@@ -1022,226 +1022,38 @@ runtime-refactor backlog later.
 
 ## A1.1d-5R3-PLAN authoritative planning status (archived for active scheduling)
 
-`A1.1d-5R3-PLAN` froze an implementation-ready decomposition for lifecycle cleanup and
-convergence. It is archived engineering evidence and its former active-scheduling replacement is
-now superseded by
-[`linux-first-runtime-resumption/DECISION.md`](linux-first-runtime-resumption/DECISION.md). It is
-not implementation or native evidence. Planning was complete at
-`19c40d41679e843e3e524f64fb9827959849d33e` / `d7f6b84c9efc8ad03d98ad55c4e1a31611b96335` with
-terminal planning fingerprint `sha256:8f4cf54640443dbeb82fffbef68fac8d03eeaa6c72cf4e44f645044bc2b210e7`.
-`R3` implementation is `PARKED_BY_USER`, no R3 implementation task has been dispatched from this
-plan, and the index below is preserved intent rather than the current next implementation line. The
-exact architecture is in
-[01-target-architecture.md](01-target-architecture.md), row ownership in
-[02-seam-crosswalk.md](02-seam-crosswalk.md), dispatch-ready packet contracts in
-[03-phase-slice-map.md](03-phase-slice-map.md), normative gates in
-[04-contracts-and-gates.md](04-contracts-and-gates.md), and planned proof in
-[05-debug-regression-ledger.md](05-debug-regression-ledger.md).
-
-The preserved historical implementation index was:
-
-1. `A1.1d-5R3-HOME` — descriptor-bound synchronous private-home candidate rollback;
-2. `A1.1d-5R3-MANIFEST` — non-destructive managed-artifact contract and durable manifest core;
-3. `A1.1d-5R3-LINUX` — publish Linux privileged/system restoration implementation;
-4. `EVIDENCE:R3-LINUX-IMP-01` then `A1.1d-5R3-LINUX-CLOSEOUT` — prove the exact published Linux
-   checkpoint natively, then land evidence/control bytes only;
-5. `A1.1d-5R3-MAC` — publish macOS/Lima and PM-bound SSH-UDS lifecycle implementation;
-6. `EVIDENCE:R3-MAC-IMP-01` then `A1.1d-5R3-MAC-CLOSEOUT` — prove and close the exact published
-   macOS checkpoint;
-7. `A1.1d-5R3-WIN` — publish Windows prefix/shared/WSL/forwarder lifecycle implementation;
-8. `EVIDENCE:R3-WIN-IMP-01` then `A1.1d-5R3-WIN-CLOSEOUT` — prove and close the exact published
-   Windows checkpoint;
-9. `A1.1d-5R3-UNIX` — Unix prefix/shim/payload/profile convergence, executor distribution, and
-   integration of the already-landed platform providers;
-10. `EVIDENCE:R3-NATIVE-LINUX-01`, `EVIDENCE:R3-NATIVE-MAC-01`, and
-    `EVIDENCE:R3-NATIVE-WIN-01` — independent native proofs of the same published UNIX checkpoint;
-    and
-11. `A1.1d-5R3-CLOSEOUT` — cross-platform evidence ingestion and gate closeout with no product
-    behavior change.
-
-After a later revalidated resume, `HOME` and `MANIFEST` may be separately authorized from this
-index; every destructive packet depends on `MANIFEST`. `LINUX` and `MAC` precede `UNIX` so the
-three historically bundled rows PI-012, PI-026, and PI-095 have one row owner and disjoint
-provider fences rather than shared mutation ownership. `WIN` remains mutation-disjoint but follows
-MAC closeout in the publication chain. Each implementation is published before its native evidence
-task, so every evidence receipt binds an exact remote-equal commit/tree/ref.
-Each platform closeout depends on its clean evidence receipt, and final `CLOSEOUT` depends on all
-three final native evidence tasks at the same published UNIX checkpoint. No task is pre-created by
-this document.
-
-The index is deliberately fail-closed around two discovered source facts. Windows PM already
-requires an exact registered distro machine ID, so R3 activates only an existing PM-bound WSL
-instance and forbids import, install-tree deletion, and unregister. The macOS packet tombstones the
-current in-guest build/DNS/toolchain fallback and requires exact native-evidence-built artifacts;
-its group, membership,
-private-home, unit/service, layout, known-hosts, staging, socket, and instance effects are separate
-manifest roles. Publisher bootstrap is a direct-interactive, OS-attested, component-durable
-transition into fixed protected service paths; product uninstall retains its anchor. Disposable
-native bootstrap proof hashes the null-retirement-slot bootstrap core, then precommits the harness
-key, external-store descriptor identity, and exact core-bound test-retirement authorization digest
-into the final bootstrap and generation-one anchor before any publisher component exists or can be
-torn down. Retirement receipt bytes are externally hashed only after fsync and authorized by a
-separate signed harness acknowledgement; neither record contains its own or a future digest.
-Lima/WSL guest bootstrap uses a protected-host-publisher-signed one-use pairing ticket;
-the ticket carries canonical signer SPKI bytes, and the operator must pin their full hash/challenge
-from the host terminal at the independent guest TTY before the guest verifies the fixed P-256
-signature or atomically links the root-only external intent. That intent durably confines the
-guest seed/nonce before the publisher directory exists; the final inactive key is materialized
-only after the host transcript. Completed state records exact-join, while an effect-visible/
-identity-record-not-durable component-creation gap is an explicit preserving stop rather than
-path/byte adoption. Evidence-only guest retirement is separately null-slot-precommitted in the
-host-signed ticket, copied through both pairing records and generation one, externally receipts
-the exhaustive guest DAG, removes guest residue before the retained host pairing record, and only
-then permits the exhaustive host retirement and parity receipt. The retained
-`limactl shell`/`wsl -d` channel carries only the post-pinning hello/transcript and is not authority.
-Provider evidence tasks natively build both host and isolated Linux
-guest executors from the exact remote-equal checkpoint under `ExecutorBuildEvidenceV1`, clean the
-build scope before baseline, and supply those exact hashes to bootstrap. Evidence receipts validate
-source and artifact digest; the separately
-validated evidence artifact, not the skill receipt schema, binds each gated successor.
-
-The planning subject is exactly these six Markdown files. Review control is recorded in
-[r3-planning-review-cycle-record.json](review-control/r3-planning-review-cycle-record.json) and
-the three linked R3 planning review reports. `06-review-finding-inventory.md` is unchanged because
-repository truth contains no current R3-owned P3/P4 item. Publication of this plan cannot
-authorize any product edit, native lifecycle action, provisioning, or successor dispatch.
-
-Explicit exclusions remain passive health/world-deps remediation, authenticated Codex execution,
-retained workers/tasks, authoritative-session repair, orchestrator packet-3 lifecycle/routing,
-gateway adoption beyond exact managed cleanup, direct-member architecture, unrelated
-runtime-refactor work, policy/capability redesign, a new shared state root, or reinterpretation of
-the bounded `0640`/`0650` cache observation. R1/R2 evidence is immutable.
-
+Canonical content: [`a1.1d-5r3/current-state.md#a11d-5r3-plan-authoritative-planning-status-archived-for-active-scheduling`](a1.1d-5r3/current-state.md#a11d-5r3-plan-authoritative-planning-status-archived-for-active-scheduling).
 ## R3 implementation status append
 
-This append preserves historical landed/status facts only. Its protected MAC, evidence, recovery,
-retirement/finalizer, E03, and Windows succession is superseded for active scheduling and
-authorizes no current task.
+Canonical content: [`a1.1d-5r3/status-append.md#r3-implementation-status-append`](a1.1d-5r3/status-append.md#r3-implementation-status-append).
 
 ### `A1.1d-5R3-MANIFEST`
 
-- Status: `LANDED_CLEAN`.
-- Scope: landed the non-destructive managed-artifact manifest/parser/publication/state-transition
-  core, hidden `substrate-lifecycle-control` direct-interactive surface, and
-  `scripts/ci/validate_r3_native_evidence.py`.
-- Boundaries preserved: no destructive lifecycle execution, no consumer integration, no new
-  top-level shared root, and provider channels remain preserving `provider_unavailable` stubs until
-  their sole platform packets land.
-- Successor: `AUTHORITY_REQUIRED:A1.1d-5R3-LINUX`.
-- Review control: `review-control/r3-manifest-review-cycle-record.json`,
-  `review-control/r3-manifest-review-authority-security.md`,
-  `review-control/r3-manifest-review-lifecycle-convergence.md`, and
-  `review-control/r3-manifest-review-allowlist-evidence.md`.
+Canonical content: [`a1.1d-5r3/status-append.md#a11d-5r3-manifest`](a1.1d-5r3/status-append.md#a11d-5r3-manifest).
 
 ### `A1.1d-5R3-LINUX`
 
-- Status: `LANDED_CLEAN`.
-- Scope: landed the Linux managed-system provider: `substrate-lifecycle-linux`, the fixed
-  root-owned publisher service/socket units, the bounded `world-provision.sh` handoff to
-  `world-lifecycle.sh`, Linux client relay/attestation, and focused Linux fixtures for exact
-  pre-state restoration and publisher bootstrap.
-- Boundaries preserved: Unix row-owner orchestrators remain unchanged; service/socket propagation
-  stays split so service state cannot mutate socket endpoint identity; no native evidence bytes are
-  created; and macOS, Windows, passive health, and run-only regression bytes remain frozen.
-- Successor: `EVIDENCE:R3-LINUX-IMP-01`.
-- Review control: `review-control/r3-linux-review-cycle-record.json`,
-  `review-control/r3-linux-review-authority-security.md`,
-  `review-control/r3-linux-review-lifecycle-convergence.md`, and
-  `review-control/r3-linux-review-allowlist-evidence.md`.
+Canonical content: [`a1.1d-5r3/status-append.md#a11d-5r3-linux`](a1.1d-5r3/status-append.md#a11d-5r3-linux).
 
 ### `A1.1d-5R3-LINUX-CLOSEOUT`
 
-- Status: `LANDED_CLEAN`.
-- Scope: materialized the validated external Linux evidence artifact and evidence receipt under
-  `review-control`, revalidated the artifact with
-  `scripts/ci/validate_r3_native_evidence.py`, revalidated the receipt with
-  `orchestrate-top-level-tasks/scripts/validate_evidence_receipt.py`, and recorded the bounded
-  closeout review set with no production or test byte change.
-- Boundaries preserved: only `review-control/r3-linux-imp-01-evidence.json`,
-  `review-control/r3-linux-imp-01-receipt.json`, the exact `linux-closeout` review set, and this
-  bounded `R3-DOCS` status append are materialized; no Linux repair, MAC dispatch, or evidence
-  reinterpretation is introduced.
-- Successor: `COMPLETE` for this authoritative orchestration closeout; the stale packet-local
-  `A1.1d-5R3-MAC` wording is historical only and is not reused in the terminal receipt.
-- Review control: `review-control/r3-linux-closeout-review-cycle-record.json`,
-  `review-control/r3-linux-closeout-review-authority-security.md`,
-  `review-control/r3-linux-closeout-review-lifecycle-convergence.md`, and
-  `review-control/r3-linux-closeout-review-allowlist-evidence.md`.
+Canonical content: [`a1.1d-5r3/status-append.md#a11d-5r3-linux-closeout`](a1.1d-5r3/status-append.md#a11d-5r3-linux-closeout).
 
 ### `A1.1d-5R3-MAC`
 
-- Status: implementation publication scope; non-native fixtures and static checks only.
-- Scope: manifest-bound fixed-executor MAC lifecycle wiring, PM-bound SSH-UDS activation with
-  exact teardown ownership, mapped Lima staging/teardown delegation, and the exact socket
-  non-propagation change.
-- Boundaries preserved: no native publisher/Lima provisioning, code-signing, build evidence,
-  or evidence bytes are created; ambient selectors, VSock/TCP, `new_with_mapping`, Linux,
-  Windows, and run-only fixture bytes remain frozen.
-- Successor: `EVIDENCE:R3-MAC-IMP-01`.
-- Review control: `review-control/r3-mac-review-cycle-record.json`,
-  `review-control/r3-mac-review-authority-security.md`,
-  `review-control/r3-mac-review-lifecycle-convergence.md`, and
-  `review-control/r3-mac-review-allowlist-evidence.md`.
-
+Canonical content: [`a1.1d-5r3/status-append.md#a11d-5r3-mac`](a1.1d-5r3/status-append.md#a11d-5r3-mac).
 ## A1.1d-5R3-MAC attempt-4 remediation status (2026-08-06)
 
-Under `substrate-a1-1d-5r3-mac-20260806-41f97e1c570d` amendment
-`0003-fresh-mac-review-epoch.json`, this new nonce-bound epoch reconstructs the verified
-19-path attempt-3 baseline solely to remediate the six mandatory P1/P2 findings. It binds the
-actual XPC peer audit token before request decoding, repeats canonical carrier/mapping/role and
-Stage-1 joins before any mapped mutation, removes the standalone retire operation, and refuses
-pre-spawn SSH-UDS replacement by disabling SSH-side unlink. The added checks are non-native only:
-no Lima, launchd, Keychain, code-signing, publisher installation, or evidence artifact is run or
-created here. Fresh review is recorded only in the exact MAC review-control set; the sole
-successor remains `EVIDENCE:R3-MAC-IMP-01`.
-
+Canonical content: [`r3-mac-evidence-recovery/current-state.md#a11d-5r3-mac-attempt-4-remediation-status-2026-08-06`](r3-mac-evidence-recovery/current-state.md#a11d-5r3-mac-attempt-4-remediation-status-2026-08-06).
 ## AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN status (2026-08-07)
 
-The preserved `AUX-R3-MAC-SOURCE-CORRECTION` donor at
-`d8a65fc8890dd37584aaeac2984c906188e5f06e` is audit input only: its 26 tracked and two untracked
-paths (`+8821/-681`, tracked diff
-`39682fd4415a00ae4099580135a687d3e11858f62f84e9ef6ff3771bafd4b54c`) must never be published
-wholesale. `AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN` freezes small recovery packets that retain the
-Bash-3.2 descriptor, macOS compile, and trusted expected-project-ID corrections while replacing
-both the unapproved `lima-stdio-v1` premise and raw `lima-action` dispatch. The only later entry is
-`AUTHORITY_REQUIRED:AUX-R3-MAC-EVIDENCE-RECOVERY-IMPLEMENTATION`; planning itself does not authorize
-source, installation, Keychain/XPC/Lima, native evidence, or a successor dispatch.
-
+Canonical content: [`r3-mac-evidence-recovery/current-state.md#aux-r3-mac-evidence-recovery-plan-status-2026-08-07`](r3-mac-evidence-recovery/current-state.md#aux-r3-mac-evidence-recovery-plan-status-2026-08-07).
 ## AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN current authority correction (2026-08-07)
 
-This recovery status supersedes the earlier present-tense MAC-attempt successor wording for this
-orchestration: historical attempt-4 and the preserved donor are ineligible to authorize
-`EVIDENCE:R3-MAC-IMP-01`. Only the separately authorized recovery implementation's reviewed,
-remote-equal receipt after R1–R6 may be considered by a fresh evidence dispatch. The recovery
-implementation remains authority-required; this planning commit does not start it.
-
+Canonical content: [`r3-mac-evidence-recovery/current-state.md#aux-r3-mac-evidence-recovery-plan-current-authority-correction-2026-08-07`](r3-mac-evidence-recovery/current-state.md#aux-r3-mac-evidence-recovery-plan-current-authority-correction-2026-08-07).
 ## macOS developer-parity lane (2026-08-19; scoped)
 
-> **Projection status:** non-authoritative current-state projection. Canonical owners are linked from [`index/current.md`](index/current.md); this legacy section grants no authority.
-
-[`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md) supersedes every earlier R3 macOS,
-recovery, retirement/finalizer, E03, and Windows-predecessor statement **for macOS-lane scheduling
-only**. Those earlier sections remain archived chronology and engineering evidence; they do not
-authorize implementation, evidence, cleanup, or successor dispatch.
-
-- The protected macOS lifecycle/finalizer/E03 architecture is archived, not erased, and is not the
-  active developer-install architecture. Revival requires a separate production threat-model
-  decision.
-- Ordinary macOS development is a user-owned prefix plus current shims/configuration/binaries,
-  typed selected-prefix/Lima mapping, current Lima/`world-service`, safe forwarding, and native
-  install → exercise world → uninstall → verify → reinstall proof. It has no System-Keychain,
-  protected-publisher, privileged-host-helper, terminal-retirement, finalizer, freeze, identity-
-  rotation, E03, or assurance-evidence prerequisite.
-- Landed Linux R3 facts remain historical landed facts with no new Linux claim. Windows remains
-  incomplete where applicable, untouched, out of scope, and not a prerequisite.
-- Attempt 4 is quarantined. The developer corridor owns no Attempt 4 record or fixed privileged
-  artifact and may proceed only after a later exact read-only, non-Keychain overlap check proves
-  disjointness; any real collision requires a separately authorized disposition.
-- Phase 1 authorizes no macOS Phase 2 work. `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` remains a
-  lane-local gate; it does not block or authorize the runtime-refactor sequence. The selected
-  future public-adoption packet is now `A1.3-P1`; the held A1.3 and A1.3-P0 records are preserved
-  as non-executable historical fences; A1.4, Windows, E03, and all other successors remain
-  undispatched.
+Canonical content: [`macos-dev-parity/current-state.md#macos-developer-parity-lane-2026-08-19-scoped`](macos-dev-parity/current-state.md#macos-developer-parity-lane-2026-08-19-scoped).
 
 ## Linux-first runtime-refactor scheduling decision (2026-08-20; controlling)
 
