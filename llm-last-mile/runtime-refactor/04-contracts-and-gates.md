@@ -90,96 +90,11 @@ Canonical content: [`b1-b2-1/contracts-and-gates.md#b1-frozen-proposal-persisten
 
 ## 3. `ActiveEphemeralTaskReceiptV1`
 
-```rust
-struct ActiveEphemeralTaskReceiptV1 {
-    schema_version: u32,
-    acceptance_record_id: String,
-    task_run_id: String,
-    request_id: String,
-    orchestration_session_id: String,
-    caller_participant_id: String,
-    target_backend_id: String,
-    world_id: String,
-    world_generation: u64,
-    policy_snapshot_ref: PolicySnapshotRefV1,
-    policy_snapshot_hash: String,
-    policy_revision: String,
-    narrowing_reason: Option<String>,
-    runtime_acceptance: RuntimeAcceptanceEvidenceV1,
-    observation_claim: SupervisorObservationClaimV1,
-    accepted_at: Timestamp,
-    state_revision: u64,
-    state: ActiveTaskStateV1,
-    cancel_supported: bool,
-    terminal: Option<WorldWorkTerminalV1>,
-}
-```
-
-States:
-
-```text
-Accepted -> Running -> AttentionPending -> Running
-Accepted|Running|AttentionPending -> Terminal|Failed|Cancelled|Invalidated
-```
-
-`Terminal`, `Failed`, `Cancelled`, and `Invalidated` are terminal and monotonic. `Parked` is not valid for an ephemeral task.
-
-`WorldWorkTerminalV1` for an ephemeral task carries one explicit result class:
-
-```text
-Completed
-Failed
-Cancelled
-NeedsRetainedFollowup
-Invalidated
-```
-
-`NeedsRetainedFollowup` is a terminal ephemeral result, not a retained worker state. It promises no durable participant identity, creates no `continue_world_worker` route, and does not silently create a retained worker or durable conversational obligation. The host must make a new, explicit, policy-checked `spawn_world_worker` decision if ongoing work is warranted.
+Canonical content: [`contracts/active-ephemeral-task-receipt-v1.md#3-activeephemeraltaskreceiptv1`](contracts/active-ephemeral-task-receipt-v1.md#3-activeephemeraltaskreceiptv1).
 
 ## 4. `ActiveRetainedTurnReceiptV1`
 
-```rust
-struct ActiveRetainedTurnReceiptV1 {
-    schema_version: u32,
-    acceptance_record_id: String,
-    active_run_id: String,
-    request_id: String,
-    orchestration_session_id: String,
-    orchestrator_participant_id: String,
-    target_participant_id: String,
-    target_backend_id: String,
-    world_id: String,
-    world_generation: u64,
-    message_id: String,
-    thread_id: Option<String>,
-    worker_policy_cap_hash: String,
-    turn_policy_snapshot_ref: PolicySnapshotRefV1,
-    turn_policy_snapshot_hash: String,
-    turn_policy_revision: String,
-    narrowing_reason: Option<String>,
-    runtime_acceptance: RuntimeAcceptanceEvidenceV1,
-    observation_claim: SupervisorObservationClaimV1,
-    accepted_at: Timestamp,
-    state_revision: u64,
-    state: ActiveRetainedTurnStateV1,
-    cancel_supported: bool,
-    terminal: Option<WorldWorkTerminalV1>,
-}
-```
-
-States:
-
-```text
-Accepted -> Running
-Running -> AttentionPending -> Running
-Accepted|Running|AttentionPending -> Parked|Terminal|Failed|Cancelled|Stopped
-```
-
-Rules:
-
-1. One retained worker may have at most one active cancelable turn unless a later version explicitly models concurrency.
-2. `Parked` closes the active turn but preserves the retained worker manifest and resume handle.
-3. Host posture is not copied from turn state. Obligations may cause host `AwaitingAttention`; worker `AttentionPending` remains worker truth.
+Canonical content: [`contracts/active-retained-turn-receipt-v1.md#4-activeretainedturnreceiptv1`](contracts/active-retained-turn-receipt-v1.md#4-activeretainedturnreceiptv1).
 
 ## 5. Receipt acceptance source
 
