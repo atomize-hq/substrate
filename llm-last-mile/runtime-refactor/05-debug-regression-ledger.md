@@ -273,6 +273,10 @@ An implementation PR may mark a ledger row resolved only when:
 3. adjacent resolved baselines remain green; and
 4. the evidence distinguishes durable success from transport/process success.
 
+### R2-2 historical failed integration closeout and remaining-seam correction
+
+Compatibility anchor only; canonical content: [`a1.1d-5r2-2f/evidence-regression.md#r2-2-historical-failed-integration-closeout-and-remaining-seam-correction`](a1.1d-5r2-2f/evidence-regression.md#r2-2-historical-failed-integration-closeout-and-remaining-seam-correction).
+
 ## A1.1d-5R2-2F0-HC empirical closure record
 
 Compatibility anchor only; canonical content: [`a1.1d-5r2-2f/evidence-regression.md#a11d-5r2-2f0-hc-empirical-closure-record`](a1.1d-5r2-2f/evidence-regression.md#a11d-5r2-2f0-hc-empirical-closure-record).

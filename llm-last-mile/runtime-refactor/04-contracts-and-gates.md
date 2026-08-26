@@ -688,6 +688,14 @@ A contract is not considered landed until tests prove:
     a legacy-writer attempt, caller/foreground drop does not erase truth, and B3.1 begins only after
     the joint closeout.
 
+##### Remaining R2-2 same-process carrier closure
+
+Compatibility anchor only; canonical content: [`a1.1d-5r2-2f/contracts-and-gates.md#remaining-r2-2-same-process-carrier-closure`](a1.1d-5r2-2f/contracts-and-gates.md#remaining-r2-2-same-process-carrier-closure).
+
+##### `PlatformBootstrapMappingV1` construction and verification
+
+Compatibility anchor only; canonical content: [`a1.1d-5r2-3/contracts-and-gates.md#platformbootstrapmappingv1-construction-and-verification`](a1.1d-5r2-3/contracts-and-gates.md#platformbootstrapmappingv1-construction-and-verification).
+
 ## A1.1d-5R2-2F0-HC corrected complete process-resource ledger
 
 Compatibility anchor only; canonical content: [`a1.1d-5r2-2f/contracts-and-gates.md#a11d-5r2-2f0-hc-corrected-complete-process-resource-ledger`](a1.1d-5r2-2f/contracts-and-gates.md#a11d-5r2-2f0-hc-corrected-complete-process-resource-ledger).

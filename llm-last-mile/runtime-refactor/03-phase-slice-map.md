@@ -111,6 +111,10 @@ Canonical content: [`slices/track-e-dispatch-policy-and-config-projection.md`](s
 
 Canonical content: [`slices/README.md#slice-closeout-minimum`](slices/README.md#slice-closeout-minimum).
 
+###### A1.1d-5R2-2 — Unix release, sudo, Linux service, and runtime propagation
+
+Compatibility anchor only; canonical content: [`a1.1d-5r2-2f/slice-and-task.md#a11d-5r2-2--unix-release-sudo-linux-service-and-runtime-propagation`](a1.1d-5r2-2f/slice-and-task.md#a11d-5r2-2--unix-release-sudo-linux-service-and-runtime-propagation).
+
 ## A1.1d-5R2-2F0-HC packet insertion and authorization
 
 Compatibility anchor only; canonical content: [`a1.1d-5r2-2f/slice-and-task.md#a11d-5r2-2f0-hc-packet-insertion-and-authorization`](a1.1d-5r2-2f/slice-and-task.md#a11d-5r2-2f0-hc-packet-insertion-and-authorization).
@@ -153,6 +157,14 @@ Compatibility anchor only; canonical content: [`a1.1d-5r2-2-renewed-closeout/sli
 ## R2-2 remediation insertion before renewed closeout (historical RP0-RP4 plan)
 
 Compatibility anchor only; canonical content: [`a1.1d-5r2-2-renewed-closeout/slice-and-task.md#r2-2-remediation-insertion-before-renewed-closeout-historical-rp0-rp4-plan`](a1.1d-5r2-2-renewed-closeout/slice-and-task.md#r2-2-remediation-insertion-before-renewed-closeout-historical-rp0-rp4-plan).
+###### A1.1d-5R2-3 — Platform-native mapping adapters
+
+Compatibility anchor only; canonical content: [`a1.1d-5r2-3/slice-and-task.md#a11d-5r2-3--platform-native-mapping-adapters`](a1.1d-5r2-3/slice-and-task.md#a11d-5r2-3--platform-native-mapping-adapters).
+
+###### A1.1d-5R2-4 — R2 integration and closeout
+
+Canonical content: [`a1.1d-5r2-4/slice-and-task.md#a11d-5r2-4--r2-integration-and-closeout`](a1.1d-5r2-4/slice-and-task.md#a11d-5r2-4--r2-integration-and-closeout).
+
 ## A1.1d-5R3 authoritative implementation index
 
 Canonical content: [`a1.1d-5r3/slice-and-task.md#a11d-5r3-authoritative-implementation-index`](a1.1d-5r3/slice-and-task.md#a11d-5r3-authoritative-implementation-index).
