@@ -32,6 +32,10 @@ Canonical content: [`contracts/development-review-and-remediation-contract.md#me
 
 Canonical content: [`a1-2-earlier-histories/contracts-and-gates.md#a1-canonical-encoding-path-identity-supporting-types-and-persistence`](a1-2-earlier-histories/contracts-and-gates.md#a1-canonical-encoding-path-identity-supporting-types-and-persistence).
 
+##### Host-path normalization and validation
+
+Compatibility anchor only; canonical content: [`a1-2-earlier-histories/contracts-and-gates.md#host-path-normalization-and-validation`](a1-2-earlier-histories/contracts-and-gates.md#host-path-normalization-and-validation).
+
 ## 1. `DurableSessionAuthorityV1`
 
 Canonical content: [`a1-2-earlier-histories/contracts-and-gates.md#1-durablesessionauthorityv1`](a1-2-earlier-histories/contracts-and-gates.md#1-durablesessionauthorityv1).
@@ -39,6 +43,10 @@ Canonical content: [`a1-2-earlier-histories/contracts-and-gates.md#1-durablesess
 ## 1A. strict `HostSessionTransitionIntentV1`/`HostSessionTransitionIntentV2`
 
 Canonical content: [`a1-2-earlier-histories/contracts-and-gates.md#1a-strict-hostsessiontransitionintentv1hostsessiontransitionintentv2`](a1-2-earlier-histories/contracts-and-gates.md#1a-strict-hostsessiontransitionintentv1hostsessiontransitionintentv2).
+
+### Lifecycle, retry, and fail-closed rules
+
+Compatibility anchor only; canonical content: [`a1-2-earlier-histories/contracts-and-gates.md#lifecycle-retry-and-fail-closed-rules`](a1-2-earlier-histories/contracts-and-gates.md#lifecycle-retry-and-fail-closed-rules).
 
 ## 2. `HostExecutionEpisodeV1`
 
