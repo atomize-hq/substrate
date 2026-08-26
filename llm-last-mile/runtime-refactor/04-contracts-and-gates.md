@@ -118,28 +118,7 @@ Canonical content: [`contracts/launch-time-secret-handoff-v1.md#9-launchtimesecr
 
 ## 10. Cancel outcome categories
 
-```rust
-enum CancelWorldWorkOutcomeV1 {
-    CancelledViaLiveTransport { active_run_id, terminal_ref },
-    CancelAcceptedPendingCloseout { active_run_id, cancel_request_id },
-    AlreadyTerminal { active_run_id, terminal_ref },
-    NoActiveCancelableWork { worker_or_task_ref },
-    OwnerUnreachable { active_run_id, durable_state, retryability },
-    InvalidTarget { reason },
-    WorldBindingMismatch { expected, actual },
-    AmbiguousTarget { candidates },
-    PolicyDenied { denial_code, explanation },
-}
-```
-
-Rules:
-
-1. Exact identity and world binding resolve before transport use.
-2. `NoActiveCancelableWork` means valid routing context but no accepted non-terminal cancelable receipt.
-3. `OwnerUnreachable` means a valid active receipt exists but the live cancellation route is unavailable and durable policy cannot yet declare closeout.
-4. `CancelAcceptedPendingCloseout` is not terminal success; inspect remains able to observe eventual closeout.
-5. Repeated cancel after terminal returns `AlreadyTerminal`; it never regresses the receipt.
-6. Stop targets worker lifecycle. Cancel targets one active task/turn. They are not aliases.
+Canonical content: [`contracts/cancel-outcome-categories.md#10-cancel-outcome-categories`](contracts/cancel-outcome-categories.md#10-cancel-outcome-categories).
 
 ## 11. Supervisor idempotency and restart rules
 
@@ -151,83 +130,15 @@ Canonical content: [`b1-b2-1/contracts-and-gates.md#11a-differential-baseline-tr
 
 ## 12. Final-receipt immutable `PolicySnapshotV3` acceptance rules
 
-B1's pre-E2 acceptance anchor records the exact current policy identity used by the runtime but is
-not a final receipt and is not model-facing. E2 owns the immutable active-run snapshot and retained
-worker cap below; B2.2 may expose a receipt only after those commitments and the B2.1 observation
-claim are durable and linked to the B1 record.
-
-A final active task/turn receipt may be exposed only when all are true:
-
-1. exact session, caller, backend, and world binding are resolved;
-2. steering policy allows the verb/mode/target;
-3. current parent policy is resolved at a known revision;
-4. retained worker cap is loaded and hash-verified when applicable;
-5. optional narrowing is validated as monotonic;
-6. the resulting `PolicySnapshotV3` canonicalizes and passes existing schema/enforcement validation;
-7. snapshot bytes/ref/hash/revision are durable;
-8. the execution envelope/world-service request carries the same verified snapshot;
-9. runtime acceptance evidence joins the acknowledgement to the exact work identity;
-10. the observation claim is durable and resumable; and
-11. the receipt references the snapshot, acceptance evidence, and observation claim before the foreground caller is told the work was accepted.
-
-After acceptance:
-
-- the receipt's policy ref/hash is immutable;
-- parent broadening or narrowing does not rewrite the active receipt;
-- parent changes apply to future task acceptance, continue, fork, or worker turns;
-- emergency revocation is an explicit audited cancel/revoke path, never silent snapshot mutation; and
-- snapshot mismatch at broker/world-service fails closed.
+Canonical content: [`gates/final-receipt-immutable-policy-snapshot-v3-acceptance.md#12-final-receipt-immutable-policysnapshotv3-acceptance-rules`](gates/final-receipt-immutable-policy-snapshot-v3-acceptance.md#12-final-receipt-immutable-policysnapshotv3-acceptance-rules).
 
 ## 13. Dispatch narrowing monotonicity rules
 
-The resolver computes:
-
-```text
-ephemeral = current_parent AND dispatch_patch
-worker_cap = current_parent_at_spawn AND spawn_patch
-turn = current_parent_now AND worker_cap AND turn_patch
-fork_cap = current_parent_now AND source_worker_cap AND fork_patch
-```
-
-V1 field rules:
-
-| Field | Allowed narrowing | Rejected broadening |
-|---|---|---|
-| `world_fs.host_visible` | `true -> false` | `false -> true` |
-| `world_fs.fail_closed.routing` | `false -> true` | `true -> false` |
-| `world_fs.caged_required` | `false -> true` | `true -> false` |
-| `world_fs.write.enabled` | `true -> false` | `false -> true` |
-| `world_fs.deny_enforcement` | same or stronger rank | weaker rank or removal |
-| discover/read/write `allow_list` | each requested path is contained by at least one parent path | root/directory/file widening |
-| discover/read/write `deny_list` | add denials or retain parent denials | remove parent denial |
-
-Path-containment rules:
-
-1. Normalize relative to the authoritative world/project root.
-2. `.` contains `src` and `src/parser.rs`; `src` contains `src/parser.rs`; a file contains only itself.
-3. Reject absolute host paths, `..` escape, unsupported glob semantics, NUL, symlink escape, and paths outside the root.
-4. Compare canonical policy paths without requiring the target file to already exist; runtime resolution must re-check symlink/ancestor escape at enforcement time.
-5. `host_visible=true` with deny-list or unprovable isolation semantics fails closed unless the patch legally narrows to supported full isolation.
-6. A patch supplied while `agents.world_dispatch.allow_capability_narrowing=false` is rejected, not ignored.
-7. Narrowing may not enable a dispatch action, backend, mode, capability, network route, or side-effect channel forbidden by the parent.
-8. Adapter config may receive policy hints, but only broker/world-service enforcement counts.
+Canonical content: [`gates/dispatch-narrowing-monotonicity.md#13-dispatch-narrowing-monotonicity-rules`](gates/dispatch-narrowing-monotonicity.md#13-dispatch-narrowing-monotonicity-rules).
 
 ## 14. Contract promotion gates
 
-A contract is not considered landed until tests prove:
-
-1. serialization and validation;
-2. atomic persistence and revision conflict handling;
-3. the real ingress/dispatch/runtime path uses it;
-4. restart/replay behavior where durable;
-5. fail-closed negative cases;
-6. every revision-bound host transition joins intent issuance, claim, authority application, and exact result on the real CLI and REPL path, including crash reconciliation and no-reapply exact retry;
-7. at least one smoke/e2e path joins session, binding, policy, receipt, runtime event, and terminal/obligation truth;
-8. credential-requiring world UAA proof joins the envelope to a consumed one-time in-world gateway handoff without copied secret files or inherited descriptors; and
-9. no compatibility copy or `CompatibilityUnproven` evidence is used for contract promotion; and
-10. B1/B2.1 production proof shows both accepted work families enter the durable supervisor without
-    a legacy-writer attempt, caller/foreground drop does not erase truth, and B3.1 begins only after
-    the joint closeout.
+Canonical content: [`gates/contract-promotion.md#14-contract-promotion-gates`](gates/contract-promotion.md#14-contract-promotion-gates).
 
 ##### Remaining R2-2 same-process carrier closure
 
