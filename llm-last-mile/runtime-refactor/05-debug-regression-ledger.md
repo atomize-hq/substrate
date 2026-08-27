@@ -192,12 +192,7 @@ Covers: `RG-CONFIG-02`, `RG-CONFIG-03`, `RG-CONFIG-04`, `RG-UAA-02`, `RG-UAA-03`
 
 ## Closeout rule
 
-An implementation PR may mark a ledger row resolved only when:
-
-1. its owning crosswalk seam has the correct owner and call path for that behavior;
-2. the named permanent gate passes on the real path;
-3. adjacent resolved baselines remain green; and
-4. the evidence distinguishes durable success from transport/process success.
+Compatibility anchor only; canonical content: [`evidence/closeout-and-review-calibration.md#closeout-rule`](evidence/closeout-and-review-calibration.md#closeout-rule).
 
 ### R2-2 historical failed integration closeout and remaining-seam correction
 
@@ -331,26 +326,8 @@ Compatibility anchor only; canonical content: [`a1.1d-5r2-2-renewed-closeout/evi
 Compatibility anchor only; canonical content: [`a1.1d-5r2-2-renewed-closeout/evidence-regression.md#rp3rp4rp5-closeout-ledger`](a1.1d-5r2-2-renewed-closeout/evidence-regression.md#rp3rp4rp5-closeout-ledger).
 ## Review-process calibration
 
-RP4 exposed a process failure without exposing a product or test regression: a blanket requirement
-for four clean reviews allowed findings about agent-created cache-only orchestration to expand the
-product-proof acceptance surface. Repeated fix/review attempts then improved bespoke evidence
-tooling rather than the selected Substrate outcome. Human disposition correctly preserved the raw
-`REQUEST_CHANGES` review while accepting the independently evaluable product proof.
+Compatibility anchor only; canonical content: [`evidence/closeout-and-review-calibration.md#review-process-calibration`](evidence/closeout-and-review-calibration.md#review-process-calibration).
 
-The prospective correction is owned by the development-review contract in `04`:
-
-- `P1`/`P2` block only on demonstrated impact to the selected contract, gate, scope, or completion
-  claim;
-- one discovery cycle, one consolidated remediation, one closure cycle, and at most two directly
-  causal supplemental cycles bound automatic work;
-- `CLEAN` is terminal, mechanical-only deltas do not create review cycles, and unrelated or expanded
-  blockers stop for authority rather than widening scope; and
-- valid non-blocking review/process debt is retained in `06`, separate from this product regression
-  ledger.
-
-The three RP4 persistence findings are registered as `RR-RF-0001` through `RR-RF-0003`. Their raw
-review files, hashes, and original verdict remain unchanged. This calibration authorizes no
-controller/supervisor remediation and changes no RP3/RP4/RP5 proof result.
 
 ## A1.1d-5R2-4 terminal evidence ledger
 
