@@ -1,0 +1,62 @@
+**Kind:** index
+**Stable ID:** `runtime-refactor-by-packet-index`
+**Status:** non-authoritative navigation
+**Canonical for:** packet and packet-family navigation only
+
+# Runtime-refactor navigation by packet
+
+> **Authority boundary:** This file is an index only. It routes packet, lane, and packet-family identifiers to their canonical packet records or packet indexes; it does not select work, close a gate, or dispatch a successor.
+
+## Current active and held packets
+
+| Identifier | Kind | Canonical owner | Current status or scope |
+|---|---|---|---|
+| `A1.3-P1` | packet | [`linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md) | `selected active next Linux-first implementation packet` |
+| `A1.3-P0` | held packet | [`linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md`](../linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md) | `held/non-implementable historical preparatory packet` |
+| `A1.3` | held packet | [`linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md`](../linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md) | `preserved held historical Linux-first packet` |
+
+## Packet, lane, and family indexes
+
+| Identifier | Kind | Canonical owner | Current status or scope |
+|---|---|---|---|
+| `A1.3-family` | packet index | [`linux-first-runtime-resumption/README.md`](../linux-first-runtime-resumption/README.md) | `non-authoritative navigation for the active A1.3-P1 packet and its held A1.3-P0/A1.3 predecessors` |
+| `macOS-dev-parity-family` | lane index | [`macos-dev-parity/README.md`](../macos-dev-parity/README.md) | `non-authoritative navigation for the macOS developer-parity decision, extracted projections, and lane-local gate` |
+| `A1.1d-5R2-4` | packet index | [`a1.1d-5r2-4/README.md`](../a1.1d-5r2-4/README.md) | `closed only as the bounded R2 propagation join` |
+| `A1.1d-5R3-family` | packet index | [`a1.1d-5r3/README.md`](../a1.1d-5r3/README.md) | `archived for active scheduling; non-authoritative navigation for the extracted R3 implementation-family owners` |
+| `r3-mac-evidence-recovery-family` | planning index | [`r3-mac-evidence-recovery/README.md`](../r3-mac-evidence-recovery/README.md) | `planning-only authority preserved; non-authoritative navigation for extracted recovery status and correction projections` |
+| `A1.2-earlier-histories-family` | packet-family index | [`a1-2-earlier-histories/README.md`](../a1-2-earlier-histories/README.md) | `historical completed-family navigation for the internal A1.2 corridor and earlier A0/A1.1/A1.1d/A1.1e packet histories` |
+| `B3.1-C1-family` | packet-family index | [`b3-1-c1/README.md`](../b3-1-c1/README.md) | `historical completed successor-family navigation for typed retained-event semantics and obligation materialization/semantic-cut closure` |
+| `B1-B2.1-family` | packet-family index | [`b1-b2-1/README.md`](../b1-b2-1/README.md) | `historical completed-family navigation for receipt acceptance, durable supervision/replay, prerequisites, and joint production closeout` |
+| `A1.1d-5R2-3-family` | packet index | [`a1.1d-5r2-3/README.md`](../a1.1d-5r2-3/README.md) | `closed only as the bounded docs-first mapping and closeout family` |
+| `A1.1d-5R2-2-renewed-closeout-family` | packet index | [`a1.1d-5r2-2-renewed-closeout/README.md`](../a1.1d-5r2-2-renewed-closeout/README.md) | `historical closeout-only navigation for the renewed R2-2 publication, remediation, and RP records` |
+| `A1.1d-5R2-2F-family` | packet index | [`a1.1d-5r2-2f/README.md`](../a1.1d-5r2-2f/README.md) | `historical family navigation for F0/F0a/F0b/F0-HC, F, and F5-PD closure` |
+
+## Selective-load starting points
+
+| Need | Start here |
+|---|---|
+| Current global status | [`current.md`](current.md) |
+| Active A1.3 packet and held predecessors | [`../linux-first-runtime-resumption/README.md`](../linux-first-runtime-resumption/README.md) |
+| macOS developer-parity lane | [`../macos-dev-parity/README.md`](../macos-dev-parity/README.md) |
+| Historical A1.2 and earlier corridor | [`../a1-2-earlier-histories/README.md`](../a1-2-earlier-histories/README.md) |
+| Historical B1/B2.1 corridor | [`../b1-b2-1/README.md`](../b1-b2-1/README.md) |
+| Historical B3.1/C1 corridor | [`../b3-1-c1/README.md`](../b3-1-c1/README.md) |
+| Historical R2/R3 packet families | [`../a1.1d-5r2-2f/README.md`](../a1.1d-5r2-2f/README.md), [`../a1.1d-5r2-2-renewed-closeout/README.md`](../a1.1d-5r2-2-renewed-closeout/README.md), [`../a1.1d-5r2-3/README.md`](../a1.1d-5r2-3/README.md), [`../a1.1d-5r2-4/README.md`](../a1.1d-5r2-4/README.md), [`../a1.1d-5r3/README.md`](../a1.1d-5r3/README.md), [`../r3-mac-evidence-recovery/README.md`](../r3-mac-evidence-recovery/README.md) |
+
+## Selective-load assembly by packet or family
+
+> Each row is a link assembly only. Read the family `README.md` first for scope, predecessors, exclusions, and status, then load only the linked typed owner needed for the task. A blank cell means the family has no separate owner of that kind in this corpus; it does not authorize inference from another kind.
+
+| Packet or family | Decision / scope / current state | Architecture / seams | Slices / tasks / dependencies | Contracts / gates | Evidence / receipts | Predecessors / exclusions |
+|---|---|---|---|---|---|---|
+| `A1.3-P1` active plus held `A1.3-P0` / `A1.3` | [`DECISION.md`](../linux-first-runtime-resumption/DECISION.md), [`A1.3-P1`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md), held [`A1.3-P0`](../linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md), held [`A1.3`](../linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md), [`current.md`](current.md) | — | [`slice-and-task.md`](../linux-first-runtime-resumption/slice-and-task.md) | linked gates in [`README.md`](../linux-first-runtime-resumption/README.md) | linked evidence/receipts in [`README.md`](../linux-first-runtime-resumption/README.md) | [`README.md`](../linux-first-runtime-resumption/README.md) |
+| macOS developer-parity lane | [`DECISION.md`](../macos-dev-parity/DECISION.md), [`current-state.md`](../macos-dev-parity/current-state.md), [`current.md`](current.md) | [`cross-lane-scheduling-and-ownership.md`](../macos-dev-parity/cross-lane-scheduling-and-ownership.md) | [`slice-and-task.md`](../macos-dev-parity/slice-and-task.md) | linked lane gate in [`README.md`](../macos-dev-parity/README.md) | [`evidence-regression.md`](../macos-dev-parity/evidence-regression.md), linked receipts in [`README.md`](../macos-dev-parity/README.md) | [`README.md`](../macos-dev-parity/README.md) |
+| `A1.1d-5R2-4` | [`README.md`](../a1.1d-5r2-4/README.md) | [`architecture-disposition.md`](../a1.1d-5r2-4/architecture-disposition.md), [`seam-crosswalk-disposition.md`](../a1.1d-5r2-4/seam-crosswalk-disposition.md) | [`slice-and-task.md`](../a1.1d-5r2-4/slice-and-task.md) | [`terminal-gate-disposition.md`](../a1.1d-5r2-4/terminal-gate-disposition.md) | [`evidence-regression.md`](../a1.1d-5r2-4/evidence-regression.md), linked receipts in [`README.md`](../a1.1d-5r2-4/README.md) | [`README.md`](../a1.1d-5r2-4/README.md) |
+| `A1.1d-5R3-family` | [`current-state.md`](../a1.1d-5r3/current-state.md) | [`architecture.md`](../a1.1d-5r3/architecture.md), [`crosswalk.md`](../a1.1d-5r3/crosswalk.md) | [`slice-and-task.md`](../a1.1d-5r3/slice-and-task.md), [`slice-status.md`](../a1.1d-5r3/slice-status.md) | [`contracts-and-gates.md`](../a1.1d-5r3/contracts-and-gates.md), [`contracts-status.md`](../a1.1d-5r3/contracts-status.md) | [`evidence-regression.md`](../a1.1d-5r3/evidence-regression.md), [`evidence-status.md`](../a1.1d-5r3/evidence-status.md) | [`README.md`](../a1.1d-5r3/README.md), [`status-append.md`](../a1.1d-5r3/status-append.md) |
+| `r3-mac-evidence-recovery-family` | [`PLAN.md`](../r3-mac-evidence-recovery/PLAN.md), [`SPEC.md`](../r3-mac-evidence-recovery/SPEC.md), [`current-state.md`](../r3-mac-evidence-recovery/current-state.md) | [`crosswalk-status.md`](../r3-mac-evidence-recovery/crosswalk-status.md) | [`TASKS.md`](../r3-mac-evidence-recovery/TASKS.md), [`slice-and-task-status.md`](../r3-mac-evidence-recovery/slice-and-task-status.md) | [`contracts-and-gates-status.md`](../r3-mac-evidence-recovery/contracts-and-gates-status.md) | [`evidence-regression.md`](../r3-mac-evidence-recovery/evidence-regression.md) | [`README.md`](../r3-mac-evidence-recovery/README.md) |
+| `A1.2-earlier-histories-family` | [`current-state.md`](../a1-2-earlier-histories/current-state.md) | [`crosswalk.md`](../a1-2-earlier-histories/crosswalk.md) | [`slice-and-task.md`](../a1-2-earlier-histories/slice-and-task.md) | [`contracts-and-gates.md`](../a1-2-earlier-histories/contracts-and-gates.md) | [`evidence-regression.md`](../a1-2-earlier-histories/evidence-regression.md) | [`README.md`](../a1-2-earlier-histories/README.md) |
+| `B3.1-C1-family` | [`current-state.md`](../b3-1-c1/current-state.md) | [`architecture.md`](../b3-1-c1/architecture.md), [`crosswalk.md`](../b3-1-c1/crosswalk.md) | [`slice-and-task.md`](../b3-1-c1/slice-and-task.md) | [`contracts-and-gates.md`](../b3-1-c1/contracts-and-gates.md) | [`evidence-regression.md`](../b3-1-c1/evidence-regression.md) | [`README.md`](../b3-1-c1/README.md) |
+| `B1-B2.1-family` | [`current-state.md`](../b1-b2-1/current-state.md) | [`architecture.md`](../b1-b2-1/architecture.md), [`crosswalk.md`](../b1-b2-1/crosswalk.md) | [`slice-and-task.md`](../b1-b2-1/slice-and-task.md) | [`contracts-and-gates.md`](../b1-b2-1/contracts-and-gates.md) | [`evidence-regression.md`](../b1-b2-1/evidence-regression.md) | [`README.md`](../b1-b2-1/README.md) |
+| `A1.1d-5R2-3-family` | [`current-state.md`](../a1.1d-5r2-3/current-state.md) | linked family context in [`README.md`](../a1.1d-5r2-3/README.md) | [`slice-and-task.md`](../a1.1d-5r2-3/slice-and-task.md) | [`contracts-and-gates.md`](../a1.1d-5r2-3/contracts-and-gates.md) | linked evidence/receipts in [`README.md`](../a1.1d-5r2-3/README.md) | [`README.md`](../a1.1d-5r2-3/README.md) |
+| `A1.1d-5R2-2-renewed-closeout-family` | [`current-state.md`](../a1.1d-5r2-2-renewed-closeout/current-state.md) | [`architecture.md`](../a1.1d-5r2-2-renewed-closeout/architecture.md), [`crosswalk.md`](../a1.1d-5r2-2-renewed-closeout/crosswalk.md) | [`slice-and-task.md`](../a1.1d-5r2-2-renewed-closeout/slice-and-task.md) | [`contracts-and-gates.md`](../a1.1d-5r2-2-renewed-closeout/contracts-and-gates.md) | [`evidence-regression.md`](../a1.1d-5r2-2-renewed-closeout/evidence-regression.md) | [`README.md`](../a1.1d-5r2-2-renewed-closeout/README.md) |
+| `A1.1d-5R2-2F-family` | [`current-state.md`](../a1.1d-5r2-2f/current-state.md) | [`architecture.md`](../a1.1d-5r2-2f/architecture.md), [`crosswalk.md`](../a1.1d-5r2-2f/crosswalk.md), [`authenticated-runtime-projections.md`](../history/authenticated-runtime-projections.md) | [`slice-and-task.md`](../a1.1d-5r2-2f/slice-and-task.md) | [`contracts-and-gates.md`](../a1.1d-5r2-2f/contracts-and-gates.md) | [`evidence-regression.md`](../a1.1d-5r2-2f/evidence-regression.md) | [`README.md`](../a1.1d-5r2-2f/README.md), cross-packet checkpoints in [`cross-cutting-control-pack-checkpoints.md`](../history/cross-cutting-control-pack-checkpoints.md) |

@@ -1,4 +1,11 @@
+**Kind:** evidence and regression compatibility index
+**Stable ID:** `root-debug-regression-compatibility-index`
+**Status:** non-authoritative typed compatibility index
+**Canonical for:** legacy root evidence/regression headings, anchors, and canonical-owner routing only
+
 # Debug Regression Ledger
+
+> **Compatibility index boundary:** Canonical evidence owners live under [`evidence/`](evidence/README.md) and linked packet-family ledgers. This root preserves legacy headings, anchors, and compatibility sections; [`06-review-finding-inventory.md`](06-review-finding-inventory.md) and [`review-control/`](review-control/) remain canonical and path-stable.
 
 ## How to read this ledger
 

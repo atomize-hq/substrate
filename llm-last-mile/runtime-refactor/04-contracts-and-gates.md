@@ -1,4 +1,11 @@
+**Kind:** contract and gate compatibility index
+**Stable ID:** `root-contracts-and-gates-compatibility-index`
+**Status:** non-authoritative typed compatibility index
+**Canonical for:** legacy root contract/gate headings, anchors, and canonical-owner routing only
+
 # Contracts and Gates
+
+> **Compatibility index boundary:** Canonical contracts and gates live under [`contracts/`](contracts/) and [`gates/`](gates/) together with linked packet-family records. This root preserves legacy headings, anchors, and compatibility sections without changing a contract or gate status.
 
 ## Normative conventions
 

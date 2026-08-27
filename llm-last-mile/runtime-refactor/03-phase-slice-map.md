@@ -1,4 +1,11 @@
+**Kind:** slice compatibility index
+**Stable ID:** `root-phase-slice-map-compatibility-index`
+**Status:** non-authoritative typed compatibility index
+**Canonical for:** legacy root track/slice/task headings, projections, anchors, and canonical-owner routing only
+
 # Phase and Slice Map
+
+> **Compatibility index boundary:** Shared sequencing and slice navigation lives under [`slices/`](slices/README.md) and the linked packet-family owners. This root preserves legacy headings, anchors, and compatibility tables without introducing scheduling authority or successor selection.
 
 ## Sequencing rules
 

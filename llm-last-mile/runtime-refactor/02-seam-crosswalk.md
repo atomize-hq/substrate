@@ -1,4 +1,11 @@
+**Kind:** seam compatibility index
+**Stable ID:** `root-seam-crosswalk-compatibility-index`
+**Status:** non-authoritative typed compatibility index
+**Canonical for:** legacy root seam headings, table projections, anchors, and canonical-owner routing only
+
 # Seam Crosswalk
+
+> **Compatibility index boundary:** Shared seam-family navigation lives under [`seams/`](seams/README.md), while packet-family and current seam-family authority remains with each linked canonical owner. This root preserves legacy headings, anchors, and explicitly labeled compatibility tables without promoting a seam; A0 remains location-locked here.
 
 ## Reading rule
 
