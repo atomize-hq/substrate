@@ -2,16 +2,7 @@
 
 ## How to read this ledger
 
-- **Resolved baseline** means a specific observed failure has a trustworthy fix or live proof that must not regress. It does **not** promote the surrounding architecture seam.
-- **Partially resolved** means a narrow behavior works while the target ownership model remains wrong or unproven.
-- **Unresolved** means the target behavior lacks an implementation and proof gate.
-- Historical diagnoses are retained only when they define a permanent negative or regression test.
-
-Primary source memos:
-
-- [`../../RUN_WORLD_TASK_DEBUG_CANONICAL.md`](../../RUN_WORLD_TASK_DEBUG_CANONICAL.md)
-- [`../../CONTINUE_WORLD_WORKER_BLOCKING_DEVIATION_DEBUG.md`](../../CONTINUE_WORLD_WORKER_BLOCKING_DEVIATION_DEBUG.md)
-- [`../../CODEX_WORLD_DISPATCH_GAP_WRITEUP.md`](../../CODEX_WORLD_DISPATCH_GAP_WRITEUP.md)
+Compatibility anchor only; canonical content: [`evidence/README.md#how-to-read-this-ledger`](evidence/README.md#how-to-read-this-ledger).
 
 ## Canonical issue ledger
 
