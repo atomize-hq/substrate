@@ -5,7 +5,7 @@
 - **Status:** accepted for active scheduling; documentation-only decision.
 - **Effective date:** 2026-08-20.
 - **Reentry gate:** `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY` (closed by the selection below).
-- **Active global implementation packet:** [`A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md`](A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md).
+- **Active global implementation packet:** [`A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md).
 - **Supersedes:** the 2026-08-19 macOS developer-parity decision only where it made
   `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` the global product-work predecessor. It does not weaken,
   close, or authorize the macOS parity lane.
@@ -51,7 +51,7 @@ later packet remains preserved at
 This historical selection itself performed no runtime, installer, Lima, macOS, Windows, archive,
 or native operation and did not claim A1.3 completion.
 
-## A1.3-P0 preparatory amendment (2026-08-20; controlling)
+## A1.3/P0 corrective replan (2026-08-21; controlling)
 
 The frozen evidence packet at remote path
 `llm-last-mile/runtime-refactor/review-control/a1-3-p0-scope-expansion-evidence.md`, bound to
@@ -62,11 +62,28 @@ legacy `launch_hidden_owner_helper` path; the authority-managed route still cros
 timeout-reconciliation, and legacy authority-write boundaries; and `agent_runtime/auto_attach.rs`
 remained a separate compatibility caller on that same launcher.
 
-Therefore A1.3 is held open behind a narrower preparatory split. The active next implementation
-packet is now **A1.3-P0 — authority-bound transport split preparatory packet**, recorded in
-[`A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md`](A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md). A1.3
-does not resume and may not claim `RG-BASE-01` until A1.3-P0 is implemented, independently
-reviewed, and exits on its exact Linux proof wall.
+The later corrective replan on bound target `a8044271cdeb5bbcbe6001b1b34eb2c7ab95f134` verified one
+additional source seam: the real retained-turn request path still submits
+`acceptance_context: None` even though B1 already owns the optional equality-only
+`host_transition_correlation` carrier and A1.2b is already the sole production source for that
+exact value.
+
+Therefore neither the held A1.3 packet nor the held A1.3-P0 preparatory split remains executable
+as the next implementation packet. The old A1.3 fence omitted the public transport path and the
+exact retained-turn `orchestrator_world_dispatch.rs` acceptance-context construction/projection
+seam. The A1.3-P0 split validly identified the legacy launcher corridor but is non-implementable
+as a standalone prerequisite because the same real public CLI/helper/REPL path must land,
+atomically, the new authority-managed public transport path, exact HostSessionAuthority
+consumption and actor-event resolution, and only the strictly mechanical projection of already
+HSA-authorized correlation through that exact retained-turn seam and into the B1 acceptance-context
+field.
+
+The active next implementation packet is now
+**A1.3-P1 — atomic public adoption**, recorded in
+[`A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md).
+A1.3-P0 and the old A1.3 packet remain preserved as held historical fences and may not be
+dispatched. A1.4, Windows, and all other later work remain undispatched until their own fresh
+authority packets activate them.
 
 ## macOS lane
 
@@ -113,7 +130,8 @@ proof rather than a historical label. That rebind later selected A1.3.
   fresh authorization.
 - This scheduling decision itself did not create a branch, modify product source, re-open Linux
   R3, or perform a Linux proof run. Its separately recorded reentry selection first selected A1.3,
-  and the later bounded amendment now activates only the A1.3-P0 preparatory packet while holding
-  A1.3 open.
+  the later frozen amendment selected A1.3-P0 as a narrower preparatory split, and the corrective
+  replan now holds both older fences while activating only the new A1.3-P1 atomic public-adoption
+  packet.
 - This decision does not dispatch Windows, protected macOS lifecycle revival, Keychain activity,
   Attempt 4 inspection or remediation, installer execution, Lima actions, or native operations.
