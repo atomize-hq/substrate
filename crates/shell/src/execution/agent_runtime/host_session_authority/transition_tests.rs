@@ -28,6 +28,11 @@ use super::schema::{
     RuntimeBackendKindV1, StartupOwnershipOutcomeV1, StartupOwnershipResultHashInputV1,
     TerminalHandoffHashInputV2, TimestampV1, WorkspaceBindingV1, WorldBindingV1,
 };
+use super::start_continuity::{
+    EstablishStartContinuationCrashPointV1, EstablishStartContinuationRequestV1,
+    SettleStartTurnCrashPointV1, SettleStartTurnRequestV1, StartContinuationOutcomeV1,
+    StartTransactionBeginOutcomeV1, StartTurnCompletionKindV1, StartTurnSettlementOutcomeV1,
+};
 use super::store_schema::{
     DurableSessionAuthorityV1, HostSessionPostTurnApplicationV1, HostSessionPostTurnApplicationV2,
     HostSessionStartupOwnershipApplicationV1, HostSessionTransitionInputHandoffV1,
@@ -35,7 +40,8 @@ use super::store_schema::{
     HostSessionTransitionTransportPayloadStateV1,
     RetainedWorkerAuthorityRegistrationRequestStateV1,
     RetainedWorkerAuthorityRegistrationRequestV1, RetainedWorkerAuthorityRegistrationV1,
-    SessionNamespaceRecordV1, StartTombstoneStateV1, StateRootV3,
+    SessionNamespaceRecordV1, StartTombstoneStateV1, StartTransactionRecordV1,
+    StartTransactionStateV1, StateRootV3,
 };
 use super::transition::{
     AcceptTransitionInputRequestV1, ApplicationCrashPointV1, ApplyHostSessionTransitionRequestV1,
@@ -226,6 +232,136 @@ fn issue_and_claim_start(
         expected_intent_revision: claimed.intent_revision,
         claim_id: claim.claim_id,
         expected_claim_revision: claim_revision,
+    }
+}
+
+fn applied_start_for_continuity() -> (
+    tempfile::TempDir,
+    HostSessionAuthority,
+    IssueHostSessionTransitionRequestV1,
+    EstablishStartContinuationRequestV1,
+) {
+    let (parent, authority, binding) = authority();
+    let request = start_request(binding);
+    let application = issue_and_claim_start(&authority, &request);
+    let TransitionApplicationOutcomeV1::Applied(intent) = authority
+        .apply_start_at(&application, timestamp("2026-07-14T12:01:10.000000000Z"))
+        .unwrap()
+    else {
+        panic!("first Start application must commit")
+    };
+    let HostSessionTransitionIntentStateV2::Applied {
+        application_result_ref,
+        authority_revision_after,
+        ..
+    } = intent.state
+    else {
+        panic!("Start must remain applied")
+    };
+    let root = authority.read_a12a_root().unwrap();
+    let registration = EstablishStartContinuationRequestV1 {
+        start_transaction_id: "stx_start_1".into(),
+        request_key_sha256: "c".repeat(64),
+        authority_store_id: root.authority_store_id,
+        orchestration_session_id: request.orchestration_session_id.clone(),
+        intent_id: request.intent_id.clone(),
+        issuer_request_id: request.issuer_request_id.clone(),
+        payload_commitment: intent.payload_commitment,
+        application_result_ref,
+        run_id: request.run_id.clone(),
+        expected_authority_revision: authority_revision_after,
+        authoritative_participant_id: request.target_authoritative_participant_id.clone(),
+        backend_id: request.start_contract.descriptor.backend_id.clone(),
+        protocol: request.start_contract.descriptor.protocol.clone(),
+        exchange_id: "exchange-start-1".into(),
+        exchange_sequence: 1,
+        provider_event_kind: "turn.exchange_opened".into(),
+        exchange_evidence_sha256: "a".repeat(64),
+        internal_uaa_session_id: "uaa-session-start-1".into(),
+        observed_at: timestamp("2026-07-14T12:01:20.000000000Z"),
+    };
+    let transaction = StartTransactionRecordV1 {
+        schema_version: 1,
+        transaction_id: registration.start_transaction_id.clone(),
+        request_key_sha256: registration.request_key_sha256.clone(),
+        prompt_sha256: "d".repeat(64),
+        authority_store_id: registration.authority_store_id.clone(),
+        orchestration_session_id: registration.orchestration_session_id.clone(),
+        shell_trace_session_id: request.shell_trace_session_id.clone(),
+        authoritative_participant_id: registration.authoritative_participant_id.clone(),
+        backend_id: registration.backend_id.clone(),
+        protocol: registration.protocol.clone(),
+        workspace_root: request
+            .workspace_binding
+            .workspace_root
+            .physical_path
+            .clone(),
+        world_id: request
+            .world_binding
+            .as_ref()
+            .map(|binding| binding.world_id.clone()),
+        world_generation: request
+            .world_binding
+            .as_ref()
+            .map(|binding| binding.world_generation),
+        public_backend_id: registration.backend_id.clone(),
+        public_scope: "host".into(),
+        start_intent_id: registration.intent_id.clone(),
+        start_issuer_request_id: registration.issuer_request_id.clone(),
+        start_payload_commitment: registration.payload_commitment.clone(),
+        start_application_result_ref: registration.application_result_ref.clone(),
+        start_run_id: registration.run_id.clone(),
+        start_authority_revision: registration.expected_authority_revision,
+        created_at: timestamp("2026-07-14T12:01:10.000000000Z"),
+        updated_at: timestamp("2026-07-14T12:01:10.000000000Z"),
+        state: StartTransactionStateV1::PromptNotSubmitted,
+    };
+    assert!(matches!(
+        authority.begin_start_transaction(&transaction).unwrap(),
+        StartTransactionBeginOutcomeV1::Applied(_)
+    ));
+    authority
+        .mark_start_prompt_submission_no_replay_barrier(
+            &registration.start_transaction_id,
+            &registration.request_key_sha256,
+            timestamp("2026-07-14T12:01:15.000000000Z"),
+        )
+        .unwrap();
+    (parent, authority, request, registration)
+}
+
+fn clean_start_settlement_request(
+    registration: &EstablishStartContinuationRequestV1,
+    resume_handle_ref: AuthorityObjectRefV1,
+    expected_authority_revision: u64,
+) -> SettleStartTurnRequestV1 {
+    SettleStartTurnRequestV1 {
+        start_transaction_id: registration.start_transaction_id.clone(),
+        request_key_sha256: registration.request_key_sha256.clone(),
+        authority_store_id: registration.authority_store_id.clone(),
+        orchestration_session_id: registration.orchestration_session_id.clone(),
+        intent_id: registration.intent_id.clone(),
+        issuer_request_id: registration.issuer_request_id.clone(),
+        payload_commitment: registration.payload_commitment.clone(),
+        application_result_ref: registration.application_result_ref.clone(),
+        run_id: registration.run_id.clone(),
+        authoritative_participant_id: registration.authoritative_participant_id.clone(),
+        backend_id: registration.backend_id.clone(),
+        protocol: registration.protocol.clone(),
+        registered_resume_handle_ref: resume_handle_ref,
+        expected_authority_revision,
+        protocol_actor: HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant {
+            participant_id: registration.authoritative_participant_id.clone(),
+        },
+        event_id: "event-start-completed-1".into(),
+        event_sequence: 2,
+        provider_event_kind: "turn.completed".into(),
+        thread_id: registration.internal_uaa_session_id.clone(),
+        turn_id: "turn-start-1".into(),
+        completion_evidence_sha256: "b".repeat(64),
+        kind: StartTurnCompletionKindV1::ResumableClean,
+        obligation_ledger_read: None,
+        completed_at: timestamp("2026-07-14T12:01:30.000000000Z"),
     }
 }
 
@@ -865,6 +1001,78 @@ fn complete_ledger_snapshot(
         attention_disposition,
         unresolved_attention_obligations,
         captured_at: chrono::DateTime::parse_from_rfc3339("2026-07-14T12:05:00.000000000Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc),
+    }
+}
+
+fn start_attention_snapshot(
+    registration: &EstablishStartContinuationRequestV1,
+    authority_revision_observed: u64,
+) -> LedgerObligationSnapshotHashInputV1 {
+    let accepted_work_identity = AcceptedWorldWorkIdentityV1::RetainedTurn {
+        active_run_id: registration.run_id.clone(),
+        message_id: "message-start-1".into(),
+        target_participant_id: registration.authoritative_participant_id.clone(),
+    };
+    let host_transition_correlation = substrate_common::HostTransitionWorkCorrelationV1 {
+        schema_version: 1,
+        authority_store_id: registration.authority_store_id.clone(),
+        orchestration_session_id: registration.orchestration_session_id.clone(),
+        authoritative_participant_id: registration.authoritative_participant_id.clone(),
+        transition_intent_id: registration.intent_id.clone(),
+        transition_intent_revision_observed: 3,
+        transition_run_id: registration.run_id.clone(),
+        transition_payload_commitment: opaque_commitment(&registration.payload_commitment),
+        authority_revision_observed,
+    };
+    LedgerObligationSnapshotHashInputV1 {
+        schema_version: 1,
+        authority_store_id: registration.authority_store_id.clone(),
+        orchestration_session_id: registration.orchestration_session_id.clone(),
+        authoritative_participant_id: registration.authoritative_participant_id.clone(),
+        acceptance_record_id: "acceptance-start-1".into(),
+        acceptance_record_revision: 1,
+        stream_id: "stream-start-1".into(),
+        accepted_work_identity: accepted_work_identity.clone(),
+        host_transition_correlation: host_transition_correlation.clone(),
+        transition_intent_id: registration.intent_id.clone(),
+        transition_run_id: registration.run_id.clone(),
+        authority_revision_observed,
+        materialization_cut: ObligationMaterializationCutV1 {
+            acceptance_record_id: "acceptance-start-1".into(),
+            acceptance_record_revision: 1,
+            stream_id: "stream-start-1".into(),
+            session_ledger_revision: 1,
+            terminal_event_id: "ledger-terminal-start-1".into(),
+            terminal_event_sequence: 41,
+            materialized_through_event_sequence: 41,
+        },
+        materialized_journal_events: vec![SupervisorJournalEventRefV1 {
+            schema_version: 1,
+            stream_id: "stream-start-1".into(),
+            journal_entry_id: "journal-start-1".into(),
+            acceptance_record_id: "acceptance-start-1".into(),
+            acceptance_record_revision: 1,
+            accepted_work_identity,
+            frame_sequence: 1,
+            event_sequence: 41,
+            event_id: "ledger-terminal-start-1".into(),
+            transport_event_commitment: AuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: "f".repeat(64),
+            },
+        }],
+        attention_disposition: ObligationAttentionDispositionV1::HasUnresolvedAttention,
+        unresolved_attention_obligations: vec![
+            obligation_ledger::UnresolvedAttentionObligationSnapshotEntryV1 {
+                obligation_id: "obligation-start-1".into(),
+                obligation_revision: 1,
+                canonical_record_commitment: AuthorityObjectCommitmentV1::CanonicalSha256 {
+                    digest_hex: "e".repeat(64),
+                },
+            },
+        ],
+        captured_at: chrono::DateTime::parse_from_rfc3339("2026-07-14T12:01:29.000000000Z")
             .unwrap()
             .with_timezone(&chrono::Utc),
     }
@@ -4482,5 +4690,572 @@ fn successor_resume_complete_cut_join_and_current_resolution_survive_released_tr
             .active_authoritative_participant_id
             .as_deref(),
         Some("participant-resume-1")
+    );
+}
+
+#[test]
+fn start_submission_barrier_durably_fails_closed_as_indeterminate() {
+    let (_parent, authority, _request, registration) = applied_start_for_continuity();
+    let barrier = authority
+        .retryable_start_transaction(&registration.request_key_sha256)
+        .unwrap()
+        .unwrap();
+    assert!(matches!(
+        barrier.state,
+        StartTransactionStateV1::PromptSubmissionNoReplayBarrier { .. }
+    ));
+
+    assert!(
+        authority
+            .mark_start_submission_outcome_indeterminate(
+                &registration.start_transaction_id,
+                &registration.request_key_sha256,
+                timestamp("2026-07-14T12:01:14.000000000Z"),
+            )
+            .is_err(),
+        "a declaration reordered before its barrier must fail closed"
+    );
+    let declared_at = timestamp("2026-07-14T12:01:16.000000000Z");
+    let indeterminate = authority
+        .mark_start_submission_outcome_indeterminate(
+            &registration.start_transaction_id,
+            &registration.request_key_sha256,
+            declared_at.clone(),
+        )
+        .unwrap();
+    assert!(matches!(
+        indeterminate.state,
+        StartTransactionStateV1::PromptSubmissionIndeterminate {
+            ref barrier_committed_at,
+            ref declared_at,
+        } if barrier_committed_at == &timestamp("2026-07-14T12:01:15.000000000Z")
+            && declared_at == &timestamp("2026-07-14T12:01:16.000000000Z")
+    ));
+    assert_eq!(
+        authority
+            .mark_start_submission_outcome_indeterminate(
+                &registration.start_transaction_id,
+                &registration.request_key_sha256,
+                declared_at,
+            )
+            .unwrap(),
+        indeterminate,
+        "an exact retry must join the durable indeterminate result"
+    );
+    assert!(
+        authority
+            .mark_start_submission_outcome_indeterminate(
+                &registration.start_transaction_id,
+                &registration.request_key_sha256,
+                timestamp("2026-07-14T12:01:17.000000000Z"),
+            )
+            .is_err(),
+        "a conflicting declaration must fail closed"
+    );
+    assert!(
+        authority
+            .establish_start_continuation(&registration)
+            .is_err(),
+        "indeterminate submission is not authenticated provider acceptance"
+    );
+    assert!(
+        authority
+            .mark_start_prompt_submission_no_replay_barrier(
+                &registration.start_transaction_id,
+                &registration.request_key_sha256,
+                timestamp("2026-07-14T12:01:15.000000000Z"),
+            )
+            .is_err(),
+        "retry from indeterminate must not authorize another provider submission"
+    );
+    assert_eq!(
+        authority
+            .retryable_start_transaction(&registration.request_key_sha256)
+            .unwrap(),
+        Some(indeterminate)
+    );
+}
+
+#[test]
+fn start_continuity_registration_and_settlement_are_durable_and_resumable() {
+    let (_parent, authority, request, registration) = applied_start_for_continuity();
+    assert!(matches!(
+        authority.read_a12b_root().unwrap().start_transaction_map
+            [&registration.start_transaction_id]
+            .state,
+        StartTransactionStateV1::PromptSubmissionNoReplayBarrier { .. }
+    ));
+    assert!(
+        authority
+            .mark_start_prompt_submission_no_replay_barrier(
+                &registration.start_transaction_id,
+                &registration.request_key_sha256,
+                timestamp("2026-07-14T12:01:16.000000000Z"),
+            )
+            .is_err(),
+        "an in-progress retry must not authorize another prompt submission"
+    );
+
+    let error = authority
+        .establish_start_continuation_at_with_crash_point(
+            &registration,
+            EstablishStartContinuationCrashPointV1::HandlePublished,
+        )
+        .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "injected crash after Start handle publication"
+    );
+    let after_orphan = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .unwrap();
+    assert_eq!(after_orphan.authority.authority_revision, 1);
+    assert!(after_orphan
+        .authority
+        .internal_resume_handle_refs
+        .is_empty());
+    assert_eq!(
+        after_orphan.authority.lifecycle_posture,
+        HostSessionPostureV1::ActiveAttached
+    );
+    assert!(matches!(
+        authority.read_a12b_root().unwrap().start_transaction_map
+            [&registration.start_transaction_id]
+            .state,
+        StartTransactionStateV1::PromptSubmissionNoReplayBarrier { .. }
+    ));
+
+    let StartContinuationOutcomeV1::Applied(registered) = authority
+        .establish_start_continuation(&registration)
+        .unwrap()
+    else {
+        panic!("first continuation registration must commit")
+    };
+    let after_registration = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .unwrap();
+    assert_eq!(after_registration.authority.authority_revision, 2);
+    assert_eq!(
+        after_registration.authority.lifecycle_posture,
+        HostSessionPostureV1::ActiveAttached
+    );
+    assert_eq!(
+        after_registration.authority.internal_resume_handle_refs,
+        vec![registered.resume_handle_ref.clone()]
+    );
+    assert_eq!(
+        authority
+            .establish_start_continuation(&registration)
+            .unwrap(),
+        StartContinuationOutcomeV1::Joined(registered.clone())
+    );
+    assert!(matches!(
+        authority.read_a12b_root().unwrap().start_transaction_map
+            [&registration.start_transaction_id]
+            .state,
+        StartTransactionStateV1::ContinuationRegistered { .. }
+    ));
+
+    let settlement = clean_start_settlement_request(
+        &registration,
+        registered.resume_handle_ref.clone(),
+        registered.authority_revision_after,
+    );
+    let error = authority
+        .settle_start_turn_at_with_crash_point(
+            &settlement,
+            SettleStartTurnCrashPointV1::RootCommitted,
+        )
+        .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "injected crash after Start settlement commit"
+    );
+    let StartTurnSettlementOutcomeV1::Joined(settled) =
+        authority.settle_start_turn(&settlement).unwrap()
+    else {
+        panic!("retry after committed settlement must join")
+    };
+    let parked = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .unwrap();
+    assert_eq!(parked.authority.authority_revision, 3);
+    assert_eq!(
+        parked.authority.lifecycle_posture,
+        HostSessionPostureV1::ParkedResumable
+    );
+    assert!(parked
+        .authority
+        .internal_resume_handle_refs
+        .contains(&registered.resume_handle_ref));
+    assert!(parked
+        .authority
+        .internal_resume_handle_refs
+        .contains(&settled.continuation_resume_handle_ref));
+    assert!(matches!(
+        authority.read_a12b_root().unwrap().start_transaction_map
+            [&registration.start_transaction_id]
+            .state,
+        StartTransactionStateV1::TurnSettledAwaitingResponse { .. }
+    ));
+    let delivered_at = timestamp("2026-07-14T12:01:31.000000000Z");
+    let delivered = authority
+        .mark_start_response_delivered(
+            &registration.start_transaction_id,
+            &registration.request_key_sha256,
+            delivered_at.clone(),
+        )
+        .unwrap();
+    assert!(matches!(
+        delivered.state,
+        StartTransactionStateV1::PublicResponseDelivered { .. }
+    ));
+    assert_eq!(
+        authority
+            .mark_start_response_delivered(
+                &registration.start_transaction_id,
+                &registration.request_key_sha256,
+                delivered_at,
+            )
+            .unwrap(),
+        delivered,
+        "an exact public-response retry must converge"
+    );
+    assert_eq!(
+        authority
+            .establish_start_continuation(&registration)
+            .unwrap(),
+        StartContinuationOutcomeV1::Joined(registered.clone()),
+        "an exact registration retry must join after settlement and response delivery"
+    );
+    assert_eq!(
+        authority.settle_start_turn(&settlement).unwrap(),
+        StartTurnSettlementOutcomeV1::Joined(settled.clone()),
+        "an exact settlement retry must join after response delivery"
+    );
+    let committed = authority
+        .committed_start_public_result(&delivered)
+        .expect("delivered transaction must authenticate its exact settlement result");
+    assert_eq!(
+        committed.completion_kind,
+        StartTurnCompletionKindV1::ResumableClean
+    );
+    assert_eq!(
+        committed.resulting_posture,
+        HostSessionPostureV1::ParkedResumable
+    );
+    assert!(authority
+        .retryable_start_transaction(&registration.request_key_sha256)
+        .unwrap()
+        .is_none());
+
+    let successor = resume_successor_request(
+        &parked,
+        settled.continuation_resume_handle_ref,
+        "participant-resume-from-start-1",
+    );
+    let SuccessorTransitionIssueOutcomeV1::Issued(issued) = authority
+        .issue_successor_at(
+            &parked,
+            &successor,
+            timestamp("2026-07-14T12:02:00.000000000Z"),
+            300,
+        )
+        .unwrap()
+    else {
+        panic!("ResumeOneTurn must consume the continuation produced by Start")
+    };
+    assert_eq!(issued.resume_handle_ref, successor.resume_handle_ref);
+
+    let claim = ClaimHostSessionTransitionRequestV1 {
+        intent_id: issued.intent_id.clone(),
+        issuer_request_id: issued.issuer_request_id.clone(),
+        payload_commitment: issued.payload_commitment.clone(),
+        expected_intent_revision: issued.intent_revision,
+        claim_id: "claim-resume-from-start-1".into(),
+        claimant_attempt_id: "attempt-resume-from-start-1".into(),
+    };
+    let SuccessorTransitionClaimOutcomeV1::Claimed(claimed) = authority
+        .claim_successor_at(&claim, timestamp("2026-07-14T12:02:10.000000000Z"), 30)
+        .unwrap()
+    else {
+        panic!("ResumeOneTurn claim must consume Start-produced continuity")
+    };
+    let HostSessionTransitionIntentStateV3::Claimed { claim_revision, .. } = claimed.state else {
+        panic!("ResumeOneTurn claim must retain exact claim evidence")
+    };
+    let application = ApplyHostSessionTransitionRequestV1 {
+        intent_id: claimed.intent_id,
+        issuer_request_id: claimed.issuer_request_id,
+        payload_commitment: claimed.payload_commitment,
+        expected_intent_revision: claimed.intent_revision,
+        claim_id: claim.claim_id,
+        expected_claim_revision: claim_revision,
+    };
+    let SuccessorTransitionApplicationOutcomeV1::Applied(applied) = authority
+        .apply_successor_at(&application, timestamp("2026-07-14T12:02:20.000000000Z"))
+        .unwrap()
+    else {
+        panic!("ResumeOneTurn application must consume Start-produced continuity")
+    };
+    assert_eq!(
+        applied
+            .resume_handle_ref
+            .as_ref()
+            .expect("applied ResumeOneTurn continuity"),
+        successor
+            .resume_handle_ref
+            .as_ref()
+            .expect("issued ResumeOneTurn continuity")
+    );
+}
+
+#[test]
+fn start_turn_settlement_uses_only_exact_completion_and_canonical_attention_evidence() {
+    let (_parent, authority, request, registration) = applied_start_for_continuity();
+    let StartContinuationOutcomeV1::Applied(registered) = authority
+        .establish_start_continuation(&registration)
+        .unwrap()
+    else {
+        panic!("first continuation registration must commit")
+    };
+    let mut attention = clean_start_settlement_request(
+        &registration,
+        registered.resume_handle_ref,
+        registered.authority_revision_after,
+    );
+    attention.obligation_ledger_read = Some(ObligationLedgerSnapshotReadV1::Complete {
+        snapshot: start_attention_snapshot(&registration, registered.authority_revision_after),
+    });
+    let ObligationLedgerSnapshotReadV1::Complete { snapshot } = attention
+        .obligation_ledger_read
+        .as_ref()
+        .expect("canonical attention evidence")
+    else {
+        panic!("attention settlement must use a complete canonical ledger cut")
+    };
+    assert_ne!(
+        snapshot.materialization_cut.terminal_event_id, attention.event_id,
+        "ledger and wrapper terminal evidence are independent authenticated identities"
+    );
+    assert_ne!(
+        snapshot.materialization_cut.terminal_event_sequence, attention.event_sequence,
+        "ledger and wrapper terminal sequences must not be conflated"
+    );
+    let StartTurnSettlementOutcomeV1::Applied(settled) =
+        authority.settle_start_turn(&attention).unwrap()
+    else {
+        panic!("attention-bearing settlement must commit")
+    };
+    assert_eq!(
+        settled.resulting_posture,
+        HostSessionPostureV1::AwaitingAttention
+    );
+    assert_eq!(
+        authority
+            .resolve_current_exact(&request.orchestration_session_id, None)
+            .unwrap()
+            .authority
+            .lifecycle_posture,
+        HostSessionPostureV1::AwaitingAttention
+    );
+
+    let (_parent, authority, request, registration) = applied_start_for_continuity();
+    let StartContinuationOutcomeV1::Applied(registered) = authority
+        .establish_start_continuation(&registration)
+        .unwrap()
+    else {
+        panic!("first continuation registration must commit")
+    };
+    let mut terminal = clean_start_settlement_request(
+        &registration,
+        registered.resume_handle_ref,
+        registered.authority_revision_after,
+    );
+    terminal.kind = StartTurnCompletionKindV1::TerminalFailure {
+        reason: "wrapper reported exact inaugural-turn failure".into(),
+    };
+    let StartTurnSettlementOutcomeV1::Applied(settled) =
+        authority.settle_start_turn(&terminal).unwrap()
+    else {
+        panic!("terminal settlement must commit")
+    };
+    assert_eq!(settled.resulting_posture, HostSessionPostureV1::Terminal);
+    assert_eq!(
+        authority
+            .resolve_current_exact(&request.orchestration_session_id, None)
+            .unwrap()
+            .authority
+            .lifecycle_posture,
+        HostSessionPostureV1::Terminal
+    );
+    let committed_transaction = authority.read_a12b_root().unwrap().start_transaction_map
+        [&registration.start_transaction_id]
+        .clone();
+    let committed = authority
+        .committed_start_public_result(&committed_transaction)
+        .expect("terminal retry must authenticate exact committed failure result");
+    assert_eq!(committed.resulting_posture, HostSessionPostureV1::Terminal);
+    assert_eq!(
+        committed.completion_kind,
+        StartTurnCompletionKindV1::TerminalFailure {
+            reason: "wrapper reported exact inaugural-turn failure".into()
+        }
+    );
+}
+
+#[test]
+fn start_attention_rejects_a_noncanonical_materialization_cut() {
+    let (_parent, authority, _request, registration) = applied_start_for_continuity();
+    let StartContinuationOutcomeV1::Applied(registered) = authority
+        .establish_start_continuation(&registration)
+        .unwrap()
+    else {
+        panic!("first continuation registration must commit")
+    };
+    let mut settlement = clean_start_settlement_request(
+        &registration,
+        registered.resume_handle_ref,
+        registered.authority_revision_after,
+    );
+    let mut snapshot = start_attention_snapshot(&registration, registered.authority_revision_after);
+    snapshot
+        .materialization_cut
+        .materialized_through_event_sequence = 1;
+    settlement.obligation_ledger_read = Some(ObligationLedgerSnapshotReadV1::Complete { snapshot });
+
+    assert!(
+        authority.settle_start_turn(&settlement).is_err(),
+        "Start must reject a raw snapshot whose journal outruns the authenticated cut"
+    );
+}
+
+#[test]
+fn start_continuity_rejects_reordered_stale_and_substituted_evidence() {
+    let (_parent, authority, request, registration) = applied_start_for_continuity();
+    let mut fabricated_ref = placeholder_ref(
+        "ao_dddddddddddddddddddddddddddddddd",
+        AuthorityObjectKindV1::ResumeHandle,
+    );
+    fabricated_ref.schema_version = 2;
+    let settlement = clean_start_settlement_request(&registration, fabricated_ref, 2);
+    assert!(authority.settle_start_turn(&settlement).is_err());
+    assert_eq!(
+        authority
+            .resolve_current_exact(&request.orchestration_session_id, None)
+            .unwrap()
+            .authority
+            .lifecycle_posture,
+        HostSessionPostureV1::ActiveAttached
+    );
+
+    let mut wrong_run = registration.clone();
+    wrong_run.run_id = "substituted-run".into();
+    assert!(authority.establish_start_continuation(&wrong_run).is_err());
+    let mut wrong_session = registration.clone();
+    wrong_session.orchestration_session_id = "session-substituted".into();
+    assert!(authority
+        .establish_start_continuation(&wrong_session)
+        .is_err());
+    let mut wrong_backend = registration.clone();
+    wrong_backend.backend_id = "cli:substituted".into();
+    assert!(authority
+        .establish_start_continuation(&wrong_backend)
+        .is_err());
+    assert_eq!(
+        authority
+            .resolve_current_exact(&request.orchestration_session_id, None)
+            .unwrap()
+            .authority
+            .lifecycle_posture,
+        HostSessionPostureV1::ActiveAttached,
+        "backend identity alone cannot change HSA posture"
+    );
+    let StartContinuationOutcomeV1::Applied(registered) = authority
+        .establish_start_continuation(&registration)
+        .unwrap()
+    else {
+        panic!("exact continuation must commit")
+    };
+    let mut substituted = registration.clone();
+    substituted.internal_uaa_session_id = "uaa-substituted".into();
+    assert!(authority
+        .establish_start_continuation(&substituted)
+        .is_err());
+    let mut substituted_exchange_evidence = registration.clone();
+    substituted_exchange_evidence.exchange_evidence_sha256 = "9".repeat(64);
+    assert!(authority
+        .establish_start_continuation(&substituted_exchange_evidence)
+        .is_err());
+
+    let mut stale_settlement = clean_start_settlement_request(
+        &registration,
+        registered.resume_handle_ref.clone(),
+        registered.authority_revision_after,
+    );
+    stale_settlement.expected_authority_revision = 1;
+    assert!(authority.settle_start_turn(&stale_settlement).is_err());
+    let mut mismatched_actor = clean_start_settlement_request(
+        &registration,
+        registered.resume_handle_ref,
+        registered.authority_revision_after,
+    );
+    mismatched_actor.protocol_actor = HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant {
+        participant_id: "participant-substituted".into(),
+    };
+    assert!(authority.settle_start_turn(&mismatched_actor).is_err());
+    assert_eq!(
+        authority
+            .resolve_current_exact(&request.orchestration_session_id, None)
+            .unwrap()
+            .authority
+            .lifecycle_posture,
+        HostSessionPostureV1::ActiveAttached
+    );
+}
+
+#[test]
+fn start_continuity_exact_retry_never_joins_across_authority_revisions() {
+    let (_parent, authority, _request, registration) = applied_start_for_continuity();
+    let StartContinuationOutcomeV1::Applied(registered) = authority
+        .establish_start_continuation(&registration)
+        .unwrap()
+    else {
+        panic!("first continuation registration must commit")
+    };
+
+    let mut stale_registration = registration.clone();
+    stale_registration.expected_authority_revision = registered.authority_revision_after;
+    assert!(
+        authority
+            .establish_start_continuation(&stale_registration)
+            .is_err(),
+        "registration retry at a substituted authority revision must fail closed"
+    );
+
+    let settlement = clean_start_settlement_request(
+        &registration,
+        registered.resume_handle_ref,
+        registered.authority_revision_after,
+    );
+    let StartTurnSettlementOutcomeV1::Applied(settled) =
+        authority.settle_start_turn(&settlement).unwrap()
+    else {
+        panic!("first Start settlement must commit")
+    };
+    let mut stale_settlement = settlement;
+    stale_settlement.expected_authority_revision = settled.authority_revision_after;
+    assert!(
+        authority.settle_start_turn(&stale_settlement).is_err(),
+        "settlement retry at a substituted authority revision must fail closed"
+    );
+    let mut substituted_completion_evidence = stale_settlement;
+    substituted_completion_evidence.expected_authority_revision = 2;
+    substituted_completion_evidence.completion_evidence_sha256 = "8".repeat(64);
+    assert!(
+        authority
+            .settle_start_turn(&substituted_completion_evidence)
+            .is_err(),
+        "settlement retry with substituted typed completion evidence must fail closed"
     );
 }

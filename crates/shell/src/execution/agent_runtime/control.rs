@@ -36,6 +36,15 @@ use uuid::Uuid;
 #[cfg(unix)]
 use crate::execution::agent_events::format_event_line;
 use crate::execution::agent_runtime::dispatch_contract::WorkerCancelPayloadV1;
+use crate::execution::agent_runtime::host_session_authority::schema::HostSessionPostureV1;
+#[cfg(unix)]
+use crate::execution::agent_runtime::host_session_authority::start_continuity::StartTurnCompletionKindV1;
+#[cfg(unix)]
+use crate::execution::agent_runtime::host_session_authority::store_schema::{
+    StartTransactionRecordV1, StartTransactionStateV1,
+};
+use crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot;
+use crate::execution::agent_runtime::host_session_authority::HostSessionAuthority;
 use crate::execution::agent_runtime::orchestration_session::{
     HostAttachContract, OrchestrationSessionPosture, StartupPromptStreamState,
 };
@@ -185,6 +194,40 @@ pub(crate) struct SubmittedPromptCompletion {
     pub warning: Option<String>,
 }
 
+pub(crate) fn verify_public_start_continuity_settled(
+    orchestration_session_id: &str,
+) -> Result<HostSessionPostureV1> {
+    let substrate_home = substrate_paths::substrate_home()?;
+    let authority = HostSessionAuthority::from_trusted_root(
+        TrustedAuthorityRoot::open(&substrate_home)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let resolved = authority
+        .resolve_current_exact(orchestration_session_id, None)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let start_handles = resolved
+        .authority
+        .internal_resume_handle_refs
+        .iter()
+        .filter(|reference| reference.schema_version == 2)
+        .count();
+    if resolved.authority.authority_revision < 3
+        || start_handles != 2
+        || !matches!(
+            resolved.authority.lifecycle_posture,
+            HostSessionPostureV1::ParkedResumable
+                | HostSessionPostureV1::AwaitingAttention
+                | HostSessionPostureV1::Terminal
+        )
+    {
+        anyhow::bail!(
+            "public Start has not durably registered and settled its inaugural continuation"
+        );
+    }
+    Ok(resolved.authority.lifecycle_posture)
+}
+
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -277,6 +320,14 @@ pub(crate) struct HiddenOwnerHelperParticipantPlan {
 pub(crate) struct HiddenOwnerHelperStartupPromptPlan {
     pub prompt_text: String,
     pub stream_path: PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_key_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub public_backend_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub public_scope: Option<AgentExecutionScope>,
 }
 
 #[allow(dead_code)]
@@ -422,6 +473,72 @@ pub(crate) fn launch_hidden_owner_helper(
         participant_id: plan.participant.participant_id.clone(),
         backend_id: plan.descriptor.backend_id.clone(),
     })
+}
+
+/// Starts the real public Start exchange without consulting the legacy
+/// compatibility projection for readiness. The startup backchannel and HSA
+/// settlement are the caller's completion authority.
+#[cfg(unix)]
+pub(crate) fn launch_hidden_owner_helper_for_durable_start(
+    plan: &HiddenOwnerHelperLaunchPlan,
+    world: bool,
+    no_world: bool,
+) -> Result<HiddenOwnerHelperLaunchReceipt> {
+    if plan.mode != OwnerHelperMode::Start || plan.startup_prompt.is_none() {
+        anyhow::bail!(
+            "durable Start launcher requires a Start plan with the real prompt backchannel"
+        );
+    }
+
+    let plan_path = persist_durable_start_launch_plan(plan)?;
+    let exe = env::current_exe()
+        .context("failed to resolve current substrate executable for hidden owner-helper launch")?;
+    let mut command = Command::new(exe);
+    if world {
+        command.arg("--world");
+    } else if no_world {
+        command.arg("--no-world");
+    }
+    command
+        .args(["agent", HIDDEN_OWNER_HELPER_SUBCOMMAND, "--plan-file"])
+        .arg(&plan_path)
+        .current_dir(&plan.session.workspace_root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+
+    let child = command.spawn().with_context(|| {
+        format!(
+            "failed to spawn hidden owner-helper for orchestration session {}",
+            plan.session.orchestration_session_id
+        )
+    })?;
+
+    Ok(HiddenOwnerHelperLaunchReceipt {
+        helper_pid: child.id(),
+        orchestration_session_id: plan.session.orchestration_session_id.clone(),
+        participant_id: plan.participant.participant_id.clone(),
+        backend_id: plan.descriptor.backend_id.clone(),
+    })
+}
+
+#[cfg(unix)]
+fn persist_durable_start_launch_plan(plan: &HiddenOwnerHelperLaunchPlan) -> Result<PathBuf> {
+    let path = durable_start_launch_plan_path(plan)?;
+    let parent = path.parent().ok_or_else(|| {
+        anyhow::anyhow!(
+            "durable Start launch plan path '{}' is missing a parent directory",
+            path.display()
+        )
+    })?;
+    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
+    fs::write(&path, serde_json::to_vec_pretty(plan)?).with_context(|| {
+        format!(
+            "failed to write durable Start launch plan {}",
+            path.display()
+        )
+    })?;
+    Ok(path)
 }
 
 fn try_acquire_hidden_owner_helper_attach_launch_guard(
@@ -850,6 +967,80 @@ pub(crate) fn hidden_owner_helper_startup_prompt_stream_path(
     preferred
 }
 
+#[cfg(unix)]
+fn durable_start_control_root() -> Result<PathBuf> {
+    Ok(substrate_paths::substrate_home()?
+        .join("runtime-control")
+        .join("durable-start"))
+}
+
+#[cfg(unix)]
+fn durable_start_startup_prompt_stream_path(
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> Result<PathBuf> {
+    let session_fragment = compact_stop_transport_fragment(orchestration_session_id);
+    let participant_fragment = compact_stop_transport_fragment(participant_id);
+    let socket_name = format!("{session_fragment}-{participant_fragment}.startup.sock");
+    let preferred = durable_start_control_root()?
+        .join("startup")
+        .join(&socket_name);
+    if preferred.as_os_str().len() > PRIVATE_STOP_UNIX_PATH_MAX {
+        return Ok(PathBuf::from("/tmp")
+            .join("substrate-durable-start")
+            .join("startup")
+            .join(socket_name));
+    }
+    Ok(preferred)
+}
+
+#[cfg(unix)]
+fn durable_start_launch_plan_path(plan: &HiddenOwnerHelperLaunchPlan) -> Result<PathBuf> {
+    let session_fragment = compact_stop_transport_fragment(plan.orchestration_session_id());
+    let participant_fragment = compact_stop_transport_fragment(plan.participant_id());
+    Ok(durable_start_control_root()?
+        .join("owner-helper")
+        .join(format!("{session_fragment}-{participant_fragment}.json")))
+}
+
+#[cfg(unix)]
+fn durable_start_private_transport_path(
+    kind: &str,
+    suffix: &str,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> Result<PathBuf> {
+    let session_fragment = compact_stop_transport_fragment(orchestration_session_id);
+    let participant_fragment = compact_stop_transport_fragment(participant_id);
+    let socket_name = format!("{session_fragment}-{participant_fragment}.{suffix}.sock");
+    let preferred = durable_start_control_root()?.join(kind).join(&socket_name);
+    if preferred.as_os_str().len() > PRIVATE_STOP_UNIX_PATH_MAX {
+        return Ok(PathBuf::from("/tmp")
+            .join("substrate-durable-start")
+            .join(kind)
+            .join(socket_name));
+    }
+    Ok(preferred)
+}
+
+#[cfg(unix)]
+pub(crate) fn durable_start_toolbox_transport_path(
+    orchestration_session_id: &str,
+) -> Result<PathBuf> {
+    let session_fragment = compact_stop_transport_fragment(orchestration_session_id);
+    let socket_name = format!("{session_fragment}.sock");
+    let preferred = durable_start_control_root()?
+        .join("toolbox")
+        .join(&socket_name);
+    if preferred.as_os_str().len() > PRIVATE_STOP_UNIX_PATH_MAX {
+        return Ok(PathBuf::from("/tmp")
+            .join("substrate-durable-start")
+            .join("toolbox")
+            .join(socket_name));
+    }
+    Ok(preferred)
+}
+
 pub(crate) fn toolbox_transport_path_for_home(
     substrate_home: &Path,
     orchestration_session_id: &str,
@@ -905,6 +1096,35 @@ pub(crate) fn register_hidden_owner_helper_startup_prompt_listener(
     listener.set_nonblocking(true).with_context(|| {
         format!(
             "failed to configure startup prompt transport {}",
+            path.display()
+        )
+    })?;
+    Ok(StartupPromptTransportListener { listener, path })
+}
+
+#[cfg(unix)]
+pub(crate) fn register_durable_start_startup_prompt_listener(
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> Result<StartupPromptTransportListener> {
+    let path = durable_start_startup_prompt_stream_path(orchestration_session_id, participant_id)?;
+    let parent = path.parent().ok_or_else(|| {
+        anyhow::anyhow!(
+            "durable Start prompt transport path '{}' is missing a parent directory",
+            path.display()
+        )
+    })?;
+    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
+    remove_existing_stop_transport_path(&path)?;
+    let listener = StdUnixListener::bind(&path).with_context(|| {
+        format!(
+            "failed to bind durable Start prompt transport {}",
+            path.display()
+        )
+    })?;
+    listener.set_nonblocking(true).with_context(|| {
+        format!(
+            "failed to configure durable Start prompt transport {}",
             path.display()
         )
     })?;
@@ -1030,19 +1250,25 @@ fn run_hidden_owner_helper_startup_prompt_stream_with_projection(
     let result = rt.block_on(async {
         consume_hidden_owner_helper_startup_prompt_stream(listener, |envelope| {
             stream_started = true;
-            if matches!(
+            let terminal = matches!(
                 envelope,
                 PublicPromptEnvelope::Completed { .. } | PublicPromptEnvelope::Failed { .. }
-            ) {
-                saw_terminal = true;
-            }
+            );
             let rewritten = rewrite_startup_prompt_envelope_action(
                 envelope,
                 action,
                 backend_id_override,
                 scope_override,
             );
-            renderer.render(&rewritten)
+            if terminal && action == PublicPromptAction::Start {
+                renderer.render_start_terminal_strict(&rewritten)?;
+            } else {
+                renderer.render(&rewritten)?;
+            }
+            if terminal {
+                saw_terminal = true;
+            }
+            Ok(())
         })
         .await
     });
@@ -1051,6 +1277,9 @@ fn run_hidden_owner_helper_startup_prompt_stream_with_projection(
         Ok(0) => Ok(()),
         Ok(code) => Err(anyhow::Error::new(PublicPromptRenderedExit {
             exit_code: code,
+        })),
+        Err(_err) if saw_terminal => Err(anyhow::Error::new(PublicPromptRenderedExit {
+            exit_code: 1,
         })),
         Err(err) if stream_started && action == PublicPromptAction::Turn => {
             if !saw_terminal {
@@ -1066,6 +1295,99 @@ fn run_hidden_owner_helper_startup_prompt_stream_with_projection(
         }
         Err(err) => Err(err),
     }
+}
+
+#[cfg(unix)]
+pub(crate) fn render_committed_public_start_transaction(
+    transaction: &StartTransactionRecordV1,
+    json: bool,
+) -> Result<i32> {
+    let substrate_home = substrate_paths::substrate_home()?;
+    let authority = HostSessionAuthority::from_trusted_root(
+        TrustedAuthorityRoot::open(&substrate_home)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let committed = authority
+        .committed_start_public_result(transaction)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let resulting_posture = committed.resulting_posture;
+    let session_posture = match resulting_posture {
+        HostSessionPostureV1::ParkedResumable | HostSessionPostureV1::AwaitingAttention => {
+            PublicSessionPosture::DetachedReattachable
+        }
+        HostSessionPostureV1::Terminal | HostSessionPostureV1::Invalid => {
+            PublicSessionPosture::Terminal
+        }
+        HostSessionPostureV1::ActiveAttached
+        | HostSessionPostureV1::DetachedReconciled
+        | HostSessionPostureV1::StaleRecoverable => {
+            anyhow::bail!("committed public Start settlement has an invalid response posture")
+        }
+    };
+    let (envelope, exit_code) = match committed.completion_kind {
+        StartTurnCompletionKindV1::ResumableClean | StartTurnCompletionKindV1::TerminalClean => (
+            PublicPromptEnvelope::Completed {
+                version: 1,
+                action: PublicPromptAction::Start,
+                orchestration_session_id: transaction.orchestration_session_id.clone(),
+                backend_id: transaction.public_backend_id.clone(),
+                participant_id: Some(transaction.authoritative_participant_id.clone()),
+                turn_outcome: "success".to_string(),
+                session_posture,
+                state: match resulting_posture {
+                    HostSessionPostureV1::ParkedResumable => "parked_resumable",
+                    HostSessionPostureV1::AwaitingAttention => "awaiting_attention",
+                    HostSessionPostureV1::Terminal => "terminal",
+                    _ => unreachable!("settled public Start posture was checked above"),
+                }
+                .to_string(),
+                warnings: Vec::new(),
+            },
+            0,
+        ),
+        StartTurnCompletionKindV1::TerminalFailure { reason } => (
+            failed_prompt_envelope("runtime", "owner_unreachable", reason),
+            1,
+        ),
+    };
+    PublicPromptRenderer::new(json).render_start_terminal_strict(&envelope)?;
+    Ok(exit_code)
+}
+
+#[cfg(unix)]
+pub(crate) fn render_indeterminate_public_start_transaction(
+    transaction: &StartTransactionRecordV1,
+    json: bool,
+) -> Result<i32> {
+    let substrate_home = substrate_paths::substrate_home()?;
+    let authority = HostSessionAuthority::from_trusted_root(
+        TrustedAuthorityRoot::open(&substrate_home)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let current = authority
+        .retryable_start_transaction(&transaction.request_key_sha256)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?
+        .ok_or_else(|| anyhow::anyhow!("durable public Start transaction disappeared"))?;
+    if current != *transaction
+        || !matches!(
+            current.state,
+            StartTransactionStateV1::PromptSubmissionIndeterminate { .. }
+        )
+    {
+        anyhow::bail!("public Start indeterminate result does not exact-join durable authority");
+    }
+    let envelope = failed_prompt_envelope(
+        "runtime",
+        "submission_outcome_unknown",
+        format!(
+            "durable Start transaction {} crossed the no-replay barrier without committed authenticated provider acceptance; the real prompt was not replayed",
+            current.transaction_id
+        ),
+    );
+    PublicPromptRenderer::new(json).render_start_terminal_strict(&envelope)?;
+    Ok(1)
 }
 
 #[cfg(unix)]
@@ -1352,57 +1674,6 @@ fn build_resumed_public_turn_detach_reconciliation(
     participant: &AgentRuntimeSessionManifest,
 ) -> Option<(OrchestrationSessionRecord, AgentRuntimeSessionManifest)> {
     build_detached_start_reconciliation(session, participant, true)
-}
-
-#[cfg(unix)]
-pub(crate) fn reconcile_start_prompt_completion_timeout(
-    store: &AgentRuntimeStateStore,
-    orchestration_session_id: &str,
-    participant_id: &str,
-) -> Result<bool> {
-    if matches!(
-        store.classify_hidden_owner_helper_launch_readiness(
-            orchestration_session_id,
-            participant_id,
-            true,
-        )?,
-        super::state_store::HiddenOwnerHelperLaunchReadiness::ReadyDetached(_)
-    ) {
-        return Ok(true);
-    }
-
-    let Some(session) = store.load_orchestration_session(orchestration_session_id)? else {
-        return Ok(false);
-    };
-    let Some(participant) = store.load_participant(participant_id)? else {
-        return Ok(false);
-    };
-
-    if !startup_prompt_is_terminal_for_participant(&session, participant_id) {
-        return Ok(false);
-    }
-
-    let Some((next_session, next_participant)) =
-        build_detached_start_reconciliation(&session, &participant, true)
-    else {
-        return Ok(false);
-    };
-
-    if next_session != session {
-        store.persist_orchestration_session(&next_session)?;
-    }
-    if next_participant != participant {
-        store.persist_participant(&next_participant)?;
-    }
-
-    Ok(matches!(
-        store.classify_hidden_owner_helper_launch_readiness(
-            orchestration_session_id,
-            participant_id,
-            true,
-        )?,
-        super::state_store::HiddenOwnerHelperLaunchReadiness::ReadyDetached(_)
-    ))
 }
 
 fn start_launch_startup_prompt_is_accepted_or_terminal(
@@ -1811,6 +2082,58 @@ pub(crate) async fn register_private_stop_transport(
     remove_existing_stop_transport_path(&path)?;
     let listener = UnixListener::bind(&path)
         .with_context(|| format!("failed to bind private stop transport {}", path.display()))?;
+    let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
+    let path_for_task = path.clone();
+    let task = tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                _ = &mut shutdown_rx => break,
+                accept = listener.accept() => {
+                    let Ok((stream, _)) = accept else {
+                        break;
+                    };
+                    let stop_tx = stop_tx.clone();
+                    tokio::spawn(async move {
+                        let _ = handle_private_stop_connection(stream, stop_tx).await;
+                    });
+                }
+            }
+        }
+        let _ = tokio::fs::remove_file(&path_for_task).await;
+    });
+    Ok(PrivateStopTransport {
+        shutdown_tx: Some(shutdown_tx),
+        task: Some(task),
+        path,
+    })
+}
+
+#[cfg(unix)]
+pub(crate) async fn register_durable_start_private_stop_transport(
+    orchestration_session_id: &str,
+    participant_id: &str,
+    stop_tx: PrivateStopRequestSender,
+) -> Result<PrivateStopTransport> {
+    let path = durable_start_private_transport_path(
+        "stop",
+        "stop",
+        orchestration_session_id,
+        participant_id,
+    )?;
+    let parent = path.parent().ok_or_else(|| {
+        anyhow::anyhow!(
+            "durable Start stop transport path '{}' is missing a parent directory",
+            path.display()
+        )
+    })?;
+    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
+    remove_existing_stop_transport_path(&path)?;
+    let listener = UnixListener::bind(&path).with_context(|| {
+        format!(
+            "failed to bind durable Start stop transport {}",
+            path.display()
+        )
+    })?;
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
     let path_for_task = path.clone();
     let task = tokio::spawn(async move {
@@ -2609,6 +2932,58 @@ pub(crate) async fn register_private_prompt_transport(
     })
 }
 
+#[cfg(unix)]
+pub(crate) async fn register_durable_start_private_prompt_transport(
+    orchestration_session_id: &str,
+    participant_id: &str,
+    prompt_tx: PrivatePromptRequestSender,
+) -> Result<PrivatePromptTransport> {
+    let path = durable_start_private_transport_path(
+        "prompt",
+        "prompt",
+        orchestration_session_id,
+        participant_id,
+    )?;
+    let parent = path.parent().ok_or_else(|| {
+        anyhow::anyhow!(
+            "durable Start prompt transport path '{}' is missing a parent directory",
+            path.display()
+        )
+    })?;
+    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
+    remove_existing_stop_transport_path(&path)?;
+    let listener = UnixListener::bind(&path).with_context(|| {
+        format!(
+            "failed to bind durable Start prompt transport {}",
+            path.display()
+        )
+    })?;
+    let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
+    let path_for_task = path.clone();
+    let task = tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                _ = &mut shutdown_rx => break,
+                accept = listener.accept() => {
+                    let Ok((stream, _)) = accept else {
+                        break;
+                    };
+                    let prompt_tx = prompt_tx.clone();
+                    tokio::spawn(async move {
+                        let _ = handle_private_prompt_connection(stream, prompt_tx).await;
+                    });
+                }
+            }
+        }
+        let _ = tokio::fs::remove_file(&path_for_task).await;
+    });
+    Ok(PrivatePromptTransport {
+        shutdown_tx: Some(shutdown_tx),
+        task: Some(task),
+        path,
+    })
+}
+
 #[cfg(not(unix))]
 pub(crate) async fn register_private_prompt_transport(
     _store: &AgentRuntimeStateStore,
@@ -3199,6 +3574,10 @@ pub(crate) fn public_prompt_rendered_exit_code(err: &anyhow::Error) -> Option<i3
         .map(|exit| exit.exit_code)
 }
 
+pub(crate) fn public_prompt_rendered_exit(exit_code: i32) -> anyhow::Error {
+    anyhow::Error::new(PublicPromptRenderedExit { exit_code })
+}
+
 fn resolve_public_start_prompt_target(
     store: &AgentRuntimeStateStore,
     orchestration_session_id: &str,
@@ -3440,6 +3819,8 @@ struct PromptRenderBuffer {
     stderr_flushes: usize,
     stdout_write_error: bool,
     stderr_write_error: bool,
+    stdout_flush_error: bool,
+    stderr_flush_error: bool,
 }
 
 #[cfg(all(unix, test))]
@@ -3447,6 +3828,7 @@ struct PromptRenderBufferWriter<'a> {
     bytes: &'a mut Vec<u8>,
     flushes: &'a mut usize,
     fail_writes: bool,
+    fail_flush: bool,
 }
 
 #[cfg(all(unix, test))]
@@ -3461,6 +3843,9 @@ impl Write for PromptRenderBufferWriter<'_> {
 
     fn flush(&mut self) -> io::Result<()> {
         *self.flushes += 1;
+        if self.fail_flush {
+            return Err(io::Error::other("in-memory prompt writer rejected flush"));
+        }
         Ok(())
     }
 }
@@ -3475,6 +3860,7 @@ impl PromptRenderOutput for PromptRenderBuffer {
             bytes: &mut self.stdout,
             flushes: &mut self.stdout_flushes,
             fail_writes: self.stdout_write_error,
+            fail_flush: self.stdout_flush_error,
         };
         render(&mut writer)
     }
@@ -3487,6 +3873,7 @@ impl PromptRenderOutput for PromptRenderBuffer {
             bytes: &mut self.stderr,
             flushes: &mut self.stderr_flushes,
             fail_writes: self.stderr_write_error,
+            fail_flush: self.stderr_flush_error,
         };
         render(&mut writer)
     }
@@ -3500,6 +3887,60 @@ impl PublicPromptRenderer {
 
     fn render(&mut self, envelope: &PublicPromptEnvelope) -> Result<()> {
         self.render_with_output(envelope, &mut StandardPromptRenderOutput)
+    }
+
+    fn render_start_terminal_strict(&mut self, envelope: &PublicPromptEnvelope) -> Result<()> {
+        self.render_start_terminal_strict_with_output(envelope, &mut StandardPromptRenderOutput)
+    }
+
+    fn render_start_terminal_strict_with_output<O: PromptRenderOutput>(
+        &mut self,
+        envelope: &PublicPromptEnvelope,
+        output: &mut O,
+    ) -> Result<()> {
+        if self.json {
+            return output.with_stdout(|stdout| {
+                writeln!(stdout, "{}", serde_json::to_string(envelope)?)
+                    .context("failed to render committed Start JSON response")?;
+                stdout
+                    .flush()
+                    .context("failed to flush committed Start JSON response")
+            });
+        }
+        match envelope {
+            PublicPromptEnvelope::Completed {
+                action,
+                orchestration_session_id,
+                backend_id,
+                participant_id,
+                turn_outcome,
+                session_posture,
+                ..
+            } => output.with_stdout(|stdout| {
+                writeln!(
+                    stdout,
+                    "action={} orchestration_session_id={} backend_id={} participant_id={} turn_outcome={} session_posture={}",
+                    action.as_str(),
+                    orchestration_session_id,
+                    backend_id,
+                    participant_id.as_deref().unwrap_or("-"),
+                    turn_outcome,
+                    session_posture.as_str()
+                )
+                .context("failed to render committed Start response")?;
+                stdout
+                    .flush()
+                    .context("failed to flush committed Start response")
+            }),
+            PublicPromptEnvelope::Failed { message, .. } => output.with_stderr(|stderr| {
+                writeln!(stderr, "{message}")
+                    .context("failed to render committed Start failure")?;
+                stderr
+                    .flush()
+                    .context("failed to flush committed Start failure")
+            }),
+            _ => anyhow::bail!("strict Start renderer requires a terminal envelope"),
+        }
     }
 
     fn render_with_output<O: PromptRenderOutput>(
@@ -3750,7 +4191,7 @@ mod tests {
     };
     #[cfg(unix)]
     use super::{
-        handle_private_prompt_connection, private_prompt_request_channel,
+        failed_prompt_envelope, handle_private_prompt_connection, private_prompt_request_channel,
         structured_prompt_event_fallback_text, PromptRenderBuffer, PublicPromptEnvelope,
         PublicPromptRenderer,
     };
@@ -3831,6 +4272,10 @@ mod tests {
             startup_prompt: Some(HiddenOwnerHelperStartupPromptPlan {
                 prompt_text: "hello".to_string(),
                 stream_path: PathBuf::from("/tmp/startup.sock"),
+                request_key_sha256: None,
+                prompt_sha256: None,
+                public_backend_id: None,
+                public_scope: None,
             }),
             source_orchestration_session_id: None,
         }
@@ -3870,6 +4315,10 @@ mod tests {
             startup_prompt: Some(HiddenOwnerHelperStartupPromptPlan {
                 prompt_text: "hello".to_string(),
                 stream_path: PathBuf::from("/tmp/startup.sock"),
+                request_key_sha256: None,
+                prompt_sha256: None,
+                public_backend_id: None,
+                public_scope: None,
             }),
             source_orchestration_session_id: None,
         }
@@ -4141,6 +4590,60 @@ mod tests {
         .expect("structured fallback text");
 
         assert_eq!(text, "[codex] status\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn strict_start_terminal_renderer_propagates_delivery_write_and_flush_failures() {
+        let completed = PublicPromptEnvelope::Completed {
+            version: 1,
+            action: PublicPromptAction::Start,
+            orchestration_session_id: "sess-start-delivery".to_string(),
+            backend_id: "cli:codex".to_string(),
+            participant_id: Some("participant-start-delivery".to_string()),
+            turn_outcome: "success".to_string(),
+            session_posture: PublicSessionPosture::DetachedReattachable,
+            state: "parked_resumable".to_string(),
+            warnings: Vec::new(),
+        };
+        let mut renderer = PublicPromptRenderer::new(false);
+        let mut failed_stdout = PromptRenderBuffer {
+            stdout_write_error: true,
+            ..PromptRenderBuffer::default()
+        };
+        assert!(renderer
+            .render_start_terminal_strict_with_output(&completed, &mut failed_stdout)
+            .is_err());
+
+        let failed = failed_prompt_envelope(
+            "runtime",
+            "owner_unreachable",
+            "exact inaugural Start failure",
+        );
+        let mut failed_stderr = PromptRenderBuffer {
+            stderr_write_error: true,
+            ..PromptRenderBuffer::default()
+        };
+        assert!(renderer
+            .render_start_terminal_strict_with_output(&failed, &mut failed_stderr)
+            .is_err());
+
+        let mut failed_stdout_flush = PromptRenderBuffer {
+            stdout_flush_error: true,
+            ..PromptRenderBuffer::default()
+        };
+        assert!(renderer
+            .render_start_terminal_strict_with_output(&completed, &mut failed_stdout_flush)
+            .is_err());
+
+        let mut json_renderer = PublicPromptRenderer::new(true);
+        let mut failed_json_flush = PromptRenderBuffer {
+            stdout_flush_error: true,
+            ..PromptRenderBuffer::default()
+        };
+        assert!(json_renderer
+            .render_start_terminal_strict_with_output(&completed, &mut failed_json_flush)
+            .is_err());
     }
 
     #[cfg(unix)]

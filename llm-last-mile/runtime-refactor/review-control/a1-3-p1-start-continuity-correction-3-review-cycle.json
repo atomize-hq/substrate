@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "packet_id": "A1.3-P1-start-continuity-correction-3",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:c63c7c5ffda114f540300252db68d4672818ab8a6b2ea70fee48afb91541d885",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "a1-3-p1-start-continuity-correction-2-review-cycle.json",
+        "codex-agent:/root/start_continuity_correction3_discovery"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "A13P1-C3-DISC-P1-001",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "A13P1-C3-DISC-P2-001",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "A13P1-C3-DISC-P2-002",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:36f1cb1c8ebde3e12ed83d2cb9bc8bbd4b4cda082e3b71d662368aebbc134855",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": [
+        "A13P1-C3-DISC-P1-001",
+        "A13P1-C3-DISC-P2-001",
+        "A13P1-C3-DISC-P2-002"
+      ],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "codex-agent:/root/start_continuity_correction3_closure"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}

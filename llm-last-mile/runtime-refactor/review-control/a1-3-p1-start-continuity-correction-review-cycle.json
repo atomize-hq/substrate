@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "packet_id": "A1.3-P1-start-continuity-correction",
+  "status": "bounded_stop",
+  "stop_reason": "scope_expansion",
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:5e968976461b96b62ca9a263caa28710a4d44a34ec10773036b8be3cea1f9e16",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "a1-3-p1-start-continuity-correction-discovery-review.txt"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "A13P1-DISC-P2-001",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "A13P1-DISC-P2-002",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "A13P1-DISC-P2-003",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "A13P1-DISC-P2-004",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "A13P1-DISC-P2-005",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "A13P1-DISC-P2-006",
+          "priority": "P2"
+        }
+      ]
+    }
+  ]
+}

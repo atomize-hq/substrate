@@ -13,7 +13,7 @@ use super::schema::{
     AuthorityObjectCommitmentV1, AuthorityObjectRefV1, CanonicalDirectoryV1,
     DurableSessionAuthorityHashInputV1, DurableSessionAuthorityOriginV1,
     HostAttachContractHashInputV1, HostAttachContractV1, HostSessionPostureV1,
-    PolicyObjectHashInputV1, WorldBindingV1,
+    PolicyObjectHashInputV1, StartContinuationHandleHashInputV2, WorldBindingV1,
 };
 use super::store::{
     self, BootstrapClassificationV1, ExpectedRevisionsV1, ObjectPublicationOutcomeV1,
@@ -720,11 +720,12 @@ impl HostSessionAuthority {
         let authority = authority.as_ref().clone();
         let authority_record_commitment = canonical_commitment(&authority_hash_input(&authority))?;
         let persisted_commitment = exact_current_authority_proof_v3(
+            self,
             root,
             &authority.orchestration_session_id,
             authority.authority_revision,
         )?;
-        if persisted_commitment != &authority_record_commitment {
+        if persisted_commitment != authority_record_commitment {
             return Err(AuthorityFacadeError(
                 "durable V3 application proof does not commit to current authority".into(),
             ));
@@ -1125,11 +1126,12 @@ pub(super) fn exact_current_authority_proof<'root>(
     Ok(commitment)
 }
 
-fn exact_current_authority_proof_v3<'root>(
-    root: &'root StateRootV3,
+fn exact_current_authority_proof_v3(
+    authority_facade: &HostSessionAuthority,
+    root: &StateRootV3,
     orchestration_session_id: &str,
     authority_revision: u64,
-) -> Result<&'root AuthorityObjectCommitmentV1, AuthorityFacadeError> {
+) -> Result<AuthorityObjectCommitmentV1, AuthorityFacadeError> {
     let mut commitment = None;
     let mut highest_revision = None;
     for journal in root.application_journal.values() {
@@ -1236,12 +1238,50 @@ fn exact_current_authority_proof_v3<'root>(
             "current authority revision is behind durable V3 application proof".into(),
         ));
     }
-    let Some(commitment) = commitment else {
+    if let Some(commitment) = commitment {
+        return Ok(commitment.clone());
+    }
+    let authority = root
+        .session_namespace_map
+        .get(orchestration_session_id)
+        .and_then(|record| match record {
+            SessionNamespaceRecordV1::Authority(authority) => Some(authority.as_ref()),
+            _ => None,
+        })
+        .ok_or_else(|| {
+            AuthorityFacadeError("current V3 authority proof has no authority record".into())
+        })?;
+    let reference = authority
+        .internal_resume_handle_refs
+        .last()
+        .filter(|reference| reference.schema_version == 2)
+        .ok_or_else(|| {
+            AuthorityFacadeError(
+                "current authority revision has no durable V3 application proof".into(),
+            )
+        })?;
+    let bytes = store::read_typed_object_v2_or_v3_opened(
+        authority_facade.trusted_root(),
+        root.root_revision,
+        reference,
+        None,
+    )
+    .map_err(store_error)?;
+    let handle: StartContinuationHandleHashInputV2 =
+        canonical_json::from_slice(&bytes).map_err(|error| {
+            AuthorityFacadeError(format!(
+                "decode Start continuation authority proof: {error}"
+            ))
+        })?;
+    if handle.authority_store_id != root.authority_store_id
+        || handle.orchestration_session_id != orchestration_session_id
+        || handle.authority_revision_after != authority_revision
+    {
         return Err(AuthorityFacadeError(
-            "current authority revision has no durable V3 application proof".into(),
+            "Start continuation authority proof does not authenticate current revision".into(),
         ));
-    };
-    Ok(commitment)
+    }
+    canonical_commitment(&authority_hash_input(authority))
 }
 
 fn verify_retained_registration_descendant_v2(

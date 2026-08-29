@@ -13,8 +13,8 @@ use super::{
     host_session_authority::{canonical_json, schema::AuthorityObjectCommitmentV1},
     state_store::{
         is_stale_or_conflicting_c1_obligation_ledger_materialization_plan_error,
-        AcceptedWorldWorkIdentityV1, AgentRuntimeStateStore, WorldWorkAcceptanceRecordV1,
-        WorldWorkReceiptRegistry,
+        AcceptedWorldWorkIdentityV1, AgentRuntimeStateStore, ResolvedWorldWorkRegistryAuthorityV1,
+        WorldWorkAcceptanceRecordV1, WorldWorkReceiptRegistry,
     },
     world_work_execution_supervisor::{
         WorldWorkExecutionClaimV1, WorldWorkExecutionObservationV1, WorldWorkExecutionSupervisor,
@@ -1651,6 +1651,91 @@ pub(crate) fn read_obligation_ledger_snapshot(
             captured_at,
         },
     })
+}
+
+pub(crate) fn read_exact_start_obligation_ledger_snapshot(
+    store: &AgentRuntimeStateStore,
+    authority: &ResolvedWorldWorkRegistryAuthorityV1,
+    expected_correlation: &HostTransitionWorkCorrelationV1,
+) -> Result<Option<ObligationLedgerSnapshotReadV1>> {
+    expected_correlation
+        .validate()
+        .map_err(anyhow::Error::msg)?;
+    if authority.authority_store_id != expected_correlation.authority_store_id
+        || authority.orchestration_session_id != expected_correlation.orchestration_session_id
+        || authority.caller_participant_id != expected_correlation.authoritative_participant_id
+        || authority.authority_revision_observed != expected_correlation.authority_revision_observed
+    {
+        anyhow::bail!("Start obligation consumer authority does not authenticate");
+    }
+
+    let persisted = authority
+        .receipt_registry
+        .persisted_acceptances_for_recovery()?;
+    let mut exact = None;
+    for acceptance in persisted {
+        let record = acceptance.record();
+        let Some(correlation) = record.host_transition_correlation.as_ref() else {
+            continue;
+        };
+        if correlation.transition_intent_id != expected_correlation.transition_intent_id
+            || correlation.transition_run_id != expected_correlation.transition_run_id
+        {
+            continue;
+        }
+        if correlation != expected_correlation
+            || record.authority_store_id != authority.authority_store_id
+            || record.orchestration_session_id != authority.orchestration_session_id
+            || record.caller_participant_id != authority.caller_participant_id
+            || record.authority_revision_observed != authority.authority_revision_observed
+        {
+            anyhow::bail!(
+                "applicable Start obligation acceptance has conflicting correlation evidence"
+            );
+        }
+        if !matches!(
+            record.work_identity,
+            AcceptedWorldWorkIdentityV1::RetainedTurn { .. }
+        ) {
+            continue;
+        }
+        if exact.replace(record.clone()).is_some() {
+            anyhow::bail!("multiple canonical obligation results match the inaugural Start turn");
+        }
+    }
+    let Some(acceptance) = exact else {
+        return Ok(None);
+    };
+    let observation = authority
+        .execution_supervisor
+        .inspect_observation_by_acceptance_id(&acceptance.acceptance_record_id)?
+        .ok_or_else(|| anyhow::anyhow!("applicable Start obligation observation is absent"))?;
+    let terminal = observation.terminal.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("applicable Start obligation result is pending its exact terminal cut")
+    })?;
+    let request = ObligationLedgerSnapshotReadRequestV1 {
+        schema_version: 1,
+        authority_store_id: acceptance.authority_store_id.clone(),
+        orchestration_session_id: acceptance.orchestration_session_id.clone(),
+        authoritative_participant_id: acceptance.caller_participant_id.clone(),
+        acceptance_record_id: acceptance.acceptance_record_id.clone(),
+        acceptance_record_revision: acceptance.record_revision,
+        stream_id: acceptance.runtime_acceptance.stream_id.clone(),
+        accepted_work_identity: acceptance.work_identity.clone(),
+        host_transition_correlation: expected_correlation.clone(),
+        transition_intent_id: expected_correlation.transition_intent_id.clone(),
+        transition_run_id: expected_correlation.transition_run_id.clone(),
+        authority_revision_observed: expected_correlation.authority_revision_observed,
+        required_terminal_event_id: terminal.event_identity.event_id.clone(),
+        required_terminal_event_sequence: terminal.event_identity.event_sequence,
+    };
+    read_obligation_ledger_snapshot(
+        store,
+        &authority.receipt_registry,
+        &authority.execution_supervisor,
+        &request,
+    )
+    .map(Some)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -480,9 +480,11 @@ pub(super) fn canonical_digest(
         AuthorityObjectKindV1::RetainedWorker => {
             canonical_digest_as::<RetainedWorkerObjectHashInputV1>(bytes)
         }
-        AuthorityObjectKindV1::ResumeHandle => {
-            canonical_digest_as::<ResumeHandleHashInputV1>(bytes)
-        }
+        AuthorityObjectKindV1::ResumeHandle => match canonical_schema_version(bytes)? {
+            1 => canonical_digest_as::<ResumeHandleHashInputV1>(bytes),
+            2 => canonical_digest_as::<StartContinuationHandleHashInputV2>(bytes),
+            _ => Err(BootstrapError("resume handle schema version is unsupported")),
+        },
         AuthorityObjectKindV1::Policy => canonical_digest_as::<PolicyObjectHashInputV1>(bytes),
         AuthorityObjectKindV1::HostAttachContract => {
             canonical_digest_as::<HostAttachContractHashInputV1>(bytes)
@@ -512,6 +514,16 @@ pub(super) fn canonical_digest(
             "sensitive object cannot use a canonical commitment",
         )),
     }
+}
+
+fn canonical_schema_version(bytes: &[u8]) -> Result<u32, BootstrapError> {
+    let value = serde_json::from_slice::<serde_json::Value>(bytes)
+        .map_err(|_| BootstrapError("canonical object bytes are invalid"))?;
+    let version = value
+        .get("schema_version")
+        .and_then(serde_json::Value::as_u64)
+        .ok_or(BootstrapError("canonical object schema version is absent"))?;
+    u32::try_from(version).map_err(|_| BootstrapError("canonical object schema version is invalid"))
 }
 
 fn canonical_digest_as<T>(bytes: &[u8]) -> Result<String, BootstrapError>

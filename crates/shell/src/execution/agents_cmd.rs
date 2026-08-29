@@ -19,28 +19,37 @@ use crate::execution::agent_runtime::control::{
 };
 #[cfg(unix)]
 use crate::execution::agent_runtime::control::{
-    private_stop_transport_path, reconcile_resumed_public_turn_detach_timeout,
-    reconcile_start_prompt_completion_timeout,
+    launch_hidden_owner_helper_for_durable_start, private_stop_transport_path,
+    public_prompt_rendered_exit, reconcile_resumed_public_turn_detach_timeout,
+    register_durable_start_startup_prompt_listener,
     register_hidden_owner_helper_startup_prompt_listener,
+    render_committed_public_start_transaction, render_indeterminate_public_start_transaction,
     run_hidden_owner_helper_startup_prompt_stream_with_action,
     run_hidden_owner_helper_startup_prompt_stream_with_public_identity,
-    HiddenOwnerHelperStartupPromptPlan,
+    verify_public_start_continuity_settled, HiddenOwnerHelperStartupPromptPlan,
 };
 use crate::execution::agent_runtime::dispatch_contract::LiveToolSupportPosture;
+#[cfg(unix)]
+use crate::execution::agent_runtime::host_session_authority::schema::TimestampV1;
+#[cfg(unix)]
+use crate::execution::agent_runtime::host_session_authority::store_schema::{
+    StartTransactionRecordV1, StartTransactionStateV1,
+};
+#[cfg(unix)]
+use crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot;
+#[cfg(unix)]
+use crate::execution::agent_runtime::host_session_authority::HostSessionAuthority;
 use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
 use crate::execution::agent_runtime::orchestration_session::{
     OrchestrationSessionPosture, OrchestrationSessionRecord,
 };
 use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
-#[cfg(unix)]
-use crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchReadiness;
 use crate::execution::agent_runtime::validator::{
     materialize_runtime_descriptor, member_selection_error_exit_code,
     resolve_live_tool_support_posture, resolve_selected_orchestrator_live_tool_support_posture,
     validate_member_selection, RuntimeSelectionDescriptor,
 };
 #[cfg(unix)]
-use crate::execution::agent_runtime::StartupPromptReplayState;
 use crate::execution::agent_runtime::{
     resolve_inventory_contract_for_exact_backend, resolve_persisted_host_attach_contract,
     runtime_realizability_error_exit_code, validate_orchestrator_selection,
@@ -48,8 +57,8 @@ use crate::execution::agent_runtime::{
     AgentRuntimeStateStore, AttachLaunchKnobs, AttachModePreference, DispatchBaselineKind,
     DispatchCallerKind, DispatchCapabilityOverrideSet, DispatchRequestEnvelope,
     HostExecutionClientStart, PublicAttachAction, PublicControlAction, PublicTurnTargetKind,
-    ResolvedLaunchContract, MANUAL_REATTACH_ATTACH_RESTORED_REASON, MEMBER_ROLE, NESTED_ROUTER,
-    ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
+    ResolvedLaunchContract, StartupPromptReplayState, MANUAL_REATTACH_ATTACH_RESTORED_REASON,
+    MEMBER_ROLE, NESTED_ROUTER, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
 };
 use crate::execution::cli::{
     AgentAction, AgentCmd, AgentDisableCapabilityArg, AgentDoctorArgs, AgentOwnerHelperArgs,
@@ -65,9 +74,13 @@ use crate::execution::policy_snapshot;
 use crate::execution::prompt_fulfillment::HOST_TOOLBOX_CONTRACT_VERSION_V1;
 #[cfg(target_os = "linux")]
 use crate::execution::{ReplPersistentSessionClient, ReplSessionStartParams};
+#[cfg(target_os = "linux")]
+use crate::repl::async_repl::prepare_public_start_authority_before_transport;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
+#[cfg(unix)]
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::ffi::OsString;
@@ -90,10 +103,6 @@ use transport_api_types::InstallBootstrapContextCarrierV1;
 use transport_api_types::{SharedWorldOwnerAction, SharedWorldOwnerSpec};
 use uuid::Uuid;
 const TOOLBOX_VERSION: u32 = HOST_TOOLBOX_CONTRACT_VERSION_V1;
-#[cfg(unix)]
-const START_DETACH_NORMALIZATION_TIMEOUT: Duration = Duration::from_secs(10);
-#[cfg(unix)]
-const START_DETACH_NORMALIZATION_POLL_INTERVAL: Duration = Duration::from_millis(50);
 #[cfg(unix)]
 const START_ATTACHED_GRACE_TIMEOUT: Duration = Duration::from_millis(250);
 #[cfg(unix)]
@@ -352,6 +361,55 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
     #[cfg(not(target_os = "linux"))]
     let start_plan = build_start_launch_plan(args, &context)?;
 
+    #[cfg(unix)]
+    let (startup_prompt_text, prompt_sha256, request_key_sha256) = {
+        let authoritative_toolbox = authoritative_host_toolbox_surface_enabled(
+            &start_plan.resolved_contract.backend_id,
+            start_plan.resolved_contract.execution_scope,
+            ORCHESTRATOR_ROLE,
+            &context.effective_config,
+            &context.base_policy,
+        );
+        let prompt_text = maybe_compose_prompt_with_authoritative_host_toolbox_contract(
+            &prompt.prompt_text,
+            authoritative_toolbox,
+        );
+        let prompt_sha256 = public_start_digest(
+            "substrate.a1.3-p1.public-start-prompt.v1",
+            &[prompt_text.as_bytes()],
+        );
+        let request_key_sha256 = public_start_request_key(
+            &start_plan,
+            &prompt_sha256,
+            &start_plan.public_identity.backend_id,
+            start_plan.public_identity.scope,
+        )?;
+        (prompt_text, prompt_sha256, request_key_sha256)
+    };
+
+    #[cfg(target_os = "linux")]
+    ensure_public_start_authority_bootstrapped()?;
+    #[cfg(unix)]
+    let mut retry_transaction = retryable_public_start_transaction(&request_key_sha256)?;
+    #[cfg(unix)]
+    {
+        if let Some(transaction) = retry_transaction.as_ref() {
+            adopt_retryable_public_start_plan(
+                &mut start_plan,
+                transaction,
+                &prompt_sha256,
+                &request_key_sha256,
+            )?;
+        }
+        start_plan.helper_plan.participant.lease_token = public_start_digest(
+            "substrate.a1.3-p1.public-start-lease.v1",
+            &[
+                request_key_sha256.as_bytes(),
+                start_plan.helper_plan.participant.participant_id.as_bytes(),
+            ],
+        );
+    }
+
     if start_plan.public_identity.scope == AgentExecutionScope::World {
         #[cfg(not(target_os = "linux"))]
         {
@@ -362,14 +420,36 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
         }
         #[cfg(target_os = "linux")]
         {
-            let world_binding = establish_public_world_start_binding(
-                start_plan.helper_plan.orchestration_session_id(),
-                &start_plan.helper_plan.session.workspace_root,
-            )
-            .map_err(runtime_start_error)?;
-            start_plan.helper_plan.session.world_id = Some(world_binding.world_id);
-            start_plan.helper_plan.session.world_generation = Some(world_binding.world_generation);
+            if retry_transaction.is_none() {
+                let world_binding = establish_public_world_start_binding(
+                    start_plan.helper_plan.orchestration_session_id(),
+                    &start_plan.helper_plan.session.workspace_root,
+                )
+                .map_err(runtime_start_error)?;
+                start_plan.helper_plan.session.world_id = Some(world_binding.world_id);
+                start_plan.helper_plan.session.world_generation =
+                    Some(world_binding.world_generation);
+            }
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    if retry_transaction.as_ref().is_none_or(|transaction| {
+        matches!(
+            transaction.state,
+            StartTransactionStateV1::PromptNotSubmitted
+        )
+    }) {
+        start_plan.helper_plan.startup_prompt = Some(HiddenOwnerHelperStartupPromptPlan {
+            prompt_text: startup_prompt_text.clone(),
+            stream_path: PathBuf::from("/tmp/substrate-public-start-transport-pending"),
+            request_key_sha256: Some(request_key_sha256.clone()),
+            prompt_sha256: Some(prompt_sha256.clone()),
+            public_backend_id: Some(start_plan.public_identity.backend_id.clone()),
+            public_scope: Some(start_plan.public_identity.scope),
+        });
+        prepare_public_start_authority_before_transport(&start_plan.helper_plan)
+            .map_err(runtime_start_error)?;
     }
 
     let HostStartLaunchPlan {
@@ -392,19 +472,42 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
 
     #[cfg(unix)]
     {
+        let _ = &resolved_contract;
+        if let Some(transaction) = retry_transaction.as_ref() {
+            if matches!(
+                transaction.state,
+                StartTransactionStateV1::PromptSubmissionNoReplayBarrier { .. }
+                    | StartTransactionStateV1::PromptSubmissionIndeterminate { .. }
+            ) {
+                let indeterminate =
+                    declare_or_join_public_start_submission_indeterminate(transaction)?;
+                return render_indeterminate_public_start_result(&indeterminate, args.json);
+            }
+        }
+        if retry_transaction.as_ref().is_some_and(|transaction| {
+            matches!(
+                transaction.state,
+                StartTransactionStateV1::ContinuationRegistered { .. }
+            )
+        }) {
+            retry_transaction = Some(wait_for_committed_public_start_transaction(
+                &request_key_sha256,
+            )?);
+        }
+        if let Some(transaction) = retry_transaction.as_ref() {
+            if matches!(
+                transaction.state,
+                StartTransactionStateV1::TurnSettledAwaitingResponse { .. }
+            ) {
+                return render_and_acknowledge_committed_public_start(
+                    transaction,
+                    &request_key_sha256,
+                    args.json,
+                );
+            }
+        }
         let public_backend_id = public_identity.backend_id.clone();
         let public_scope = public_identity.scope;
-        let host_toolbox_surface_authoritative = authoritative_host_toolbox_surface_enabled(
-            &resolved_contract.backend_id,
-            resolved_contract.execution_scope,
-            ORCHESTRATOR_ROLE,
-            &context.effective_config,
-            &context.base_policy,
-        );
-        let startup_prompt_text = maybe_compose_prompt_with_authoritative_host_toolbox_contract(
-            &prompt.prompt_text,
-            host_toolbox_surface_authoritative,
-        );
         let stream_start_result = |listener| {
             run_hidden_owner_helper_startup_prompt_stream_with_public_identity(
                 listener,
@@ -415,8 +518,7 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
             )
         };
         let mut plan = helper_plan;
-        let startup_listener = register_hidden_owner_helper_startup_prompt_listener(
-            &store,
+        let startup_listener = register_durable_start_startup_prompt_listener(
             plan.orchestration_session_id(),
             plan.participant_id(),
         )
@@ -424,232 +526,340 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
         plan.startup_prompt = Some(HiddenOwnerHelperStartupPromptPlan {
             prompt_text: startup_prompt_text.clone(),
             stream_path: startup_listener.path().to_path_buf(),
+            request_key_sha256: Some(request_key_sha256.clone()),
+            prompt_sha256: Some(prompt_sha256.clone()),
+            public_backend_id: Some(public_backend_id.clone()),
+            public_scope: Some(public_scope),
         });
 
-        let receipt = launch_hidden_owner_helper(&plan, cli.world, cli.no_world)
+        let receipt = launch_hidden_owner_helper_for_durable_start(&plan, cli.world, cli.no_world)
             .map_err(runtime_start_error)?;
         match stream_start_result(startup_listener) {
-            Ok(()) => wait_for_start_completion_for_scope(
-                &store,
-                &receipt.orchestration_session_id,
-                &receipt.participant_id,
-                public_scope,
-            )
-            .and_then(|()| {
-                persist_resolved_start_attach_contract(
-                    &store,
-                    &receipt.orchestration_session_id,
-                    &resolved_contract,
-                )
-            })
-            .map_err(runtime_start_error),
-            Err(err)
-                if recoverable_detached_start_retry(
-                    &receipt.orchestration_session_id,
-                    &receipt.participant_id,
-                    receipt.helper_pid,
-                    &err,
-                )? =>
-            {
-                let retry_listener = register_hidden_owner_helper_startup_prompt_listener(
-                    &store,
-                    plan.orchestration_session_id(),
-                    plan.participant_id(),
-                )
-                .map_err(runtime_start_error)?;
-                plan.startup_prompt = Some(HiddenOwnerHelperStartupPromptPlan {
-                    prompt_text: startup_prompt_text.clone(),
-                    stream_path: retry_listener.path().to_path_buf(),
-                });
-                let retry_receipt = launch_hidden_owner_helper(&plan, cli.world, cli.no_world)
+            Ok(()) => {
+                verify_public_start_continuity_settled(&receipt.orchestration_session_id)
                     .map_err(runtime_start_error)?;
-                stream_start_result(retry_listener).map_err(normalize_public_prompt_error)?;
-                wait_for_start_completion_for_scope(
-                    &store,
-                    &retry_receipt.orchestration_session_id,
-                    &retry_receipt.participant_id,
-                    public_scope,
-                )
-                .and_then(|()| {
-                    persist_resolved_start_attach_contract(
-                        &store,
-                        &retry_receipt.orchestration_session_id,
-                        &resolved_contract,
-                    )
-                })
-                .map_err(runtime_start_error)
+                let transaction = retryable_public_start_transaction(&request_key_sha256)?
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("settled public Start transaction disappeared")
+                    })?;
+                acknowledge_public_start_response(&transaction, &request_key_sha256)
             }
-            Err(err) => Err(normalize_public_prompt_error(err)),
-        }
-    }
-}
-
-#[cfg(unix)]
-fn wait_for_start_completion_for_scope(
-    store: &AgentRuntimeStateStore,
-    orchestration_session_id: &str,
-    participant_id: &str,
-    public_scope: AgentExecutionScope,
-) -> Result<()> {
-    match public_scope {
-        AgentExecutionScope::Host => wait_for_start_prompt_completion_normalization(
-            store,
-            orchestration_session_id,
-            participant_id,
-        ),
-        AgentExecutionScope::World => wait_for_start_prompt_attached_readiness(
-            store,
-            orchestration_session_id,
-            participant_id,
-        ),
-    }
-}
-
-#[cfg(unix)]
-fn wait_for_start_prompt_completion_normalization(
-    store: &AgentRuntimeStateStore,
-    orchestration_session_id: &str,
-    participant_id: &str,
-) -> Result<()> {
-    let normalization_started_at = std::time::Instant::now();
-    loop {
-        match store.classify_hidden_owner_helper_launch_readiness(
-            orchestration_session_id,
-            participant_id,
-            true,
-        )? {
-            HiddenOwnerHelperLaunchReadiness::ReadyDetached(_) => return Ok(()),
-            HiddenOwnerHelperLaunchReadiness::ReadyAttached
-            | HiddenOwnerHelperLaunchReadiness::Pending => {}
-        }
-
-        if normalization_started_at.elapsed() >= START_DETACH_NORMALIZATION_TIMEOUT {
-            match reconcile_start_prompt_completion_timeout(
-                store,
-                orchestration_session_id,
-                participant_id,
-            ) {
-                Ok(true) => return Ok(()),
-                Ok(false) => {}
-                Err(reconcile_err) => {
-                    anyhow::bail!(
-                        "timed out waiting for detached start normalization after startup prompt completion for orchestration session {}; additionally failed to reconcile persisted startup state: {reconcile_err:#}",
-                        orchestration_session_id,
-                    );
+            Err(err) => {
+                if verify_public_start_continuity_settled(&receipt.orchestration_session_id).is_ok()
+                {
+                    let transaction = retryable_public_start_transaction(&request_key_sha256)?
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("settled public Start transaction disappeared")
+                        })?;
+                    join_committed_public_start_after_stream_error(
+                        err,
+                        || acknowledge_public_start_response(&transaction, &request_key_sha256),
+                        || {
+                            render_and_acknowledge_committed_public_start(
+                                &transaction,
+                                &request_key_sha256,
+                                args.json,
+                            )
+                        },
+                    )
+                } else {
+                    let _legacy_replay_observation_only = store
+                        .startup_prompt_replay_state(
+                            &receipt.orchestration_session_id,
+                            &receipt.participant_id,
+                        )
+                        .map(StartupPromptReplayState::replay_safe);
+                    let transaction = retryable_public_start_transaction(&request_key_sha256)?
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("durable public Start transaction disappeared")
+                        })?;
+                    if transaction.orchestration_session_id != receipt.orchestration_session_id
+                        || transaction.authoritative_participant_id != receipt.participant_id
+                    {
+                        anyhow::bail!(config_model::user_error(
+                            "runtime_start_failed: failed Start transport does not exact-join its durable transaction"
+                        ));
+                    }
+                    match transaction.state {
+                        StartTransactionStateV1::PromptSubmissionNoReplayBarrier { .. }
+                        | StartTransactionStateV1::PromptSubmissionIndeterminate { .. } => {
+                            let indeterminate =
+                                declare_or_join_public_start_submission_indeterminate(
+                                    &transaction,
+                                )?;
+                            render_indeterminate_public_start_result(&indeterminate, args.json)
+                        }
+                        StartTransactionStateV1::ContinuationRegistered { .. } => {
+                            let committed =
+                                wait_for_committed_public_start_transaction(&request_key_sha256)?;
+                            render_and_acknowledge_committed_public_start(
+                                &committed,
+                                &request_key_sha256,
+                                args.json,
+                            )
+                        }
+                        StartTransactionStateV1::TurnSettledAwaitingResponse { .. } => {
+                            render_and_acknowledge_committed_public_start(
+                                &transaction,
+                                &request_key_sha256,
+                                args.json,
+                            )
+                        }
+                        StartTransactionStateV1::PromptNotSubmitted
+                        | StartTransactionStateV1::PublicResponseDelivered { .. } => {
+                            Err(normalize_public_prompt_error(err))
+                        }
+                    }
                 }
             }
-            let snapshot_summary = store
-                .load_orchestration_session(orchestration_session_id)?
-                .map(|session| {
-                    format!(
-                        "state={:?}, posture={:?}, attached_participant_id={:?}, shell_owner_pid={}",
-                        session.state,
-                        session.posture,
-                        session.attached_participant_id,
-                        session.shell_owner_pid,
-                    )
-                })
-                .unwrap_or_else(|| "session_missing".to_string());
-            anyhow::bail!(
-                "timed out waiting for detached start normalization after startup prompt completion for orchestration session {} ({snapshot_summary})",
-                orchestration_session_id,
-            );
         }
-
-        thread::sleep(START_DETACH_NORMALIZATION_POLL_INTERVAL);
     }
 }
 
 #[cfg(unix)]
-fn wait_for_start_prompt_attached_readiness(
-    store: &AgentRuntimeStateStore,
-    orchestration_session_id: &str,
-    participant_id: &str,
-) -> Result<()> {
-    let readiness_started_at = std::time::Instant::now();
-    loop {
-        match store.classify_hidden_owner_helper_launch_readiness(
-            orchestration_session_id,
-            participant_id,
-            true,
-        )? {
-            HiddenOwnerHelperLaunchReadiness::ReadyAttached => return Ok(()),
-            HiddenOwnerHelperLaunchReadiness::ReadyDetached(posture) => {
-                anyhow::bail!(
-                    "runtime_start_failed: world-backed public start detached before returning (orchestration session {} normalized to {:?} instead of remaining attached through start return)",
-                    orchestration_session_id,
-                    posture
-                );
-            }
-            HiddenOwnerHelperLaunchReadiness::Pending => {}
-        }
-
-        if readiness_started_at.elapsed() >= START_DETACH_NORMALIZATION_TIMEOUT {
-            let snapshot_summary = store
-                .load_orchestration_session(orchestration_session_id)?
-                .map(|session| {
-                    format!(
-                        "state={:?}, posture={:?}, attached_participant_id={:?}, shell_owner_pid={}",
-                        session.state,
-                        session.posture,
-                        session.attached_participant_id,
-                        session.shell_owner_pid,
-                    )
-                })
-                .unwrap_or_else(|| "session_missing".to_string());
-            anyhow::bail!(
-                "timed out waiting for attached start readiness after startup prompt completion for orchestration session {} ({snapshot_summary})",
-                orchestration_session_id,
-            );
-        }
-
-        thread::sleep(START_DETACH_NORMALIZATION_POLL_INTERVAL);
+fn public_start_digest(domain: &str, parts: &[&[u8]]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(domain.as_bytes());
+    for part in parts {
+        hasher.update((part.len() as u64).to_be_bytes());
+        hasher.update(part);
     }
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 #[cfg(unix)]
-fn recoverable_detached_start_retry(
-    orchestration_session_id: &str,
-    participant_id: &str,
-    helper_pid: u32,
-    err: &anyhow::Error,
-) -> Result<bool> {
-    if public_prompt_rendered_exit_code(err).is_some() {
-        return Ok(false);
-    }
-
-    let message = err.to_string();
-    let prompt_transport_failed = message.contains("startup prompt stream")
-        || message.starts_with("stream_bridge_failed:")
-        || message.contains("hidden owner-helper startup prompt stream ended");
-    if !prompt_transport_failed {
-        return Ok(false);
-    }
-
-    let store = AgentRuntimeStateStore::new()?;
-    let replay_state =
-        store.startup_prompt_replay_state(orchestration_session_id, participant_id)?;
-    if !replay_state.replay_safe() {
-        return Ok(false);
-    }
-    #[cfg(unix)]
-    if pid_is_alive(helper_pid) {
-        return Ok(false);
-    }
-    Ok(matches!(
-        replay_state,
-        StartupPromptReplayState::NotTracked | StartupPromptReplayState::PendingAcceptance
+fn public_start_request_key(
+    plan: &HostStartLaunchPlan,
+    prompt_sha256: &str,
+    public_backend_id: &str,
+    public_scope: AgentExecutionScope,
+) -> Result<String> {
+    let stable_request = serde_json::json!({
+        "schema_version": 1,
+        "descriptor": &plan.helper_plan.descriptor,
+        "workspace_root": &plan.helper_plan.session.workspace_root,
+        "host_attach_contract": &plan.helper_plan.host_attach_contract,
+        "public_backend_id": public_backend_id,
+        "public_scope": match public_scope {
+            AgentExecutionScope::Host => "host",
+            AgentExecutionScope::World => "world",
+        },
+        "prompt_sha256": prompt_sha256,
+    });
+    let bytes = serde_json::to_vec(&stable_request)
+        .context("failed to encode the durable public Start request key")?;
+    Ok(public_start_digest(
+        "substrate.a1.3-p1.public-start-request.v1",
+        &[&bytes],
     ))
 }
 
 #[cfg(unix)]
-fn pid_is_alive(pid: u32) -> bool {
-    let rc = unsafe { libc::kill(pid as libc::pid_t, 0) };
-    rc == 0
-        || matches!(
-            std::io::Error::last_os_error().raw_os_error(),
-            Some(libc::EPERM)
+fn public_start_authority() -> Result<HostSessionAuthority> {
+    let substrate_home = substrate_paths::substrate_home()?;
+    HostSessionAuthority::from_trusted_root(
+        TrustedAuthorityRoot::open(&substrate_home)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))
+}
+
+#[cfg(target_os = "linux")]
+fn ensure_public_start_authority_bootstrapped() -> Result<()> {
+    public_start_authority()?
+        .bootstrap()
+        .map(|_| ())
+        .map_err(|error| anyhow::anyhow!(error.to_string()))
+}
+
+#[cfg(unix)]
+fn retryable_public_start_transaction(
+    request_key_sha256: &str,
+) -> Result<Option<StartTransactionRecordV1>> {
+    public_start_authority()?
+        .retryable_start_transaction(request_key_sha256)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))
+}
+
+#[cfg(unix)]
+fn declare_or_join_public_start_submission_indeterminate(
+    transaction: &StartTransactionRecordV1,
+) -> Result<StartTransactionRecordV1> {
+    let authority = public_start_authority()?;
+    let current = authority
+        .retryable_start_transaction(&transaction.request_key_sha256)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?
+        .ok_or_else(|| anyhow::anyhow!("durable public Start transaction disappeared"))?;
+    if current != *transaction {
+        anyhow::bail!(config_model::user_error(
+            "runtime_start_failed: indeterminate Start recovery does not exact-join the durable transaction"
+        ));
+    }
+    match current.state {
+        StartTransactionStateV1::PromptSubmissionNoReplayBarrier { .. } => {
+            let declared_at =
+                TimestampV1::parse(Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true))
+                    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+            authority
+                .mark_start_submission_outcome_indeterminate(
+                    &current.transaction_id,
+                    &current.request_key_sha256,
+                    declared_at,
+                )
+                .map_err(|error| anyhow::anyhow!(error.to_string()))
+        }
+        StartTransactionStateV1::PromptSubmissionIndeterminate { .. } => Ok(current),
+        _ => anyhow::bail!(config_model::user_error(
+            "runtime_start_failed: Start submission is not in an indeterminate recovery phase"
+        )),
+    }
+}
+
+#[cfg(unix)]
+fn public_start_submission_outcome_unknown_error(
+    transaction: &StartTransactionRecordV1,
+) -> anyhow::Error {
+    config_model::user_error(format!(
+        "submission_outcome_unknown: durable Start transaction {} crossed the no-replay barrier without committed authenticated provider acceptance; the real prompt was not replayed",
+        transaction.transaction_id
+    ))
+}
+
+#[cfg(unix)]
+fn adopt_retryable_public_start_plan(
+    plan: &mut HostStartLaunchPlan,
+    transaction: &StartTransactionRecordV1,
+    prompt_sha256: &str,
+    request_key_sha256: &str,
+) -> Result<()> {
+    let expected_scope = match plan.public_identity.scope {
+        AgentExecutionScope::Host => "host",
+        AgentExecutionScope::World => "world",
+    };
+    if transaction.request_key_sha256 != request_key_sha256
+        || transaction.prompt_sha256 != prompt_sha256
+        || transaction.backend_id != plan.helper_plan.descriptor.backend_id
+        || transaction.protocol != plan.helper_plan.descriptor.protocol
+        || transaction.workspace_root != plan.helper_plan.session.workspace_root
+        || transaction.public_backend_id != plan.public_identity.backend_id
+        || transaction.public_scope != expected_scope
+    {
+        anyhow::bail!(config_model::user_error(
+            "runtime_start_failed: retry does not exact-join the committed Start transaction"
+        ));
+    }
+    plan.helper_plan.session.orchestration_session_id =
+        transaction.orchestration_session_id.clone();
+    plan.helper_plan.session.shell_trace_session_id = transaction.shell_trace_session_id.clone();
+    plan.helper_plan.session.world_id = transaction.world_id.clone();
+    plan.helper_plan.session.world_generation = transaction.world_generation;
+    plan.helper_plan.participant.participant_id = transaction.authoritative_participant_id.clone();
+    plan.helper_plan.participant.run_id = transaction.start_run_id.clone();
+    Ok(())
+}
+
+#[cfg(unix)]
+fn wait_for_committed_public_start_transaction(
+    request_key_sha256: &str,
+) -> Result<StartTransactionRecordV1> {
+    let started_at = std::time::Instant::now();
+    loop {
+        let transaction = retryable_public_start_transaction(request_key_sha256)?
+            .ok_or_else(|| anyhow::anyhow!("durable public Start transaction disappeared"))?;
+        match transaction.state {
+            StartTransactionStateV1::TurnSettledAwaitingResponse { .. } => return Ok(transaction),
+            StartTransactionStateV1::ContinuationRegistered { .. } => {}
+            StartTransactionStateV1::PromptSubmissionNoReplayBarrier { .. }
+            | StartTransactionStateV1::PromptSubmissionIndeterminate { .. } => {
+                return Err(public_start_submission_outcome_unknown_error(&transaction))
+            }
+            StartTransactionStateV1::PromptNotSubmitted => {
+                anyhow::bail!(
+                    "durable Start retry regressed to the pre-submission transaction phase"
+                )
+            }
+            StartTransactionStateV1::PublicResponseDelivered { .. } => {
+                anyhow::bail!("durable Start retry unexpectedly joined a delivered transaction")
+            }
+        }
+        if started_at.elapsed() >= Duration::from_secs(30) {
+            anyhow::bail!(config_model::user_error(
+                "owner_unreachable: durable Start remains in progress; the real prompt was not replayed"
+            ));
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+}
+
+#[cfg(unix)]
+fn acknowledge_public_start_response(
+    transaction: &StartTransactionRecordV1,
+    request_key_sha256: &str,
+) -> Result<()> {
+    let delivered_at =
+        TimestampV1::parse(Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true))
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    public_start_authority()?
+        .mark_start_response_delivered(
+            &transaction.transaction_id,
+            request_key_sha256,
+            delivered_at,
         )
+        .map(|_| ())
+        .map_err(|error| anyhow::anyhow!(error.to_string()))
+}
+
+#[cfg(unix)]
+fn render_and_acknowledge_committed_public_start(
+    transaction: &StartTransactionRecordV1,
+    request_key_sha256: &str,
+    json: bool,
+) -> Result<()> {
+    commit_rendered_public_start_response(
+        || render_committed_public_start_transaction(transaction, json),
+        || acknowledge_public_start_response(transaction, request_key_sha256),
+    )
+}
+
+#[cfg(unix)]
+fn render_indeterminate_public_start_result(
+    transaction: &StartTransactionRecordV1,
+    json: bool,
+) -> Result<()> {
+    let exit_code = render_indeterminate_public_start_transaction(transaction, json)?;
+    Err(public_prompt_rendered_exit(exit_code))
+}
+
+#[cfg(unix)]
+fn commit_rendered_public_start_response(
+    render: impl FnOnce() -> Result<i32>,
+    acknowledge: impl FnOnce() -> Result<()>,
+) -> Result<()> {
+    let exit_code = render()?;
+    acknowledge()?;
+    if exit_code == 0 {
+        Ok(())
+    } else {
+        Err(public_prompt_rendered_exit(exit_code))
+    }
+}
+
+#[cfg(unix)]
+fn join_committed_public_start_after_stream_error(
+    stream_error: anyhow::Error,
+    acknowledge_already_rendered: impl FnOnce() -> Result<()>,
+    render_and_acknowledge: impl FnOnce() -> Result<()>,
+) -> Result<()> {
+    if public_prompt_rendered_exit_code(&stream_error).is_some() {
+        acknowledge_already_rendered()?;
+        Err(stream_error)
+    } else {
+        render_and_acknowledge()
+    }
 }
 
 fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
@@ -698,6 +908,10 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
                 host_toolbox_surface_authoritative,
             ),
             stream_path: startup_listener.path().to_path_buf(),
+            request_key_sha256: None,
+            prompt_sha256: None,
+            public_backend_id: None,
+            public_scope: None,
         });
         let receipt = launch_hidden_owner_helper(&plan, cli.world, cli.no_world)
             .map_err(runtime_start_error)?;
@@ -1515,25 +1729,6 @@ async fn establish_public_world_start_binding_async(
     };
     let _ = world_client.close().await;
     Ok(world_binding)
-}
-
-#[cfg(unix)]
-fn persist_resolved_start_attach_contract(
-    store: &AgentRuntimeStateStore,
-    orchestration_session_id: &str,
-    resolved: &ResolvedLaunchContract,
-) -> Result<()> {
-    let mut session = store
-        .load_orchestration_session(orchestration_session_id)?
-        .ok_or_else(|| anyhow::anyhow!(
-            "runtime_start_failed: orchestration session {orchestration_session_id} disappeared before durable attach truth could be persisted"
-        ))?;
-    let continuity = session
-        .host_attach_contract()
-        .and_then(|contract| contract.continuity_uaa_session_id.clone());
-    session.host_attach_contract = HostAttachContract::from_resolved_contract(resolved, continuity);
-    store.persist_orchestration_session(&session)?;
-    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -4316,6 +4511,64 @@ mod tests {
     use transport_api_types::InstallBootstrapContextV1;
 
     const SHARED_WORLD_METADATA_ROOT_TEST_ENV: &str = "SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT";
+
+    #[cfg(unix)]
+    #[test]
+    fn committed_start_response_is_acknowledged_only_after_successful_exact_rendering() {
+        use std::cell::Cell;
+
+        let acknowledged = Cell::new(false);
+        let error = commit_rendered_public_start_response(
+            || anyhow::bail!("injected response rendering failure"),
+            || {
+                acknowledged.set(true);
+                Ok(())
+            },
+        )
+        .expect_err("failed rendering must retain the awaiting-response transaction phase");
+        assert!(error.to_string().contains("rendering failure"));
+        assert!(!acknowledged.get());
+
+        let error = commit_rendered_public_start_response(
+            || Ok(1),
+            || {
+                acknowledged.set(true);
+                Ok(())
+            },
+        )
+        .expect_err("a rendered terminal failure must preserve its public exit status");
+        assert_eq!(public_prompt_rendered_exit_code(&error), Some(1));
+        assert!(acknowledged.get());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn exact_terminal_start_stream_result_is_acknowledged_without_second_render() {
+        use std::cell::Cell;
+
+        let acknowledged = Cell::new(0);
+        let rendered = Cell::new(0);
+        let error = join_committed_public_start_after_stream_error(
+            public_prompt_rendered_exit(1),
+            || {
+                acknowledged.set(acknowledged.get() + 1);
+                Ok(())
+            },
+            || {
+                rendered.set(rendered.get() + 1);
+                Ok(())
+            },
+        )
+        .expect_err("a rendered terminal Start failure must preserve its exit status");
+
+        assert_eq!(public_prompt_rendered_exit_code(&error), Some(1));
+        assert_eq!(acknowledged.get(), 1);
+        assert_eq!(
+            rendered.get(),
+            0,
+            "an exact terminal envelope already emitted by the stream must not be rendered twice"
+        );
+    }
 
     struct EnvVarGuard {
         key: &'static str,

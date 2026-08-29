@@ -1,10 +1,14 @@
 use super::*;
 use crate::execution::agent_runtime::host_session_authority::schema::{
-    HostSessionTransitionModeV1, TerminalHandoffHashInputV2,
+    DurableSessionAuthorityOriginV1, HostPostTurnProtocolActorV1,
+    HostSessionAuthorityPreconditionV1, HostSessionPostureV1, HostSessionTransitionModeV1,
+    ObligationAttentionDispositionV1, StartContinuationHandleHashInputV2,
+    StartContinuationHandleStateV2, StartTurnCompletionKindV1, TerminalHandoffHashInputV2,
 };
 use crate::execution::agent_runtime::host_session_authority::store_schema::StateRootV3;
 use crate::execution::agent_runtime::host_session_authority::store_schema::{
-    HostSessionPostTurnApplicationV2, HostSessionTransitionIntentStateV3,
+    DurableSessionAuthorityV1, HostSessionPostTurnApplicationV2,
+    HostSessionTransitionIntentStateV3, HostSessionTransitionIntentV2,
     HostSessionTransitionIntentV3,
 };
 
@@ -896,7 +900,7 @@ impl<'a> StoreLayout<'a> {
         root: &StateRootV1,
         allow_released_copy: bool,
     ) -> Result<(), StoreError> {
-        self.validate_existing_object_index(&root.object_index, allow_released_copy)
+        self.validate_existing_object_index(&root.object_index, allow_released_copy, false)
     }
 
     pub(super) fn validate_existing_objects_v2(
@@ -904,7 +908,7 @@ impl<'a> StoreLayout<'a> {
         root: &StateRootV2,
         allow_released_copy: bool,
     ) -> Result<(), StoreError> {
-        self.validate_existing_object_index(&root.object_index, allow_released_copy)
+        self.validate_existing_object_index(&root.object_index, allow_released_copy, false)
     }
 
     pub(super) fn validate_existing_objects_v3(
@@ -912,13 +916,14 @@ impl<'a> StoreLayout<'a> {
         root: &StateRootV3,
         allow_released_copy: bool,
     ) -> Result<(), StoreError> {
-        self.validate_existing_objects_v2(&root.preserved_v2_view(), allow_released_copy)
+        self.validate_existing_object_index(&root.object_index, allow_released_copy, true)
     }
 
     fn validate_existing_object_index(
         &self,
         object_index: &std::collections::BTreeMap<String, AuthorityObjectIndexEntryV1>,
         allow_released_copy: bool,
+        allow_v3_schema_versions: bool,
     ) -> Result<(), StoreError> {
         let mut present = std::collections::BTreeSet::new();
         for kind_entry in self
@@ -942,7 +947,20 @@ impl<'a> StoreLayout<'a> {
                 .entries()
                 .map_err(|_| StoreError("enumerate object schema versions"))?
             {
-                if version_entry.kind != EntryKind::Directory || version_entry.name != "v1" {
+                let object_schema_version = match version_entry.name.as_str() {
+                    "v1" => 1,
+                    "v2" if allow_v3_schema_versions
+                        && matches!(
+                            kind,
+                            AuthorityObjectKindV1::ResumeHandle
+                                | AuthorityObjectKindV1::TerminalHandoff
+                        ) =>
+                    {
+                        2
+                    }
+                    _ => return Err(StoreError("object schema version directory is invalid")),
+                };
+                if version_entry.kind != EntryKind::Directory {
                     return Err(StoreError("object schema version directory is invalid"));
                 }
                 let version_directory = kind_directory
@@ -981,7 +999,7 @@ impl<'a> StoreLayout<'a> {
                             AuthorityObjectStorageStateV1::Released { .. }
                         );
                         if index.object_kind != kind
-                            || index.object_schema_version != 1
+                            || index.object_schema_version != object_schema_version
                             || (!released && index.byte_length != bytes.len() as u64)
                             || (released && !allow_released_copy)
                         {
@@ -1432,7 +1450,9 @@ impl<'a> StoreLayout<'a> {
         let mut processed = std::collections::BTreeSet::new();
         let mut attach_contracts = std::collections::BTreeMap::new();
         let mut descriptors = std::collections::BTreeMap::new();
+        let mut policies = std::collections::BTreeMap::new();
         let mut resume_handles = std::collections::BTreeMap::new();
+        let mut start_continuation_handles = std::collections::BTreeMap::new();
         let mut retained_workers = std::collections::BTreeMap::new();
         let mut terminal_handoffs_v1 = std::collections::BTreeMap::new();
         let mut terminal_handoffs_v2 = std::collections::BTreeMap::new();
@@ -1502,6 +1522,11 @@ impl<'a> StoreLayout<'a> {
                         .map_err(|_| StoreError("decode V3 agent descriptor graph"))?;
                     descriptors.insert(ref_id.clone(), value);
                 }
+                AuthorityObjectKindV1::Policy => {
+                    let value: PolicyObjectHashInputV1 = canonical_json::from_slice(&bytes)
+                        .map_err(|_| StoreError("decode V3 policy graph"))?;
+                    policies.insert(ref_id.clone(), value);
+                }
                 AuthorityObjectKindV1::RetainedWorker => {
                     let value: RetainedWorkerObjectHashInputV1 = canonical_json::from_slice(&bytes)
                         .map_err(|_| StoreError("decode V3 retained worker graph"))?;
@@ -1520,11 +1545,21 @@ impl<'a> StoreLayout<'a> {
                     }
                     retained_workers.insert(ref_id.clone(), value);
                 }
-                AuthorityObjectKindV1::ResumeHandle => {
-                    let value: ResumeHandleHashInputV1 = canonical_json::from_slice(&bytes)
-                        .map_err(|_| StoreError("decode V3 resume handle graph"))?;
-                    resume_handles.insert(ref_id.clone(), value);
-                }
+                AuthorityObjectKindV1::ResumeHandle => match object.reference.schema_version {
+                    1 => {
+                        let value: ResumeHandleHashInputV1 = canonical_json::from_slice(&bytes)
+                            .map_err(|_| StoreError("decode V3 resume handle graph"))?;
+                        resume_handles.insert(ref_id.clone(), value);
+                    }
+                    2 => {
+                        let value: StartContinuationHandleHashInputV2 =
+                            canonical_json::from_slice(&bytes).map_err(|_| {
+                                StoreError("decode V3 Start continuation handle graph")
+                            })?;
+                        start_continuation_handles.insert(ref_id.clone(), value);
+                    }
+                    _ => return Err(StoreError("decode V3 resume handle graph")),
+                },
                 AuthorityObjectKindV1::TerminalHandoff => {
                     match terminal_handoff_schema_version(&bytes)? {
                         1 => {
@@ -1572,7 +1607,9 @@ impl<'a> StoreLayout<'a> {
             DecodedObjectGraphsV3 {
                 attach_contracts: &attach_contracts,
                 descriptors: &descriptors,
+                policies: &policies,
                 resume_handles: &resume_handles,
+                start_continuation_handles: &start_continuation_handles,
                 retained_workers: &retained_workers,
                 terminal_handoffs_v1: &terminal_handoffs_v1,
                 terminal_handoffs_v2: &terminal_handoffs_v2,
@@ -1820,12 +1857,10 @@ impl<'a> StoreLayout<'a> {
                     ));
                 };
                 if let Some(reference) = &attach.contract.continuity_resume_handle_ref {
-                    let resume = graphs
-                        .resume_handles
-                        .get(&reference.ref_id)
-                        .ok_or(StoreError("V3 successor resume handle is unreachable"))?;
-                    validate_resume_identity(
-                        resume,
+                    validate_resume_identity_v3(
+                        reference,
+                        graphs.resume_handles,
+                        graphs.start_continuation_handles,
                         &intent.orchestration_session_id,
                         source_participant_id,
                         &attach.contract.backend_id,
@@ -1833,14 +1868,10 @@ impl<'a> StoreLayout<'a> {
                     )?;
                 }
                 if let Some(reference) = &intent.resume_handle_ref {
-                    let resume = graphs
-                        .resume_handles
-                        .get(&reference.ref_id)
-                        .ok_or(StoreError(
-                            "V3 successor intent resume handle is unreachable",
-                        ))?;
-                    validate_resume_identity(
-                        resume,
+                    validate_resume_identity_v3(
+                        reference,
+                        graphs.resume_handles,
+                        graphs.start_continuation_handles,
                         &intent.orchestration_session_id,
                         source_participant_id,
                         &attach.contract.backend_id,
@@ -1925,6 +1956,25 @@ impl<'a> StoreLayout<'a> {
             })
         {
             for reference in &authority.internal_resume_handle_refs {
+                if reference.schema_version == 2 {
+                    let start = graphs
+                        .start_continuation_handles
+                        .get(&reference.ref_id)
+                        .ok_or(StoreError(
+                            "V3 authority Start continuation handle is unreachable",
+                        ))?;
+                    if start.orchestration_session_id != authority.orchestration_session_id
+                        || !authority
+                            .authoritative_participant_lineage
+                            .contains(&start.participant_id)
+                        || start.authority_store_id != root.authority_store_id
+                    {
+                        return Err(StoreError(
+                            "V3 Start continuation identity disagrees with authority",
+                        ));
+                    }
+                    continue;
+                }
                 let resume = graphs
                     .resume_handles
                     .get(&reference.ref_id)
@@ -1972,6 +2022,7 @@ impl<'a> StoreLayout<'a> {
                 }
             }
         }
+        validate_start_continuation_graphs_v3(root, &graphs)?;
         for intent in root.transition_intent_map.values() {
             let terminal_ref = match &intent.state {
                 HostSessionTransitionIntentStateV2::Rejected {
@@ -2211,10 +2262,416 @@ pub(super) fn validate_resume_identity(
 struct DecodedObjectGraphsV3<'a> {
     attach_contracts: &'a std::collections::BTreeMap<String, HostAttachContractHashInputV1>,
     descriptors: &'a std::collections::BTreeMap<String, AgentDescriptorHashInputV1>,
+    policies: &'a std::collections::BTreeMap<String, PolicyObjectHashInputV1>,
     resume_handles: &'a std::collections::BTreeMap<String, ResumeHandleHashInputV1>,
+    start_continuation_handles:
+        &'a std::collections::BTreeMap<String, StartContinuationHandleHashInputV2>,
     retained_workers: &'a std::collections::BTreeMap<String, RetainedWorkerObjectHashInputV1>,
     terminal_handoffs_v1: &'a std::collections::BTreeMap<String, TerminalHandoffHashInputV1>,
     terminal_handoffs_v2: &'a std::collections::BTreeMap<String, TerminalHandoffHashInputV2>,
+}
+
+fn validate_resume_identity_v3(
+    reference: &AuthorityObjectRefV1,
+    resume_handles: &std::collections::BTreeMap<String, ResumeHandleHashInputV1>,
+    start_continuation_handles: &std::collections::BTreeMap<
+        String,
+        StartContinuationHandleHashInputV2,
+    >,
+    orchestration_session_id: &str,
+    participant_id: &str,
+    backend_id: &str,
+    protocol: &str,
+) -> Result<(), StoreError> {
+    match reference.schema_version {
+        1 => {
+            let resume = resume_handles
+                .get(&reference.ref_id)
+                .ok_or(StoreError("V3 successor resume handle is unreachable"))?;
+            validate_resume_identity(
+                resume,
+                orchestration_session_id,
+                participant_id,
+                backend_id,
+                protocol,
+            )
+        }
+        2 => {
+            let resume = start_continuation_handles
+                .get(&reference.ref_id)
+                .ok_or(StoreError(
+                    "V3 successor Start continuation handle is unreachable",
+                ))?;
+            if resume.orchestration_session_id != orchestration_session_id
+                || resume.participant_id != participant_id
+                || resume.backend_id != backend_id
+                || resume.protocol != protocol
+                || !matches!(resume.state, StartContinuationHandleStateV2::Settled { .. })
+            {
+                return Err(StoreError(
+                    "Start continuation handle identity disagrees with successor graph",
+                ));
+            }
+            Ok(())
+        }
+        _ => Err(StoreError("V3 successor resume handle schema is invalid")),
+    }
+}
+
+fn validate_start_continuation_graphs_v3(
+    root: &StateRootV3,
+    graphs: &DecodedObjectGraphsV3<'_>,
+) -> Result<(), StoreError> {
+    for authority in root
+        .session_namespace_map
+        .values()
+        .filter_map(|record| match record {
+            SessionNamespaceRecordV1::Authority(authority) => Some(authority.as_ref()),
+            _ => None,
+        })
+    {
+        let start_refs = authority
+            .internal_resume_handle_refs
+            .iter()
+            .filter(|reference| reference.schema_version == 2)
+            .collect::<Vec<_>>();
+        if start_refs.is_empty() {
+            continue;
+        }
+        if start_refs.len() > 2 {
+            return Err(StoreError(
+                "V3 Start continuation has more than two authority phases",
+            ));
+        }
+        let DurableSessionAuthorityOriginV1::StartIntent { intent_id, .. } = &authority.origin;
+        let intent = root.transition_intent_map.get(intent_id).ok_or(StoreError(
+            "V3 Start continuation origin intent is unreachable",
+        ))?;
+        let HostSessionTransitionIntentStateV2::Applied {
+            claim_id,
+            claimant_attempt_id,
+            authority_revision_after,
+            active_authoritative_participant_id,
+            resulting_posture,
+            authority_record_commitment,
+            application_result_ref,
+            ..
+        } = &intent.state
+        else {
+            return Err(StoreError(
+                "V3 Start continuation origin intent is not applied",
+            ));
+        };
+        if *authority_revision_after != 1
+            || *resulting_posture != HostSessionPostureV1::ActiveAttached
+            || active_authoritative_participant_id != &intent.target_authoritative_participant_id
+        {
+            return Err(StoreError(
+                "V3 Start continuation origin application is inconsistent",
+            ));
+        }
+        let attach = graphs
+            .attach_contracts
+            .get(&intent.host_attach_contract_ref.ref_id)
+            .ok_or(StoreError("V3 Start continuation attach is unreachable"))?;
+        let descriptor = graphs
+            .descriptors
+            .get(&intent.descriptor_ref.ref_id)
+            .ok_or(StoreError(
+                "V3 Start continuation descriptor is unreachable",
+            ))?;
+        let policy = graphs
+            .policies
+            .get(&attach.contract.policy_ref.ref_id)
+            .ok_or(StoreError("V3 Start continuation policy is unreachable"))?;
+        let registered_ref = start_refs[0];
+        let registered = graphs
+            .start_continuation_handles
+            .get(&registered_ref.ref_id)
+            .ok_or(StoreError(
+                "V3 Start continuation registration is unreachable",
+            ))?;
+        validate_start_handle_identity_v3(
+            root,
+            intent,
+            application_result_ref,
+            descriptor,
+            registered,
+        )?;
+        let StartContinuationHandleStateV2::Registered {
+            exchange_sequence, ..
+        } = &registered.state
+        else {
+            return Err(StoreError(
+                "V3 Start continuation first phase is not registration",
+            ));
+        };
+        if registered.authority_revision_before != 1
+            || registered.authority_revision_after != 2
+            || registered.authority_record_commitment_before != *authority_record_commitment
+        {
+            return Err(StoreError(
+                "V3 Start continuation registration ancestry is inconsistent",
+            ));
+        }
+        let registered_commitment = start_authority_commitment_v3(
+            intent,
+            policy,
+            &attach.contract.policy_ref,
+            vec![registered_ref.clone()],
+            2,
+            HostSessionPostureV1::ActiveAttached,
+        )?;
+        if start_refs.len() == 1 {
+            if root
+                .successor_transition_intent_map
+                .values()
+                .any(|successor| {
+                    successor.orchestration_session_id == authority.orchestration_session_id
+                })
+                || authority.authority_revision != 2
+                || authority.lifecycle_posture != HostSessionPostureV1::ActiveAttached
+                || authority.internal_resume_handle_refs != vec![registered_ref.clone()]
+                || authority_commitment_for_record_v3(authority)? != registered_commitment
+            {
+                return Err(StoreError(
+                    "V3 registered Start continuation is not exact current authority",
+                ));
+            }
+            continue;
+        }
+
+        let settled_ref = start_refs[1];
+        let settled = graphs
+            .start_continuation_handles
+            .get(&settled_ref.ref_id)
+            .ok_or(StoreError("V3 Start settlement is unreachable"))?;
+        validate_start_handle_identity_v3(
+            root,
+            intent,
+            application_result_ref,
+            descriptor,
+            settled,
+        )?;
+        if settled.internal_uaa_session_id != registered.internal_uaa_session_id {
+            return Err(StoreError(
+                "V3 Start settlement substitutes the registered continuation ID",
+            ));
+        }
+        let StartContinuationHandleStateV2::Settled {
+            registered_resume_handle_ref,
+            protocol_actor,
+            event_sequence,
+            completion_kind,
+            obligation_snapshot,
+            ..
+        } = &settled.state
+        else {
+            return Err(StoreError(
+                "V3 Start continuation second phase is not settlement",
+            ));
+        };
+        if registered_resume_handle_ref.as_ref() != registered_ref
+            || *event_sequence <= *exchange_sequence
+            || settled.authority_revision_before != 2
+            || settled.authority_revision_after != 3
+            || settled.authority_record_commitment_before != registered_commitment
+        {
+            return Err(StoreError("V3 Start settlement ancestry is inconsistent"));
+        }
+        let actor_is_exact = match protocol_actor {
+            HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant { participant_id } => {
+                participant_id == &intent.target_authoritative_participant_id
+            }
+            HostPostTurnProtocolActorV1::LaunchApplicationClaimant {
+                claim_id: actor_claim_id,
+                claimant_attempt_id: actor_attempt_id,
+            } => actor_claim_id == claim_id && actor_attempt_id == claimant_attempt_id,
+        };
+        if !actor_is_exact {
+            return Err(StoreError("V3 Start settlement actor is not authoritative"));
+        }
+        let settled_posture = match completion_kind {
+            StartTurnCompletionKindV1::TerminalClean
+            | StartTurnCompletionKindV1::TerminalFailure { .. } => {
+                if obligation_snapshot.is_some() {
+                    return Err(StoreError(
+                        "V3 terminal Start settlement carries obligation evidence",
+                    ));
+                }
+                HostSessionPostureV1::Terminal
+            }
+            StartTurnCompletionKindV1::ResumableClean => match obligation_snapshot.as_deref() {
+                None => HostSessionPostureV1::ParkedResumable,
+                Some(snapshot) => {
+                    if snapshot.authority_store_id != root.authority_store_id
+                        || snapshot.orchestration_session_id != intent.orchestration_session_id
+                        || snapshot.authoritative_participant_id
+                            != intent.target_authoritative_participant_id
+                        || snapshot.transition_intent_id != intent.intent_id
+                        || snapshot.transition_run_id != intent.run_id
+                        || snapshot.authority_revision_observed != 2
+                    {
+                        return Err(StoreError(
+                            "V3 Start settlement obligation evidence does not authenticate",
+                        ));
+                    }
+                    match snapshot.attention_disposition {
+                        ObligationAttentionDispositionV1::HasUnresolvedAttention
+                            if !snapshot.unresolved_attention_obligations.is_empty() =>
+                        {
+                            HostSessionPostureV1::AwaitingAttention
+                        }
+                        ObligationAttentionDispositionV1::NoUnresolvedAttention
+                            if snapshot.unresolved_attention_obligations.is_empty() =>
+                        {
+                            HostSessionPostureV1::ParkedResumable
+                        }
+                        _ => {
+                            return Err(StoreError(
+                                "V3 Start settlement obligation disposition is inconsistent",
+                            ));
+                        }
+                    }
+                }
+            },
+        };
+        let settled_commitment = start_authority_commitment_v3(
+            intent,
+            policy,
+            &attach.contract.policy_ref,
+            vec![registered_ref.clone(), settled_ref.clone()],
+            3,
+            settled_posture,
+        )?;
+        let earliest_successor = root
+            .successor_transition_intent_map
+            .values()
+            .filter(|successor| {
+                successor.orchestration_session_id == intent.orchestration_session_id
+            })
+            .filter_map(|successor| match &successor.authority_precondition {
+                HostSessionAuthorityPreconditionV1::ExpectedRevision {
+                    authority_revision,
+                    authority_record_commitment,
+                    active_authoritative_participant_id,
+                    lifecycle_posture,
+                    ..
+                } => Some((
+                    *authority_revision,
+                    authority_record_commitment,
+                    active_authoritative_participant_id,
+                    *lifecycle_posture,
+                )),
+                HostSessionAuthorityPreconditionV1::ExpectedAbsent => None,
+            })
+            .min_by_key(|(revision, ..)| *revision);
+        if let Some((revision, commitment, participant, posture)) = earliest_successor {
+            if revision != 3
+                || commitment != &settled_commitment
+                || participant != &intent.target_authoritative_participant_id
+                || posture != settled_posture
+            {
+                return Err(StoreError(
+                    "V3 successor does not descend from exact Start settlement",
+                ));
+            }
+        } else if authority.authority_revision != 3
+            || authority.lifecycle_posture != settled_posture
+            || authority.internal_resume_handle_refs
+                != vec![registered_ref.clone(), settled_ref.clone()]
+            || authority_commitment_for_record_v3(authority)? != settled_commitment
+        {
+            return Err(StoreError(
+                "V3 settled Start continuation is not exact current authority",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_start_handle_identity_v3(
+    root: &StateRootV3,
+    intent: &HostSessionTransitionIntentV2,
+    application_result_ref: &AuthorityObjectRefV1,
+    descriptor: &AgentDescriptorHashInputV1,
+    handle: &StartContinuationHandleHashInputV2,
+) -> Result<(), StoreError> {
+    if handle.authority_store_id != root.authority_store_id
+        || handle.orchestration_session_id != intent.orchestration_session_id
+        || handle.participant_id != intent.target_authoritative_participant_id
+        || handle.backend_id != descriptor.descriptor.backend_id
+        || handle.protocol != descriptor.descriptor.protocol
+        || handle.start_intent_id != intent.intent_id
+        || handle.start_issuer_request_id != intent.issuer_request_id
+        || handle.start_payload_commitment != intent.payload_commitment
+        || handle.start_application_result_ref != *application_result_ref
+        || handle.start_run_id != intent.run_id
+    {
+        return Err(StoreError(
+            "V3 Start continuation identity does not authenticate",
+        ));
+    }
+    Ok(())
+}
+
+fn start_authority_commitment_v3(
+    intent: &HostSessionTransitionIntentV2,
+    policy: &PolicyObjectHashInputV1,
+    policy_ref: &AuthorityObjectRefV1,
+    internal_resume_handle_refs: Vec<AuthorityObjectRefV1>,
+    authority_revision: u64,
+    lifecycle_posture: HostSessionPostureV1,
+) -> Result<AuthorityObjectCommitmentV1, StoreError> {
+    let digest_hex = canonical_sha256(&DurableSessionAuthorityHashInputV1 {
+        schema_version: 1,
+        orchestration_session_id: intent.orchestration_session_id.clone(),
+        shell_trace_session_id: intent.shell_trace_session_id.clone(),
+        authority_revision,
+        origin: DurableSessionAuthorityOriginV1::StartIntent {
+            intent_id: intent.intent_id.clone(),
+            issuer_request_id: intent.issuer_request_id.clone(),
+            payload_commitment: intent.payload_commitment.clone(),
+        },
+        authoritative_participant_lineage: intent.resulting_authoritative_lineage.clone(),
+        active_authoritative_participant_id: Some(
+            intent.target_authoritative_participant_id.clone(),
+        ),
+        workspace_binding: intent.workspace_binding.clone(),
+        world_binding: intent.world_binding.clone(),
+        host_attach_contract_ref: Some(intent.host_attach_contract_ref.clone()),
+        retained_worker_refs: Vec::new(),
+        internal_resume_handle_refs,
+        lifecycle_posture,
+        current_policy_ref: Some(policy_ref.clone()),
+        current_policy_revision: Some(policy.policy_revision.clone()),
+    })
+    .map_err(|_| StoreError("commit V3 Start continuation authority"))?;
+    Ok(AuthorityObjectCommitmentV1::CanonicalSha256 { digest_hex })
+}
+
+fn authority_commitment_for_record_v3(
+    authority: &DurableSessionAuthorityV1,
+) -> Result<AuthorityObjectCommitmentV1, StoreError> {
+    let digest_hex = canonical_sha256(&DurableSessionAuthorityHashInputV1 {
+        schema_version: authority.schema_version,
+        orchestration_session_id: authority.orchestration_session_id.clone(),
+        shell_trace_session_id: authority.shell_trace_session_id.clone(),
+        authority_revision: authority.authority_revision,
+        origin: authority.origin.clone(),
+        authoritative_participant_lineage: authority.authoritative_participant_lineage.clone(),
+        active_authoritative_participant_id: authority.active_authoritative_participant_id.clone(),
+        workspace_binding: authority.workspace_binding.clone(),
+        world_binding: authority.world_binding.clone(),
+        host_attach_contract_ref: authority.host_attach_contract_ref.clone(),
+        retained_worker_refs: authority.retained_worker_refs.clone(),
+        internal_resume_handle_refs: authority.internal_resume_handle_refs.clone(),
+        lifecycle_posture: authority.lifecycle_posture,
+        current_policy_ref: authority.current_policy_ref.clone(),
+        current_policy_revision: authority.current_policy_revision.clone(),
+    })
+    .map_err(|_| StoreError("commit current V3 Start continuation authority"))?;
+    Ok(AuthorityObjectCommitmentV1::CanonicalSha256 { digest_hex })
 }
 
 enum TerminalHandoffGraphV3<'a> {

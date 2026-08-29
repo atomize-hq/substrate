@@ -67,6 +67,7 @@ pub(crate) enum CanonicalObjectHashInputV1<'a> {
     AgentDescriptor(&'a super::schema::AgentDescriptorHashInputV1),
     RetainedWorker(&'a super::schema::RetainedWorkerObjectHashInputV1),
     ResumeHandle(&'a super::schema::ResumeHandleHashInputV1),
+    StartContinuationHandle(&'a super::schema::StartContinuationHandleHashInputV2),
     Policy(&'a super::schema::PolicyObjectHashInputV1),
     HostAttachContract(&'a super::schema::HostAttachContractHashInputV1),
     TransitionTransportPayload(&'a super::schema::TransitionTransportPayloadObjectV1),
@@ -85,7 +86,9 @@ impl CanonicalObjectHashInputV1<'_> {
         match self {
             Self::AgentDescriptor(_) => AuthorityObjectKindV1::AgentDescriptor,
             Self::RetainedWorker(_) => AuthorityObjectKindV1::RetainedWorker,
-            Self::ResumeHandle(_) => AuthorityObjectKindV1::ResumeHandle,
+            Self::ResumeHandle(_) | Self::StartContinuationHandle(_) => {
+                AuthorityObjectKindV1::ResumeHandle
+            }
             Self::Policy(_) => AuthorityObjectKindV1::Policy,
             Self::HostAttachContract(_) => AuthorityObjectKindV1::HostAttachContract,
             Self::TransitionTransportPayload(_) => {
@@ -121,6 +124,7 @@ pub(crate) fn canonical_object_bytes(
         CanonicalObjectHashInputV1::AgentDescriptor(value) => encode!(value),
         CanonicalObjectHashInputV1::RetainedWorker(value) => encode!(value),
         CanonicalObjectHashInputV1::ResumeHandle(value) => encode!(value),
+        CanonicalObjectHashInputV1::StartContinuationHandle(value) => encode!(value),
         CanonicalObjectHashInputV1::Policy(value) => encode!(value),
         CanonicalObjectHashInputV1::HostAttachContract(value) => encode!(value),
         CanonicalObjectHashInputV1::TransitionTransportPayload(value) => encode!(value),

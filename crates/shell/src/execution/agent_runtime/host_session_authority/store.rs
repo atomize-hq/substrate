@@ -656,7 +656,8 @@ mod platform {
         AuthorityObjectRefV1, CanonicalDirectoryV1, DurableSessionAuthorityHashInputV1,
         HostAttachContractHashInputV1, InputAcceptanceHashInputV1, PolicyObjectHashInputV1,
         PostTurnCompletionHashInputV1, ResumeHandleHashInputV1, RetainedWorkerObjectHashInputV1,
-        TerminalHandoffHashInputV1, TerminalHandoffStateV1, TimestampV1,
+        StartContinuationHandleHashInputV2, TerminalHandoffHashInputV1, TerminalHandoffStateV1,
+        TimestampV1,
     };
     use crate::execution::agent_runtime::host_session_authority::store_format::{
         key_id, nonce, object_ref_id, store_id, validate_key_id, validate_ref_id,

@@ -17,6 +17,13 @@ use super::validation::validate_object_commitment_rule;
 
 const SCHEMA_VERSION: u32 = 1;
 
+fn lower_hex(value: &str, length: usize) -> bool {
+    value.len() == length
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct AuthorityStoreCommitmentKeyV1 {
@@ -112,7 +119,69 @@ pub(crate) struct StateRootV3 {
     pub(crate) successor_issuer_request_index: BTreeMap<String, IssuerRequestIndexEntryV1>,
     pub(crate) successor_application_journal:
         BTreeMap<String, HostSessionTransitionApplicationJournalV3>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) start_transaction_map: BTreeMap<String, StartTransactionRecordV1>,
     pub(crate) object_index: BTreeMap<String, AuthorityObjectIndexEntryV1>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "value", deny_unknown_fields)]
+pub(crate) enum StartTransactionStateV1 {
+    PromptNotSubmitted,
+    PromptSubmissionNoReplayBarrier {
+        barrier_committed_at: TimestampV1,
+    },
+    PromptSubmissionIndeterminate {
+        barrier_committed_at: TimestampV1,
+        declared_at: TimestampV1,
+    },
+    ContinuationRegistered {
+        registration_ref: AuthorityObjectRefV1,
+        authority_revision_after: u64,
+        registered_at: TimestampV1,
+    },
+    TurnSettledAwaitingResponse {
+        settlement_ref: AuthorityObjectRefV1,
+        authority_revision_after: u64,
+        resulting_posture: HostSessionPostureV1,
+        completed_at: TimestampV1,
+    },
+    PublicResponseDelivered {
+        settlement_ref: AuthorityObjectRefV1,
+        authority_revision_after: u64,
+        resulting_posture: HostSessionPostureV1,
+        completed_at: TimestampV1,
+        delivered_at: TimestampV1,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct StartTransactionRecordV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) transaction_id: String,
+    pub(crate) request_key_sha256: String,
+    pub(crate) prompt_sha256: String,
+    pub(crate) authority_store_id: String,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) shell_trace_session_id: String,
+    pub(crate) authoritative_participant_id: String,
+    pub(crate) backend_id: String,
+    pub(crate) protocol: String,
+    pub(crate) workspace_root: String,
+    pub(crate) world_id: Option<String>,
+    pub(crate) world_generation: Option<u64>,
+    pub(crate) public_backend_id: String,
+    pub(crate) public_scope: String,
+    pub(crate) start_intent_id: String,
+    pub(crate) start_issuer_request_id: String,
+    pub(crate) start_payload_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) start_application_result_ref: AuthorityObjectRefV1,
+    pub(crate) start_run_id: String,
+    pub(crate) start_authority_revision: u64,
+    pub(crate) created_at: TimestampV1,
+    pub(crate) updated_at: TimestampV1,
+    pub(crate) state: StartTransactionStateV1,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1624,6 +1693,7 @@ impl StateRootV3 {
             successor_transition_intent_map: BTreeMap::new(),
             successor_issuer_request_index: BTreeMap::new(),
             successor_application_journal: BTreeMap::new(),
+            start_transaction_map: BTreeMap::new(),
             object_index: root.object_index.clone(),
         };
         upgraded.validate()?;
@@ -1641,6 +1711,7 @@ impl StateRootV3 {
             || !self.successor_transition_intent_map.is_empty()
             || !self.successor_issuer_request_index.is_empty()
             || !self.successor_application_journal.is_empty()
+            || !self.start_transaction_map.is_empty()
             || !self.object_index.is_empty()
         {
             return Err(StoreSchemaError(
@@ -1752,6 +1823,164 @@ impl StateRootV3 {
         }
         let preserved = self.preserved_v2_validation_view()?;
         preserved.validate()?;
+        let mut active_request_keys = std::collections::BTreeSet::new();
+        for (key, transaction) in &self.start_transaction_map {
+            if key != &transaction.transaction_id
+                || transaction.schema_version != 1
+                || transaction.authority_store_id != self.authority_store_id
+                || transaction.start_authority_revision != 1
+                || transaction.world_id.is_some() != transaction.world_generation.is_some()
+                || !lower_hex(&transaction.request_key_sha256, 64)
+                || !lower_hex(&transaction.prompt_sha256, 64)
+            {
+                return Err(StoreSchemaError("invalid V3 Start transaction identity"));
+            }
+            for value in [
+                transaction.transaction_id.as_str(),
+                transaction.orchestration_session_id.as_str(),
+                transaction.shell_trace_session_id.as_str(),
+                transaction.authoritative_participant_id.as_str(),
+                transaction.backend_id.as_str(),
+                transaction.protocol.as_str(),
+                transaction.workspace_root.as_str(),
+                transaction.public_backend_id.as_str(),
+                transaction.public_scope.as_str(),
+                transaction.start_intent_id.as_str(),
+                transaction.start_issuer_request_id.as_str(),
+                transaction.start_run_id.as_str(),
+            ] {
+                required(value)?;
+            }
+            let intent = self
+                .transition_intent_map
+                .get(&transaction.start_intent_id)
+                .ok_or(StoreSchemaError(
+                    "Start transaction references no Start intent",
+                ))?;
+            let HostSessionTransitionIntentStateV2::Applied {
+                application_result_ref,
+                authority_revision_after,
+                active_authoritative_participant_id,
+                ..
+            } = &intent.state
+            else {
+                return Err(StoreSchemaError(
+                    "Start transaction requires an applied Start intent",
+                ));
+            };
+            if intent.mode != HostSessionTransitionModeV1::Start
+                || intent.orchestration_session_id != transaction.orchestration_session_id
+                || intent.shell_trace_session_id != transaction.shell_trace_session_id
+                || intent.target_authoritative_participant_id
+                    != transaction.authoritative_participant_id
+                || intent.issuer_request_id != transaction.start_issuer_request_id
+                || intent.payload_commitment != transaction.start_payload_commitment
+                || application_result_ref != &transaction.start_application_result_ref
+                || intent.run_id != transaction.start_run_id
+                || active_authoritative_participant_id != &transaction.authoritative_participant_id
+                || *authority_revision_after != transaction.start_authority_revision
+                || intent.workspace_binding.workspace_root.physical_path
+                    != transaction.workspace_root
+                || intent
+                    .world_binding
+                    .as_ref()
+                    .map(|binding| binding.world_id.as_str())
+                    != transaction.world_id.as_deref()
+                || intent
+                    .world_binding
+                    .as_ref()
+                    .map(|binding| binding.world_generation)
+                    != transaction.world_generation
+            {
+                return Err(StoreSchemaError(
+                    "Start transaction conflicts with its applied Start intent",
+                ));
+            }
+            let authority = self
+                .session_namespace_map
+                .get(&transaction.orchestration_session_id)
+                .and_then(|record| match record {
+                    SessionNamespaceRecordV1::Authority(authority) => Some(authority.as_ref()),
+                    _ => None,
+                })
+                .ok_or(StoreSchemaError(
+                    "Start transaction references no authority",
+                ))?;
+            let (expected_revision, expected_ref, expected_posture, settled) =
+                match &transaction.state {
+                    StartTransactionStateV1::PromptNotSubmitted
+                    | StartTransactionStateV1::PromptSubmissionNoReplayBarrier { .. }
+                    | StartTransactionStateV1::PromptSubmissionIndeterminate { .. } => (
+                        transaction.start_authority_revision,
+                        None,
+                        HostSessionPostureV1::ActiveAttached,
+                        false,
+                    ),
+                    StartTransactionStateV1::ContinuationRegistered {
+                        registration_ref,
+                        authority_revision_after,
+                        ..
+                    } => (
+                        *authority_revision_after,
+                        Some(registration_ref),
+                        HostSessionPostureV1::ActiveAttached,
+                        false,
+                    ),
+                    StartTransactionStateV1::TurnSettledAwaitingResponse {
+                        settlement_ref,
+                        authority_revision_after,
+                        resulting_posture,
+                        ..
+                    } => (
+                        *authority_revision_after,
+                        Some(settlement_ref),
+                        *resulting_posture,
+                        true,
+                    ),
+                    StartTransactionStateV1::PublicResponseDelivered {
+                        settlement_ref,
+                        authority_revision_after,
+                        resulting_posture,
+                        ..
+                    } => (
+                        *authority_revision_after,
+                        Some(settlement_ref),
+                        *resulting_posture,
+                        true,
+                    ),
+                };
+            let authority_state_mismatch = if settled {
+                authority.authority_revision < expected_revision
+                    || (authority.authority_revision == expected_revision
+                        && authority.lifecycle_posture != expected_posture)
+            } else {
+                authority.authority_revision != expected_revision
+                    || authority.active_authoritative_participant_id.as_deref()
+                        != Some(transaction.authoritative_participant_id.as_str())
+                    || authority.lifecycle_posture != expected_posture
+            };
+            if authority_state_mismatch
+                || expected_ref.is_some_and(|reference| {
+                    (!settled && authority.internal_resume_handle_refs.last() != Some(reference))
+                        || (settled && !authority.internal_resume_handle_refs.contains(reference))
+                        || reference.object_kind != AuthorityObjectKindV1::ResumeHandle
+                        || reference.schema_version != 2
+                })
+            {
+                return Err(StoreSchemaError(
+                    "Start transaction state conflicts with current authority",
+                ));
+            }
+            if !matches!(
+                transaction.state,
+                StartTransactionStateV1::PublicResponseDelivered { .. }
+            ) && !active_request_keys.insert(transaction.request_key_sha256.as_str())
+            {
+                return Err(StoreSchemaError(
+                    "multiple unfinished Start transactions share a request key",
+                ));
+            }
+        }
         let mut successor_histories = BTreeMap::new();
         for (key, record) in &self.session_namespace_map {
             if key != record.orchestration_session_id() {
@@ -2747,7 +2976,116 @@ impl StateRootV3 {
             journal.startup_terminal_application.as_ref(),
         ) {
             (HostSessionStartupOwnershipApplicationV1::Pending { .. }, None)
-            | (HostSessionStartupOwnershipApplicationV1::Accepted { .. }, None) => Ok(history),
+            | (HostSessionStartupOwnershipApplicationV1::Accepted { .. }, None) => {
+                let start_continuation_refs = current_authority
+                    .internal_resume_handle_refs
+                    .iter()
+                    .filter(|reference| {
+                        reference.object_kind == AuthorityObjectKindV1::ResumeHandle
+                            && reference.schema_version == 2
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>();
+                if start_continuation_refs.is_empty() {
+                    return Ok(history);
+                }
+                if start_continuation_refs.len() > 2 {
+                    return Err(StoreSchemaError(
+                        "V3 Start continuation history has too many handle phases",
+                    ));
+                }
+                let expected_revision = latest
+                    .authority
+                    .authority_revision
+                    .checked_add(start_continuation_refs.len() as u64)
+                    .ok_or(StoreSchemaError(
+                        "V3 Start continuation authority revision overflow",
+                    ))?;
+                let earliest_successor = self
+                    .successor_transition_intent_map
+                    .values()
+                    .filter(|successor| {
+                        successor.orchestration_session_id
+                            == current_authority.orchestration_session_id
+                    })
+                    .filter_map(|successor| match &successor.authority_precondition {
+                        HostSessionAuthorityPreconditionV1::ExpectedRevision {
+                            authority_revision,
+                            authority_record_commitment,
+                            active_authoritative_participant_id,
+                            authoritative_lineage_commitment,
+                            lifecycle_posture,
+                        } => Some((
+                            *authority_revision,
+                            authority_record_commitment,
+                            active_authoritative_participant_id,
+                            authoritative_lineage_commitment,
+                            *lifecycle_posture,
+                        )),
+                        HostSessionAuthorityPreconditionV1::ExpectedAbsent => None,
+                    })
+                    .min_by_key(|(revision, ..)| *revision);
+                let reconstructed = if let Some((
+                    revision,
+                    authority_record_commitment,
+                    active_participant,
+                    lineage_commitment,
+                    lifecycle_posture,
+                )) = earliest_successor
+                {
+                    if revision != expected_revision {
+                        return Err(StoreSchemaError(
+                            "V3 successor does not descend from settled Start continuity",
+                        ));
+                    }
+                    let authority = if current_authority.authority_revision == revision {
+                        current_authority.clone()
+                    } else {
+                        let mut authority = latest.authority.clone();
+                        authority.authority_revision = revision;
+                        authority.active_authoritative_participant_id =
+                            Some(active_participant.clone());
+                        authority.internal_resume_handle_refs = start_continuation_refs.clone();
+                        authority.lifecycle_posture = lifecycle_posture;
+                        authority
+                    };
+                    let reconstructed = reconstruct_authority_state(authority)?;
+                    if &reconstructed.authority_record_commitment != authority_record_commitment
+                        || &reconstructed.authoritative_lineage_commitment != lineage_commitment
+                    {
+                        return Err(StoreSchemaError(
+                            "V3 Start continuation does not match successor precondition",
+                        ));
+                    }
+                    reconstructed
+                } else {
+                    if current_authority.authority_revision != expected_revision
+                        || current_authority.internal_resume_handle_refs != start_continuation_refs
+                    {
+                        return Err(StoreSchemaError(
+                            "current V3 Start continuation authority is not contiguous",
+                        ));
+                    }
+                    reconstruct_authority_state(current_authority.clone())?
+                };
+                if (start_continuation_refs.len() == 1
+                    && reconstructed.authority.lifecycle_posture
+                        != HostSessionPostureV1::ActiveAttached)
+                    || (start_continuation_refs.len() == 2
+                        && !matches!(
+                            reconstructed.authority.lifecycle_posture,
+                            HostSessionPostureV1::ParkedResumable
+                                | HostSessionPostureV1::AwaitingAttention
+                                | HostSessionPostureV1::Terminal
+                        ))
+                {
+                    return Err(StoreSchemaError(
+                        "V3 Start continuation posture is inconsistent with its phases",
+                    ));
+                }
+                history.insert(reconstructed.authority.authority_revision, reconstructed);
+                Ok(history)
+            }
             (
                 HostSessionStartupOwnershipApplicationV1::TerminalReconciled {
                     authority_revision_before,
@@ -3126,7 +3464,10 @@ fn v3_object_schema_version_allowed(
     schema_version: u32,
 ) -> bool {
     schema_version == SCHEMA_VERSION
-        || (object_kind == AuthorityObjectKindV1::TerminalHandoff && schema_version == 2)
+        || (matches!(
+            object_kind,
+            AuthorityObjectKindV1::TerminalHandoff | AuthorityObjectKindV1::ResumeHandle
+        ) && schema_version == 2)
 }
 
 fn reservation_matches_v2(

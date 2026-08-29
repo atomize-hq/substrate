@@ -404,6 +404,60 @@ pub(crate) struct ResumeHandleHashInputV1 {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "value", deny_unknown_fields)]
+pub(crate) enum StartTurnCompletionKindV1 {
+    ResumableClean,
+    TerminalClean,
+    TerminalFailure { reason: String },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "value", deny_unknown_fields)]
+pub(crate) enum StartContinuationHandleStateV2 {
+    Registered {
+        exchange_id: String,
+        exchange_sequence: u64,
+        provider_event_kind: String,
+        evidence_sha256: String,
+        observed_at: TimestampV1,
+    },
+    Settled {
+        registered_resume_handle_ref: Box<AuthorityObjectRefV1>,
+        protocol_actor: HostPostTurnProtocolActorV1,
+        event_id: String,
+        event_sequence: u64,
+        provider_event_kind: String,
+        thread_id: String,
+        turn_id: String,
+        evidence_sha256: String,
+        completion_kind: StartTurnCompletionKindV1,
+        obligation_snapshot: Option<Box<ObligationSnapshotHashInputV1>>,
+        completed_at: TimestampV1,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct StartContinuationHandleHashInputV2 {
+    pub(crate) schema_version: u32,
+    pub(crate) authority_store_id: String,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) participant_id: String,
+    pub(crate) backend_id: String,
+    pub(crate) protocol: String,
+    pub(crate) internal_uaa_session_id: String,
+    pub(crate) start_intent_id: String,
+    pub(crate) start_issuer_request_id: String,
+    pub(crate) start_payload_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) start_application_result_ref: AuthorityObjectRefV1,
+    pub(crate) start_run_id: String,
+    pub(crate) authority_revision_before: u64,
+    pub(crate) authority_record_commitment_before: AuthorityObjectCommitmentV1,
+    pub(crate) authority_revision_after: u64,
+    pub(crate) state: StartContinuationHandleStateV2,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct PolicyObjectHashInputV1 {
     pub(crate) schema_version: u32,

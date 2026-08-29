@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "packet_id": "A1.3-P1-start-continuity-correction-2",
+  "status": "bounded_stop",
+  "stop_reason": "scope_expansion",
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:5e968976461b96b62ca9a263caa28710a4d44a34ec10773036b8be3cea1f9e16",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "a1-3-p1-start-continuity-correction-discovery-review.txt",
+        "a1-3-p1-start-continuity-correction-review-cycle.json"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "A13P1-DISC-P2-001",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "A13P1-DISC-P2-002",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "A13P1-DISC-P2-003",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "A13P1-DISC-P2-004",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "A13P1-DISC-P2-005",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "A13P1-DISC-P2-006",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:c1fd3206e992ad621d66432f369871ebe9117ff355f97ab918b321fc188c888c",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": [
+        "A13P1-DISC-P2-001",
+        "A13P1-DISC-P2-002",
+        "A13P1-DISC-P2-003",
+        "A13P1-DISC-P2-004",
+        "A13P1-DISC-P2-005",
+        "A13P1-DISC-P2-006"
+      ],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "codex-agent:/root/start_continuity_closure_review"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "A13P1-CLOSURE-P1-001",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "A13P1-CLOSURE-P2-002",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "supplemental-causal-1",
+      "kind": "supplemental_causal",
+      "subject_fingerprint": "sha256:bbfd57394b714e6a999be441df3cb7f9b415620a8390796f33eb826f12c666b8",
+      "trigger_cycle_id": "closure-1",
+      "trigger_finding_ids": [
+        "A13P1-CLOSURE-P1-001",
+        "A13P1-CLOSURE-P2-002"
+      ],
+      "causal_evidence_refs": [
+        "crates/shell/src/execution/agent_runtime/control.rs:3629-3678",
+        "crates/shell/src/repl/async_repl.rs:5279-5411",
+        "crates/shell/src/execution/agents_cmd.rs:476-671"
+      ],
+      "review_refs": [
+        "codex-agent:/root/start_continuity_supplemental_review"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "A13P1-SUP-P1-001",
+          "priority": "P1"
+        }
+      ]
+    }
+  ]
+}

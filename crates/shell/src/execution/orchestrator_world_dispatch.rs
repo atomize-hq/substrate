@@ -51,6 +51,8 @@ use crate::execution::agent_runtime::dispatch_contract::{
     InspectWorldWorkerOutcomeV1, RetainedWorkerCancelCloseoutV1, RetainedWorkerStopCloseoutV1,
     StopWorldWorkerOutcomeV1, WorkerCancelPayloadV1, WorkerForkPayloadV1,
 };
+#[cfg(all(target_os = "linux", test))]
+use crate::execution::agent_runtime::host_session_authority::schema::HostSessionPostureV1;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::host_session_authority::schema::{
     AgentDescriptorV1 as AuthorityAgentDescriptorV1,
@@ -67,8 +69,9 @@ use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
 use crate::execution::agent_runtime::obligation_ledger::reconcile_retained_event_obligations;
 #[cfg(all(target_os = "linux", test))]
 use crate::execution::agent_runtime::obligation_ledger::{
-    read_obligation_ledger_snapshot, ObligationAttentionDispositionV1,
-    ObligationLedgerSnapshotReadRequestV1, ObligationLedgerSnapshotReadV1,
+    read_exact_start_obligation_ledger_snapshot, read_obligation_ledger_snapshot,
+    ObligationAttentionDispositionV1, ObligationLedgerSnapshotReadRequestV1,
+    ObligationLedgerSnapshotReadV1,
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::retained_worker_runtime::{
@@ -79,6 +82,8 @@ use crate::execution::agent_runtime::retained_worker_runtime::{
 };
 #[cfg(test)]
 use crate::execution::agent_runtime::state_store::ActiveEphemeralWorldTaskRecord;
+#[cfg(all(target_os = "linux", test))]
+use crate::execution::agent_runtime::state_store::ResolvedWorldWorkRegistryAuthorityV1;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::state_store::{
     AcceptedWorldWorkIdentityV1, PreparedInternalApprovalResponseObligationCloseout,
@@ -10158,12 +10163,40 @@ mod tests {
                 }
             }
 
+            let start_consumer_authority = ResolvedWorldWorkRegistryAuthorityV1 {
+                receipt_registry: receipt_registry.clone(),
+                execution_supervisor: execution_supervisor.clone(),
+                authority_store_id: authority_store_id.clone(),
+                authority_revision_observed: correlation.authority_revision_observed,
+                orchestration_session_id: acceptance.orchestration_session_id.clone(),
+                caller_participant_id: acceptance.caller_participant_id.clone(),
+                caller_backend_id: acceptance.caller_backend_id.clone(),
+                workspace_root: "/workspace".to_string(),
+                world_id: acceptance.world_id.clone(),
+                world_generation: acceptance.world_generation,
+                host_session_posture: HostSessionPostureV1::ActiveAttached,
+                current_policy_snapshot_ref: acceptance.current_policy_snapshot_ref.clone(),
+                current_policy_snapshot_hash: acceptance.current_policy_snapshot_hash.clone(),
+                current_policy_revision: acceptance.current_policy_revision.clone(),
+                retained_target: None,
+            };
+            let pending_error = read_exact_start_obligation_ledger_snapshot(
+                &store,
+                &start_consumer_authority,
+                &correlation,
+            )
+            .expect_err("production Start consumer must reject an incomplete terminal cut");
+            assert!(pending_error
+                .to_string()
+                .contains("pending its exact terminal cut"));
+
             allow_terminal_tx
                 .send(())
                 .expect("release retained snapshot terminal frame");
-            snapshot_request
+            (snapshot_request, start_consumer_authority)
         };
-        let (result, snapshot_request) = tokio::join!(execute, observe_snapshot);
+        let (result, (snapshot_request, start_consumer_authority)) =
+            tokio::join!(execute, observe_snapshot);
         let result = result.expect("B2.1 retained snapshot stream completes");
         assert_eq!(result.exit_code, 0);
 
@@ -10204,6 +10237,22 @@ mod tests {
                 assert_eq!(snapshot.unresolved_attention_obligations.len(), 1);
             }
         }
+
+        let consumed = read_exact_start_obligation_ledger_snapshot(
+            &store,
+            &start_consumer_authority,
+            &correlation,
+        )
+        .expect("production Start consumer reads canonical ledger evidence")
+        .expect("matching retained Start work has applicable ledger evidence");
+        let ObligationLedgerSnapshotReadV1::Complete { snapshot } = consumed else {
+            panic!("production Start consumer must fail closed instead of accepting Pending")
+        };
+        assert_eq!(
+            snapshot.attention_disposition,
+            ObligationAttentionDispositionV1::HasUnresolvedAttention
+        );
+        assert_eq!(snapshot.unresolved_attention_obligations.len(), 1);
 
         let mut mismatched_terminal_request = snapshot_request.clone();
         mismatched_terminal_request.required_terminal_event_id = "evt_terminal_wrong".to_string();

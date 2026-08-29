@@ -408,6 +408,48 @@ impl AgentControlFixture {
         ))
     }
 
+    fn load_hsa_authority(&self, orchestration_session_id: &str) -> Value {
+        let root = read_json_file(&self.substrate_home.join("authority-v1/state-root-v1.json"));
+        assert_eq!(root.get("schema_version").and_then(Value::as_u64), Some(3));
+        let record = root
+            .get("session_namespace_map")
+            .and_then(|sessions| sessions.get(orchestration_session_id))
+            .unwrap_or_else(|| panic!("missing HSA session {orchestration_session_id}: {root}"));
+        assert_eq!(
+            record.get("kind").and_then(Value::as_str),
+            Some("Authority")
+        );
+        record
+            .get("value")
+            .cloned()
+            .expect("HSA authority record value")
+    }
+
+    fn load_hsa_object(&self, reference: &Value) -> Value {
+        let ref_id = reference
+            .get("ref_id")
+            .and_then(Value::as_str)
+            .expect("HSA object ref_id");
+        assert_eq!(
+            reference
+                .pointer("/object_kind/kind")
+                .and_then(Value::as_str),
+            Some("ResumeHandle")
+        );
+        let schema_version = reference
+            .get("schema_version")
+            .and_then(Value::as_u64)
+            .expect("HSA object schema version");
+        read_json_file(
+            &self
+                .substrate_home
+                .join(format!(
+                    "authority-v1/objects/resume-handle/v{schema_version}"
+                ))
+                .join(format!("{ref_id}.obj")),
+        )
+    }
+
     fn load_obligation(&self, orchestration_session_id: &str, obligation_id: &str) -> Value {
         read_json_file(&canonical_obligation_path(
             &self.substrate_home,
@@ -638,6 +680,23 @@ fn write_fake_codex_script(dir: &Path) -> PathBuf {
         .permissions();
     perms.set_mode(0o755);
     fs::set_permissions(&path, perms).expect("set fake codex permissions");
+    path
+}
+
+fn write_fake_codex_script_with_indeterminate_start_handoff(dir: &Path) -> PathBuf {
+    let path = dir.join("fake-codex-indeterminate-start.sh");
+    let count_path = dir.join("fake-codex.count");
+    let body = format!(
+        "#!/bin/sh\nSTATE_FILE='{}'\nSCRIPT_DIR='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then count=$(cat \"$STATE_FILE\"); fi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nprintf '%s\\n' \"$@\" > \"$SCRIPT_DIR/fake-codex-$count.args\"\ncat > \"$SCRIPT_DIR/fake-codex-$count.stdin\"\nexit 17\n",
+        count_path.display(),
+        dir.display(),
+    );
+    fs::write(&path, body).expect("write indeterminate Start fake codex script");
+    let mut perms = fs::metadata(&path)
+        .expect("indeterminate Start fake codex metadata")
+        .permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("set indeterminate Start fake codex permissions");
     path
 }
 
@@ -2321,7 +2380,7 @@ fn public_start_plain_human_streams_events_before_completion_summary() {
 
 #[test]
 #[serial]
-fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
+fn public_start_emits_streaming_ndjson_and_durable_hsa_continuity() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
     fixture.write_runtime_inventory(false);
@@ -2368,7 +2427,7 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
     );
     assert_eq!(
         start_json.get("session_posture").and_then(Value::as_str),
-        Some("active")
+        Some("detached_reattachable")
     );
     assert_eq!(
         start_json.get("state").and_then(Value::as_str),
@@ -2388,43 +2447,60 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
         .as_str()
         .expect("start participant id")
         .to_string();
-    let persisted_session = fixture.load_orchestration_session(&orchestration_session_id);
+    let authority = fixture.load_hsa_authority(&orchestration_session_id);
     assert_eq!(
-        persisted_session
-            .get("active_session_handle_id")
+        authority
+            .get("active_authoritative_participant_id")
             .and_then(Value::as_str),
         Some(participant_id.as_str()),
-        "public start must not report readiness before the state store points at the active participant"
+        "public Start must preserve its exact authoritative participant after settlement"
     );
     assert_eq!(
-        persisted_session
-            .pointer("/startup_prompt/state")
+        authority.get("authority_revision").and_then(Value::as_u64),
+        Some(3),
+        "successful Start must durably commit registration and settlement revisions"
+    );
+    assert_eq!(
+        authority
+            .pointer("/lifecycle_posture/kind")
             .and_then(Value::as_str),
-        Some("completed"),
-        "public start must persist startup prompt completion for replay gating"
+        Some("ParkedResumable"),
+        "successful Start must settle HSA to ParkedResumable"
     );
-    let owner_pid = persisted_session["shell_owner_pid"]
-        .as_u64()
-        .expect("shell owner pid") as u32;
-    assert!(
-        pid_is_alive(owner_pid),
-        "public start must leave the hidden owner-helper process alive"
-    );
-    assert!(
-        wait_for_path(
-            &stop_transport_path(&fixture, &orchestration_session_id, &participant_id),
-            Duration::from_secs(5),
-        ),
-        "public start must materialize a per-session private stop transport"
-    );
-    let persisted_participant =
-        fixture.load_participant(&orchestration_session_id, &participant_id);
+    let handle_refs = authority
+        .get("internal_resume_handle_refs")
+        .and_then(Value::as_array)
+        .expect("HSA resume handle refs");
     assert_eq!(
-        persisted_participant
-            .pointer("/internal/uaa_session_id")
+        handle_refs.len(),
+        2,
+        "successful Start must reference the registered and settled continuation objects"
+    );
+    let registered_handle = fixture.load_hsa_object(&handle_refs[0]);
+    let settled_handle = fixture.load_hsa_object(&handle_refs[1]);
+    assert_eq!(
+        registered_handle
+            .pointer("/state/kind")
+            .and_then(Value::as_str),
+        Some("Registered")
+    );
+    assert_eq!(
+        settled_handle
+            .pointer("/state/kind")
+            .and_then(Value::as_str),
+        Some("Settled")
+    );
+    assert_eq!(
+        settled_handle
+            .get("internal_uaa_session_id")
             .and_then(Value::as_str),
         Some("thread-test"),
-        "public start must persist the retained internal.uaa_session_id from the single startup exec"
+        "public Start must bind the continuation produced by the one real exchange"
+    );
+    assert!(
+        !canonical_orchestration_session_path(&fixture.substrate_home, &orchestration_session_id)
+            .exists(),
+        "authority-managed public Start must not create legacy StateStore authority"
     );
     let start_args = fixture.read_fake_codex_args(1);
     assert!(
@@ -2491,162 +2567,112 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
         !fixture.fake_codex_args_path(2).exists(),
         "agent start must cause exactly one Codex exec launch before any follow-up turn"
     );
+}
 
-    let turn_output = fixture.run(&[
+#[test]
+#[serial]
+fn public_start_indeterminate_handoff_retries_without_provider_replay() {
+    let fixture = AgentControlFixture::new_with_fake_codex(
+        write_fake_codex_script_with_indeterminate_start_handoff,
+    );
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+    let start_args = [
         "agent",
-        "turn",
-        "--session",
-        &orchestration_session_id,
+        "start",
         "--backend",
         "cli:codex-host",
         "--prompt",
-        "hello from turn",
+        "one real prompt with ambiguous provider acceptance",
         "--json",
-    ]);
+    ];
+
+    let first = fixture.run(&start_args);
     assert!(
-        turn_output.status.success(),
-        "public turn should succeed: {turn_output:?}"
+        !first.status.success(),
+        "ambiguous provider handoff must not report successful Start: {first:?}"
     );
-    let turn_records = parse_ndjson_output(&turn_output);
-    let turn_accepted = find_ndjson_record(&turn_records, "accepted");
     assert_eq!(
-        turn_records
-            .first()
-            .and_then(|record| record.get("kind"))
+        find_ndjson_record(&parse_ndjson_output(&first), "failed")
+            .get("error_code")
             .and_then(Value::as_str),
-        Some("accepted"),
-        "public turn must stream acceptance before terminal completion: {turn_records:?}"
-    );
-    let turn_json = find_ndjson_record(&turn_records, "completed");
-    assert_eq!(
-        turn_json.get("action").and_then(Value::as_str),
-        Some("turn")
+        Some("submission_outcome_unknown"),
+        "ambiguous provider handoff must return the typed durable result: {first:?}"
     );
     assert_eq!(
-        turn_json
-            .get("orchestration_session_id")
+        fixture
+            .read_fake_codex_stdin(1)
+            .matches("one real prompt")
+            .count(),
+        1,
+        "the caller's real prompt must be submitted once"
+    );
+    assert!(
+        !fixture
+            .read_fake_codex_stdin(1)
+            .contains("Enter persistent Substrate host orchestrator mode."),
+        "the ambiguous path must not introduce a hidden bootstrap prompt"
+    );
+
+    let second = fixture.run(&start_args);
+    assert!(
+        !second.status.success(),
+        "retry of indeterminate Start must remain unsuccessful: {second:?}"
+    );
+    assert_eq!(
+        find_ndjson_record(&parse_ndjson_output(&second), "failed")
+            .get("error_code")
             .and_then(Value::as_str),
-        Some(orchestration_session_id.as_str())
+        Some("submission_outcome_unknown"),
+        "retry must join the same typed indeterminate result: {second:?}"
     );
+    let count_path = fixture
+        .fake_codex
+        .parent()
+        .expect("fake codex parent")
+        .join("fake-codex.count");
     assert_eq!(
-        turn_json.get("backend_id").and_then(Value::as_str),
-        Some("cli:codex-host")
-    );
-    assert_eq!(
-        turn_accepted.get("scope").and_then(Value::as_str),
-        Some("host")
-    );
-    assert_eq!(
-        turn_json.get("turn_outcome").and_then(Value::as_str),
-        Some("success")
-    );
-    assert_eq!(
-        turn_json.get("session_posture").and_then(Value::as_str),
-        Some("active")
-    );
-    assert_eq!(
-        turn_json.get("state").and_then(Value::as_str),
-        Some("active")
-    );
-    assert_empty_warnings(turn_json);
-    let turn_args = fixture.read_fake_codex_args(2);
-    assert!(
-        turn_args.iter().any(|arg| arg == "resume"),
-        "the first follow-up turn must be the first resume-backed invocation: {turn_args:?}"
-    );
-    let turn_stdin = fixture.read_fake_codex_stdin(2);
-    let turn_env = fixture.read_fake_codex_env(2);
-    assert!(
-        turn_stdin.contains("hello from turn"),
-        "resume-backed follow-up turns must continue to send the prompt on stdin: {turn_stdin:?}"
+        fs::read_to_string(count_path).expect("read provider invocation count"),
+        "1",
+        "retry from indeterminate must perform zero provider submissions"
     );
     assert!(
-        turn_stdin.contains("Substrate host toolbox contract:"),
-        "follow-up turns must keep the host toolbox contract disclosed at the prompt boundary: {turn_stdin:?}"
+        !fixture.fake_codex_args_path(2).exists(),
+        "retry must fail before a second provider launch"
     );
-    assert!(
-        turn_stdin.contains("host-only sessions cannot bootstrap the first binding through these tools"),
-        "follow-up turns must keep the world-binding precondition visible at the prompt boundary: {turn_stdin:?}"
+
+    let root = read_json_file(
+        &fixture
+            .substrate_home
+            .join("authority-v1/state-root-v1.json"),
     );
+    let transactions = root
+        .get("start_transaction_map")
+        .and_then(Value::as_object)
+        .expect("durable Start transaction map");
+    assert_eq!(transactions.len(), 1);
+    let transaction = transactions.values().next().expect("Start transaction");
     assert_eq!(
-        turn_env
-            .get("SUBSTRATE_AGENT_TOOLBOX_ENDPOINT")
-            .map(String::as_str),
-        Some(
-            expected_toolbox_endpoint(&fixture.substrate_home, &orchestration_session_id,).as_str()
-        ),
-        "follow-up turns must keep using the same runtime-owned toolbox endpoint env: {turn_env:?}"
+        transaction.pointer("/state/kind").and_then(Value::as_str),
+        Some("PromptSubmissionIndeterminate")
     );
-    assert_eq!(
-        turn_env
-            .get("SUBSTRATE_AGENT_TOOLBOX_VERSION")
-            .map(String::as_str),
-        Some("1"),
-        "follow-up turns must keep using the same runtime-owned toolbox version env: {turn_env:?}"
-    );
-    assert_eq!(
-        turn_env
-            .get("SUBSTRATE_AGENT_TOOLBOX_ENDPOINT_BOUND")
-            .map(String::as_str),
-        Some("1"),
-        "follow-up turns must keep the advertised toolbox endpoint live: {turn_env:?}"
-    );
-    let reparked_session = wait_for_session_posture(
-        &fixture,
-        &orchestration_session_id,
-        "parked_resumable",
-        Duration::from_secs(5),
-    );
-    let authoritative_participant_id = reparked_session
-        .get("active_session_handle_id")
+    let orchestration_session_id = transaction
+        .get("orchestration_session_id")
         .and_then(Value::as_str)
-        .expect("authoritative participant id after detached turn")
-        .to_string();
-
-    let stop_output = fixture.run(&[
-        "agent",
-        "stop",
-        "--session",
-        &orchestration_session_id,
-        "--json",
-    ]);
-    assert!(
-        stop_output.status.success(),
-        "public stop should succeed: {stop_output:?}"
-    );
-    let stop_json = parse_json_output(&stop_output);
+        .expect("transaction session");
+    let authority = fixture.load_hsa_authority(orchestration_session_id);
     assert_eq!(
-        stop_json.get("action").and_then(Value::as_str),
-        Some("stop")
-    );
-    assert_eq!(
-        stop_json
-            .get("orchestration_session_id")
+        authority
+            .pointer("/lifecycle_posture/kind")
             .and_then(Value::as_str),
-        Some(orchestration_session_id.as_str())
-    );
-    assert_eq!(
-        stop_json.get("participant_id").and_then(Value::as_str),
-        Some(authoritative_participant_id.as_str())
-    );
-    assert_eq!(
-        stop_json.get("backend_id").and_then(Value::as_str),
-        Some("cli:codex-host")
+        Some("ActiveAttached")
     );
     assert!(
-        matches!(
-            stop_json.get("state").and_then(Value::as_str),
-            Some("stopped") | Some("invalidated")
-        ),
-        "public stop must wait for a terminal parent state: {stop_json}"
-    );
-    assert_empty_warnings(&stop_json);
-
-    let final_session = fixture.load_orchestration_session(&orchestration_session_id);
-    assert_eq!(
-        final_session.get("state").and_then(Value::as_str),
-        Some("stopped"),
-        "host-scoped public stop should persist a stopped parent session on clean shutdown"
+        authority
+            .get("internal_resume_handle_refs")
+            .and_then(Value::as_array)
+            .is_some_and(Vec::is_empty),
+        "indeterminate Start must not mint a resumable handle"
     );
 }
 

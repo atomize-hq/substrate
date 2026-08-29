@@ -62,6 +62,7 @@ fn object_schema_version(
 ) -> Result<(), ValidationError> {
     match object_kind {
         AuthorityObjectKindV1::TerminalHandoff if matches!(schema_version, 1 | 2) => Ok(()),
+        AuthorityObjectKindV1::ResumeHandle if matches!(schema_version, 1 | 2) => Ok(()),
         _ => schema_v1(schema_version),
     }
 }
@@ -815,6 +816,130 @@ impl CanonicalHashInputV1 for AuthorityObjectRefV1 {}
 impl CanonicalHashInputV1 for AgentDescriptorHashInputV1 {}
 impl CanonicalHashInputV1 for HostAttachContractHashInputV1 {}
 impl CanonicalHashInputV1 for ResumeHandleHashInputV1 {}
+impl sealed::Sealed for StartContinuationHandleHashInputV2 {}
+impl ValidatedCanonicalV1 for StartContinuationHandleHashInputV2 {
+    fn validate(&self) -> Result<(), ValidationError> {
+        schema_v2(self.schema_version)?;
+        for value in [
+            &self.authority_store_id,
+            &self.orchestration_session_id,
+            &self.participant_id,
+            &self.backend_id,
+            &self.protocol,
+            &self.internal_uaa_session_id,
+            &self.start_intent_id,
+            &self.start_issuer_request_id,
+            &self.start_run_id,
+        ] {
+            required(value)?;
+        }
+        validate_commitment(&self.start_payload_commitment)?;
+        validate_ref(
+            &self.start_application_result_ref,
+            AuthorityObjectKindV1::ApplicationResult,
+        )?;
+        validate_commitment(&self.authority_record_commitment_before)?;
+        let expected_revision_after =
+            self.authority_revision_before
+                .checked_add(1)
+                .ok_or(ValidationError(
+                    "Start continuation authority revision overflows",
+                ))?;
+        if self.authority_revision_before == 0
+            || self.authority_revision_after != expected_revision_after
+        {
+            return Err(ValidationError(
+                "Start continuation authority revisions are not contiguous",
+            ));
+        }
+        match &self.state {
+            StartContinuationHandleStateV2::Registered {
+                exchange_id,
+                exchange_sequence,
+                provider_event_kind,
+                evidence_sha256,
+                ..
+            } => {
+                required(exchange_id)?;
+                required(provider_event_kind)?;
+                if *exchange_sequence == 0 {
+                    return Err(ValidationError(
+                        "Start continuation exchange sequence is invalid",
+                    ));
+                }
+                if !lower_hex(evidence_sha256, 64) {
+                    return Err(ValidationError(
+                        "Start continuation exchange evidence is invalid",
+                    ));
+                }
+            }
+            StartContinuationHandleStateV2::Settled {
+                registered_resume_handle_ref,
+                protocol_actor,
+                event_id,
+                event_sequence,
+                provider_event_kind,
+                thread_id,
+                turn_id,
+                evidence_sha256,
+                completion_kind,
+                obligation_snapshot,
+                ..
+            } => {
+                validate_ref(
+                    registered_resume_handle_ref,
+                    AuthorityObjectKindV1::ResumeHandle,
+                )?;
+                if registered_resume_handle_ref.schema_version != 2 {
+                    return Err(ValidationError(
+                        "Start settlement registration ref requires schema version 2",
+                    ));
+                }
+                match protocol_actor {
+                    HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant {
+                        participant_id,
+                    } => required(participant_id)?,
+                    HostPostTurnProtocolActorV1::LaunchApplicationClaimant {
+                        claim_id,
+                        claimant_attempt_id,
+                    } => {
+                        required(claim_id)?;
+                        required(claimant_attempt_id)?;
+                    }
+                }
+                required(event_id)?;
+                required(provider_event_kind)?;
+                required(thread_id)?;
+                required(turn_id)?;
+                if *event_sequence == 0 {
+                    return Err(ValidationError(
+                        "Start settlement event sequence is invalid",
+                    ));
+                }
+                if !lower_hex(evidence_sha256, 64) {
+                    return Err(ValidationError(
+                        "Start settlement completion evidence is invalid",
+                    ));
+                }
+                if let StartTurnCompletionKindV1::TerminalFailure { reason } = completion_kind {
+                    required(reason)?;
+                }
+                if obligation_snapshot.is_some()
+                    && !matches!(completion_kind, StartTurnCompletionKindV1::ResumableClean)
+                {
+                    return Err(ValidationError(
+                        "terminal Start settlement cannot carry an obligation snapshot",
+                    ));
+                }
+                if let Some(snapshot) = obligation_snapshot.as_deref() {
+                    snapshot.validate()?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+impl CanonicalHashInputV1 for StartContinuationHandleHashInputV2 {}
 impl CanonicalHashInputV1 for PolicyObjectHashInputV1 {}
 impl CanonicalHashInputV1 for RetainedWorkerObjectHashInputV1 {}
 impl CanonicalHashInputV1 for AuthoritativeLineageHashInputV1 {}
