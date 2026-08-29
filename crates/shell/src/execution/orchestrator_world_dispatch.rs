@@ -56,11 +56,19 @@ use crate::execution::agent_runtime::host_session_authority::schema::HostSession
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::host_session_authority::schema::{
     AgentDescriptorV1 as AuthorityAgentDescriptorV1,
-    AgentExecutionScopeV1 as AuthorityAgentExecutionScopeV1,
-    RuntimeBackendKindV1 as AuthorityRuntimeBackendKindV1, TimestampV1,
+    AgentExecutionScopeV1 as AuthorityAgentExecutionScopeV1, AuthorityObjectCommitmentV1,
+    HostSessionTransitionModeV1, RuntimeBackendKindV1 as AuthorityRuntimeBackendKindV1,
+    TimestampV1,
 };
 #[cfg(target_os = "linux")]
-use crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot;
+use crate::execution::agent_runtime::host_session_authority::store_schema::{
+    HostSessionPostTurnApplicationV2, HostSessionTransitionInputHandoffV1,
+    HostSessionTransitionIntentStateV3,
+};
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::host_session_authority::trusted_fs::{
+    EntryKind, TrustedAuthorityRoot,
+};
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::host_session_authority::HostSessionAuthority;
 #[cfg(target_os = "linux")]
@@ -1320,6 +1328,145 @@ fn prepare_retained_acceptance_submission(
     }
     let caller_backend_id = registry_authority.caller_backend_id.clone();
     let request_id = prepared.request.request_id.clone();
+    let mut host_transition_correlation = None;
+    let substrate_home = substrate_common::paths::substrate_home()?;
+    let trusted_root = TrustedAuthorityRoot::open(&substrate_home)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let authority_layout = match trusted_root
+        .directory()
+        .entry_kind("authority-v1")
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?
+    {
+        None => None,
+        Some(EntryKind::Directory) => {
+            let authority_directory = trusted_root
+                .directory()
+                .open_directory("authority-v1")
+                .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+            match authority_directory
+                .entry_kind("state-root-v1.json")
+                .map_err(|error| anyhow::anyhow!(error.to_string()))?
+            {
+                None => None,
+                Some(EntryKind::RegularFile) => {
+                    let root_bytes = authority_directory
+                        .open_file("state-root-v1.json")
+                        .and_then(|file| file.read_all())
+                        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                    let root_schema = serde_json::from_slice::<serde_json::Value>(&root_bytes)
+                        .context("decode retained B1 authority root schema")?
+                        .get("schema_version")
+                        .and_then(serde_json::Value::as_u64)
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("retained B1 authority root omitted schema version")
+                        })?;
+                    match root_schema {
+                        1 | 2 => None,
+                        3 => Some(()),
+                        _ => anyhow::bail!(
+                            "retained B1 authority root has unsupported schema version"
+                        ),
+                    }
+                }
+                Some(_) => anyhow::bail!("retained B1 authority root is unsafe"),
+            }
+        }
+        Some(_) => anyhow::bail!("retained B1 authority layout is unsafe"),
+    };
+    if authority_layout.is_some() {
+        let authority = HostSessionAuthority::from_trusted_root(trusted_root)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        let hsa_root = authority
+            .read_a12b_root()
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        let resolved = authority
+            .resolve_current_exact(&prepared.request.orchestration_session_id, None)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        if hsa_root.authority_store_id != registry_authority.authority_store_id
+            || resolved.observation.authority_store_id != registry_authority.authority_store_id
+            || resolved.observation.authority_revision
+                != registry_authority.authority_revision_observed
+            || resolved.caller.participant_id != prepared.request.caller_participant_id
+        {
+            anyhow::bail!("retained B1 submission authority changed before transition correlation");
+        }
+        let mut saw_resume_candidate = false;
+        for intent in hsa_root.successor_transition_intent_map.values() {
+            if intent.mode == HostSessionTransitionModeV1::ResumeOneTurn
+                && intent.orchestration_session_id == prepared.request.orchestration_session_id
+                && intent.target_authoritative_participant_id
+                    == prepared.request.caller_participant_id
+            {
+                saw_resume_candidate = true;
+            }
+            let HostSessionTransitionIntentStateV3::Applied {
+                authority_revision_after,
+                authority_record_commitment,
+                active_authoritative_participant_id,
+                post_turn,
+                ..
+            } = &intent.state
+            else {
+                continue;
+            };
+            if intent.mode != HostSessionTransitionModeV1::ResumeOneTurn
+                || intent.orchestration_session_id != prepared.request.orchestration_session_id
+                || intent.target_authoritative_participant_id
+                    != prepared.request.caller_participant_id
+                || active_authoritative_participant_id != &prepared.request.caller_participant_id
+                || *authority_revision_after != registry_authority.authority_revision_observed
+                || authority_record_commitment != &resolved.observation.authority_record_commitment
+                || !matches!(
+                    intent.input_handoff,
+                    HostSessionTransitionInputHandoffV1::Accepted { .. }
+                )
+                || !matches!(
+                    post_turn.as_ref(),
+                    HostSessionPostTurnApplicationV2::Pending { .. }
+                )
+            {
+                continue;
+            }
+            let transition_payload_commitment = match &intent.payload_commitment {
+                AuthorityObjectCommitmentV1::CanonicalSha256 { digest_hex } => {
+                    substrate_common::OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                        digest_hex: digest_hex.clone(),
+                    }
+                }
+                AuthorityObjectCommitmentV1::StoreHmacSha256 {
+                    key_id,
+                    domain,
+                    digest_hex,
+                } => substrate_common::OpaqueAuthorityCommitmentV1::StoreHmacSha256 {
+                    key_id: key_id.clone(),
+                    domain: domain.clone(),
+                    digest_hex: digest_hex.clone(),
+                },
+            };
+            let correlation = substrate_common::HostTransitionWorkCorrelationV1 {
+                schema_version: 1,
+                authority_store_id: hsa_root.authority_store_id.clone(),
+                orchestration_session_id: intent.orchestration_session_id.clone(),
+                authoritative_participant_id: intent.target_authoritative_participant_id.clone(),
+                transition_intent_id: intent.intent_id.clone(),
+                transition_intent_revision_observed: intent.intent_revision,
+                transition_run_id: intent.run_id.clone(),
+                transition_payload_commitment,
+                authority_revision_observed: *authority_revision_after,
+            };
+            correlation.validate().map_err(anyhow::Error::msg)?;
+            if host_transition_correlation.replace(correlation).is_some() {
+                anyhow::bail!(
+                    "retained B1 submission has ambiguous ResumeOneTurn transition correlation"
+                );
+            }
+        }
+        if saw_resume_candidate && host_transition_correlation.is_none() {
+            anyhow::bail!(
+                "retained B1 submission has no exact accepted ResumeOneTurn transition correlation"
+            );
+        }
+    }
     let target_participant_id = prepared
         .request
         .target_participant_id
@@ -1332,8 +1479,10 @@ fn prepare_retained_acceptance_submission(
             &request_id,
             WorldWorkProposalFamilyV1::RetainedTurn,
             |allocation| {
-                let acceptance_context =
+                let mut acceptance_context =
                     world_work_acceptance_context(&allocation, &request_id, &caller_backend_id);
+                acceptance_context.host_transition_correlation =
+                    host_transition_correlation.clone();
                 let submit_request =
                     build_continue_world_worker_submit_request_with_acceptance_context(
                         prepared,

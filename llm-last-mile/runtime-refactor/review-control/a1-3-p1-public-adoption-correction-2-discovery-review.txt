@@ -1,0 +1,33 @@
+Subject verification
+
+- Baseline commit/tree/remote verified: `54cf865432fbf7fb3344ddbe83843b81c15c7152` / `49bd951f59291ed11186ecd6c48615d97564f9ab` / matching remote tip.
+- Exactly five authorized product files differ from baseline.
+- Independently recomputed sorted-manifest fingerprint: `sha256:f0831632c68213d4d216cddeb29ede41e51a139458cfbd68e602e1dc631ace3e`.
+- Manifest blobs exactly match the correction-2 verification record.
+
+Evidence inspected
+
+- Canonical development review/remediation contract.
+- A1.3-P1 Linux-first atomic public-adoption packet.
+- Correction-2 verification evidence and immutable prior P2-009 record.
+- Full five-file baseline diff, focused guard/completion implementation, public Attach/ResumeOneTurn call paths, retained-turn projection, actor-event reconciliation, Start continuity/zero-replay paths, and focused tests.
+- Recorded focused/build/format/differential verification.
+
+Findings
+
+- No unresolved valid P1 or P2.
+- `control.rs:717-751` checks exact durable completion before guard acquisition and immediately after successful acquisition; only the second incomplete result yields leadership. The existing contended path at `control.rs:790-811` retains the same acquire-then-recheck property.
+- `control.rs:643-714` represents a completed join with the existing no-guard permit/zero-PID receipt and does not persist a launch plan or spawn a helper.
+- `control.rs:963-1123` reopens the exact HSA store, validates store, request, transition, claim, participant, revision, application, handle/reference, commitment, and current-authority identity, and fails closed on substitution.
+- `agents_cmd.rs:6408-6511` deterministically proves free-guard and acquisition-race joins for both Attach and ResumeOneTurn, no leader/helper launch, no HSA identity creation, and mismatch rejection.
+- `agents_cmd.rs:6530-6810` preserves deterministic Issued/Claimed crash recovery and exact Applied/acknowledged convergence from A13P1-P2-008.
+- The remaining candidate paths stay within the atomic public-adoption fence: exact retained correlation projection, authenticated actor-owned settlement, public routing, Start continuity, and zero replay. No forbidden lock/ledger/coordinator/authority system, Stop/StateStore semantic reopening, platform widening, or PID/liveness/readiness/timeout/EOF/event-order authority inference was introduced.
+
+Frozen bytes
+
+- `auto_attach.rs`: `70e8e344347144971721d3c2ef70a261352282b0b7f2b7788231b297f0944b5e`
+- `launch_hidden_owner_helper` sentinel: `f796453a5f16f856d6a278b38694d9521c2f0011d4e4a4ba34160408aeea31c0`
+- Complete helper extraction is byte-identical to baseline.
+- All nine inherited review-control artifact hashes match the correction-2 verification record.
+
+VERDICT: CLEAN

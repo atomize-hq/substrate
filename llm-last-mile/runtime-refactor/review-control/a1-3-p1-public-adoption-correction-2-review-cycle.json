@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "packet_id": "A1.3-P1-public-adoption-correction-2",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:f0831632c68213d4d216cddeb29ede41e51a139458cfbd68e602e1dc631ace3e",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "a1-3-p1-public-adoption-correction-2-discovery-review.txt",
+        "a1-3-p1-public-adoption-correction-review-cycle.json",
+        "a1-3-p1-public-adoption-correction-discovery-review.txt",
+        "codex-agent:/root/a13p1_p2_009_successor_review"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}

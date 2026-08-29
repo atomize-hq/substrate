@@ -40,6 +40,8 @@ use crate::execution::agent_inventory::{load_effective_agent_inventory, AgentInv
 use crate::execution::agent_runtime::control::authoritative_host_toolbox_surface_enabled;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::control::spawn_remote_private_prompt_owner;
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::control::AuthorityManagedSuccessorLaunchPlanV1;
 use crate::execution::agent_runtime::control::{
     apply_runtime_cancel_closeout, apply_runtime_stop_closeout, build_session_resume_extension,
     durable_start_toolbox_transport_path, invalidate_stale_world_members_after_binding,
@@ -71,9 +73,13 @@ use crate::execution::agent_runtime::host_session_authority::schema::{
     AgentDescriptorV1, AgentExecutionScopeV1, AuthorityObjectCommitmentV1, CanonicalDirectoryV1,
     DirectoryPhysicalIdentityV1, HostAttachCapabilitiesV1, HostAttachExecutionClientStartV1,
     HostAttachLaunchKnobsV1, HostAttachModePreferenceV1, HostPostTurnProtocolActorV1,
+    HostPostTurnProtocolEventKindV1, HostPostTurnTerminalReasonV1,
     HostSessionAuthorityPreconditionV1, HostSessionPostureV1, HostSessionTransitionCallerKindV1,
-    HostSessionTransitionCallerV1, HostSessionTransitionModeV1, PolicyObjectHashInputV1,
-    RuntimeBackendKindV1, TimestampV1, WorkspaceBindingV1, WorldBindingV1,
+    HostSessionTransitionCallerV1, HostSessionTransitionModeV1,
+    HostStartupOwnershipProtocolActorV1, HostStartupOwnershipProtocolEventV1,
+    PolicyObjectHashInputV1, PostTurnCompletionHashInputV1, PostTurnCompletionOutcomeV1,
+    PostTurnProtocolEventHashInputV1, RuntimeBackendKindV1, StartContinuationHandleHashInputV2,
+    StartContinuationHandleStateV2, TimestampV1, WorkspaceBindingV1, WorldBindingV1,
 };
 use crate::execution::agent_runtime::host_session_authority::start_continuity::{
     EstablishStartContinuationRequestV1, SettleStartTurnRequestV1, StartContinuationOutcomeV1,
@@ -81,12 +87,18 @@ use crate::execution::agent_runtime::host_session_authority::start_continuity::{
     StartTurnSettlementOutcomeV1,
 };
 use crate::execution::agent_runtime::host_session_authority::store_schema::{
-    HostSessionTransitionIntentStateV2, StartTransactionRecordV1, StartTransactionStateV1,
+    HostSessionPostTurnApplicationV2, HostSessionStartupOwnershipApplicationV1,
+    HostSessionTransitionInputHandoffV1, HostSessionTransitionIntentStateV2,
+    HostSessionTransitionIntentStateV3, HostSessionTransitionIntentV3, StartTransactionRecordV1,
+    StartTransactionStateV1,
 };
 use crate::execution::agent_runtime::host_session_authority::transition::{
-    ApplyHostSessionTransitionRequestV1, ClaimHostSessionTransitionRequestV1,
-    IssueHostSessionTransitionRequestV1, StartContractMaterialV1, TransitionApplicationOutcomeV1,
-    TransitionClaimOutcomeV1, TransitionIssueOutcomeV1,
+    AcceptTransitionInputRequestV1, ApplyHostSessionTransitionRequestV1,
+    ClaimHostSessionTransitionRequestV1, ConsumeObligationSnapshotRequestV1,
+    InputAcceptanceOutcomeV1, IssueHostSessionTransitionRequestV1,
+    ObligationSnapshotConsumptionOutcomeV1, PostTurnResolutionOutcomeV1, ResolvePostTurnRequestV1,
+    ResolveStartupOwnershipRequestV1, StartContractMaterialV1, StartupOwnershipResolutionOutcomeV1,
+    TransitionApplicationOutcomeV1, TransitionClaimOutcomeV1, TransitionIssueOutcomeV1,
 };
 use crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot;
 use crate::execution::agent_runtime::host_session_authority::{
@@ -1833,6 +1845,8 @@ enum RuntimeAuthorityContext {
 #[derive(Clone)]
 struct RuntimeOrchestrationContext {
     authority: RuntimeAuthorityContext,
+    #[cfg(target_os = "linux")]
+    authority_successor: Option<Arc<AuthorityManagedSuccessorLaunchPlanV1>>,
     store: AgentRuntimeStateStore,
     orchestration_session: Arc<Mutex<OrchestrationSessionRecord>>,
     effective_config: crate::execution::config_model::SubstrateConfig,
@@ -3744,6 +3758,8 @@ fn apply_greenfield_host_start_from_authority(
         prompt_fulfillment: Some(prompt_fulfillment),
         startup_context: RuntimeOrchestrationContext {
             authority: RuntimeAuthorityContext::Bound(Arc::new(resolved)),
+            #[cfg(target_os = "linux")]
+            authority_successor: None,
             store: state_store,
             orchestration_session: Arc::new(Mutex::new(orchestration_session)),
             effective_config,
@@ -4194,9 +4210,261 @@ fn owner_helper_orchestration_session(
     session
 }
 
+#[cfg(target_os = "linux")]
+fn validate_authority_managed_successor_runtime(
+    plan: &HiddenOwnerHelperLaunchPlan,
+    successor: &AuthorityManagedSuccessorLaunchPlanV1,
+    descriptor: &RuntimeSelectionDescriptor,
+) -> std::result::Result<ResolvedCurrentAuthorityV1, RuntimeBootstrapFailure> {
+    let fail = |message: String| RuntimeBootstrapFailure {
+        exit_code: 1,
+        message: format!("owner_unreachable: {message}"),
+    };
+    if successor.schema_version != 1
+        || successor.helper_plan != *plan
+        || successor.authority_store_id.is_empty()
+    {
+        return Err(fail(
+            "authority-managed successor launch envelope was substituted".to_string(),
+        ));
+    }
+    let authority_home = Path::new(
+        &successor
+            .applied_transition
+            .workspace_binding
+            .authority_store_root
+            .physical_path,
+    );
+    let authority = HostSessionAuthority::from_trusted_root(
+        TrustedAuthorityRoot::open(authority_home).map_err(|error| fail(error.to_string()))?,
+    )
+    .map_err(|error| fail(error.to_string()))?;
+    let root = authority
+        .read_a12b_root()
+        .map_err(|error| fail(error.to_string()))?;
+    if root.authority_store_id != successor.authority_store_id {
+        return Err(fail(
+            "authority-managed successor store identity changed".to_string(),
+        ));
+    }
+    let current = root
+        .successor_transition_intent_map
+        .get(&successor.applied_transition.intent_id)
+        .ok_or_else(|| fail("authority-managed successor intent disappeared".to_string()))?;
+    let expected = &successor.applied_transition;
+    if current.schema_version != expected.schema_version
+        || current.intent_id != expected.intent_id
+        || current.issuer_request_id != expected.issuer_request_id
+        || current.intent_revision < expected.intent_revision
+        || current.mode != expected.mode
+        || current.authority_precondition != expected.authority_precondition
+        || current.orchestration_session_id != expected.orchestration_session_id
+        || current.shell_trace_session_id != expected.shell_trace_session_id
+        || current.caller != expected.caller
+        || current.source_authoritative_participant_id
+            != expected.source_authoritative_participant_id
+        || current.target_authoritative_participant_id
+            != expected.target_authoritative_participant_id
+        || current.target_participant_lease_token_ref != expected.target_participant_lease_token_ref
+        || current.run_id != expected.run_id
+        || current.resulting_authoritative_lineage != expected.resulting_authoritative_lineage
+        || current.workspace_binding != expected.workspace_binding
+        || current.world_binding != expected.world_binding
+        || current.descriptor_ref != expected.descriptor_ref
+        || current.host_attach_contract_ref != expected.host_attach_contract_ref
+        || current.resume_handle_ref != expected.resume_handle_ref
+        || current.transition_input_ref != expected.transition_input_ref
+        || current.post_turn_disposition != expected.post_turn_disposition
+        || current.transport_payload_ref != expected.transport_payload_ref
+        || current.payload_commitment != expected.payload_commitment
+        || current.issued_at != expected.issued_at
+        || current.expires_at != expected.expires_at
+    {
+        return Err(fail(
+            "authority-managed successor launch identity was substituted".to_string(),
+        ));
+    }
+    let (
+        HostSessionTransitionIntentStateV3::Applied {
+            claim_id,
+            claimant_attempt_id,
+            authority_revision_before,
+            authority_revision_after,
+            active_authoritative_participant_id,
+            resulting_posture,
+            authority_record_commitment,
+            application_result_ref,
+            applied_at,
+            ..
+        },
+        HostSessionTransitionIntentStateV3::Applied {
+            claim_id: expected_claim_id,
+            claimant_attempt_id: expected_claimant_attempt_id,
+            authority_revision_before: expected_authority_revision_before,
+            authority_revision_after: expected_authority_revision_after,
+            active_authoritative_participant_id: expected_active_participant_id,
+            resulting_posture: expected_resulting_posture,
+            authority_record_commitment: expected_authority_record_commitment,
+            application_result_ref: expected_application_result_ref,
+            applied_at: expected_applied_at,
+            ..
+        },
+    ) = (&current.state, &expected.state)
+    else {
+        return Err(fail(
+            "authority-managed successor is not durably Applied".to_string(),
+        ));
+    };
+    if claim_id != expected_claim_id
+        || claimant_attempt_id != expected_claimant_attempt_id
+        || authority_revision_before != expected_authority_revision_before
+        || authority_revision_after != expected_authority_revision_after
+        || active_authoritative_participant_id != expected_active_participant_id
+        || resulting_posture != expected_resulting_posture
+        || authority_record_commitment != expected_authority_record_commitment
+        || application_result_ref != expected_application_result_ref
+        || applied_at != expected_applied_at
+    {
+        return Err(fail(
+            "authority-managed successor application evidence changed".to_string(),
+        ));
+    }
+    let resolved = authority
+        .resolve_current_exact(&current.orchestration_session_id, None)
+        .map_err(|error| fail(error.to_string()))?;
+    let resolved_descriptor = &resolved.caller.descriptor;
+    let backend_matches = matches!(
+        (resolved_descriptor.backend_kind, descriptor.backend_kind),
+        (RuntimeBackendKindV1::Codex, AgentRuntimeBackendKind::Codex)
+            | (
+                RuntimeBackendKindV1::ClaudeCode,
+                AgentRuntimeBackendKind::ClaudeCode
+            )
+    );
+    let scope_matches = matches!(
+        (
+            resolved_descriptor.execution_scope,
+            descriptor.execution_scope
+        ),
+        (AgentExecutionScopeV1::Host, AgentExecutionScope::Host)
+            | (AgentExecutionScopeV1::World, AgentExecutionScope::World)
+    );
+    if resolved.observation.authority_store_id != successor.authority_store_id
+        || resolved.observation.authority_revision != *authority_revision_after
+        || resolved.observation.authority_record_commitment != *authority_record_commitment
+        || resolved
+            .authority
+            .active_authoritative_participant_id
+            .as_deref()
+            != Some(current.target_authoritative_participant_id.as_str())
+        || resolved.authority.workspace_binding != current.workspace_binding
+        || resolved.authority.world_binding != current.world_binding
+        || resolved.caller.participant_id != current.target_authoritative_participant_id
+        || resolved_descriptor.agent_id != descriptor.agent_id
+        || resolved_descriptor.backend_id != descriptor.backend_id
+        || !backend_matches
+        || resolved_descriptor.protocol != descriptor.protocol
+        || !scope_matches
+        || resolved_descriptor.binary_path != descriptor.binary_path.display().to_string()
+        || plan.session.workspace_root != current.workspace_binding.workspace_root.physical_path
+        || plan.session.world_id.as_deref()
+            != current
+                .world_binding
+                .as_ref()
+                .map(|binding| binding.world_id.as_str())
+        || plan.session.world_generation
+            != current
+                .world_binding
+                .as_ref()
+                .map(|binding| binding.world_generation)
+    {
+        return Err(fail(
+            "authority-managed successor runtime identity changed".to_string(),
+        ));
+    }
+    let lease_token = authority
+        .read_authority_object_v2_at(
+            root.root_revision,
+            &current.target_participant_lease_token_ref,
+        )
+        .map_err(|error| fail(error.to_string()))?;
+    if lease_token != plan.participant.lease_token.as_bytes() {
+        return Err(fail(
+            "authority-managed successor lease evidence was substituted".to_string(),
+        ));
+    }
+    match (
+        current.mode,
+        current.transition_input_ref.as_ref(),
+        plan.startup_prompt.as_ref(),
+    ) {
+        (HostSessionTransitionModeV1::Attach, None, None) => {}
+        (HostSessionTransitionModeV1::ResumeOneTurn, Some(input_ref), Some(prompt)) => {
+            let input = authority
+                .read_authority_object_v2_at(root.root_revision, input_ref)
+                .map_err(|error| fail(error.to_string()))?;
+            if input != prompt.prompt_text.as_bytes() {
+                return Err(fail(
+                    "authority-managed ResumeOneTurn input was substituted".to_string(),
+                ));
+            }
+        }
+        _ => {
+            return Err(fail(
+                "authority-managed successor transport shape changed".to_string(),
+            ));
+        }
+    }
+    let expected_uaa_session_id = plan
+        .participant
+        .internal_uaa_session_id
+        .as_deref()
+        .ok_or_else(|| fail("durable resume identity is missing".to_string()))?;
+    let mut settled_handle_ref = None;
+    for reference in &resolved.authority.internal_resume_handle_refs {
+        if reference.schema_version != 2 {
+            continue;
+        }
+        let bytes = authority
+            .read_authority_object_v2_at(root.root_revision, reference)
+            .map_err(|error| fail(error.to_string()))?;
+        let handle: StartContinuationHandleHashInputV2 =
+            canonical_json::from_slice(&bytes).map_err(|error| fail(error.to_string()))?;
+        if handle.authority_store_id != successor.authority_store_id
+            || handle.orchestration_session_id != current.orchestration_session_id
+            || handle.backend_id != descriptor.backend_id
+            || handle.protocol != descriptor.protocol
+            || handle.internal_uaa_session_id != expected_uaa_session_id
+        {
+            return Err(fail(
+                "durable resume handle does not authenticate the successor runtime".to_string(),
+            ));
+        }
+        if matches!(handle.state, StartContinuationHandleStateV2::Settled { .. })
+            && settled_handle_ref.replace(reference).is_some()
+        {
+            return Err(fail(
+                "authority-managed successor has ambiguous settled resume handles".to_string(),
+            ));
+        }
+    }
+    let settled_handle_ref = settled_handle_ref.ok_or_else(|| {
+        fail("authority-managed successor has no settled resume handle".to_string())
+    })?;
+    if current.mode == HostSessionTransitionModeV1::ResumeOneTurn
+        && current.resume_handle_ref.as_ref() != Some(settled_handle_ref)
+    {
+        return Err(fail(
+            "authority-managed ResumeOneTurn selected the wrong resume handle".to_string(),
+        ));
+    }
+    Ok(resolved)
+}
+
 fn prepare_hidden_owner_helper_runtime(
     config: &Arc<ShellConfig>,
     plan: &HiddenOwnerHelperLaunchPlan,
+    #[cfg(target_os = "linux")] authority_successor: Option<&AuthorityManagedSuccessorLaunchPlanV1>,
     #[cfg(target_os = "linux")] intended_host_principal: PlatformPrincipalV1,
 ) -> std::result::Result<PreparedAgentRuntime, RuntimeBootstrapFailure> {
     let Some(resolved) = resolve_host_orchestrator_bootstrap(config)? else {
@@ -4206,6 +4474,13 @@ fn prepare_hidden_owner_helper_runtime(
         });
     };
     if plan.mode == OwnerHelperMode::Start {
+        #[cfg(target_os = "linux")]
+        if authority_successor.is_some() {
+            return Err(RuntimeBootstrapFailure {
+                exit_code: 1,
+                message: "public Start cannot consume a successor launch envelope".to_string(),
+            });
+        }
         let world_binding = match (
             plan.session.world_id.as_ref(),
             plan.session.world_generation,
@@ -4252,20 +4527,31 @@ fn prepare_hidden_owner_helper_runtime(
         });
     }
 
+    #[cfg(target_os = "linux")]
+    let authority_successor = authority_successor.cloned();
+    #[cfg(target_os = "linux")]
+    let bound_successor = authority_successor
+        .as_ref()
+        .map(|successor| validate_authority_managed_successor_runtime(plan, successor, &descriptor))
+        .transpose()?;
+    #[cfg(not(target_os = "linux"))]
+    let bound_successor: Option<ResolvedCurrentAuthorityV1> = None;
     let manifest = owner_helper_manifest(&descriptor, plan)?;
     let orchestration_session = Arc::new(Mutex::new(owner_helper_orchestration_session(
         plan, &manifest,
     )));
-    state_store
-        .persist_orchestration_session(
-            &orchestration_session
-                .lock()
-                .expect("hidden owner-helper orchestration session mutex poisoned"),
-        )
-        .map_err(|err| RuntimeBootstrapFailure {
-            exit_code: 1,
-            message: format!("failed to persist hidden owner-helper session record: {err:#}"),
-        })?;
+    if bound_successor.is_none() {
+        state_store
+            .persist_orchestration_session(
+                &orchestration_session
+                    .lock()
+                    .expect("hidden owner-helper orchestration session mutex poisoned"),
+            )
+            .map_err(|err| RuntimeBootstrapFailure {
+                exit_code: 1,
+                message: format!("failed to persist hidden owner-helper session record: {err:#}"),
+            })?;
+    }
 
     let prompt_fulfillment =
         build_gateway_for_descriptor(&descriptor).map_err(|err| RuntimeBootstrapFailure {
@@ -4277,7 +4563,11 @@ fn prepare_hidden_owner_helper_runtime(
         member_dispatch_parity: None,
         prompt_fulfillment: Some(prompt_fulfillment),
         startup_context: RuntimeOrchestrationContext {
-            authority: RuntimeAuthorityContext::Legacy,
+            authority: bound_successor
+                .map(|resolved| RuntimeAuthorityContext::Bound(Arc::new(resolved)))
+                .unwrap_or(RuntimeAuthorityContext::Legacy),
+            #[cfg(target_os = "linux")]
+            authority_successor: authority_successor.map(Arc::new),
             store: state_store,
             orchestration_session,
             effective_config,
@@ -4306,7 +4596,7 @@ pub(crate) fn prepare_public_start_authority_before_transport(
     let config = Arc::new(owner_helper_shell_config(plan)?);
     let intended_host_principal =
         crate::execution::install_bootstrap::current_unix_principal_and_home()?.0;
-    prepare_hidden_owner_helper_runtime(&config, plan, intended_host_principal)
+    prepare_hidden_owner_helper_runtime(&config, plan, None, intended_host_principal)
         .map(drop)
         .map_err(|failure| anyhow!(failure.message))
 }
@@ -5002,6 +5292,7 @@ fn persist_hidden_owner_helper_stop_failure(
 
 pub(crate) fn run_hidden_owner_helper(
     plan: HiddenOwnerHelperLaunchPlan,
+    #[cfg(target_os = "linux")] authority_successor: Option<AuthorityManagedSuccessorLaunchPlanV1>,
     #[cfg(target_os = "linux")] intended_host_principal: PlatformPrincipalV1,
 ) -> Result<i32> {
     let config = Arc::new(owner_helper_shell_config(&plan)?);
@@ -5017,6 +5308,8 @@ pub(crate) fn run_hidden_owner_helper(
         let prepared = prepare_hidden_owner_helper_runtime(
             &config,
             &plan,
+            #[cfg(target_os = "linux")]
+            authority_successor.as_ref(),
             #[cfg(target_os = "linux")]
             intended_host_principal,
         )
@@ -5132,6 +5425,644 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
     .await
 }
 
+#[cfg(target_os = "linux")]
+fn current_authority_managed_successor(
+    successor: &AuthorityManagedSuccessorLaunchPlanV1,
+) -> std::result::Result<
+    (HostSessionAuthority, HostSessionTransitionIntentV3),
+    RuntimeBootstrapFailure,
+> {
+    let failure = |message: String| RuntimeBootstrapFailure {
+        exit_code: 1,
+        message: format!("owner_unreachable: {message}"),
+    };
+    let authority_home = Path::new(
+        &successor
+            .applied_transition
+            .workspace_binding
+            .authority_store_root
+            .physical_path,
+    );
+    let authority = HostSessionAuthority::from_trusted_root(
+        TrustedAuthorityRoot::open(authority_home).map_err(|error| failure(error.to_string()))?,
+    )
+    .map_err(|error| failure(error.to_string()))?;
+    let root = authority
+        .read_a12b_root()
+        .map_err(|error| failure(error.to_string()))?;
+    if root.authority_store_id != successor.authority_store_id {
+        return Err(failure(
+            "authority-managed successor store identity changed".to_string(),
+        ));
+    }
+    let current = root
+        .successor_transition_intent_map
+        .get(&successor.applied_transition.intent_id)
+        .ok_or_else(|| failure("authority-managed successor intent disappeared".to_string()))?
+        .clone();
+    let expected = &successor.applied_transition;
+    if current.schema_version != expected.schema_version
+        || current.intent_id != expected.intent_id
+        || current.issuer_request_id != expected.issuer_request_id
+        || current.intent_revision < expected.intent_revision
+        || current.mode != expected.mode
+        || current.authority_precondition != expected.authority_precondition
+        || current.orchestration_session_id != expected.orchestration_session_id
+        || current.shell_trace_session_id != expected.shell_trace_session_id
+        || current.caller != expected.caller
+        || current.source_authoritative_participant_id
+            != expected.source_authoritative_participant_id
+        || current.target_authoritative_participant_id
+            != expected.target_authoritative_participant_id
+        || current.target_participant_lease_token_ref != expected.target_participant_lease_token_ref
+        || current.run_id != expected.run_id
+        || current.resulting_authoritative_lineage != expected.resulting_authoritative_lineage
+        || current.workspace_binding != expected.workspace_binding
+        || current.world_binding != expected.world_binding
+        || current.descriptor_ref != expected.descriptor_ref
+        || current.host_attach_contract_ref != expected.host_attach_contract_ref
+        || current.resume_handle_ref != expected.resume_handle_ref
+        || current.transition_input_ref != expected.transition_input_ref
+        || current.post_turn_disposition != expected.post_turn_disposition
+        || current.transport_payload_ref != expected.transport_payload_ref
+        || current.payload_commitment != expected.payload_commitment
+        || current.issued_at != expected.issued_at
+        || current.expires_at != expected.expires_at
+        || !matches!(
+            current.state,
+            HostSessionTransitionIntentStateV3::Applied { .. }
+        )
+    {
+        return Err(failure(
+            "authority-managed successor identity changed".to_string(),
+        ));
+    }
+    Ok((authority, current))
+}
+
+#[cfg(target_os = "linux")]
+fn successor_timestamp_now() -> std::result::Result<TimestampV1, RuntimeBootstrapFailure> {
+    TimestampV1::parse(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true))
+        .map_err(|error| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!("authority-managed successor timestamp failed: {error}"),
+        })
+}
+
+#[cfg(target_os = "linux")]
+fn accept_authority_managed_resume_input(
+    successor: &AuthorityManagedSuccessorLaunchPlanV1,
+) -> std::result::Result<bool, RuntimeBootstrapFailure> {
+    let (authority, current) = current_authority_managed_successor(successor)?;
+    if current.mode != HostSessionTransitionModeV1::ResumeOneTurn {
+        return Err(RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: "authority-managed turn did not carry ResumeOneTurn".to_string(),
+        });
+    }
+    let (input_ref, run_id) = match &current.input_handoff {
+        HostSessionTransitionInputHandoffV1::Pending { input_ref, run_id } => (input_ref, run_id),
+        HostSessionTransitionInputHandoffV1::Accepted {
+            input_ref, run_id, ..
+        } => {
+            if current.transition_input_ref.as_ref() != Some(input_ref) || run_id != &current.run_id
+            {
+                return Err(RuntimeBootstrapFailure {
+                    exit_code: 1,
+                    message: "authority-managed ResumeOneTurn accepted substituted input evidence"
+                        .to_string(),
+                });
+            }
+            return Ok(false);
+        }
+        HostSessionTransitionInputHandoffV1::TerminalWithoutAcceptance { .. }
+        | HostSessionTransitionInputHandoffV1::NotApplicable => {
+            return Err(RuntimeBootstrapFailure {
+                exit_code: 1,
+                message: "authority-managed ResumeOneTurn input is not acceptably pending"
+                    .to_string(),
+            });
+        }
+    };
+    if current.transition_input_ref.as_ref() != Some(input_ref) || run_id != &current.run_id {
+        return Err(RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: "authority-managed ResumeOneTurn input handoff identity changed".to_string(),
+        });
+    }
+    match authority
+        .accept_transition_input(&AcceptTransitionInputRequestV1 {
+            intent_id: current.intent_id.clone(),
+            issuer_request_id: current.issuer_request_id.clone(),
+            payload_commitment: current.payload_commitment.clone(),
+            accepting_participant_id: current.target_authoritative_participant_id.clone(),
+            accepted_at: successor_timestamp_now()?,
+        })
+        .map_err(|error| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!("authority-managed ResumeOneTurn input acceptance failed: {error}"),
+        })? {
+        InputAcceptanceOutcomeV1::Accepted(_) => Ok(true),
+        InputAcceptanceOutcomeV1::Joined(_) => Ok(false),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_authority_managed_attach_ownership(
+    successor: &AuthorityManagedSuccessorLaunchPlanV1,
+) -> std::result::Result<(), RuntimeBootstrapFailure> {
+    let (authority, current) = current_authority_managed_successor(successor)?;
+    if current.mode != HostSessionTransitionModeV1::Attach {
+        return Err(RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: "authority-managed reattach did not carry Attach".to_string(),
+        });
+    }
+    let HostSessionTransitionIntentStateV3::Applied {
+        startup_ownership, ..
+    } = &current.state
+    else {
+        unreachable!("current successor helper requires Applied state")
+    };
+    match startup_ownership.as_ref() {
+        HostSessionStartupOwnershipApplicationV1::Accepted { .. } => return Ok(()),
+        HostSessionStartupOwnershipApplicationV1::Pending {
+            expected_run_id,
+            expected_authority_revision,
+            expected_active_authoritative_participant_id,
+        } if expected_run_id == &current.run_id
+            && expected_active_authoritative_participant_id
+                == &current.target_authoritative_participant_id =>
+        {
+            let resolved = authority
+                .resolve_current_exact(&current.orchestration_session_id, None)
+                .map_err(|error| RuntimeBootstrapFailure {
+                    exit_code: 1,
+                    message: format!("authority-managed Attach current authority failed: {error}"),
+                })?;
+            if resolved.observation.authority_revision != *expected_authority_revision {
+                return Err(RuntimeBootstrapFailure {
+                    exit_code: 1,
+                    message: "authority-managed Attach expected revision changed".to_string(),
+                });
+            }
+        }
+        HostSessionStartupOwnershipApplicationV1::Pending { .. }
+        | HostSessionStartupOwnershipApplicationV1::NotApplicable
+        | HostSessionStartupOwnershipApplicationV1::TerminalReconciled { .. } => {
+            return Err(RuntimeBootstrapFailure {
+                exit_code: 1,
+                message: "authority-managed Attach startup ownership evidence changed".to_string(),
+            });
+        }
+    }
+    let request = ResolveStartupOwnershipRequestV1 {
+        intent_id: current.intent_id.clone(),
+        issuer_request_id: current.issuer_request_id.clone(),
+        payload_commitment: current.payload_commitment.clone(),
+        protocol_actor: HostStartupOwnershipProtocolActorV1::TargetAuthoritativeParticipant {
+            participant_id: current.target_authoritative_participant_id.clone(),
+        },
+        protocol_event: HostStartupOwnershipProtocolEventV1::OwnershipAccepted {
+            ownership_acknowledgement_id: format!("ownership-accepted-{}", current.intent_id),
+        },
+        observed_at: successor_timestamp_now()?,
+    };
+    match authority
+        .resolve_startup_ownership(&request)
+        .map_err(|error| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!("authority-managed Attach ownership reconciliation failed: {error}"),
+        })? {
+        StartupOwnershipResolutionOutcomeV1::ResolvedSuccessor(_)
+        | StartupOwnershipResolutionOutcomeV1::JoinedSuccessor(_) => Ok(()),
+        StartupOwnershipResolutionOutcomeV1::ResolvedStart(_)
+        | StartupOwnershipResolutionOutcomeV1::JoinedStart(_) => Err(RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: "authority-managed Attach reconciled the wrong transition identity"
+                .to_string(),
+        }),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn settle_authority_managed_resume_post_turn(
+    successor: &AuthorityManagedSuccessorLaunchPlanV1,
+    state_store: &AgentRuntimeStateStore,
+) -> std::result::Result<HostSessionPostureV1, RuntimeBootstrapFailure> {
+    let failure = |message: String| RuntimeBootstrapFailure {
+        exit_code: 1,
+        message: format!("authority-managed ResumeOneTurn reconciliation failed: {message}"),
+    };
+    let (authority, current) = current_authority_managed_successor(successor)?;
+    let HostSessionTransitionIntentStateV3::Applied { post_turn, .. } = &current.state else {
+        unreachable!("current successor helper requires Applied state")
+    };
+    if let HostSessionPostTurnApplicationV2::Applied {
+        resulting_posture, ..
+    } = post_turn.as_ref()
+    {
+        return Ok(*resulting_posture);
+    }
+    if !matches!(
+        current.input_handoff,
+        HostSessionTransitionInputHandoffV1::Accepted { .. }
+    ) || !matches!(
+        post_turn.as_ref(),
+        HostSessionPostTurnApplicationV2::Pending { .. }
+            | HostSessionPostTurnApplicationV2::AwaitingObligationCut { .. }
+    ) {
+        return Err(failure(
+            "transition is outside the accepted-input pending post-turn state".to_string(),
+        ));
+    }
+    let resolved = authority
+        .resolve_current_exact(&current.orchestration_session_id, None)
+        .map_err(|error| failure(error.to_string()))?;
+    let world_binding = resolved
+        .authority
+        .world_binding
+        .as_ref()
+        .ok_or_else(|| failure("current authority has no world binding".to_string()))?;
+    let registry = state_store
+        .resolve_world_work_registry_authority(
+            &current.orchestration_session_id,
+            &current.target_authoritative_participant_id,
+            &world_binding.world_id,
+            world_binding.world_generation,
+            None,
+        )
+        .map_err(|error| failure(error.to_string()))?;
+    // This value is only the exact authority-derived lookup key. The canonical
+    // ledger reader verifies it against the persisted acceptance and returns
+    // the authenticated correlation copied into post-turn evidence below.
+    let expected_correlation = match post_turn.as_ref() {
+        HostSessionPostTurnApplicationV2::AwaitingObligationCut {
+            host_transition_correlation,
+            ..
+        } => host_transition_correlation.as_ref().clone(),
+        HostSessionPostTurnApplicationV2::Pending {
+            expected_authority_revision,
+            expected_run_id,
+        } => {
+            if *expected_authority_revision != resolved.observation.authority_revision
+                || expected_run_id != &current.run_id
+            {
+                return Err(failure(
+                    "pending post-turn authority identity changed".to_string(),
+                ));
+            }
+            HostTransitionWorkCorrelationV1 {
+                schema_version: 1,
+                authority_store_id: resolved.observation.authority_store_id.clone(),
+                orchestration_session_id: current.orchestration_session_id.clone(),
+                authoritative_participant_id: current.target_authoritative_participant_id.clone(),
+                transition_intent_id: current.intent_id.clone(),
+                transition_intent_revision_observed: current.intent_revision,
+                transition_run_id: current.run_id.clone(),
+                transition_payload_commitment: opaque_start_commitment(&current.payload_commitment),
+                authority_revision_observed: *expected_authority_revision,
+            }
+        }
+        HostSessionPostTurnApplicationV2::Applied { .. }
+        | HostSessionPostTurnApplicationV2::NotApplicable => unreachable!(),
+    };
+    expected_correlation.validate().map_err(failure)?;
+    let ledger_read =
+        read_exact_start_obligation_ledger_snapshot(state_store, &registry, &expected_correlation)
+            .map_err(|error| failure(error.to_string()))?
+            .ok_or_else(|| failure("exact retained-turn acceptance is absent".to_string()))?;
+    let snapshot = match &ledger_read {
+        ObligationLedgerSnapshotReadV1::Complete { snapshot } => snapshot,
+        ObligationLedgerSnapshotReadV1::Pending { .. } => {
+            return Err(failure(
+                "exact retained-turn obligation cut is still pending".to_string(),
+            ));
+        }
+    };
+    if matches!(
+        post_turn.as_ref(),
+        HostSessionPostTurnApplicationV2::Pending { .. }
+    ) {
+        let completed_at = TimestampV1::parse(
+            snapshot
+                .captured_at
+                .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+        )
+        .map_err(|error| failure(error.to_string()))?;
+        match authority
+            .resolve_post_turn(&ResolvePostTurnRequestV1 {
+                intent_id: current.intent_id.clone(),
+                issuer_request_id: current.issuer_request_id.clone(),
+                payload_commitment: current.payload_commitment.clone(),
+                protocol_actor: HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant {
+                    participant_id: current.target_authoritative_participant_id.clone(),
+                },
+                event_id: snapshot.materialization_cut.terminal_event_id.clone(),
+                event_sequence: snapshot.materialization_cut.terminal_event_sequence,
+                kind: HostPostTurnProtocolEventKindV1::ResumableClean,
+                emitted_at: completed_at.clone(),
+                acceptance_record_id: snapshot.acceptance_record_id.clone(),
+                acceptance_record_revision: snapshot.acceptance_record_revision,
+                stream_id: snapshot.stream_id.clone(),
+                accepted_work_identity: snapshot.accepted_work_identity.clone(),
+                host_transition_correlation: snapshot.host_transition_correlation.clone(),
+                completed_at,
+            })
+            .map_err(|error| failure(error.to_string()))?
+        {
+            PostTurnResolutionOutcomeV1::AwaitingObligationCut(_)
+            | PostTurnResolutionOutcomeV1::Joined(_) => {}
+            PostTurnResolutionOutcomeV1::Applied(_) => {
+                return Err(failure(
+                    "resumable post-turn bypassed the exact obligation cut".to_string(),
+                ));
+            }
+        }
+    }
+    let applied = match authority
+        .consume_obligation_snapshot(&ConsumeObligationSnapshotRequestV1 {
+            intent_id: current.intent_id.clone(),
+            issuer_request_id: current.issuer_request_id.clone(),
+            payload_commitment: current.payload_commitment.clone(),
+            ledger_read,
+        })
+        .map_err(|error| failure(error.to_string()))?
+    {
+        ObligationSnapshotConsumptionOutcomeV1::Applied(intent)
+        | ObligationSnapshotConsumptionOutcomeV1::Joined(intent) => intent,
+        ObligationSnapshotConsumptionOutcomeV1::Pending(_) => {
+            return Err(failure(
+                "exact retained-turn obligation cut remained pending".to_string(),
+            ));
+        }
+    };
+    let HostSessionTransitionIntentStateV3::Applied { post_turn, .. } = applied.state else {
+        return Err(failure(
+            "post-turn application left the Applied transition state".to_string(),
+        ));
+    };
+    let HostSessionPostTurnApplicationV2::Applied {
+        resulting_posture, ..
+    } = post_turn.as_ref()
+    else {
+        return Err(failure(
+            "post-turn application did not durably settle".to_string(),
+        ));
+    };
+    Ok(*resulting_posture)
+}
+
+#[cfg(target_os = "linux")]
+fn resume_turn_failure_evidence_id(
+    current: &HostSessionTransitionIntentV3,
+    terminal: &AuthoritativeStartTerminalEvidenceV1,
+) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"substrate.a1.3-p1.resume-turn-failure-evidence.v1");
+    for value in [
+        current.intent_id.as_bytes(),
+        current.run_id.as_bytes(),
+        terminal.thread_id.as_bytes(),
+        terminal.turn_id.as_bytes(),
+        terminal.provider_event_kind.as_bytes(),
+        terminal.raw_event_sha256.as_bytes(),
+    ] {
+        hasher.update((value.len() as u64).to_be_bytes());
+        hasher.update(value);
+    }
+    let digest_hex = hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    format!("evt_{digest_hex}")
+}
+
+#[cfg(target_os = "linux")]
+fn settle_authority_managed_resume_terminal_failure(
+    successor: &AuthorityManagedSuccessorLaunchPlanV1,
+    state_store: &AgentRuntimeStateStore,
+    terminal: &AuthoritativeStartTerminalEvidenceV1,
+) -> std::result::Result<HostSessionPostureV1, RuntimeBootstrapFailure> {
+    let failure = |message: String| RuntimeBootstrapFailure {
+        exit_code: 1,
+        message: format!(
+            "authority-managed ResumeOneTurn terminal reconciliation failed: {message}"
+        ),
+    };
+    let (authority, current) = current_authority_managed_successor(successor)?;
+    if current.mode != HostSessionTransitionModeV1::ResumeOneTurn
+        || !matches!(
+            current.input_handoff,
+            HostSessionTransitionInputHandoffV1::Accepted { .. }
+        )
+    {
+        return Err(failure(
+            "terminal provider evidence does not match accepted ResumeOneTurn input".to_string(),
+        ));
+    }
+    let HostSessionTransitionIntentStateV3::Applied { post_turn, .. } = &current.state else {
+        unreachable!("current successor helper requires Applied state")
+    };
+    let event_id = resume_turn_failure_evidence_id(&current, terminal);
+
+    let request = if let HostSessionPostTurnApplicationV2::Applied {
+        completion_ref,
+        resulting_posture,
+        ..
+    } = post_turn.as_ref()
+    {
+        if *resulting_posture != HostSessionPostureV1::Terminal {
+            return Err(failure(
+                "terminal provider evidence conflicts with the committed post-turn posture"
+                    .to_string(),
+            ));
+        }
+        let root = authority
+            .read_a12b_root()
+            .map_err(|error| failure(error.to_string()))?;
+        let completion_bytes = authority
+            .read_authority_object_v2_at(root.root_revision, completion_ref)
+            .map_err(|error| failure(error.to_string()))?;
+        let completion: PostTurnCompletionHashInputV1 =
+            canonical_json::from_slice(&completion_bytes)
+                .map_err(|error| failure(error.to_string()))?;
+        let protocol_bytes = authority
+            .read_authority_object_v2_at(root.root_revision, &completion.protocol_event_ref)
+            .map_err(|error| failure(error.to_string()))?;
+        let protocol: PostTurnProtocolEventHashInputV1 =
+            canonical_json::from_slice(&protocol_bytes)
+                .map_err(|error| failure(error.to_string()))?;
+        if completion.outcome != PostTurnCompletionOutcomeV1::TerminalFailure
+            || protocol.event_id != event_id
+            || protocol.kind
+                != (HostPostTurnProtocolEventKindV1::TerminalFailure {
+                    reason: HostPostTurnTerminalReasonV1::TargetFailedAfterInputAcceptance,
+                })
+            || protocol.protocol_actor
+                != (HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant {
+                    participant_id: current.target_authoritative_participant_id.clone(),
+                })
+            || protocol.acceptance_record_id != completion.acceptance_record_id
+            || protocol.acceptance_record_revision != completion.acceptance_record_revision
+            || protocol.stream_id != completion.stream_id
+            || protocol.accepted_work_identity != completion.accepted_work_identity
+            || protocol.host_transition_correlation != completion.host_transition_correlation
+        {
+            return Err(failure(
+                "committed terminal failure does not join the exact provider evidence".to_string(),
+            ));
+        }
+        ResolvePostTurnRequestV1 {
+            intent_id: current.intent_id.clone(),
+            issuer_request_id: current.issuer_request_id.clone(),
+            payload_commitment: current.payload_commitment.clone(),
+            protocol_actor: protocol.protocol_actor,
+            event_id: protocol.event_id,
+            event_sequence: protocol.event_sequence,
+            kind: protocol.kind,
+            emitted_at: protocol.emitted_at,
+            acceptance_record_id: completion.acceptance_record_id,
+            acceptance_record_revision: completion.acceptance_record_revision,
+            stream_id: completion.stream_id,
+            accepted_work_identity: completion.accepted_work_identity,
+            host_transition_correlation: completion.host_transition_correlation,
+            completed_at: completion.completed_at,
+        }
+    } else {
+        let resolved = authority
+            .resolve_current_exact(&current.orchestration_session_id, None)
+            .map_err(|error| failure(error.to_string()))?;
+        let HostSessionPostTurnApplicationV2::Pending {
+            expected_authority_revision,
+            expected_run_id,
+        } = post_turn.as_ref()
+        else {
+            return Err(failure(
+                "terminal provider evidence conflicts with post-turn reconciliation state"
+                    .to_string(),
+            ));
+        };
+        if *expected_authority_revision != resolved.observation.authority_revision
+            || expected_run_id != &current.run_id
+        {
+            return Err(failure(
+                "pending post-turn authority identity changed".to_string(),
+            ));
+        }
+        let world_binding = resolved
+            .authority
+            .world_binding
+            .as_ref()
+            .ok_or_else(|| failure("current authority has no world binding".to_string()))?;
+        let registry = state_store
+            .resolve_world_work_registry_authority(
+                &current.orchestration_session_id,
+                &current.target_authoritative_participant_id,
+                &world_binding.world_id,
+                world_binding.world_generation,
+                None,
+            )
+            .map_err(|error| failure(error.to_string()))?;
+        let expected_correlation = HostTransitionWorkCorrelationV1 {
+            schema_version: 1,
+            authority_store_id: resolved.observation.authority_store_id.clone(),
+            orchestration_session_id: current.orchestration_session_id.clone(),
+            authoritative_participant_id: current.target_authoritative_participant_id.clone(),
+            transition_intent_id: current.intent_id.clone(),
+            transition_intent_revision_observed: current.intent_revision,
+            transition_run_id: current.run_id.clone(),
+            transition_payload_commitment: opaque_start_commitment(&current.payload_commitment),
+            authority_revision_observed: *expected_authority_revision,
+        };
+        expected_correlation.validate().map_err(failure)?;
+        let ledger_read = read_exact_start_obligation_ledger_snapshot(
+            state_store,
+            &registry,
+            &expected_correlation,
+        )
+        .map_err(|error| failure(error.to_string()))?
+        .ok_or_else(|| failure("exact retained-turn acceptance is absent".to_string()))?;
+        let (
+            acceptance_record_id,
+            acceptance_record_revision,
+            stream_id,
+            accepted_work_identity,
+            host_transition_correlation,
+        ) = match ledger_read {
+            ObligationLedgerSnapshotReadV1::Pending {
+                acceptance_record_id,
+                acceptance_record_revision,
+                stream_id,
+                accepted_work_identity,
+                host_transition_correlation,
+                ..
+            } => (
+                acceptance_record_id,
+                acceptance_record_revision,
+                stream_id,
+                accepted_work_identity,
+                host_transition_correlation,
+            ),
+            ObligationLedgerSnapshotReadV1::Complete { snapshot } => (
+                snapshot.acceptance_record_id,
+                snapshot.acceptance_record_revision,
+                snapshot.stream_id,
+                snapshot.accepted_work_identity,
+                snapshot.host_transition_correlation,
+            ),
+        };
+        let observed_at = successor_timestamp_now()?;
+        ResolvePostTurnRequestV1 {
+            intent_id: current.intent_id.clone(),
+            issuer_request_id: current.issuer_request_id.clone(),
+            payload_commitment: current.payload_commitment.clone(),
+            protocol_actor: HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant {
+                participant_id: current.target_authoritative_participant_id.clone(),
+            },
+            event_id,
+            event_sequence: 1,
+            kind: HostPostTurnProtocolEventKindV1::TerminalFailure {
+                reason: HostPostTurnTerminalReasonV1::TargetFailedAfterInputAcceptance,
+            },
+            emitted_at: observed_at.clone(),
+            acceptance_record_id,
+            acceptance_record_revision,
+            stream_id,
+            accepted_work_identity,
+            host_transition_correlation,
+            completed_at: observed_at,
+        }
+    };
+
+    match authority
+        .resolve_post_turn(&request)
+        .map_err(|error| failure(error.to_string()))?
+    {
+        PostTurnResolutionOutcomeV1::Applied(intent)
+        | PostTurnResolutionOutcomeV1::Joined(intent) => {
+            let HostSessionTransitionIntentStateV3::Applied { post_turn, .. } = intent.state else {
+                return Err(failure(
+                    "terminal reconciliation left the Applied transition state".to_string(),
+                ));
+            };
+            match post_turn.as_ref() {
+                HostSessionPostTurnApplicationV2::Applied {
+                    resulting_posture: HostSessionPostureV1::Terminal,
+                    ..
+                } => Ok(HostSessionPostureV1::Terminal),
+                _ => Err(failure(
+                    "terminal reconciliation did not durably terminalize authority".to_string(),
+                )),
+            }
+        }
+        PostTurnResolutionOutcomeV1::AwaitingObligationCut(_) => Err(failure(
+            "terminal failure cannot await an obligation cut".to_string(),
+        )),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_request_tx(
     prepared: Option<PreparedAgentRuntime>,
@@ -5183,6 +6114,13 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
         &startup_context.authority,
         RuntimeAuthorityContext::Bound(_)
     );
+    #[cfg(target_os = "linux")]
+    let authority_successor = startup_context.authority_successor.clone();
+    #[cfg(target_os = "linux")]
+    let authority_successor_active = authority_successor.is_some();
+    #[cfg(not(target_os = "linux"))]
+    let authority_successor_active = false;
+    let durable_start = authority_managed && !authority_successor_active;
     if let RuntimeAuthorityContext::Bound(resolved) = &startup_context.authority {
         let supplied_binding = initial_world_binding.map(|binding| WorldBindingV1 {
             world_id: binding.world_id.clone(),
@@ -5191,7 +6129,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
         if supplied_binding != resolved.authority.world_binding {
             return Err(RuntimeBootstrapFailure {
                 exit_code: 1,
-                message: "prepared runtime world binding conflicts with applied Start authority"
+                message: "prepared runtime world binding conflicts with applied HSA authority"
                     .to_string(),
             });
         }
@@ -5267,7 +6205,165 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
     );
 
     if control_only_attach {
-        return start_control_only_attach_runtime(
+        #[cfg(target_os = "linux")]
+        if let Some(successor) = authority_successor.as_ref() {
+            let Some(uaa_session_handle_id) = manifest
+                .lock()
+                .expect("runtime manifest mutex poisoned")
+                .internal
+                .uaa_session_id
+                .clone()
+                .filter(|session_id| !session_id.trim().is_empty())
+            else {
+                return Err(RuntimeBootstrapFailure {
+                    exit_code: 1,
+                    message: "authority-managed Attach is missing its durable resume identity"
+                        .to_string(),
+                });
+            };
+            let shutdown_requested = Arc::new(AtomicBool::new(false));
+            let cancel_requested = Arc::new(AtomicBool::new(false));
+            let mut startup_toolbox_transport: Option<InternalToolboxTransport> = None;
+            let (orchestration_session_id, participant_id) = {
+                let manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
+                (
+                    manifest_guard.handle.orchestration_session_id.clone(),
+                    manifest_guard.handle.participant_id.clone(),
+                )
+            };
+            if host_toolbox_surface_requested {
+                if let Some(request_tx) = startup_toolbox_request_tx {
+                    let transport = register_internal_toolbox_transport_for_session(
+                        &orchestration_session_id,
+                        &participant_id,
+                        request_tx.clone(),
+                    )
+                    .await
+                    .map_err(|err| RuntimeBootstrapFailure {
+                        exit_code: 1,
+                        message: format!(
+                            "failed to register authority-managed Attach toolbox transport: {err:#}"
+                        ),
+                    })?;
+                    host_toolbox_surface_authoritative.store(true, Ordering::SeqCst);
+                    startup_toolbox_transport = Some(transport);
+                }
+            }
+
+            let (stop_tx, stop_rx) = private_stop_request_channel();
+            let mut stop_transport = match register_durable_start_private_stop_transport(
+                &orchestration_session_id,
+                &participant_id,
+                stop_tx,
+            )
+            .await
+            {
+                Ok(transport) => transport,
+                Err(err) => {
+                    if let Some(mut transport) = startup_toolbox_transport.take() {
+                        host_toolbox_surface_authoritative.store(false, Ordering::SeqCst);
+                        transport.close().await;
+                    }
+                    return Err(RuntimeBootstrapFailure {
+                        exit_code: 1,
+                        message: format!(
+                            "failed to register authority-managed Attach stop transport: {err:#}"
+                        ),
+                    });
+                }
+            };
+            let (prompt_tx, prompt_rx) = private_prompt_request_channel();
+            let mut prompt_transport = match register_durable_start_private_prompt_transport(
+                &orchestration_session_id,
+                &participant_id,
+                prompt_tx,
+            )
+            .await
+            {
+                Ok(transport) => transport,
+                Err(err) => {
+                    stop_transport.close().await;
+                    if let Some(mut transport) = startup_toolbox_transport.take() {
+                        host_toolbox_surface_authoritative.store(false, Ordering::SeqCst);
+                        transport.close().await;
+                    }
+                    return Err(RuntimeBootstrapFailure {
+                        exit_code: 1,
+                        message: format!(
+                            "failed to register authority-managed Attach prompt transport: {err:#}"
+                        ),
+                    });
+                }
+            };
+            let prompt_owner_task = spawn_local_private_prompt_owner(
+                prompt_runtime_from_parts(
+                    descriptor.clone(),
+                    Arc::clone(&startup_context.orchestration_session),
+                    Arc::clone(&manifest),
+                    startup_context.store.clone(),
+                    uaa_session_handle_id.clone(),
+                    None,
+                    Arc::clone(&host_toolbox_surface_authoritative),
+                ),
+                prompt_rx,
+            );
+
+            let (orchestration_snapshot, manifest_snapshot) = {
+                let mut orchestration_guard = startup_context
+                    .orchestration_session
+                    .lock()
+                    .expect("orchestration session mutex poisoned");
+                let mut manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
+                manifest_guard.mark_runtime_ownership_retained();
+                manifest_guard.transition_state(AgentRuntimeSessionState::Ready);
+                orchestration_guard.sync_host_attach_contract(&manifest_guard);
+                (orchestration_guard.clone(), manifest_guard.clone())
+            };
+            if let Err(failure) = resolve_authority_managed_attach_ownership(successor) {
+                prompt_transport.close().await;
+                let _ = prompt_owner_task.await;
+                stop_transport.close().await;
+                if let Some(mut transport) = startup_toolbox_transport.take() {
+                    host_toolbox_surface_authoritative.store(false, Ordering::SeqCst);
+                    transport.close().await;
+                }
+                return Err(failure);
+            }
+            emit_runtime_event(
+                build_runtime_message_event(
+                    &manifest_snapshot,
+                    &orchestration_snapshot,
+                    run_id,
+                    MessageEventKind::Status,
+                    runtime_ready_message(&runtime_role),
+                ),
+                telemetry,
+                agent_printer,
+            );
+            return Ok(Some(AsyncReplAgentRuntime {
+                descriptor,
+                orchestration_session: startup_context.orchestration_session,
+                manifest,
+                store: startup_context.store,
+                uaa_session_handle_id,
+                host_toolbox_surface_authoritative,
+                retained_control: RetainedRunControl::Synthetic(SyntheticRetainedRunControl),
+                shutdown_requested,
+                cancel_requested,
+                auto_park_rx: None,
+                private_stop_rx: Some(stop_rx),
+                cancel_transport: None,
+                cancel_owner_task: None,
+                stop_transport: Some(stop_transport),
+                stop_owner_task: None,
+                prompt_transport: Some(prompt_transport),
+                prompt_owner_task: Some(prompt_owner_task),
+                toolbox_transport: startup_toolbox_transport,
+                heartbeat_stop_tx: None,
+                heartbeat_task: None,
+            }));
+        }
+        let runtime = start_control_only_attach_runtime(
             descriptor,
             startup_context,
             manifest,
@@ -5279,7 +6375,8 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
             agent_printer,
             telemetry,
         )
-        .await;
+        .await?;
+        return Ok(runtime);
     }
 
     let startup_backchannel = match initial_prompt.as_ref() {
@@ -5288,6 +6385,21 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
         }
         _ => None,
     };
+    #[cfg(target_os = "linux")]
+    let successor_input_accepted = if let Some(successor) = authority_successor.as_ref() {
+        let newly_accepted = accept_authority_managed_resume_input(successor)?;
+        if !newly_accepted {
+            return Err(RuntimeBootstrapFailure {
+                exit_code: 1,
+                message: "submission_outcome_unknown: ResumeOneTurn input was already durably accepted; retry will not resubmit the provider prompt".to_string(),
+            });
+        }
+        true
+    } else {
+        false
+    };
+    #[cfg(not(target_os = "linux"))]
+    let successor_input_accepted = false;
     if let Some(backchannel) = startup_backchannel.as_ref() {
         let (orchestration_snapshot, manifest_snapshot) = {
             let mut orchestration_guard = startup_context
@@ -5312,7 +6424,11 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
         }
         backchannel.send(PublicPromptEnvelope::Accepted {
             version: 1,
-            action: PublicPromptAction::Start,
+            action: if authority_successor_active {
+                PublicPromptAction::Turn
+            } else {
+                PublicPromptAction::Start
+            },
             orchestration_session_id: orchestration_snapshot.orchestration_session_id.clone(),
             backend_id: manifest_snapshot.handle.backend_id.clone(),
             participant_id: Some(manifest_snapshot.handle.participant_id.clone()),
@@ -5411,7 +6527,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
             },
             extensions: startup_extensions,
         };
-        if authority_managed && startup_backchannel.is_some() {
+        if durable_start && startup_backchannel.is_some() {
             let RuntimeAuthorityContext::Bound(resolved) = &startup_context.authority else {
                 return Err(RuntimeBootstrapFailure {
                     exit_code: 1,
@@ -5432,7 +6548,9 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
                 transport.close().await;
             }
             let mut failure = runtime_bootstrap_failure_from_wrapper_error(err);
-            let submission_indeterminate =
+            let submission_indeterminate = if successor_input_accepted {
+                true
+            } else if durable_start {
                 if let RuntimeAuthorityContext::Bound(resolved) = &startup_context.authority {
                     if startup_backchannel.is_some() {
                         match declare_bound_start_submission_indeterminate_if_unaccepted(resolved) {
@@ -5444,7 +6562,10 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
                     }
                 } else {
                     false
-                };
+                }
+            } else {
+                false
+            };
             if submission_indeterminate {
                 failure.message = format!(
                     "submission_outcome_unknown: authenticated provider acceptance was not durably recorded after the no-replay barrier: {}",
@@ -5516,11 +6637,16 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
     let startup_signal_for_events = Arc::clone(&startup_signal);
     let startup_backchannel_for_events = startup_backchannel.clone();
     let start_authority_for_events = match &startup_context.authority {
-        RuntimeAuthorityContext::Bound(resolved) if startup_backchannel.is_some() => {
+        RuntimeAuthorityContext::Bound(resolved)
+            if startup_backchannel.is_some() && !authority_successor_active =>
+        {
             Some(Arc::clone(resolved))
         }
         RuntimeAuthorityContext::Legacy | RuntimeAuthorityContext::Bound(_) => None,
     };
+    #[cfg(target_os = "linux")]
+    let successor_for_events = authority_successor.clone();
+    let successor_for_events_active = authority_successor_active;
     let shutdown_for_events = Arc::clone(&shutdown_requested);
     let runtime_role_for_events = runtime_role.clone();
     let auto_park_tx_for_events = auto_park_tx.clone();
@@ -5530,9 +6656,13 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
         let mut startup_saw_substantive_output = false;
         let mut start_registration: Option<StartContinuationRegistrationV1> = None;
         let mut start_lifecycle_state: Option<AuthoritativeStartLifecycleStateV1> = None;
+        #[cfg(target_os = "linux")]
+        let mut successor_lifecycle_state: Option<AuthoritativeStartLifecycleStateV1> = None;
         let mut latched_start_continuity_error: Option<String> = None;
         while let Some(wrapper_event) = events.next().await {
-            let mut startup_turn_phase = if start_authority_for_events.is_none() {
+            let mut startup_turn_phase = if start_authority_for_events.is_none()
+                && !successor_for_events_active
+            {
                 infer_startup_turn_phase_fallback(&wrapper_event, startup_saw_substantive_output)
                     .map(ToOwned::to_owned)
             } else {
@@ -5652,6 +6782,182 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
                                         "wrapper completed the inaugural Start turn before publishing an authenticated continuation ID"
                                             .to_string(),
                                     );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            #[cfg(target_os = "linux")]
+            if let Some(successor) = successor_for_events.as_ref() {
+                if malformed_start_lifecycle {
+                    start_continuity_error = Some(
+                        "wrapper published malformed ResumeOneTurn lifecycle evidence".to_string(),
+                    );
+                }
+                if start_continuity_error.is_none() {
+                    if let Some(observation) = start_lifecycle_observation.as_ref() {
+                        let expected_uaa_session_id = successor
+                            .helper_plan
+                            .participant
+                            .internal_uaa_session_id
+                            .as_deref()
+                            .unwrap_or_default();
+                        if observation.session_id != expected_uaa_session_id
+                            || observation.thread_id != expected_uaa_session_id
+                        {
+                            start_continuity_error = Some(
+                                "wrapper substituted the durable ResumeOneTurn handle".to_string(),
+                            );
+                        } else {
+                            match observation.phase {
+                                TurnLifecyclePhaseV1::ExchangeOpened => {
+                                    if successor_lifecycle_state.is_some() {
+                                        start_continuity_error = Some(
+                                            "wrapper duplicated or reordered the ResumeOneTurn exchange"
+                                                .to_string(),
+                                        );
+                                    } else {
+                                        successor_lifecycle_state = Some(
+                                            AuthoritativeStartLifecycleStateV1::ExchangeOpened {
+                                                provider: observation.provider.clone(),
+                                                thread_id: observation.thread_id.clone(),
+                                            },
+                                        );
+                                    }
+                                }
+                                TurnLifecyclePhaseV1::Started => {
+                                    let exact = matches!(
+                                        successor_lifecycle_state.as_ref(),
+                                        Some(AuthoritativeStartLifecycleStateV1::ExchangeOpened {
+                                            provider,
+                                            thread_id,
+                                        }) if provider == "codex"
+                                            && provider == &observation.provider
+                                            && thread_id == &observation.thread_id
+                                            && observation.provider_event_kind == "turn.started"
+                                    );
+                                    if exact {
+                                        successor_lifecycle_state =
+                                            Some(AuthoritativeStartLifecycleStateV1::Started {
+                                                provider: observation.provider.clone(),
+                                                thread_id: observation.thread_id.clone(),
+                                                turn_id: observation.turn_id.clone(),
+                                            });
+                                    } else {
+                                        start_continuity_error = Some(
+                                            "wrapper reordered or substituted ResumeOneTurn started evidence"
+                                                .to_string(),
+                                        );
+                                    }
+                                }
+                                TurnLifecyclePhaseV1::Completed | TurnLifecyclePhaseV1::Failed => {
+                                    let exact_terminal = match successor_lifecycle_state.as_ref() {
+                                        Some(AuthoritativeStartLifecycleStateV1::Started {
+                                            provider,
+                                            thread_id,
+                                            turn_id,
+                                        }) => {
+                                            provider == "codex"
+                                                && provider == &observation.provider
+                                                && thread_id == &observation.thread_id
+                                                && turn_id == &observation.turn_id
+                                                && matches!(
+                                                    (
+                                                        observation.phase,
+                                                        observation.provider_event_kind.as_str(),
+                                                    ),
+                                                    (
+                                                        TurnLifecyclePhaseV1::Completed,
+                                                        "turn.completed"
+                                                    ) | (
+                                                        TurnLifecyclePhaseV1::Failed,
+                                                        "turn.failed"
+                                                    )
+                                                )
+                                        }
+                                        Some(
+                                            AuthoritativeStartLifecycleStateV1::ExchangeOpened {
+                                                provider,
+                                                thread_id,
+                                            },
+                                        ) => {
+                                            provider == "claude_code"
+                                                && provider == &observation.provider
+                                                && thread_id == &observation.thread_id
+                                                && observation.turn_id == observation.thread_id
+                                                && matches!(
+                                                    (
+                                                        observation.phase,
+                                                        observation.provider_event_kind.as_str(),
+                                                    ),
+                                                    (
+                                                        TurnLifecyclePhaseV1::Completed,
+                                                        "result.success"
+                                                    ) | (
+                                                        TurnLifecyclePhaseV1::Failed,
+                                                        "result.error"
+                                                    )
+                                                )
+                                        }
+                                        Some(AuthoritativeStartLifecycleStateV1::Terminal)
+                                        | None => false,
+                                    };
+                                    if !exact_terminal {
+                                        start_continuity_error = Some(
+                                            "wrapper reordered or substituted ResumeOneTurn terminal evidence"
+                                                .to_string(),
+                                        );
+                                    } else if observation.phase == TurnLifecyclePhaseV1::Failed {
+                                        let terminal = AuthoritativeStartTerminalEvidenceV1 {
+                                            phase: observation.phase,
+                                            thread_id: observation.thread_id.clone(),
+                                            turn_id: observation.turn_id.clone(),
+                                            provider_event_kind: observation
+                                                .provider_event_kind
+                                                .clone(),
+                                            raw_event_sha256: observation.raw_event_sha256.clone(),
+                                        };
+                                        match settle_authority_managed_resume_terminal_failure(
+                                            successor,
+                                            &event_store,
+                                            &terminal,
+                                        ) {
+                                            Ok(posture) => {
+                                                settled_start_posture = Some(posture);
+                                                successor_lifecycle_state = Some(
+                                                    AuthoritativeStartLifecycleStateV1::Terminal,
+                                                );
+                                                start_continuity_error = Some(
+                                                    startup_failure_message.clone().unwrap_or_else(
+                                                        || {
+                                                            "wrapper reported exact ResumeOneTurn failure"
+                                                                .to_string()
+                                                        },
+                                                    ),
+                                                );
+                                            }
+                                            Err(failure) => {
+                                                start_continuity_error = Some(failure.message)
+                                            }
+                                        }
+                                    } else {
+                                        match settle_authority_managed_resume_post_turn(
+                                            successor,
+                                            &event_store,
+                                        ) {
+                                            Ok(posture) => {
+                                                settled_start_posture = Some(posture);
+                                                startup_turn_phase = Some("completed".to_string());
+                                                successor_lifecycle_state = Some(
+                                                    AuthoritativeStartLifecycleStateV1::Terminal,
+                                                );
+                                            }
+                                            Err(failure) => {
+                                                start_continuity_error = Some(failure.message)
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -5978,7 +7284,9 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
     let startup_signal_for_completion = Arc::clone(&startup_signal);
     let startup_backchannel_for_completion = startup_backchannel.clone();
     let start_authority_for_completion = match &startup_context.authority {
-        RuntimeAuthorityContext::Bound(resolved) if startup_backchannel.is_some() => {
+        RuntimeAuthorityContext::Bound(resolved)
+            if startup_backchannel.is_some() && !authority_successor_active =>
+        {
             Some(Arc::clone(resolved))
         }
         RuntimeAuthorityContext::Legacy | RuntimeAuthorityContext::Bound(_) => None,
@@ -17055,7 +18363,7 @@ mod tests {
                     .expect("resolve test principal")
                     .0;
             let prepared =
-                prepare_hidden_owner_helper_runtime(&config, &plan, intended_host_principal)
+                prepare_hidden_owner_helper_runtime(&config, &plan, None, intended_host_principal)
                     .expect("prepare HSA-bound public Start");
             let startup_context = prepared.startup_context.clone();
             let mut telemetry = ReplSessionTelemetry::new(config, "start-continuity-test");
@@ -17253,7 +18561,7 @@ mod tests {
                     .expect("resolve test principal")
                     .0;
             let prepared =
-                prepare_hidden_owner_helper_runtime(&config, &plan, intended_host_principal)
+                prepare_hidden_owner_helper_runtime(&config, &plan, None, intended_host_principal)
                     .expect("prepare HSA-bound public Start");
             let startup_context = prepared.startup_context.clone();
             let mut telemetry = ReplSessionTelemetry::new(config, "start-indeterminate-test");
@@ -17531,6 +18839,8 @@ mod tests {
                 &config,
                 &plan,
                 #[cfg(target_os = "linux")]
+                None,
+                #[cfg(target_os = "linux")]
                 intended_host_principal.clone(),
             )
             .expect("prepare hidden owner-helper attach runtime should succeed");
@@ -17706,6 +19016,8 @@ mod tests {
         let prepared = prepare_hidden_owner_helper_runtime(
             &config,
             &plan,
+            #[cfg(target_os = "linux")]
+            None,
             #[cfg(target_os = "linux")]
             intended_host_principal.clone(),
         )

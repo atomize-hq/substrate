@@ -5,8 +5,14 @@ use std::fs::File;
 #[cfg(unix)]
 use std::io::Write;
 use std::io::{self, Read};
+#[cfg(target_os = "linux")]
+use std::os::fd::AsRawFd;
+#[cfg(target_os = "linux")]
+use std::os::unix::fs::MetadataExt;
 #[cfg(unix)]
 use std::os::unix::net::UnixListener as StdUnixListener;
+#[cfg(target_os = "linux")]
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -39,6 +45,11 @@ use crate::execution::agent_runtime::dispatch_contract::WorkerCancelPayloadV1;
 use crate::execution::agent_runtime::host_session_authority::schema::HostSessionPostureV1;
 #[cfg(unix)]
 use crate::execution::agent_runtime::host_session_authority::start_continuity::StartTurnCompletionKindV1;
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::host_session_authority::store_schema::{
+    HostSessionPostTurnApplicationV2, HostSessionStartupOwnershipApplicationV1,
+    HostSessionTransitionIntentStateV3, HostSessionTransitionIntentV3,
+};
 #[cfg(unix)]
 use crate::execution::agent_runtime::host_session_authority::store_schema::{
     StartTransactionRecordV1, StartTransactionStateV1,
@@ -69,6 +80,9 @@ use substrate_common::paths as substrate_paths;
 pub(crate) const AGENT_API_SESSION_RESUME_V1: &str = "agent_api.session.resume.v1";
 pub(crate) const AGENT_API_TURN_LIFECYCLE_V1: &str = "agent_api.turn.lifecycle.v1";
 pub(crate) const HIDDEN_OWNER_HELPER_SUBCOMMAND: &str = "__owner-helper";
+#[cfg(target_os = "linux")]
+const AUTHORITY_SUCCESSOR_LAUNCH_GUARD_FD_ENV: &str =
+    "SUBSTRATE_AUTHORITY_SUCCESSOR_LAUNCH_GUARD_FD";
 const OWNER_HELPER_READY_TIMEOUT_ERROR_PREFIX: &str =
     "timed out waiting for authoritative owner-helper readiness for orchestration session ";
 const OWNER_HELPER_READY_TIMEOUT: Duration = Duration::from_secs(30);
@@ -344,6 +358,51 @@ pub(crate) struct HiddenOwnerHelperLaunchPlan {
     pub source_orchestration_session_id: Option<String>,
 }
 
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct AuthorityManagedSuccessorLaunchPlanV1 {
+    pub schema_version: u32,
+    pub authority_store_id: String,
+    pub helper_plan: HiddenOwnerHelperLaunchPlan,
+    pub applied_transition: HostSessionTransitionIntentV3,
+}
+
+#[cfg(target_os = "linux")]
+impl AuthorityManagedSuccessorLaunchPlanV1 {
+    fn validate_transport_shape(&self) -> Result<()> {
+        if self.schema_version != 1
+            || self.authority_store_id.is_empty()
+            || self.applied_transition.workspace_binding.authority_store_id
+                != self.authority_store_id
+            || !matches!(
+                self.helper_plan.mode,
+                OwnerHelperMode::Attach | OwnerHelperMode::ResumeOneTurn
+            )
+            || self.applied_transition.mode
+                != match self.helper_plan.mode {
+                    OwnerHelperMode::Attach => crate::execution::agent_runtime::host_session_authority::schema::HostSessionTransitionModeV1::Attach,
+                    OwnerHelperMode::ResumeOneTurn => crate::execution::agent_runtime::host_session_authority::schema::HostSessionTransitionModeV1::ResumeOneTurn,
+                    OwnerHelperMode::Start => unreachable!(),
+                }
+            || self.applied_transition.orchestration_session_id
+                != self.helper_plan.session.orchestration_session_id
+            || self.applied_transition.shell_trace_session_id
+                != self.helper_plan.session.shell_trace_session_id
+            || self.applied_transition.target_authoritative_participant_id
+                != self.helper_plan.participant.participant_id
+            || self.applied_transition.run_id != self.helper_plan.participant.run_id
+            || !matches!(
+                self.applied_transition.state,
+                HostSessionTransitionIntentStateV3::Applied { .. }
+            )
+        {
+            anyhow::bail!("authority-managed successor launch envelope is inconsistent");
+        }
+        Ok(())
+    }
+}
+
 #[allow(dead_code)]
 impl HiddenOwnerHelperLaunchPlan {
     pub(crate) fn orchestration_session_id(&self) -> &str {
@@ -368,6 +427,59 @@ pub(crate) struct HiddenOwnerHelperLaunchReceipt {
     pub orchestration_session_id: String,
     pub participant_id: String,
     pub backend_id: String,
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) struct AuthorityManagedSuccessorLaunchReceiptV1 {
+    pub launch_receipt: HiddenOwnerHelperLaunchReceipt,
+    _launch_guard: Option<AuthorityManagedSuccessorLaunchGuardV1>,
+}
+
+#[cfg(target_os = "linux")]
+struct AuthorityManagedSuccessorLaunchGuardV1 {
+    lock_file: File,
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) struct AuthorityManagedSuccessorLaunchPermitV1 {
+    authority_store_id: String,
+    intent_id: String,
+    launch_guard: Option<AuthorityManagedSuccessorLaunchGuardV1>,
+}
+
+#[cfg(target_os = "linux")]
+impl AuthorityManagedSuccessorLaunchPermitV1 {
+    pub(crate) fn joined_completed_launch(&self) -> bool {
+        self.launch_guard.is_none()
+    }
+}
+
+#[cfg(target_os = "linux")]
+enum AuthorityManagedSuccessorLaunchJoinV1 {
+    Joined,
+    RetryAsLeader(AuthorityManagedSuccessorLaunchGuardV1),
+}
+
+#[cfg(all(target_os = "linux", test))]
+thread_local! {
+    static AUTHORITY_SUCCESSOR_COMPLETION_RACE_HOOK: std::cell::RefCell<Option<Box<dyn FnOnce()>>> =
+        std::cell::RefCell::new(None);
+}
+
+#[cfg(all(target_os = "linux", test))]
+pub(crate) fn inject_authority_successor_completion_race_for_test(hook: impl FnOnce() + 'static) {
+    AUTHORITY_SUCCESSOR_COMPLETION_RACE_HOOK.with(|slot| {
+        *slot.borrow_mut() = Some(Box::new(hook));
+    });
+}
+
+#[cfg(all(target_os = "linux", test))]
+fn maybe_inject_authority_successor_completion_race_for_test() {
+    AUTHORITY_SUCCESSOR_COMPLETION_RACE_HOOK.with(|slot| {
+        if let Some(hook) = slot.borrow_mut().take() {
+            hook();
+        }
+    });
 }
 
 struct HiddenOwnerHelperAttachLaunchGuard {
@@ -520,6 +632,495 @@ pub(crate) fn launch_hidden_owner_helper_for_durable_start(
         participant_id: plan.participant.participant_id.clone(),
         backend_id: plan.descriptor.backend_id.clone(),
     })
+}
+
+/// Launches an already-applied HSA Attach or ResumeOneTurn without consulting
+/// legacy readiness or compatibility state. Durable HSA reconciliation is the
+/// caller's only completion authority.
+#[cfg(target_os = "linux")]
+pub(crate) fn launch_authority_managed_successor_owner_helper(
+    plan: &AuthorityManagedSuccessorLaunchPlanV1,
+    permit: AuthorityManagedSuccessorLaunchPermitV1,
+    world: bool,
+    no_world: bool,
+) -> Result<AuthorityManagedSuccessorLaunchReceiptV1> {
+    plan.validate_transport_shape()?;
+    if permit.authority_store_id != plan.authority_store_id
+        || permit.intent_id != plan.applied_transition.intent_id
+    {
+        anyhow::bail!("authority-managed successor launch permit identity was substituted");
+    }
+    let Some(launch_guard) = permit.launch_guard else {
+        if authority_managed_successor_completion(plan)?.is_none() {
+            anyhow::bail!("authority-managed successor joined launch lost its HSA completion");
+        }
+        return Ok(AuthorityManagedSuccessorLaunchReceiptV1 {
+            launch_receipt: authority_managed_successor_joined_receipt(plan),
+            _launch_guard: None,
+        });
+    };
+    let plan_path = persist_authority_managed_successor_launch_plan(plan)?;
+    let exe = env::current_exe().context(
+        "failed to resolve current substrate executable for authority-managed owner-helper launch",
+    )?;
+    let mut command = Command::new(exe);
+    if world {
+        command.arg("--world");
+    } else if no_world {
+        command.arg("--no-world");
+    }
+    command
+        .args(["agent", HIDDEN_OWNER_HELPER_SUBCOMMAND, "--plan-file"])
+        .arg(&plan_path)
+        .current_dir(&plan.helper_plan.session.workspace_root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    let launch_guard_fd = launch_guard.lock_file.as_raw_fd();
+    command.env(
+        AUTHORITY_SUCCESSOR_LAUNCH_GUARD_FD_ENV,
+        launch_guard_fd.to_string(),
+    );
+    // Clear close-on-exec only in the forked child. Toggling the parent descriptor
+    // would let an unrelated concurrent spawn inherit and prolong this guard.
+    unsafe {
+        command.pre_exec(move || {
+            let flags = libc::fcntl(launch_guard_fd, libc::F_GETFD);
+            if flags < 0 {
+                return Err(io::Error::last_os_error());
+            }
+            if libc::fcntl(launch_guard_fd, libc::F_SETFD, flags & !libc::FD_CLOEXEC) < 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let child = command.spawn().with_context(|| {
+        format!(
+            "failed to spawn authority-managed owner-helper for orchestration session {}",
+            plan.helper_plan.session.orchestration_session_id
+        )
+    })?;
+
+    Ok(AuthorityManagedSuccessorLaunchReceiptV1 {
+        launch_receipt: HiddenOwnerHelperLaunchReceipt {
+            helper_pid: child.id(),
+            orchestration_session_id: plan.helper_plan.session.orchestration_session_id.clone(),
+            participant_id: plan.helper_plan.participant.participant_id.clone(),
+            backend_id: plan.helper_plan.descriptor.backend_id.clone(),
+        },
+        _launch_guard: Some(launch_guard),
+    })
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn acquire_authority_managed_successor_launch_permit(
+    plan: &AuthorityManagedSuccessorLaunchPlanV1,
+) -> Result<AuthorityManagedSuccessorLaunchPermitV1> {
+    plan.validate_transport_shape()?;
+    if authority_managed_successor_completion(plan)?.is_some() {
+        return Ok(AuthorityManagedSuccessorLaunchPermitV1 {
+            authority_store_id: plan.authority_store_id.clone(),
+            intent_id: plan.applied_transition.intent_id.clone(),
+            launch_guard: None,
+        });
+    }
+    let launch_guard = loop {
+        match try_acquire_authority_managed_successor_launch_guard(plan)? {
+            Some(guard) => {
+                #[cfg(test)]
+                maybe_inject_authority_successor_completion_race_for_test();
+                if authority_managed_successor_completion(plan)?.is_some() {
+                    drop(guard);
+                    break None;
+                }
+                break Some(guard);
+            }
+            None => match wait_for_inflight_authority_managed_successor_launch(plan)? {
+                AuthorityManagedSuccessorLaunchJoinV1::Joined => {
+                    break None;
+                }
+                AuthorityManagedSuccessorLaunchJoinV1::RetryAsLeader(guard) => break Some(guard),
+            },
+        }
+    };
+    Ok(AuthorityManagedSuccessorLaunchPermitV1 {
+        authority_store_id: plan.authority_store_id.clone(),
+        intent_id: plan.applied_transition.intent_id.clone(),
+        launch_guard,
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn try_acquire_authority_managed_successor_launch_guard(
+    plan: &AuthorityManagedSuccessorLaunchPlanV1,
+) -> Result<Option<AuthorityManagedSuccessorLaunchGuardV1>> {
+    let intent_id = &plan.applied_transition.intent_id;
+    let path = authority_managed_successor_launch_guard_path(plan)?;
+    let parent = path.parent().ok_or_else(|| {
+        anyhow::anyhow!(
+            "authority-managed successor launch guard '{}' is missing a parent directory",
+            path.display()
+        )
+    })?;
+    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
+    let file = fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        .open(&path)
+        .with_context(|| {
+            format!(
+                "failed to open authority-managed successor launch guard {}",
+                path.display()
+            )
+        })?;
+    match file.try_lock_exclusive() {
+        Ok(()) => Ok(Some(AuthorityManagedSuccessorLaunchGuardV1 {
+            lock_file: file,
+        })),
+        Err(err) if err.kind() == io::ErrorKind::WouldBlock => Ok(None),
+        Err(err) => Err(anyhow::Error::new(err).context(format!(
+            "failed to coordinate authority-managed successor launch for intent {intent_id}"
+        ))),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn wait_for_inflight_authority_managed_successor_launch(
+    plan: &AuthorityManagedSuccessorLaunchPlanV1,
+) -> Result<AuthorityManagedSuccessorLaunchJoinV1> {
+    let started_at = Instant::now();
+    loop {
+        if authority_managed_successor_completion(plan)?.is_some() {
+            return Ok(AuthorityManagedSuccessorLaunchJoinV1::Joined);
+        }
+        if let Some(guard) = try_acquire_authority_managed_successor_launch_guard(plan)? {
+            if authority_managed_successor_completion(plan)?.is_some() {
+                drop(guard);
+                return Ok(AuthorityManagedSuccessorLaunchJoinV1::Joined);
+            }
+            return Ok(AuthorityManagedSuccessorLaunchJoinV1::RetryAsLeader(guard));
+        }
+        if started_at.elapsed() >= OWNER_HELPER_READY_TIMEOUT {
+            anyhow::bail!(
+                "authority-managed successor launch leader did not settle exact HSA evidence"
+            );
+        }
+        thread::sleep(OWNER_HELPER_READY_POLL_INTERVAL);
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn authority_managed_successor_joined_receipt(
+    plan: &AuthorityManagedSuccessorLaunchPlanV1,
+) -> HiddenOwnerHelperLaunchReceipt {
+    HiddenOwnerHelperLaunchReceipt {
+        helper_pid: 0,
+        orchestration_session_id: plan.helper_plan.session.orchestration_session_id.clone(),
+        participant_id: plan.helper_plan.participant.participant_id.clone(),
+        backend_id: plan.helper_plan.descriptor.backend_id.clone(),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn persist_authority_managed_successor_launch_plan(
+    plan: &AuthorityManagedSuccessorLaunchPlanV1,
+) -> Result<PathBuf> {
+    plan.validate_transport_shape()?;
+    let path = durable_start_control_root()?
+        .join("successor-plans")
+        .join(format!("{}.json", plan.applied_transition.intent_id));
+    let parent = path.parent().ok_or_else(|| {
+        anyhow::anyhow!(
+            "authority-managed successor plan path '{}' is missing a parent directory",
+            path.display()
+        )
+    })?;
+    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
+    fs::write(&path, serde_json::to_vec_pretty(plan)?).with_context(|| {
+        format!(
+            "failed to write authority-managed successor plan {}",
+            path.display()
+        )
+    })?;
+    Ok(path)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn load_authority_managed_successor_launch_plan(
+    path: &Path,
+) -> Result<AuthorityManagedSuccessorLaunchPlanV1> {
+    let bytes = fs::read(path).with_context(|| {
+        format!(
+            "failed to read authority-managed successor launch plan {}",
+            path.display()
+        )
+    })?;
+    let plan: AuthorityManagedSuccessorLaunchPlanV1 =
+        serde_json::from_slice(&bytes).with_context(|| {
+            format!(
+                "failed to decode authority-managed successor launch plan {}",
+                path.display()
+            )
+        })?;
+    plan.validate_transport_shape()?;
+    validate_inherited_authority_successor_launch_guard(&plan)?;
+    Ok(plan)
+}
+
+#[cfg(target_os = "linux")]
+fn authority_managed_successor_launch_guard_path(
+    plan: &AuthorityManagedSuccessorLaunchPlanV1,
+) -> Result<PathBuf> {
+    let intent_id = &plan.applied_transition.intent_id;
+    if intent_id.is_empty()
+        || !intent_id
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
+    {
+        anyhow::bail!("authority-managed successor intent cannot identify a launch guard");
+    }
+    Ok(Path::new(
+        &plan
+            .applied_transition
+            .workspace_binding
+            .authority_store_root
+            .physical_path,
+    )
+    .join("runtime-control")
+    .join("durable-start")
+    .join("successor-launch-guards")
+    .join(format!("{intent_id}.lock")))
+}
+
+#[cfg(target_os = "linux")]
+fn set_authority_successor_launch_guard_close_on_exec(fd: i32, enabled: bool) -> Result<()> {
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
+    if flags < 0 {
+        return Err(io::Error::last_os_error())
+            .context("failed to read authority successor launch-guard descriptor flags");
+    }
+    let next = if enabled {
+        flags | libc::FD_CLOEXEC
+    } else {
+        flags & !libc::FD_CLOEXEC
+    };
+    if unsafe { libc::fcntl(fd, libc::F_SETFD, next) } < 0 {
+        return Err(io::Error::last_os_error())
+            .context("failed to set authority successor launch-guard descriptor flags");
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn validate_inherited_authority_successor_launch_guard(
+    plan: &AuthorityManagedSuccessorLaunchPlanV1,
+) -> Result<()> {
+    let fd = env::var(AUTHORITY_SUCCESSOR_LAUNCH_GUARD_FD_ENV)
+        .context("authority-managed successor helper is missing its inherited launch guard")?
+        .parse::<i32>()
+        .context("authority-managed successor helper launch guard is malformed")?;
+    if fd < 0 {
+        anyhow::bail!("authority-managed successor helper launch guard is invalid");
+    }
+    let expected_path = authority_managed_successor_launch_guard_path(plan)?;
+    let expected = fs::metadata(&expected_path).with_context(|| {
+        format!(
+            "failed to inspect authority successor launch guard {}",
+            expected_path.display()
+        )
+    })?;
+    let inherited = fs::metadata(format!("/proc/self/fd/{fd}"))
+        .context("failed to inspect inherited authority successor launch guard")?;
+    if !expected.is_file() || expected.dev() != inherited.dev() || expected.ino() != inherited.ino()
+    {
+        anyhow::bail!("authority-managed successor helper launch guard identity was substituted");
+    }
+    set_authority_successor_launch_guard_close_on_exec(fd, true)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn wait_for_authority_managed_successor_completion(
+    plan: &AuthorityManagedSuccessorLaunchPlanV1,
+) -> Result<HostSessionPostureV1> {
+    plan.validate_transport_shape()?;
+    let started_at = Instant::now();
+    loop {
+        if let Some(posture) = authority_managed_successor_completion(plan)? {
+            return Ok(posture);
+        }
+        if started_at.elapsed() >= OWNER_HELPER_READY_TIMEOUT {
+            anyhow::bail!(
+                "authority-managed successor remains durably pending exact actor-event reconciliation"
+            );
+        }
+        thread::sleep(OWNER_HELPER_READY_POLL_INTERVAL);
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn authority_managed_successor_completion(
+    plan: &AuthorityManagedSuccessorLaunchPlanV1,
+) -> Result<Option<HostSessionPostureV1>> {
+    plan.validate_transport_shape()?;
+    let substrate_home = Path::new(
+        &plan
+            .applied_transition
+            .workspace_binding
+            .authority_store_root
+            .physical_path,
+    );
+    let authority = HostSessionAuthority::from_trusted_root(
+        TrustedAuthorityRoot::open(substrate_home)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let root = authority
+        .read_a12b_root()
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    if root.authority_store_id != plan.authority_store_id {
+        anyhow::bail!("authority-managed successor store identity changed");
+    }
+    let current = root
+        .successor_transition_intent_map
+        .get(&plan.applied_transition.intent_id)
+        .ok_or_else(|| anyhow::anyhow!("authority-managed successor intent disappeared"))?;
+    verify_authority_managed_successor_identity(&plan.applied_transition, current)?;
+    let HostSessionTransitionIntentStateV3::Applied {
+        startup_ownership,
+        post_turn,
+        ..
+    } = &current.state
+    else {
+        anyhow::bail!("authority-managed successor is no longer durably Applied");
+    };
+    let resolved = authority
+        .resolve_current_exact(&current.orchestration_session_id, None)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    if resolved.observation.authority_store_id != plan.authority_store_id
+        || resolved
+            .authority
+            .active_authoritative_participant_id
+            .as_deref()
+            != Some(current.target_authoritative_participant_id.as_str())
+    {
+        anyhow::bail!("authority-managed successor current authority identity changed");
+    }
+    Ok(match current.mode {
+            crate::execution::agent_runtime::host_session_authority::schema::HostSessionTransitionModeV1::Attach => {
+                match startup_ownership.as_ref() {
+                    HostSessionStartupOwnershipApplicationV1::Accepted { .. } => {
+                        Some(resolved.authority.lifecycle_posture)
+                    }
+                    HostSessionStartupOwnershipApplicationV1::TerminalReconciled { .. } => {
+                        anyhow::bail!("authority-managed Attach reconciled to terminal failure")
+                    }
+                    HostSessionStartupOwnershipApplicationV1::Pending { .. } => None,
+                    HostSessionStartupOwnershipApplicationV1::NotApplicable => {
+                        anyhow::bail!("authority-managed Attach lost startup ownership state")
+                    }
+                }
+            }
+            crate::execution::agent_runtime::host_session_authority::schema::HostSessionTransitionModeV1::ResumeOneTurn => {
+                match post_turn.as_ref() {
+                    HostSessionPostTurnApplicationV2::Applied {
+                        resulting_posture, ..
+                    } if *resulting_posture == resolved.authority.lifecycle_posture => {
+                        Some(*resulting_posture)
+                    }
+                    HostSessionPostTurnApplicationV2::Applied { .. } => {
+                        anyhow::bail!("authority-managed ResumeOneTurn posture changed after reconciliation")
+                    }
+                    HostSessionPostTurnApplicationV2::Pending { .. }
+                    | HostSessionPostTurnApplicationV2::AwaitingObligationCut { .. } => None,
+                    HostSessionPostTurnApplicationV2::NotApplicable => {
+                        anyhow::bail!("authority-managed ResumeOneTurn lost post-turn state")
+                    }
+                }
+            }
+            crate::execution::agent_runtime::host_session_authority::schema::HostSessionTransitionModeV1::Start => {
+                anyhow::bail!("authority-managed successor cannot use Start")
+            }
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn verify_authority_managed_successor_identity(
+    expected: &HostSessionTransitionIntentV3,
+    actual: &HostSessionTransitionIntentV3,
+) -> Result<()> {
+    if actual.schema_version != expected.schema_version
+        || actual.intent_id != expected.intent_id
+        || actual.issuer_request_id != expected.issuer_request_id
+        || actual.mode != expected.mode
+        || actual.authority_precondition != expected.authority_precondition
+        || actual.orchestration_session_id != expected.orchestration_session_id
+        || actual.shell_trace_session_id != expected.shell_trace_session_id
+        || actual.caller != expected.caller
+        || actual.source_authoritative_participant_id
+            != expected.source_authoritative_participant_id
+        || actual.target_authoritative_participant_id
+            != expected.target_authoritative_participant_id
+        || actual.target_participant_lease_token_ref != expected.target_participant_lease_token_ref
+        || actual.run_id != expected.run_id
+        || actual.resulting_authoritative_lineage != expected.resulting_authoritative_lineage
+        || actual.workspace_binding != expected.workspace_binding
+        || actual.world_binding != expected.world_binding
+        || actual.descriptor_ref != expected.descriptor_ref
+        || actual.host_attach_contract_ref != expected.host_attach_contract_ref
+        || actual.resume_handle_ref != expected.resume_handle_ref
+        || actual.transition_input_ref != expected.transition_input_ref
+        || actual.post_turn_disposition != expected.post_turn_disposition
+        || actual.transport_payload_ref != expected.transport_payload_ref
+        || actual.payload_commitment != expected.payload_commitment
+        || actual.issued_at != expected.issued_at
+        || actual.expires_at != expected.expires_at
+    {
+        anyhow::bail!("authority-managed successor launch identity was substituted");
+    }
+    let (
+        HostSessionTransitionIntentStateV3::Applied {
+            claim_id: expected_claim_id,
+            claimant_attempt_id: expected_claimant_attempt_id,
+            authority_revision_before: expected_authority_revision_before,
+            authority_revision_after: expected_authority_revision_after,
+            active_authoritative_participant_id: expected_active_participant_id,
+            resulting_posture: expected_resulting_posture,
+            authority_record_commitment: expected_authority_record_commitment,
+            application_result_ref: expected_application_result_ref,
+            applied_at: expected_applied_at,
+            ..
+        },
+        HostSessionTransitionIntentStateV3::Applied {
+            claim_id: actual_claim_id,
+            claimant_attempt_id: actual_claimant_attempt_id,
+            authority_revision_before: actual_authority_revision_before,
+            authority_revision_after: actual_authority_revision_after,
+            active_authoritative_participant_id: actual_active_participant_id,
+            resulting_posture: actual_resulting_posture,
+            authority_record_commitment: actual_authority_record_commitment,
+            application_result_ref: actual_application_result_ref,
+            applied_at: actual_applied_at,
+            ..
+        },
+    ) = (&expected.state, &actual.state)
+    else {
+        anyhow::bail!("authority-managed successor launch application identity changed");
+    };
+    if actual_claim_id != expected_claim_id
+        || actual_claimant_attempt_id != expected_claimant_attempt_id
+        || actual_authority_revision_before != expected_authority_revision_before
+        || actual_authority_revision_after != expected_authority_revision_after
+        || actual_active_participant_id != expected_active_participant_id
+        || actual_resulting_posture != expected_resulting_posture
+        || actual_authority_record_commitment != expected_authority_record_commitment
+        || actual_application_result_ref != expected_application_result_ref
+        || actual_applied_at != expected_applied_at
+    {
+        anyhow::bail!("authority-managed successor launch application identity was substituted");
+    }
+    Ok(())
 }
 
 #[cfg(unix)]
@@ -4218,6 +4819,63 @@ mod tests {
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     #[cfg(unix)]
     use tokio::net::UnixStream;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn authority_successor_launch_guard_survives_parent_drop_across_exec() {
+        use fs2::FileExt as _;
+        use std::os::fd::AsRawFd as _;
+        use std::os::unix::process::CommandExt as _;
+        use std::process::{Command, Stdio};
+
+        let temp = tempfile::tempdir().expect("launch guard tempdir");
+        let path = temp.path().join("intent.lock");
+        let leader = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(false)
+            .open(&path)
+            .expect("open leader launch guard");
+        leader.lock_exclusive().expect("lock leader launch guard");
+        let fd = leader.as_raw_fd();
+        let mut command = Command::new("/bin/sh");
+        command
+            .args(["-c", "sleep 30"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        unsafe {
+            command.pre_exec(move || {
+                let flags = libc::fcntl(fd, libc::F_GETFD);
+                if flags < 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                if libc::fcntl(fd, libc::F_SETFD, flags & !libc::FD_CLOEXEC) < 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        let mut child = command
+            .spawn()
+            .expect("spawn child holding inherited launch guard");
+        drop(leader);
+
+        let challenger = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .expect("open challenger launch guard");
+        let error = challenger
+            .try_lock_exclusive()
+            .expect_err("child must retain the launch guard after parent drop");
+        assert_eq!(error.kind(), std::io::ErrorKind::WouldBlock);
+
+        child.kill().expect("kill launch-guard child");
+        child.wait().expect("join launch-guard child");
+        challenger
+            .try_lock_exclusive()
+            .expect("launch guard must release after child exit");
+    }
 
     fn with_store(test: impl FnOnce(&AgentRuntimeStateStore)) {
         let authority_env = crate::execution::AuthorityEnvTestGuard::preserve();

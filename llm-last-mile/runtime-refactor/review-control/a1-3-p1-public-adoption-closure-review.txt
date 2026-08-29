@@ -1,0 +1,5 @@
+VERDICT: FINDINGS
+
+- `A13P1-P2-005` — Concurrent retries can still launch duplicate Attach helpers while startup ownership is pending. `current_applied_public_successor` returns the same pending transition (`agents_cmd.rs:2274-2348`), and every caller then spawns through `run_reattach` (`:1240-1259`). The successor launcher has no intent-scoped leader/lock (`control.rs:579-608`); both children may read the same plan, and plan removal treats `NotFound` as success (`:1807-1811`). Each helper can then unlink/rebind the same durable transports (`async_repl.rs:6253-6297`) and treat already-accepted ownership as success (`:5587-5589`), leaving two live helper episodes with one orphaned/unreachable. This violates required duplicate-launch convergence and retry idempotence. Bounded remedy: add an exact transition-intent launch guard so only one leader spawns; followers wait for and join HSA completion without spawning. Add a concurrent retry test asserting one helper PID.
+
+The review was read-only and made no repository changes. Exact live subject fingerprint verified: `sha256:05373565965a647386167de42c6ac96b263750df5c8fe92e9694fcd3dc2ef63c`.

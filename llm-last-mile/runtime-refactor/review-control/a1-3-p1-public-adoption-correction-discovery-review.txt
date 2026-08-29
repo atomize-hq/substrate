@@ -1,0 +1,18 @@
+VERDICT: FINDINGS
+
+A13P1-P2-009 — P2 — `crates/shell/src/execution/agent_runtime/control.rs:695-714`, `:753-766`, `:631-640`; callers at `crates/shell/src/execution/agents_cmd.rs:1072-1099` and `:1307-1329`; incomplete proof at `crates/shell/src/execution/agents_cmd.rs:6461-6523` — An exact already-completed transition is joined only when the launch lock is observed contended. `acquire_authority_managed_successor_launch_permit` first attempts the lock and immediately returns a leader permit when it is free; durable HSA completion is checked only in the contended wait path. A permit containing that free guard then unconditionally persists the plan and spawns another helper.
+
+Failure scenario: Attach startup ownership or ResumeOneTurn post-turn reconciliation commits, then the helper exits and releases its inherited guard. An exact retry correctly reuses the persisted request and HSA transition identity, but uncontended launch-lock acquisition causes a replacement helper launch instead of joining the committed result. For ResumeOneTurn, that helper encounters already-accepted input and returns `submission_outcome_unknown`; for Attach, it recreates transport for an already-accepted transition. The outcome therefore still depends on absence of lock contention and helper lifetime, violating the required idempotent Applied/settled join. The new crash tests stop after rebuilding the exact launch plan and never exercise the permit/launch decision after durable settlement and guard release, so they do not catch this case.
+
+Bounded remediation: check `authority_managed_successor_completion(plan)` before interpreting launch-lock state, and recheck it after acquiring an uncontended guard before spawning. If complete, drop the guard and return a joined-completed permit; only launch the same exact Applied transition when durable completion remains pending. Add deterministic Attach and ResumeOneTurn coverage that settles the actor-owned result, releases the launch guard, retries uncontended through permit acquisition, and asserts a joined result with no new helper or transport.
+
+I reviewed the full five-product-file candidate against baseline `54cf865432fbf7fb3344ddbe83843b81c15c7152`, including public routing, HSA issue/claim/apply and actor reconciliation, retained correlation, Start no-replay behavior, tests, evidence, and exclusions. The remediation does close the original A13P1-P2-008 pre-apply identity loss: the independently run Attach and ResumeOneTurn issue/claim fault tests passed, as did the inherited launch-guard test. The remaining issue is the required post-application/settlement join behavior above.
+
+Independently recomputed product fingerprint: `sha256:4f834a7d02e0c1696d0f1adf99fefe472f8e5d7e37c33eba1ed81b51a8c82c91`; it matches the frozen subject.
+
+Frozen bytes match baseline:
+
+- `auto_attach.rs`: `70e8e344347144971721d3c2ef70a261352282b0b7f2b7788231b297f0944b5e`
+- Complete `launch_hidden_owner_helper`: `f796453a5f16f856d6a278b38694d9521c2f0011d4e4a4ba34160408aeea31c0`
+
+No out-of-fence product change was observed. The only tracked product changes are the five authorized paths; the untracked files are the preserved review-control evidence plus the successor verification artifact.

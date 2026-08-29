@@ -7,23 +7,32 @@ use crate::execution::agent_runtime::auto_attach::SessionAutoAttachClaim;
 use crate::execution::agent_runtime::control::request_private_stop;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::control::PersistedWorldBinding;
+#[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::control::{
-    authoritative_host_toolbox_surface_enabled, launch_hidden_owner_helper,
-    load_hidden_owner_helper_launch_plan, load_public_prompt_source,
-    maybe_compose_prompt_with_authoritative_host_toolbox_contract, persist_runtime_stop_closeout,
-    public_prompt_rendered_exit_code, remove_hidden_owner_helper_launch_plan,
-    run_public_prompt_command, toolbox_transport_path, toolbox_transport_path_for_home,
-    HiddenOwnerHelperLaunchPlan, HiddenOwnerHelperLaunchReceipt, HiddenOwnerHelperParticipantPlan,
-    HiddenOwnerHelperSessionPlan, OwnerHelperMode, PublicPromptAction, PublicPromptCommandRequest,
-    PublicPromptInput, PublicSessionPosture,
+    acquire_authority_managed_successor_launch_permit,
+    launch_authority_managed_successor_owner_helper, load_authority_managed_successor_launch_plan,
+    wait_for_authority_managed_successor_completion, AuthorityManagedSuccessorLaunchPlanV1,
+    ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor,
+};
+use crate::execution::agent_runtime::control::{
+    authoritative_host_toolbox_surface_enabled, load_hidden_owner_helper_launch_plan,
+    load_public_prompt_source, maybe_compose_prompt_with_authoritative_host_toolbox_contract,
+    persist_runtime_stop_closeout, public_prompt_rendered_exit_code,
+    remove_hidden_owner_helper_launch_plan, run_public_prompt_command, toolbox_transport_path,
+    toolbox_transport_path_for_home, HiddenOwnerHelperLaunchPlan, HiddenOwnerHelperLaunchReceipt,
+    HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan, OwnerHelperMode,
+    PublicPromptAction, PublicPromptCommandRequest, PublicPromptInput, PublicSessionPosture,
+};
+#[cfg(all(unix, not(target_os = "linux")))]
+use crate::execution::agent_runtime::control::{
+    launch_hidden_owner_helper, register_hidden_owner_helper_startup_prompt_listener,
 };
 #[cfg(unix)]
 use crate::execution::agent_runtime::control::{
     launch_hidden_owner_helper_for_durable_start, private_stop_transport_path,
     public_prompt_rendered_exit, reconcile_resumed_public_turn_detach_timeout,
-    register_durable_start_startup_prompt_listener,
-    register_hidden_owner_helper_startup_prompt_listener,
-    render_committed_public_start_transaction, render_indeterminate_public_start_transaction,
+    register_durable_start_startup_prompt_listener, render_committed_public_start_transaction,
+    render_indeterminate_public_start_transaction,
     run_hidden_owner_helper_startup_prompt_stream_with_action,
     run_hidden_owner_helper_startup_prompt_stream_with_public_identity,
     verify_public_start_continuity_settled, HiddenOwnerHelperStartupPromptPlan,
@@ -31,9 +40,30 @@ use crate::execution::agent_runtime::control::{
 use crate::execution::agent_runtime::dispatch_contract::LiveToolSupportPosture;
 #[cfg(unix)]
 use crate::execution::agent_runtime::host_session_authority::schema::TimestampV1;
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::host_session_authority::schema::{
+    AgentExecutionScopeV1, HostPostTurnDispositionV1, HostSessionAuthorityPreconditionV1,
+    HostSessionPostureV1, HostSessionTransitionCallerKindV1, HostSessionTransitionCallerV1,
+    HostSessionTransitionModeV1, RuntimeBackendKindV1,
+};
+#[cfg(unix)]
+use crate::execution::agent_runtime::host_session_authority::schema::{
+    StartContinuationHandleHashInputV2, StartContinuationHandleStateV2,
+};
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::host_session_authority::store_schema::{
+    HostSessionTransitionInputHandoffV1, HostSessionTransitionIntentStateV3,
+    HostSessionTransitionIntentV3,
+};
 #[cfg(unix)]
 use crate::execution::agent_runtime::host_session_authority::store_schema::{
     StartTransactionRecordV1, StartTransactionStateV1,
+};
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::host_session_authority::transition::{
+    ApplyHostSessionTransitionRequestV1, ClaimHostSessionTransitionRequestV1,
+    IssueSuccessorTransitionRequestV1, SuccessorTransitionApplicationOutcomeV1,
+    SuccessorTransitionClaimOutcomeV1, SuccessorTransitionIssueOutcomeV1,
 };
 #[cfg(unix)]
 use crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot;
@@ -43,6 +73,8 @@ use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
 use crate::execution::agent_runtime::orchestration_session::{
     OrchestrationSessionPosture, OrchestrationSessionRecord,
 };
+#[cfg(all(unix, not(target_os = "linux")))]
+use crate::execution::agent_runtime::resolve_persisted_host_attach_contract;
 use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
 use crate::execution::agent_runtime::validator::{
     materialize_runtime_descriptor, member_selection_error_exit_code,
@@ -51,14 +83,14 @@ use crate::execution::agent_runtime::validator::{
 };
 #[cfg(unix)]
 use crate::execution::agent_runtime::{
-    resolve_inventory_contract_for_exact_backend, resolve_persisted_host_attach_contract,
-    runtime_realizability_error_exit_code, validate_orchestrator_selection,
-    validate_runtime_realizability, AgentRuntimeParticipantRecord, AgentRuntimeSessionRecord,
-    AgentRuntimeStateStore, AttachLaunchKnobs, AttachModePreference, DispatchBaselineKind,
-    DispatchCallerKind, DispatchCapabilityOverrideSet, DispatchRequestEnvelope,
-    HostExecutionClientStart, PublicAttachAction, PublicControlAction, PublicTurnTargetKind,
-    ResolvedLaunchContract, StartupPromptReplayState, MANUAL_REATTACH_ATTACH_RESTORED_REASON,
-    MEMBER_ROLE, NESTED_ROUTER, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
+    resolve_inventory_contract_for_exact_backend, runtime_realizability_error_exit_code,
+    validate_orchestrator_selection, validate_runtime_realizability, AgentRuntimeParticipantRecord,
+    AgentRuntimeSessionRecord, AgentRuntimeStateStore, AttachLaunchKnobs, AttachModePreference,
+    DispatchBaselineKind, DispatchCallerKind, DispatchCapabilityOverrideSet,
+    DispatchRequestEnvelope, HostExecutionClientStart, PublicAttachAction, PublicControlAction,
+    PublicTurnTargetKind, ResolvedLaunchContract, StartupPromptReplayState,
+    MANUAL_REATTACH_ATTACH_RESTORED_REASON, MEMBER_ROLE, NESTED_ROUTER, ORCHESTRATOR_ROLE,
+    PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
 };
 use crate::execution::cli::{
     AgentAction, AgentCmd, AgentDisableCapabilityArg, AgentDoctorArgs, AgentOwnerHelperArgs,
@@ -78,14 +110,20 @@ use crate::execution::{ReplPersistentSessionClient, ReplSessionStartParams};
 use crate::repl::async_repl::prepare_public_start_authority_before_transport;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
+#[cfg(target_os = "linux")]
+use fs2::FileExt;
+#[cfg(target_os = "linux")]
+use serde::Deserialize;
 use serde::Serialize;
 #[cfg(unix)]
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::ffi::OsString;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader};
+#[cfg(target_os = "linux")]
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 #[cfg(target_os = "linux")]
@@ -308,10 +346,27 @@ fn run_owner_helper(
     args: &AgentOwnerHelperArgs,
     #[cfg(target_os = "linux")] install_context: &InstallBootstrapContextCarrierV1,
 ) -> Result<i32> {
+    #[cfg(target_os = "linux")]
+    let authority_successor = (args
+        .plan_file
+        .parent()
+        .and_then(|path| path.file_name())
+        .and_then(std::ffi::OsStr::to_str)
+        == Some("successor-plans"))
+    .then(|| load_authority_managed_successor_launch_plan(&args.plan_file))
+    .transpose()?;
+    #[cfg(target_os = "linux")]
+    let plan = match authority_successor.as_ref() {
+        Some(successor) => successor.helper_plan.clone(),
+        None => load_hidden_owner_helper_launch_plan(&args.plan_file)?,
+    };
+    #[cfg(not(target_os = "linux"))]
     let plan = load_hidden_owner_helper_launch_plan(&args.plan_file)?;
     remove_hidden_owner_helper_launch_plan(&args.plan_file)?;
     crate::repl::async_repl::run_hidden_owner_helper(
         plan,
+        #[cfg(target_os = "linux")]
+        authority_successor,
         #[cfg(target_os = "linux")]
         install_context.context.intended_host_principal.clone(),
     )
@@ -868,16 +923,247 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
         prompt_file: args.prompt_source.prompt_file.clone(),
     })
     .map_err(normalize_public_prompt_error)?;
+
+    #[cfg(target_os = "linux")]
+    let mut public_successor_guard = acquire_public_successor_request_guard(
+        &substrate_paths::substrate_home()?,
+        &args.session,
+        HostSessionTransitionModeV1::ResumeOneTurn,
+        &public_start_digest(
+            "substrate.public-successor-request.v1",
+            &[
+                args.session.as_bytes(),
+                args.backend.as_bytes(),
+                prompt.prompt_text.as_bytes(),
+            ],
+        ),
+    )
+    .map_err(runtime_start_error)?;
+
+    #[cfg(target_os = "linux")]
+    let hsa_active_identity = {
+        let substrate_home = substrate_paths::substrate_home()?;
+        let state_root_path = substrate_home.join("authority-v1/state-root-v1.json");
+        if state_root_path.exists() {
+            let authority = HostSessionAuthority::from_trusted_root(
+                TrustedAuthorityRoot::open(&substrate_home)
+                    .map_err(|error| runtime_start_error(anyhow::anyhow!(error.to_string())))?,
+            )
+            .map_err(|error| runtime_start_error(anyhow::anyhow!(error.to_string())))?;
+            let root = authority
+                .read_a12b_root()
+                .map_err(|error| runtime_start_error(anyhow::anyhow!(error.to_string())))?;
+            if root.session_namespace_map.contains_key(&args.session) {
+                let current = authority
+                    .resolve_current_exact(&args.session, None)
+                    .map_err(|error| runtime_start_error(anyhow::anyhow!(error.to_string())))?;
+                let backend_id = current.caller.descriptor.backend_id.clone();
+                if backend_id != args.backend {
+                    anyhow::bail!(config_model::user_error(format!(
+                        "backend_not_in_session: orchestration session {} has no exact backend slot for {}",
+                        args.session, args.backend
+                    )));
+                }
+                let context = resolve_command_context(cli)?;
+                let host_toolbox_surface_authoritative = authoritative_host_toolbox_surface_enabled(
+                    &backend_id,
+                    AgentExecutionScope::Host,
+                    ORCHESTRATOR_ROLE,
+                    &context.effective_config,
+                    &context.base_policy,
+                );
+                let exact_prompt = maybe_compose_prompt_with_authoritative_host_toolbox_contract(
+                    &prompt.prompt_text,
+                    host_toolbox_surface_authoritative,
+                );
+                let mut in_flight_resume = None;
+                for intent in root.successor_transition_intent_map.values() {
+                    let HostSessionTransitionIntentStateV3::Applied {
+                        authority_revision_after,
+                        authority_record_commitment,
+                        active_authoritative_participant_id,
+                        post_turn,
+                        ..
+                    } = &intent.state
+                    else {
+                        continue;
+                    };
+                    if intent.mode == HostSessionTransitionModeV1::ResumeOneTurn
+                        && intent.caller.kind == HostSessionTransitionCallerKindV1::PublicCli
+                        && intent.orchestration_session_id == args.session
+                        && intent.target_authoritative_participant_id
+                            == current.caller.participant_id
+                        && active_authoritative_participant_id == &current.caller.participant_id
+                        && *authority_revision_after == current.observation.authority_revision
+                        && authority_record_commitment
+                            == &current.observation.authority_record_commitment
+                        && matches!(
+                            post_turn.as_ref(),
+                            crate::execution::agent_runtime::host_session_authority::store_schema::HostSessionPostTurnApplicationV2::Pending { .. }
+                                | crate::execution::agent_runtime::host_session_authority::store_schema::HostSessionPostTurnApplicationV2::AwaitingObligationCut { .. }
+                        )
+                    {
+                        if in_flight_resume.replace(intent).is_some() {
+                            anyhow::bail!(runtime_start_error(anyhow::anyhow!(
+                                "current HSA authority has ambiguous in-flight public ResumeOneTurn transitions"
+                            )));
+                        }
+                    }
+                }
+                let mut resume_required = matches!(
+                    current.authority.lifecycle_posture,
+                    HostSessionPostureV1::ParkedResumable
+                        | HostSessionPostureV1::DetachedReconciled
+                        | HostSessionPostureV1::AwaitingAttention
+                        | HostSessionPostureV1::StaleRecoverable
+                );
+                if let Some(intent) = in_flight_resume {
+                    let joined = coordinated_applied_public_successor(
+                        &authority,
+                        &root,
+                        &current,
+                        HostSessionTransitionModeV1::ResumeOneTurn,
+                        Some(exact_prompt.as_bytes()),
+                        &public_successor_guard,
+                    )?
+                    .ok_or_else(|| {
+                        runtime_start_error(anyhow::anyhow!(
+                            "in-flight public ResumeOneTurn was not durably applied"
+                        ))
+                    })?;
+                    if joined.intent_id != intent.intent_id {
+                        anyhow::bail!(runtime_start_error(anyhow::anyhow!(
+                            "in-flight public ResumeOneTurn changed durable request identity"
+                        )));
+                    }
+                    match &intent.input_handoff {
+                        HostSessionTransitionInputHandoffV1::Pending { .. } => {
+                            resume_required = true;
+                        }
+                        HostSessionTransitionInputHandoffV1::Accepted { .. } => {
+                            anyhow::bail!(config_model::user_error(
+                                "submission_outcome_unknown: ResumeOneTurn input was already durably accepted; retry will not resubmit the provider prompt"
+                            ));
+                        }
+                        HostSessionTransitionInputHandoffV1::TerminalWithoutAcceptance {
+                            ..
+                        }
+                        | HostSessionTransitionInputHandoffV1::NotApplicable => {
+                            anyhow::bail!(runtime_start_error(anyhow::anyhow!(
+                                "in-flight public ResumeOneTurn input handoff is not retryable"
+                            )));
+                        }
+                    }
+                }
+                if resume_required {
+                    mark_public_successor_request_in_flight(&mut public_successor_guard)
+                        .map_err(runtime_start_error)?;
+                    let mut launch = build_resumed_turn_launch_plan(
+                        &args.session,
+                        &exact_prompt,
+                        Some(&public_successor_guard),
+                    )?;
+                    if launch.helper_plan.descriptor.backend_id != backend_id {
+                        anyhow::bail!(config_model::user_error(format!(
+                            "backend_not_in_session: orchestration session {} has no exact backend slot for {}",
+                            args.session, args.backend
+                        )));
+                    }
+                    let launch_permit = acquire_authority_managed_successor_launch_permit(&launch)
+                        .map_err(runtime_start_error)?;
+                    if launch_permit.joined_completed_launch() {
+                        wait_for_authority_managed_successor_completion(&launch)
+                            .map_err(runtime_start_error)?;
+                        acknowledge_public_successor_request(&public_successor_guard)
+                            .map_err(runtime_start_error)?;
+                        return Ok(());
+                    }
+                    let startup_listener = register_durable_start_startup_prompt_listener(
+                        launch.helper_plan.orchestration_session_id(),
+                        launch.helper_plan.participant_id(),
+                    )
+                    .map_err(runtime_start_error)?;
+                    launch.helper_plan.startup_prompt = Some(HiddenOwnerHelperStartupPromptPlan {
+                        prompt_text: exact_prompt,
+                        stream_path: startup_listener.path().to_path_buf(),
+                        request_key_sha256: None,
+                        prompt_sha256: None,
+                        public_backend_id: None,
+                        public_scope: None,
+                    });
+                    let _successor_launch = launch_authority_managed_successor_owner_helper(
+                        &launch,
+                        launch_permit,
+                        cli.world,
+                        cli.no_world,
+                    )
+                    .map_err(runtime_start_error)?;
+                    run_hidden_owner_helper_startup_prompt_stream_with_action(
+                        startup_listener,
+                        args.json,
+                        PublicPromptAction::Turn,
+                    )
+                    .map_err(normalize_public_prompt_error)?;
+                    wait_for_authority_managed_successor_completion(&launch)
+                        .map_err(runtime_start_error)?;
+                    acknowledge_public_successor_request(&public_successor_guard)
+                        .map_err(runtime_start_error)?;
+                    return Ok(());
+                }
+                match current.authority.lifecycle_posture {
+                    HostSessionPostureV1::ActiveAttached => Some((
+                        current
+                            .authority
+                            .active_authoritative_participant_id
+                            .clone()
+                            .ok_or_else(|| {
+                                runtime_start_error(anyhow::anyhow!(
+                                    "active HSA authority has no authoritative participant"
+                                ))
+                            })?,
+                        backend_id,
+                    )),
+                    HostSessionPostureV1::Terminal | HostSessionPostureV1::Invalid => {
+                        anyhow::bail!(config_model::user_error(format!(
+                            "owner_unreachable: orchestration session {} backend {} is terminal and cannot accept follow-up turns",
+                            args.session, args.backend
+                        )));
+                    }
+                    HostSessionPostureV1::ParkedResumable
+                    | HostSessionPostureV1::DetachedReconciled
+                    | HostSessionPostureV1::AwaitingAttention
+                    | HostSessionPostureV1::StaleRecoverable => unreachable!(
+                        "resumable HSA postures are routed before active target resolution"
+                    ),
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
+
     let store = AgentRuntimeStateStore::new()?;
     let target = store
         .resolve_public_turn_target(&args.session, &args.backend)
         .map_err(|err| config_model::user_error(err.to_string()))?;
     let orchestration_session_id = target.session.orchestration_session_id.clone();
     let backend_id = target.participant.handle.backend_id.clone();
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
+    if let Some((hsa_participant_id, hsa_backend_id)) = hsa_active_identity.as_ref() {
+        if target.participant.handle.participant_id != *hsa_participant_id
+            || backend_id != *hsa_backend_id
+        {
+            anyhow::bail!(runtime_start_error(anyhow::anyhow!(
+                "active public turn target does not match exact current HSA identity"
+            )));
+        }
+    }
+    #[cfg(all(unix, not(target_os = "linux")))]
     let exact_backend_id = backend_id.clone();
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "linux")))]
     if target.session_posture == PublicSessionPosture::DetachedReattachable
         && target.target_kind == PublicTurnTargetKind::Host
     {
@@ -934,7 +1220,20 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
     let resumed_receipt: Option<HiddenOwnerHelperLaunchReceipt> = match target.session_posture {
         PublicSessionPosture::Active => None,
         PublicSessionPosture::DetachedReattachable => match target.target_kind {
-            PublicTurnTargetKind::Host => unreachable!("detached host turns are handled above"),
+            PublicTurnTargetKind::Host => {
+                #[cfg(all(unix, not(target_os = "linux")))]
+                unreachable!("detached host turns are handled above");
+                #[cfg(target_os = "linux")]
+                anyhow::bail!(config_model::user_error(format!(
+                    "unsupported_platform_or_posture: orchestration session {} backend {} has no exact HSA ResumeOneTurn authority",
+                    args.session, args.backend
+                )));
+                #[cfg(not(unix))]
+                anyhow::bail!(config_model::user_error(format!(
+                    "unsupported_platform_or_posture: orchestration session {} backend {} is detached",
+                    args.session, args.backend
+                )));
+            }
             PublicTurnTargetKind::World => {
                 anyhow::bail!(config_model::user_error(format!(
                     "unsupported_platform_or_posture: orchestration session {} backend {} is detached and cannot be recovered through the retained world-member seam without an active host owner; run `substrate agent reattach --session {}` first",
@@ -952,7 +1251,7 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
             )));
         }
     };
-    #[cfg(not(unix))]
+    #[cfg(not(all(unix, not(target_os = "linux"))))]
     let _ = &resumed_receipt;
 
     run_public_prompt_command(
@@ -968,7 +1267,7 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
     )
     .map_err(normalize_public_prompt_error)?;
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "linux")))]
     if let Some(receipt) = resumed_receipt.as_ref() {
         wait_for_resumed_public_turn_detach(
             &store,
@@ -979,9 +1278,115 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
         .map_err(runtime_start_error)?;
     }
 
+    #[cfg(target_os = "linux")]
+    acknowledge_public_successor_request(&public_successor_guard).map_err(runtime_start_error)?;
+
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
+fn run_reattach(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {
+    let store = AgentRuntimeStateStore::new()?;
+    let mut public_successor_guard = acquire_public_successor_request_guard(
+        &substrate_paths::substrate_home()?,
+        &args.session,
+        HostSessionTransitionModeV1::Attach,
+        &public_start_digest(
+            "substrate.public-successor-request.v1",
+            &[args.session.as_bytes(), b"reattach"],
+        ),
+    )
+    .map_err(runtime_start_error)?;
+    mark_public_successor_request_in_flight(&mut public_successor_guard)
+        .map_err(runtime_start_error)?;
+    let plan = build_attach_launch_plan_with_public_coordination(
+        &args.session,
+        AttachLaunchIntent::Reattach,
+        &public_successor_guard,
+    )?;
+    let launch_permit =
+        acquire_authority_managed_successor_launch_permit(&plan).map_err(runtime_start_error)?;
+    let has_legacy_control_target = store
+        .resolve_public_control_target(&args.session, PublicControlAction::Stop)
+        .is_ok();
+    let claimed_auto_attach = match store
+        .claim_session_auto_attach(&args.session, "manual::reattach")
+        .map_err(runtime_start_error)?
+    {
+        SessionAutoAttachClaim::Claimed {
+            obligation_id,
+            attach_claim_owner,
+        } => Some((obligation_id, attach_claim_owner)),
+        SessionAutoAttachClaim::NoCandidate { .. }
+        | SessionAutoAttachClaim::AlreadyClaimed { .. } => None,
+    };
+    let successor_launch = match launch_authority_managed_successor_owner_helper(
+        &plan,
+        launch_permit,
+        cli.world,
+        cli.no_world,
+    ) {
+        Ok(receipt) => receipt,
+        Err(err) => {
+            if let Err(release_err) = release_manual_reattach_auto_attach_claim(
+                &store,
+                &args.session,
+                claimed_auto_attach.as_ref(),
+            ) {
+                return Err(runtime_start_error(anyhow::anyhow!(
+                    "manual reattach launch failed: {err}; additionally failed to release the session auto-attach claim: {release_err}"
+                )));
+            }
+            return Err(runtime_start_error(err));
+        }
+    };
+    let receipt = &successor_launch.launch_receipt;
+    if receipt.orchestration_session_id != args.session {
+        anyhow::bail!(runtime_start_error(anyhow::anyhow!(
+            "authority-managed owner-helper attached orchestration session {} instead of requested session {}",
+            receipt.orchestration_session_id,
+            args.session
+        )));
+    }
+    if let Err(err) = wait_for_authority_managed_successor_completion(&plan) {
+        if let Err(release_err) = release_manual_reattach_auto_attach_claim(
+            &store,
+            &args.session,
+            claimed_auto_attach.as_ref(),
+        ) {
+            return Err(runtime_start_error(anyhow::anyhow!(
+                "manual reattach authority reconciliation failed: {err}; additionally failed to release the session auto-attach claim: {release_err}"
+            )));
+        }
+        return Err(runtime_start_error(err));
+    }
+
+    if has_legacy_control_target {
+        store
+            .settle_session_auto_attach_after_attach_restored(
+                &receipt.orchestration_session_id,
+                MANUAL_REATTACH_ATTACH_RESTORED_REASON,
+            )
+            .map_err(runtime_start_error)?;
+    }
+
+    render_agent_control_result(
+        args.json,
+        &AgentControlResultJson {
+            action: "reattach",
+            orchestration_session_id: &receipt.orchestration_session_id,
+            backend_id: &receipt.backend_id,
+            scope: "host",
+            state: "active",
+            warnings: Vec::new(),
+            participant_id: Some(&receipt.participant_id),
+            source_orchestration_session_id: None,
+        },
+    )?;
+    acknowledge_public_successor_request(&public_successor_guard).map_err(runtime_start_error)
+}
+
+#[cfg(not(target_os = "linux"))]
 fn run_reattach(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {
     let store = AgentRuntimeStateStore::new()?;
     let plan = build_attach_launch_plan(&args.session, AttachLaunchIntent::Reattach)?;
@@ -1798,6 +2203,39 @@ fn build_public_attach_runtime_continuity(
     })
 }
 
+#[cfg(target_os = "linux")]
+fn build_attach_launch_plan(
+    orchestration_session_id: &str,
+    intent: AttachLaunchIntent,
+) -> Result<AuthorityManagedSuccessorLaunchPlanV1> {
+    let store = AgentRuntimeStateStore::new()?;
+    build_attach_launch_plan_with_store(&store, orchestration_session_id, intent)
+}
+
+#[cfg(target_os = "linux")]
+fn build_attach_launch_plan_with_store(
+    _store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    intent: AttachLaunchIntent,
+) -> Result<AuthorityManagedSuccessorLaunchPlanV1> {
+    build_authority_managed_successor_launch_plan(orchestration_session_id, intent, None, None)
+}
+
+#[cfg(target_os = "linux")]
+fn build_attach_launch_plan_with_public_coordination(
+    orchestration_session_id: &str,
+    intent: AttachLaunchIntent,
+    coordination: &PublicSuccessorRequestGuardV1,
+) -> Result<AuthorityManagedSuccessorLaunchPlanV1> {
+    build_authority_managed_successor_launch_plan(
+        orchestration_session_id,
+        intent,
+        None,
+        Some(coordination),
+    )
+}
+
+#[cfg(not(target_os = "linux"))]
 fn build_attach_launch_plan(
     orchestration_session_id: &str,
     intent: AttachLaunchIntent,
@@ -1806,6 +2244,7 @@ fn build_attach_launch_plan(
     build_attach_launch_plan_with_store(&store, orchestration_session_id, intent)
 }
 
+#[cfg(not(target_os = "linux"))]
 fn build_attach_launch_plan_with_store(
     store: &AgentRuntimeStateStore,
     orchestration_session_id: &str,
@@ -1864,7 +2303,706 @@ fn build_attach_launch_plan_with_store(
     })
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
+fn exact_settled_start_continuation(
+    authority: &HostSessionAuthority,
+    root: &crate::execution::agent_runtime::host_session_authority::store_schema::StateRootV3,
+    resolved: &crate::execution::agent_runtime::host_session_authority::ResolvedCurrentAuthorityV1,
+) -> Result<(
+    crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
+    String,
+)> {
+    let mut settled = None;
+    for reference in &resolved.authority.internal_resume_handle_refs {
+        if reference.schema_version != 2 {
+            continue;
+        }
+        let bytes = authority
+            .read_authority_object_v2_at(root.root_revision, reference)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        let handle: StartContinuationHandleHashInputV2 =
+            crate::execution::agent_runtime::host_session_authority::canonical_json::from_slice(
+                &bytes,
+            )
+            .context("decode durable Start continuation handle")?;
+        if handle.authority_store_id != root.authority_store_id
+            || handle.orchestration_session_id != resolved.authority.orchestration_session_id
+            || handle.backend_id != resolved.caller.descriptor.backend_id
+            || handle.protocol != resolved.caller.descriptor.protocol
+            || handle.internal_uaa_session_id.trim().is_empty()
+        {
+            anyhow::bail!(config_model::user_error(
+                "owner_unreachable: durable Start continuation does not authenticate current authority"
+            ));
+        }
+        if matches!(handle.state, StartContinuationHandleStateV2::Settled { .. }) {
+            if settled
+                .replace((reference.clone(), handle.internal_uaa_session_id))
+                .is_some()
+            {
+                anyhow::bail!(config_model::user_error(
+                    "owner_unreachable: current authority has ambiguous settled Start continuations"
+                ));
+            }
+        }
+    }
+    settled.ok_or_else(|| {
+        config_model::user_error(
+            "owner_unreachable: current authority has no settled durable Start continuation",
+        )
+    })
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct PublicSuccessorRequestStateV1 {
+    schema_version: u32,
+    request_commitment: String,
+    mode: HostSessionTransitionModeV1,
+    orchestration_session_id: String,
+    intent_id: String,
+    issuer_request_id: String,
+    target_participant_id: String,
+    participant_lease_token: String,
+    run_id: String,
+    claim_id: String,
+    claimant_attempt_id: String,
+    #[serde(default)]
+    acknowledged: bool,
+}
+
+#[cfg(target_os = "linux")]
+struct PublicSuccessorRequestGuardV1 {
+    _lock_file: File,
+    state_root: PathBuf,
+    state_path: PathBuf,
+    state: PublicSuccessorRequestStateV1,
+}
+
+#[cfg(target_os = "linux")]
+fn acquire_public_successor_request_guard(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+    mode: HostSessionTransitionModeV1,
+    request_commitment: &str,
+) -> Result<PublicSuccessorRequestGuardV1> {
+    match mode {
+        HostSessionTransitionModeV1::Attach | HostSessionTransitionModeV1::ResumeOneTurn => {}
+        HostSessionTransitionModeV1::Start => {
+            anyhow::bail!("public successor request coordination cannot use Start")
+        }
+    }
+    let key = public_start_digest(
+        "substrate.public-successor-coordinate.v1",
+        &[orchestration_session_id.as_bytes()],
+    );
+    let root = substrate_home
+        .join("runtime-control")
+        .join("durable-start")
+        .join("public-successor-requests");
+    fs::create_dir_all(&root).with_context(|| format!("failed to create {}", root.display()))?;
+    let lock_path = root.join(format!("{key}.lock"));
+    let state_path = root.join(format!("{key}.json"));
+    let file = fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        .open(&lock_path)
+        .with_context(|| {
+            format!(
+                "failed to open public successor request guard {}",
+                lock_path.display()
+            )
+        })?;
+    match file.try_lock_exclusive() {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+            file.lock_exclusive().with_context(|| {
+                format!(
+                    "failed to join the in-flight public successor request for {orchestration_session_id}"
+                )
+            })?;
+        }
+        Err(error) => {
+            return Err(anyhow::Error::new(error).context(format!(
+                "failed to coordinate public successor request for {orchestration_session_id}"
+            )));
+        }
+    }
+
+    let existing = if state_path.exists() {
+        let bytes = fs::read(&state_path)
+            .with_context(|| format!("failed to read {}", state_path.display()))?;
+        Some(
+            serde_json::from_slice::<PublicSuccessorRequestStateV1>(&bytes)
+                .with_context(|| format!("failed to decode {}", state_path.display()))?,
+        )
+    } else {
+        None
+    };
+    let existing_identity_is_well_formed = existing.as_ref().is_some_and(|state| {
+        state.schema_version == 1
+            && !state.request_commitment.is_empty()
+            && !state.orchestration_session_id.is_empty()
+            && !state.intent_id.is_empty()
+            && !state.issuer_request_id.is_empty()
+            && !state.target_participant_id.is_empty()
+            && !state.participant_lease_token.is_empty()
+            && !state.run_id.is_empty()
+            && !state.claim_id.is_empty()
+            && !state.claimant_attempt_id.is_empty()
+    });
+    if existing.is_some() && !existing_identity_is_well_formed {
+        anyhow::bail!(
+            "durable public successor request identity is malformed for {orchestration_session_id}"
+        );
+    }
+    let existing_is_exact = existing_identity_is_well_formed
+        && existing.as_ref().is_some_and(|state| {
+            state.request_commitment == request_commitment
+                && state.mode == mode
+                && state.orchestration_session_id == orchestration_session_id
+        });
+    if existing.as_ref().is_some_and(|state| !state.acknowledged) && !existing_is_exact {
+        anyhow::bail!(
+            "durable public successor request identity conflicts with the retry for {orchestration_session_id}"
+        );
+    }
+    let state = if existing_is_exact {
+        existing.expect("checked exact durable public successor request")
+    } else {
+        PublicSuccessorRequestStateV1 {
+            schema_version: 1,
+            request_commitment: request_commitment.to_string(),
+            mode,
+            orchestration_session_id: orchestration_session_id.to_string(),
+            intent_id: format!("intent_{}", Uuid::now_v7()),
+            issuer_request_id: format!("request_{}", Uuid::now_v7()),
+            target_participant_id: format!("ash_{}", Uuid::now_v7()),
+            participant_lease_token: Uuid::now_v7().to_string(),
+            run_id: Uuid::now_v7().to_string(),
+            claim_id: format!("claim_{}", Uuid::now_v7()),
+            claimant_attempt_id: format!("attempt_{}", Uuid::now_v7()),
+            acknowledged: false,
+        }
+    };
+    persist_public_successor_request_state(&root, &state_path, &state)?;
+    Ok(PublicSuccessorRequestGuardV1 {
+        _lock_file: file,
+        state_root: root,
+        state_path,
+        state,
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn acknowledge_public_successor_request(
+    coordination: &PublicSuccessorRequestGuardV1,
+) -> Result<()> {
+    let bytes = fs::read(&coordination.state_path)
+        .with_context(|| format!("failed to read {}", coordination.state_path.display()))?;
+    let mut persisted = serde_json::from_slice::<PublicSuccessorRequestStateV1>(&bytes)
+        .with_context(|| format!("failed to decode {}", coordination.state_path.display()))?;
+    if persisted != coordination.state {
+        anyhow::bail!("durable public successor request changed before acknowledgement");
+    }
+    persisted.acknowledged = true;
+    persist_public_successor_request_state(
+        &coordination.state_root,
+        &coordination.state_path,
+        &persisted,
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn mark_public_successor_request_in_flight(
+    coordination: &mut PublicSuccessorRequestGuardV1,
+) -> Result<()> {
+    if !coordination.state.acknowledged {
+        return Ok(());
+    }
+    let bytes = fs::read(&coordination.state_path)
+        .with_context(|| format!("failed to read {}", coordination.state_path.display()))?;
+    let persisted = serde_json::from_slice::<PublicSuccessorRequestStateV1>(&bytes)
+        .with_context(|| format!("failed to decode {}", coordination.state_path.display()))?;
+    if persisted != coordination.state {
+        anyhow::bail!("durable public successor request changed before launch");
+    }
+    coordination.state.acknowledged = false;
+    persist_public_successor_request_state(
+        &coordination.state_root,
+        &coordination.state_path,
+        &coordination.state,
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn persist_public_successor_request_state(
+    root: &Path,
+    state_path: &Path,
+    state: &PublicSuccessorRequestStateV1,
+) -> Result<()> {
+    let temp_path = root.join(format!(".request-state-{}.tmp", Uuid::now_v7()));
+    let bytes = serde_json::to_vec_pretty(state)?;
+    let mut temp = fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(&temp_path)
+        .with_context(|| format!("failed to create {}", temp_path.display()))?;
+    use std::io::Write as _;
+    temp.write_all(&bytes)
+        .with_context(|| format!("failed to write {}", temp_path.display()))?;
+    temp.sync_all()
+        .with_context(|| format!("failed to sync {}", temp_path.display()))?;
+    fs::rename(&temp_path, state_path).with_context(|| {
+        format!(
+            "failed to publish public successor request state {}",
+            state_path.display()
+        )
+    })?;
+    File::open(root)
+        .with_context(|| format!("failed to open {}", root.display()))?
+        .sync_all()
+        .with_context(|| format!("failed to sync {}", root.display()))?;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn current_applied_public_successor(
+    authority: &HostSessionAuthority,
+    root: &crate::execution::agent_runtime::host_session_authority::store_schema::StateRootV3,
+    resolved: &crate::execution::agent_runtime::host_session_authority::ResolvedCurrentAuthorityV1,
+    mode: HostSessionTransitionModeV1,
+    transition_input: Option<&[u8]>,
+) -> Result<Option<HostSessionTransitionIntentV3>> {
+    let Some(active_participant_id) = resolved
+        .authority
+        .active_authoritative_participant_id
+        .as_deref()
+    else {
+        return Ok(None);
+    };
+    let mut exact = None;
+    for intent in root.successor_transition_intent_map.values() {
+        let HostSessionTransitionIntentStateV3::Applied {
+            authority_revision_after,
+            authority_record_commitment,
+            active_authoritative_participant_id: applied_participant_id,
+            startup_ownership,
+            post_turn,
+            ..
+        } = &intent.state
+        else {
+            continue;
+        };
+        if intent.mode != mode
+            || intent.orchestration_session_id != resolved.authority.orchestration_session_id
+            || intent.caller.kind != HostSessionTransitionCallerKindV1::PublicCli
+            || intent.target_authoritative_participant_id != active_participant_id
+            || applied_participant_id != active_participant_id
+            || *authority_revision_after != resolved.observation.authority_revision
+            || authority_record_commitment != &resolved.observation.authority_record_commitment
+        {
+            continue;
+        }
+        let joinable = match mode {
+            HostSessionTransitionModeV1::Attach => matches!(
+                startup_ownership.as_ref(),
+                crate::execution::agent_runtime::host_session_authority::store_schema::HostSessionStartupOwnershipApplicationV1::Pending { .. }
+            ),
+            HostSessionTransitionModeV1::ResumeOneTurn => {
+                matches!(
+                    intent.input_handoff,
+                    HostSessionTransitionInputHandoffV1::Pending { .. }
+                ) && matches!(
+                    post_turn.as_ref(),
+                    crate::execution::agent_runtime::host_session_authority::store_schema::HostSessionPostTurnApplicationV2::Pending { .. }
+                )
+            }
+            HostSessionTransitionModeV1::Start => false,
+        };
+        if !joinable {
+            continue;
+        }
+        match (transition_input, intent.transition_input_ref.as_ref()) {
+            (Some(expected), Some(reference)) => {
+                let actual = authority
+                    .read_authority_object_v2_at(root.root_revision, reference)
+                    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                if actual != expected {
+                    continue;
+                }
+            }
+            (None, None) => {}
+            _ => continue,
+        }
+        if exact.replace(intent.clone()).is_some() {
+            anyhow::bail!(
+                "current HSA authority has ambiguous applied public successor transitions"
+            );
+        }
+    }
+    Ok(exact)
+}
+
+#[cfg(target_os = "linux")]
+fn coordinated_applied_public_successor(
+    authority: &HostSessionAuthority,
+    root: &crate::execution::agent_runtime::host_session_authority::store_schema::StateRootV3,
+    resolved: &crate::execution::agent_runtime::host_session_authority::ResolvedCurrentAuthorityV1,
+    mode: HostSessionTransitionModeV1,
+    transition_input: Option<&[u8]>,
+    coordination: &PublicSuccessorRequestGuardV1,
+) -> Result<Option<HostSessionTransitionIntentV3>> {
+    let Some(intent) = root
+        .successor_transition_intent_map
+        .get(&coordination.state.intent_id)
+    else {
+        if root.successor_transition_intent_map.values().any(|intent| {
+            intent.orchestration_session_id == coordination.state.orchestration_session_id
+                && intent.mode == mode
+                && intent.caller.kind == HostSessionTransitionCallerKindV1::PublicCli
+                && matches!(
+                    intent.state,
+                    HostSessionTransitionIntentStateV3::Issued
+                        | HostSessionTransitionIntentStateV3::Claimed { .. }
+                )
+        }) {
+            anyhow::bail!(
+                "durable public successor request identity conflicts with a nonterminal HSA transition"
+            );
+        }
+        return Ok(None);
+    };
+    if intent.mode != mode
+        || intent.orchestration_session_id != coordination.state.orchestration_session_id
+        || intent.issuer_request_id != coordination.state.issuer_request_id
+        || intent.target_authoritative_participant_id != coordination.state.target_participant_id
+        || intent.run_id != coordination.state.run_id
+        || intent.caller.kind != HostSessionTransitionCallerKindV1::PublicCli
+    {
+        anyhow::bail!("coordinated public successor intent identity was substituted");
+    }
+    let exact_request = IssueSuccessorTransitionRequestV1 {
+        intent_id: intent.intent_id.clone(),
+        issuer_request_id: intent.issuer_request_id.clone(),
+        mode: intent.mode,
+        authority_precondition: intent.authority_precondition.clone(),
+        orchestration_session_id: intent.orchestration_session_id.clone(),
+        shell_trace_session_id: intent.shell_trace_session_id.clone(),
+        caller: intent.caller.clone(),
+        source_authoritative_participant_id: intent.source_authoritative_participant_id.clone(),
+        target_authoritative_participant_id: intent.target_authoritative_participant_id.clone(),
+        target_participant_lease_token: coordination
+            .state
+            .participant_lease_token
+            .as_bytes()
+            .to_vec(),
+        run_id: intent.run_id.clone(),
+        resulting_authoritative_lineage: intent.resulting_authoritative_lineage.clone(),
+        workspace_binding: intent.workspace_binding.clone(),
+        world_binding: intent.world_binding.clone(),
+        resume_handle_ref: intent.resume_handle_ref.clone(),
+        transition_input: transition_input.map(<[u8]>::to_vec),
+        post_turn_disposition: intent.post_turn_disposition,
+    };
+    let joined = match authority
+        .issue_successor(resolved, &exact_request)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?
+    {
+        SuccessorTransitionIssueOutcomeV1::Joined(intent) => intent,
+        SuccessorTransitionIssueOutcomeV1::Issued(_) => {
+            anyhow::bail!("coordinated public successor exact join issued a replacement intent")
+        }
+    };
+    if joined != *intent {
+        anyhow::bail!("coordinated public successor exact join changed durable identity");
+    }
+    match &joined.state {
+        HostSessionTransitionIntentStateV3::Applied { .. } => Ok(Some(joined)),
+        HostSessionTransitionIntentStateV3::Issued
+        | HostSessionTransitionIntentStateV3::Claimed { .. } => Ok(None),
+        HostSessionTransitionIntentStateV3::Rejected { .. }
+        | HostSessionTransitionIntentStateV3::Expired { .. } => {
+            anyhow::bail!("coordinated public successor is durably terminal without application")
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn build_authority_managed_successor_launch_plan(
+    orchestration_session_id: &str,
+    launch_intent: AttachLaunchIntent,
+    transition_input: Option<&str>,
+    coordination: Option<&PublicSuccessorRequestGuardV1>,
+) -> Result<AuthorityManagedSuccessorLaunchPlanV1> {
+    let authority = public_start_authority()?;
+    let mut resolved = authority
+        .resolve_current_exact(orchestration_session_id, None)
+        .map_err(|error| config_model::user_error(format!("owner_unreachable: {error}")))?;
+    let mode = match launch_intent {
+        AttachLaunchIntent::Reattach => HostSessionTransitionModeV1::Attach,
+        AttachLaunchIntent::DetachedTurn => HostSessionTransitionModeV1::ResumeOneTurn,
+    };
+    if matches!(mode, HostSessionTransitionModeV1::ResumeOneTurn) != transition_input.is_some() {
+        anyhow::bail!(config_model::user_error(
+            "owner_unreachable: authority-managed ResumeOneTurn requires the exact public turn input"
+        ));
+    }
+    let root = authority
+        .read_a12b_root()
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let (resume_handle_ref, internal_uaa_session_id) =
+        exact_settled_start_continuation(&authority, &root, &resolved)?;
+
+    let existing_applied = match coordination {
+        Some(coordination) => coordinated_applied_public_successor(
+            &authority,
+            &root,
+            &resolved,
+            mode,
+            transition_input.map(str::as_bytes),
+            coordination,
+        )?,
+        None => current_applied_public_successor(
+            &authority,
+            &root,
+            &resolved,
+            mode,
+            transition_input.map(str::as_bytes),
+        )?,
+    };
+    let applied = match existing_applied {
+        Some(applied) => applied,
+        None => {
+            let source_participant_id = resolved
+                .authority
+                .active_authoritative_participant_id
+                .clone()
+                .ok_or_else(|| {
+                    config_model::user_error(
+                        "owner_unreachable: current HSA authority has no active participant",
+                    )
+                })?;
+            let target_participant_id = coordination
+                .map(|coordination| coordination.state.target_participant_id.clone())
+                .unwrap_or_else(|| format!("ash_{}", Uuid::now_v7()));
+            let lease_token = coordination
+                .map(|coordination| coordination.state.participant_lease_token.clone())
+                .unwrap_or_else(|| Uuid::now_v7().to_string());
+            let run_id = coordination
+                .map(|coordination| coordination.state.run_id.clone())
+                .unwrap_or_else(|| Uuid::now_v7().to_string());
+            let mut lineage = resolved.authority.authoritative_participant_lineage.clone();
+            lineage.push(target_participant_id.clone());
+            let request = IssueSuccessorTransitionRequestV1 {
+                intent_id: coordination
+                    .map(|coordination| coordination.state.intent_id.clone())
+                    .unwrap_or_else(|| format!("intent_{}", Uuid::now_v7())),
+                issuer_request_id: coordination
+                    .map(|coordination| coordination.state.issuer_request_id.clone())
+                    .unwrap_or_else(|| format!("request_{}", Uuid::now_v7())),
+                mode,
+                authority_precondition: HostSessionAuthorityPreconditionV1::ExpectedRevision {
+                    authority_revision: resolved.observation.authority_revision,
+                    authority_record_commitment: resolved
+                        .observation
+                        .authority_record_commitment
+                        .clone(),
+                    active_authoritative_participant_id: source_participant_id.clone(),
+                    authoritative_lineage_commitment: resolved
+                        .observation
+                        .authoritative_lineage_commitment
+                        .clone(),
+                    lifecycle_posture: resolved.authority.lifecycle_posture,
+                },
+                orchestration_session_id: orchestration_session_id.to_string(),
+                shell_trace_session_id: resolved.authority.shell_trace_session_id.clone(),
+                caller: HostSessionTransitionCallerV1 {
+                    kind: HostSessionTransitionCallerKindV1::PublicCli,
+                    caller_participant_id: Some(source_participant_id.clone()),
+                    auto_attach_obligation_id: None,
+                    auto_attach_claim_owner: None,
+                },
+                source_authoritative_participant_id: Some(source_participant_id),
+                target_authoritative_participant_id: target_participant_id,
+                target_participant_lease_token: lease_token.into_bytes(),
+                run_id,
+                resulting_authoritative_lineage: lineage,
+                workspace_binding: resolved.authority.workspace_binding.clone(),
+                world_binding: resolved.authority.world_binding.clone(),
+                resume_handle_ref: matches!(mode, HostSessionTransitionModeV1::ResumeOneTurn)
+                    .then_some(resume_handle_ref.clone()),
+                transition_input: transition_input.map(|input| input.as_bytes().to_vec()),
+                post_turn_disposition: matches!(mode, HostSessionTransitionModeV1::ResumeOneTurn)
+                    .then_some(HostPostTurnDispositionV1::ReconcileToAttentionParkOrTerminal),
+            };
+            let issued = match authority
+                .issue_successor(&resolved, &request)
+                .map_err(|error| anyhow::anyhow!(error.to_string()))?
+            {
+                SuccessorTransitionIssueOutcomeV1::Issued(intent)
+                | SuccessorTransitionIssueOutcomeV1::Joined(intent) => intent,
+            };
+            maybe_inject_public_successor_launcher_crash("after_issue")?;
+            let claim_id = coordination
+                .map(|coordination| coordination.state.claim_id.clone())
+                .unwrap_or_else(|| format!("claim_{}", Uuid::now_v7()));
+            let claimant_attempt_id = coordination
+                .map(|coordination| coordination.state.claimant_attempt_id.clone())
+                .unwrap_or_else(|| format!("attempt_{}", Uuid::now_v7()));
+            let claimed = match authority
+                .claim_successor(&ClaimHostSessionTransitionRequestV1 {
+                    intent_id: issued.intent_id.clone(),
+                    issuer_request_id: issued.issuer_request_id.clone(),
+                    payload_commitment: issued.payload_commitment.clone(),
+                    expected_intent_revision: issued.intent_revision,
+                    claim_id: claim_id.clone(),
+                    claimant_attempt_id,
+                })
+                .map_err(|error| anyhow::anyhow!(error.to_string()))?
+            {
+                SuccessorTransitionClaimOutcomeV1::Claimed(intent)
+                | SuccessorTransitionClaimOutcomeV1::Reclaimed(intent)
+                | SuccessorTransitionClaimOutcomeV1::Joined(intent) => intent,
+            };
+            maybe_inject_public_successor_launcher_crash("after_claim")?;
+            let HostSessionTransitionIntentStateV3::Claimed { claim_revision, .. } = &claimed.state
+            else {
+                anyhow::bail!(
+                    "authority-managed successor claim did not retain exact claim evidence"
+                );
+            };
+            let applied = match authority
+                .apply_successor(&ApplyHostSessionTransitionRequestV1 {
+                    intent_id: claimed.intent_id.clone(),
+                    issuer_request_id: claimed.issuer_request_id.clone(),
+                    payload_commitment: claimed.payload_commitment.clone(),
+                    expected_intent_revision: claimed.intent_revision,
+                    claim_id,
+                    expected_claim_revision: *claim_revision,
+                })
+                .map_err(|error| anyhow::anyhow!(error.to_string()))?
+            {
+                SuccessorTransitionApplicationOutcomeV1::Applied(intent)
+                | SuccessorTransitionApplicationOutcomeV1::Joined(intent) => intent,
+            };
+            maybe_inject_public_successor_launcher_crash("after_apply")?;
+            applied
+        }
+    };
+    resolved = authority
+        .resolve_current_exact(orchestration_session_id, None)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let root = authority
+        .read_a12b_root()
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let lease_token = match coordination {
+        Some(coordination) => coordination
+            .state
+            .participant_lease_token
+            .as_bytes()
+            .to_vec(),
+        None => authority
+            .read_authority_object_v2_at(
+                root.root_revision,
+                &applied.target_participant_lease_token_ref,
+            )
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+    };
+    let descriptor = &resolved.caller.descriptor;
+    let descriptor = ResolvedRuntimeDescriptor {
+        agent_id: descriptor.agent_id.clone(),
+        backend_id: descriptor.backend_id.clone(),
+        backend_kind: match descriptor.backend_kind {
+            RuntimeBackendKindV1::Codex => ResolvedRuntimeBackendKind::Codex,
+            RuntimeBackendKindV1::ClaudeCode => ResolvedRuntimeBackendKind::ClaudeCode,
+        },
+        protocol: descriptor.protocol.clone(),
+        execution_scope: match descriptor.execution_scope {
+            AgentExecutionScopeV1::Host => AgentExecutionScope::Host,
+            AgentExecutionScopeV1::World => AgentExecutionScope::World,
+        },
+        binary_path: descriptor.binary_path.clone(),
+    };
+    let world_binding = applied.world_binding.as_ref();
+    let helper_plan = HiddenOwnerHelperLaunchPlan {
+        mode: launch_intent.owner_helper_mode(),
+        descriptor,
+        session: HiddenOwnerHelperSessionPlan {
+            orchestration_session_id: applied.orchestration_session_id.clone(),
+            shell_trace_session_id: applied.shell_trace_session_id.clone(),
+            workspace_root: applied
+                .workspace_binding
+                .workspace_root
+                .physical_path
+                .clone(),
+            world_id: world_binding.map(|binding| binding.world_id.clone()),
+            world_generation: world_binding.map(|binding| binding.world_generation),
+        },
+        participant: HiddenOwnerHelperParticipantPlan {
+            participant_id: applied.target_authoritative_participant_id.clone(),
+            lease_token: String::from_utf8(lease_token)
+                .context("authority-managed participant lease token is not UTF-8")?,
+            run_id: applied.run_id.clone(),
+            resumed_from_participant_id: applied.source_authoritative_participant_id.clone(),
+            internal_uaa_session_id: Some(internal_uaa_session_id),
+        },
+        host_attach_contract: None,
+        startup_prompt: None,
+        source_orchestration_session_id: None,
+    };
+    Ok(AuthorityManagedSuccessorLaunchPlanV1 {
+        schema_version: 1,
+        authority_store_id: root.authority_store_id.clone(),
+        helper_plan,
+        applied_transition: applied,
+    })
+}
+
+#[cfg(all(target_os = "linux", test))]
+thread_local! {
+    static PUBLIC_SUCCESSOR_LAUNCHER_FAULT: std::cell::Cell<Option<&'static str>> =
+        const { std::cell::Cell::new(None) };
+}
+
+#[cfg(all(target_os = "linux", test))]
+fn inject_public_successor_launcher_fault_for_test(stage: &'static str) {
+    PUBLIC_SUCCESSOR_LAUNCHER_FAULT.set(Some(stage));
+}
+
+#[cfg(all(target_os = "linux", test))]
+fn maybe_inject_public_successor_launcher_crash(stage: &str) -> Result<()> {
+    let injected = PUBLIC_SUCCESSOR_LAUNCHER_FAULT.take();
+    if injected == Some(stage) {
+        anyhow::bail!("injected launcher crash {stage}");
+    }
+    PUBLIC_SUCCESSOR_LAUNCHER_FAULT.set(injected);
+    Ok(())
+}
+
+#[cfg(all(target_os = "linux", not(test)))]
+fn maybe_inject_public_successor_launcher_crash(_stage: &str) -> Result<()> {
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn build_resumed_turn_launch_plan(
+    orchestration_session_id: &str,
+    transition_input: &str,
+    coordination: Option<&PublicSuccessorRequestGuardV1>,
+) -> Result<AuthorityManagedSuccessorLaunchPlanV1> {
+    build_authority_managed_successor_launch_plan(
+        orchestration_session_id,
+        AttachLaunchIntent::DetachedTurn,
+        Some(transition_input),
+        coordination,
+    )
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
 fn build_resumed_turn_launch_plan(
     orchestration_session_id: &str,
 ) -> Result<HiddenOwnerHelperLaunchPlan> {
@@ -4493,7 +5631,31 @@ mod tests {
     use crate::execution::agent_runtime::dispatch_contract::{
         LiveToolSupportState, LiveToolValidationState,
     };
+    #[cfg(target_os = "linux")]
+    use crate::execution::agent_runtime::host_session_authority::schema::{
+        AgentDescriptorV1, AuthorityObjectCommitmentV1, HostAttachCapabilitiesV1,
+        HostAttachExecutionClientStartV1, HostAttachLaunchKnobsV1, HostAttachModePreferenceV1,
+        HostPostTurnProtocolActorV1, HostPostTurnProtocolEventKindV1, HostPostTurnTerminalReasonV1,
+        HostStartupOwnershipProtocolActorV1, HostStartupOwnershipProtocolEventV1,
+        PolicyObjectHashInputV1, WorkspaceBindingV1,
+    };
+    #[cfg(target_os = "linux")]
+    use crate::execution::agent_runtime::host_session_authority::start_continuity::{
+        EstablishStartContinuationRequestV1, SettleStartTurnRequestV1, StartContinuationOutcomeV1,
+        StartTransactionBeginOutcomeV1, StartTurnCompletionKindV1, StartTurnSettlementOutcomeV1,
+    };
+    #[cfg(target_os = "linux")]
+    use crate::execution::agent_runtime::host_session_authority::store_schema::HostSessionTransitionIntentStateV2;
+    #[cfg(target_os = "linux")]
+    use crate::execution::agent_runtime::host_session_authority::transition::{
+        IssueHostSessionTransitionRequestV1, PostTurnResolutionOutcomeV1, ResolvePostTurnRequestV1,
+        ResolveStartupOwnershipRequestV1, StartContractMaterialV1,
+        StartupOwnershipResolutionOutcomeV1, TransitionApplicationOutcomeV1,
+        TransitionClaimOutcomeV1, TransitionIssueOutcomeV1,
+    };
     use crate::execution::agent_runtime::mapping::PURE_AGENT_PROTOCOL;
+    #[cfg(target_os = "linux")]
+    use crate::execution::agent_runtime::state_store::AcceptedWorldWorkIdentityV1;
     use crate::execution::agent_runtime::{
         mapping::AgentRuntimeBackendKind, AgentRuntimeParticipantRecord, AgentRuntimeSessionState,
         OrchestrationObligationAttachState, OrchestrationObligationKind,
@@ -4511,6 +5673,138 @@ mod tests {
     use transport_api_types::InstallBootstrapContextV1;
 
     const SHARED_WORLD_METADATA_ROOT_TEST_ENV: &str = "SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT";
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn concurrent_public_successor_requests_reuse_one_durable_identity_before_issuance() {
+        let temp = tempfile::tempdir().expect("public successor coordination tempdir");
+        let first_home = temp.path().to_path_buf();
+        let second_home = first_home.clone();
+        let (first_ready_tx, first_ready_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let first = std::thread::spawn(move || {
+            let guard = acquire_public_successor_request_guard(
+                &first_home,
+                "session-exact",
+                HostSessionTransitionModeV1::Attach,
+                "request-commitment",
+            )
+            .expect("acquire first public successor request");
+            first_ready_tx
+                .send(guard.state.clone())
+                .expect("publish first request identity");
+            release_rx.recv().expect("release first request guard");
+        });
+        let first_state = first_ready_rx
+            .recv()
+            .expect("receive first request identity");
+        let second = std::thread::spawn(move || {
+            acquire_public_successor_request_guard(
+                &second_home,
+                "session-exact",
+                HostSessionTransitionModeV1::Attach,
+                "request-commitment",
+            )
+            .expect("acquire contended public successor request")
+        });
+        std::thread::sleep(Duration::from_millis(200));
+        assert!(
+            !second.is_finished(),
+            "concurrent request must wait before reading or issuing HSA state"
+        );
+        release_tx.send(()).expect("release first request");
+        first.join().expect("join first request owner");
+        let second_guard = second.join().expect("join second request owner");
+        assert_eq!(second_guard.state, first_state);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn uncontended_public_successor_retry_reuses_persisted_identity_after_launcher_drop() {
+        let temp = tempfile::tempdir().expect("public successor coordination tempdir");
+        for (session, mode) in [
+            (
+                "session-attach-crash-retry",
+                HostSessionTransitionModeV1::Attach,
+            ),
+            (
+                "session-resume-crash-retry",
+                HostSessionTransitionModeV1::ResumeOneTurn,
+            ),
+        ] {
+            let first = acquire_public_successor_request_guard(
+                temp.path(),
+                session,
+                mode,
+                "request-commitment",
+            )
+            .expect("acquire first public successor request");
+            let first_state = first.state.clone();
+            drop(first);
+
+            let mismatch = match acquire_public_successor_request_guard(
+                temp.path(),
+                session,
+                mode,
+                "substituted-request-commitment",
+            ) {
+                Ok(_) => panic!("mismatched crash retry must fail closed"),
+                Err(error) => error,
+            };
+            assert!(mismatch.to_string().contains("identity conflicts"));
+
+            let retry = acquire_public_successor_request_guard(
+                temp.path(),
+                session,
+                mode,
+                "request-commitment",
+            )
+            .expect("acquire uncontended crash retry");
+
+            assert_eq!(retry.state, first_state);
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn acknowledged_public_successor_exact_joins_then_distinct_request_rotates_identity() {
+        let temp = tempfile::tempdir().expect("public successor coordination tempdir");
+        let first = acquire_public_successor_request_guard(
+            temp.path(),
+            "session-acknowledged",
+            HostSessionTransitionModeV1::Attach,
+            "request-commitment",
+        )
+        .expect("acquire first public successor request");
+        let first_state = first.state.clone();
+        acknowledge_public_successor_request(&first).expect("acknowledge public successor result");
+        drop(first);
+        let mut joined = acquire_public_successor_request_guard(
+            temp.path(),
+            "session-acknowledged",
+            HostSessionTransitionModeV1::Attach,
+            "request-commitment",
+        )
+        .expect("exact acknowledged retry must join durable request identity");
+        assert_eq!(joined.state.intent_id, first_state.intent_id);
+        assert!(joined.state.acknowledged);
+        mark_public_successor_request_in_flight(&mut joined)
+            .expect("mark exact acknowledged identity in flight before HSA issue");
+        assert!(!joined.state.acknowledged);
+        acknowledge_public_successor_request(&joined)
+            .expect("re-acknowledge exact public successor identity");
+        drop(joined);
+
+        let sequential = acquire_public_successor_request_guard(
+            temp.path(),
+            "session-acknowledged",
+            HostSessionTransitionModeV1::Attach,
+            "distinct-request-commitment",
+        )
+        .expect("acquire distinct later public successor request");
+        assert_ne!(sequential.state.intent_id, first_state.intent_id);
+        assert!(!sequential.state.acknowledged);
+    }
 
     #[cfg(unix)]
     #[test]
@@ -4678,6 +5972,860 @@ mod tests {
         let result = test(&store);
         std::env::remove_var(SHARED_WORLD_METADATA_ROOT_TEST_ENV);
         result
+    }
+
+    #[cfg(unix)]
+    fn with_private_hsa_state_store<T>(
+        test: impl FnOnce(&AgentRuntimeStateStore, &Path) -> T,
+    ) -> T {
+        use std::os::unix::fs::PermissionsExt;
+
+        let authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("safe authority test parent");
+        let temp = tempfile::Builder::new()
+            .prefix("substrate-agents-cmd-")
+            .tempdir_in(safe_parent)
+            .expect("private authority tempdir");
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))
+            .expect("private authority tempdir mode");
+        authority_env.install_home(temp.path());
+        let shared_world_root = temp.path().join("shared-worlds");
+        let _shared_world_root_guard = EnvVarGuard::set(
+            SHARED_WORLD_METADATA_ROOT_TEST_ENV,
+            shared_world_root.as_path(),
+        );
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        let result = test(&store, &shared_world_root);
+        std::env::remove_var(SHARED_WORLD_METADATA_ROOT_TEST_ENV);
+        result
+    }
+
+    #[cfg(target_os = "linux")]
+    fn hsa_test_timestamp(value: &str) -> TimestampV1 {
+        TimestampV1::parse(value).expect("valid HSA test timestamp")
+    }
+
+    #[cfg(target_os = "linux")]
+    fn seed_settled_public_start_authority(orchestration_session_id: &str) {
+        let authority = public_start_authority().expect("open private public Start authority");
+        let root = authority.bootstrap().expect("bootstrap private authority");
+        let workspace_binding = WorkspaceBindingV1 {
+            workspace_root: root.bootstrap_home.clone(),
+            authority_store_root: root.bootstrap_home.clone(),
+            authority_store_id: root.authority_store_id,
+        };
+        let request = IssueHostSessionTransitionRequestV1 {
+            intent_id: "intent-start-crash-recovery".into(),
+            issuer_request_id: "request-start-crash-recovery".into(),
+            mode: HostSessionTransitionModeV1::Start,
+            authority_precondition: HostSessionAuthorityPreconditionV1::ExpectedAbsent,
+            orchestration_session_id: orchestration_session_id.into(),
+            shell_trace_session_id: "trace-start-crash-recovery".into(),
+            caller: HostSessionTransitionCallerV1 {
+                kind: HostSessionTransitionCallerKindV1::PublicCli,
+                caller_participant_id: None,
+                auto_attach_obligation_id: None,
+                auto_attach_claim_owner: None,
+            },
+            source_authoritative_participant_id: None,
+            target_authoritative_participant_id: "participant-start-crash-recovery".into(),
+            target_participant_lease_token: b"lease-start-crash-recovery".to_vec(),
+            run_id: "run-start-crash-recovery".into(),
+            resulting_authoritative_lineage: vec!["participant-start-crash-recovery".into()],
+            workspace_binding: workspace_binding.clone(),
+            world_binding: None,
+            start_contract: StartContractMaterialV1 {
+                descriptor: AgentDescriptorV1 {
+                    schema_version: 1,
+                    agent_id: "codex".into(),
+                    backend_id: "cli:codex-host".into(),
+                    backend_kind: RuntimeBackendKindV1::Codex,
+                    protocol: "substrate.agent.session".into(),
+                    execution_scope: AgentExecutionScopeV1::Host,
+                    binary_path: "/usr/bin/codex".into(),
+                },
+                policy: PolicyObjectHashInputV1 {
+                    schema_version: 1,
+                    policy_revision: "policy-crash-recovery".into(),
+                    canonical_policy_snapshot_sha256: "a".repeat(64),
+                },
+                capabilities: HostAttachCapabilitiesV1 {
+                    session_resume: true,
+                    session_fork: true,
+                    session_stop: true,
+                    status_snapshot: true,
+                    event_stream: true,
+                },
+                launch_knobs: HostAttachLaunchKnobsV1 {
+                    requested_execution_scope: AgentExecutionScopeV1::Host,
+                    host_execution_client_start: HostAttachExecutionClientStartV1::StartNow,
+                    attach_mode_preference: HostAttachModePreferenceV1::ContinuityPreferred,
+                },
+            },
+            transition_input: None,
+        };
+        let TransitionIssueOutcomeV1::Issued(issued) = authority
+            .issue_start_at(
+                &request,
+                hsa_test_timestamp("2026-08-29T12:00:00.000000000Z"),
+                300,
+            )
+            .expect("issue seed Start")
+        else {
+            panic!("seed Start must issue");
+        };
+        let claim_request = ClaimHostSessionTransitionRequestV1 {
+            intent_id: issued.intent_id.clone(),
+            issuer_request_id: issued.issuer_request_id.clone(),
+            payload_commitment: issued.payload_commitment.clone(),
+            expected_intent_revision: issued.intent_revision,
+            claim_id: "claim-start-crash-recovery".into(),
+            claimant_attempt_id: "attempt-start-crash-recovery".into(),
+        };
+        let TransitionClaimOutcomeV1::Claimed(claimed) = authority
+            .claim_start_at(
+                &claim_request,
+                hsa_test_timestamp("2026-08-29T12:00:01.000000000Z"),
+                30,
+            )
+            .expect("claim seed Start")
+        else {
+            panic!("seed Start must claim");
+        };
+        let HostSessionTransitionIntentStateV2::Claimed { claim_revision, .. } = claimed.state
+        else {
+            panic!("seed Start claim must retain claim evidence");
+        };
+        let TransitionApplicationOutcomeV1::Applied(applied) = authority
+            .apply_start_at(
+                &ApplyHostSessionTransitionRequestV1 {
+                    intent_id: claimed.intent_id,
+                    issuer_request_id: claimed.issuer_request_id,
+                    payload_commitment: claimed.payload_commitment,
+                    expected_intent_revision: claimed.intent_revision,
+                    claim_id: claim_request.claim_id,
+                    expected_claim_revision: claim_revision,
+                },
+                hsa_test_timestamp("2026-08-29T12:00:02.000000000Z"),
+            )
+            .expect("apply seed Start")
+        else {
+            panic!("seed Start must apply");
+        };
+        let HostSessionTransitionIntentStateV2::Applied {
+            application_result_ref,
+            authority_revision_after,
+            ..
+        } = &applied.state
+        else {
+            panic!("seed Start must remain applied");
+        };
+        let root = authority.read_a12a_root().expect("read applied Start root");
+        let registration = EstablishStartContinuationRequestV1 {
+            start_transaction_id: "stx-crash-recovery".into(),
+            request_key_sha256: "b".repeat(64),
+            authority_store_id: root.authority_store_id.clone(),
+            orchestration_session_id: request.orchestration_session_id.clone(),
+            intent_id: request.intent_id.clone(),
+            issuer_request_id: request.issuer_request_id.clone(),
+            payload_commitment: applied.payload_commitment.clone(),
+            application_result_ref: application_result_ref.clone(),
+            run_id: request.run_id.clone(),
+            expected_authority_revision: *authority_revision_after,
+            authoritative_participant_id: request.target_authoritative_participant_id.clone(),
+            backend_id: request.start_contract.descriptor.backend_id.clone(),
+            protocol: request.start_contract.descriptor.protocol.clone(),
+            exchange_id: "exchange-start-crash-recovery".into(),
+            exchange_sequence: 1,
+            provider_event_kind: "turn.exchange_opened".into(),
+            exchange_evidence_sha256: "c".repeat(64),
+            internal_uaa_session_id: "uaa-session-crash-recovery".into(),
+            observed_at: hsa_test_timestamp("2026-08-29T12:00:04.000000000Z"),
+        };
+        let transaction = StartTransactionRecordV1 {
+            schema_version: 1,
+            transaction_id: registration.start_transaction_id.clone(),
+            request_key_sha256: registration.request_key_sha256.clone(),
+            prompt_sha256: "d".repeat(64),
+            authority_store_id: registration.authority_store_id.clone(),
+            orchestration_session_id: registration.orchestration_session_id.clone(),
+            shell_trace_session_id: request.shell_trace_session_id.clone(),
+            authoritative_participant_id: registration.authoritative_participant_id.clone(),
+            backend_id: registration.backend_id.clone(),
+            protocol: registration.protocol.clone(),
+            workspace_root: workspace_binding.workspace_root.physical_path.clone(),
+            world_id: None,
+            world_generation: None,
+            public_backend_id: registration.backend_id.clone(),
+            public_scope: "host".into(),
+            start_intent_id: registration.intent_id.clone(),
+            start_issuer_request_id: registration.issuer_request_id.clone(),
+            start_payload_commitment: registration.payload_commitment.clone(),
+            start_application_result_ref: registration.application_result_ref.clone(),
+            start_run_id: registration.run_id.clone(),
+            start_authority_revision: registration.expected_authority_revision,
+            created_at: hsa_test_timestamp("2026-08-29T12:00:02.000000000Z"),
+            updated_at: hsa_test_timestamp("2026-08-29T12:00:02.000000000Z"),
+            state: StartTransactionStateV1::PromptNotSubmitted,
+        };
+        assert!(matches!(
+            authority
+                .begin_start_transaction(&transaction)
+                .expect("begin Start transaction"),
+            StartTransactionBeginOutcomeV1::Applied(_)
+        ));
+        authority
+            .mark_start_prompt_submission_no_replay_barrier(
+                &registration.start_transaction_id,
+                &registration.request_key_sha256,
+                hsa_test_timestamp("2026-08-29T12:00:03.000000000Z"),
+            )
+            .expect("commit Start no-replay barrier");
+        let StartContinuationOutcomeV1::Applied(registered) = authority
+            .establish_start_continuation(&registration)
+            .expect("establish seed Start continuation")
+        else {
+            panic!("seed Start continuation must apply");
+        };
+        let settlement = SettleStartTurnRequestV1 {
+            start_transaction_id: registration.start_transaction_id.clone(),
+            request_key_sha256: registration.request_key_sha256.clone(),
+            authority_store_id: registration.authority_store_id.clone(),
+            orchestration_session_id: registration.orchestration_session_id.clone(),
+            intent_id: registration.intent_id.clone(),
+            issuer_request_id: registration.issuer_request_id.clone(),
+            payload_commitment: registration.payload_commitment.clone(),
+            application_result_ref: registration.application_result_ref.clone(),
+            run_id: registration.run_id.clone(),
+            authoritative_participant_id: registration.authoritative_participant_id.clone(),
+            backend_id: registration.backend_id.clone(),
+            protocol: registration.protocol.clone(),
+            registered_resume_handle_ref: registered.resume_handle_ref,
+            expected_authority_revision: registered.authority_revision_after,
+            protocol_actor: HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant {
+                participant_id: registration.authoritative_participant_id.clone(),
+            },
+            event_id: "event-start-crash-recovery".into(),
+            event_sequence: 2,
+            provider_event_kind: "turn.completed".into(),
+            thread_id: registration.internal_uaa_session_id,
+            turn_id: "turn-start-crash-recovery".into(),
+            completion_evidence_sha256: "e".repeat(64),
+            kind: StartTurnCompletionKindV1::ResumableClean,
+            obligation_ledger_read: None,
+            completed_at: hsa_test_timestamp("2026-08-29T12:00:05.000000000Z"),
+        };
+        assert!(matches!(
+            authority
+                .settle_start_turn(&settlement)
+                .expect("settle seed Start turn"),
+            StartTurnSettlementOutcomeV1::Applied(_)
+        ));
+        let settled = authority
+            .resolve_current_exact(orchestration_session_id, None)
+            .expect("resolve settled seed Start authority");
+        assert_eq!(
+            settled.authority.lifecycle_posture,
+            HostSessionPostureV1::ParkedResumable
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    fn opaque_successor_commitment_for_guard_test(
+        commitment: &AuthorityObjectCommitmentV1,
+    ) -> substrate_common::OpaqueAuthorityCommitmentV1 {
+        match commitment {
+            AuthorityObjectCommitmentV1::CanonicalSha256 { digest_hex } => {
+                substrate_common::OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                    digest_hex: digest_hex.clone(),
+                }
+            }
+            AuthorityObjectCommitmentV1::StoreHmacSha256 {
+                key_id,
+                domain,
+                digest_hex,
+            } => substrate_common::OpaqueAuthorityCommitmentV1::StoreHmacSha256 {
+                key_id: key_id.clone(),
+                domain: domain.clone(),
+                digest_hex: digest_hex.clone(),
+            },
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn settle_authority_managed_successor_for_guard_test(
+        plan: &AuthorityManagedSuccessorLaunchPlanV1,
+    ) {
+        let authority = public_start_authority().expect("open successor guard test authority");
+        match plan.applied_transition.mode {
+            HostSessionTransitionModeV1::Attach => {
+                let request = ResolveStartupOwnershipRequestV1 {
+                    intent_id: plan.applied_transition.intent_id.clone(),
+                    issuer_request_id: plan.applied_transition.issuer_request_id.clone(),
+                    payload_commitment: plan.applied_transition.payload_commitment.clone(),
+                    protocol_actor:
+                        HostStartupOwnershipProtocolActorV1::TargetAuthoritativeParticipant {
+                            participant_id: plan
+                                .applied_transition
+                                .target_authoritative_participant_id
+                                .clone(),
+                        },
+                    protocol_event: HostStartupOwnershipProtocolEventV1::OwnershipAccepted {
+                        ownership_acknowledgement_id: "guard-test-attach-accepted".into(),
+                    },
+                    observed_at: hsa_test_timestamp("2026-08-30T12:01:30.000000000Z"),
+                };
+                assert!(matches!(
+                    authority
+                        .resolve_startup_ownership_at(
+                            &request,
+                            hsa_test_timestamp("2026-08-30T12:01:31.000000000Z"),
+                        )
+                        .expect("settle Attach startup ownership for guard test"),
+                    StartupOwnershipResolutionOutcomeV1::ResolvedSuccessor(_)
+                ));
+            }
+            HostSessionTransitionModeV1::ResumeOneTurn => {
+                let HostSessionTransitionIntentStateV3::Applied {
+                    claim_id,
+                    claimant_attempt_id,
+                    authority_revision_after,
+                    ..
+                } = &plan.applied_transition.state
+                else {
+                    panic!("successor guard test requires an Applied ResumeOneTurn")
+                };
+                let request = ResolvePostTurnRequestV1 {
+                    intent_id: plan.applied_transition.intent_id.clone(),
+                    issuer_request_id: plan.applied_transition.issuer_request_id.clone(),
+                    payload_commitment: plan.applied_transition.payload_commitment.clone(),
+                    protocol_actor: HostPostTurnProtocolActorV1::LaunchApplicationClaimant {
+                        claim_id: claim_id.clone(),
+                        claimant_attempt_id: claimant_attempt_id.clone(),
+                    },
+                    event_id: "guard-test-resume-terminal".into(),
+                    event_sequence: 1,
+                    kind: HostPostTurnProtocolEventKindV1::TerminalFailure {
+                        reason: HostPostTurnTerminalReasonV1::ResumeRuntimeCreationRejected,
+                    },
+                    emitted_at: hsa_test_timestamp("2026-08-30T12:01:30.000000000Z"),
+                    acceptance_record_id: "guard-test-acceptance".into(),
+                    acceptance_record_revision: 1,
+                    stream_id: "guard-test-stream".into(),
+                    accepted_work_identity: AcceptedWorldWorkIdentityV1::RetainedTurn {
+                        active_run_id: plan.applied_transition.run_id.clone(),
+                        message_id: "guard-test-message".into(),
+                        target_participant_id: plan
+                            .applied_transition
+                            .target_authoritative_participant_id
+                            .clone(),
+                    },
+                    host_transition_correlation:
+                        substrate_common::HostTransitionWorkCorrelationV1 {
+                            schema_version: 1,
+                            authority_store_id: plan.authority_store_id.clone(),
+                            orchestration_session_id: plan
+                                .applied_transition
+                                .orchestration_session_id
+                                .clone(),
+                            authoritative_participant_id: plan
+                                .applied_transition
+                                .target_authoritative_participant_id
+                                .clone(),
+                            transition_intent_id: plan.applied_transition.intent_id.clone(),
+                            transition_intent_revision_observed: plan
+                                .applied_transition
+                                .intent_revision,
+                            transition_run_id: plan.applied_transition.run_id.clone(),
+                            transition_payload_commitment:
+                                opaque_successor_commitment_for_guard_test(
+                                    &plan.applied_transition.payload_commitment,
+                                ),
+                            authority_revision_observed: *authority_revision_after,
+                        },
+                    completed_at: hsa_test_timestamp("2026-08-30T12:01:31.000000000Z"),
+                };
+                assert!(matches!(
+                    authority
+                        .resolve_post_turn(&request)
+                        .expect("settle ResumeOneTurn post-turn result for guard test"),
+                    PostTurnResolutionOutcomeV1::Applied(_)
+                ));
+            }
+            HostSessionTransitionModeV1::Start => {
+                panic!("Start does not use the authority-managed successor guard")
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn with_applied_public_successor_for_guard_test(
+        mode: HostSessionTransitionModeV1,
+        test: impl FnOnce(AuthorityManagedSuccessorLaunchPlanV1),
+    ) {
+        with_private_hsa_state_store(|_, _| {
+            let orchestration_session_id = match mode {
+                HostSessionTransitionModeV1::Attach => "session-attach-completion-guard",
+                HostSessionTransitionModeV1::ResumeOneTurn => "session-resume-completion-guard",
+                HostSessionTransitionModeV1::Start => {
+                    panic!("Start does not use the authority-managed successor guard")
+                }
+            };
+            seed_settled_public_start_authority(orchestration_session_id);
+            let substrate_home = substrate_paths::substrate_home().expect("private substrate home");
+            let request_guard = acquire_public_successor_request_guard(
+                &substrate_home,
+                orchestration_session_id,
+                mode,
+                "successor-completion-guard-request",
+            )
+            .expect("acquire public successor request guard for completion race");
+            let plan = build_authority_managed_successor_launch_plan(
+                orchestration_session_id,
+                match mode {
+                    HostSessionTransitionModeV1::Attach => AttachLaunchIntent::Reattach,
+                    HostSessionTransitionModeV1::ResumeOneTurn => AttachLaunchIntent::DetachedTurn,
+                    HostSessionTransitionModeV1::Start => unreachable!(),
+                },
+                matches!(mode, HostSessionTransitionModeV1::ResumeOneTurn)
+                    .then_some("successor completion guard prompt"),
+                Some(&request_guard),
+            )
+            .expect("build Applied successor plan for completion guard test");
+            drop(request_guard);
+            test(plan);
+        });
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn completed_public_successor_retry_joins_without_uncontended_relaunch() {
+        for mode in [
+            HostSessionTransitionModeV1::Attach,
+            HostSessionTransitionModeV1::ResumeOneTurn,
+        ] {
+            with_applied_public_successor_for_guard_test(mode, |plan| {
+                let original_permit = acquire_authority_managed_successor_launch_permit(&plan)
+                    .expect("acquire original successor launch permit");
+                assert!(!original_permit.joined_completed_launch());
+                settle_authority_managed_successor_for_guard_test(&plan);
+                drop(original_permit);
+
+                let authority = public_start_authority().expect("reopen successor test authority");
+                let completed_root = authority
+                    .read_a12b_root()
+                    .expect("read completed successor root");
+                let retry_permit = acquire_authority_managed_successor_launch_permit(&plan)
+                    .expect("exact completed retry must join");
+                assert!(
+                    retry_permit.joined_completed_launch(),
+                    "an uncontended completed retry must not regain launch leadership"
+                );
+                let receipt = launch_authority_managed_successor_owner_helper(
+                    &plan,
+                    retry_permit,
+                    false,
+                    true,
+                )
+                .expect("joined completion must not spawn a helper");
+                assert_eq!(receipt.launch_receipt.helper_pid, 0);
+                assert_eq!(
+                    authority
+                        .read_a12b_root()
+                        .expect("read HSA after completed exact join"),
+                    completed_root,
+                    "completed exact join must not create a successor identity"
+                );
+
+                let mut substituted_plan = plan.clone();
+                substituted_plan.applied_transition.issued_at =
+                    hsa_test_timestamp("2026-08-29T12:09:59.000000000Z");
+                let mismatch =
+                    match acquire_authority_managed_successor_launch_permit(&substituted_plan) {
+                        Ok(_) => panic!("substituted completed identity must fail closed"),
+                        Err(error) => error,
+                    };
+                assert!(mismatch.to_string().contains("identity was substituted"));
+                assert_eq!(
+                    authority
+                        .read_a12b_root()
+                        .expect("read HSA after completed identity mismatch"),
+                    completed_root,
+                    "identity mismatch must neither join nor relaunch"
+                );
+            });
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn public_successor_completion_between_probe_and_guard_acquisition_joins_without_relaunch() {
+        for mode in [
+            HostSessionTransitionModeV1::Attach,
+            HostSessionTransitionModeV1::ResumeOneTurn,
+        ] {
+            with_applied_public_successor_for_guard_test(mode, |plan| {
+                let hook_plan = plan.clone();
+                crate::execution::agent_runtime::control::inject_authority_successor_completion_race_for_test(
+                    move || settle_authority_managed_successor_for_guard_test(&hook_plan),
+                );
+                let retry_permit = acquire_authority_managed_successor_launch_permit(&plan)
+                    .expect("completion race retry must exact-join");
+                assert!(
+                    retry_permit.joined_completed_launch(),
+                    "completion committed after the first probe must suppress leadership"
+                );
+                let authority = public_start_authority().expect("reopen raced successor authority");
+                let completed_root = authority
+                    .read_a12b_root()
+                    .expect("read raced completed successor root");
+                let receipt = launch_authority_managed_successor_owner_helper(
+                    &plan,
+                    retry_permit,
+                    false,
+                    true,
+                )
+                .expect("raced joined completion must not spawn a helper");
+                assert_eq!(receipt.launch_receipt.helper_pid, 0);
+                assert_eq!(
+                    authority
+                        .read_a12b_root()
+                        .expect("read HSA after raced exact join"),
+                    completed_root,
+                    "raced completion join must not create a successor identity"
+                );
+                assert_eq!(completed_root.successor_transition_intent_map.len(), 1);
+                assert!(completed_root
+                    .successor_transition_intent_map
+                    .contains_key(&plan.applied_transition.intent_id));
+            });
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn assert_public_successor_static_identity_preserved(
+        actual: &HostSessionTransitionIntentV3,
+        original: &HostSessionTransitionIntentV3,
+    ) {
+        assert_eq!(actual.intent_id, original.intent_id);
+        assert_eq!(actual.issuer_request_id, original.issuer_request_id);
+        assert_eq!(actual.mode, original.mode);
+        assert_eq!(
+            actual.authority_precondition,
+            original.authority_precondition
+        );
+        assert_eq!(
+            actual.orchestration_session_id,
+            original.orchestration_session_id
+        );
+        assert_eq!(
+            actual.shell_trace_session_id,
+            original.shell_trace_session_id
+        );
+        assert_eq!(actual.caller, original.caller);
+        assert_eq!(
+            actual.source_authoritative_participant_id,
+            original.source_authoritative_participant_id
+        );
+        assert_eq!(
+            actual.target_authoritative_participant_id,
+            original.target_authoritative_participant_id
+        );
+        assert_eq!(
+            actual.target_participant_lease_token_ref,
+            original.target_participant_lease_token_ref
+        );
+        assert_eq!(actual.run_id, original.run_id);
+        assert_eq!(
+            actual.resulting_authoritative_lineage,
+            original.resulting_authoritative_lineage
+        );
+        assert_eq!(actual.workspace_binding, original.workspace_binding);
+        assert_eq!(actual.world_binding, original.world_binding);
+        assert_eq!(actual.descriptor_ref, original.descriptor_ref);
+        assert_eq!(
+            actual.host_attach_contract_ref,
+            original.host_attach_contract_ref
+        );
+        assert_eq!(actual.resume_handle_ref, original.resume_handle_ref);
+        assert_eq!(actual.transition_input_ref, original.transition_input_ref);
+        assert_eq!(actual.post_turn_disposition, original.post_turn_disposition);
+        assert_eq!(actual.transport_payload_ref, original.transport_payload_ref);
+        assert_eq!(actual.payload_commitment, original.payload_commitment);
+    }
+
+    #[cfg(target_os = "linux")]
+    fn assert_public_successor_launcher_crash_recovery(
+        mode: HostSessionTransitionModeV1,
+        crash_after: &'static str,
+    ) {
+        with_private_hsa_state_store(|_, _| {
+            let orchestration_session_id = match mode {
+                HostSessionTransitionModeV1::Attach => "session-attach-launcher-crash",
+                HostSessionTransitionModeV1::ResumeOneTurn => {
+                    "session-resume-one-turn-launcher-crash"
+                }
+                HostSessionTransitionModeV1::Start => panic!("Start is not a successor mode"),
+            };
+            seed_settled_public_start_authority(orchestration_session_id);
+            let substrate_home = substrate_paths::substrate_home().expect("private substrate home");
+            let transition_input = matches!(mode, HostSessionTransitionModeV1::ResumeOneTurn)
+                .then_some("exact public successor transition input");
+            let launch_intent = match mode {
+                HostSessionTransitionModeV1::Attach => AttachLaunchIntent::Reattach,
+                HostSessionTransitionModeV1::ResumeOneTurn => AttachLaunchIntent::DetachedTurn,
+                HostSessionTransitionModeV1::Start => unreachable!(),
+            };
+            let request_commitment = "exact-public-successor-request-commitment";
+            let first = acquire_public_successor_request_guard(
+                &substrate_home,
+                orchestration_session_id,
+                mode,
+                request_commitment,
+            )
+            .expect("acquire initial public successor request guard");
+            let durable_request = first.state.clone();
+            let request_state_root = first.state_root.clone();
+            let request_state_path = first.state_path.clone();
+            inject_public_successor_launcher_fault_for_test(crash_after);
+            let crash = build_authority_managed_successor_launch_plan(
+                orchestration_session_id,
+                launch_intent,
+                transition_input,
+                Some(&first),
+            )
+            .expect_err("launcher fault must interrupt before apply");
+            assert!(crash.to_string().contains(crash_after));
+
+            let authority = public_start_authority().expect("reopen public Start authority");
+            let after_crash = authority.read_a12b_root().expect("read HSA after crash");
+            assert_eq!(after_crash.successor_transition_intent_map.len(), 1);
+            let original = after_crash
+                .successor_transition_intent_map
+                .get(&durable_request.intent_id)
+                .expect("original durable successor intent")
+                .clone();
+            assert_eq!(
+                original.issuer_request_id,
+                durable_request.issuer_request_id
+            );
+            assert_eq!(
+                original.target_authoritative_participant_id,
+                durable_request.target_participant_id
+            );
+            assert_eq!(original.run_id, durable_request.run_id);
+            assert_eq!(original.mode, mode);
+            assert!(match (&original.state, crash_after) {
+                (HostSessionTransitionIntentStateV3::Issued, "after_issue") => true,
+                (
+                    HostSessionTransitionIntentStateV3::Claimed {
+                        claim_id,
+                        claimant_attempt_id,
+                        ..
+                    },
+                    "after_claim",
+                ) => {
+                    claim_id == &durable_request.claim_id
+                        && claimant_attempt_id == &durable_request.claimant_attempt_id
+                }
+                _ => false,
+            });
+            if transition_input.is_some() {
+                assert!(original.transition_input_ref.is_some());
+            } else {
+                assert!(original.transition_input_ref.is_none());
+            }
+            drop(first);
+
+            let mismatch = match acquire_public_successor_request_guard(
+                &substrate_home,
+                orchestration_session_id,
+                mode,
+                "substituted-public-successor-request-commitment",
+            ) {
+                Ok(_) => panic!("mismatched retry identity must fail closed"),
+                Err(error) => error,
+            };
+            assert!(mismatch.to_string().contains("identity conflicts"));
+            assert_eq!(
+                authority.read_a12b_root().expect("read HSA after mismatch"),
+                after_crash,
+                "a mismatched retry must not mutate durable HSA state"
+            );
+
+            let mut substituted_request = durable_request.clone();
+            substituted_request.intent_id = "intent-substituted-crash-retry".into();
+            persist_public_successor_request_state(
+                &request_state_root,
+                &request_state_path,
+                &substituted_request,
+            )
+            .expect("inject conflicting persisted request identity");
+            let conflicting_retry = acquire_public_successor_request_guard(
+                &substrate_home,
+                orchestration_session_id,
+                mode,
+                request_commitment,
+            )
+            .expect("acquire substituted durable retry identity");
+            let conflict = build_authority_managed_successor_launch_plan(
+                orchestration_session_id,
+                launch_intent,
+                transition_input,
+                Some(&conflicting_retry),
+            )
+            .expect_err("persisted identity conflict must fail before successor issuance");
+            assert!(conflict.to_string().contains("identity conflicts"));
+            assert_eq!(
+                authority
+                    .read_a12b_root()
+                    .expect("read HSA after persisted identity conflict"),
+                after_crash,
+                "persisted identity conflict must not strand a successor transition"
+            );
+            drop(conflicting_retry);
+            persist_public_successor_request_state(
+                &request_state_root,
+                &request_state_path,
+                &durable_request,
+            )
+            .expect("restore exact durable request identity after conflict proof");
+
+            let retry = acquire_public_successor_request_guard(
+                &substrate_home,
+                orchestration_session_id,
+                mode,
+                request_commitment,
+            )
+            .expect("acquire uncontended exact retry");
+            assert_eq!(retry.state, durable_request);
+            inject_public_successor_launcher_fault_for_test("after_apply");
+            let apply_crash = build_authority_managed_successor_launch_plan(
+                orchestration_session_id,
+                launch_intent,
+                transition_input,
+                Some(&retry),
+            )
+            .expect_err("retry must apply the original intent before the injected crash");
+            assert!(apply_crash.to_string().contains("after_apply"));
+            let after_apply = authority
+                .read_a12b_root()
+                .expect("read HSA after exact retry apply");
+            assert_eq!(after_apply.successor_transition_intent_map.len(), 1);
+            let applied = after_apply
+                .successor_transition_intent_map
+                .get(&durable_request.intent_id)
+                .expect("original successor intent after apply")
+                .clone();
+            assert_public_successor_static_identity_preserved(&applied, &original);
+            assert!(matches!(
+                &applied.state,
+                HostSessionTransitionIntentStateV3::Applied {
+                    claim_id,
+                    claimant_attempt_id,
+                    active_authoritative_participant_id,
+                    ..
+                } if claim_id == &durable_request.claim_id
+                    && claimant_attempt_id == &durable_request.claimant_attempt_id
+                    && active_authoritative_participant_id == &durable_request.target_participant_id
+            ));
+            drop(retry);
+
+            let applied_join = acquire_public_successor_request_guard(
+                &substrate_home,
+                orchestration_session_id,
+                mode,
+                request_commitment,
+            )
+            .expect("acquire exact already-applied retry");
+            assert_eq!(applied_join.state, durable_request);
+            let launch_plan = build_authority_managed_successor_launch_plan(
+                orchestration_session_id,
+                launch_intent,
+                transition_input,
+                Some(&applied_join),
+            )
+            .expect("exact retry must join the already-applied transition");
+            assert_eq!(launch_plan.applied_transition, applied);
+            assert_eq!(
+                launch_plan.helper_plan.participant.participant_id,
+                durable_request.target_participant_id
+            );
+            assert_eq!(
+                launch_plan.helper_plan.participant.lease_token,
+                durable_request.participant_lease_token
+            );
+            assert_eq!(
+                launch_plan.helper_plan.participant.run_id,
+                durable_request.run_id
+            );
+            assert_eq!(
+                authority
+                    .read_a12b_root()
+                    .expect("read HSA after exact applied join"),
+                after_apply,
+                "an already-applied exact join must not issue a successor"
+            );
+            acknowledge_public_successor_request(&applied_join)
+                .expect("acknowledge joined public successor result");
+            drop(applied_join);
+
+            let acknowledged_join = acquire_public_successor_request_guard(
+                &substrate_home,
+                orchestration_session_id,
+                mode,
+                request_commitment,
+            )
+            .expect("acquire exact acknowledged applied retry");
+            assert!(acknowledged_join.state.acknowledged);
+            assert_eq!(acknowledged_join.state.intent_id, durable_request.intent_id);
+            let acknowledged_plan = build_authority_managed_successor_launch_plan(
+                orchestration_session_id,
+                launch_intent,
+                transition_input,
+                Some(&acknowledged_join),
+            )
+            .expect("acknowledged exact retry must join the committed result idempotently");
+            assert_eq!(acknowledged_plan.applied_transition, applied);
+            assert_eq!(
+                authority
+                    .read_a12b_root()
+                    .expect("read HSA after acknowledged exact join"),
+                after_apply,
+                "an acknowledged exact join must not issue a successor"
+            );
+        });
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn public_attach_fault_after_issue_or_claim_reuses_exact_persisted_transition() {
+        for crash_after in ["after_issue", "after_claim"] {
+            assert_public_successor_launcher_crash_recovery(
+                HostSessionTransitionModeV1::Attach,
+                crash_after,
+            );
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn public_resume_one_turn_fault_after_issue_or_claim_reuses_exact_persisted_transition() {
+        for crash_after in ["after_issue", "after_claim"] {
+            assert_public_successor_launcher_crash_recovery(
+                HostSessionTransitionModeV1::ResumeOneTurn,
+                crash_after,
+            );
+        }
     }
 
     #[cfg(target_os = "linux")]
@@ -5112,48 +7260,28 @@ mod tests {
     #[test]
     #[serial]
     fn build_attach_launch_plan_distinguishes_reattach_from_detached_turn_modes() {
-        with_state_store(|store| {
+        with_private_hsa_state_store(|store, _| {
             let orchestration_session_id = "sess_attach_intents";
-            let (session, participant) =
-                detached_orchestrator(orchestration_session_id, "ash_attach_intents");
-            store
-                .persist_orchestration_session(&session)
-                .expect("persist detached session");
-            store
-                .persist_participant(&participant)
-                .expect("persist detached participant");
+            public_start_authority()
+                .expect("open HSA")
+                .bootstrap()
+                .expect("bootstrap empty HSA");
 
-            let reattach_plan = build_attach_launch_plan_with_store(
-                store,
-                orchestration_session_id,
+            for intent in [
                 AttachLaunchIntent::Reattach,
-            )
-            .expect("build reattach plan");
-            assert_eq!(reattach_plan.mode, OwnerHelperMode::Attach);
-            assert_eq!(reattach_plan.startup_prompt, None);
-
-            let detached_turn_plan = build_attach_launch_plan_with_store(
-                store,
-                orchestration_session_id,
                 AttachLaunchIntent::DetachedTurn,
-            )
-            .expect("build detached-turn attach plan");
-            assert_eq!(detached_turn_plan.mode, OwnerHelperMode::ResumeOneTurn);
-            assert_eq!(
-                detached_turn_plan
-                    .participant
-                    .resumed_from_participant_id
-                    .as_deref(),
-                Some("ash_attach_intents")
-            );
-            assert_eq!(
-                detached_turn_plan
-                    .participant
-                    .internal_uaa_session_id
-                    .as_deref()
-                    .map(|value| !value.is_empty()),
-                Some(true)
-            );
+            ] {
+                let error =
+                    build_attach_launch_plan_with_store(store, orchestration_session_id, intent)
+                        .expect_err(
+                        "legacy StateStore-only targets must not produce public successor plans",
+                    );
+                assert!(
+                    error.to_string().contains("owner_unreachable")
+                        || error.to_string().contains("authority"),
+                    "public Attach/ResumeOneTurn must fail closed without exact HSA authority: {error:#}"
+                );
+            }
         });
     }
 
@@ -5161,17 +7289,12 @@ mod tests {
     #[test]
     #[serial]
     fn build_attach_launch_plan_refreshes_stale_shared_world_binding_from_local_metadata() {
-        with_state_store_and_shared_world_root(|store, shared_world_root| {
+        with_private_hsa_state_store(|store, shared_world_root| {
             let orchestration_session_id = "sess_attach_binding_refresh";
-            let (mut session, participant) =
-                detached_orchestrator(orchestration_session_id, "ash_attach_binding_refresh");
-            session.set_world_binding("wld_stale_binding", 0);
-            store
-                .persist_orchestration_session(&session)
-                .expect("persist detached session");
-            store
-                .persist_participant(&participant)
-                .expect("persist detached participant");
+            public_start_authority()
+                .expect("open HSA")
+                .bootstrap()
+                .expect("bootstrap empty HSA");
 
             let world_id = format!("wld_attach_binding_refresh_{}", Uuid::now_v7());
             let metadata_dir = write_shared_world_metadata_for_test(
@@ -5181,22 +7304,18 @@ mod tests {
                 0,
             );
 
-            let plan = build_attach_launch_plan_with_store(
+            let error = build_attach_launch_plan_with_store(
                 store,
                 orchestration_session_id,
                 AttachLaunchIntent::Reattach,
             )
-            .expect("build attach launch plan");
+            .expect_err("legacy world metadata cannot authorize public HSA Attach");
 
-            assert_eq!(plan.session.world_id.as_deref(), Some(world_id.as_str()));
-            assert_eq!(plan.session.world_generation, Some(0));
-            let persisted = store
-                .load_orchestration_session(orchestration_session_id)
-                .expect("load orchestration session")
-                .expect("orchestration session should persist");
-            assert_eq!(persisted.world_id.as_deref(), Some(world_id.as_str()));
-            assert_eq!(persisted.world_generation, Some(0));
-
+            assert!(
+                error.to_string().contains("owner_unreachable")
+                    || error.to_string().contains("authority"),
+                "public Attach must reject compatibility-only world binding evidence: {error:#}"
+            );
             fs::remove_dir_all(metadata_dir).expect("remove shared world metadata dir");
         });
     }

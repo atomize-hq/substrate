@@ -126,6 +126,34 @@ impl AgentControlFixture {
         cmd
     }
 
+    #[cfg(target_os = "linux")]
+    fn command_with_installed_invocation_witness(&self) -> assert_cmd::Command {
+        ensure_substrate_built();
+        let install_bin = self.substrate_home.join("bin");
+        fs::create_dir_all(&install_bin).expect("create installed invocation bin");
+        let witness = install_bin.join("substrate");
+        if !witness.exists() {
+            std::os::unix::fs::symlink(binary_path(), &witness)
+                .expect("create installed invocation witness");
+        }
+        let mut cmd = assert_cmd::Command::new(witness);
+        cmd.env("HOME", &self.home)
+            .env("USERPROFILE", &self.home)
+            .env("SUBSTRATE_HOME", &self.substrate_home)
+            .env(
+                "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+                &self.fake_world_deps_bin,
+            )
+            .env("SUBSTRATE_MANAGER_MANIFEST", manager_manifest_path())
+            .env("SHIM_TRACE_LOG", self.trace_path())
+            .env_remove("SHIM_ORIGINAL_PATH")
+            .env_remove("SUBSTRATE_WORLD")
+            .env_remove("SUBSTRATE_WORLD_ENABLED")
+            .env_remove("SUBSTRATE_WORLD_ID")
+            .env("SUBSTRATE_OVERRIDE_WORLD", "disabled");
+        cmd
+    }
+
     fn init_workspace(&self) {
         let output = self
             .command()
@@ -683,6 +711,112 @@ fn write_fake_codex_script(dir: &Path) -> PathBuf {
     path
 }
 
+#[cfg(target_os = "linux")]
+fn write_fake_codex_script_with_retained_resume_cut(dir: &Path) -> PathBuf {
+    let path = dir.join("fake-codex-retained-resume.sh");
+    let count_path = dir.join("fake-codex.count");
+    let body = r#"#!/bin/sh
+set -eu
+STATE_FILE='__COUNT_PATH__'
+SCRIPT_DIR='__SCRIPT_DIR__'
+count=0
+if [ -f "$STATE_FILE" ]; then count=$(cat "$STATE_FILE"); fi
+count=$((count + 1))
+printf '%s' "$count" > "$STATE_FILE"
+printf '%s\n' "$@" > "$SCRIPT_DIR/fake-codex-$count.args"
+cat > "$SCRIPT_DIR/fake-codex-$count.stdin"
+TOOLBOX_ENDPOINT="${SUBSTRATE_AGENT_TOOLBOX_ENDPOINT-}"
+case "$TOOLBOX_ENDPOINT" in
+  unix://*) TOOLBOX_SOCKET="${TOOLBOX_ENDPOINT#unix://}" ;;
+  *) exit 41 ;;
+esac
+
+if [ "$count" -eq 1 ]; then
+  printf '{"type":"thread.started","thread_id":"thread-test"}\r\n'
+  printf '{"type":"turn.started","thread_id":"thread-test","turn_id":"turn-1"}\r\n'
+else
+  printf '{"type":"thread.resumed","thread_id":"thread-test"}\r\n'
+  printf '{"type":"turn.started","thread_id":"thread-test","turn_id":"turn-2"}\r\n'
+fi
+sleep 1
+
+python3 - "$TOOLBOX_SOCKET" "$count" "$SCRIPT_DIR" <<'PY'
+import json
+import socket
+import sys
+
+socket_path, count_text, script_dir = sys.argv[1:]
+count = int(count_text)
+if count == 1:
+    envelope = {
+        "version": 1,
+        "tool_name": "spawn_world_worker",
+        "tool_call_id": "a13p1-retained-spawn",
+        "arguments": {
+            "target_backend_id": "cli:codex-world",
+            "payload": {"prompt": "establish retained ResumeOneTurn target"},
+        },
+    }
+else:
+    with open(f"{script_dir}/a13p1-retained-worker.json", encoding="utf-8") as handle:
+        worker = json.load(handle)
+    participant_id = worker.get("participant_id") or worker.get("target_participant_id")
+    if not participant_id:
+        raise RuntimeError(f"spawn response omitted participant identity: {worker!r}")
+    envelope = {
+        "version": 1,
+        "tool_name": "continue_world_worker",
+        "tool_call_id": "a13p1-retained-continue",
+        "arguments": {
+            "participant_id": participant_id,
+            "payload": {"prompt": "complete authenticated retained ResumeOneTurn"},
+        },
+    }
+
+client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+client.connect(socket_path)
+client.sendall((json.dumps(envelope, separators=(",", ":")) + "\n").encode())
+stream = client.makefile("r", encoding="utf-8")
+while True:
+    line = stream.readline()
+    if not line:
+        raise RuntimeError("toolbox transport closed before a terminal response")
+    response = json.loads(line)
+    if response.get("frame_kind") == "event":
+        continue
+    if response.get("ok") is not True:
+        raise RuntimeError(f"toolbox request failed: {response!r}")
+    outcome = response.get("outcome")
+    if not isinstance(outcome, dict):
+        raise RuntimeError(f"toolbox response omitted outcome: {response!r}")
+    break
+client.close()
+if count == 1:
+    with open(f"{script_dir}/a13p1-retained-worker.json", "w", encoding="utf-8") as handle:
+        json.dump(outcome, handle)
+PY
+
+if [ "$count" -eq 1 ]; then
+  printf '{"type":"item.completed","thread_id":"thread-test","turn_id":"turn-1","item_id":"msg-1","status":"completed","item_type":"agent_message","content":{"text":"startup retained target ready"}}\r\n'
+  printf '{"type":"turn.completed","thread_id":"thread-test","turn_id":"turn-1"}\r\n'
+  trap 'exit 0' INT TERM
+  while :; do sleep 1; done
+fi
+printf '{"type":"item.completed","thread_id":"thread-test","turn_id":"turn-2","item_id":"msg-2","status":"completed","item_type":"agent_message","content":{"text":"retained ResumeOneTurn complete"}}\r\n'
+printf '{"type":"turn.completed","thread_id":"thread-test","turn_id":"turn-2"}\r\n'
+exit 0
+"#
+    .replace("__COUNT_PATH__", &count_path.display().to_string())
+    .replace("__SCRIPT_DIR__", &dir.display().to_string());
+    fs::write(&path, body).expect("write retained ResumeOneTurn fake codex script");
+    let mut perms = fs::metadata(&path)
+        .expect("retained ResumeOneTurn fake codex metadata")
+        .permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("set retained ResumeOneTurn fake codex permissions");
+    path
+}
+
 fn write_fake_codex_script_with_indeterminate_start_handoff(dir: &Path) -> PathBuf {
     let path = dir.join("fake-codex-indeterminate-start.sh");
     let count_path = dir.join("fake-codex.count");
@@ -1232,6 +1366,27 @@ fn terminate_pid(pid: u32) {
     unsafe {
         let _ = libc::kill(pid, libc::SIGKILL);
     }
+}
+
+#[cfg(target_os = "linux")]
+fn owner_helper_pids_for_plan(plan_path: &Path) -> Vec<u32> {
+    let expected = plan_path.to_string_lossy();
+    let mut pids = fs::read_dir("/proc")
+        .expect("enumerate /proc")
+        .filter_map(Result::ok)
+        .filter_map(|entry| entry.file_name().to_str()?.parse::<u32>().ok())
+        .filter(|pid| {
+            fs::read(format!("/proc/{pid}/cmdline"))
+                .ok()
+                .is_some_and(|cmdline| {
+                    cmdline
+                        .split(|byte| *byte == 0)
+                        .any(|arg| arg == expected.as_bytes())
+                })
+        })
+        .collect::<Vec<_>>();
+    pids.sort_unstable();
+    pids
 }
 
 fn wait_for_pid_exit(pid: u32, timeout: Duration) -> bool {
@@ -2702,10 +2857,228 @@ fn public_turn_plain_human_streams_events_before_completion_summary() {
         .as_str()
         .expect("start session id")
         .to_string();
+    let settled_start = fixture.load_hsa_authority(&orchestration_session_id);
+    let settled_resume_handle = settled_start
+        .get("internal_resume_handle_refs")
+        .and_then(Value::as_array)
+        .and_then(|refs| refs.last())
+        .cloned()
+        .expect("settled Start resume handle");
 
-    assert_plain_human_prompt_streams_before_summary(
-        &fixture,
-        &[
+    let turn_args = [
+        "agent",
+        "turn",
+        "--session",
+        &orchestration_session_id,
+        "--backend",
+        "cli:codex-host",
+        "--prompt",
+        "hello from turn",
+        "--json",
+    ];
+    let turn_output = fixture.run(&turn_args);
+    assert!(
+        !turn_output.status.success(),
+        "provider completion without retained actor-event evidence must fail closed: {turn_output:?}"
+    );
+    let turn_records = parse_ndjson_output(&turn_output);
+    assert_eq!(
+        turn_records
+            .first()
+            .and_then(|record| record.get("kind"))
+            .and_then(Value::as_str),
+        Some("accepted"),
+        "ResumeOneTurn must stream exact input acceptance before provider events: {turn_records:?}"
+    );
+    assert_eq!(
+        turn_records
+            .last()
+            .and_then(|record| record.get("kind"))
+            .and_then(Value::as_str),
+        Some("failed"),
+        "provider completion alone must not become post-turn truth: {turn_records:?}"
+    );
+
+    let turn_provider_args = fixture.read_fake_codex_args(2);
+    assert!(
+        turn_provider_args.iter().any(|arg| arg == "resume")
+            && turn_provider_args.iter().any(|arg| arg == "thread-test"),
+        "public Turn must use the durable Start continuation: {turn_provider_args:?}"
+    );
+    assert!(
+        fixture.read_fake_codex_stdin(2).contains("hello from turn"),
+        "ResumeOneTurn must submit the caller's exact visible turn"
+    );
+
+    let hsa_root = read_json_file(
+        &fixture
+            .substrate_home
+            .join("authority-v1/state-root-v1.json"),
+    );
+    let successors = hsa_root
+        .get("successor_transition_intent_map")
+        .and_then(Value::as_object)
+        .expect("HSA successor map");
+    let resume_intents = successors
+        .values()
+        .filter(|intent| {
+            intent.pointer("/mode/kind").and_then(Value::as_str) == Some("ResumeOneTurn")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(resume_intents.len(), 1, "exactly one public ResumeOneTurn");
+    let resume = resume_intents[0];
+    assert_eq!(
+        resume.get("resume_handle_ref"),
+        Some(&settled_resume_handle),
+        "ResumeOneTurn must consume the exact durable handle settled by Start"
+    );
+    assert_eq!(
+        resume
+            .pointer("/input_handoff/kind")
+            .and_then(Value::as_str),
+        Some("Accepted"),
+        "provider handoff must occur only after durable HSA input acceptance"
+    );
+    assert_eq!(
+        resume
+            .pointer("/state/value/post_turn/kind")
+            .and_then(Value::as_str),
+        Some("Pending"),
+        "PID, readiness, EOF, timeout, and provider completion must not settle post-turn truth"
+    );
+    let active_after_turn = fixture.load_hsa_authority(&orchestration_session_id);
+    assert_eq!(
+        active_after_turn
+            .pointer("/lifecycle_posture/kind")
+            .and_then(Value::as_str),
+        Some("ActiveAttached")
+    );
+
+    let retry = fixture.run(&turn_args);
+    assert!(
+        !retry.status.success()
+            && String::from_utf8_lossy(&retry.stderr).contains("submission_outcome_unknown"),
+        "accepted ResumeOneTurn retry must fail without provider replay: {retry:?}"
+    );
+    assert!(
+        !fixture.fake_codex_args_path(3).exists(),
+        "exact retry after accepted ResumeOneTurn input must perform zero provider submissions"
+    );
+
+    let mismatched_retry = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        &orchestration_session_id,
+        "--backend",
+        "cli:codex-host",
+        "--prompt",
+        "substituted turn input",
+        "--json",
+    ]);
+    assert!(
+        !mismatched_retry.status.success()
+            && String::from_utf8_lossy(&mismatched_retry.stderr)
+                .contains("submission_outcome_unknown"),
+        "substituted ResumeOneTurn input must fail closed: {mismatched_retry:?}"
+    );
+    assert!(
+        !fixture.fake_codex_args_path(3).exists(),
+        "substituted input must not trigger provider submission"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn public_turn_applies_retained_resume_correlation_and_exact_terminal_cut() {
+    let mut fixture =
+        AgentControlFixture::new_with_fake_codex(write_fake_codex_script_with_retained_resume_cut);
+    let safe_install_parent =
+        PathBuf::from(std::env::var_os("HOME").expect("retained ResumeOneTurn test requires HOME"));
+    let install_home = tempfile::Builder::new()
+        .prefix("sac-a13p1-install-")
+        .tempdir_in(safe_install_parent)
+        .expect("create private installed invocation prefix");
+    fs::set_permissions(install_home.path(), fs::Permissions::from_mode(0o700))
+        .expect("set installed invocation prefix mode");
+    fixture.substrate_home = install_home.path().to_path_buf();
+    let workspace_init = fixture
+        .command_with_installed_invocation_witness()
+        .arg("workspace")
+        .arg("init")
+        .arg(&fixture.workspace_root)
+        .arg("--force")
+        .output()
+        .expect("initialize retained ResumeOneTurn workspace");
+    assert!(
+        workspace_init.status.success(),
+        "workspace init through an installed invocation witness must succeed: {workspace_init:?}"
+    );
+    fixture.write_runtime_inventory_with_member_backend(Some("codex-world"));
+
+    let socket_home = tempfile::Builder::new()
+        .prefix("sac-a13p1-resume-")
+        .tempdir_in("/tmp")
+        .expect("socket tempdir");
+    let socket_path = socket_home.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &socket_path,
+        StreamBehavior::Normal,
+        vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+            session_handle_id: "session-a13p1-retained-worker".to_string(),
+            exit_code_on_cancel: 130,
+        }],
+    );
+    let records = server.records();
+
+    let start_output = fixture
+        .command_with_installed_invocation_witness()
+        .current_dir(&fixture.workspace_root)
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .args([
+            "agent",
+            "start",
+            "--backend",
+            "cli:codex-host",
+            "--scope",
+            "host",
+            "--prompt",
+            "start retained correlation proof",
+            "--json",
+        ])
+        .output()
+        .expect("run world-bound public Start");
+    assert!(
+        start_output.status.success(),
+        "world-bound Start must succeed before retained ResumeOneTurn: {start_output:?}"
+    );
+    wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(5));
+    let start_records = parse_ndjson_output(&start_output);
+    let start = find_ndjson_record(&start_records, "completed");
+    let orchestration_session_id = start["orchestration_session_id"]
+        .as_str()
+        .expect("Start session id")
+        .to_string();
+    let settled_start = fixture.load_hsa_authority(&orchestration_session_id);
+    assert_eq!(
+        settled_start
+            .pointer("/lifecycle_posture/kind")
+            .and_then(Value::as_str),
+        Some("ParkedResumable")
+    );
+    assert!(
+        settled_start
+            .get("world_binding")
+            .is_none_or(Value::is_null),
+        "host Start must not synthesize a world binding"
+    );
+
+    let turn_output = fixture
+        .command_with_installed_invocation_witness()
+        .current_dir(&fixture.workspace_root)
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .args([
             "agent",
             "turn",
             "--session",
@@ -2713,10 +3086,105 @@ fn public_turn_plain_human_streams_events_before_completion_summary() {
             "--backend",
             "cli:codex-host",
             "--prompt",
-            "hello from turn",
-        ],
-        "turn",
-        "follow-up prompt success",
+            "continue the retained target once",
+            "--json",
+        ])
+        .output()
+        .expect("run public retained ResumeOneTurn");
+    assert!(
+        turn_output.status.success(),
+        "authenticated retained terminal cut must settle public ResumeOneTurn: {turn_output:?}"
+    );
+    wait_for_min_member_turn_submit_requests(&records, 1, Duration::from_secs(5));
+    let turn_records = parse_ndjson_output(&turn_output);
+    assert_eq!(
+        turn_records
+            .first()
+            .and_then(|record| record.get("kind"))
+            .and_then(Value::as_str),
+        Some("accepted")
+    );
+    assert_eq!(
+        turn_records
+            .last()
+            .and_then(|record| record.get("kind"))
+            .and_then(Value::as_str),
+        Some("completed")
+    );
+
+    let root = read_json_file(
+        &fixture
+            .substrate_home
+            .join("authority-v1/state-root-v1.json"),
+    );
+    let resume = root
+        .get("successor_transition_intent_map")
+        .and_then(Value::as_object)
+        .expect("successor map")
+        .values()
+        .find(|intent| {
+            intent.pointer("/mode/kind").and_then(Value::as_str) == Some("ResumeOneTurn")
+        })
+        .expect("public ResumeOneTurn intent");
+    assert_eq!(
+        resume
+            .pointer("/state/value/post_turn/kind")
+            .and_then(Value::as_str),
+        Some("Applied")
+    );
+    assert_eq!(
+        resume
+            .pointer("/state/value/post_turn/value/resulting_posture/kind")
+            .and_then(Value::as_str),
+        Some("ParkedResumable")
+    );
+    let completion_ref = resume
+        .pointer("/state/value/post_turn/value/completion_ref")
+        .expect("post-turn completion ref");
+    assert_eq!(
+        completion_ref
+            .pointer("/object_kind/kind")
+            .and_then(Value::as_str),
+        Some("PostTurnCompletion")
+    );
+    let completion_id = completion_ref
+        .get("ref_id")
+        .and_then(Value::as_str)
+        .expect("completion ref id");
+    let completion_schema = completion_ref
+        .get("schema_version")
+        .and_then(Value::as_u64)
+        .expect("completion schema version");
+    let completion = read_json_file(&fixture.substrate_home.join(format!(
+        "authority-v1/objects/post-turn-completion/v{completion_schema}/{completion_id}.obj"
+    )));
+    let correlation = completion
+        .get("host_transition_correlation")
+        .expect("authenticated retained host-transition correlation");
+    assert_eq!(
+        correlation
+            .get("transition_intent_id")
+            .and_then(Value::as_str),
+        resume.get("intent_id").and_then(Value::as_str)
+    );
+    assert_eq!(
+        correlation.get("transition_run_id").and_then(Value::as_str),
+        resume.get("run_id").and_then(Value::as_str)
+    );
+    assert_eq!(
+        correlation
+            .get("authoritative_participant_id")
+            .and_then(Value::as_str),
+        resume
+            .get("target_authoritative_participant_id")
+            .and_then(Value::as_str)
+    );
+    let current = fixture.load_hsa_authority(&orchestration_session_id);
+    assert_eq!(
+        current
+            .pointer("/lifecycle_posture/kind")
+            .and_then(Value::as_str),
+        Some("ParkedResumable")
     );
 }
 
@@ -3471,8 +3939,257 @@ fn public_start_omitted_scope_prefers_workspace_defaults_before_global_defaults(
     }
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 #[serial]
+fn public_reattach_applies_hsa_attach_and_preserves_auto_attach_bookkeeping() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let start_output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:codex-host",
+        "--prompt",
+        "establish durable reattach continuity",
+        "--json",
+    ]);
+    assert!(
+        start_output.status.success(),
+        "setup public Start must durably settle: {start_output:?}"
+    );
+    let start_records = parse_ndjson_output(&start_output);
+    let start = find_ndjson_record(&start_records, "completed");
+    let orchestration_session_id = start["orchestration_session_id"]
+        .as_str()
+        .expect("Start session id")
+        .to_string();
+    let source_participant_id = start["participant_id"]
+        .as_str()
+        .expect("Start participant id")
+        .to_string();
+    let settled_start = fixture.load_hsa_authority(&orchestration_session_id);
+    assert_eq!(
+        settled_start
+            .pointer("/lifecycle_posture/kind")
+            .and_then(Value::as_str),
+        Some("ParkedResumable")
+    );
+
+    // Preserve the compatibility-only auto-attach projection around the HSA
+    // route without allowing it to authorize the Attach transition.
+    let ts = "2026-08-29T00:00:00Z";
+    write_parked_orchestration_session(
+        &fixture,
+        "codex",
+        &orchestration_session_id,
+        &source_participant_id,
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        &source_participant_id,
+        "codex",
+        &orchestration_session_id,
+        "running",
+        false,
+        Some("thread-test"),
+        None,
+        ts,
+    );
+    write_obligation_record(
+        &fixture,
+        ObligationRecordSpec {
+            orchestration_session_id: &orchestration_session_id,
+            obligation_id: "obl_claimed",
+            kind: "blocked",
+            attach_state: "claimed",
+            attach_attempt_count: 1,
+            attach_claim_owner: Some("router::local"),
+            attach_completion_reason: None,
+            ts,
+        },
+    );
+    write_obligation_record(
+        &fixture,
+        ObligationRecordSpec {
+            orchestration_session_id: &orchestration_session_id,
+            obligation_id: "obl_sibling",
+            kind: "follow_up_required",
+            attach_state: "eligible",
+            attach_attempt_count: 0,
+            attach_claim_owner: None,
+            attach_completion_reason: None,
+            ts,
+        },
+    );
+
+    let reattach_args = [
+        "agent",
+        "reattach",
+        "--session",
+        orchestration_session_id.as_str(),
+        "--json",
+    ];
+    let first_reattach = fixture.spawn(&reattach_args);
+    let second_reattach = fixture.spawn(&reattach_args);
+    let reattach_outputs = [
+        first_reattach
+            .wait_with_output()
+            .expect("wait for first concurrent public reattach"),
+        second_reattach
+            .wait_with_output()
+            .expect("wait for second concurrent public reattach"),
+    ];
+    let successful_reattach_outputs = reattach_outputs
+        .iter()
+        .filter(|output| output.status.success())
+        .collect::<Vec<_>>();
+    assert!(
+        !successful_reattach_outputs.is_empty(),
+        "one HSA-authorized concurrent public reattach must succeed: {reattach_outputs:?}"
+    );
+    let reattach = parse_json_output(successful_reattach_outputs[0]);
+    let target_participant_id = reattach["participant_id"]
+        .as_str()
+        .expect("Attach target participant")
+        .to_string();
+    for duplicate_success in successful_reattach_outputs.iter().skip(1) {
+        let duplicate = parse_json_output(duplicate_success);
+        assert_eq!(
+            duplicate.get("participant_id").and_then(Value::as_str),
+            Some(target_participant_id.as_str()),
+            "concurrent exact retry must join the same HSA Attach target"
+        );
+    }
+    assert_ne!(target_participant_id, source_participant_id);
+
+    let hsa_root = read_json_file(
+        &fixture
+            .substrate_home
+            .join("authority-v1/state-root-v1.json"),
+    );
+    let attach_intents = hsa_root
+        .get("successor_transition_intent_map")
+        .and_then(Value::as_object)
+        .expect("HSA successor map")
+        .values()
+        .filter(|intent| intent.pointer("/mode/kind").and_then(Value::as_str) == Some("Attach"))
+        .collect::<Vec<_>>();
+    assert_eq!(attach_intents.len(), 1, "exactly one HSA Attach intent");
+    let attach = attach_intents[0];
+    let attach_intent_id = attach
+        .get("intent_id")
+        .and_then(Value::as_str)
+        .expect("Attach intent id");
+    assert_eq!(
+        attach
+            .get("target_authoritative_participant_id")
+            .and_then(Value::as_str),
+        Some(target_participant_id.as_str())
+    );
+    assert_eq!(
+        attach
+            .pointer("/authority_precondition/value/authority_revision")
+            .and_then(Value::as_u64),
+        Some(3),
+        "Attach must consume the exact settled Start revision"
+    );
+    assert_eq!(
+        attach
+            .pointer("/state/value/startup_ownership/kind")
+            .and_then(Value::as_str),
+        Some("Accepted"),
+        "Attach success requires target actor ownership acceptance"
+    );
+    let current = fixture.load_hsa_authority(&orchestration_session_id);
+    assert_eq!(
+        current
+            .pointer("/lifecycle_posture/kind")
+            .and_then(Value::as_str),
+        Some("ActiveAttached")
+    );
+    assert_eq!(
+        current.get("authority_revision").and_then(Value::as_u64),
+        Some(4)
+    );
+    assert_eq!(
+        current
+            .get("active_authoritative_participant_id")
+            .and_then(Value::as_str),
+        Some(target_participant_id.as_str())
+    );
+
+    assert!(
+        !canonical_participant_manifest_path(
+            &fixture.substrate_home,
+            &orchestration_session_id,
+            &target_participant_id,
+        )
+        .exists(),
+        "HSA Attach must not persist target ownership through legacy StateStore authority writers"
+    );
+    assert!(
+        !fixture.fake_codex_args_path(2).exists(),
+        "control-only Attach must not submit a hidden provider prompt"
+    );
+    let successor_plan_path = fixture
+        .substrate_home
+        .join("runtime-control/durable-start/successor-plans")
+        .join(format!("{attach_intent_id}.json"));
+    let helper_pids = owner_helper_pids_for_plan(&successor_plan_path);
+    assert_eq!(
+        helper_pids.len(),
+        1,
+        "accepted Attach must retain exactly one helper episode for the exact plan"
+    );
+
+    for (obligation_id, expected_state) in
+        [("obl_claimed", "satisfied"), ("obl_sibling", "superseded")]
+    {
+        let obligation = fixture.load_obligation(&orchestration_session_id, obligation_id);
+        assert_eq!(
+            obligation.get("attach_state").and_then(Value::as_str),
+            Some(expected_state)
+        );
+        assert_eq!(
+            obligation
+                .get("attach_completion_reason")
+                .and_then(Value::as_str),
+            Some("session_attach_restored_by_manual_reattach")
+        );
+    }
+
+    let duplicate = fixture.run(&[
+        "agent",
+        "reattach",
+        "--session",
+        &orchestration_session_id,
+        "--json",
+    ]);
+    assert!(
+        !duplicate.status.success(),
+        "current ActiveAttached HSA authority must reject duplicate Attach: {duplicate:?}"
+    );
+    assert!(
+        !fixture.fake_codex_args_path(2).exists(),
+        "rejected duplicate Attach must not launch a provider"
+    );
+    assert_eq!(
+        owner_helper_pids_for_plan(&successor_plan_path),
+        helper_pids,
+        "completed Attach retry must not spawn a second helper or reuse stale acceptance evidence"
+    );
+    for helper_pid in helper_pids {
+        terminate_pid(helper_pid);
+    }
+}
+
+#[test]
+#[serial]
+#[cfg(not(target_os = "linux"))]
 fn public_reattach_and_fork_preserve_exact_session_and_lineage_contracts() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
@@ -3635,6 +4352,7 @@ fn public_reattach_and_fork_preserve_exact_session_and_lineage_contracts() {
 
 #[test]
 #[serial]
+#[cfg(not(target_os = "linux"))]
 fn public_reattach_uses_persisted_attach_continuity_selector_for_resume_args() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
@@ -3699,6 +4417,7 @@ fn public_reattach_uses_persisted_attach_continuity_selector_for_resume_args() {
 
 #[test]
 #[serial]
+#[cfg(not(target_os = "linux"))]
 fn public_reattach_settles_outstanding_auto_attach_claims_and_blocks_duplicate_launches() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
@@ -3815,6 +4534,7 @@ fn public_reattach_settles_outstanding_auto_attach_claims_and_blocks_duplicate_l
 
 #[test]
 #[serial]
+#[cfg(not(target_os = "linux"))]
 fn public_reattach_fails_closed_when_persisted_attach_contract_disables_continuity_attach() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
@@ -4061,6 +4781,7 @@ fn public_fork_and_stop_fail_closed_when_persisted_attach_contract_disables_capa
 
 #[test]
 #[serial]
+#[cfg(not(target_os = "linux"))]
 fn public_stop_cleanly_closes_same_durable_session_after_reattach() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
@@ -4180,6 +4901,7 @@ fn public_stop_cleanly_closes_same_durable_session_after_reattach() {
 
 #[test]
 #[serial]
+#[cfg(not(target_os = "linux"))]
 fn public_turn_resumes_parked_host_session_and_preserves_exact_session_selector_contracts() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
@@ -4272,6 +4994,7 @@ fn public_turn_resumes_parked_host_session_and_preserves_exact_session_selector_
 
 #[test]
 #[serial]
+#[cfg(not(target_os = "linux"))]
 fn public_turn_uses_persisted_attach_continuity_selector_when_recovering_detached_host_turns() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
@@ -4330,6 +5053,7 @@ fn public_turn_uses_persisted_attach_continuity_selector_when_recovering_detache
 
 #[test]
 #[serial]
+#[cfg(not(target_os = "linux"))]
 fn public_turn_semantically_uses_persisted_attach_continuity_when_recovering_detached_host_turns() {
     let fixture = AgentControlFixture::new_with_fake_codex(
         write_fake_codex_script_resume_requires_expected_handle,
@@ -4386,6 +5110,7 @@ fn public_turn_semantically_uses_persisted_attach_continuity_when_recovering_det
 
 #[test]
 #[serial]
+#[cfg(not(target_os = "linux"))]
 fn public_same_session_parked_status_turn_reattach_and_stop_stay_on_one_orchestration_session_id() {
     let fixture = AgentControlFixture::new_with_fake_codex(
         write_fake_codex_script_turn_requires_helper_cancel_after_prompt,
