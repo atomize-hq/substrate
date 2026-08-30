@@ -1,8 +1,8 @@
 **Kind:** slice/task projection
 **Stable ID:** `macOS-dev-parity-family`
 **Canonical for:** current Linux-first scheduling reset projection
-**Status:** canonical
-**Authority scope:** exact extracted macOS-parity source body only
+**Status:** canonical current projection with preserved packet-era body
+**Authority scope:** exact extracted macOS-parity source body plus the A1.3-P1 closure-status overlay only; no implementation or successor authority
 **Source span:** [`03-phase-slice-map.md#current-linux-first-scheduling-reset-2026-08-20-controlling`](../03-phase-slice-map.md#current-linux-first-scheduling-reset-2026-08-20-controlling), D6 pre-extraction lines 3238–3284
 **Supersedes:** canonical ownership of that source body; the source heading remains a compatibility anchor
 **Superseded by:** none
@@ -11,6 +11,13 @@
 > **Relocation context:** Source-relative phrases inside the preserved extracted body, such as
 > “above,” still refer to the linked pre-extraction root document rather than standalone
 > surrounding content in this canonical file.
+
+## A1.3-P1 closure-status overlay (2026-08-29; current)
+
+The dated extracted scheduling projection below remains byte-stable as its packet-era snapshot.
+A1.3-P1 is terminally complete. Its named implementation successor is A1.4, which awaits fresh
+admission and explicit dispatch and is not authorized, admitted, dispatched, implemented,
+scheduled, or complete here.
 
 ## Current Linux-first scheduling reset (2026-08-20; controlling)
 

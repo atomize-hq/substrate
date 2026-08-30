@@ -10,7 +10,7 @@
 
 # A1.4 — bounded auto-attach producer adoption and regression closure
 
-> **Authority boundary:** This file owns only the extracted A1.4 row below. A1.4 requires separate authorization as a substep/checkpoint inside A1, not an independent slice, not the active packet, and not currently dispatched here.
+> **Authority boundary:** This file owns only the extracted A1.4 row below. A1.4 is the named implementation successor to terminally complete A1.3-P1, but it still requires fresh admission and explicit dispatch as a substep/checkpoint inside A1. It is not an independent slice and is not authorized, admitted, dispatched, implemented, scheduled, or complete here.
 
 | Packet | Goal and authority boundary | Exact code and test areas | Contract fields or transitions | Explicit non-goals | Test-first or test-alongside proof and packet exit | Slice gates not yet claimable |
 |---|---|---|---|---|---|---|

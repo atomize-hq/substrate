@@ -10,7 +10,7 @@
 
 # Track A — Authority and surface neutrality
 
-> **Authority boundary:** This file is a navigation index only. A0/A1/A2/A3 remain independent slices; A1.1–A1.4 remain substeps/checkpoints inside A1 rather than independent slices; A1.1d and historical entries remain checkpoints, not slices; held `A1.3-P0` and `A1.3` remain preserved history only; [`../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md) remains the sole selected active global implementation packet; and later slices remain undispatched and authority-gated here.
+> **Authority boundary:** This file is a navigation index only. A0/A1/A2/A3 remain independent slices; A1.1–A1.4 remain substeps/checkpoints inside A1 rather than independent slices; A1.1d and historical entries remain checkpoints, not slices; held `A1.3-P0` and `A1.3` remain preserved history only; [`../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md) is terminally complete; A1.4 is only the named successor awaiting fresh admission and explicit dispatch; and later slices remain undispatched and authority-gated here.
 
 | Slice | Goal | Must-read docs | Sibling context | Allowed code areas | Explicit non-goals | Exit gate | Regression gates |
 |---|---|---|---|---|---|---|---|

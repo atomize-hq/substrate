@@ -251,7 +251,7 @@
 
 | Identifier | Canonical owner | Status | Canonical for |
 |---|---|---|---|
-| `A1.3-P1` | [`linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md) | `selected active next Linux-first implementation packet` | active Linux-first atomic public-adoption packet only |
+| `A1.3-P1` | [`linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md) | `terminally complete` | completed Linux-first atomic public-adoption packet only |
 
 ## packet index
 

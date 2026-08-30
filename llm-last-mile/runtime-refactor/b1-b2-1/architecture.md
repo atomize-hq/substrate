@@ -10,7 +10,7 @@
 
 # B1/B2.1 family architecture
 
-> **Historical wording note:** The phrase `C1 is next` below is preserved verbatim from the source projection as provenance. It is not current scheduling truth: B3.1 and C1 are recorded complete elsewhere, and `A1.3-P1` remains the sole active global implementation packet.
+> **Historical wording note:** The phrase `C1 is next` below is preserved verbatim from the source projection as provenance. It is not current scheduling truth: B3.1, C1, and A1.3-P1 are recorded complete elsewhere, while A1.4 is only the named successor awaiting fresh admission and explicit dispatch.
 
 ### Current B1/B2.1 control state
 

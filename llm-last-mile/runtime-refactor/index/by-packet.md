@@ -7,11 +7,12 @@
 
 > **Authority boundary:** This file is an index only. It routes packet, lane, and packet-family identifiers to their canonical packet records or packet indexes; it does not select work, close a gate, or dispatch a successor.
 
-## Current active and held packets
+## Current completed, held, and awaiting-admission records
 
 | Identifier | Kind | Canonical owner | Current status or scope |
 |---|---|---|---|
-| `A1.3-P1` | packet | [`linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md) | `selected active next Linux-first implementation packet` |
+| `A1.3-P1` | completed packet | [`linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md) | `terminally complete` |
+| `A1.4` | named successor checkpoint | [`slices/tasks/a1-4-auto-attach-producer-adoption.md`](../slices/tasks/a1-4-auto-attach-producer-adoption.md) | `awaiting fresh admission and explicit dispatch; not authorized or dispatched` |
 | `A1.3-P0` | held packet | [`linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md`](../linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md) | `held/non-implementable historical preparatory packet` |
 | `A1.3` | held packet | [`linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md`](../linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md) | `preserved held historical Linux-first packet` |
 
@@ -19,7 +20,7 @@
 
 | Identifier | Kind | Canonical owner | Current status or scope |
 |---|---|---|---|
-| `A1.3-family` | packet index | [`linux-first-runtime-resumption/README.md`](../linux-first-runtime-resumption/README.md) | `non-authoritative navigation for the active A1.3-P1 packet and its held A1.3-P0/A1.3 predecessors` |
+| `A1.3-family` | packet index | [`linux-first-runtime-resumption/README.md`](../linux-first-runtime-resumption/README.md) | `non-authoritative navigation for completed A1.3-P1 and its held A1.3-P0/A1.3 predecessors` |
 | `macOS-dev-parity-family` | lane index | [`macos-dev-parity/README.md`](../macos-dev-parity/README.md) | `non-authoritative navigation for the macOS developer-parity decision, extracted projections, and lane-local gate` |
 | `A1.1d-5R2-4` | packet index | [`a1.1d-5r2-4/README.md`](../a1.1d-5r2-4/README.md) | `closed only as the bounded R2 propagation join` |
 | `A1.1d-5R3-family` | packet index | [`a1.1d-5r3/README.md`](../a1.1d-5r3/README.md) | `archived for active scheduling; non-authoritative navigation for the extracted R3 implementation-family owners` |
@@ -36,7 +37,7 @@
 | Need | Start here |
 |---|---|
 | Current global status | [`current.md`](current.md) |
-| Active A1.3 packet and held predecessors | [`../linux-first-runtime-resumption/README.md`](../linux-first-runtime-resumption/README.md) |
+| Completed A1.3-P1 packet, held predecessors, and named A1.4 successor | [`../linux-first-runtime-resumption/README.md`](../linux-first-runtime-resumption/README.md), [`../slices/tasks/a1-4-auto-attach-producer-adoption.md`](../slices/tasks/a1-4-auto-attach-producer-adoption.md) |
 | macOS developer-parity lane | [`../macos-dev-parity/README.md`](../macos-dev-parity/README.md) |
 | Historical A1.2 and earlier corridor | [`../a1-2-earlier-histories/README.md`](../a1-2-earlier-histories/README.md) |
 | Historical B1/B2.1 corridor | [`../b1-b2-1/README.md`](../b1-b2-1/README.md) |
@@ -49,7 +50,7 @@
 
 | Packet or family | Decision / scope / current state | Architecture / seams | Slices / tasks / dependencies | Contracts / gates | Evidence / receipts | Predecessors / exclusions |
 |---|---|---|---|---|---|---|
-| `A1.3-P1` active plus held `A1.3-P0` / `A1.3` | [`DECISION.md`](../linux-first-runtime-resumption/DECISION.md), [`A1.3-P1`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md), held [`A1.3-P0`](../linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md), held [`A1.3`](../linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md), [`current.md`](current.md) | — | [`slice-and-task.md`](../linux-first-runtime-resumption/slice-and-task.md) | linked gates in [`README.md`](../linux-first-runtime-resumption/README.md) | linked evidence/receipts in [`README.md`](../linux-first-runtime-resumption/README.md) | [`README.md`](../linux-first-runtime-resumption/README.md) |
+| `A1.3-P1` completed plus held `A1.3-P0` / `A1.3` | [`DECISION.md`](../linux-first-runtime-resumption/DECISION.md), [`A1.3-P1`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md), held [`A1.3-P0`](../linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md), held [`A1.3`](../linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md), [`current.md`](current.md) | — | [`slice-and-task.md`](../linux-first-runtime-resumption/slice-and-task.md) | linked gates in [`README.md`](../linux-first-runtime-resumption/README.md) | linked evidence/receipts in [`README.md`](../linux-first-runtime-resumption/README.md) | [`README.md`](../linux-first-runtime-resumption/README.md) |
 | macOS developer-parity lane | [`DECISION.md`](../macos-dev-parity/DECISION.md), [`current-state.md`](../macos-dev-parity/current-state.md), [`current.md`](current.md) | [`cross-lane-scheduling-and-ownership.md`](../macos-dev-parity/cross-lane-scheduling-and-ownership.md) | [`slice-and-task.md`](../macos-dev-parity/slice-and-task.md) | linked lane gate in [`README.md`](../macos-dev-parity/README.md) | [`evidence-regression.md`](../macos-dev-parity/evidence-regression.md), linked receipts in [`README.md`](../macos-dev-parity/README.md) | [`README.md`](../macos-dev-parity/README.md) |
 | `A1.1d-5R2-4` | [`README.md`](../a1.1d-5r2-4/README.md) | [`architecture-disposition.md`](../a1.1d-5r2-4/architecture-disposition.md), [`seam-crosswalk-disposition.md`](../a1.1d-5r2-4/seam-crosswalk-disposition.md) | [`slice-and-task.md`](../a1.1d-5r2-4/slice-and-task.md) | [`terminal-gate-disposition.md`](../a1.1d-5r2-4/terminal-gate-disposition.md) | [`evidence-regression.md`](../a1.1d-5r2-4/evidence-regression.md), linked receipts in [`README.md`](../a1.1d-5r2-4/README.md) | [`README.md`](../a1.1d-5r2-4/README.md) |
 | `A1.1d-5R3-family` | [`current-state.md`](../a1.1d-5r3/current-state.md) | [`architecture.md`](../a1.1d-5r3/architecture.md), [`crosswalk.md`](../a1.1d-5r3/crosswalk.md) | [`slice-and-task.md`](../a1.1d-5r3/slice-and-task.md), [`slice-status.md`](../a1.1d-5r3/slice-status.md) | [`contracts-and-gates.md`](../a1.1d-5r3/contracts-and-gates.md), [`contracts-status.md`](../a1.1d-5r3/contracts-status.md) | [`evidence-regression.md`](../a1.1d-5r3/evidence-regression.md), [`evidence-status.md`](../a1.1d-5r3/evidence-status.md) | [`README.md`](../a1.1d-5r3/README.md), [`status-append.md`](../a1.1d-5r3/status-append.md) |

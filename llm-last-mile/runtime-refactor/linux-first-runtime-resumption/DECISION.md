@@ -5,7 +5,9 @@
 - **Status:** accepted for active scheduling; documentation-only decision.
 - **Effective date:** 2026-08-20.
 - **Reentry gate:** `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY` (closed by the selection below).
-- **Active global implementation packet:** [`A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md).
+- **Active global implementation packet:** none. [`A1.3-P1`](A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md)
+  is terminally complete; A1.4 is only the named successor awaiting fresh admission and explicit
+  dispatch.
 - **Supersedes:** the 2026-08-19 macOS developer-parity decision only where it made
   `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` the global product-work predecessor. It does not weaken,
   close, or authorize the macOS parity lane.
@@ -78,12 +80,26 @@ consumption and actor-event resolution, and only the strictly mechanical project
 HSA-authorized correlation through that exact retained-turn seam and into the B1 acceptance-context
 field.
 
-The active next implementation packet is now
-**A1.3-P1 — atomic public adoption**, recorded in
+The corrective replan selected **A1.3-P1 — atomic public adoption**, recorded in
 [`A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md).
 A1.3-P0 and the old A1.3 packet remain preserved as held historical fences and may not be
-dispatched. A1.4, Windows, and all other later work remain undispatched until their own fresh
-authority packets activate them.
+dispatched. At that selection point, A1.4, Windows, and all other later work remained undispatched
+until their own fresh authority packets activated them.
+
+## A1.3-P1 closure (2026-08-29; controlling)
+
+A1.3-P1 is terminally complete at commit
+`ee3b9f0dbcaf60f4a97aae9bdabe51570d400d09` and tree
+`6d256d9e59cb2f4f74d07ccc60a4a0c3b57285e8` under the exact closure identities recorded in its
+packet owner. All nine packet conditions are satisfied. `RG-BASE-01` remains open, unwaived, and
+not green; its outstanding positive real-path Linux smoke belongs to A1.4's final A1 proof wall
+under current sequencing authority and is not an unsatisfied A1.3-P1 implementation or closure
+condition.
+
+A1.4 — bounded auto-attach producer adoption and regression closure — is only the named
+implementation successor. It awaits fresh admission and explicit dispatch. This closure does not
+schedule, authorize, admit, dispatch, implement, or complete A1.4, and A1.4 cannot claim final
+completion until it supplies the required `RG-BASE-01` proof.
 
 ## macOS lane
 
@@ -131,7 +147,7 @@ proof rather than a historical label. That rebind later selected A1.3.
 - This scheduling decision itself did not create a branch, modify product source, re-open Linux
   R3, or perform a Linux proof run. Its separately recorded reentry selection first selected A1.3,
   the later frozen amendment selected A1.3-P0 as a narrower preparatory split, and the corrective
-  replan now holds both older fences while activating only the new A1.3-P1 atomic public-adoption
-  packet.
+  replan held both older fences while selecting the now-terminally-complete A1.3-P1 atomic
+  public-adoption packet.
 - This decision does not dispatch Windows, protected macOS lifecycle revival, Keychain activity,
   Attempt 4 inspection or remediation, installer execution, Lima actions, or native operations.

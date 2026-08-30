@@ -1,8 +1,8 @@
 **Kind:** seam family
 **Stable ID:** `host-session-authority-family`
 **Canonical for:** host/session authority family seam extraction and related owner navigation
-**Status:** canonical current seam-family record
-**Authority scope:** exact extracted family-local source body plus the preserved related-owner link only; no implementation authority
+**Status:** canonical current seam-family record with preserved packet-era row
+**Authority scope:** exact extracted family-local source body, the preserved related-owner link, and the A1.3-P1 closure-status overlay only; no implementation or successor authority
 **Source span:** D8 host/session authority family extraction from `02-seam-crosswalk.md`
 **Supersedes:** canonical ownership of the extracted `SurfaceAdapter / HostExecutionEpisode` row; the related `HostSessionAuthority` row remains canonical under `a1-2-earlier-histories/`
 **Superseded by:** none
@@ -11,6 +11,13 @@
 # Host/session authority seam family
 
 > **Authority boundary:** This file owns only the extracted `SurfaceAdapter / HostExecutionEpisode` seam row and the preserved related-owner link for the already-extracted `HostSessionAuthority` family row. It does not promote either seam, move the A0 authority-leak inventory, reopen `a1-2-earlier-histories/`, or authorize A1/A2/A3 implementation work.
+
+## A1.3-P1 closure-status overlay (2026-08-29; current)
+
+The extracted seam row below remains byte-stable; its reference to the active A1.3-P1 packet is
+packet-era scope wording, not current scheduling status. A1.3-P1 is terminally complete, while the
+row's `MissingSeam` classification remains unchanged and unpromoted. A1.4 is only the named
+successor awaiting fresh admission and explicit dispatch and receives no authority here.
 
 ## Related canonical owner
 

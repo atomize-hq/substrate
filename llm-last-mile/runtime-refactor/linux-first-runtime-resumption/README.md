@@ -10,19 +10,25 @@
 
 # A1.3 Linux-first packet family index
 
-> **Authority boundary:** This file only assembles links for the active `A1.3-P1` packet and its
-> inseparable held predecessors `A1.3-P0` and `A1.3`. It does not dispatch implementation, reopen
-> the closed reentry gate, broaden macOS or Windows scope, or replace the linked canonical owners.
+> **Authority boundary:** This file only assembles links for terminally complete `A1.3-P1`, its
+> inseparable held predecessors `A1.3-P0` and `A1.3`, and the named A1.4 successor awaiting fresh
+> admission and explicit dispatch. It does not dispatch implementation, reopen the closed reentry
+> gate, broaden macOS or Windows scope, or replace the linked canonical owners.
 
 | Component | Canonical owner |
 |---|---|
 | Controlling decision | [`DECISION.md`](DECISION.md) |
-| Active packet | [`A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md) |
+| Completed packet | [`A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md) |
+| Named successor awaiting fresh admission and explicit dispatch | [`../slices/tasks/a1-4-auto-attach-producer-adoption.md`](../slices/tasks/a1-4-auto-attach-producer-adoption.md) |
 | Held packet | [`A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md`](A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md) |
 | Held packet | [`A1.3-LINUX-FIRST-PACKET.md`](A1.3-LINUX-FIRST-PACKET.md) |
 | Extracted slice/task family rows | [`slice-and-task.md`](slice-and-task.md) |
 | Closed global selection gate | [`../gates/authority-required-runtime-refactor-reentry.md`](../gates/authority-required-runtime-refactor-reentry.md) |
 | Current non-authoritative state projection | [`../index/current.md`](../index/current.md) |
+
+A1.3-P1 is terminally complete under the exact commit, tree, reviewed fingerprint, CLEAN review,
+and verification-evidence identities recorded in its packet owner. A1.4 is not authorized,
+admitted, dispatched, implemented, scheduled, or complete by this family index.
 
 Historical predecessors stay linked in their preserved packet records. The macOS developer-parity
 lane remains separate under [`../macos-dev-parity/DECISION.md`](../macos-dev-parity/DECISION.md),
