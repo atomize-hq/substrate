@@ -18,14 +18,19 @@ use super::facade::{
     exact_v3_authority_history_with_reader, AuthorityParticipantRoleV1, HostSessionAuthority,
     ResolvedCurrentAuthorityV1, RetainedWorkerAuthorityPreconditionV1,
 };
+use super::fork_successor::{
+    AllocateForkSuccessorRequestV1, ForkSuccessorAllocationCrashPointV1,
+    ForkSuccessorAllocationOutcomeV1,
+};
 use super::schema::{
     AgentDescriptorHashInputV1, AgentDescriptorV1, AgentExecutionScopeV1,
     AuthoritativeLineageHashInputV1, AuthorityObjectCommitmentV1, AuthorityObjectKindV1,
     AuthorityObjectRefV1, DurableSessionAuthorityHashInputV1, HostAttachCapabilitiesV1,
-    HostAttachExecutionClientStartV1, HostAttachLaunchKnobsV1, HostAttachModePreferenceV1,
-    HostPostTurnDispositionV1, HostPostTurnProtocolActorV1, HostPostTurnProtocolEventKindV1,
-    HostPostTurnTerminalReasonV1, HostSessionAuthorityPreconditionV1, HostSessionPostureV1,
-    HostSessionTransitionCallerKindV1, HostSessionTransitionCallerV1, HostSessionTransitionModeV1,
+    HostAttachContractHashInputV1, HostAttachExecutionClientStartV1, HostAttachLaunchKnobsV1,
+    HostAttachModePreferenceV1, HostPostTurnDispositionV1, HostPostTurnProtocolActorV1,
+    HostPostTurnProtocolEventKindV1, HostPostTurnTerminalReasonV1,
+    HostSessionAuthorityPreconditionV1, HostSessionPostureV1, HostSessionTransitionCallerKindV1,
+    HostSessionTransitionCallerV1, HostSessionTransitionModeV1,
     HostStartupOwnershipProtocolActorV1, HostStartupOwnershipProtocolEventV1,
     PolicyObjectHashInputV1, ResumeHandleHashInputV1, RetainedWorkerObjectHashInputV1,
     RuntimeBackendKindV1, StartupOwnershipOutcomeV1, StartupOwnershipResultHashInputV1,
@@ -5778,4 +5783,1187 @@ fn hsa_stop_capability_denial_precedes_intent_mutation() {
         .unwrap()
         .stop_transaction_map
         .is_empty());
+}
+
+fn fork_successor_source() -> (
+    tempfile::TempDir,
+    HostSessionAuthority,
+    IssueHostSessionTransitionRequestV1,
+    ResolvedCurrentAuthorityV1,
+) {
+    let (parent, authority, binding) = authority();
+    let request = start_request(binding);
+    let application = issue_and_claim_start(&authority, &request);
+    authority
+        .apply_start_at(&application, timestamp("2026-07-14T12:01:10.000000000Z"))
+        .unwrap();
+    let home = request
+        .workspace_binding
+        .authority_store_root
+        .physical_path
+        .clone();
+    let exact_v2 = authority.read_a12a_root().unwrap();
+    super::store::upgrade_v2_root_to_v3_test(Path::new(&home), &exact_v2).unwrap();
+    let source = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .unwrap();
+    (parent, authority, request, source)
+}
+
+fn world_fork_successor_source() -> (
+    tempfile::TempDir,
+    HostSessionAuthority,
+    IssueHostSessionTransitionRequestV1,
+    ResolvedCurrentAuthorityV1,
+) {
+    let (parent, authority, binding) = authority();
+    let mut request = start_request(binding);
+    request.start_contract.descriptor.execution_scope = AgentExecutionScopeV1::World;
+    request
+        .start_contract
+        .launch_knobs
+        .requested_execution_scope = AgentExecutionScopeV1::World;
+    request.world_binding = Some(WorldBindingV1 {
+        world_id: "world-fork-successor-1".into(),
+        world_generation: 1,
+    });
+    let application = issue_and_claim_start(&authority, &request);
+    authority
+        .apply_start_at(&application, timestamp("2026-07-14T12:01:10.000000000Z"))
+        .unwrap();
+    let home = request
+        .workspace_binding
+        .authority_store_root
+        .physical_path
+        .clone();
+    let exact_v2 = authority.read_a12a_root().unwrap();
+    super::store::upgrade_v2_root_to_v3_test(Path::new(&home), &exact_v2).unwrap();
+    let source = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .unwrap();
+    (parent, authority, request, source)
+}
+
+fn fork_successor_request(source: &ResolvedCurrentAuthorityV1) -> AllocateForkSuccessorRequestV1 {
+    AllocateForkSuccessorRequestV1 {
+        schema_version: 1,
+        allocation_id: "fork-allocation-1".into(),
+        request_id: "fork-request-1".into(),
+        authority_store_id: source.observation.authority_store_id.clone(),
+        bootstrap_home: source.observation.bootstrap_home.clone(),
+        expected_source_root_revision: source.observation.root_revision,
+        source_orchestration_session_id: source.authority.orchestration_session_id.clone(),
+        source_shell_trace_session_id: source.authority.shell_trace_session_id.clone(),
+        source_authority_precondition: HostSessionAuthorityPreconditionV1::ExpectedRevision {
+            authority_revision: source.observation.authority_revision,
+            authority_record_commitment: source.observation.authority_record_commitment.clone(),
+            active_authoritative_participant_id: source
+                .authority
+                .active_authoritative_participant_id
+                .clone()
+                .unwrap(),
+            authoritative_lineage_commitment: source
+                .observation
+                .authoritative_lineage_commitment
+                .clone(),
+            lifecycle_posture: source.authority.lifecycle_posture,
+        },
+        source_authoritative_participant_lineage: source
+            .authority
+            .authoritative_participant_lineage
+            .clone(),
+        target_orchestration_session_id: "session-fork-successor-1".into(),
+        target_shell_trace_session_id: "trace-fork-successor-1".into(),
+        target_authoritative_participant_id: "participant-fork-successor-1".into(),
+        resulting_authoritative_lineage: source
+            .authority
+            .authoritative_participant_lineage
+            .iter()
+            .cloned()
+            .chain(std::iter::once("participant-fork-successor-1".into()))
+            .collect(),
+        workspace_binding: source.authority.workspace_binding.clone(),
+        world_binding: source.authority.world_binding.clone(),
+        allocated_at: timestamp("2026-07-14T12:02:00.000000000Z"),
+    }
+}
+
+fn set_fork_source_revision(request: &mut AllocateForkSuccessorRequestV1, revision: u64) {
+    let HostSessionAuthorityPreconditionV1::ExpectedRevision {
+        authority_revision, ..
+    } = &mut request.source_authority_precondition
+    else {
+        panic!("fork successor request must use ExpectedRevision")
+    };
+    *authority_revision = revision;
+}
+
+fn set_fork_source_commitment(
+    request: &mut AllocateForkSuccessorRequestV1,
+    commitment: AuthorityObjectCommitmentV1,
+) {
+    let HostSessionAuthorityPreconditionV1::ExpectedRevision {
+        authority_record_commitment,
+        ..
+    } = &mut request.source_authority_precondition
+    else {
+        panic!("fork successor request must use ExpectedRevision")
+    };
+    *authority_record_commitment = commitment;
+}
+
+fn retarget_fork_request(
+    request: &mut AllocateForkSuccessorRequestV1,
+    suffix: &str,
+    target_trace: &str,
+    target_participant: &str,
+) {
+    request.allocation_id = format!("fork-allocation-{suffix}");
+    request.request_id = format!("fork-request-{suffix}");
+    request.target_orchestration_session_id = format!("session-fork-successor-{suffix}");
+    request.target_shell_trace_session_id = target_trace.into();
+    request.target_authoritative_participant_id = target_participant.into();
+    *request.resulting_authoritative_lineage.last_mut().unwrap() = target_participant.into();
+}
+
+#[test]
+fn hsa_fork_successor_allocates_parked_authority_and_exact_retry_joins() {
+    let (_parent, authority, _start, source) = fork_successor_source();
+    let source_before = source.authority.clone();
+    let request = fork_successor_request(&source);
+    let root_before = authority.read_a12b_root().unwrap();
+
+    let ForkSuccessorAllocationOutcomeV1::Allocated(result) =
+        authority.allocate_fork_successor(&request).unwrap()
+    else {
+        panic!("first fork successor allocation must commit")
+    };
+    assert_eq!(
+        result.target_authority.lifecycle_posture,
+        HostSessionPostureV1::ParkedResumable
+    );
+    assert_eq!(result.target_authority.authority_revision, 1);
+    assert_eq!(
+        result
+            .target_authority
+            .active_authoritative_participant_id
+            .as_deref(),
+        Some(request.target_authoritative_participant_id.as_str())
+    );
+    assert!(result.target_authority.retained_worker_refs.is_empty());
+    assert!(result
+        .target_authority
+        .internal_resume_handle_refs
+        .is_empty());
+    assert_eq!(
+        authority
+            .resolve_current_exact(&request.source_orchestration_session_id, None)
+            .unwrap()
+            .authority,
+        source_before,
+        "allocation must not revise source authority"
+    );
+    let target = authority
+        .resolve_current_exact(&request.target_orchestration_session_id, None)
+        .unwrap();
+    assert_eq!(target.authority, result.target_authority);
+    assert!(target
+        .host_attach_contract
+        .continuity_resume_handle_ref
+        .is_none());
+
+    let root_after = authority.read_a12b_root().unwrap();
+    assert_eq!(root_after.root_revision, root_before.root_revision + 1);
+    assert!(matches!(
+        authority.allocate_fork_successor(&request).unwrap(),
+        ForkSuccessorAllocationOutcomeV1::Joined(joined) if joined == result
+    ));
+    assert_eq!(authority.read_a12b_root().unwrap(), root_after);
+
+    let attach = attach_successor_request(&target, "participant-fork-attach-1");
+    assert!(matches!(
+        authority
+            .issue_successor_at(
+                &target,
+                &attach,
+                timestamp("2026-07-14T12:03:00.000000000Z"),
+                300,
+            )
+            .unwrap(),
+        SuccessorTransitionIssueOutcomeV1::Issued(_)
+    ));
+}
+
+#[test]
+fn hsa_fork_successor_target_composes_attach_and_retained_registration_history() {
+    let (_parent, authority, _start, source) = world_fork_successor_source();
+    let request = fork_successor_request(&source);
+    let ForkSuccessorAllocationOutcomeV1::Allocated(allocation) =
+        authority.allocate_fork_successor(&request).unwrap()
+    else {
+        panic!("first fork successor allocation must commit")
+    };
+    let parked = authority
+        .resolve_current_exact(&request.target_orchestration_session_id, None)
+        .unwrap();
+    let attach = attach_successor_request(&parked, "participant-fork-attached-1");
+    let SuccessorTransitionIssueOutcomeV1::Issued(issued) = authority
+        .issue_successor_at(
+            &parked,
+            &attach,
+            timestamp("2026-07-14T12:03:00.000000000Z"),
+            300,
+        )
+        .unwrap()
+    else {
+        panic!("fork target Attach must issue")
+    };
+    let claim = ClaimHostSessionTransitionRequestV1 {
+        intent_id: issued.intent_id.clone(),
+        issuer_request_id: issued.issuer_request_id.clone(),
+        payload_commitment: issued.payload_commitment.clone(),
+        expected_intent_revision: issued.intent_revision,
+        claim_id: "claim-fork-attach-1".into(),
+        claimant_attempt_id: "attempt-fork-attach-1".into(),
+    };
+    let SuccessorTransitionClaimOutcomeV1::Claimed(claimed) = authority
+        .claim_successor_at(&claim, timestamp("2026-07-14T12:03:10.000000000Z"), 30)
+        .unwrap()
+    else {
+        panic!("fork target Attach must claim")
+    };
+    let HostSessionTransitionIntentStateV3::Claimed { claim_revision, .. } = claimed.state else {
+        panic!("fork target Attach claim must retain claim evidence")
+    };
+    let application = ApplyHostSessionTransitionRequestV1 {
+        intent_id: claimed.intent_id,
+        issuer_request_id: claimed.issuer_request_id,
+        payload_commitment: claimed.payload_commitment,
+        expected_intent_revision: claimed.intent_revision,
+        claim_id: claim.claim_id,
+        expected_claim_revision: claim_revision,
+    };
+    assert!(matches!(
+        authority
+            .apply_successor_at(&application, timestamp("2026-07-14T12:03:20.000000000Z"))
+            .unwrap(),
+        SuccessorTransitionApplicationOutcomeV1::Applied(_)
+    ));
+    let attached = authority
+        .resolve_current_exact(&request.target_orchestration_session_id, None)
+        .unwrap();
+    assert_eq!(attached.authority.authority_revision, 2);
+    assert_eq!(
+        attached.authority.lifecycle_posture,
+        HostSessionPostureV1::ActiveAttached
+    );
+
+    let plan = RetainedWorkerRegistrationPlanV1 {
+        registration_request_id: "fork-target-retained-registration-1".into(),
+        orchestration_session_id: request.target_orchestration_session_id.clone(),
+        expected_authority: RetainedWorkerAuthorityPreconditionV1 {
+            authority_store_id: attached.observation.authority_store_id.clone(),
+            authority_revision: attached.observation.authority_revision,
+            authority_record_commitment: attached.observation.authority_record_commitment.clone(),
+        },
+        retained_participant_id: "participant-fork-retained-target-1".into(),
+        descriptor: AgentDescriptorV1 {
+            schema_version: 1,
+            agent_id: "fork-retained-worker-1".into(),
+            backend_id: "cli:codex-world".into(),
+            backend_kind: RuntimeBackendKindV1::Codex,
+            protocol: "substrate.agent.session".into(),
+            execution_scope: AgentExecutionScopeV1::World,
+            binary_path: "/usr/bin/codex".into(),
+        },
+        internal_uaa_session_id: "uaa-fork-retained-target-1".into(),
+    };
+    let runtime = RetainedWorkerRuntime;
+    let first = runtime
+        .register_retained_target(&authority, &plan)
+        .expect("fork target retained registration must commit");
+    let joined = runtime
+        .register_retained_target(&authority, &plan)
+        .expect("fork target retained registration exact retry must join");
+    assert_eq!(joined, first);
+    let retained = authority
+        .resolve_current_exact(&request.target_orchestration_session_id, None)
+        .unwrap();
+    assert_eq!(retained.authority.authority_revision, 3);
+    assert_eq!(
+        retained.authority.authoritative_participant_lineage.last(),
+        Some(&plan.retained_participant_id)
+    );
+    assert!(matches!(
+        authority.allocate_fork_successor(&request).unwrap(),
+        ForkSuccessorAllocationOutcomeV1::Joined(joined) if joined == allocation
+    ));
+}
+
+#[test]
+fn hsa_fork_successor_recurses_through_descendant_transition_and_exact_retries() {
+    let (_parent, authority, _start, source) = fork_successor_source();
+    let parent_request = fork_successor_request(&source);
+    let ForkSuccessorAllocationOutcomeV1::Allocated(parent_allocation) =
+        authority.allocate_fork_successor(&parent_request).unwrap()
+    else {
+        panic!("parent fork allocation must commit")
+    };
+    let parent_target = authority
+        .resolve_current_exact(&parent_request.target_orchestration_session_id, None)
+        .unwrap();
+    let mut child_request = fork_successor_request(&parent_target);
+    retarget_fork_request(
+        &mut child_request,
+        "recursive-child-1",
+        "trace-fork-recursive-child-1",
+        "participant-fork-recursive-child-1",
+    );
+    child_request.allocated_at = timestamp("2026-07-14T12:02:30.000000000Z");
+    let ForkSuccessorAllocationOutcomeV1::Allocated(child_allocation) =
+        authority.allocate_fork_successor(&child_request).unwrap()
+    else {
+        panic!("recursive child fork allocation must commit")
+    };
+    let child_target = authority
+        .resolve_current_exact(&child_request.target_orchestration_session_id, None)
+        .unwrap();
+    assert!(child_target
+        .authority
+        .authoritative_participant_lineage
+        .starts_with(
+            &parent_allocation
+                .target_authority
+                .authoritative_participant_lineage
+        ));
+
+    let attach = attach_successor_request(&child_target, "participant-recursive-attach-1");
+    let SuccessorTransitionIssueOutcomeV1::Issued(issued) = authority
+        .issue_successor_at(
+            &child_target,
+            &attach,
+            timestamp("2026-07-14T12:03:00.000000000Z"),
+            300,
+        )
+        .unwrap()
+    else {
+        panic!("recursive child transition must issue")
+    };
+    let claim = ClaimHostSessionTransitionRequestV1 {
+        intent_id: issued.intent_id.clone(),
+        issuer_request_id: issued.issuer_request_id.clone(),
+        payload_commitment: issued.payload_commitment.clone(),
+        expected_intent_revision: issued.intent_revision,
+        claim_id: "claim-recursive-attach-1".into(),
+        claimant_attempt_id: "attempt-recursive-attach-1".into(),
+    };
+    let SuccessorTransitionClaimOutcomeV1::Claimed(claimed) = authority
+        .claim_successor_at(&claim, timestamp("2026-07-14T12:03:10.000000000Z"), 30)
+        .unwrap()
+    else {
+        panic!("recursive child transition must claim")
+    };
+    let HostSessionTransitionIntentStateV3::Claimed { claim_revision, .. } = claimed.state else {
+        panic!("recursive child transition must retain claim evidence")
+    };
+    assert!(matches!(
+        authority
+            .apply_successor_at(
+                &ApplyHostSessionTransitionRequestV1 {
+                    intent_id: claimed.intent_id,
+                    issuer_request_id: claimed.issuer_request_id,
+                    payload_commitment: claimed.payload_commitment,
+                    expected_intent_revision: claimed.intent_revision,
+                    claim_id: claim.claim_id,
+                    expected_claim_revision: claim_revision,
+                },
+                timestamp("2026-07-14T12:03:20.000000000Z"),
+            )
+            .unwrap(),
+        SuccessorTransitionApplicationOutcomeV1::Applied(_)
+    ));
+    assert!(matches!(
+        authority.allocate_fork_successor(&parent_request).unwrap(),
+        ForkSuccessorAllocationOutcomeV1::Joined(joined) if joined == parent_allocation
+    ));
+    assert!(matches!(
+        authority.allocate_fork_successor(&child_request).unwrap(),
+        ForkSuccessorAllocationOutcomeV1::Joined(joined) if joined == child_allocation
+    ));
+}
+
+#[test]
+fn hsa_fork_successor_durable_publication_proof_rejects_duplicate_and_reversed_revisions() {
+    {
+        let (_parent, authority, _start, source) = fork_successor_source();
+        let first_request = fork_successor_request(&source);
+        authority.allocate_fork_successor(&first_request).unwrap();
+        let refreshed_source = authority
+            .resolve_current_exact(&source.authority.orchestration_session_id, None)
+            .unwrap();
+        let mut second_request = fork_successor_request(&refreshed_source);
+        retarget_fork_request(
+            &mut second_request,
+            "duplicate-publication-1",
+            "trace-fork-duplicate-publication-1",
+            "participant-fork-duplicate-publication-1",
+        );
+        authority.allocate_fork_successor(&second_request).unwrap();
+        let mut substituted = authority.read_a12b_root().unwrap();
+        let first_root_revision_after = substituted.fork_successor_allocation_map
+            [&first_request.allocation_id]
+            .root_revision_after;
+        let second = substituted
+            .fork_successor_allocation_map
+            .get_mut(&second_request.allocation_id)
+            .unwrap();
+        second.request.expected_source_root_revision = first_root_revision_after - 1;
+        second.root_revision_after = first_root_revision_after;
+        second.request_commitment = canonical_commitment(&second.request);
+        assert!(
+            substituted.validate().is_err(),
+            "two allocations cannot claim the same root publication revision"
+        );
+    }
+
+    {
+        let (_parent, authority, _start, source) = fork_successor_source();
+        let parent_request = fork_successor_request(&source);
+        authority.allocate_fork_successor(&parent_request).unwrap();
+        let parent_target = authority
+            .resolve_current_exact(&parent_request.target_orchestration_session_id, None)
+            .unwrap();
+        let mut child_request = fork_successor_request(&parent_target);
+        retarget_fork_request(
+            &mut child_request,
+            "reversed-child-1",
+            "trace-fork-reversed-child-1",
+            "participant-fork-reversed-child-1",
+        );
+        child_request.allocated_at = timestamp("2026-07-14T12:02:30.000000000Z");
+        authority.allocate_fork_successor(&child_request).unwrap();
+        let mut substituted = authority.read_a12b_root().unwrap();
+        let parent_root_revision_after = substituted.fork_successor_allocation_map
+            [&parent_request.allocation_id]
+            .root_revision_after;
+        assert!(parent_root_revision_after >= 5);
+        let child = substituted
+            .fork_successor_allocation_map
+            .get_mut(&child_request.allocation_id)
+            .unwrap();
+        child.request.expected_source_root_revision = parent_root_revision_after - 2;
+        child.root_revision_after = parent_root_revision_after - 1;
+        child.request_commitment = canonical_commitment(&child.request);
+        assert!(
+            substituted.validate().is_err(),
+            "a recursive child cannot claim publication before its source allocation"
+        );
+    }
+}
+
+#[test]
+fn hsa_fork_successor_rejects_stale_commitment_and_identity_substitution() {
+    let (_parent, authority, _start, source) = fork_successor_source();
+    let base = fork_successor_request(&source);
+    let root_before = authority.read_a12b_root().unwrap();
+    let wrong_commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+        digest_hex: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee".into(),
+    };
+
+    let mut stale = base.clone();
+    set_fork_source_revision(&mut stale, source.observation.authority_revision + 1);
+    assert!(authority.allocate_fork_successor(&stale).is_err());
+    let mut mismatched = base.clone();
+    set_fork_source_commitment(&mut mismatched, wrong_commitment);
+    assert!(authority.allocate_fork_successor(&mismatched).is_err());
+    let mut substituted_source = base.clone();
+    substituted_source.source_orchestration_session_id = "session-substituted".into();
+    assert!(authority
+        .allocate_fork_successor(&substituted_source)
+        .is_err());
+    let mut substituted_participant = base.clone();
+    substituted_participant.target_authoritative_participant_id = "participant-substituted".into();
+    assert!(authority
+        .allocate_fork_successor(&substituted_participant)
+        .is_err());
+    let mut substituted_lineage = base.clone();
+    substituted_lineage
+        .resulting_authoritative_lineage
+        .reverse();
+    assert!(authority
+        .allocate_fork_successor(&substituted_lineage)
+        .is_err());
+    let mut substituted_binding = base;
+    substituted_binding
+        .workspace_binding
+        .workspace_root
+        .physical_path
+        .push_str("-substituted");
+    assert!(authority
+        .allocate_fork_successor(&substituted_binding)
+        .is_err());
+    let mut reordered = fork_successor_request(&source);
+    reordered.allocated_at = timestamp("2026-07-14T12:01:09.999999999Z");
+    assert!(authority.allocate_fork_successor(&reordered).is_err());
+    assert_eq!(authority.read_a12b_root().unwrap(), root_before);
+}
+
+#[test]
+fn hsa_fork_successor_accepts_exact_source_with_retained_lineage() {
+    let (_parent, authority, binding) = authority();
+    let mut start = start_request(binding);
+    start.start_contract.descriptor.execution_scope = AgentExecutionScopeV1::World;
+    start.start_contract.launch_knobs.requested_execution_scope = AgentExecutionScopeV1::World;
+    start.world_binding = Some(WorldBindingV1 {
+        world_id: "world-fork-retained-source-1".into(),
+        world_generation: 1,
+    });
+    let application = issue_and_claim_start(&authority, &start);
+    authority
+        .apply_start_at(&application, timestamp("2026-07-14T12:01:10.000000000Z"))
+        .unwrap();
+    let root_before_retained = authority.read_a12a_root().unwrap();
+    let SessionNamespaceRecordV1::Authority(current_authority) =
+        &root_before_retained.session_namespace_map[&start.orchestration_session_id]
+    else {
+        panic!("applied Start must have current authority")
+    };
+    let expected_authority = RetainedWorkerAuthorityPreconditionV1 {
+        authority_store_id: root_before_retained.authority_store_id.clone(),
+        authority_revision: current_authority.authority_revision,
+        authority_record_commitment: canonical_commitment(&authority_hash_input(current_authority)),
+    };
+    let descriptor_bytes = super::canonical_json::to_vec(&AgentDescriptorHashInputV1 {
+        schema_version: 1,
+        descriptor: start.start_contract.descriptor.clone(),
+    })
+    .unwrap();
+    let retained_participant_id = "participant-fork-retained-source-1".to_string();
+    let session_id = start.orchestration_session_id.clone();
+    let resume_handle_bytes = super::canonical_json::to_vec(&ResumeHandleHashInputV1 {
+        schema_version: 1,
+        orchestration_session_id: session_id.clone(),
+        participant_id: retained_participant_id.clone(),
+        backend_id: start.start_contract.descriptor.backend_id.clone(),
+        protocol: start.start_contract.descriptor.protocol.clone(),
+        internal_uaa_session_id: "uaa-fork-retained-source-1".into(),
+    })
+    .unwrap();
+    let participant_for_worker = retained_participant_id.clone();
+    let session_for_worker = session_id.clone();
+    let reserved = authority
+        .reserve_retained_worker_registration_at(
+            "fork-retained-registration-1",
+            &session_id,
+            &expected_authority,
+            &retained_participant_id,
+            descriptor_bytes,
+            resume_handle_bytes,
+            timestamp("2026-07-14T12:01:30.000000000Z"),
+            None,
+            move |descriptor_ref, resume_handle_ref, policy_ref, world_binding| {
+                super::canonical_json::to_vec(&RetainedWorkerObjectHashInputV1 {
+                    schema_version: 1,
+                    orchestration_session_id: session_for_worker.clone(),
+                    participant_id: participant_for_worker.clone(),
+                    world_binding: world_binding.clone(),
+                    descriptor_ref: descriptor_ref.clone(),
+                    resume_handle_ref: resume_handle_ref.clone(),
+                    policy_ref: policy_ref.clone(),
+                })
+                .map_err(|_| "serialize retained worker")
+            },
+        )
+        .unwrap();
+    for (reference, bytes) in [
+        (
+            &reserved.descriptor_ref,
+            reserved.descriptor_bytes.as_slice(),
+        ),
+        (
+            &reserved.resume_handle_ref,
+            reserved.resume_handle_bytes.as_slice(),
+        ),
+        (
+            &reserved.retained_worker_ref,
+            reserved.retained_worker_bytes.as_slice(),
+        ),
+    ] {
+        authority
+            .publish_reserved_retained_object(&reserved, reference, bytes)
+            .unwrap();
+    }
+    authority
+        .apply_reserved_retained_worker_registration(&reserved)
+        .unwrap();
+    let root_after_retained = authority.read_a12a_root().unwrap();
+    super::store::upgrade_v2_root_to_v3_test(
+        Path::new(&start.workspace_binding.authority_store_root.physical_path),
+        &root_after_retained,
+    )
+    .unwrap();
+    let source = authority
+        .resolve_current_exact(&start.orchestration_session_id, None)
+        .unwrap();
+    assert_eq!(
+        source
+            .authority
+            .authoritative_participant_lineage
+            .last()
+            .map(String::as_str),
+        Some(retained_participant_id.as_str())
+    );
+    assert_ne!(
+        source
+            .authority
+            .active_authoritative_participant_id
+            .as_deref(),
+        Some(retained_participant_id.as_str())
+    );
+    let mut request = fork_successor_request(&source);
+    request.allocated_at = source.authority.updated_at.clone();
+    assert!(matches!(
+        authority.allocate_fork_successor(&request).unwrap(),
+        ForkSuccessorAllocationOutcomeV1::Allocated(_)
+    ));
+}
+
+#[test]
+fn hsa_fork_successor_durable_source_proof_rejects_coherent_snapshot_substitution() {
+    let (_parent, authority, _start, source) = fork_successor_source();
+    let request = fork_successor_request(&source);
+    authority.allocate_fork_successor(&request).unwrap();
+    let mut substituted = authority.read_a12b_root().unwrap();
+    let allocation = substituted
+        .fork_successor_allocation_map
+        .get_mut(&request.allocation_id)
+        .unwrap();
+    allocation.source_authority_before.updated_at = timestamp("2026-07-14T12:01:11.000000000Z");
+    let source_commitment = canonical_commitment(&authority_hash_input(
+        allocation.source_authority_before.as_ref(),
+    ));
+    set_fork_source_commitment(&mut allocation.request, source_commitment);
+    allocation.request_commitment = canonical_commitment(&allocation.request);
+    assert!(
+        substituted.validate().is_err(),
+        "a re-committed allocation snapshot must still match reconstructed source history"
+    );
+}
+
+#[test]
+fn hsa_fork_successor_exact_retry_joins_after_source_authority_advances() {
+    let (_parent, authority, _start, source) = fork_successor_source();
+    let request = fork_successor_request(&source);
+    let ForkSuccessorAllocationOutcomeV1::Allocated(result) =
+        authority.allocate_fork_successor(&request).unwrap()
+    else {
+        panic!("first fork allocation must commit")
+    };
+    let current_source = authority
+        .resolve_current_exact(&request.source_orchestration_session_id, None)
+        .unwrap();
+    let HostSessionStopIssueOutcomeV1::Issued(stop) = authority
+        .issue_stop(&current_source, &stop_request(&current_source))
+        .unwrap()
+    else {
+        panic!("source Stop must issue")
+    };
+    let delivery = AcceptHostSessionStopDeliveryRequestV1 {
+        intent_id: stop.intent_id.clone(),
+        request_id: stop.request_id.clone(),
+        payload_commitment: stop.payload_commitment.clone(),
+        orchestration_session_id: stop.orchestration_session_id.clone(),
+        authoritative_participant_id: stop.authoritative_participant_id.clone(),
+        authority_revision: stop.authority_before.authority_revision,
+        authority_record_commitment: stop.authority_record_commitment_before.clone(),
+        acceptance_id: "fork-source-stop-acceptance-1".into(),
+        accepted_at: timestamp("2026-07-14T12:10:10.000000000Z"),
+    };
+    assert!(matches!(
+        authority.accept_stop_delivery(&delivery).unwrap(),
+        HostSessionStopDeliveryOutcomeV1::Accepted(_)
+    ));
+    assert!(matches!(
+        authority
+            .complete_stop(&stop_completion_request(
+                &stop,
+                Some(&delivery.acceptance_id),
+            ))
+            .unwrap(),
+        HostSessionStopCompletionOutcomeV1::Completed(_)
+    ));
+    assert!(matches!(
+        authority.allocate_fork_successor(&request).unwrap(),
+        ForkSuccessorAllocationOutcomeV1::Joined(joined) if joined == result
+    ));
+}
+
+#[test]
+fn hsa_fork_successor_fails_closed_for_conflicting_existing_target() {
+    let (_parent, authority, _start, source) = fork_successor_source();
+    let request = fork_successor_request(&source);
+    assert!(matches!(
+        authority.allocate_fork_successor(&request).unwrap(),
+        ForkSuccessorAllocationOutcomeV1::Allocated(_)
+    ));
+    let root_before = authority.read_a12b_root().unwrap();
+    let mut conflict = request;
+    conflict.allocation_id = "fork-allocation-conflict".into();
+    conflict.request_id = "fork-request-conflict".into();
+    assert!(authority.allocate_fork_successor(&conflict).is_err());
+    assert_eq!(authority.read_a12b_root().unwrap(), root_before);
+}
+
+#[test]
+fn hsa_fork_successor_rejects_pending_start_successor_and_retained_identity_reservations() {
+    {
+        let (_parent, authority, binding) = authority();
+        let source_start = start_request(binding.clone());
+        let source_application = issue_and_claim_start(&authority, &source_start);
+        authority
+            .apply_start_at(
+                &source_application,
+                timestamp("2026-07-14T12:01:10.000000000Z"),
+            )
+            .unwrap();
+        let mut pending_start = start_request(binding);
+        pending_start.intent_id = "intent-pending-start-identity-1".into();
+        pending_start.issuer_request_id = "request-pending-start-identity-1".into();
+        pending_start.orchestration_session_id = "session-pending-start-identity-1".into();
+        pending_start.shell_trace_session_id = "trace-pending-start-identity-1".into();
+        pending_start.target_authoritative_participant_id =
+            "participant-pending-start-identity-1".into();
+        pending_start.resulting_authoritative_lineage =
+            vec![pending_start.target_authoritative_participant_id.clone()];
+        pending_start.run_id = "run-pending-start-identity-1".into();
+        assert!(matches!(
+            authority
+                .issue_start_at(
+                    &pending_start,
+                    timestamp("2026-07-14T12:01:30.000000000Z"),
+                    300,
+                )
+                .unwrap(),
+            TransitionIssueOutcomeV1::Issued(_)
+        ));
+        let exact_v2 = authority.read_a12a_root().unwrap();
+        super::store::upgrade_v2_root_to_v3_test(
+            Path::new(
+                &source_start
+                    .workspace_binding
+                    .authority_store_root
+                    .physical_path,
+            ),
+            &exact_v2,
+        )
+        .unwrap();
+        let source = authority
+            .resolve_current_exact(&source_start.orchestration_session_id, None)
+            .unwrap();
+        let refreshed_source = authority
+            .resolve_current_exact(&source.authority.orchestration_session_id, None)
+            .unwrap();
+        let root_before = authority.read_a12b_root().unwrap();
+
+        let mut trace_conflict = fork_successor_request(&refreshed_source);
+        retarget_fork_request(
+            &mut trace_conflict,
+            "pending-start-trace",
+            &pending_start.shell_trace_session_id,
+            "participant-fork-pending-start-trace-1",
+        );
+        assert!(authority.allocate_fork_successor(&trace_conflict).is_err());
+
+        let mut participant_conflict = fork_successor_request(&refreshed_source);
+        retarget_fork_request(
+            &mut participant_conflict,
+            "pending-start-participant",
+            "trace-fork-pending-start-participant-1",
+            &pending_start.target_authoritative_participant_id,
+        );
+        assert!(authority
+            .allocate_fork_successor(&participant_conflict)
+            .is_err());
+        assert_eq!(authority.read_a12b_root().unwrap(), root_before);
+    }
+
+    {
+        let (_parent, authority, _start, source) = fork_successor_source();
+        let first_request = fork_successor_request(&source);
+        authority.allocate_fork_successor(&first_request).unwrap();
+        let first_target = authority
+            .resolve_current_exact(&first_request.target_orchestration_session_id, None)
+            .unwrap();
+        let pending_attach =
+            attach_successor_request(&first_target, "participant-pending-successor-identity-1");
+        assert!(matches!(
+            authority
+                .issue_successor_at(
+                    &first_target,
+                    &pending_attach,
+                    timestamp("2026-07-14T12:03:00.000000000Z"),
+                    300,
+                )
+                .unwrap(),
+            SuccessorTransitionIssueOutcomeV1::Issued(_)
+        ));
+        let refreshed_source = authority
+            .resolve_current_exact(&source.authority.orchestration_session_id, None)
+            .unwrap();
+        let mut conflict = fork_successor_request(&refreshed_source);
+        retarget_fork_request(
+            &mut conflict,
+            "pending-successor-participant",
+            "trace-fork-pending-successor-participant-1",
+            &pending_attach.target_authoritative_participant_id,
+        );
+        let root_before = authority.read_a12b_root().unwrap();
+        assert!(authority.allocate_fork_successor(&conflict).is_err());
+        assert_eq!(authority.read_a12b_root().unwrap(), root_before);
+    }
+
+    {
+        let (_parent, authority, start, source) = world_fork_successor_source();
+        let expected_authority = RetainedWorkerAuthorityPreconditionV1 {
+            authority_store_id: source.observation.authority_store_id.clone(),
+            authority_revision: source.observation.authority_revision,
+            authority_record_commitment: source.observation.authority_record_commitment.clone(),
+        };
+        let descriptor_bytes = super::canonical_json::to_vec(&AgentDescriptorHashInputV1 {
+            schema_version: 1,
+            descriptor: start.start_contract.descriptor.clone(),
+        })
+        .unwrap();
+        let retained_participant = "participant-pending-retained-identity-1".to_string();
+        let resume_handle_bytes = super::canonical_json::to_vec(&ResumeHandleHashInputV1 {
+            schema_version: 1,
+            orchestration_session_id: source.authority.orchestration_session_id.clone(),
+            participant_id: retained_participant.clone(),
+            backend_id: start.start_contract.descriptor.backend_id.clone(),
+            protocol: start.start_contract.descriptor.protocol.clone(),
+            internal_uaa_session_id: "uaa-pending-retained-identity-1".into(),
+        })
+        .unwrap();
+        let retained_for_worker = retained_participant.clone();
+        let session_for_worker = source.authority.orchestration_session_id.clone();
+        authority
+            .reserve_retained_worker_registration_at(
+                "fork-pending-retained-identity-1",
+                &source.authority.orchestration_session_id,
+                &expected_authority,
+                &retained_participant,
+                descriptor_bytes,
+                resume_handle_bytes,
+                timestamp("2026-07-14T12:01:30.000000000Z"),
+                None,
+                move |descriptor_ref, resume_handle_ref, policy_ref, world_binding| {
+                    super::canonical_json::to_vec(&RetainedWorkerObjectHashInputV1 {
+                        schema_version: 1,
+                        orchestration_session_id: session_for_worker.clone(),
+                        participant_id: retained_for_worker.clone(),
+                        world_binding: world_binding.clone(),
+                        descriptor_ref: descriptor_ref.clone(),
+                        resume_handle_ref: resume_handle_ref.clone(),
+                        policy_ref: policy_ref.clone(),
+                    })
+                    .map_err(|_| "serialize retained worker")
+                },
+            )
+            .unwrap();
+        let refreshed_source = authority
+            .resolve_current_exact(&source.authority.orchestration_session_id, None)
+            .unwrap();
+        let mut conflict = fork_successor_request(&refreshed_source);
+        retarget_fork_request(
+            &mut conflict,
+            "pending-retained-participant",
+            "trace-fork-pending-retained-participant-1",
+            &retained_participant,
+        );
+        let root_before = authority.read_a12b_root().unwrap();
+        assert!(authority.allocate_fork_successor(&conflict).is_err());
+        assert_eq!(authority.read_a12b_root().unwrap(), root_before);
+    }
+}
+
+#[test]
+fn hsa_fork_successor_concurrent_duplicates_create_one_allocation() {
+    let (_parent, authority, _start, source) = fork_successor_source();
+    let home = source.observation.bootstrap_home.physical_path.clone();
+    let request = std::sync::Arc::new(fork_successor_request(&source));
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+    let mut handles = Vec::new();
+    for _ in 0..2 {
+        let home = home.clone();
+        let request = std::sync::Arc::clone(&request);
+        let barrier = std::sync::Arc::clone(&barrier);
+        handles.push(std::thread::spawn(move || {
+            let authority = HostSessionAuthority::open(Path::new(&home)).unwrap();
+            barrier.wait();
+            authority.allocate_fork_successor(request.as_ref()).unwrap()
+        }));
+    }
+    let outcomes: Vec<_> = handles
+        .into_iter()
+        .map(|handle| handle.join().unwrap())
+        .collect();
+    assert_eq!(
+        outcomes
+            .iter()
+            .filter(|outcome| matches!(outcome, ForkSuccessorAllocationOutcomeV1::Allocated(_)))
+            .count(),
+        1
+    );
+    assert_eq!(
+        outcomes
+            .iter()
+            .filter(|outcome| matches!(outcome, ForkSuccessorAllocationOutcomeV1::Joined(_)))
+            .count(),
+        1
+    );
+    assert_eq!(
+        authority
+            .read_a12b_root()
+            .unwrap()
+            .fork_successor_allocation_map
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn hsa_fork_successor_crash_retry_converges_at_publication_boundary() {
+    for (suffix, crash_point, published) in [
+        (
+            "before",
+            ForkSuccessorAllocationCrashPointV1::BeforeRootPublication,
+            false,
+        ),
+        (
+            "after",
+            ForkSuccessorAllocationCrashPointV1::AfterRootPublication,
+            true,
+        ),
+    ] {
+        let (_parent, authority, _start, source) = fork_successor_source();
+        let mut request = fork_successor_request(&source);
+        request.allocation_id.push_str(suffix);
+        request.request_id.push_str(suffix);
+        request.target_orchestration_session_id.push_str(suffix);
+        request.target_shell_trace_session_id.push_str(suffix);
+        request.target_authoritative_participant_id.push_str(suffix);
+        *request.resulting_authoritative_lineage.last_mut().unwrap() =
+            request.target_authoritative_participant_id.clone();
+        assert!(authority
+            .allocate_fork_successor_with_crash_point(&request, crash_point)
+            .is_err());
+        let outcome = authority.allocate_fork_successor(&request).unwrap();
+        assert_eq!(
+            matches!(outcome, ForkSuccessorAllocationOutcomeV1::Joined(_)),
+            published
+        );
+        assert_eq!(
+            authority
+                .read_a12b_root()
+                .unwrap()
+                .fork_successor_allocation_map
+                .len(),
+            1
+        );
+    }
+}
+
+#[test]
+fn hsa_fork_successor_continuity_stripping_object_retries_and_reuses_authoritative_bytes() {
+    let (_parent, authority, _start, source) = fork_successor_source();
+    let initial_root = authority.read_a12b_root().unwrap();
+    let mut continuity_source = source.clone();
+    continuity_source
+        .host_attach_contract
+        .continuity_resume_handle_ref = Some(AuthorityObjectRefV1 {
+        schema_version: 1,
+        ref_id: "ao_12121212121212121212121212121212".into(),
+        object_kind: AuthorityObjectKindV1::ResumeHandle,
+        commitment: AuthorityObjectCommitmentV1::CanonicalSha256 {
+            digest_hex: "12".repeat(32),
+        },
+    });
+
+    let orphan = super::fork_successor::prepare_fork_successor_attach(
+        &authority,
+        &initial_root,
+        &continuity_source,
+    )
+    .unwrap();
+    assert!(orphan.requires_index);
+    let retried_orphan = super::fork_successor::prepare_fork_successor_attach(
+        &authority,
+        &initial_root,
+        &continuity_source,
+    )
+    .unwrap();
+    assert_eq!(retried_orphan.reference, orphan.reference);
+    assert_eq!(retried_orphan.bytes, orphan.bytes);
+    assert!(retried_orphan.requires_index);
+
+    let request = fork_successor_request(&source);
+    authority.allocate_fork_successor(&request).unwrap();
+    let current = authority.read_a12b_root().unwrap();
+    let prepared = super::fork_successor::prepare_fork_successor_attach(
+        &authority,
+        &current,
+        &continuity_source,
+    )
+    .unwrap();
+    assert!(prepared.requires_index);
+
+    let mut indexed = current.clone();
+    indexed.root_revision += 1;
+    insert_present_v3(&mut indexed, &prepared.reference, prepared.bytes.len());
+    let allocation = indexed
+        .fork_successor_allocation_map
+        .get_mut(&request.allocation_id)
+        .unwrap();
+    allocation.target_authority.host_attach_contract_ref = Some(prepared.reference.clone());
+    allocation.target_authority_record_commitment =
+        canonical_commitment(&authority_hash_input(allocation.target_authority.as_ref()));
+    let SessionNamespaceRecordV1::Authority(target) = indexed
+        .session_namespace_map
+        .get_mut(&request.target_orchestration_session_id)
+        .unwrap()
+    else {
+        panic!("allocated fork target must be current authority")
+    };
+    target.host_attach_contract_ref = Some(prepared.reference.clone());
+    indexed.validate().unwrap();
+    super::store::commit_v3_root_exact_current_opened(
+        authority.trusted_root(),
+        &current,
+        &indexed,
+        || Ok(()),
+    )
+    .unwrap();
+
+    let authoritative = super::fork_successor::prepare_fork_successor_attach(
+        &authority,
+        &indexed,
+        &continuity_source,
+    )
+    .unwrap();
+    assert_eq!(authoritative.reference, prepared.reference);
+    assert_eq!(authoritative.bytes, prepared.bytes);
+    assert!(!authoritative.requires_index);
+}
+
+#[test]
+fn hsa_fork_successor_durable_attach_proof_rejects_coherent_target_substitution() {
+    let (_parent, authority, _start, source) = fork_successor_source();
+    let request = fork_successor_request(&source);
+    authority.allocate_fork_successor(&request).unwrap();
+    let current = authority.read_a12b_root().unwrap();
+
+    let mut substituted_attach = HostAttachContractHashInputV1 {
+        schema_version: 1,
+        contract: source.host_attach_contract.clone(),
+    };
+    substituted_attach.contract.continuity_resume_handle_ref = None;
+    substituted_attach.contract.capabilities.event_stream =
+        !substituted_attach.contract.capabilities.event_stream;
+    let substituted_commitment = canonical_commitment(&substituted_attach);
+    let AuthorityObjectCommitmentV1::CanonicalSha256 { digest_hex } = &substituted_commitment
+    else {
+        panic!("attach contract commitment must be canonical")
+    };
+    let substituted_ref = AuthorityObjectRefV1 {
+        schema_version: 1,
+        ref_id: format!("ao_{}", &digest_hex[..32]),
+        object_kind: AuthorityObjectKindV1::HostAttachContract,
+        commitment: substituted_commitment,
+    };
+    let substituted_bytes = super::canonical_json::to_vec(&substituted_attach).unwrap();
+    super::store::prepare_typed_object_v3_opened(
+        authority.trusted_root(),
+        current.root_revision,
+        &substituted_ref,
+        &substituted_bytes,
+        None,
+    )
+    .unwrap();
+
+    let mut proposed = current.clone();
+    proposed.root_revision += 1;
+    insert_present_v3(&mut proposed, &substituted_ref, substituted_bytes.len());
+    let allocation = proposed
+        .fork_successor_allocation_map
+        .get_mut(&request.allocation_id)
+        .unwrap();
+    allocation.target_authority.host_attach_contract_ref = Some(substituted_ref.clone());
+    allocation.target_authority_record_commitment =
+        canonical_commitment(&authority_hash_input(allocation.target_authority.as_ref()));
+    let SessionNamespaceRecordV1::Authority(target) = proposed
+        .session_namespace_map
+        .get_mut(&request.target_orchestration_session_id)
+        .unwrap()
+    else {
+        panic!("allocated fork target must be current authority")
+    };
+    target.host_attach_contract_ref = Some(substituted_ref);
+    proposed.validate().unwrap();
+    assert!(super::store::commit_v3_root_exact_current_opened(
+        authority.trusted_root(),
+        &current,
+        &proposed,
+        || Ok(()),
+    )
+    .is_err());
+    assert_eq!(authority.read_a12b_root().unwrap(), current);
+}
+
+#[test]
+fn hsa_fork_successor_attach_semantics_reject_disabled_source_capability() {
+    let (_parent, _authority, start, source) = fork_successor_source();
+    let mut source_attach = HostAttachContractHashInputV1 {
+        schema_version: 1,
+        contract: source.host_attach_contract,
+    };
+    source_attach.contract.capabilities.session_fork = false;
+    let mut target_attach = source_attach.clone();
+    target_attach.contract.continuity_resume_handle_ref = None;
+    assert!(super::validation::validate_fork_successor_attach_semantics(
+        &source_attach,
+        &target_attach
+    )
+    .is_err());
+    assert!(start.start_contract.capabilities.session_fork);
+}
+
+#[test]
+fn hsa_fork_successor_records_no_process_or_fabricated_start_evidence() {
+    let (_parent, authority, _start, source) = fork_successor_source();
+    let request = fork_successor_request(&source);
+    let before = authority.read_a12b_root().unwrap();
+    let result = match authority.allocate_fork_successor(&request).unwrap() {
+        ForkSuccessorAllocationOutcomeV1::Allocated(result) => result,
+        ForkSuccessorAllocationOutcomeV1::Joined(_) => panic!("first allocation must commit"),
+    };
+    let after = authority.read_a12b_root().unwrap();
+    assert_eq!(after.transition_intent_map, before.transition_intent_map);
+    assert_eq!(after.application_journal, before.application_journal);
+    assert_eq!(after.start_transaction_map, before.start_transaction_map);
+    let encoded = serde_json::to_string(&result).unwrap();
+    for forbidden in [
+        "pid",
+        "process",
+        "readiness",
+        "helper",
+        "endpoint",
+        "timeout",
+        "prompt",
+    ] {
+        assert!(
+            !encoded.contains(forbidden),
+            "parked authority must not fabricate {forbidden} evidence"
+        );
+    }
+    assert!(!encoded.contains("\"pid\":0"));
 }

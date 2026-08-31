@@ -10,6 +10,8 @@ pub(crate) mod canonical_json;
 #[allow(dead_code)]
 pub(crate) mod facade;
 #[allow(dead_code)]
+pub(crate) mod fork_successor;
+#[allow(dead_code)]
 pub(crate) mod hash;
 #[allow(dead_code)]
 pub(crate) mod schema;

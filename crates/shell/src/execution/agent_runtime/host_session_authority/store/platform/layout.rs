@@ -11,6 +11,7 @@ use crate::execution::agent_runtime::host_session_authority::store_schema::{
     HostSessionTransitionIntentStateV3, HostSessionTransitionIntentV2,
     HostSessionTransitionIntentV3,
 };
+use crate::execution::agent_runtime::host_session_authority::validation::validate_fork_successor_attach_semantics;
 
 pub(super) struct StoreLayout<'a> {
     pub(super) bootstrap: &'a TrustedDirectory,
@@ -1846,6 +1847,39 @@ impl<'a> StoreLayout<'a> {
         graphs: DecodedObjectGraphsV3<'_>,
         validate_start_ancestry: bool,
     ) -> Result<(), StoreError> {
+        for allocation in root.fork_successor_allocation_map.values() {
+            let source_ref = allocation
+                .source_authority_before
+                .host_attach_contract_ref
+                .as_ref()
+                .ok_or(StoreError(
+                    "fork successor source attach contract is absent",
+                ))?;
+            let target_ref = allocation
+                .target_authority
+                .host_attach_contract_ref
+                .as_ref()
+                .ok_or(StoreError(
+                    "fork successor target attach contract is absent",
+                ))?;
+            let source_attach =
+                graphs
+                    .attach_contracts
+                    .get(&source_ref.ref_id)
+                    .ok_or(StoreError(
+                        "fork successor source attach contract is unreachable",
+                    ))?;
+            let target_attach =
+                graphs
+                    .attach_contracts
+                    .get(&target_ref.ref_id)
+                    .ok_or(StoreError(
+                        "fork successor target attach contract is unreachable",
+                    ))?;
+            validate_fork_successor_attach_semantics(source_attach, target_attach).map_err(
+                |_| StoreError("fork successor attach capability or transformation is invalid"),
+            )?;
+        }
         for (ref_id, attach) in graphs.attach_contracts {
             let descriptor = graphs
                 .descriptors

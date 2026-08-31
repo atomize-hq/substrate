@@ -26,6 +26,25 @@ pub(crate) trait ValidatedCanonicalV1: sealed::Sealed + Serialize {
 
 pub(crate) trait CanonicalHashInputV1: ValidatedCanonicalV1 {}
 
+pub(super) fn validate_fork_successor_attach_semantics(
+    source: &HostAttachContractHashInputV1,
+    target: &HostAttachContractHashInputV1,
+) -> Result<(), ValidationError> {
+    let mut expected_target = source.clone();
+    expected_target.contract.continuity_resume_handle_ref = None;
+    if !source.contract.capabilities.session_fork {
+        return Err(ValidationError(
+            "fork successor source attach contract disables session_fork",
+        ));
+    }
+    if target != &expected_target {
+        return Err(ValidationError(
+            "fork successor target attach contract is not the continuity-cleared source contract",
+        ));
+    }
+    Ok(())
+}
+
 fn schema_v1(value: u32) -> Result<(), ValidationError> {
     if value == 1 {
         Ok(())
@@ -392,6 +411,95 @@ impl ValidatedCanonicalV1 for DurableSessionAuthorityHashInputV1 {
             (None, None) => Ok(()),
             _ => Err(ValidationError("policy ref and revision must agree")),
         }
+    }
+}
+
+impl sealed::Sealed for ForkSuccessorAllocationRequestHashInputV1 {}
+impl ValidatedCanonicalV1 for ForkSuccessorAllocationRequestHashInputV1 {
+    fn validate(&self) -> Result<(), ValidationError> {
+        schema_v1(self.schema_version)?;
+        for value in [
+            self.allocation_id.as_str(),
+            self.request_id.as_str(),
+            self.source_orchestration_session_id.as_str(),
+            self.source_shell_trace_session_id.as_str(),
+            self.target_orchestration_session_id.as_str(),
+            self.target_shell_trace_session_id.as_str(),
+            self.target_authoritative_participant_id.as_str(),
+        ] {
+            required(value)?;
+        }
+        if !prefixed_id(&self.authority_store_id, "as_") || self.expected_source_root_revision == 0
+        {
+            return Err(ValidationError(
+                "fork successor allocation store or root revision is invalid",
+            ));
+        }
+        validate_directory(&self.bootstrap_home)?;
+        validate_workspace(&self.workspace_binding)?;
+        if self.workspace_binding.authority_store_id != self.authority_store_id
+            || self.workspace_binding.authority_store_root != self.bootstrap_home
+        {
+            return Err(ValidationError(
+                "fork successor allocation workspace binding is inconsistent",
+            ));
+        }
+        if let Some(world) = &self.world_binding {
+            validate_world(world)?;
+        }
+        let HostSessionAuthorityPreconditionV1::ExpectedRevision {
+            authority_revision,
+            authority_record_commitment,
+            active_authoritative_participant_id,
+            authoritative_lineage_commitment,
+            ..
+        } = &self.source_authority_precondition
+        else {
+            return Err(ValidationError(
+                "fork successor allocation requires an exact source revision",
+            ));
+        };
+        if *authority_revision == 0 {
+            return Err(ValidationError(
+                "fork successor allocation source revision is invalid",
+            ));
+        }
+        validate_canonical_commitment(authority_record_commitment)?;
+        validate_canonical_commitment(authoritative_lineage_commitment)?;
+        required(active_authoritative_participant_id)?;
+        if self.source_authoritative_participant_lineage.is_empty()
+            || self
+                .source_authoritative_participant_lineage
+                .iter()
+                .any(|participant| participant.is_empty())
+            || self
+                .source_authoritative_participant_lineage
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                != self.source_authoritative_participant_lineage.len()
+            || !self
+                .source_authoritative_participant_lineage
+                .contains(active_authoritative_participant_id)
+            || self
+                .source_authoritative_participant_lineage
+                .contains(&self.target_authoritative_participant_id)
+        {
+            return Err(ValidationError(
+                "fork successor allocation source lineage is invalid",
+            ));
+        }
+        let mut expected_lineage = self.source_authoritative_participant_lineage.clone();
+        expected_lineage.push(self.target_authoritative_participant_id.clone());
+        if self.resulting_authoritative_lineage != expected_lineage
+            || self.source_orchestration_session_id == self.target_orchestration_session_id
+            || self.source_shell_trace_session_id == self.target_shell_trace_session_id
+        {
+            return Err(ValidationError(
+                "fork successor allocation target identity or lineage is invalid",
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -1020,6 +1128,7 @@ impl CanonicalHashInputV1 for PolicyObjectHashInputV1 {}
 impl CanonicalHashInputV1 for RetainedWorkerObjectHashInputV1 {}
 impl CanonicalHashInputV1 for AuthoritativeLineageHashInputV1 {}
 impl CanonicalHashInputV1 for DurableSessionAuthorityHashInputV1 {}
+impl CanonicalHashInputV1 for ForkSuccessorAllocationRequestHashInputV1 {}
 impl CanonicalHashInputV1 for HostSessionTransitionPayloadHashInputV1 {}
 impl CanonicalHashInputV1 for HostSessionStopPayloadHashInputV1 {}
 impl CanonicalHashInputV1 for HostSessionStopResultHashInputV1 {}

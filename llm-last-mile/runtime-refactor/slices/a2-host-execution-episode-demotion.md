@@ -18,6 +18,15 @@ the A1 final wall and completed in A1.4. A2 must not repeat that adoption. The r
 still the episode-demotion scope in the preserved row below and requires fresh admission plus
 explicit dispatch; A2 is not admitted, dispatched, implemented, or completed here.
 
+A bounded HSA prerequisite now supplies a private typed fork-successor allocation operation. It
+authenticates an exact source authority, proves the target namespace absent, and atomically creates
+only the target session, participant lineage, binding, and `ParkedResumable` authority, with exact
+join and crash/retry semantics. The target's direct birth proof is the allocation record; it does
+not fabricate a target Start, process, PID, helper, readiness, endpoint, timeout, or prompt event.
+This prerequisite does not wire `agents_cmd.rs::allocate_fork_successor`, expose a public allocate
+surface, or demote execution episodes. A2 retains those later ownership decisions and remains
+unadmitted and undispatched.
+
 | Slice | Goal | Must-read docs | Sibling context | Allowed code areas | Explicit non-goals | Exit gate | Regression gates |
 |---|---|---|---|---|---|---|---|
 | **A2 — HostExecutionEpisode demotion** | Represent REPL/helper/toolbox/recovered processes as episodes whose PID/socket/readiness data are observations only. | `01` invariants 1–2; `02` SurfaceAdapter row; `04` HostExecutionEpisodeV1; `DESIGN-internal-toolbox-transport-and-session-binding.md` | HostSessionAuthority; InternalToolboxTransport; RouterAttachTrigger | `agent_runtime/control.rs`; `execution/agents_cmd.rs`; `repl/async_repl.rs`; episode-focused tests | No deletion of `__owner-helper`; no transport protocol rewrite; no auto-attach redesign. | Killing/orphaning an episode leaves durable session truth intact; stale episode updates are revision-rejected; transport classification is explicit. | `RG-AUTH-01`, `RG-AUTH-02`, `RG-CLOSE-01`, `RG-BASE-01` |

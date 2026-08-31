@@ -321,6 +321,28 @@ pub(crate) struct DurableSessionAuthorityHashInputV1 {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
+pub(crate) struct ForkSuccessorAllocationRequestHashInputV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) allocation_id: String,
+    pub(crate) request_id: String,
+    pub(crate) authority_store_id: String,
+    pub(crate) bootstrap_home: CanonicalDirectoryV1,
+    pub(crate) expected_source_root_revision: u64,
+    pub(crate) source_orchestration_session_id: String,
+    pub(crate) source_shell_trace_session_id: String,
+    pub(crate) source_authority_precondition: HostSessionAuthorityPreconditionV1,
+    pub(crate) source_authoritative_participant_lineage: Vec<String>,
+    pub(crate) target_orchestration_session_id: String,
+    pub(crate) target_shell_trace_session_id: String,
+    pub(crate) target_authoritative_participant_id: String,
+    pub(crate) resulting_authoritative_lineage: Vec<String>,
+    pub(crate) workspace_binding: WorkspaceBindingV1,
+    pub(crate) world_binding: Option<WorldBindingV1>,
+    pub(crate) allocated_at: TimestampV1,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct AuthoritativeLineageHashInputV1 {
     pub(crate) schema_version: u32,
     pub(crate) orchestration_session_id: String,

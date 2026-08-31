@@ -8,13 +8,14 @@ use super::super::state_store::AcceptedWorldWorkIdentityV1;
 use super::schema::{
     AuthoritativeLineageHashInputV1, AuthorityObjectCommitmentV1, AuthorityObjectKindV1,
     AuthorityObjectRefV1, CanonicalDirectoryV1, DurableSessionAuthorityHashInputV1,
-    DurableSessionAuthorityOriginV1, HostPostTurnDispositionV1, HostSessionAuthorityPreconditionV1,
-    HostSessionPostureV1, HostSessionStopPayloadHashInputV1, HostSessionStopResultHashInputV1,
+    DurableSessionAuthorityOriginV1, ForkSuccessorAllocationRequestHashInputV1,
+    HostPostTurnDispositionV1, HostSessionAuthorityPreconditionV1, HostSessionPostureV1,
+    HostSessionStopPayloadHashInputV1, HostSessionStopResultHashInputV1,
     HostSessionTransitionCallerV1, HostSessionTransitionModeV1,
     HostSessionTransitionTerminalRejectionV1, TimestampV1, WorkspaceBindingV1, WorldBindingV1,
 };
 use super::store_format::{validate_key_id, validate_ref_id, validate_store_id};
-use super::validation::validate_object_commitment_rule;
+use super::validation::{validate_object_commitment_rule, ValidatedCanonicalV1};
 
 const SCHEMA_VERSION: u32 = 1;
 
@@ -124,7 +125,22 @@ pub(crate) struct StateRootV3 {
     pub(crate) start_transaction_map: BTreeMap<String, StartTransactionRecordV1>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) stop_transaction_map: BTreeMap<String, HostSessionStopIntentV1>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) fork_successor_allocation_map: BTreeMap<String, ForkSuccessorAllocationRecordV1>,
     pub(crate) object_index: BTreeMap<String, AuthorityObjectIndexEntryV1>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ForkSuccessorAllocationRecordV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) request: ForkSuccessorAllocationRequestHashInputV1,
+    pub(crate) request_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) source_authority_before: Box<DurableSessionAuthorityV1>,
+    pub(crate) target_authority: Box<DurableSessionAuthorityV1>,
+    pub(crate) target_authority_record_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) target_authoritative_lineage_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) root_revision_after: u64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -1741,6 +1757,7 @@ impl StateRootV3 {
             successor_application_journal: BTreeMap::new(),
             start_transaction_map: BTreeMap::new(),
             stop_transaction_map: BTreeMap::new(),
+            fork_successor_allocation_map: BTreeMap::new(),
             object_index: root.object_index.clone(),
         };
         upgraded.validate()?;
@@ -1760,6 +1777,7 @@ impl StateRootV3 {
             || !self.successor_application_journal.is_empty()
             || !self.start_transaction_map.is_empty()
             || !self.stop_transaction_map.is_empty()
+            || !self.fork_successor_allocation_map.is_empty()
             || !self.object_index.is_empty()
         {
             return Err(StoreSchemaError(
@@ -1792,6 +1810,25 @@ impl StateRootV3 {
 
     fn preserved_v2_validation_view(&self) -> Result<StateRootV2, StoreSchemaError> {
         let mut preserved = self.preserved_v2_view();
+        for allocation in self.fork_successor_allocation_map.values() {
+            preserved
+                .session_namespace_map
+                .remove(&allocation.request.target_orchestration_session_id);
+            let target_attach_ref = allocation
+                .target_authority
+                .host_attach_contract_ref
+                .as_ref();
+            if target_attach_ref
+                != allocation
+                    .source_authority_before
+                    .host_attach_contract_ref
+                    .as_ref()
+            {
+                if let Some(reference) = target_attach_ref {
+                    preserved.object_index.remove(&reference.ref_id);
+                }
+            }
+        }
         let mut preserved_transport_refs = Vec::new();
         for intent in preserved.transition_intent_map.values_mut() {
             let HostSessionTransitionIntentStateV2::Applied {
@@ -1881,6 +1918,7 @@ impl StateRootV3 {
         if self.root_revision < 3 {
             return Err(StoreSchemaError("V3 root revision must be at least three"));
         }
+        self.validate_fork_successor_allocations()?;
         let preserved = self.preserved_v2_validation_view()?;
         preserved.validate()?;
         let mut active_request_keys = std::collections::BTreeSet::new();
@@ -2275,8 +2313,7 @@ impl StateRootV3 {
                     }
                     history
                 } else {
-                    let history =
-                        self.reconstruct_v2_runtime_authority_history(history_authority)?;
+                    let history = self.reconstruct_runtime_authority_history(history_authority)?;
                     let reconstructed = history
                         .last_key_value()
                         .map(|(_, state)| &state.authority)
@@ -2396,6 +2433,343 @@ impl StateRootV3 {
             return Err(StoreSchemaError(
                 "every V3 successor intent requires one issuer index entry",
             ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn fork_successor_target_identity_is_occupied(
+        &self,
+        request: &ForkSuccessorAllocationRequestHashInputV1,
+    ) -> bool {
+        let target_session = &request.target_orchestration_session_id;
+        let target_trace = &request.target_shell_trace_session_id;
+        let target_participant = &request.target_authoritative_participant_id;
+        let authority_conflict = self
+            .session_namespace_map
+            .iter()
+            .any(|(session_id, record)| {
+                session_id != target_session
+                    && matches!(
+                        record,
+                        SessionNamespaceRecordV1::Authority(authority)
+                            if authority.shell_trace_session_id == *target_trace
+                                || authority
+                                    .authoritative_participant_lineage
+                                    .contains(target_participant)
+                    )
+            });
+        let start_intent_conflict = self.transition_intent_map.values().any(|intent| {
+            intent.orchestration_session_id != *target_session
+                && (intent.shell_trace_session_id == *target_trace
+                    || intent.target_authoritative_participant_id == *target_participant
+                    || intent
+                        .resulting_authoritative_lineage
+                        .contains(target_participant))
+        });
+        let successor_intent_conflict =
+            self.successor_transition_intent_map.values().any(|intent| {
+                intent.orchestration_session_id != *target_session
+                    && (intent.shell_trace_session_id == *target_trace
+                        || intent.target_authoritative_participant_id == *target_participant
+                        || intent
+                            .resulting_authoritative_lineage
+                            .contains(target_participant))
+            });
+        let start_transaction_conflict = self.start_transaction_map.values().any(|transaction| {
+            transaction.orchestration_session_id != *target_session
+                && (transaction.shell_trace_session_id == *target_trace
+                    || transaction.authoritative_participant_id == *target_participant)
+        });
+        let retained_registration_conflict = self
+            .retained_worker_registration_request_index
+            .values()
+            .any(|registration| {
+                registration.orchestration_session_id != *target_session
+                    && registration.retained_participant_id == *target_participant
+            });
+        authority_conflict
+            || start_intent_conflict
+            || successor_intent_conflict
+            || start_transaction_conflict
+            || retained_registration_conflict
+    }
+
+    fn fork_successor_target_identity_conflicts_with_allocation(
+        &self,
+        request: &ForkSuccessorAllocationRequestHashInputV1,
+    ) -> bool {
+        let target_session = &request.target_orchestration_session_id;
+        let target_trace = &request.target_shell_trace_session_id;
+        let target_participant = &request.target_authoritative_participant_id;
+        let is_descendant_lineage = |lineage: &[String]| {
+            lineage.starts_with(request.resulting_authoritative_lineage.as_slice())
+        };
+        let authority_conflict = self
+            .session_namespace_map
+            .iter()
+            .any(|(session_id, record)| {
+                session_id != target_session
+                    && matches!(
+                        record,
+                        SessionNamespaceRecordV1::Authority(authority)
+                            if authority.shell_trace_session_id == *target_trace
+                                || (authority
+                                    .authoritative_participant_lineage
+                                    .contains(target_participant)
+                                    && !is_descendant_lineage(
+                                        &authority.authoritative_participant_lineage,
+                                    ))
+                    )
+            });
+        let start_intent_conflict = self.transition_intent_map.values().any(|intent| {
+            intent.orchestration_session_id != *target_session
+                && (intent.shell_trace_session_id == *target_trace
+                    || ((intent.target_authoritative_participant_id == *target_participant
+                        || intent
+                            .resulting_authoritative_lineage
+                            .contains(target_participant))
+                        && !is_descendant_lineage(&intent.resulting_authoritative_lineage)))
+        });
+        let successor_intent_conflict =
+            self.successor_transition_intent_map.values().any(|intent| {
+                intent.orchestration_session_id != *target_session
+                    && (intent.shell_trace_session_id == *target_trace
+                        || ((intent.target_authoritative_participant_id == *target_participant
+                            || intent
+                                .resulting_authoritative_lineage
+                                .contains(target_participant))
+                            && !is_descendant_lineage(&intent.resulting_authoritative_lineage)))
+            });
+        let start_transaction_conflict = self.start_transaction_map.values().any(|transaction| {
+            transaction.orchestration_session_id != *target_session
+                && (transaction.shell_trace_session_id == *target_trace
+                    || transaction.authoritative_participant_id == *target_participant)
+        });
+        let retained_registration_conflict = self
+            .retained_worker_registration_request_index
+            .values()
+            .any(|registration| {
+                registration.orchestration_session_id != *target_session
+                    && registration.retained_participant_id == *target_participant
+            });
+        authority_conflict
+            || start_intent_conflict
+            || successor_intent_conflict
+            || start_transaction_conflict
+            || retained_registration_conflict
+    }
+
+    fn validate_fork_successor_allocations(&self) -> Result<(), StoreSchemaError> {
+        let mut request_ids = std::collections::BTreeSet::new();
+        let mut target_sessions = std::collections::BTreeSet::new();
+        let mut target_traces = std::collections::BTreeSet::new();
+        let mut target_participants = std::collections::BTreeSet::new();
+        let mut publication_revisions = std::collections::BTreeSet::new();
+        for (allocation_id, allocation) in &self.fork_successor_allocation_map {
+            let request = &allocation.request;
+            if allocation.schema_version != 1
+                || allocation_id != &request.allocation_id
+                || request.validate().is_err()
+                || request.authority_store_id != self.authority_store_id
+                || request.bootstrap_home != self.bootstrap_home
+                || request.expected_source_root_revision < 3
+                || request.expected_source_root_revision.checked_add(1)
+                    != Some(allocation.root_revision_after)
+                || allocation.root_revision_after < 4
+                || allocation.root_revision_after > self.root_revision
+                || !publication_revisions.insert(allocation.root_revision_after)
+                || !request_ids.insert(request.request_id.as_str())
+                || !target_sessions.insert(request.target_orchestration_session_id.as_str())
+                || !target_traces.insert(request.target_shell_trace_session_id.as_str())
+                || !target_participants.insert(request.target_authoritative_participant_id.as_str())
+            {
+                return Err(StoreSchemaError(
+                    "invalid fork successor allocation identity",
+                ));
+            }
+            let request_commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: super::hash::canonical_sha256(request)
+                    .map_err(|_| StoreSchemaError("commit fork successor allocation request"))?,
+            };
+            if allocation.request_commitment != request_commitment {
+                return Err(StoreSchemaError(
+                    "fork successor allocation request commitment mismatch",
+                ));
+            }
+            let source = allocation.source_authority_before.as_ref();
+            let HostSessionAuthorityPreconditionV1::ExpectedRevision {
+                authority_revision,
+                authority_record_commitment,
+                active_authoritative_participant_id,
+                authoritative_lineage_commitment,
+                lifecycle_posture,
+            } = &request.source_authority_precondition
+            else {
+                return Err(StoreSchemaError(
+                    "fork successor allocation has no exact source precondition",
+                ));
+            };
+            let source_commitment = authority_record_commitment_for_allocation(source)?;
+            let source_lineage_commitment = lineage_commitment_for_allocation(
+                &source.orchestration_session_id,
+                &source.authoritative_participant_lineage,
+            )?;
+            if source.orchestration_session_id != request.source_orchestration_session_id
+                || source.shell_trace_session_id != request.source_shell_trace_session_id
+                || source.authority_revision != *authority_revision
+                || source_commitment != *authority_record_commitment
+                || source_lineage_commitment != *authoritative_lineage_commitment
+                || source.active_authoritative_participant_id.as_ref()
+                    != Some(active_authoritative_participant_id)
+                || source.authoritative_participant_lineage
+                    != request.source_authoritative_participant_lineage
+                || source.lifecycle_posture != *lifecycle_posture
+                || source.workspace_binding != request.workspace_binding
+                || source.world_binding != request.world_binding
+                || request.allocated_at.as_str() < source.updated_at.as_str()
+                || matches!(
+                    source.lifecycle_posture,
+                    HostSessionPostureV1::Terminal | HostSessionPostureV1::Invalid
+                )
+            {
+                return Err(StoreSchemaError(
+                    "fork successor allocation source proof is substituted or stale",
+                ));
+            }
+            let target = allocation.target_authority.as_ref();
+            if target.schema_version != 1
+                || target.orchestration_session_id != request.target_orchestration_session_id
+                || target.shell_trace_session_id != request.target_shell_trace_session_id
+                || target.authority_revision != 1
+                || target.origin != source.origin
+                || target.authoritative_participant_lineage
+                    != request.resulting_authoritative_lineage
+                || target.active_authoritative_participant_id.as_deref()
+                    != Some(request.target_authoritative_participant_id.as_str())
+                || target.workspace_binding != request.workspace_binding
+                || target.world_binding != request.world_binding
+                || target.host_attach_contract_ref.is_none()
+                || !target.retained_worker_refs.is_empty()
+                || !target.internal_resume_handle_refs.is_empty()
+                || target.lifecycle_posture != HostSessionPostureV1::ParkedResumable
+                || target.current_policy_ref != source.current_policy_ref
+                || target.current_policy_revision != source.current_policy_revision
+                || target.updated_at != request.allocated_at
+            {
+                return Err(StoreSchemaError(
+                    "fork successor allocation target authority is inconsistent",
+                ));
+            }
+            let target_commitment = authority_record_commitment_for_allocation(target)?;
+            let target_lineage_commitment = lineage_commitment_for_allocation(
+                &target.orchestration_session_id,
+                &target.authoritative_participant_lineage,
+            )?;
+            if allocation.target_authority_record_commitment != target_commitment
+                || allocation.target_authoritative_lineage_commitment != target_lineage_commitment
+            {
+                return Err(StoreSchemaError(
+                    "fork successor allocation target commitment mismatch",
+                ));
+            }
+            if self.fork_successor_target_identity_conflicts_with_allocation(request) {
+                return Err(StoreSchemaError(
+                    "fork successor allocation target identity conflicts",
+                ));
+            }
+            if let Some(parent_allocation) =
+                self.fork_successor_allocation_map
+                    .values()
+                    .find(|candidate| {
+                        candidate.request.target_orchestration_session_id
+                            == request.source_orchestration_session_id
+                    })
+            {
+                if request.expected_source_root_revision < parent_allocation.root_revision_after {
+                    return Err(StoreSchemaError(
+                        "fork successor allocation publication predates its source allocation",
+                    ));
+                }
+            }
+            let current_source = self
+                .session_namespace_map
+                .get(&request.source_orchestration_session_id)
+                .and_then(|record| match record {
+                    SessionNamespaceRecordV1::Authority(authority) => Some(authority.as_ref()),
+                    _ => None,
+                })
+                .ok_or(StoreSchemaError(
+                    "fork successor allocation source authority is absent",
+                ))?;
+            let current_target = self
+                .session_namespace_map
+                .get(&request.target_orchestration_session_id)
+                .and_then(|record| match record {
+                    SessionNamespaceRecordV1::Authority(authority) => Some(authority.as_ref()),
+                    _ => None,
+                })
+                .ok_or(StoreSchemaError(
+                    "fork successor allocation target authority is absent",
+                ))?;
+            let source_history_authority = self
+                .stop_transaction_map
+                .values()
+                .find_map(|stop| {
+                    (stop.orchestration_session_id == request.source_orchestration_session_id)
+                        .then_some(&stop.state)
+                        .and_then(|state| match state {
+                            HostSessionStopIntentStateV1::Completed { .. } => {
+                                Some(stop.authority_before.as_ref())
+                            }
+                            _ => None,
+                        })
+                })
+                .unwrap_or(current_source);
+            let source_history =
+                if self.has_any_successor_transition(&request.source_orchestration_session_id) {
+                    self.reconstruct_successor_authority_history(source_history_authority)?
+                } else {
+                    self.reconstruct_runtime_authority_history(source_history_authority)?
+                };
+            let exact_source =
+                source_history
+                    .get(&source.authority_revision)
+                    .ok_or(StoreSchemaError(
+                        "fork successor allocation source revision has no exact history",
+                    ))?;
+            if exact_source.authority != *source
+                || exact_source.authority_record_commitment != source_commitment
+                || exact_source.authoritative_lineage_commitment != source_lineage_commitment
+                || current_source.authority_revision < source.authority_revision
+                || (current_target.authority_revision == 1 && current_target != target)
+                || current_target.authority_revision < 1
+                || !current_target
+                    .authoritative_participant_lineage
+                    .starts_with(&target.authoritative_participant_lineage)
+            {
+                return Err(StoreSchemaError(
+                    "fork successor allocation current authority relation is invalid",
+                ));
+            }
+            let attach_ref = target
+                .host_attach_contract_ref
+                .as_ref()
+                .ok_or(StoreSchemaError(
+                    "fork successor allocation attach contract is absent",
+                ))?;
+            let Some(attach_entry) = self.object_index.get(&attach_ref.ref_id) else {
+                return Err(StoreSchemaError(
+                    "fork successor allocation attach contract is absent",
+                ));
+            };
+            if attach_entry.object_kind != AuthorityObjectKindV1::HostAttachContract
+                || attach_entry.object_schema_version != 1
+                || attach_entry.storage_state != AuthorityObjectStorageStateV1::Present
+            {
+                return Err(StoreSchemaError(
+                    "fork successor allocation attach contract index is invalid",
+                ));
+            }
         }
         Ok(())
     }
@@ -2923,6 +3297,150 @@ impl StateRootV3 {
             .any(|intent| intent.orchestration_session_id == orchestration_session_id)
     }
 
+    fn retained_registration_count(&self, orchestration_session_id: &str) -> usize {
+        self.retained_worker_registration_journal
+            .values()
+            .filter(|registration| {
+                registration.orchestration_session_id == orchestration_session_id
+            })
+            .count()
+    }
+
+    fn retained_registration_candidates<'a>(
+        &'a self,
+        latest: &ReconstructedAuthorityStateV1,
+        orchestration_session_id: &str,
+    ) -> Vec<&'a RetainedWorkerAuthorityRegistrationV1> {
+        self.retained_worker_registration_journal
+            .values()
+            .filter(|registration| {
+                registration.orchestration_session_id == orchestration_session_id
+                    && registration.authority_revision_before == latest.authority.authority_revision
+                    && registration.authority_record_commitment_before
+                        == latest.authority_record_commitment
+            })
+            .collect()
+    }
+
+    fn reconstruct_retained_registration_state(
+        &self,
+        latest: &ReconstructedAuthorityStateV1,
+        registration: &RetainedWorkerAuthorityRegistrationV1,
+    ) -> Result<ReconstructedAuthorityStateV1, StoreSchemaError> {
+        let request = self
+            .retained_worker_registration_request_index
+            .get(&registration.issuer_request_id)
+            .ok_or(StoreSchemaError(
+                "V3 retained registration has no request record",
+            ))?;
+        validate_applied_registration_request(request, registration)?;
+        let next = reconstruct_authority_state(DurableSessionAuthorityV1 {
+            schema_version: latest.authority.schema_version,
+            orchestration_session_id: latest.authority.orchestration_session_id.clone(),
+            shell_trace_session_id: latest.authority.shell_trace_session_id.clone(),
+            authority_revision: registration.authority_revision_after,
+            origin: latest.authority.origin.clone(),
+            authoritative_participant_lineage: {
+                let mut lineage = latest.authority.authoritative_participant_lineage.clone();
+                lineage.push(registration.retained_participant_id.clone());
+                lineage
+            },
+            active_authoritative_participant_id: latest
+                .authority
+                .active_authoritative_participant_id
+                .clone(),
+            workspace_binding: latest.authority.workspace_binding.clone(),
+            world_binding: latest.authority.world_binding.clone(),
+            host_attach_contract_ref: latest.authority.host_attach_contract_ref.clone(),
+            retained_worker_refs: {
+                let mut refs = latest.authority.retained_worker_refs.clone();
+                refs.push(registration.retained_worker_ref.clone());
+                refs
+            },
+            internal_resume_handle_refs: Vec::new(),
+            lifecycle_posture: latest.authority.lifecycle_posture,
+            current_policy_ref: latest.authority.current_policy_ref.clone(),
+            current_policy_revision: latest.authority.current_policy_revision.clone(),
+            updated_at: registration.registered_at.clone(),
+        })?;
+        if next.authority_record_commitment != registration.authority_record_commitment_after
+            || next.authoritative_lineage_commitment
+                != registration.authoritative_lineage_commitment_after
+        {
+            return Err(StoreSchemaError(
+                "V3 retained authority reconstruction is inconsistent",
+            ));
+        }
+        Ok(next)
+    }
+
+    fn extend_contiguous_retained_history(
+        &self,
+        history: &mut BTreeMap<u64, ReconstructedAuthorityStateV1>,
+        orchestration_session_id: &str,
+    ) -> Result<usize, StoreSchemaError> {
+        let mut consumed = 0_usize;
+        loop {
+            let latest = history
+                .last_key_value()
+                .map(|(_, state)| state.clone())
+                .ok_or(StoreSchemaError("V3 retained authority history is empty"))?;
+            let candidates =
+                self.retained_registration_candidates(&latest, orchestration_session_id);
+            let registration = match candidates.as_slice() {
+                [] => break,
+                [registration] => *registration,
+                _ => {
+                    return Err(StoreSchemaError(
+                        "V3 retained authority ancestry is ambiguous",
+                    ))
+                }
+            };
+            let next = self.reconstruct_retained_registration_state(&latest, registration)?;
+            if history
+                .insert(next.authority.authority_revision, next)
+                .is_some()
+            {
+                return Err(StoreSchemaError("V3 retained authority revision is reused"));
+            }
+            consumed += 1;
+        }
+        Ok(consumed)
+    }
+
+    fn reconstruct_fork_successor_birth_history(
+        &self,
+        current_authority: &DurableSessionAuthorityV1,
+    ) -> Result<Option<BTreeMap<u64, ReconstructedAuthorityStateV1>>, StoreSchemaError> {
+        let allocations = self
+            .fork_successor_allocation_map
+            .values()
+            .filter(|allocation| {
+                allocation.request.target_orchestration_session_id
+                    == current_authority.orchestration_session_id
+            })
+            .collect::<Vec<_>>();
+        let allocation = match allocations.as_slice() {
+            [] => return Ok(None),
+            [allocation] => *allocation,
+            _ => {
+                return Err(StoreSchemaError(
+                    "fork successor initial authority history is ambiguous",
+                ))
+            }
+        };
+        let initial = reconstruct_authority_state(allocation.target_authority.as_ref().clone())?;
+        if initial.authority_record_commitment != allocation.target_authority_record_commitment
+            || initial.authoritative_lineage_commitment
+                != allocation.target_authoritative_lineage_commitment
+        {
+            return Err(StoreSchemaError(
+                "fork successor initial authority history is inconsistent",
+            ));
+        }
+        Ok(Some(BTreeMap::from([(1, initial)])))
+    }
+
     fn reconstruct_v2_authority_history(
         &self,
         current_authority: &DurableSessionAuthorityV1,
@@ -3011,80 +3529,15 @@ impl StateRootV3 {
             ));
         }
         history.insert(initial.authority.authority_revision, initial.clone());
-        let session_registration_count = self
-            .retained_worker_registration_journal
-            .values()
-            .filter(|registration| {
-                registration.orchestration_session_id == current_authority.orchestration_session_id
-            })
-            .count();
-        let mut consumed = 0_usize;
-        let mut latest = initial;
-        while consumed < session_registration_count {
-            let candidates = self
-                .retained_worker_registration_journal
-                .values()
-                .filter(|registration| {
-                    registration.orchestration_session_id
-                        == current_authority.orchestration_session_id
-                        && registration.authority_revision_before
-                            == latest.authority.authority_revision
-                        && registration.authority_record_commitment_before
-                            == latest.authority_record_commitment
-                })
-                .collect::<Vec<_>>();
-            let [registration] = candidates.as_slice() else {
-                return Err(StoreSchemaError(
-                    "V3 preserved V2 retained authority ancestry is not uniquely contiguous",
-                ));
-            };
-            let request = self
-                .retained_worker_registration_request_index
-                .get(&registration.issuer_request_id)
-                .ok_or(StoreSchemaError(
-                    "V3 preserved V2 retained registration has no request record",
-                ))?;
-            validate_applied_registration_request(request, registration)?;
-            let next = reconstruct_authority_state(DurableSessionAuthorityV1 {
-                schema_version: latest.authority.schema_version,
-                orchestration_session_id: latest.authority.orchestration_session_id.clone(),
-                shell_trace_session_id: latest.authority.shell_trace_session_id.clone(),
-                authority_revision: registration.authority_revision_after,
-                origin: latest.authority.origin.clone(),
-                authoritative_participant_lineage: {
-                    let mut lineage = latest.authority.authoritative_participant_lineage.clone();
-                    lineage.push(registration.retained_participant_id.clone());
-                    lineage
-                },
-                active_authoritative_participant_id: latest
-                    .authority
-                    .active_authoritative_participant_id
-                    .clone(),
-                workspace_binding: latest.authority.workspace_binding.clone(),
-                world_binding: latest.authority.world_binding.clone(),
-                host_attach_contract_ref: latest.authority.host_attach_contract_ref.clone(),
-                retained_worker_refs: {
-                    let mut refs = latest.authority.retained_worker_refs.clone();
-                    refs.push(registration.retained_worker_ref.clone());
-                    refs
-                },
-                internal_resume_handle_refs: Vec::new(),
-                lifecycle_posture: latest.authority.lifecycle_posture,
-                current_policy_ref: latest.authority.current_policy_ref.clone(),
-                current_policy_revision: latest.authority.current_policy_revision.clone(),
-                updated_at: registration.registered_at.clone(),
-            })?;
-            if next.authority_record_commitment != registration.authority_record_commitment_after
-                || next.authoritative_lineage_commitment
-                    != registration.authoritative_lineage_commitment_after
-            {
-                return Err(StoreSchemaError(
-                    "V3 preserved V2 retained authority reconstruction is inconsistent",
-                ));
-            }
-            history.insert(next.authority.authority_revision, next.clone());
-            latest = next;
-            consumed += 1;
+        let consumed = self.extend_contiguous_retained_history(
+            &mut history,
+            &current_authority.orchestration_session_id,
+        )?;
+        if consumed != self.retained_registration_count(&current_authority.orchestration_session_id)
+        {
+            return Err(StoreSchemaError(
+                "V3 preserved V2 retained authority ancestry is not uniquely contiguous",
+            ));
         }
         Ok(history)
     }
@@ -3093,13 +3546,27 @@ impl StateRootV3 {
         &self,
         current_authority: &DurableSessionAuthorityV1,
     ) -> Result<BTreeMap<u64, ReconstructedAuthorityStateV1>, StoreSchemaError> {
-        let mut history = self.reconstruct_v2_runtime_authority_history(current_authority)?;
+        let fork_birth = self.reconstruct_fork_successor_birth_history(current_authority)?;
+        let fork_born = fork_birth.is_some();
+        let mut history = match fork_birth {
+            Some(history) => history,
+            None => self.reconstruct_v2_runtime_authority_history(current_authority)?,
+        };
+        let mut consumed_retained = 0_usize;
         let mut consumed = std::collections::BTreeSet::new();
         loop {
             let (latest_revision, latest_state) = history
                 .last_key_value()
                 .ok_or(StoreSchemaError("V3 successor authority history is empty"))?;
-            let candidates = self
+            let retained_candidates = if fork_born {
+                self.retained_registration_candidates(
+                    latest_state,
+                    &current_authority.orchestration_session_id,
+                )
+            } else {
+                Vec::new()
+            };
+            let successor_candidates = self
                 .successor_transition_intent_map
                 .values()
                 .filter(|intent| {
@@ -3113,7 +3580,26 @@ impl StateRootV3 {
                         )
                 })
                 .collect::<Vec<_>>();
-            let intent = match candidates.as_slice() {
+            if fork_born && retained_candidates.len() + successor_candidates.len() > 1 {
+                return Err(StoreSchemaError(
+                    "V3 fork successor authority chain is ambiguous",
+                ));
+            }
+            if let [registration] = retained_candidates.as_slice() {
+                let next =
+                    self.reconstruct_retained_registration_state(latest_state, registration)?;
+                if history
+                    .insert(next.authority.authority_revision, next)
+                    .is_some()
+                {
+                    return Err(StoreSchemaError(
+                        "V3 fork successor retained authority revision is reused",
+                    ));
+                }
+                consumed_retained += 1;
+                continue;
+            }
+            let intent = match successor_candidates.as_slice() {
                 [] => break,
                 [intent] => *intent,
                 _ => return Err(StoreSchemaError("V3 applied successor chain is ambiguous")),
@@ -3232,7 +3718,38 @@ impl StateRootV3 {
                 "V3 applied successor chain is disconnected from current authority",
             ));
         }
+        if fork_born
+            && consumed_retained
+                != self.retained_registration_count(&current_authority.orchestration_session_id)
+        {
+            return Err(StoreSchemaError(
+                "V3 fork successor retained authority chain is disconnected",
+            ));
+        }
         Ok(history)
+    }
+
+    fn reconstruct_runtime_authority_history(
+        &self,
+        current_authority: &DurableSessionAuthorityV1,
+    ) -> Result<BTreeMap<u64, ReconstructedAuthorityStateV1>, StoreSchemaError> {
+        if let Some(mut history) =
+            self.reconstruct_fork_successor_birth_history(current_authority)?
+        {
+            let consumed = self.extend_contiguous_retained_history(
+                &mut history,
+                &current_authority.orchestration_session_id,
+            )?;
+            if consumed
+                != self.retained_registration_count(&current_authority.orchestration_session_id)
+            {
+                return Err(StoreSchemaError(
+                    "V3 fork successor retained authority ancestry is not uniquely contiguous",
+                ));
+            }
+            return Ok(history);
+        }
+        self.reconstruct_v2_runtime_authority_history(current_authority)
     }
 
     fn reconstruct_v2_runtime_authority_history(
@@ -3602,6 +4119,25 @@ fn authority_record_commitment(
     })
     .map(|digest_hex| AuthorityObjectCommitmentV1::CanonicalSha256 { digest_hex })
     .map_err(|_| StoreSchemaError("commit durable retained authority"))
+}
+
+fn authority_record_commitment_for_allocation(
+    authority: &DurableSessionAuthorityV1,
+) -> Result<AuthorityObjectCommitmentV1, StoreSchemaError> {
+    authority_record_commitment(authority)
+}
+
+fn lineage_commitment_for_allocation(
+    orchestration_session_id: &str,
+    participant_ids: &[String],
+) -> Result<AuthorityObjectCommitmentV1, StoreSchemaError> {
+    super::hash::canonical_sha256(&AuthoritativeLineageHashInputV1 {
+        schema_version: 1,
+        orchestration_session_id: orchestration_session_id.to_string(),
+        participant_ids: participant_ids.to_vec(),
+    })
+    .map(|digest_hex| AuthorityObjectCommitmentV1::CanonicalSha256 { digest_hex })
+    .map_err(|_| StoreSchemaError("commit fork successor authority lineage"))
 }
 
 fn reconstruct_authority_state(

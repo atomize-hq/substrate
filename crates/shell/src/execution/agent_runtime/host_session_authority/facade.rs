@@ -34,6 +34,7 @@ use super::transition::{verify_applied_start, ApplyHostSessionTransitionRequestV
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use super::trusted_fs::EntryKind;
 use super::trusted_fs::TrustedAuthorityRoot;
+use super::validation::validate_fork_successor_attach_semantics;
 
 #[derive(Debug)]
 pub(crate) struct HostSessionAuthority {
@@ -1438,124 +1439,208 @@ where
         ));
     };
     let current = current.as_ref();
-    let DurableSessionAuthorityOriginV1::StartIntent {
-        intent_id,
-        issuer_request_id,
-        payload_commitment,
-    } = &current.origin;
-    let intent = root.transition_intent_map.get(intent_id).ok_or_else(|| {
-        AuthorityFacadeError("exact authority ancestry has no origin Start intent".into())
-    })?;
-    let HostSessionTransitionIntentStateV2::Applied {
-        authority_revision_before: None,
-        authority_revision_after,
-        active_authoritative_participant_id,
-        resulting_posture,
-        authority_record_commitment,
-        startup_ownership,
-        applied_at,
-        ..
-    } = &intent.state
-    else {
-        return Err(AuthorityFacadeError(
-            "exact authority ancestry requires an applied origin Start".into(),
-        ));
-    };
-    let journal = root.application_journal.get(intent_id).ok_or_else(|| {
-        AuthorityFacadeError("exact authority ancestry has no origin Start journal".into())
-    })?;
-    if intent.issuer_request_id != *issuer_request_id
-        || intent.payload_commitment != *payload_commitment
-        || intent.orchestration_session_id != orchestration_session_id
-        || *authority_revision_after != 1
-        || active_authoritative_participant_id != &intent.target_authoritative_participant_id
-        || *resulting_posture != HostSessionPostureV1::ActiveAttached
-        || journal
-            .initial_application
-            .authority_revision_before
-            .is_some()
-        || journal.initial_application.authority_revision_after != 1
-        || journal.initial_application.authority_record_commitment != *authority_record_commitment
-        || journal.initial_application.applied_at != *applied_at
-    {
-        return Err(AuthorityFacadeError(
-            "origin Start authority edge is inconsistent".into(),
-        ));
-    }
-    let origin_startup_terminal = match (
-        startup_ownership.as_ref(),
-        journal.startup_terminal_application.as_ref(),
-    ) {
-        (
-            HostSessionStartupOwnershipApplicationV1::Pending { .. }
-            | HostSessionStartupOwnershipApplicationV1::Accepted { .. },
-            None,
-        ) => None,
-        (
-            HostSessionStartupOwnershipApplicationV1::TerminalReconciled {
-                evidence_id,
-                result_ref,
-                authority_revision_before,
-                authority_revision_after,
-                resulting_posture,
-                reconciled_at,
-            },
-            Some(terminal),
-        ) if terminal.schema_version == 1
-            && terminal.evidence_id == *evidence_id
-            && terminal.startup_ownership_result_ref == *result_ref
-            && terminal.authority_revision_before == *authority_revision_before
-            && terminal.authority_revision_after == *authority_revision_after
-            && terminal.resulting_posture == *resulting_posture
-            && terminal.applied_at == *reconciled_at =>
-        {
-            Some(terminal)
-        }
-        _ => {
-            return Err(AuthorityFacadeError(
-                "origin Start startup-terminal edge is inconsistent".into(),
-            ))
-        }
-    };
-    let attach_bytes =
-        read_object(&intent.host_attach_contract_ref).map_err(AuthorityFacadeError)?;
-    let attach: HostAttachContractHashInputV1 = canonical_json::from_slice(&attach_bytes)
-        .map_err(|error| AuthorityFacadeError(error.to_string()))?;
-    let policy_bytes = read_object(&attach.contract.policy_ref).map_err(AuthorityFacadeError)?;
-    let policy: PolicyObjectHashInputV1 = canonical_json::from_slice(&policy_bytes)
-        .map_err(|error| AuthorityFacadeError(error.to_string()))?;
-    let initial = resolved_session_authority(
-        root.root_revision,
-        &root.authority_store_id,
-        &root.bootstrap_home,
-        DurableSessionAuthorityV1 {
-            schema_version: 1,
-            orchestration_session_id: orchestration_session_id.to_string(),
-            shell_trace_session_id: intent.shell_trace_session_id.clone(),
-            authority_revision: 1,
-            origin: current.origin.clone(),
-            authoritative_participant_lineage: intent.resulting_authoritative_lineage.clone(),
-            active_authoritative_participant_id: Some(
-                intent.target_authoritative_participant_id.clone(),
-            ),
-            workspace_binding: intent.workspace_binding.clone(),
-            world_binding: intent.world_binding.clone(),
-            host_attach_contract_ref: Some(intent.host_attach_contract_ref.clone()),
-            retained_worker_refs: Vec::new(),
-            internal_resume_handle_refs: Vec::new(),
-            lifecycle_posture: HostSessionPostureV1::ActiveAttached,
-            current_policy_ref: Some(attach.contract.policy_ref),
-            current_policy_revision: Some(policy.policy_revision),
-            updated_at: applied_at.clone(),
-        },
-    )?;
-    if initial.authority_record_commitment != *authority_record_commitment {
-        return Err(AuthorityFacadeError(
-            "origin Start authority commitment is inconsistent".into(),
-        ));
-    }
-
-    let continuation_handles = exact_start_continuation_handles(root, current, &mut read_object)?;
+    let fork_allocations = root
+        .fork_successor_allocation_map
+        .values()
+        .filter(|allocation| {
+            allocation.request.target_orchestration_session_id == orchestration_session_id
+        })
+        .collect::<Vec<_>>();
+    let (initial, origin_startup_terminal, origin_intent_id, continuation_handles) =
+        match fork_allocations.as_slice() {
+            [allocation] => {
+                let source_attach_ref = allocation
+                    .source_authority_before
+                    .host_attach_contract_ref
+                    .as_ref()
+                    .ok_or_else(|| {
+                        AuthorityFacadeError(
+                            "fork successor source attach contract is absent".into(),
+                        )
+                    })?;
+                let target_attach_ref = allocation
+                    .target_authority
+                    .host_attach_contract_ref
+                    .as_ref()
+                    .ok_or_else(|| {
+                        AuthorityFacadeError(
+                            "fork successor target attach contract is absent".into(),
+                        )
+                    })?;
+                let source_attach: HostAttachContractHashInputV1 = canonical_json::from_slice(
+                    &read_object(source_attach_ref).map_err(AuthorityFacadeError)?,
+                )
+                .map_err(|error| AuthorityFacadeError(error.to_string()))?;
+                let target_attach: HostAttachContractHashInputV1 = canonical_json::from_slice(
+                    &read_object(target_attach_ref).map_err(AuthorityFacadeError)?,
+                )
+                .map_err(|error| AuthorityFacadeError(error.to_string()))?;
+                validate_fork_successor_attach_semantics(&source_attach, &target_attach).map_err(
+                    |_| {
+                        AuthorityFacadeError(
+                            "fork successor attach capability or transformation is invalid".into(),
+                        )
+                    },
+                )?;
+                let initial = resolved_session_authority(
+                    root.root_revision,
+                    &root.authority_store_id,
+                    &root.bootstrap_home,
+                    allocation.target_authority.as_ref().clone(),
+                )?;
+                if initial.authority_record_commitment
+                    != allocation.target_authority_record_commitment
+                    || initial.authoritative_lineage_commitment
+                        != allocation.target_authoritative_lineage_commitment
+                {
+                    return Err(AuthorityFacadeError(
+                        "fork successor initial authority edge is inconsistent".into(),
+                    ));
+                }
+                (initial, None, String::new(), Vec::new())
+            }
+            [] => {
+                let DurableSessionAuthorityOriginV1::StartIntent {
+                    intent_id,
+                    issuer_request_id,
+                    payload_commitment,
+                } = &current.origin;
+                let intent = root.transition_intent_map.get(intent_id).ok_or_else(|| {
+                    AuthorityFacadeError(
+                        "exact authority ancestry has no origin Start intent".into(),
+                    )
+                })?;
+                let HostSessionTransitionIntentStateV2::Applied {
+                    authority_revision_before: None,
+                    authority_revision_after,
+                    active_authoritative_participant_id,
+                    resulting_posture,
+                    authority_record_commitment,
+                    startup_ownership,
+                    applied_at,
+                    ..
+                } = &intent.state
+                else {
+                    return Err(AuthorityFacadeError(
+                        "exact authority ancestry requires an applied origin Start".into(),
+                    ));
+                };
+                let journal = root.application_journal.get(intent_id).ok_or_else(|| {
+                    AuthorityFacadeError(
+                        "exact authority ancestry has no origin Start journal".into(),
+                    )
+                })?;
+                if intent.issuer_request_id != *issuer_request_id
+                    || intent.payload_commitment != *payload_commitment
+                    || intent.orchestration_session_id != orchestration_session_id
+                    || *authority_revision_after != 1
+                    || active_authoritative_participant_id
+                        != &intent.target_authoritative_participant_id
+                    || *resulting_posture != HostSessionPostureV1::ActiveAttached
+                    || journal
+                        .initial_application
+                        .authority_revision_before
+                        .is_some()
+                    || journal.initial_application.authority_revision_after != 1
+                    || journal.initial_application.authority_record_commitment
+                        != *authority_record_commitment
+                    || journal.initial_application.applied_at != *applied_at
+                {
+                    return Err(AuthorityFacadeError(
+                        "origin Start authority edge is inconsistent".into(),
+                    ));
+                }
+                let origin_startup_terminal = match (
+                    startup_ownership.as_ref(),
+                    journal.startup_terminal_application.as_ref(),
+                ) {
+                    (
+                        HostSessionStartupOwnershipApplicationV1::Pending { .. }
+                        | HostSessionStartupOwnershipApplicationV1::Accepted { .. },
+                        None,
+                    ) => None,
+                    (
+                        HostSessionStartupOwnershipApplicationV1::TerminalReconciled {
+                            evidence_id,
+                            result_ref,
+                            authority_revision_before,
+                            authority_revision_after,
+                            resulting_posture,
+                            reconciled_at,
+                        },
+                        Some(terminal),
+                    ) if terminal.schema_version == 1
+                        && terminal.evidence_id == *evidence_id
+                        && terminal.startup_ownership_result_ref == *result_ref
+                        && terminal.authority_revision_before == *authority_revision_before
+                        && terminal.authority_revision_after == *authority_revision_after
+                        && terminal.resulting_posture == *resulting_posture
+                        && terminal.applied_at == *reconciled_at =>
+                    {
+                        Some(terminal)
+                    }
+                    _ => {
+                        return Err(AuthorityFacadeError(
+                            "origin Start startup-terminal edge is inconsistent".into(),
+                        ))
+                    }
+                };
+                let attach_bytes =
+                    read_object(&intent.host_attach_contract_ref).map_err(AuthorityFacadeError)?;
+                let attach: HostAttachContractHashInputV1 =
+                    canonical_json::from_slice(&attach_bytes)
+                        .map_err(|error| AuthorityFacadeError(error.to_string()))?;
+                let policy_bytes =
+                    read_object(&attach.contract.policy_ref).map_err(AuthorityFacadeError)?;
+                let policy: PolicyObjectHashInputV1 = canonical_json::from_slice(&policy_bytes)
+                    .map_err(|error| AuthorityFacadeError(error.to_string()))?;
+                let initial = resolved_session_authority(
+                    root.root_revision,
+                    &root.authority_store_id,
+                    &root.bootstrap_home,
+                    DurableSessionAuthorityV1 {
+                        schema_version: 1,
+                        orchestration_session_id: orchestration_session_id.to_string(),
+                        shell_trace_session_id: intent.shell_trace_session_id.clone(),
+                        authority_revision: 1,
+                        origin: current.origin.clone(),
+                        authoritative_participant_lineage: intent
+                            .resulting_authoritative_lineage
+                            .clone(),
+                        active_authoritative_participant_id: Some(
+                            intent.target_authoritative_participant_id.clone(),
+                        ),
+                        workspace_binding: intent.workspace_binding.clone(),
+                        world_binding: intent.world_binding.clone(),
+                        host_attach_contract_ref: Some(intent.host_attach_contract_ref.clone()),
+                        retained_worker_refs: Vec::new(),
+                        internal_resume_handle_refs: Vec::new(),
+                        lifecycle_posture: HostSessionPostureV1::ActiveAttached,
+                        current_policy_ref: Some(attach.contract.policy_ref),
+                        current_policy_revision: Some(policy.policy_revision),
+                        updated_at: applied_at.clone(),
+                    },
+                )?;
+                if initial.authority_record_commitment != *authority_record_commitment {
+                    return Err(AuthorityFacadeError(
+                        "origin Start authority commitment is inconsistent".into(),
+                    ));
+                }
+                let continuation_handles =
+                    exact_start_continuation_handles(root, current, &mut read_object)?;
+                (
+                    initial,
+                    origin_startup_terminal,
+                    intent_id.clone(),
+                    continuation_handles,
+                )
+            }
+            _ => {
+                return Err(AuthorityFacadeError(
+                    "multiple fork successor allocations claim one target session".into(),
+                ))
+            }
+        };
     let retained_count = root
         .retained_worker_registration_journal
         .values()
@@ -1611,7 +1696,7 @@ where
         let mut candidate = None;
 
         if let Some(terminal) = origin_startup_terminal {
-            let key = format!("start-startup-terminal:{intent_id}");
+            let key = format!("start-startup-terminal:{origin_intent_id}");
             if !consumed.contains(&key)
                 && terminal.authority_revision_before == latest.authority.authority_revision
                 && terminal.authority_record_commitment_before == latest.authority_record_commitment
@@ -2186,6 +2271,25 @@ fn exact_current_authority_proof_v3(
 ) -> Result<AuthorityObjectCommitmentV1, AuthorityFacadeError> {
     let mut commitment = None;
     let mut highest_revision = None;
+    for allocation in root.fork_successor_allocation_map.values() {
+        if allocation.request.target_orchestration_session_id != orchestration_session_id {
+            continue;
+        }
+        let revision = allocation.target_authority.authority_revision;
+        highest_revision =
+            Some(highest_revision.map_or(revision, |highest: u64| highest.max(revision)));
+        if revision != authority_revision {
+            continue;
+        }
+        if commitment
+            .replace(&allocation.target_authority_record_commitment)
+            .is_some()
+        {
+            return Err(AuthorityFacadeError(
+                "current authority revision has ambiguous fork allocation proof".into(),
+            ));
+        }
+    }
     for journal in root.application_journal.values() {
         let Some(intent) = root.transition_intent_map.get(&journal.intent_id) else {
             continue;

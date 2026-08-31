@@ -263,6 +263,19 @@ pub(super) fn collect_reachable_objects_v3(
 ) -> Result<std::collections::BTreeMap<String, ReachableObjectV1>, StoreError> {
     let mut reachable = std::collections::BTreeMap::new();
     collect_namespace_refs(&mut reachable, root.session_namespace_map.values())?;
+    for allocation in root.fork_successor_allocation_map.values() {
+        for authority in [
+            allocation.source_authority_before.as_ref(),
+            allocation.target_authority.as_ref(),
+        ] {
+            add_optional_ref(
+                &mut reachable,
+                authority.host_attach_contract_ref.as_ref(),
+                AuthorityObjectKindV1::HostAttachContract,
+                None,
+            )?;
+        }
+    }
     for intent in root.transition_intent_map.values() {
         let context = ObjectVerificationContextV1 {
             intent_id: intent.intent_id.clone(),
