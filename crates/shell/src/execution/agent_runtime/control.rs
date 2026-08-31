@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
 use std::fs::File;
@@ -8,9 +8,11 @@ use std::io::{self, Read};
 #[cfg(target_os = "linux")]
 use std::os::fd::AsRawFd;
 #[cfg(target_os = "linux")]
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 #[cfg(unix)]
 use std::os::unix::net::UnixListener as StdUnixListener;
+#[cfg(target_os = "linux")]
+use std::os::unix::net::UnixStream as StdUnixStream;
 #[cfg(target_os = "linux")]
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -29,6 +31,7 @@ use chrono::Utc;
 use fs2::FileExt;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use substrate_broker::Policy;
 #[cfg(unix)]
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -64,7 +67,9 @@ use crate::execution::agent_runtime::host_session_authority::store_schema::{
     StartTransactionRecordV1, StartTransactionStateV1,
 };
 use crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot;
-use crate::execution::agent_runtime::host_session_authority::HostSessionAuthority;
+use crate::execution::agent_runtime::host_session_authority::{
+    HostSessionAuthority, ResolvedCurrentAuthorityV1,
+};
 use crate::execution::agent_runtime::orchestration_session::{
     HostAttachContract, OrchestrationSessionPosture, StartupPromptStreamState,
 };
@@ -111,6 +116,782 @@ const START_DETACH_NORMALIZATION_TIMEOUT: Duration = Duration::from_secs(10);
 const START_DETACH_NORMALIZATION_POLL_INTERVAL: Duration = Duration::from_millis(50);
 #[cfg(unix)]
 const START_ATTACHED_GRACE_TIMEOUT: Duration = Duration::from_millis(250);
+
+/// One process-local host execution episode. Every field is observational;
+/// durable session authority remains exclusively owned by HostSessionAuthority.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct HostExecutionEpisodeV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) episode_id: String,
+    pub(crate) kind: HostExecutionEpisodeKindV1,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) observed_authority_revision: u64,
+    pub(crate) backend_id: Option<String>,
+    pub(crate) process_ref: Option<ProcessRefV1>,
+    pub(crate) transport_status: HostExecutionEpisodeTransportStatusV1,
+    pub(crate) started_at: TimestampV1,
+    pub(crate) last_heartbeat_at: Option<TimestampV1>,
+    pub(crate) ended_at: Option<TimestampV1>,
+    pub(crate) exit_observation: Option<EpisodeExitObservationV1>,
+}
+
+#[allow(clippy::enum_variant_names)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) enum HostExecutionEpisodeKindV1 {
+    ReplAttachedEpisode,
+    HiddenOwnerHelperStartEpisode,
+    HiddenOwnerHelperAttachEpisode,
+    HiddenOwnerHelperResumeOneTurnEpisode,
+    RuntimeToolboxEpisode,
+    SyntheticOrRecoveredEpisode,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) enum HostExecutionEpisodeTransportStatusV1 {
+    Available,
+    UnavailableButDurableAuthorityExists,
+    UnavailableAndNoAuthoritativeRoute,
+    StaleOrOrphaned,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) enum PrivateTransportAvailabilityV1 {
+    Available,
+    Missing,
+    Refused,
+    Failed,
+    Stale,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct PrivateEpisodeEndpointIdentityV1 {
+    device: u64,
+    inode: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ProcessRefV1 {
+    pub(crate) pid: u32,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct EpisodeExitObservationV1 {
+    pub(crate) observed_at: TimestampV1,
+    pub(crate) exit_code: Option<i32>,
+    pub(crate) signal: Option<i32>,
+}
+
+/// Runtime-only facts that may be associated with an episode. None of these
+/// variants is accepted as durable lifecycle or authority evidence.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "observation", content = "value", deny_unknown_fields)]
+pub(crate) enum HostExecutionEpisodeObservationV1 {
+    Process(ProcessRefV1),
+    Heartbeat {
+        observed_at: TimestampV1,
+    },
+    Readiness {
+        ready: bool,
+    },
+    Prompt {
+        accepted: bool,
+    },
+    Handle {
+        present: bool,
+    },
+    Stream {
+        active: bool,
+    },
+    Endpoint {
+        availability: PrivateTransportAvailabilityV1,
+    },
+    Timeout {
+        timed_out: bool,
+    },
+    Exit(EpisodeExitObservationV1),
+}
+
+/// Complete identity needed to bind an observational episode to an exact HSA
+/// authority without adding participant or store fields to the canonical V1
+/// episode schema.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct HostExecutionEpisodeBindingV1 {
+    pub(crate) authority_store_id: String,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) participant_id: String,
+    pub(crate) episode_id: String,
+    pub(crate) authority_revision: u64,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug)]
+pub(crate) struct HostExecutionEpisodeObserverV1 {
+    state: Arc<Mutex<HostExecutionEpisodeObserverStateV1>>,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug)]
+struct HostExecutionEpisodeObserverStateV1 {
+    episode: HostExecutionEpisodeV1,
+    binding: HostExecutionEpisodeBindingV1,
+    observed_keys: BTreeSet<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct HostExecutionEpisodeTransportProjectionV1 {
+    pub(crate) episode: HostExecutionEpisodeV1,
+    pub(crate) binding: HostExecutionEpisodeBindingV1,
+    pub(crate) availability: PrivateTransportAvailabilityV1,
+    pub(crate) endpoint_path: PathBuf,
+    pub(crate) agent_id: String,
+    pub(crate) backend_id: String,
+    pub(crate) world_id: Option<String>,
+    pub(crate) world_generation: Option<u64>,
+}
+
+impl HostExecutionEpisodeV1 {
+    pub(crate) fn validate_binding(&self, binding: &HostExecutionEpisodeBindingV1) -> Result<()> {
+        if self.schema_version != 1
+            || self.episode_id.is_empty()
+            || self.orchestration_session_id.is_empty()
+            || self.observed_authority_revision == 0
+            || self
+                .process_ref
+                .as_ref()
+                .is_some_and(|process| process.pid == 0)
+            || binding.authority_store_id.is_empty()
+            || binding.participant_id.is_empty()
+            || self.episode_id != binding.episode_id
+            || self.orchestration_session_id != binding.orchestration_session_id
+            || self.observed_authority_revision != binding.authority_revision
+        {
+            anyhow::bail!("host execution episode does not match exact authority binding");
+        }
+        Ok(())
+    }
+
+    /// Records episode-local state only. Callers that can affect an
+    /// authority-owned surface must first use `validate_current_authority`.
+    pub(crate) fn record_local_observation(
+        &mut self,
+        binding: &HostExecutionEpisodeBindingV1,
+        observation: HostExecutionEpisodeObservationV1,
+    ) -> Result<bool> {
+        self.validate_binding(binding)?;
+        match observation {
+            HostExecutionEpisodeObservationV1::Process(process) => {
+                if process.pid == 0 {
+                    anyhow::bail!("PID zero is not a host execution episode observation");
+                }
+                match self.process_ref.as_ref() {
+                    Some(current) if current == &process => Ok(false),
+                    Some(_) => anyhow::bail!(
+                        "a competing process cannot replace an existing episode process binding"
+                    ),
+                    None => {
+                        self.process_ref = Some(process);
+                        Ok(true)
+                    }
+                }
+            }
+            HostExecutionEpisodeObservationV1::Heartbeat { observed_at } => {
+                if self
+                    .last_heartbeat_at
+                    .as_ref()
+                    .is_some_and(|current| current.as_str() >= observed_at.as_str())
+                {
+                    return Ok(false);
+                }
+                self.last_heartbeat_at = Some(observed_at);
+                Ok(true)
+            }
+            HostExecutionEpisodeObservationV1::Endpoint { availability } => {
+                let status = classify_episode_transport(availability, true);
+                if self.transport_status == status {
+                    return Ok(false);
+                }
+                self.transport_status = status;
+                Ok(true)
+            }
+            HostExecutionEpisodeObservationV1::Exit(exit) => {
+                if let Some(current) = self.exit_observation.as_ref() {
+                    if current == &exit {
+                        return Ok(false);
+                    }
+                    anyhow::bail!("conflicting terminal observation for one execution episode");
+                }
+                self.ended_at = Some(exit.observed_at.clone());
+                self.exit_observation = Some(exit);
+                Ok(true)
+            }
+            HostExecutionEpisodeObservationV1::Readiness { .. }
+            | HostExecutionEpisodeObservationV1::Prompt { .. }
+            | HostExecutionEpisodeObservationV1::Handle { .. }
+            | HostExecutionEpisodeObservationV1::Stream { .. }
+            | HostExecutionEpisodeObservationV1::Timeout { .. } => Ok(false),
+        }
+    }
+
+    pub(crate) fn validate_current_authority(
+        &self,
+        binding: &HostExecutionEpisodeBindingV1,
+        current: &ResolvedCurrentAuthorityV1,
+    ) -> Result<()> {
+        self.validate_binding(binding)?;
+        if binding.authority_store_id != current.observation.authority_store_id
+            || binding.orchestration_session_id != current.authority.orchestration_session_id
+            || binding.participant_id != current.caller.participant_id
+            || binding.authority_revision != current.observation.authority_revision
+        {
+            anyhow::bail!("host execution episode observed a stale or substituted authority");
+        }
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl HostExecutionEpisodeObserverV1 {
+    pub(crate) fn new(
+        episode: HostExecutionEpisodeV1,
+        binding: HostExecutionEpisodeBindingV1,
+    ) -> Result<Self> {
+        episode.validate_binding(&binding)?;
+        Ok(Self {
+            state: Arc::new(Mutex::new(HostExecutionEpisodeObserverStateV1 {
+                episode,
+                binding,
+                observed_keys: BTreeSet::new(),
+            })),
+        })
+    }
+
+    /// Records an idempotent process-local observation only after the episode's
+    /// exact HSA revision is still current. This method has no authority write.
+    pub(crate) fn observe_current(
+        &self,
+        observation_key: &str,
+        observation: HostExecutionEpisodeObservationV1,
+    ) -> Result<bool> {
+        if observation_key.is_empty() {
+            anyhow::bail!("host execution episode observation key must not be empty");
+        }
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| anyhow::anyhow!("host execution episode observer mutex poisoned"))?;
+        validate_host_execution_episode_against_current_hsa(&state.episode, &state.binding)?;
+        if state.observed_keys.contains(observation_key) {
+            return Ok(false);
+        }
+        let binding = state.binding.clone();
+        let changed = state
+            .episode
+            .record_local_observation(&binding, observation)?;
+        state.observed_keys.insert(observation_key.to_string());
+        Ok(changed)
+    }
+}
+
+impl HostExecutionEpisodeKindV1 {
+    fn identity_label(self) -> &'static str {
+        match self {
+            Self::ReplAttachedEpisode => "repl-attached",
+            Self::HiddenOwnerHelperStartEpisode => "hidden-owner-helper-start",
+            Self::HiddenOwnerHelperAttachEpisode => "hidden-owner-helper-attach",
+            Self::HiddenOwnerHelperResumeOneTurnEpisode => "hidden-owner-helper-resume-one-turn",
+            Self::RuntimeToolboxEpisode => "runtime-toolbox",
+            Self::SyntheticOrRecoveredEpisode => "synthetic-or-recovered",
+        }
+    }
+}
+
+pub(crate) fn classify_episode_transport(
+    availability: PrivateTransportAvailabilityV1,
+    durable_authority_exists: bool,
+) -> HostExecutionEpisodeTransportStatusV1 {
+    match availability {
+        PrivateTransportAvailabilityV1::Available => {
+            HostExecutionEpisodeTransportStatusV1::Available
+        }
+        PrivateTransportAvailabilityV1::Stale => {
+            HostExecutionEpisodeTransportStatusV1::StaleOrOrphaned
+        }
+        PrivateTransportAvailabilityV1::Missing
+        | PrivateTransportAvailabilityV1::Refused
+        | PrivateTransportAvailabilityV1::Failed => {
+            if durable_authority_exists {
+                HostExecutionEpisodeTransportStatusV1::UnavailableButDurableAuthorityExists
+            } else {
+                HostExecutionEpisodeTransportStatusV1::UnavailableAndNoAuthoritativeRoute
+            }
+        }
+    }
+}
+
+pub(crate) fn host_execution_episode_for_authority(
+    current: &ResolvedCurrentAuthorityV1,
+    kind: HostExecutionEpisodeKindV1,
+    episode_seed: &str,
+    process_ref: Option<ProcessRefV1>,
+    availability: PrivateTransportAvailabilityV1,
+) -> Result<(HostExecutionEpisodeV1, HostExecutionEpisodeBindingV1)> {
+    let participant_id = current.caller.participant_id.clone();
+    if current
+        .authority
+        .active_authoritative_participant_id
+        .as_deref()
+        != Some(participant_id.as_str())
+    {
+        anyhow::bail!("host execution episode requires the exact active HSA participant");
+    }
+    let episode_id = format!(
+        "hee_{}",
+        &episode_path_digest(
+            "substrate.host-execution-episode.identity.v1",
+            &[
+                current.observation.authority_store_id.as_bytes(),
+                current.authority.orchestration_session_id.as_bytes(),
+                participant_id.as_bytes(),
+                kind.identity_label().as_bytes(),
+                episode_seed.as_bytes(),
+            ],
+        )[..32]
+    );
+    let binding = HostExecutionEpisodeBindingV1 {
+        authority_store_id: current.observation.authority_store_id.clone(),
+        orchestration_session_id: current.authority.orchestration_session_id.clone(),
+        participant_id,
+        episode_id: episode_id.clone(),
+        authority_revision: current.observation.authority_revision,
+    };
+    let started_at =
+        TimestampV1::parse(Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true))
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let episode = HostExecutionEpisodeV1 {
+        schema_version: 1,
+        episode_id,
+        kind,
+        orchestration_session_id: current.authority.orchestration_session_id.clone(),
+        observed_authority_revision: current.observation.authority_revision,
+        backend_id: Some(current.caller.descriptor.backend_id.clone()),
+        process_ref,
+        transport_status: classify_episode_transport(availability, true),
+        started_at,
+        last_heartbeat_at: None,
+        ended_at: None,
+        exit_observation: None,
+    };
+    episode.validate_current_authority(&binding, current)?;
+    Ok((episode, binding))
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn host_execution_episode_for_current_authority(
+    orchestration_session_id: &str,
+    kind: HostExecutionEpisodeKindV1,
+    episode_seed: &str,
+    process_ref: Option<ProcessRefV1>,
+    availability: PrivateTransportAvailabilityV1,
+) -> Result<(HostExecutionEpisodeV1, HostExecutionEpisodeBindingV1)> {
+    let authority = HostSessionAuthority::from_trusted_root(
+        TrustedAuthorityRoot::open(&substrate_paths::substrate_home()?)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let current = authority
+        .resolve_current_exact(orchestration_session_id, None)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    host_execution_episode_for_authority(&current, kind, episode_seed, process_ref, availability)
+}
+
+#[cfg(target_os = "linux")]
+fn host_execution_episode_for_helper_plan(
+    plan: &HiddenOwnerHelperLaunchPlan,
+) -> Result<(HostExecutionEpisodeV1, HostExecutionEpisodeBindingV1)> {
+    let authority = HostSessionAuthority::from_trusted_root(
+        TrustedAuthorityRoot::open(&substrate_paths::substrate_home()?)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let current = authority
+        .resolve_current_exact(plan.orchestration_session_id(), None)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    if current.caller.participant_id != plan.participant_id() {
+        anyhow::bail!("owner-helper episode participant is not the exact current HSA participant");
+    }
+    let kind = match plan.mode {
+        OwnerHelperMode::Start => HostExecutionEpisodeKindV1::HiddenOwnerHelperStartEpisode,
+        OwnerHelperMode::Attach => HostExecutionEpisodeKindV1::HiddenOwnerHelperAttachEpisode,
+        OwnerHelperMode::ResumeOneTurn => {
+            HostExecutionEpisodeKindV1::HiddenOwnerHelperResumeOneTurnEpisode
+        }
+    };
+    host_execution_episode_for_authority(
+        &current,
+        kind,
+        &plan.participant.run_id,
+        None,
+        PrivateTransportAvailabilityV1::Missing,
+    )
+}
+
+fn episode_path_digest(domain: &str, parts: &[&[u8]]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(domain.as_bytes());
+    for part in parts {
+        hasher.update((part.len() as u64).to_be_bytes());
+        hasher.update(part);
+    }
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+pub(crate) fn toolbox_transport_path_for_episode(
+    substrate_home: &Path,
+    uid: u32,
+    binding: &HostExecutionEpisodeBindingV1,
+) -> PathBuf {
+    let home = substrate_home.as_os_str().as_encoded_bytes();
+    let uid_bytes = uid.to_be_bytes();
+    let store_namespace = episode_path_digest(
+        "substrate.host-execution-episode.store-path.v1",
+        &[home, &uid_bytes, binding.authority_store_id.as_bytes()],
+    );
+    let endpoint_identity = episode_path_digest(
+        "substrate.host-execution-episode.toolbox-path.v1",
+        &[
+            home,
+            &uid_bytes,
+            binding.authority_store_id.as_bytes(),
+            binding.orchestration_session_id.as_bytes(),
+            binding.participant_id.as_bytes(),
+            binding.episode_id.as_bytes(),
+        ],
+    );
+    let suffix = PathBuf::from(format!("u{uid}"))
+        .join(&store_namespace[..16])
+        .join(format!("{}.sock", &endpoint_identity[..32]));
+    let preferred = substrate_home
+        .join("run")
+        .join("agent-toolbox")
+        .join(&suffix);
+    if preferred.as_os_str().len() <= PRIVATE_STOP_UNIX_PATH_MAX {
+        return preferred;
+    }
+    PathBuf::from("/tmp")
+        .join(format!("substrate-agent-toolbox-u{uid}"))
+        .join(&store_namespace[..16])
+        .join(format!("{}.sock", &endpoint_identity[..32]))
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn private_transport_availability(
+    path: &Path,
+    expected_uid: u32,
+) -> PrivateTransportAvailabilityV1 {
+    let metadata_availability =
+        private_transport_endpoint_metadata_availability(path, expected_uid);
+    if metadata_availability != PrivateTransportAvailabilityV1::Available {
+        return metadata_availability;
+    }
+    match StdUnixStream::connect(path) {
+        Ok(_) => PrivateTransportAvailabilityV1::Available,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            PrivateTransportAvailabilityV1::Missing
+        }
+        Err(error) if error.kind() == io::ErrorKind::ConnectionRefused => {
+            PrivateTransportAvailabilityV1::Refused
+        }
+        Err(_) => PrivateTransportAvailabilityV1::Failed,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn private_transport_endpoint_metadata_availability(
+    path: &Path,
+    expected_uid: u32,
+) -> PrivateTransportAvailabilityV1 {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return PrivateTransportAvailabilityV1::Missing;
+        }
+        Err(_) => return PrivateTransportAvailabilityV1::Failed,
+    };
+    if metadata.file_type().is_symlink()
+        || !metadata.file_type().is_socket()
+        || metadata.uid() != expected_uid
+        || metadata.permissions().mode() & 0o777 != 0o600
+    {
+        return PrivateTransportAvailabilityV1::Stale;
+    }
+    PrivateTransportAvailabilityV1::Available
+}
+
+#[cfg(target_os = "linux")]
+fn private_episode_endpoint_identity(path: &Path) -> Result<PrivateEpisodeEndpointIdentityV1> {
+    let metadata = fs::symlink_metadata(path).with_context(|| {
+        format!(
+            "failed to inspect private episode endpoint {}",
+            path.display()
+        )
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.file_type().is_socket() {
+        anyhow::bail!(
+            "private episode endpoint {} is not an exact Unix socket",
+            path.display()
+        );
+    }
+    Ok(PrivateEpisodeEndpointIdentityV1 {
+        device: metadata.dev(),
+        inode: metadata.ino(),
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn remove_private_episode_endpoint_if_same(
+    path: &Path,
+    expected: PrivateEpisodeEndpointIdentityV1,
+) -> Result<()> {
+    let current = match private_episode_endpoint_identity(path) {
+        Ok(current) => current,
+        Err(error)
+            if error
+                .downcast_ref::<io::Error>()
+                .is_some_and(|error| error.kind() == io::ErrorKind::NotFound) =>
+        {
+            return Ok(())
+        }
+        Err(error) => return Err(error),
+    };
+    if current != expected {
+        anyhow::bail!(
+            "private episode endpoint {} was replaced by a competing publisher",
+            path.display()
+        );
+    }
+    fs::remove_file(path).with_context(|| {
+        format!(
+            "failed to remove private episode endpoint {}",
+            path.display()
+        )
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn ensure_private_episode_owned_directory(path: &Path, expected_uid: u32) -> Result<()> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink()
+                || !metadata.file_type().is_dir()
+                || metadata.uid() != expected_uid
+                || metadata.permissions().mode() & 0o777 != 0o700
+            {
+                anyhow::bail!(
+                    "private episode directory {} has unsafe type, ownership, or permissions",
+                    path.display()
+                );
+            }
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            use std::os::unix::fs::DirBuilderExt;
+            fs::DirBuilder::new()
+                .mode(0o700)
+                .create(path)
+                .with_context(|| format!("failed to create {}", path.display()))?;
+            let metadata = fs::symlink_metadata(path)
+                .with_context(|| format!("failed to revalidate {}", path.display()))?;
+            if metadata.file_type().is_symlink()
+                || !metadata.file_type().is_dir()
+                || metadata.uid() != expected_uid
+                || metadata.permissions().mode() & 0o777 != 0o700
+            {
+                anyhow::bail!(
+                    "created private episode directory {} changed identity",
+                    path.display()
+                );
+            }
+        }
+        Err(error) => {
+            return Err(error).with_context(|| format!("failed to inspect {}", path.display()));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn private_episode_namespace_root(
+    path: &Path,
+    substrate_home: &Path,
+    expected_uid: u32,
+) -> Result<PathBuf> {
+    if path.starts_with(substrate_home) {
+        return Ok(substrate_home.to_path_buf());
+    }
+    let fallback = PathBuf::from(format!("/tmp/substrate-host-episodes-u{expected_uid}"));
+    if path.starts_with(&fallback) {
+        return Ok(fallback);
+    }
+    anyhow::bail!(
+        "private episode endpoint {} is outside its exact HSA store namespace",
+        path.display()
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn prepare_private_episode_endpoint_for_bind(
+    path: &Path,
+    expected_uid: u32,
+    trusted_namespace_root: &Path,
+) -> Result<()> {
+    let parent = path.parent().ok_or_else(|| {
+        anyhow::anyhow!(
+            "private episode transport path '{}' is missing a parent directory",
+            path.display()
+        )
+    })?;
+    let relative_parent = parent.strip_prefix(trusted_namespace_root).map_err(|_| {
+        anyhow::anyhow!(
+            "private episode endpoint {} escapes trusted namespace {}",
+            path.display(),
+            trusted_namespace_root.display()
+        )
+    })?;
+    if relative_parent.as_os_str().is_empty()
+        || relative_parent
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        anyhow::bail!(
+            "private episode endpoint {} has an invalid namespace-relative parent",
+            path.display()
+        );
+    }
+
+    ensure_private_episode_owned_directory(trusted_namespace_root, expected_uid)?;
+    let mut current = trusted_namespace_root.to_path_buf();
+    for component in relative_parent.components() {
+        let std::path::Component::Normal(component) = component else {
+            unreachable!("private episode parent components were validated")
+        };
+        current.push(component);
+        ensure_private_episode_owned_directory(&current, expected_uid)?;
+    }
+
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!(
+                    "failed to inspect private episode transport {}",
+                    path.display()
+                )
+            });
+        }
+    };
+    if metadata.file_type().is_symlink()
+        || !metadata.file_type().is_socket()
+        || metadata.uid() != expected_uid
+        || metadata.permissions().mode() & 0o777 != 0o600
+    {
+        anyhow::bail!(
+            "private episode transport {} has unsafe type, ownership, or permissions",
+            path.display()
+        );
+    }
+    let stale_identity = PrivateEpisodeEndpointIdentityV1 {
+        device: metadata.dev(),
+        inode: metadata.ino(),
+    };
+    match StdUnixStream::connect(path) {
+        Ok(_) => anyhow::bail!(
+            "private episode transport {} is owned by an active competing publisher",
+            path.display()
+        ),
+        Err(error) if error.kind() == io::ErrorKind::ConnectionRefused => {
+            remove_private_episode_endpoint_if_same(path, stale_identity)
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| {
+            format!(
+                "failed to classify existing private episode transport {}",
+                path.display()
+            )
+        }),
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn discover_toolbox_episode_transport(
+    orchestration_session_id: &str,
+) -> Result<HostExecutionEpisodeTransportProjectionV1> {
+    let substrate_home = substrate_paths::substrate_home()?;
+    let authority = HostSessionAuthority::from_trusted_root(
+        TrustedAuthorityRoot::open(&substrate_home)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let current = authority
+        .resolve_current_exact(orchestration_session_id, None)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let (mut episode, binding) = host_execution_episode_for_authority(
+        &current,
+        HostExecutionEpisodeKindV1::RuntimeToolboxEpisode,
+        current.caller.participant_id.as_str(),
+        None,
+        PrivateTransportAvailabilityV1::Failed,
+    )?;
+    let uid = unsafe { libc::geteuid() };
+    let endpoint_path = toolbox_transport_path_for_episode(&substrate_home, uid, &binding);
+    let availability = private_transport_availability(&endpoint_path, uid);
+    episode.transport_status = classify_episode_transport(availability, true);
+    episode.validate_current_authority(&binding, &current)?;
+    let (world_id, world_generation) = current
+        .authority
+        .world_binding
+        .as_ref()
+        .map(|binding| {
+            (
+                Some(binding.world_id.clone()),
+                Some(binding.world_generation),
+            )
+        })
+        .unwrap_or((None, None));
+    Ok(HostExecutionEpisodeTransportProjectionV1 {
+        episode,
+        binding,
+        availability,
+        endpoint_path,
+        agent_id: current.caller.descriptor.agent_id,
+        backend_id: current.caller.descriptor.backend_id,
+        world_id,
+        world_generation,
+    })
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn validate_host_execution_episode_against_current_hsa(
+    episode: &HostExecutionEpisodeV1,
+    binding: &HostExecutionEpisodeBindingV1,
+) -> Result<()> {
+    let authority = HostSessionAuthority::from_trusted_root(
+        TrustedAuthorityRoot::open(&substrate_paths::substrate_home()?)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let current = authority
+        .resolve_current_exact(&binding.orchestration_session_id, None)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    episode.validate_current_authority(binding, &current)
+}
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -508,6 +1289,8 @@ pub(crate) fn launch_hidden_owner_helper(
     world: bool,
     no_world: bool,
 ) -> Result<HiddenOwnerHelperLaunchReceipt> {
+    #[cfg(target_os = "linux")]
+    let (mut launch_episode, launch_binding) = host_execution_episode_for_helper_plan(plan)?;
     let store = AgentRuntimeStateStore::new()?;
     let _attach_launch_guard = if plan.mode == OwnerHelperMode::Attach {
         loop {
@@ -545,6 +1328,13 @@ pub(crate) fn launch_hidden_owner_helper(
             plan.session.orchestration_session_id
         )
     })?;
+    #[cfg(target_os = "linux")]
+    {
+        launch_episode.record_local_observation(
+            &launch_binding,
+            HostExecutionEpisodeObservationV1::Process(ProcessRefV1 { pid: child.id() }),
+        )?;
+    }
     if let Err(err) = wait_for_hidden_owner_helper_readiness(&store, plan) {
         let reconciled = if plan.mode == OwnerHelperMode::Start
             && hidden_owner_helper_readiness_timed_out(&err)
@@ -627,6 +1417,9 @@ pub(crate) fn launch_hidden_owner_helper_for_durable_start(
         );
     }
 
+    #[cfg(target_os = "linux")]
+    let (mut launch_episode, launch_binding) = host_execution_episode_for_helper_plan(plan)?;
+
     let plan_path = persist_durable_start_launch_plan(plan)?;
     let exe = env::current_exe()
         .context("failed to resolve current substrate executable for hidden owner-helper launch")?;
@@ -652,6 +1445,13 @@ pub(crate) fn launch_hidden_owner_helper_for_durable_start(
             plan.session.orchestration_session_id
         )
     })?;
+    #[cfg(target_os = "linux")]
+    {
+        launch_episode.record_local_observation(
+            &launch_binding,
+            HostExecutionEpisodeObservationV1::Process(ProcessRefV1 { pid: child.id() }),
+        )?;
+    }
 
     Ok(HiddenOwnerHelperLaunchReceipt {
         helper_pid: child.id(),
@@ -672,6 +1472,8 @@ pub(crate) fn launch_authority_managed_successor_owner_helper(
     no_world: bool,
 ) -> Result<AuthorityManagedSuccessorLaunchReceiptV1> {
     plan.validate_transport_shape()?;
+    let (mut launch_episode, launch_binding) =
+        host_execution_episode_for_helper_plan(&plan.helper_plan)?;
     if permit.authority_store_id != plan.authority_store_id
         || permit.intent_id != plan.applied_transition.intent_id
     {
@@ -729,6 +1531,10 @@ pub(crate) fn launch_authority_managed_successor_owner_helper(
             plan.helper_plan.session.orchestration_session_id
         )
     })?;
+    launch_episode.record_local_observation(
+        &launch_binding,
+        HostExecutionEpisodeObservationV1::Process(ProcessRefV1 { pid: child.id() }),
+    )?;
 
     Ok(AuthorityManagedSuccessorLaunchReceiptV1 {
         launch_receipt: HiddenOwnerHelperLaunchReceipt {
@@ -753,24 +1559,21 @@ pub(crate) fn acquire_authority_managed_successor_launch_permit(
             launch_guard: None,
         });
     }
-    let launch_guard = loop {
-        match try_acquire_authority_managed_successor_launch_guard(plan)? {
-            Some(guard) => {
-                #[cfg(test)]
-                maybe_inject_authority_successor_completion_race_for_test();
-                if authority_managed_successor_completion(plan)?.is_some() {
-                    drop(guard);
-                    break None;
-                }
-                break Some(guard);
+    let launch_guard = match try_acquire_authority_managed_successor_launch_guard(plan)? {
+        Some(guard) => {
+            #[cfg(test)]
+            maybe_inject_authority_successor_completion_race_for_test();
+            if authority_managed_successor_completion(plan)?.is_some() {
+                drop(guard);
+                None
+            } else {
+                Some(guard)
             }
-            None => match wait_for_inflight_authority_managed_successor_launch(plan)? {
-                AuthorityManagedSuccessorLaunchJoinV1::Joined => {
-                    break None;
-                }
-                AuthorityManagedSuccessorLaunchJoinV1::RetryAsLeader(guard) => break Some(guard),
-            },
         }
+        None => match wait_for_inflight_authority_managed_successor_launch(plan)? {
+            AuthorityManagedSuccessorLaunchJoinV1::Joined => None,
+            AuthorityManagedSuccessorLaunchJoinV1::RetryAsLeader(guard) => Some(guard),
+        },
     };
     Ok(AuthorityManagedSuccessorLaunchPermitV1 {
         authority_store_id: plan.authority_store_id.clone(),
@@ -1389,7 +2192,7 @@ pub(crate) struct PrivateStopRequest {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum PrivateStopRequestPayloadV1 {
     Legacy,
-    AuthorityManaged(HostSessionStopDeliveryV1),
+    AuthorityManaged(Box<HostSessionStopDeliveryV1>),
 }
 
 #[cfg(unix)]
@@ -1402,7 +2205,7 @@ pub(crate) struct AuthorityManagedStopCloseoutV1 {
 #[cfg(unix)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum AuthorityManagedStopAcceptanceV1 {
-    Accepted(AuthorityManagedStopCloseoutV1),
+    Accepted(Box<AuthorityManagedStopCloseoutV1>),
     AlreadyTerminal,
 }
 
@@ -1422,6 +2225,8 @@ pub(crate) struct PrivateStopTransport {
     shutdown_tx: Option<oneshot::Sender<()>>,
     task: Option<tokio::task::JoinHandle<()>>,
     path: PathBuf,
+    #[cfg(target_os = "linux")]
+    endpoint_identity: Option<PrivateEpisodeEndpointIdentityV1>,
 }
 
 #[derive(Debug)]
@@ -1446,6 +2251,8 @@ pub(crate) struct PrivatePromptTransport {
     shutdown_tx: Option<oneshot::Sender<()>>,
     task: Option<tokio::task::JoinHandle<()>>,
     path: PathBuf,
+    #[cfg(target_os = "linux")]
+    endpoint_identity: Option<PrivateEpisodeEndpointIdentityV1>,
 }
 
 #[cfg(unix)]
@@ -1478,7 +2285,15 @@ impl PrivatePromptTransport {
         if let Some(task) = self.task.take() {
             let _ = task.await;
         }
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
+        {
+            if let Some(identity) = self.endpoint_identity.take() {
+                let _ = remove_private_episode_endpoint_if_same(&self.path, identity);
+            } else {
+                let _ = tokio::fs::remove_file(&self.path).await;
+            }
+        }
+        #[cfg(all(unix, not(target_os = "linux")))]
         {
             let _ = tokio::fs::remove_file(&self.path).await;
         }
@@ -1540,7 +2355,15 @@ impl PrivateStopTransport {
         if let Some(task) = self.task.take() {
             let _ = task.await;
         }
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
+        {
+            if let Some(identity) = self.endpoint_identity.take() {
+                let _ = remove_private_episode_endpoint_if_same(&self.path, identity);
+            } else {
+                let _ = tokio::fs::remove_file(&self.path).await;
+            }
+        }
+        #[cfg(all(unix, not(target_os = "linux")))]
         {
             let _ = tokio::fs::remove_file(&self.path).await;
         }
@@ -1660,17 +2483,114 @@ fn durable_start_private_transport_path(
     orchestration_session_id: &str,
     participant_id: &str,
 ) -> Result<PathBuf> {
-    let session_fragment = compact_stop_transport_fragment(orchestration_session_id);
-    let participant_fragment = compact_stop_transport_fragment(participant_id);
-    let socket_name = format!("{session_fragment}-{participant_fragment}.{suffix}.sock");
-    let preferred = durable_start_control_root()?.join(kind).join(&socket_name);
-    if preferred.as_os_str().len() > PRIVATE_STOP_UNIX_PATH_MAX {
-        return Ok(PathBuf::from("/tmp")
-            .join("substrate-durable-start")
-            .join(kind)
-            .join(socket_name));
+    #[cfg(target_os = "linux")]
+    {
+        let substrate_home = substrate_paths::substrate_home()?;
+        let (_, binding) = durable_private_transport_episode(
+            orchestration_session_id,
+            participant_id,
+            PrivateTransportAvailabilityV1::Missing,
+        )?;
+        let uid = unsafe { libc::geteuid() };
+        Ok(private_episode_transport_path_for_binding(
+            &substrate_home,
+            uid,
+            &binding,
+            kind,
+            suffix,
+        ))
     }
-    Ok(preferred)
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let session_fragment = compact_stop_transport_fragment(orchestration_session_id);
+        let participant_fragment = compact_stop_transport_fragment(participant_id);
+        let socket_name = format!("{session_fragment}-{participant_fragment}.{suffix}.sock");
+        let preferred = durable_start_control_root()?.join(kind).join(&socket_name);
+        if preferred.as_os_str().len() > PRIVATE_STOP_UNIX_PATH_MAX {
+            return Ok(PathBuf::from("/tmp")
+                .join("substrate-durable-start")
+                .join(kind)
+                .join(socket_name));
+        }
+        Ok(preferred)
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn durable_private_transport_episode(
+    orchestration_session_id: &str,
+    participant_id: &str,
+    availability: PrivateTransportAvailabilityV1,
+) -> Result<(HostExecutionEpisodeV1, HostExecutionEpisodeBindingV1)> {
+    let authority = HostSessionAuthority::from_trusted_root(
+        TrustedAuthorityRoot::open(&substrate_paths::substrate_home()?)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let current = authority
+        .resolve_current_exact(orchestration_session_id, None)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    if current.caller.participant_id != participant_id {
+        anyhow::bail!("durable private transport participant is not exact current HSA authority");
+    }
+    host_execution_episode_for_authority(
+        &current,
+        HostExecutionEpisodeKindV1::SyntheticOrRecoveredEpisode,
+        &format!("durable-private-owner:{participant_id}"),
+        Some(ProcessRefV1 {
+            pid: std::process::id(),
+        }),
+        availability,
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn private_episode_transport_path_for_binding(
+    substrate_home: &Path,
+    uid: u32,
+    binding: &HostExecutionEpisodeBindingV1,
+    kind: &str,
+    suffix: &str,
+) -> PathBuf {
+    let home = substrate_home.as_os_str().as_encoded_bytes();
+    let uid_bytes = uid.to_be_bytes();
+    let revision_bytes = binding.authority_revision.to_be_bytes();
+    let store_namespace = episode_path_digest(
+        "substrate.host-execution-episode.private-store-path.v1",
+        &[home, &uid_bytes, binding.authority_store_id.as_bytes()],
+    );
+    let endpoint_identity = episode_path_digest(
+        "substrate.host-execution-episode.private-endpoint-path.v1",
+        &[
+            home,
+            &uid_bytes,
+            binding.authority_store_id.as_bytes(),
+            binding.orchestration_session_id.as_bytes(),
+            binding.participant_id.as_bytes(),
+            binding.episode_id.as_bytes(),
+            &revision_bytes,
+            kind.as_bytes(),
+            suffix.as_bytes(),
+        ],
+    );
+    let socket_name = format!("{}.{}.sock", &endpoint_identity[..32], suffix);
+    let suffix_path = PathBuf::from(format!("u{uid}"))
+        .join(&store_namespace[..16])
+        .join(kind)
+        .join(socket_name);
+    let preferred = substrate_home
+        .join("run")
+        .join("host-episodes")
+        .join(&suffix_path);
+    if preferred.as_os_str().len() <= PRIVATE_STOP_UNIX_PATH_MAX {
+        return preferred;
+    }
+    PathBuf::from("/tmp")
+        .join(format!("substrate-host-episodes-u{uid}"))
+        .join(&store_namespace[..16])
+        .join(kind)
+        .join(format!("{}.{}.sock", &endpoint_identity[..32], suffix))
 }
 
 #[cfg(unix)]
@@ -1685,38 +2605,99 @@ pub(crate) fn durable_start_stop_transport_path(
 pub(crate) fn durable_start_toolbox_transport_path(
     orchestration_session_id: &str,
 ) -> Result<PathBuf> {
-    let session_fragment = compact_stop_transport_fragment(orchestration_session_id);
-    let socket_name = format!("{session_fragment}.sock");
-    let preferred = durable_start_control_root()?
-        .join("toolbox")
-        .join(&socket_name);
-    if preferred.as_os_str().len() > PRIVATE_STOP_UNIX_PATH_MAX {
-        return Ok(PathBuf::from("/tmp")
-            .join("substrate-durable-start")
-            .join("toolbox")
-            .join(socket_name));
+    #[cfg(target_os = "linux")]
+    {
+        toolbox_transport_path(orchestration_session_id)
     }
-    Ok(preferred)
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let session_fragment = compact_stop_transport_fragment(orchestration_session_id);
+        let socket_name = format!("{session_fragment}.sock");
+        let preferred = durable_start_control_root()?
+            .join("toolbox")
+            .join(&socket_name);
+        if preferred.as_os_str().len() > PRIVATE_STOP_UNIX_PATH_MAX {
+            return Ok(PathBuf::from("/tmp")
+                .join("substrate-durable-start")
+                .join("toolbox")
+                .join(socket_name));
+        }
+        Ok(preferred)
+    }
 }
 
 pub(crate) fn toolbox_transport_path_for_home(
     substrate_home: &Path,
     orchestration_session_id: &str,
 ) -> PathBuf {
-    let socket_name = format!("{orchestration_session_id}.sock");
-    let preferred = substrate_home
-        .join("run")
-        .join("agent-toolbox")
-        .join(&socket_name);
-    if preferred.as_os_str().len() > PRIVATE_STOP_UNIX_PATH_MAX {
-        return PathBuf::from("/tmp")
-            .join("substrate-agent-toolbox")
-            .join(socket_name);
+    #[cfg(target_os = "linux")]
+    {
+        #[cfg(unix)]
+        let uid = unsafe { libc::geteuid() };
+        #[cfg(not(unix))]
+        let uid = 0;
+        let authority_store_id = episode_path_digest(
+            "substrate.host-execution-episode.legacy-store-path.v1",
+            &[substrate_home.as_os_str().as_encoded_bytes()],
+        );
+        toolbox_transport_path_for_episode(
+            substrate_home,
+            uid,
+            &HostExecutionEpisodeBindingV1 {
+                authority_store_id,
+                orchestration_session_id: orchestration_session_id.to_string(),
+                participant_id: "legacy-participant-projection".to_string(),
+                episode_id: "legacy-toolbox-projection".to_string(),
+                authority_revision: 1,
+            },
+        )
     }
-    preferred
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let socket_name = format!("{orchestration_session_id}.sock");
+        let preferred = substrate_home
+            .join("run")
+            .join("agent-toolbox")
+            .join(&socket_name);
+        if preferred.as_os_str().len() > PRIVATE_STOP_UNIX_PATH_MAX {
+            return PathBuf::from("/tmp")
+                .join("substrate-agent-toolbox")
+                .join(socket_name);
+        }
+        preferred
+    }
 }
 
 pub(crate) fn toolbox_transport_path(orchestration_session_id: &str) -> Result<PathBuf> {
+    #[cfg(target_os = "linux")]
+    {
+        let substrate_home = substrate_paths::substrate_home()?;
+        let authority = HostSessionAuthority::from_trusted_root(
+            TrustedAuthorityRoot::open(&substrate_home)
+                .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+        )
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        let current = authority
+            .resolve_current_exact(orchestration_session_id, None)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        let (_, binding) = host_execution_episode_for_authority(
+            &current,
+            HostExecutionEpisodeKindV1::RuntimeToolboxEpisode,
+            current.caller.participant_id.as_str(),
+            None,
+            PrivateTransportAvailabilityV1::Available,
+        )?;
+        let uid = unsafe { libc::geteuid() };
+        Ok(toolbox_transport_path_for_episode(
+            &substrate_home,
+            uid,
+            &binding,
+        ))
+    }
+
+    #[cfg(not(target_os = "linux"))]
     Ok(toolbox_transport_path_for_home(
         &substrate_paths::substrate_home()?,
         orchestration_session_id,
@@ -1759,6 +2740,10 @@ pub(crate) fn register_hidden_owner_helper_startup_prompt_listener(
     })?;
     Ok(StartupPromptTransportListener { listener, path })
 }
+
+#[cfg(target_os = "linux")]
+const _: fn(&AgentRuntimeStateStore, &str, &str) -> Result<StartupPromptTransportListener> =
+    register_hidden_owner_helper_startup_prompt_listener;
 
 #[cfg(unix)]
 pub(crate) fn register_durable_start_startup_prompt_listener(
@@ -2769,6 +3754,8 @@ pub(crate) async fn register_private_stop_transport(
         shutdown_tx: Some(shutdown_tx),
         task: Some(task),
         path,
+        #[cfg(target_os = "linux")]
+        endpoint_identity: None,
     })
 }
 
@@ -2778,26 +3765,84 @@ pub(crate) async fn register_durable_start_private_stop_transport(
     participant_id: &str,
     stop_tx: PrivateStopRequestSender,
 ) -> Result<PrivateStopTransport> {
+    #[cfg(target_os = "linux")]
+    let (episode, binding) = durable_private_transport_episode(
+        orchestration_session_id,
+        participant_id,
+        PrivateTransportAvailabilityV1::Missing,
+    )?;
+    #[cfg(target_os = "linux")]
+    let expected_uid = unsafe { libc::geteuid() };
+    #[cfg(target_os = "linux")]
+    let path = private_episode_transport_path_for_binding(
+        &substrate_paths::substrate_home()?,
+        expected_uid,
+        &binding,
+        "stop",
+        "stop",
+    );
+    #[cfg(not(target_os = "linux"))]
     let path = durable_start_private_transport_path(
         "stop",
         "stop",
         orchestration_session_id,
         participant_id,
     )?;
-    let parent = path.parent().ok_or_else(|| {
-        anyhow::anyhow!(
-            "durable Start stop transport path '{}' is missing a parent directory",
-            path.display()
-        )
-    })?;
-    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
-    remove_existing_stop_transport_path(&path)?;
+    #[cfg(target_os = "linux")]
+    let trusted_namespace_root =
+        private_episode_namespace_root(&path, &substrate_paths::substrate_home()?, expected_uid)?;
+    #[cfg(target_os = "linux")]
+    prepare_private_episode_endpoint_for_bind(&path, expected_uid, &trusted_namespace_root)?;
+    #[cfg(not(target_os = "linux"))]
+    {
+        let parent = path.parent().ok_or_else(|| {
+            anyhow::anyhow!(
+                "durable Start stop transport path '{}' is missing a parent directory",
+                path.display()
+            )
+        })?;
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+        remove_existing_stop_transport_path(&path)?;
+    }
     let listener = UnixListener::bind(&path).with_context(|| {
         format!(
             "failed to bind durable Start stop transport {}",
             path.display()
         )
     })?;
+    #[cfg(target_os = "linux")]
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).with_context(|| {
+        format!(
+            "failed to secure durable Start stop transport {}",
+            path.display()
+        )
+    })?;
+    #[cfg(target_os = "linux")]
+    let endpoint_identity = private_episode_endpoint_identity(&path)?;
+    #[cfg(target_os = "linux")]
+    if private_transport_endpoint_metadata_availability(&path, expected_uid)
+        != PrivateTransportAvailabilityV1::Available
+    {
+        let _ = remove_private_episode_endpoint_if_same(&path, endpoint_identity);
+        anyhow::bail!(
+            "durable Start stop transport {} failed exact owner/mode availability validation",
+            path.display()
+        );
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let observer = HostExecutionEpisodeObserverV1::new(episode, binding)?;
+        if let Err(error) = observer.observe_current(
+            "durable-stop-endpoint-available",
+            HostExecutionEpisodeObservationV1::Endpoint {
+                availability: PrivateTransportAvailabilityV1::Available,
+            },
+        ) {
+            let _ = remove_private_episode_endpoint_if_same(&path, endpoint_identity);
+            return Err(error).context("durable Stop endpoint publication became stale");
+        }
+    }
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
     let path_for_task = path.clone();
     let task = tokio::spawn(async move {
@@ -2815,12 +3860,17 @@ pub(crate) async fn register_durable_start_private_stop_transport(
                 }
             }
         }
+        #[cfg(target_os = "linux")]
+        let _ = remove_private_episode_endpoint_if_same(&path_for_task, endpoint_identity);
+        #[cfg(not(target_os = "linux"))]
         let _ = tokio::fs::remove_file(&path_for_task).await;
     });
     Ok(PrivateStopTransport {
         shutdown_tx: Some(shutdown_tx),
         task: Some(task),
         path,
+        #[cfg(target_os = "linux")]
+        endpoint_identity: Some(endpoint_identity),
     })
 }
 
@@ -2912,7 +3962,7 @@ pub(crate) fn spawn_local_private_stop_owner(
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         while let Some(request) = stop_rx.recv().await {
-            let outcome = if !matches!(request.payload, PrivateStopRequestPayloadV1::Legacy) {
+            let outcome = if !matches!(&request.payload, PrivateStopRequestPayloadV1::Legacy) {
                 PrivateStopOutcome::ProtocolError
             } else if runtime_is_terminal(&manifest) {
                 PrivateStopOutcome::AlreadyTerminal
@@ -3035,6 +4085,91 @@ pub(crate) fn maybe_build_runtime_owned_toolbox_env(
     }
 }
 
+#[cfg(target_os = "linux")]
+fn prompt_submission_episode_for_runtime(
+    runtime: &PromptSubmitRuntime,
+) -> Result<Option<HostExecutionEpisodeObserverV1>> {
+    let substrate_home = substrate_paths::substrate_home()?;
+    if !substrate_home
+        .join("authority-v1/state-root-v1.json")
+        .exists()
+    {
+        return Ok(None);
+    }
+    let authority = HostSessionAuthority::from_trusted_root(
+        TrustedAuthorityRoot::open(&substrate_home)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let root = authority
+        .read_a12b_root()
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let manifest = runtime
+        .manifest
+        .lock()
+        .map_err(|_| anyhow::anyhow!("runtime manifest mutex poisoned"))?
+        .clone();
+    let orchestration_session_id = manifest.handle.orchestration_session_id.as_str();
+    if !root
+        .session_namespace_map
+        .contains_key(orchestration_session_id)
+    {
+        return Ok(None);
+    }
+    let current = authority
+        .resolve_current_exact(orchestration_session_id, None)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    if current.caller.participant_id != manifest.handle.participant_id
+        || current.caller.descriptor.backend_id != runtime.descriptor.backend_id
+        || current.authority.lifecycle_posture != HostSessionPostureV1::ActiveAttached
+    {
+        anyhow::bail!(
+            "stale_transport: prompt submission runtime does not match exact active HSA authority"
+        );
+    }
+    let participant_id = current.caller.participant_id.clone();
+    let (mut episode, binding) = host_execution_episode_for_authority(
+        &current,
+        HostExecutionEpisodeKindV1::SyntheticOrRecoveredEpisode,
+        &format!("durable-private-owner:{participant_id}"),
+        Some(ProcessRefV1 {
+            pid: std::process::id(),
+        }),
+        PrivateTransportAvailabilityV1::Missing,
+    )?;
+    let expected_uid = unsafe { libc::geteuid() };
+    let endpoint_path = private_episode_transport_path_for_binding(
+        &substrate_home,
+        expected_uid,
+        &binding,
+        "prompt",
+        "prompt",
+    );
+    episode.record_local_observation(
+        &binding,
+        HostExecutionEpisodeObservationV1::Endpoint {
+            availability: private_transport_endpoint_metadata_availability(
+                &endpoint_path,
+                expected_uid,
+            ),
+        },
+    )?;
+    episode.validate_current_authority(&binding, &current)?;
+    HostExecutionEpisodeObserverV1::new(episode, binding).map(Some)
+}
+
+#[cfg(target_os = "linux")]
+fn observe_prompt_submission_episode(
+    observer: Option<&HostExecutionEpisodeObserverV1>,
+    observation_key: &str,
+    observation: HostExecutionEpisodeObservationV1,
+) -> Result<()> {
+    if let Some(observer) = observer {
+        observer.observe_current(observation_key, observation)?;
+    }
+    Ok(())
+}
+
 pub(crate) async fn submit_host_prompt_turn<F>(
     runtime: &PromptSubmitRuntime,
     run_id: &str,
@@ -3044,6 +4179,14 @@ pub(crate) async fn submit_host_prompt_turn<F>(
 where
     F: FnMut(SubmittedPromptStreamEvent),
 {
+    #[cfg(target_os = "linux")]
+    let episode_observer = prompt_submission_episode_for_runtime(runtime)?;
+    #[cfg(target_os = "linux")]
+    observe_prompt_submission_episode(
+        episode_observer.as_ref(),
+        &format!("prompt:{run_id}:ready"),
+        HostExecutionEpisodeObservationV1::Readiness { ready: true },
+    )?;
     let prompt_fulfillment = super::build_gateway_for_descriptor(&runtime.descriptor)
         .context("build host targeted-turn gateway")?;
     let orchestration_session_id = runtime
@@ -3079,11 +4222,25 @@ where
         .run_control(request)
         .await
         .map_err(|err| anyhow::anyhow!("substrate: error: {}", err))?;
+    #[cfg(target_os = "linux")]
+    {
+        observe_prompt_submission_episode(
+            episode_observer.as_ref(),
+            &format!("prompt:{run_id}:accepted"),
+            HostExecutionEpisodeObservationV1::Prompt { accepted: true },
+        )?;
+        observe_prompt_submission_episode(
+            episode_observer.as_ref(),
+            &format!("prompt:{run_id}:stream-open"),
+            HostExecutionEpisodeObservationV1::Stream { active: true },
+        )?;
+    }
     let agent_api::AgentWrapperRunHandle {
         mut events,
         completion,
     } = control.handle;
 
+    let mut event_index = 0_u64;
     while let Some(wrapper_event) = events.next().await {
         let (orchestration_snapshot, manifest_snapshot, event) = {
             let mut orchestration_guard = runtime
@@ -3109,6 +4266,21 @@ where
             );
             (orchestration_guard.clone(), manifest_guard.clone(), event)
         };
+        #[cfg(target_os = "linux")]
+        if episode_observer.is_some() {
+            event_index += 1;
+            let observed_at =
+                TimestampV1::parse(Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true))
+                    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+            observe_prompt_submission_episode(
+                episode_observer.as_ref(),
+                &format!("prompt:{run_id}:event:{event_index}"),
+                HostExecutionEpisodeObservationV1::Heartbeat { observed_at },
+            )?;
+        } else {
+            persist_runtime_snapshots(&runtime.store, &orchestration_snapshot, &manifest_snapshot)?;
+        }
+        #[cfg(not(target_os = "linux"))]
         persist_runtime_snapshots(&runtime.store, &orchestration_snapshot, &manifest_snapshot)?;
         on_event(SubmittedPromptStreamEvent::Agent(Box::new(event)));
     }
@@ -3116,6 +4288,12 @@ where
     let completion = completion
         .await
         .map_err(|err| anyhow::anyhow!("substrate: error: {}", err))?;
+    #[cfg(target_os = "linux")]
+    observe_prompt_submission_episode(
+        episode_observer.as_ref(),
+        &format!("prompt:{run_id}:stream-closed"),
+        HostExecutionEpisodeObservationV1::Stream { active: false },
+    )?;
     if let Some(session_id) = extract_session_handle_id(completion.data.as_ref()) {
         let mut manifest_guard = runtime
             .manifest
@@ -3124,6 +4302,12 @@ where
         if manifest_guard.internal.uaa_session_id.as_deref() != Some(session_id) {
             manifest_guard.set_uaa_session_id(session_id.to_string());
         }
+        #[cfg(target_os = "linux")]
+        observe_prompt_submission_episode(
+            episode_observer.as_ref(),
+            &format!("prompt:{run_id}:handle"),
+            HostExecutionEpisodeObservationV1::Handle { present: true },
+        )?;
     }
     Ok(SubmittedPromptCompletion {
         exit_code: completion.status.code().unwrap_or(-1),
@@ -3355,8 +4539,18 @@ pub(crate) fn run_public_prompt_command(
     _cli_world: bool,
     _cli_no_world: bool,
 ) -> Result<()> {
-    let store = AgentRuntimeStateStore::new()?;
     let (orchestration_session_id, backend_id) = validate_public_prompt_command_request(&request)?;
+
+    #[cfg(target_os = "linux")]
+    if request.action == PublicPromptAction::Turn {
+        if let Some(transport) =
+            resolve_current_hsa_private_prompt_transport(orchestration_session_id, backend_id)?
+        {
+            return run_public_prompt_transport(&request, &transport.path, Some(&transport));
+        }
+    }
+
+    let store = AgentRuntimeStateStore::new()?;
     let participant_id = match request.action {
         PublicPromptAction::Start => {
             resolve_public_start_prompt_target(&store, orchestration_session_id, backend_id)?
@@ -3390,53 +4584,172 @@ pub(crate) fn run_public_prompt_command(
             orchestration_session_id,
             participant_id.as_str(),
         );
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .context("failed to initialize prompt transport runtime")?;
-        let mut renderer = PublicPromptRenderer::new(request.json);
-        let mut stream_started = false;
-        let mut saw_terminal = false;
-        let result = rt.block_on(async {
-            wait_for_private_prompt_transport(&transport_path).await?;
-            request_private_prompt_stream(
-                &transport_path,
-                request.action,
-                &request.prompt.prompt_text,
-                |envelope| {
-                    stream_started = true;
-                    if matches!(
-                        envelope,
-                        PublicPromptEnvelope::Completed { .. }
-                            | PublicPromptEnvelope::Failed { .. }
-                    ) {
-                        saw_terminal = true;
-                    }
-                    renderer.render(envelope)
-                },
-            )
-            .await
-        });
+        #[cfg(target_os = "linux")]
+        return run_public_prompt_transport(&request, &transport_path, None);
+        #[cfg(not(target_os = "linux"))]
+        return run_public_prompt_transport(&request, &transport_path);
+    }
+}
 
-        match result {
-            Ok(0) => Ok(()),
-            Ok(code) => Err(anyhow::Error::new(PublicPromptRenderedExit {
-                exit_code: code,
-            })),
-            Err(err) if stream_started => {
-                if !saw_terminal {
-                    renderer.render(&failed_prompt_envelope(
-                        "bridge",
-                        "owner_unreachable",
-                        err.to_string(),
-                    ))?;
-                }
-                Err(anyhow::Error::new(PublicPromptRenderedExit {
-                    exit_code: 1,
-                }))
-            }
-            Err(err) => Err(err),
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug)]
+struct ExactPrivatePromptTransportV1 {
+    episode: HostExecutionEpisodeV1,
+    binding: HostExecutionEpisodeBindingV1,
+    path: PathBuf,
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_current_hsa_private_prompt_transport(
+    orchestration_session_id: &str,
+    backend_id: &str,
+) -> Result<Option<ExactPrivatePromptTransportV1>> {
+    let substrate_home = substrate_paths::substrate_home()?;
+    if !substrate_home
+        .join("authority-v1/state-root-v1.json")
+        .exists()
+    {
+        return Ok(None);
+    }
+    let authority = HostSessionAuthority::from_trusted_root(
+        TrustedAuthorityRoot::open(&substrate_home)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let root = authority
+        .read_a12b_root()
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    if !root
+        .session_namespace_map
+        .contains_key(orchestration_session_id)
+    {
+        return Ok(None);
+    }
+    let current = authority
+        .resolve_current_exact(orchestration_session_id, None)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    if current.caller.descriptor.backend_id != backend_id {
+        anyhow::bail!(
+            "backend_not_in_session: orchestration session {} has no exact backend slot for {}",
+            orchestration_session_id,
+            backend_id
+        );
+    }
+    if current.authority.lifecycle_posture != HostSessionPostureV1::ActiveAttached {
+        anyhow::bail!(
+            "owner_unreachable: orchestration session {} backend {} is not currently attached to a live retained turn target",
+            orchestration_session_id,
+            backend_id
+        );
+    }
+    let participant_id = current.caller.participant_id.clone();
+    let (mut episode, binding) = host_execution_episode_for_authority(
+        &current,
+        HostExecutionEpisodeKindV1::SyntheticOrRecoveredEpisode,
+        &format!("durable-private-owner:{participant_id}"),
+        None,
+        PrivateTransportAvailabilityV1::Missing,
+    )?;
+    let expected_uid = unsafe { libc::geteuid() };
+    let path = private_episode_transport_path_for_binding(
+        &substrate_home,
+        expected_uid,
+        &binding,
+        "prompt",
+        "prompt",
+    );
+    let availability = private_transport_endpoint_metadata_availability(&path, expected_uid);
+    episode.record_local_observation(
+        &binding,
+        HostExecutionEpisodeObservationV1::Endpoint { availability },
+    )?;
+    episode.validate_current_authority(&binding, &current)?;
+    Ok(Some(ExactPrivatePromptTransportV1 {
+        episode,
+        binding,
+        path,
+    }))
+}
+
+#[cfg(unix)]
+fn run_public_prompt_transport(
+    request: &PublicPromptCommandRequest,
+    transport_path: &Path,
+    #[cfg(target_os = "linux")] exact_transport: Option<&ExactPrivatePromptTransportV1>,
+) -> Result<()> {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("failed to initialize prompt transport runtime")?;
+    let mut renderer = PublicPromptRenderer::new(request.json);
+    let mut stream_started = false;
+    let mut saw_terminal = false;
+    let result = rt.block_on(async {
+        #[cfg(target_os = "linux")]
+        if let Some(exact_transport) = exact_transport {
+            wait_for_current_hsa_private_prompt_transport(exact_transport).await?;
+            validate_host_execution_episode_against_current_hsa(
+                &exact_transport.episode,
+                &exact_transport.binding,
+            )?;
+        } else {
+            wait_for_private_prompt_transport(transport_path).await?;
         }
+        #[cfg(not(target_os = "linux"))]
+        wait_for_private_prompt_transport(transport_path).await?;
+
+        let stream_result = request_private_prompt_stream(
+            transport_path,
+            request.action,
+            &request.prompt.prompt_text,
+            |envelope| {
+                stream_started = true;
+                if matches!(
+                    envelope,
+                    PublicPromptEnvelope::Completed { .. } | PublicPromptEnvelope::Failed { .. }
+                ) {
+                    saw_terminal = true;
+                }
+                renderer.render(envelope)
+            },
+        )
+        .await;
+
+        #[cfg(target_os = "linux")]
+        if exact_transport.is_some() {
+            return stream_result.map_err(|error| {
+                let classification = match private_stop_transport_error_kind(&error) {
+                    Some(io::ErrorKind::NotFound) => "missing_transport",
+                    Some(io::ErrorKind::ConnectionRefused) => "refused_transport",
+                    _ => "failed_transport",
+                };
+                error.context(format!(
+                    "{classification}: exact HSA private prompt transport {} became unavailable",
+                    transport_path.display()
+                ))
+            });
+        }
+        stream_result
+    });
+
+    match result {
+        Ok(0) => Ok(()),
+        Ok(code) => Err(anyhow::Error::new(PublicPromptRenderedExit {
+            exit_code: code,
+        })),
+        Err(err) if stream_started => {
+            if !saw_terminal {
+                renderer.render(&failed_prompt_envelope(
+                    "bridge",
+                    "owner_unreachable",
+                    err.to_string(),
+                ))?;
+            }
+            Err(anyhow::Error::new(PublicPromptRenderedExit {
+                exit_code: 1,
+            }))
+        }
+        Err(err) => Err(err),
     }
 }
 
@@ -3510,12 +4823,134 @@ pub(crate) async fn request_private_authority_managed_stop(
     path: &Path,
     delivery: &HostSessionStopDeliveryV1,
 ) -> Result<PrivateStopOutcome> {
-    request_private_authority_managed_stop_with_response_timeout(
+    #[cfg(target_os = "linux")]
+    {
+        let expected_path = durable_start_stop_transport_path(
+            &delivery.orchestration_session_id,
+            &delivery.authoritative_participant_id,
+        )?;
+        if expected_path != path {
+            anyhow::bail!(
+                "stale_transport: private HSA Stop endpoint does not match exact current episode binding"
+            );
+        }
+        let availability =
+            private_transport_endpoint_metadata_availability(path, unsafe { libc::geteuid() });
+        match availability {
+            PrivateTransportAvailabilityV1::Available => {}
+            PrivateTransportAvailabilityV1::Missing | PrivateTransportAvailabilityV1::Refused => {
+                return recover_authority_managed_stop_episode(delivery, availability)
+                    .with_context(|| {
+                        format!(
+                            "recovery_failed: exact HSA Stop recovery after {} transport",
+                            match availability {
+                                PrivateTransportAvailabilityV1::Missing => "missing",
+                                PrivateTransportAvailabilityV1::Refused => "refused",
+                                _ => unreachable!("availability arm is exact"),
+                            }
+                        )
+                    });
+            }
+            PrivateTransportAvailabilityV1::Stale => {
+                anyhow::bail!(
+                    "stale_transport: private HSA Stop endpoint failed exact owner, mode, or socket validation"
+                );
+            }
+            PrivateTransportAvailabilityV1::Failed => {
+                anyhow::bail!(
+                    "failed_transport: private HSA Stop endpoint could not be classified safely"
+                );
+            }
+        }
+    }
+    let result = request_private_authority_managed_stop_with_response_timeout(
         path,
         delivery,
         PRIVATE_HSA_STOP_RESPONSE_TIMEOUT,
     )
-    .await
+    .await;
+    #[cfg(target_os = "linux")]
+    if let Err(error) = &result {
+        let availability = match private_stop_transport_error_kind(error) {
+            Some(io::ErrorKind::NotFound) => Some(PrivateTransportAvailabilityV1::Missing),
+            Some(io::ErrorKind::ConnectionRefused) => Some(PrivateTransportAvailabilityV1::Refused),
+            _ => None,
+        };
+        if let Some(availability) = availability {
+            return recover_authority_managed_stop_episode(delivery, availability).with_context(
+                || {
+                    format!(
+                        "recovery_failed: exact HSA Stop recovery after {} transport",
+                        match availability {
+                            PrivateTransportAvailabilityV1::Missing => "missing",
+                            PrivateTransportAvailabilityV1::Refused => "refused",
+                            _ => "unavailable",
+                        }
+                    )
+                },
+            );
+        }
+    }
+    result
+}
+
+#[cfg(target_os = "linux")]
+fn recover_authority_managed_stop_episode(
+    delivery: &HostSessionStopDeliveryV1,
+    availability: PrivateTransportAvailabilityV1,
+) -> Result<PrivateStopOutcome> {
+    let authority = authority_for_stop_delivery(delivery)?;
+    let current = authority
+        .resolve_current_exact(&delivery.orchestration_session_id, None)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    if current.caller.participant_id != delivery.authoritative_participant_id {
+        anyhow::bail!("recovered Stop episode participant is not current HSA authority");
+    }
+    let (episode, binding) = host_execution_episode_for_authority(
+        &current,
+        HostExecutionEpisodeKindV1::SyntheticOrRecoveredEpisode,
+        &delivery.intent_id,
+        Some(ProcessRefV1 {
+            pid: std::process::id(),
+        }),
+        availability,
+    )?;
+    let observer = HostExecutionEpisodeObserverV1::new(episode, binding)?;
+    observer.observe_current(
+        "private-stop-unavailable",
+        HostExecutionEpisodeObservationV1::Endpoint { availability },
+    )?;
+
+    let closeout = match accept_authority_managed_stop(delivery)? {
+        AuthorityManagedStopAcceptanceV1::AlreadyTerminal => {
+            return Ok(PrivateStopOutcome::AlreadyTerminal);
+        }
+        AuthorityManagedStopAcceptanceV1::Accepted(closeout) => closeout,
+    };
+    let accepted = authority
+        .resolve_current_exact(&delivery.orchestration_session_id, None)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let (accepted_episode, accepted_binding) = host_execution_episode_for_authority(
+        &accepted,
+        HostExecutionEpisodeKindV1::SyntheticOrRecoveredEpisode,
+        &delivery.intent_id,
+        Some(ProcessRefV1 {
+            pid: std::process::id(),
+        }),
+        availability,
+    )?;
+    let accepted_observer =
+        HostExecutionEpisodeObserverV1::new(accepted_episode, accepted_binding)?;
+    accepted_observer.observe_current(
+        "private-stop-closeout",
+        HostExecutionEpisodeObservationV1::Exit(EpisodeExitObservationV1 {
+            observed_at: hsa_stop_timestamp()?,
+            exit_code: Some(0),
+            signal: None,
+        }),
+    )?;
+    complete_authority_managed_stop(&closeout)?;
+    Ok(PrivateStopOutcome::Accepted)
 }
 
 #[cfg(unix)]
@@ -3613,12 +5048,12 @@ pub(crate) fn accept_authority_managed_stop(
     ) {
         anyhow::bail!("private HSA Stop delivery did not commit exact acceptance");
     }
-    Ok(AuthorityManagedStopAcceptanceV1::Accepted(
+    Ok(AuthorityManagedStopAcceptanceV1::Accepted(Box::new(
         AuthorityManagedStopCloseoutV1 {
             delivery: delivery.clone(),
             acceptance_id,
         },
-    ))
+    )))
 }
 
 #[cfg(unix)]
@@ -3804,6 +5239,8 @@ pub(crate) async fn register_private_prompt_transport(
         shutdown_tx: Some(shutdown_tx),
         task: Some(task),
         path,
+        #[cfg(target_os = "linux")]
+        endpoint_identity: None,
     })
 }
 
@@ -3813,26 +5250,84 @@ pub(crate) async fn register_durable_start_private_prompt_transport(
     participant_id: &str,
     prompt_tx: PrivatePromptRequestSender,
 ) -> Result<PrivatePromptTransport> {
+    #[cfg(target_os = "linux")]
+    let (episode, binding) = durable_private_transport_episode(
+        orchestration_session_id,
+        participant_id,
+        PrivateTransportAvailabilityV1::Missing,
+    )?;
+    #[cfg(target_os = "linux")]
+    let expected_uid = unsafe { libc::geteuid() };
+    #[cfg(target_os = "linux")]
+    let path = private_episode_transport_path_for_binding(
+        &substrate_paths::substrate_home()?,
+        expected_uid,
+        &binding,
+        "prompt",
+        "prompt",
+    );
+    #[cfg(not(target_os = "linux"))]
     let path = durable_start_private_transport_path(
         "prompt",
         "prompt",
         orchestration_session_id,
         participant_id,
     )?;
-    let parent = path.parent().ok_or_else(|| {
-        anyhow::anyhow!(
-            "durable Start prompt transport path '{}' is missing a parent directory",
-            path.display()
-        )
-    })?;
-    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
-    remove_existing_stop_transport_path(&path)?;
+    #[cfg(target_os = "linux")]
+    let trusted_namespace_root =
+        private_episode_namespace_root(&path, &substrate_paths::substrate_home()?, expected_uid)?;
+    #[cfg(target_os = "linux")]
+    prepare_private_episode_endpoint_for_bind(&path, expected_uid, &trusted_namespace_root)?;
+    #[cfg(not(target_os = "linux"))]
+    {
+        let parent = path.parent().ok_or_else(|| {
+            anyhow::anyhow!(
+                "durable Start prompt transport path '{}' is missing a parent directory",
+                path.display()
+            )
+        })?;
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+        remove_existing_stop_transport_path(&path)?;
+    }
     let listener = UnixListener::bind(&path).with_context(|| {
         format!(
             "failed to bind durable Start prompt transport {}",
             path.display()
         )
     })?;
+    #[cfg(target_os = "linux")]
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).with_context(|| {
+        format!(
+            "failed to secure durable Start prompt transport {}",
+            path.display()
+        )
+    })?;
+    #[cfg(target_os = "linux")]
+    let endpoint_identity = private_episode_endpoint_identity(&path)?;
+    #[cfg(target_os = "linux")]
+    if private_transport_endpoint_metadata_availability(&path, expected_uid)
+        != PrivateTransportAvailabilityV1::Available
+    {
+        let _ = remove_private_episode_endpoint_if_same(&path, endpoint_identity);
+        anyhow::bail!(
+            "durable Start prompt transport {} failed exact owner/mode availability validation",
+            path.display()
+        );
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let observer = HostExecutionEpisodeObserverV1::new(episode, binding)?;
+        if let Err(error) = observer.observe_current(
+            "durable-prompt-endpoint-available",
+            HostExecutionEpisodeObservationV1::Endpoint {
+                availability: PrivateTransportAvailabilityV1::Available,
+            },
+        ) {
+            let _ = remove_private_episode_endpoint_if_same(&path, endpoint_identity);
+            return Err(error).context("durable prompt endpoint publication became stale");
+        }
+    }
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
     let path_for_task = path.clone();
     let task = tokio::spawn(async move {
@@ -3850,12 +5345,17 @@ pub(crate) async fn register_durable_start_private_prompt_transport(
                 }
             }
         }
+        #[cfg(target_os = "linux")]
+        let _ = remove_private_episode_endpoint_if_same(&path_for_task, endpoint_identity);
+        #[cfg(not(target_os = "linux"))]
         let _ = tokio::fs::remove_file(&path_for_task).await;
     });
     Ok(PrivatePromptTransport {
         shutdown_tx: Some(shutdown_tx),
         task: Some(task),
         path,
+        #[cfg(target_os = "linux")]
+        endpoint_identity: Some(endpoint_identity),
     })
 }
 
@@ -4026,9 +5526,9 @@ fn parse_private_stop_request(payload: &str) -> Result<PrivateStopRequestPayload
             if request.version != 2 || request.action != "stop" {
                 anyhow::bail!("unsupported private stop request");
             }
-            Ok(PrivateStopRequestPayloadV1::AuthorityManaged(
+            Ok(PrivateStopRequestPayloadV1::AuthorityManaged(Box::new(
                 request.hsa_stop,
-            ))
+            )))
         }
         _ => anyhow::bail!("unsupported private stop request"),
     }
@@ -4533,6 +6033,58 @@ fn resolve_public_start_prompt_target(
         );
     }
     Ok(active_participant.handle.participant_id.clone())
+}
+
+#[cfg(unix)]
+#[cfg(target_os = "linux")]
+async fn wait_for_current_hsa_private_prompt_transport(
+    transport: &ExactPrivatePromptTransportV1,
+) -> Result<()> {
+    let started_at = std::time::Instant::now();
+    loop {
+        validate_host_execution_episode_against_current_hsa(&transport.episode, &transport.binding)
+            .context("stale_transport: private prompt episode authority changed")?;
+        let availability =
+            private_transport_endpoint_metadata_availability(&transport.path, unsafe {
+                libc::geteuid()
+            });
+        match availability {
+            PrivateTransportAvailabilityV1::Available => {
+                validate_host_execution_episode_against_current_hsa(
+                    &transport.episode,
+                    &transport.binding,
+                )
+                .context("stale_transport: private prompt episode authority changed")?;
+                return Ok(());
+            }
+            PrivateTransportAvailabilityV1::Missing | PrivateTransportAvailabilityV1::Refused => {
+                if started_at.elapsed() >= PRIVATE_PROMPT_READY_TIMEOUT {
+                    anyhow::bail!(
+                        "{}_transport: timed out waiting for exact HSA private prompt transport {}",
+                        match availability {
+                            PrivateTransportAvailabilityV1::Missing => "missing",
+                            PrivateTransportAvailabilityV1::Refused => "refused",
+                            _ => unreachable!("availability arm is exact"),
+                        },
+                        transport.path.display()
+                    );
+                }
+            }
+            PrivateTransportAvailabilityV1::Stale => {
+                anyhow::bail!(
+                    "stale_transport: exact HSA private prompt transport {} failed owner, mode, or socket validation",
+                    transport.path.display()
+                );
+            }
+            PrivateTransportAvailabilityV1::Failed => {
+                anyhow::bail!(
+                    "failed_transport: exact HSA private prompt transport {} could not be classified safely",
+                    transport.path.display()
+                );
+            }
+        }
+        tokio::time::sleep(PRIVATE_PROMPT_READY_POLL_INTERVAL).await;
+    }
 }
 
 #[cfg(unix)]
@@ -6907,5 +8459,575 @@ mod tests {
             super::world_task_terminal_state_from_exit_code(17),
             super::super::dispatch_contract::WorldTaskTerminalStateV1::Failed
         );
+    }
+
+    #[test]
+    fn host_execution_episode_v1_canonical_tables_are_complete() {
+        use super::{
+            HostExecutionEpisodeKindV1, HostExecutionEpisodeTransportStatusV1,
+            PrivateTransportAvailabilityV1,
+        };
+
+        let kinds = [
+            HostExecutionEpisodeKindV1::ReplAttachedEpisode,
+            HostExecutionEpisodeKindV1::HiddenOwnerHelperStartEpisode,
+            HostExecutionEpisodeKindV1::HiddenOwnerHelperAttachEpisode,
+            HostExecutionEpisodeKindV1::HiddenOwnerHelperResumeOneTurnEpisode,
+            HostExecutionEpisodeKindV1::RuntimeToolboxEpisode,
+            HostExecutionEpisodeKindV1::SyntheticOrRecoveredEpisode,
+        ];
+        assert_eq!(
+            kinds.map(|kind| serde_json::to_string(&kind).unwrap()),
+            [
+                "\"ReplAttachedEpisode\"",
+                "\"HiddenOwnerHelperStartEpisode\"",
+                "\"HiddenOwnerHelperAttachEpisode\"",
+                "\"HiddenOwnerHelperResumeOneTurnEpisode\"",
+                "\"RuntimeToolboxEpisode\"",
+                "\"SyntheticOrRecoveredEpisode\"",
+            ]
+        );
+
+        let cases = [
+            (
+                PrivateTransportAvailabilityV1::Available,
+                true,
+                HostExecutionEpisodeTransportStatusV1::Available,
+            ),
+            (
+                PrivateTransportAvailabilityV1::Missing,
+                true,
+                HostExecutionEpisodeTransportStatusV1::UnavailableButDurableAuthorityExists,
+            ),
+            (
+                PrivateTransportAvailabilityV1::Refused,
+                true,
+                HostExecutionEpisodeTransportStatusV1::UnavailableButDurableAuthorityExists,
+            ),
+            (
+                PrivateTransportAvailabilityV1::Failed,
+                true,
+                HostExecutionEpisodeTransportStatusV1::UnavailableButDurableAuthorityExists,
+            ),
+            (
+                PrivateTransportAvailabilityV1::Missing,
+                false,
+                HostExecutionEpisodeTransportStatusV1::UnavailableAndNoAuthoritativeRoute,
+            ),
+            (
+                PrivateTransportAvailabilityV1::Stale,
+                true,
+                HostExecutionEpisodeTransportStatusV1::StaleOrOrphaned,
+            ),
+        ];
+        for (availability, durable_authority_exists, expected) in cases {
+            assert_eq!(
+                super::classify_episode_transport(availability, durable_authority_exists),
+                expected
+            );
+        }
+
+        let statuses = [
+            HostExecutionEpisodeTransportStatusV1::Available,
+            HostExecutionEpisodeTransportStatusV1::UnavailableButDurableAuthorityExists,
+            HostExecutionEpisodeTransportStatusV1::UnavailableAndNoAuthoritativeRoute,
+            HostExecutionEpisodeTransportStatusV1::StaleOrOrphaned,
+        ];
+        assert_eq!(
+            statuses.map(|status| serde_json::to_string(&status).unwrap()),
+            [
+                "\"Available\"",
+                "\"UnavailableButDurableAuthorityExists\"",
+                "\"UnavailableAndNoAuthoritativeRoute\"",
+                "\"StaleOrOrphaned\"",
+            ]
+        );
+    }
+
+    #[test]
+    fn host_execution_episode_v1_requires_exact_binding() {
+        use super::{
+            EpisodeExitObservationV1, HostExecutionEpisodeBindingV1, HostExecutionEpisodeKindV1,
+            HostExecutionEpisodeTransportStatusV1, HostExecutionEpisodeV1, ProcessRefV1,
+        };
+        use crate::execution::agent_runtime::host_session_authority::schema::TimestampV1;
+
+        let started_at = TimestampV1::parse("2026-08-31T12:00:00.000000000Z").unwrap();
+        let episode = HostExecutionEpisodeV1 {
+            schema_version: 1,
+            episode_id: "hee_exact".to_string(),
+            kind: HostExecutionEpisodeKindV1::RuntimeToolboxEpisode,
+            orchestration_session_id: "session_exact".to_string(),
+            observed_authority_revision: 7,
+            backend_id: Some("cli:codex".to_string()),
+            process_ref: Some(ProcessRefV1 { pid: 42 }),
+            transport_status: HostExecutionEpisodeTransportStatusV1::Available,
+            started_at: started_at.clone(),
+            last_heartbeat_at: Some(started_at.clone()),
+            ended_at: None,
+            exit_observation: None::<EpisodeExitObservationV1>,
+        };
+        let exact = HostExecutionEpisodeBindingV1 {
+            authority_store_id: "store_exact".to_string(),
+            orchestration_session_id: "session_exact".to_string(),
+            participant_id: "participant_exact".to_string(),
+            episode_id: "hee_exact".to_string(),
+            authority_revision: 7,
+        };
+        episode.validate_binding(&exact).unwrap();
+
+        for stale in [
+            HostExecutionEpisodeBindingV1 {
+                authority_revision: 8,
+                ..exact.clone()
+            },
+            HostExecutionEpisodeBindingV1 {
+                episode_id: "hee_competing".to_string(),
+                ..exact.clone()
+            },
+            HostExecutionEpisodeBindingV1 {
+                orchestration_session_id: "session_substituted".to_string(),
+                ..exact.clone()
+            },
+        ] {
+            assert!(episode.validate_binding(&stale).is_err());
+        }
+    }
+
+    #[test]
+    fn host_execution_episode_observations_are_local_revision_bound_and_idempotent() {
+        use super::{
+            EpisodeExitObservationV1, HostExecutionEpisodeBindingV1, HostExecutionEpisodeKindV1,
+            HostExecutionEpisodeObservationV1, HostExecutionEpisodeTransportStatusV1,
+            HostExecutionEpisodeV1, PrivateTransportAvailabilityV1, ProcessRefV1,
+        };
+        use crate::execution::agent_runtime::host_session_authority::schema::TimestampV1;
+
+        let ts = |value| TimestampV1::parse(value).unwrap();
+        let mut episode = HostExecutionEpisodeV1 {
+            schema_version: 1,
+            episode_id: "hee_observations".to_string(),
+            kind: HostExecutionEpisodeKindV1::ReplAttachedEpisode,
+            orchestration_session_id: "session_observations".to_string(),
+            observed_authority_revision: 9,
+            backend_id: Some("cli:codex-host".to_string()),
+            process_ref: None,
+            transport_status: HostExecutionEpisodeTransportStatusV1::Available,
+            started_at: ts("2026-08-31T12:00:00.000000000Z"),
+            last_heartbeat_at: None,
+            ended_at: None,
+            exit_observation: None,
+        };
+        let binding = HostExecutionEpisodeBindingV1 {
+            authority_store_id: "store_observations".to_string(),
+            orchestration_session_id: episode.orchestration_session_id.clone(),
+            participant_id: "participant_observations".to_string(),
+            episode_id: episode.episode_id.clone(),
+            authority_revision: episode.observed_authority_revision,
+        };
+
+        let observation_table = [
+            HostExecutionEpisodeObservationV1::Process(ProcessRefV1 { pid: 42 }),
+            HostExecutionEpisodeObservationV1::Heartbeat {
+                observed_at: ts("2026-08-31T12:00:01.000000000Z"),
+            },
+            HostExecutionEpisodeObservationV1::Readiness { ready: true },
+            HostExecutionEpisodeObservationV1::Prompt { accepted: true },
+            HostExecutionEpisodeObservationV1::Handle { present: true },
+            HostExecutionEpisodeObservationV1::Stream { active: true },
+            HostExecutionEpisodeObservationV1::Endpoint {
+                availability: PrivateTransportAvailabilityV1::Missing,
+            },
+            HostExecutionEpisodeObservationV1::Timeout { timed_out: true },
+            HostExecutionEpisodeObservationV1::Exit(EpisodeExitObservationV1 {
+                observed_at: ts("2026-08-31T12:00:02.000000000Z"),
+                exit_code: Some(0),
+                signal: None,
+            }),
+        ];
+        assert_eq!(
+            observation_table.map(|observation| {
+                serde_json::to_value(observation).unwrap()["observation"]
+                    .as_str()
+                    .unwrap()
+                    .to_string()
+            }),
+            [
+                "Process",
+                "Heartbeat",
+                "Readiness",
+                "Prompt",
+                "Handle",
+                "Stream",
+                "Endpoint",
+                "Timeout",
+                "Exit",
+            ]
+        );
+
+        let process = HostExecutionEpisodeObservationV1::Process(ProcessRefV1 { pid: 42 });
+        assert!(episode
+            .record_local_observation(&binding, process.clone())
+            .unwrap());
+        assert!(!episode.record_local_observation(&binding, process).unwrap());
+        assert!(episode
+            .record_local_observation(
+                &binding,
+                HostExecutionEpisodeObservationV1::Process(ProcessRefV1 { pid: 43 }),
+            )
+            .is_err());
+        assert!(episode
+            .record_local_observation(
+                &binding,
+                HostExecutionEpisodeObservationV1::Process(ProcessRefV1 { pid: 0 }),
+            )
+            .is_err());
+
+        let heartbeat = HostExecutionEpisodeObservationV1::Heartbeat {
+            observed_at: ts("2026-08-31T12:00:01.000000000Z"),
+        };
+        assert!(episode
+            .record_local_observation(&binding, heartbeat.clone())
+            .unwrap());
+        assert!(!episode
+            .record_local_observation(&binding, heartbeat)
+            .unwrap());
+        for observation in [
+            HostExecutionEpisodeObservationV1::Readiness { ready: true },
+            HostExecutionEpisodeObservationV1::Prompt { accepted: true },
+            HostExecutionEpisodeObservationV1::Handle { present: true },
+            HostExecutionEpisodeObservationV1::Stream { active: true },
+            HostExecutionEpisodeObservationV1::Timeout { timed_out: true },
+        ] {
+            assert!(!episode
+                .record_local_observation(&binding, observation)
+                .unwrap());
+        }
+        let endpoint = HostExecutionEpisodeObservationV1::Endpoint {
+            availability: PrivateTransportAvailabilityV1::Missing,
+        };
+        assert!(episode
+            .record_local_observation(&binding, endpoint.clone())
+            .unwrap());
+        assert!(!episode
+            .record_local_observation(&binding, endpoint)
+            .unwrap());
+
+        let exit = HostExecutionEpisodeObservationV1::Exit(EpisodeExitObservationV1 {
+            observed_at: ts("2026-08-31T12:00:02.000000000Z"),
+            exit_code: Some(0),
+            signal: None,
+        });
+        assert!(episode
+            .record_local_observation(&binding, exit.clone())
+            .unwrap());
+        assert!(!episode.record_local_observation(&binding, exit).unwrap());
+        assert!(episode
+            .record_local_observation(
+                &binding,
+                HostExecutionEpisodeObservationV1::Exit(EpisodeExitObservationV1 {
+                    observed_at: ts("2026-08-31T12:00:03.000000000Z"),
+                    exit_code: Some(1),
+                    signal: None,
+                }),
+            )
+            .is_err());
+
+        let before_stale = episode.clone();
+        let stale_binding = HostExecutionEpisodeBindingV1 {
+            authority_revision: binding.authority_revision + 1,
+            ..binding.clone()
+        };
+        assert!(episode
+            .record_local_observation(
+                &stale_binding,
+                HostExecutionEpisodeObservationV1::Endpoint {
+                    availability: PrivateTransportAvailabilityV1::Available,
+                },
+            )
+            .is_err());
+        assert_eq!(episode, before_stale);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn private_transport_availability_classifies_live_missing_refused_failed_and_stale() {
+        use super::PrivateTransportAvailabilityV1;
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        use std::os::unix::net::UnixListener;
+
+        let temp = tempfile::tempdir().expect("transport availability tempdir");
+        let uid = unsafe { libc::geteuid() };
+        let path = temp.path().join("episode.sock");
+        assert_eq!(
+            super::private_transport_availability(&path, uid),
+            PrivateTransportAvailabilityV1::Missing
+        );
+
+        let listener = UnixListener::bind(&path).expect("bind live episode socket");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+            .expect("secure live episode socket");
+        assert_eq!(
+            super::private_transport_availability(&path, uid),
+            PrivateTransportAvailabilityV1::Available
+        );
+        drop(listener);
+        assert_eq!(
+            super::private_transport_availability(&path, uid),
+            PrivateTransportAvailabilityV1::Refused
+        );
+
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o660))
+            .expect("make stale endpoint permissive");
+        assert_eq!(
+            super::private_transport_availability(&path, uid),
+            PrivateTransportAvailabilityV1::Stale
+        );
+        std::fs::remove_file(&path).expect("remove stale endpoint");
+        let target = temp.path().join("target");
+        std::fs::write(&target, b"target").expect("write symlink target");
+        symlink(&target, &path).expect("create stale endpoint symlink");
+        assert_eq!(
+            super::private_transport_availability(&path, uid),
+            PrivateTransportAvailabilityV1::Stale
+        );
+
+        let too_long = temp.path().join("x".repeat(300));
+        assert_eq!(
+            super::private_transport_availability(&too_long, uid),
+            PrivateTransportAvailabilityV1::Failed
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn durable_private_episode_paths_are_injective_revision_bound_and_length_safe() {
+        use super::HostExecutionEpisodeBindingV1;
+        use std::path::Path;
+
+        let binding = HostExecutionEpisodeBindingV1 {
+            authority_store_id: "store/alpha".to_string(),
+            orchestration_session_id: "session/a".to_string(),
+            participant_id: "participant:a".to_string(),
+            episode_id: "episode:a".to_string(),
+            authority_revision: 17,
+        };
+        let exact = super::private_episode_transport_path_for_binding(
+            Path::new("/short"),
+            1000,
+            &binding,
+            "stop",
+            "stop",
+        );
+        assert_eq!(
+            exact,
+            super::private_episode_transport_path_for_binding(
+                Path::new("/short"),
+                1000,
+                &binding,
+                "stop",
+                "stop",
+            )
+        );
+
+        for distinct in [
+            HostExecutionEpisodeBindingV1 {
+                authority_store_id: "store_alpha".to_string(),
+                ..binding.clone()
+            },
+            HostExecutionEpisodeBindingV1 {
+                orchestration_session_id: "session_a".to_string(),
+                ..binding.clone()
+            },
+            HostExecutionEpisodeBindingV1 {
+                participant_id: "participant_a".to_string(),
+                ..binding.clone()
+            },
+            HostExecutionEpisodeBindingV1 {
+                episode_id: "episode_a".to_string(),
+                ..binding.clone()
+            },
+            HostExecutionEpisodeBindingV1 {
+                authority_revision: 18,
+                ..binding.clone()
+            },
+        ] {
+            assert_ne!(
+                exact,
+                super::private_episode_transport_path_for_binding(
+                    Path::new("/short"),
+                    1000,
+                    &distinct,
+                    "stop",
+                    "stop",
+                )
+            );
+        }
+        assert_ne!(
+            exact,
+            super::private_episode_transport_path_for_binding(
+                Path::new("/short"),
+                1001,
+                &binding,
+                "stop",
+                "stop",
+            )
+        );
+        assert_ne!(
+            exact,
+            super::private_episode_transport_path_for_binding(
+                Path::new("/other"),
+                1000,
+                &binding,
+                "stop",
+                "stop",
+            )
+        );
+        assert_ne!(
+            exact,
+            super::private_episode_transport_path_for_binding(
+                Path::new("/short"),
+                1000,
+                &binding,
+                "prompt",
+                "prompt",
+            )
+        );
+
+        let long_home = PathBuf::from(format!("/{}", "long-home/".repeat(32)));
+        let fallback = super::private_episode_transport_path_for_binding(
+            &long_home, 1000, &binding, "stop", "stop",
+        );
+        assert!(fallback.as_os_str().len() <= super::PRIVATE_STOP_UNIX_PATH_MAX);
+        assert!(fallback.starts_with("/tmp/substrate-host-episodes-u1000"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn durable_private_episode_publication_rejects_collisions_and_unsafe_paths() {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        use std::os::unix::net::UnixListener;
+
+        let temp = tempfile::tempdir().expect("private episode namespace tempdir");
+        let root = temp.path().join("namespace");
+        let path = root.join("store/stop/episode.stop.sock");
+        let uid = unsafe { libc::geteuid() };
+
+        super::prepare_private_episode_endpoint_for_bind(&path, uid, &root)
+            .expect("prepare exact private episode namespace");
+        let listener = UnixListener::bind(&path).expect("bind active private episode publisher");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+            .expect("secure active private episode publisher");
+        let active_error = super::prepare_private_episode_endpoint_for_bind(&path, uid, &root)
+            .expect_err("an active competing publisher must not be replaced");
+        assert!(active_error
+            .to_string()
+            .contains("active competing publisher"));
+
+        let stale_identity = super::private_episode_endpoint_identity(&path)
+            .expect("capture stale endpoint identity");
+        drop(listener);
+        super::prepare_private_episode_endpoint_for_bind(&path, uid, &root)
+            .expect("an exact refused endpoint may be reclaimed");
+        assert!(!path.exists());
+
+        let replacement = UnixListener::bind(&path).expect("bind replacement endpoint");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+            .expect("secure replacement endpoint");
+        let cas_error = super::remove_private_episode_endpoint_if_same(&path, stale_identity)
+            .expect_err("stale cleanup identity must not remove a replacement publisher");
+        assert!(cas_error.to_string().contains("competing publisher"));
+        assert!(path.exists());
+        drop(replacement);
+        std::fs::remove_file(&path).expect("remove replacement endpoint");
+
+        let target = root.join("symlink-target");
+        std::fs::write(&target, b"target").expect("write symlink target");
+        symlink(&target, &path).expect("create endpoint symlink");
+        assert!(super::prepare_private_episode_endpoint_for_bind(&path, uid, &root).is_err());
+        std::fs::remove_file(&path).expect("remove endpoint symlink");
+
+        let permissive = UnixListener::bind(&path).expect("bind permissive endpoint");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o660))
+            .expect("make endpoint permissions unsafe");
+        drop(permissive);
+        assert!(super::prepare_private_episode_endpoint_for_bind(&path, uid, &root).is_err());
+        std::fs::remove_file(&path).expect("remove permissive endpoint");
+
+        assert!(
+            super::prepare_private_episode_endpoint_for_bind(&path, uid.saturating_add(1), &root)
+                .is_err(),
+            "wrong ownership identity must fail closed"
+        );
+        let store_dir = root.join("store");
+        std::fs::set_permissions(&store_dir, std::fs::Permissions::from_mode(0o755))
+            .expect("make namespace component permissions unsafe");
+        assert!(super::prepare_private_episode_endpoint_for_bind(&path, uid, &root).is_err());
+    }
+
+    #[test]
+    fn toolbox_episode_paths_are_uid_store_and_exact_binding_namespaced() {
+        use super::HostExecutionEpisodeBindingV1;
+        use std::path::Path;
+
+        let binding = HostExecutionEpisodeBindingV1 {
+            authority_store_id: "store/alpha".to_string(),
+            orchestration_session_id: "session/a".to_string(),
+            participant_id: "participant:a".to_string(),
+            episode_id: "episode:a".to_string(),
+            authority_revision: 17,
+        };
+        let exact = super::toolbox_transport_path_for_episode(Path::new("/short"), 1000, &binding);
+        let same = super::toolbox_transport_path_for_episode(Path::new("/short"), 1000, &binding);
+        assert_eq!(exact, same);
+
+        for distinct in [
+            HostExecutionEpisodeBindingV1 {
+                authority_store_id: "store_alpha".to_string(),
+                ..binding.clone()
+            },
+            HostExecutionEpisodeBindingV1 {
+                orchestration_session_id: "session_a".to_string(),
+                ..binding.clone()
+            },
+            HostExecutionEpisodeBindingV1 {
+                participant_id: "participant_a".to_string(),
+                ..binding.clone()
+            },
+            HostExecutionEpisodeBindingV1 {
+                episode_id: "episode_a".to_string(),
+                ..binding.clone()
+            },
+        ] {
+            assert_ne!(
+                exact,
+                super::toolbox_transport_path_for_episode(Path::new("/short"), 1000, &distinct)
+            );
+        }
+        assert_ne!(
+            exact,
+            super::toolbox_transport_path_for_episode(Path::new("/short"), 1001, &binding)
+        );
+        assert_ne!(
+            exact,
+            super::toolbox_transport_path_for_episode(Path::new("/other"), 1000, &binding)
+        );
+        assert_eq!(
+            exact,
+            super::toolbox_transport_path_for_episode(
+                Path::new("/short"),
+                1000,
+                &HostExecutionEpisodeBindingV1 {
+                    authority_revision: 18,
+                    ..binding.clone()
+                },
+            ),
+            "one publisher keeps a stable logical endpoint while its exact revision binding advances"
+        );
+
+        let long_home = PathBuf::from(format!("/{}", "long-home/".repeat(32)));
+        let fallback = super::toolbox_transport_path_for_episode(&long_home, 1000, &binding);
+        assert!(fallback.as_os_str().len() <= super::PRIVATE_STOP_UNIX_PATH_MAX);
+        assert!(fallback.starts_with("/tmp/substrate-agent-toolbox-u1000"));
     }
 }

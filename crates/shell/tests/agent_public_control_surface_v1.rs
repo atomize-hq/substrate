@@ -1382,24 +1382,84 @@ fn stop_transport_path(
 #[cfg(target_os = "linux")]
 fn durable_start_stop_transport_path_for_fixture(
     fixture: &AgentControlFixture,
-    orchestration_session_id: &str,
-    participant_id: &str,
+    _orchestration_session_id: &str,
+    _participant_id: &str,
 ) -> PathBuf {
-    let socket_name = format!(
-        "{}-{}.stop.sock",
-        compact_stop_transport_fragment(orchestration_session_id),
-        compact_stop_transport_fragment(participant_id)
-    );
-    let preferred = fixture
-        .substrate_home
-        .join("runtime-control/durable-start/stop")
-        .join(&socket_name);
-    if preferred.as_os_str().len() > PRIVATE_STOP_UNIX_PATH_MAX {
-        return PathBuf::from("/tmp")
-            .join("substrate-durable-start/stop")
-            .join(socket_name);
+    use sha2::{Digest as _, Sha256};
+    use std::os::unix::fs::FileTypeExt as _;
+
+    fn stop_sockets_below(directory: &Path, sockets: &mut Vec<PathBuf>) {
+        let Ok(entries) = fs::read_dir(directory) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Ok(metadata) = fs::symlink_metadata(&path) else {
+                continue;
+            };
+            if metadata.is_dir() {
+                stop_sockets_below(&path, sockets);
+            } else if metadata.file_type().is_socket()
+                && path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.ends_with(".stop.sock"))
+            {
+                sockets.push(path);
+            }
+        }
     }
-    preferred
+
+    let authority = fixture.load_hsa_authority(_orchestration_session_id);
+    assert_eq!(
+        authority
+            .get("active_authoritative_participant_id")
+            .and_then(Value::as_str),
+        Some(_participant_id),
+        "private Stop endpoint lookup requires the exact current HSA participant"
+    );
+    let authority_store_id = authority
+        .pointer("/workspace_binding/authority_store_id")
+        .and_then(Value::as_str)
+        .expect("HSA authority store id");
+    let uid = unsafe { libc::geteuid() };
+    let uid_bytes = uid.to_be_bytes();
+    let mut hasher = Sha256::new();
+    hasher.update(b"substrate.host-execution-episode.private-store-path.v1");
+    for part in [
+        fixture.substrate_home.as_os_str().as_encoded_bytes(),
+        uid_bytes.as_slice(),
+        authority_store_id.as_bytes(),
+    ] {
+        hasher.update((part.len() as u64).to_be_bytes());
+        hasher.update(part);
+    }
+    let store_namespace = hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let namespaces = [
+        fixture
+            .substrate_home
+            .join("run/host-episodes")
+            .join(format!("u{uid}"))
+            .join(&store_namespace[..16]),
+        PathBuf::from(format!("/tmp/substrate-host-episodes-u{uid}")).join(&store_namespace[..16]),
+    ];
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let mut sockets = Vec::new();
+        for namespace in &namespaces {
+            stop_sockets_below(namespace, &mut sockets);
+        }
+        match sockets.as_slice() {
+            [socket] => return socket.clone(),
+            [] if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(25)),
+            [] => return namespaces[0].join("missing.stop.sock"),
+            _ => panic!("expected one exact private Stop endpoint, found {sockets:?}"),
+        }
+    }
 }
 
 fn wait_for_path(path: &Path, timeout: Duration) -> bool {
@@ -3181,6 +3241,13 @@ fn public_turn_applies_retained_resume_correlation_and_exact_terminal_cut() {
         Some(0),
         "world Start must preserve the exact shared-world generation"
     );
+    assert!(
+        settled_start
+            .get("retained_worker_refs")
+            .and_then(Value::as_array)
+            .is_some_and(|refs| refs.len() == 1),
+        "installed S1 witness must retain one durable worker before episode loss: {settled_start}"
+    );
 
     let turn_output = fixture
         .command_with_installed_invocation_witness()
@@ -3295,6 +3362,201 @@ fn public_turn_applies_retained_resume_correlation_and_exact_terminal_cut() {
         Some("ParkedResumable")
     );
 
+    let mut reattach_output = None;
+    for _attempt in 0..5 {
+        let output = fixture
+            .command_with_installed_invocation_witness()
+            .current_dir(&fixture.workspace_root)
+            .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+            .args([
+                "agent",
+                "reattach",
+                "--session",
+                &orchestration_session_id,
+                "--json",
+            ])
+            .output()
+            .expect("reattach installed S1 session before episode loss");
+        if output.status.success()
+            || !String::from_utf8_lossy(&output.stderr).contains("stale authority root revision")
+        {
+            reattach_output = Some(output);
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let reattach_output = reattach_output.expect("reattach exact retry budget exhausted");
+    assert!(
+        reattach_output.status.success(),
+        "installed S1 reattach must establish a live revision-bound episode: {reattach_output:?}"
+    );
+    let attached = fixture.load_hsa_authority(&orchestration_session_id);
+    assert_eq!(
+        attached
+            .pointer("/lifecycle_posture/kind")
+            .and_then(Value::as_str),
+        Some("ActiveAttached")
+    );
+    let attached_participant_id = attached
+        .get("active_authoritative_participant_id")
+        .and_then(Value::as_str)
+        .expect("installed S1 attached participant id");
+
+    let authority_root_path = fixture
+        .substrate_home
+        .join("authority-v1/state-root-v1.json");
+    let authority_root_before_episode_loss =
+        fs::read(&authority_root_path).expect("read S1 authority root before episode loss");
+    let root_before_episode_loss = read_json_file(&authority_root_path);
+    assert!(
+        root_before_episode_loss
+            .get("retained_worker_registration_journal")
+            .and_then(Value::as_object)
+            .is_some_and(|journal| journal.len() == 1),
+        "installed S1 witness must retain one exact worker registration"
+    );
+    let retained_receipt_path = fixture
+        .fake_codex
+        .parent()
+        .expect("fake provider directory")
+        .join("a13p1-retained-worker.json");
+    let retained_receipt_before_episode_loss = fs::read(&retained_receipt_path)
+        .expect("read installed S1 retained receipt before episode loss");
+    let attach_intent_id = root_before_episode_loss
+        .get("successor_transition_intent_map")
+        .and_then(Value::as_object)
+        .expect("installed S1 successor transition map")
+        .values()
+        .find(|intent| intent.pointer("/mode/kind").and_then(Value::as_str) == Some("Attach"))
+        .and_then(|intent| intent.get("intent_id"))
+        .and_then(Value::as_str)
+        .expect("installed S1 Attach intent id");
+    let attach_plan_path = fixture
+        .substrate_home
+        .join("runtime-control/durable-start/successor-plans")
+        .join(format!("{attach_intent_id}.json"));
+    let helper_pids = owner_helper_pids_for_plan(&attach_plan_path);
+    assert_eq!(
+        helper_pids.len(),
+        1,
+        "installed S1 witness requires one live reattach execution episode"
+    );
+    let episode_socket = durable_start_stop_transport_path_for_fixture(
+        &fixture,
+        &orchestration_session_id,
+        attached_participant_id,
+    );
+    assert!(
+        wait_for_path(&episode_socket, Duration::from_secs(5)),
+        "installed S1 witness requires the exact private episode endpoint: {episode_socket:?}"
+    );
+    let toolbox_status_output = fixture
+        .command_with_installed_invocation_witness()
+        .current_dir(&fixture.workspace_root)
+        .args(["agent", "toolbox", "status", "--json"])
+        .output()
+        .expect("read HSA-only toolbox status");
+    assert!(
+        toolbox_status_output.status.success(),
+        "HSA-only toolbox status must resolve the live exact episode: {toolbox_status_output:?}"
+    );
+    let toolbox_status = parse_json_output(&toolbox_status_output);
+    assert_eq!(
+        toolbox_status
+            .pointer("/eligibility/state")
+            .and_then(Value::as_str),
+        Some("allowed")
+    );
+    assert_eq!(
+        toolbox_status
+            .get("active_orchestration_session_id")
+            .and_then(Value::as_str),
+        Some(orchestration_session_id.as_str())
+    );
+    let toolbox_endpoint = toolbox_status
+        .get("endpoint")
+        .and_then(Value::as_str)
+        .expect("HSA-only toolbox endpoint");
+    assert!(toolbox_endpoint.starts_with("unix://"));
+    assert!(Path::new(&toolbox_endpoint["unix://".len()..]).exists());
+
+    let toolbox_env_output = fixture
+        .command_with_installed_invocation_witness()
+        .current_dir(&fixture.workspace_root)
+        .args(["agent", "toolbox", "env", "--json"])
+        .output()
+        .expect("project HSA-only toolbox environment");
+    assert!(
+        toolbox_env_output.status.success(),
+        "HSA-only toolbox env must project the exact available episode: {toolbox_env_output:?}"
+    );
+    let toolbox_env = parse_json_output(&toolbox_env_output);
+    assert_eq!(
+        toolbox_env
+            .get("SUBSTRATE_AGENT_TOOLBOX_ENDPOINT")
+            .and_then(Value::as_str),
+        Some(toolbox_endpoint)
+    );
+    assert_eq!(
+        toolbox_env
+            .get("SUBSTRATE_AGENT_TOOLBOX_VERSION")
+            .and_then(Value::as_str),
+        Some("1")
+    );
+    for helper_pid in helper_pids {
+        terminate_pid(helper_pid);
+        assert!(
+            wait_for_pid_exit(helper_pid, Duration::from_secs(5)),
+            "installed S1 helper episode {helper_pid} must terminate"
+        );
+    }
+    match fs::remove_file(&episode_socket) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => panic!("remove installed S1 episode endpoint {episode_socket:?}: {error}"),
+    }
+    assert!(
+        std::os::unix::net::UnixStream::connect(&episode_socket).is_err(),
+        "removed stale endpoint must not retain transport authority"
+    );
+
+    assert_eq!(
+        fixture.load_hsa_authority(&orchestration_session_id),
+        attached,
+        "helper/process/socket loss must not alter durable HSA authority"
+    );
+    assert_eq!(
+        fs::read(&authority_root_path).expect("read S1 authority root after episode loss"),
+        authority_root_before_episode_loss,
+        "episode loss and stale endpoint removal must perform zero HSA mutation"
+    );
+    assert_eq!(
+        fs::read(&retained_receipt_path).expect("read S1 receipt after episode loss"),
+        retained_receipt_before_episode_loss,
+        "episode loss must preserve retained receipt truth byte-for-byte"
+    );
+    let exact_reattach_retry = fixture
+        .command_with_installed_invocation_witness()
+        .current_dir(&fixture.workspace_root)
+        .args([
+            "agent",
+            "reattach",
+            "--session",
+            &orchestration_session_id,
+            "--json",
+        ])
+        .output()
+        .expect("retry installed S1 reattach");
+    assert!(
+        exact_reattach_retry.status.success(),
+        "an exact reattach retry must join without replacing newer authority: {exact_reattach_retry:?}"
+    );
+    assert_eq!(
+        fs::read(&authority_root_path).expect("read S1 authority root after stale write"),
+        authority_root_before_episode_loss,
+        "exact retry and stale episode publication must perform zero HSA mutation"
+    );
+
     let stop_output = fixture
         .command_with_installed_invocation_witness()
         .current_dir(&fixture.workspace_root)
@@ -3310,7 +3572,7 @@ fn public_turn_applies_retained_resume_correlation_and_exact_terminal_cut() {
         .expect("run public HSA Stop after retained ResumeOneTurn terminal cut");
     assert!(
         stop_output.status.success(),
-        "public HSA Stop must close the parked retained session without a helper launch: {stop_output:?}"
+        "public HSA Stop must close the active retained session with unavailable private transport: {stop_output:?}"
     );
     let stop_result = parse_json_output(&stop_output);
     assert_eq!(
@@ -3488,7 +3750,6 @@ fn public_stop_active_hsa_owner_requires_bound_delivery_and_terminal_closeout() 
         "authority-managed owner must register its exact Stop transport at {}",
         stop_transport_path.display()
     );
-
     let stop_output = fixture
         .command_with_installed_invocation_witness()
         .current_dir(&fixture.workspace_root)
@@ -4561,6 +4822,413 @@ fn public_reattach_applies_hsa_attach_and_preserves_auto_attach_bookkeeping() {
     for helper_pid in helper_pids {
         terminate_pid(helper_pid);
     }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn public_active_turn_uses_exact_hsa_episode_without_legacy_target() {
+    let mut fixture = AgentControlFixture::new();
+    let safe_install_parent =
+        PathBuf::from(std::env::var_os("HOME").expect("active HSA Turn test requires HOME"));
+    let install_home = tempfile::Builder::new()
+        .prefix("sac-active-hsa-turn-install-")
+        .tempdir_in(safe_install_parent)
+        .expect("create private installed invocation prefix");
+    fs::set_permissions(install_home.path(), fs::Permissions::from_mode(0o700))
+        .expect("set installed invocation prefix mode");
+    fixture.substrate_home = install_home.path().to_path_buf();
+    let workspace_init = fixture
+        .command_with_installed_invocation_witness()
+        .arg("workspace")
+        .arg("init")
+        .arg(&fixture.workspace_root)
+        .arg("--force")
+        .output()
+        .expect("initialize active HSA Turn workspace");
+    assert!(
+        workspace_init.status.success(),
+        "workspace init through installed invocation witness must succeed: {workspace_init:?}"
+    );
+    fixture.write_runtime_inventory(false);
+    fs::set_permissions(
+        fixture.substrate_home.join("agents"),
+        fs::Permissions::from_mode(0o700),
+    )
+    .expect("set private accepted-home inventory mode");
+    for relative in ["config.yaml", "policy.yaml", "agents/codex.yaml"] {
+        fs::set_permissions(
+            fixture.substrate_home.join(relative),
+            fs::Permissions::from_mode(0o600),
+        )
+        .unwrap_or_else(|_| panic!("set private accepted-home file mode for {relative}"));
+    }
+
+    let start_output = fixture
+        .command_with_installed_invocation_witness()
+        .current_dir(&fixture.workspace_root)
+        .args([
+            "agent",
+            "start",
+            "--backend",
+            "cli:codex-host",
+            "--prompt",
+            "establish exact active HSA prompt transport",
+            "--json",
+        ])
+        .output()
+        .expect("start active HSA Turn fixture");
+    assert!(
+        start_output.status.success(),
+        "setup public Start must durably settle: {start_output:?}"
+    );
+    let start_records = parse_ndjson_output(&start_output);
+    let start = find_ndjson_record(&start_records, "completed");
+    let orchestration_session_id = start["orchestration_session_id"]
+        .as_str()
+        .expect("Start session id")
+        .to_string();
+
+    let reattach_output = fixture
+        .command_with_installed_invocation_witness()
+        .current_dir(&fixture.workspace_root)
+        .args([
+            "agent",
+            "reattach",
+            "--session",
+            &orchestration_session_id,
+            "--json",
+        ])
+        .output()
+        .expect("reattach active HSA Turn fixture");
+    assert!(
+        reattach_output.status.success(),
+        "public reattach must establish an active HSA episode: {reattach_output:?}"
+    );
+    let reattach = parse_json_output(&reattach_output);
+    let participant_id = reattach["participant_id"]
+        .as_str()
+        .expect("Attach participant id")
+        .to_string();
+    assert!(
+        !canonical_participant_manifest_path(
+            &fixture.substrate_home,
+            &orchestration_session_id,
+            &participant_id,
+        )
+        .exists(),
+        "active HSA target must have no legacy StateStore authority record"
+    );
+
+    let turn_output = fixture
+        .command_with_installed_invocation_witness()
+        .current_dir(&fixture.workspace_root)
+        .args([
+            "agent",
+            "turn",
+            "--session",
+            &orchestration_session_id,
+            "--backend",
+            "cli:codex-host",
+            "--prompt",
+            "submit through the exact active HSA prompt episode",
+            "--json",
+        ])
+        .output()
+        .expect("submit active HSA Turn");
+    assert!(
+        turn_output.status.success(),
+        "active public Turn must avoid legacy StateStore resolution: {turn_output:?}"
+    );
+    let records = parse_ndjson_output(&turn_output);
+    assert_eq!(
+        records
+            .first()
+            .and_then(|record| record.get("kind"))
+            .and_then(Value::as_str),
+        Some("accepted")
+    );
+    assert_eq!(
+        records
+            .first()
+            .and_then(|record| record.get("participant_id"))
+            .and_then(Value::as_str),
+        Some(participant_id.as_str())
+    );
+    assert_eq!(
+        records
+            .last()
+            .and_then(|record| record.get("kind"))
+            .and_then(Value::as_str),
+        Some("completed")
+    );
+    assert!(
+        !canonical_participant_manifest_path(
+            &fixture.substrate_home,
+            &orchestration_session_id,
+            &participant_id,
+        )
+        .exists(),
+        "active HSA Turn must perform no legacy target authority write"
+    );
+
+    let root = read_json_file(
+        &fixture
+            .substrate_home
+            .join("authority-v1/state-root-v1.json"),
+    );
+    for intent in root
+        .get("successor_transition_intent_map")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flat_map(|intents| intents.values())
+    {
+        let Some(intent_id) = intent.get("intent_id").and_then(Value::as_str) else {
+            continue;
+        };
+        let plan_path = fixture
+            .substrate_home
+            .join("runtime-control/durable-start/successor-plans")
+            .join(format!("{intent_id}.json"));
+        for helper_pid in owner_helper_pids_for_plan(&plan_path) {
+            terminate_pid(helper_pid);
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn public_fork_allocates_one_hsa_parked_successor_without_legacy_authority() {
+    let mut fixture = AgentControlFixture::new();
+    let safe_install_parent =
+        PathBuf::from(std::env::var_os("HOME").expect("fork test requires HOME"));
+    let install_home = tempfile::Builder::new()
+        .prefix("sac-hsa-fork-install-")
+        .tempdir_in(safe_install_parent)
+        .expect("create private installed invocation prefix");
+    fs::set_permissions(install_home.path(), fs::Permissions::from_mode(0o700))
+        .expect("set installed invocation prefix mode");
+    fixture.substrate_home = install_home.path().to_path_buf();
+    let workspace_init = fixture
+        .command_with_installed_invocation_witness()
+        .arg("workspace")
+        .arg("init")
+        .arg(&fixture.workspace_root)
+        .arg("--force")
+        .output()
+        .expect("initialize HSA fork workspace");
+    assert!(workspace_init.status.success(), "{workspace_init:?}");
+    fixture.write_runtime_inventory(false);
+    fs::set_permissions(
+        fixture.substrate_home.join("agents"),
+        fs::Permissions::from_mode(0o700),
+    )
+    .expect("set private fork inventory mode");
+    for relative in ["config.yaml", "policy.yaml", "agents/codex.yaml"] {
+        fs::set_permissions(
+            fixture.substrate_home.join(relative),
+            fs::Permissions::from_mode(0o600),
+        )
+        .unwrap_or_else(|_| panic!("set private fork file mode for {relative}"));
+    }
+
+    let start_output = fixture
+        .command_with_installed_invocation_witness()
+        .current_dir(&fixture.workspace_root)
+        .args([
+            "agent",
+            "start",
+            "--backend",
+            "cli:codex-host",
+            "--prompt",
+            "establish exact fork source authority",
+            "--json",
+        ])
+        .output()
+        .expect("run installed-witness fork source Start");
+    assert!(
+        start_output.status.success(),
+        "setup public Start must durably settle: {start_output:?}"
+    );
+    let start_records = parse_ndjson_output(&start_output);
+    let start = find_ndjson_record(&start_records, "completed");
+    let source_session_id = start["orchestration_session_id"]
+        .as_str()
+        .expect("Start session id")
+        .to_string();
+    let source_participant_id = start["participant_id"]
+        .as_str()
+        .expect("Start participant id")
+        .to_string();
+    let source_before = fixture.load_hsa_authority(&source_session_id);
+
+    let fork_output = fixture
+        .command_with_installed_invocation_witness()
+        .current_dir(&fixture.workspace_root)
+        .args([
+            "agent",
+            "fork",
+            "--session",
+            source_session_id.as_str(),
+            "--json",
+        ])
+        .output()
+        .expect("run installed-witness public fork");
+    assert!(
+        fork_output.status.success(),
+        "public fork must allocate through HSA: {fork_output:?}"
+    );
+    let fork = parse_json_output(&fork_output);
+    assert_eq!(fork.get("action").and_then(Value::as_str), Some("fork"));
+    assert_eq!(
+        fork.get("source_orchestration_session_id")
+            .and_then(Value::as_str),
+        Some(source_session_id.as_str())
+    );
+    assert_eq!(
+        fork.get("backend_id").and_then(Value::as_str),
+        Some("cli:codex-host")
+    );
+    assert_eq!(fork.get("scope").and_then(Value::as_str), Some("host"));
+    assert_eq!(
+        fork.get("state").and_then(Value::as_str),
+        Some("parked_resumable")
+    );
+    assert!(fork.get("participant_id").is_none());
+    assert_empty_warnings(&fork);
+
+    let target_session_id = fork["orchestration_session_id"]
+        .as_str()
+        .expect("fork target session id")
+        .to_string();
+    assert_ne!(target_session_id, source_session_id);
+    let target = fixture.load_hsa_authority(&target_session_id);
+    let target_participant_id = target
+        .get("active_authoritative_participant_id")
+        .and_then(Value::as_str)
+        .expect("fork target authoritative participant");
+    assert_eq!(
+        target.get("authority_revision").and_then(Value::as_u64),
+        Some(1)
+    );
+    assert_eq!(
+        target
+            .pointer("/lifecycle_posture/kind")
+            .and_then(Value::as_str),
+        Some("ParkedResumable")
+    );
+    assert!(
+        target.get("shell_owner_pid").is_none(),
+        "HSA successor authority must not encode PID-zero or any process identity: {target}"
+    );
+    assert!(target
+        .get("retained_worker_refs")
+        .and_then(Value::as_array)
+        .is_some_and(Vec::is_empty));
+    assert!(target
+        .get("internal_resume_handle_refs")
+        .and_then(Value::as_array)
+        .is_some_and(Vec::is_empty));
+    assert_eq!(
+        target.get("workspace_binding"),
+        source_before.get("workspace_binding")
+    );
+    assert_eq!(
+        target.get("world_binding"),
+        source_before.get("world_binding")
+    );
+    assert_eq!(target.get("origin"), source_before.get("origin"));
+    assert_eq!(
+        target.get("current_policy_ref"),
+        source_before.get("current_policy_ref")
+    );
+    assert_eq!(
+        target.get("current_policy_revision"),
+        source_before.get("current_policy_revision")
+    );
+
+    let source_lineage = source_before
+        .get("authoritative_participant_lineage")
+        .and_then(Value::as_array)
+        .expect("source authoritative lineage");
+    assert_eq!(
+        source_lineage.last().and_then(Value::as_str),
+        Some(source_participant_id.as_str())
+    );
+    let target_lineage = target
+        .get("authoritative_participant_lineage")
+        .and_then(Value::as_array)
+        .expect("target authoritative lineage");
+    assert_eq!(&target_lineage[..source_lineage.len()], source_lineage);
+    assert_eq!(
+        target_lineage.last().and_then(Value::as_str),
+        Some(target_participant_id)
+    );
+
+    let root = read_json_file(
+        &fixture
+            .substrate_home
+            .join("authority-v1/state-root-v1.json"),
+    );
+    let allocations = root
+        .get("fork_successor_allocation_map")
+        .and_then(Value::as_object)
+        .expect("HSA fork successor allocation map");
+    assert_eq!(
+        allocations.len(),
+        1,
+        "public fork must create one allocation"
+    );
+    let allocation = allocations.values().next().expect("fork allocation record");
+    assert_eq!(
+        allocation.get("source_authority_before"),
+        Some(&source_before)
+    );
+    assert_eq!(allocation.get("target_authority"), Some(&target));
+    assert_eq!(
+        allocation.pointer("/request/source_orchestration_session_id"),
+        Some(&Value::String(source_session_id.clone()))
+    );
+    assert_eq!(
+        allocation.pointer("/request/target_orchestration_session_id"),
+        Some(&Value::String(target_session_id.clone()))
+    );
+    assert_eq!(
+        allocation.pointer("/request/source_authority_precondition/value/authority_revision"),
+        source_before.get("authority_revision")
+    );
+    assert_eq!(
+        allocation.pointer("/request/workspace_binding"),
+        source_before.get("workspace_binding")
+    );
+    assert_eq!(
+        allocation.pointer("/request/world_binding"),
+        source_before.get("world_binding")
+    );
+    assert_eq!(
+        allocation.pointer("/request/resulting_authoritative_lineage"),
+        target.get("authoritative_participant_lineage")
+    );
+    assert_eq!(
+        fixture.load_hsa_authority(&source_session_id),
+        source_before,
+        "fork allocation must not revise or otherwise mutate source authority"
+    );
+
+    assert!(
+        !canonical_orchestration_session_path(&fixture.substrate_home, &target_session_id).exists(),
+        "fork target must not have legacy StateStore session authority"
+    );
+    assert!(
+        !canonical_participant_manifest_path(
+            &fixture.substrate_home,
+            &target_session_id,
+            target_participant_id,
+        )
+        .exists(),
+        "fork target must not have legacy StateStore participant authority"
+    );
 }
 
 #[test]

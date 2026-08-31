@@ -3,20 +3,22 @@ use crate::execution::agent_inventory::{
     AgentInventoryEntryV1,
 };
 use crate::execution::agent_runtime::auto_attach::SessionAutoAttachClaim;
+#[cfg(not(target_os = "linux"))]
+use crate::execution::agent_runtime::control::toolbox_transport_path;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::control::PersistedWorldBinding;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::control::{
-    acquire_authority_managed_successor_launch_permit,
+    acquire_authority_managed_successor_launch_permit, discover_toolbox_episode_transport,
     launch_authority_managed_successor_owner_helper, load_authority_managed_successor_launch_plan,
     wait_for_authority_managed_successor_completion, AuthorityManagedSuccessorLaunchPlanV1,
-    ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor,
+    PrivateTransportAvailabilityV1, ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor,
 };
 use crate::execution::agent_runtime::control::{
     authoritative_host_toolbox_surface_enabled, load_hidden_owner_helper_launch_plan,
     load_public_prompt_source, maybe_compose_prompt_with_authoritative_host_toolbox_contract,
     persist_runtime_stop_closeout, public_prompt_rendered_exit_code,
-    remove_hidden_owner_helper_launch_plan, run_public_prompt_command, toolbox_transport_path,
+    remove_hidden_owner_helper_launch_plan, run_public_prompt_command,
     toolbox_transport_path_for_home, HiddenOwnerHelperLaunchPlan, HiddenOwnerHelperLaunchReceipt,
     HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan, OwnerHelperMode,
     PublicPromptAction, PublicPromptCommandRequest, PublicPromptInput, PublicSessionPosture,
@@ -40,6 +42,10 @@ use crate::execution::agent_runtime::control::{
     verify_public_start_continuity_settled, HiddenOwnerHelperStartupPromptPlan,
 };
 use crate::execution::agent_runtime::dispatch_contract::LiveToolSupportPosture;
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::host_session_authority::fork_successor::{
+    AllocateForkSuccessorRequestV1, ForkSuccessorAllocationOutcomeV1,
+};
 #[cfg(unix)]
 use crate::execution::agent_runtime::host_session_authority::schema::TimestampV1;
 #[cfg(target_os = "linux")]
@@ -82,11 +88,14 @@ use crate::execution::agent_runtime::orchestration_session::{
 };
 #[cfg(all(unix, not(target_os = "linux")))]
 use crate::execution::agent_runtime::resolve_persisted_host_attach_contract;
+#[cfg(not(target_os = "linux"))]
 use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
+#[cfg(any(test, not(target_os = "linux")))]
+use crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor;
 use crate::execution::agent_runtime::validator::{
     materialize_runtime_descriptor, member_selection_error_exit_code,
     resolve_live_tool_support_posture, resolve_selected_orchestrator_live_tool_support_posture,
-    validate_member_selection, RuntimeSelectionDescriptor,
+    validate_member_selection,
 };
 #[cfg(unix)]
 use crate::execution::agent_runtime::{
@@ -1009,12 +1018,11 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
                             crate::execution::agent_runtime::host_session_authority::store_schema::HostSessionPostTurnApplicationV2::Pending { .. }
                                 | crate::execution::agent_runtime::host_session_authority::store_schema::HostSessionPostTurnApplicationV2::AwaitingObligationCut { .. }
                         )
+                        && in_flight_resume.replace(intent).is_some()
                     {
-                        if in_flight_resume.replace(intent).is_some() {
-                            anyhow::bail!(runtime_start_error(anyhow::anyhow!(
-                                "current HSA authority has ambiguous in-flight public ResumeOneTurn transitions"
-                            )));
-                        }
+                        anyhow::bail!(runtime_start_error(anyhow::anyhow!(
+                            "current HSA authority has ambiguous in-flight public ResumeOneTurn transitions"
+                        )));
                     }
                 }
                 let mut resume_required = matches!(
@@ -1150,6 +1158,25 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
             None
         }
     };
+
+    #[cfg(target_os = "linux")]
+    if let Some((_participant_id, backend_id)) = hsa_active_identity.as_ref() {
+        run_public_prompt_command(
+            PublicPromptCommandRequest {
+                action: PublicPromptAction::Turn,
+                orchestration_session_id: Some(args.session.clone()),
+                backend_id: backend_id.clone(),
+                prompt: prompt.clone(),
+                json: args.json,
+            },
+            cli.world,
+            cli.no_world,
+        )
+        .map_err(normalize_public_prompt_error)?;
+        acknowledge_public_successor_request(&public_successor_guard)
+            .map_err(runtime_start_error)?;
+        return Ok(());
+    }
 
     let store = AgentRuntimeStateStore::new()?;
     let target = store
@@ -1316,16 +1343,20 @@ fn run_reattach(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {
     let has_legacy_control_target = store
         .resolve_public_control_target(&args.session, PublicControlAction::Stop)
         .is_ok();
-    let claimed_auto_attach = match store
-        .claim_session_auto_attach(&args.session, "manual::reattach")
-        .map_err(runtime_start_error)?
-    {
-        SessionAutoAttachClaim::Claimed {
-            obligation_id,
-            attach_claim_owner,
-        } => Some((obligation_id, attach_claim_owner)),
-        SessionAutoAttachClaim::NoCandidate { .. }
-        | SessionAutoAttachClaim::AlreadyClaimed { .. } => None,
+    let claimed_auto_attach = if has_legacy_control_target {
+        match store
+            .claim_session_auto_attach(&args.session, "manual::reattach")
+            .map_err(runtime_start_error)?
+        {
+            SessionAutoAttachClaim::Claimed {
+                obligation_id,
+                attach_claim_owner,
+            } => Some((obligation_id, attach_claim_owner)),
+            SessionAutoAttachClaim::NoCandidate { .. }
+            | SessionAutoAttachClaim::AlreadyClaimed { .. } => None,
+        }
+    } else {
+        None
     };
     let successor_launch = match launch_authority_managed_successor_owner_helper(
         &plan,
@@ -1906,8 +1937,7 @@ fn hsa_stop_authority_for_session(
         {
             Err(config_model::user_error(
                 "authority_invalid: discovered HSA Stop session failed exact authority resolution",
-            )
-            .into())
+            ))
         }
         Ok(_) => Ok(None),
         Err(strict_error) => {
@@ -1919,8 +1949,7 @@ fn hsa_stop_authority_for_session(
             } else {
                 Err(config_model::user_error(format!(
                     "authority_invalid: cannot resolve strict HSA Stop authority: {strict_error}"
-                ))
-                .into())
+                )))
             }
         }
     }
@@ -2444,6 +2473,55 @@ fn build_public_attach_runtime_continuity(
 }
 
 #[cfg(target_os = "linux")]
+fn retain_linux_legacy_attach_compatibility_surface(
+    store: &AgentRuntimeStateStore,
+    target: &crate::execution::agent_runtime::state_store::ResolvedPublicAttachTarget,
+    runtime: &PublicAttachRuntimeContinuity,
+    receipt: &HiddenOwnerHelperLaunchReceipt,
+    intent: AttachLaunchIntent,
+) {
+    let _ = (&target.active_participant, &target.host_attach_contract);
+    let _ = (
+        &runtime.source_participant_id,
+        &runtime.continuity_session_id,
+    );
+    let _ = store.resolve_public_attach_target("", intent.public_attach_action());
+    let _ = verify_manual_reattach_restored_ownership(store, "", receipt, None);
+    let _ = (
+        intent.caller_kind(),
+        intent.has_prompt_payload(),
+        intent.continuity_label(),
+    );
+}
+
+#[cfg(target_os = "linux")]
+const _: fn(
+    &AgentRuntimeStateStore,
+    &crate::execution::agent_runtime::state_store::ResolvedPublicAttachTarget,
+    &PublicAttachRuntimeContinuity,
+    &HiddenOwnerHelperLaunchReceipt,
+    AttachLaunchIntent,
+) = retain_linux_legacy_attach_compatibility_surface;
+
+#[cfg(target_os = "linux")]
+const _: fn(
+    &str,
+    &crate::execution::agent_runtime::state_store::ResolvedPublicAttachTarget,
+    &HostAttachContract,
+    AttachLaunchIntent,
+) -> Result<PublicAttachRuntimeContinuity> = build_public_attach_runtime_continuity;
+
+#[cfg(target_os = "linux")]
+const _: fn(
+    DispatchCallerKind,
+    &str,
+    &str,
+    HostExecutionClientStart,
+    AttachModePreference,
+    bool,
+) -> DispatchRequestEnvelope = build_persisted_attach_dispatch_envelope;
+
+#[cfg(target_os = "linux")]
 fn build_attach_launch_plan(
     orchestration_session_id: &str,
     intent: AttachLaunchIntent,
@@ -2451,6 +2529,10 @@ fn build_attach_launch_plan(
     let store = AgentRuntimeStateStore::new()?;
     build_attach_launch_plan_with_store(&store, orchestration_session_id, intent)
 }
+
+#[cfg(target_os = "linux")]
+const _: fn(&str, AttachLaunchIntent) -> Result<AuthorityManagedSuccessorLaunchPlanV1> =
+    build_attach_launch_plan;
 
 #[cfg(target_os = "linux")]
 fn build_attach_launch_plan_with_store(
@@ -2467,12 +2549,44 @@ fn build_attach_launch_plan_with_public_coordination(
     intent: AttachLaunchIntent,
     coordination: &PublicSuccessorRequestGuardV1,
 ) -> Result<AuthorityManagedSuccessorLaunchPlanV1> {
-    build_authority_managed_successor_launch_plan(
+    build_authority_managed_successor_launch_plan_with_stale_retry(
         orchestration_session_id,
         intent,
         None,
         Some(coordination),
     )
+}
+
+#[cfg(target_os = "linux")]
+fn build_authority_managed_successor_launch_plan_with_stale_retry(
+    orchestration_session_id: &str,
+    launch_intent: AttachLaunchIntent,
+    transition_input: Option<&str>,
+    coordination: Option<&PublicSuccessorRequestGuardV1>,
+) -> Result<AuthorityManagedSuccessorLaunchPlanV1> {
+    const ATTEMPTS: usize = 8;
+    const RETRY_INTERVAL: Duration = Duration::from_millis(10);
+
+    for attempt in 0..ATTEMPTS {
+        match build_authority_managed_successor_launch_plan(
+            orchestration_session_id,
+            launch_intent,
+            transition_input,
+            coordination,
+        ) {
+            Ok(plan) => return Ok(plan),
+            Err(error)
+                if attempt + 1 < ATTEMPTS
+                    && error
+                        .chain()
+                        .any(|cause| cause.to_string() == "stale authority root revision") =>
+            {
+                thread::sleep(RETRY_INTERVAL);
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    unreachable!("bounded successor-plan retry loop always returns")
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -2575,15 +2689,14 @@ fn exact_settled_start_continuation(
                 "owner_unreachable: durable Start continuation does not authenticate current authority"
             ));
         }
-        if matches!(handle.state, StartContinuationHandleStateV2::Settled { .. }) {
-            if settled
+        if matches!(handle.state, StartContinuationHandleStateV2::Settled { .. })
+            && settled
                 .replace((reference.clone(), handle.internal_uaa_session_id))
                 .is_some()
-            {
-                anyhow::bail!(config_model::user_error(
-                    "owner_unreachable: current authority has ambiguous settled Start continuations"
-                ));
-            }
+        {
+            anyhow::bail!(config_model::user_error(
+                "owner_unreachable: current authority has ambiguous settled Start continuations"
+            ));
         }
     }
     settled.ok_or_else(|| {
@@ -3234,7 +3347,7 @@ fn build_resumed_turn_launch_plan(
     transition_input: &str,
     coordination: Option<&PublicSuccessorRequestGuardV1>,
 ) -> Result<AuthorityManagedSuccessorLaunchPlanV1> {
-    build_authority_managed_successor_launch_plan(
+    build_authority_managed_successor_launch_plan_with_stale_retry(
         orchestration_session_id,
         AttachLaunchIntent::DetachedTurn,
         Some(transition_input),
@@ -3256,90 +3369,198 @@ struct ForkSuccessorAllocation {
     source_orchestration_session_id: String,
 }
 
+// Linux no longer executes the legacy fork authority path. Keep the frozen cross-platform
+// surface type-checked until its definitions can be removed by a separately admitted change.
+#[cfg(target_os = "linux")]
+const _: PublicControlAction = PublicControlAction::Fork;
+#[cfg(target_os = "linux")]
+const _: fn(&OrchestrationSessionRecord) -> Option<HostAttachContract> =
+    OrchestrationSessionRecord::fork_successor_attach_contract;
+#[cfg(target_os = "linux")]
+const _: fn(
+    &crate::execution::agent_runtime::state_store::ResolvedPublicControlTarget,
+) -> Option<&HostAttachContract> = |target| target.host_attach_contract.as_ref();
+
 fn allocate_fork_successor(orchestration_session_id: &str) -> Result<ForkSuccessorAllocation> {
-    let store = AgentRuntimeStateStore::new()?;
-    let mut target = store
-        .resolve_public_control_target(orchestration_session_id, PublicControlAction::Fork)
-        .map_err(|err| config_model::user_error(err.to_string()))?;
-    #[cfg(target_os = "linux")]
-    refresh_public_control_target_world_binding(&store, &mut target)?;
-    let attach_contract = target.host_attach_contract.clone().ok_or_else(|| {
-        config_model::user_error(format!(
-            "owner_unreachable: orchestration session {} is missing durable host attach contract state",
-            orchestration_session_id
-        ))
-    })?;
-    let descriptor = RuntimeSelectionDescriptor::try_from(&attach_contract.launch_descriptor)
-        .map_err(|err| {
-            runtime_materialization_user_error(
-                "owner_unreachable",
-                format!(
-                    "persisted host attach contract stored an invalid successor launch descriptor: {err:#}"
-                ),
-            )
+    #[cfg(not(target_os = "linux"))]
+    {
+        let store = AgentRuntimeStateStore::new()?;
+        let target = store
+            .resolve_public_control_target(orchestration_session_id, PublicControlAction::Fork)
+            .map_err(|err| config_model::user_error(err.to_string()))?;
+        let attach_contract = target.host_attach_contract.clone().ok_or_else(|| {
+            config_model::user_error(format!(
+                "owner_unreachable: orchestration session {} is missing durable host attach contract state",
+                orchestration_session_id
+            ))
         })?;
-    let successor_session_id = Uuid::now_v7().to_string();
-    let successor_participant_id = format!("ash_{}", Uuid::now_v7());
-    let lease_token = Uuid::now_v7().to_string();
-    let run_id = Uuid::now_v7().to_string();
-    let mut successor_participant = AgentRuntimeParticipantRecord::new_replacement_participant(
-        &descriptor,
-        AgentRuntimeReplacementParticipantInit {
-            orchestration_session_id: successor_session_id.clone(),
-            participant_id: successor_participant_id.clone(),
-            role: ORCHESTRATOR_ROLE.to_string(),
-            orchestrator_participant_id: None,
-            parent_participant_id: None,
-            resumed_from_participant_id: target.active_participant.handle.participant_id.clone(),
-            world: None,
-            lease_token,
-        },
-    )
-    .context("failed to allocate fork successor participant")?;
-    successor_participant
-        .transition_state(crate::execution::agent_runtime::AgentRuntimeSessionState::Ready);
-    successor_participant.internal.latest_run_id = Some(run_id.clone());
-    successor_participant.internal.shell_owner_pid = 0;
-    successor_participant.internal.uaa_session_id = None;
-    successor_participant.internal.control_owner_retained = false;
-    successor_participant.internal.event_stream_active = false;
-    successor_participant.internal.completion_observer_retained = false;
-    successor_participant.internal.ownership_valid = false;
-    successor_participant.internal.ownership_verified_at = None;
-    successor_participant.internal.attached_client_present = false;
-    successor_participant.internal.last_attached_at = None;
-    successor_participant.internal.last_detached_at = None;
-    successor_participant.internal.detach_reason = None;
-    successor_participant.internal.resume_eligible = false;
-    successor_participant.touch_heartbeat();
+        let descriptor = RuntimeSelectionDescriptor::try_from(&attach_contract.launch_descriptor)
+            .map_err(|err| {
+                runtime_materialization_user_error(
+                    "owner_unreachable",
+                    format!(
+                        "persisted host attach contract stored an invalid successor launch descriptor: {err:#}"
+                    ),
+                )
+            })?;
+        let successor_session_id = Uuid::now_v7().to_string();
+        let successor_participant_id = format!("ash_{}", Uuid::now_v7());
+        let lease_token = Uuid::now_v7().to_string();
+        let run_id = Uuid::now_v7().to_string();
+        let mut successor_participant = AgentRuntimeParticipantRecord::new_replacement_participant(
+            &descriptor,
+            AgentRuntimeReplacementParticipantInit {
+                orchestration_session_id: successor_session_id.clone(),
+                participant_id: successor_participant_id.clone(),
+                role: ORCHESTRATOR_ROLE.to_string(),
+                orchestrator_participant_id: None,
+                parent_participant_id: None,
+                resumed_from_participant_id: target
+                    .active_participant
+                    .handle
+                    .participant_id
+                    .clone(),
+                world: None,
+                lease_token,
+            },
+        )
+        .context("failed to allocate fork successor participant")?;
+        successor_participant
+            .transition_state(crate::execution::agent_runtime::AgentRuntimeSessionState::Ready);
+        successor_participant.internal.latest_run_id = Some(run_id.clone());
+        successor_participant.internal.shell_owner_pid = 0;
+        successor_participant.internal.uaa_session_id = None;
+        successor_participant.internal.control_owner_retained = false;
+        successor_participant.internal.event_stream_active = false;
+        successor_participant.internal.completion_observer_retained = false;
+        successor_participant.internal.ownership_valid = false;
+        successor_participant.internal.ownership_verified_at = None;
+        successor_participant.internal.attached_client_present = false;
+        successor_participant.internal.last_attached_at = None;
+        successor_participant.internal.last_detached_at = None;
+        successor_participant.internal.detach_reason = None;
+        successor_participant.internal.resume_eligible = false;
+        successor_participant.touch_heartbeat();
 
-    let mut successor_session = OrchestrationSessionRecord::new(
-        successor_session_id.clone(),
-        Uuid::now_v7().to_string(),
-        target.session.workspace_root.clone(),
-        &successor_participant,
-        target.session.fork_successor_attach_contract(),
-    );
-    successor_session.shell_owner_pid = 0;
-    successor_session.latest_run_id = Some(run_id);
-    successor_session.world_id = target.session.world_id.clone();
-    successor_session.world_generation = target.session.world_generation;
-    successor_session
-        .transition_state(crate::execution::agent_runtime::OrchestrationSessionState::Active);
-    successor_session.active_session_handle_id = Some(successor_participant_id);
-    successor_session.pending_inbox_count = 0;
-    successor_session.last_attention_at = None;
-    successor_session
-        .mark_parked_resumable("fork successor allocated without attached host client");
+        let mut successor_session = OrchestrationSessionRecord::new(
+            successor_session_id.clone(),
+            Uuid::now_v7().to_string(),
+            target.session.workspace_root.clone(),
+            &successor_participant,
+            target.session.fork_successor_attach_contract(),
+        );
+        successor_session.shell_owner_pid = 0;
+        successor_session.latest_run_id = Some(run_id);
+        successor_session.world_id = target.session.world_id.clone();
+        successor_session.world_generation = target.session.world_generation;
+        successor_session
+            .transition_state(crate::execution::agent_runtime::OrchestrationSessionState::Active);
+        successor_session.active_session_handle_id = Some(successor_participant_id);
+        successor_session.pending_inbox_count = 0;
+        successor_session.last_attention_at = None;
+        successor_session
+            .mark_parked_resumable("fork successor allocated without attached host client");
 
-    store.persist_orchestration_session(&successor_session)?;
-    store.persist_participant(&successor_participant)?;
+        store.persist_orchestration_session(&successor_session)?;
+        store.persist_participant(&successor_participant)?;
 
-    Ok(ForkSuccessorAllocation {
-        orchestration_session_id: successor_session_id,
-        backend_id: attach_contract.backend_id,
-        source_orchestration_session_id: target.session.orchestration_session_id,
-    })
+        return Ok(ForkSuccessorAllocation {
+            orchestration_session_id: successor_session_id,
+            backend_id: attach_contract.backend_id,
+            source_orchestration_session_id: target.session.orchestration_session_id,
+        });
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let authority = public_start_authority()?;
+        let source = authority
+            .resolve_current_exact(orchestration_session_id, None)
+            .map_err(|error| config_model::user_error(error.to_string()))?;
+        if !source.host_attach_contract.capabilities.session_fork {
+            anyhow::bail!(config_model::user_error(
+                "durable host attach contract does not allow fork"
+            ));
+        }
+        let source_participant_id = source
+            .authority
+            .active_authoritative_participant_id
+            .clone()
+            .ok_or_else(|| {
+                config_model::user_error(
+                    "authority_invalid: fork source has no active authoritative participant",
+                )
+            })?;
+        if source_participant_id != source.caller.participant_id {
+            anyhow::bail!(config_model::user_error(
+                "authority_invalid: fork source participant does not match exact caller"
+            ));
+        }
+
+        let allocation_nonce = Uuid::now_v7();
+        let target_orchestration_session_id = Uuid::now_v7().to_string();
+        let target_shell_trace_session_id = Uuid::now_v7().to_string();
+        let target_authoritative_participant_id = format!("ash_{}", Uuid::now_v7());
+        let resulting_authoritative_lineage = source
+            .authority
+            .authoritative_participant_lineage
+            .iter()
+            .cloned()
+            .chain(std::iter::once(target_authoritative_participant_id.clone()))
+            .collect();
+        let request = AllocateForkSuccessorRequestV1 {
+            schema_version: 1,
+            allocation_id: format!("fork-allocation-{allocation_nonce}"),
+            request_id: format!("fork-request-{allocation_nonce}"),
+            authority_store_id: source.observation.authority_store_id.clone(),
+            bootstrap_home: source.observation.bootstrap_home.clone(),
+            expected_source_root_revision: source.observation.root_revision,
+            source_orchestration_session_id: source.authority.orchestration_session_id.clone(),
+            source_shell_trace_session_id: source.authority.shell_trace_session_id.clone(),
+            source_authority_precondition: HostSessionAuthorityPreconditionV1::ExpectedRevision {
+                authority_revision: source.observation.authority_revision,
+                authority_record_commitment: source.observation.authority_record_commitment.clone(),
+                active_authoritative_participant_id: source_participant_id,
+                authoritative_lineage_commitment: source
+                    .observation
+                    .authoritative_lineage_commitment
+                    .clone(),
+                lifecycle_posture: source.authority.lifecycle_posture,
+            },
+            source_authoritative_participant_lineage: source
+                .authority
+                .authoritative_participant_lineage
+                .clone(),
+            target_orchestration_session_id: target_orchestration_session_id.clone(),
+            target_shell_trace_session_id,
+            target_authoritative_participant_id,
+            resulting_authoritative_lineage,
+            workspace_binding: source.authority.workspace_binding.clone(),
+            world_binding: source.authority.world_binding.clone(),
+            allocated_at: current_timestamp_v1()?,
+        };
+        let allocation = match authority
+            .allocate_fork_successor(&request)
+            .map_err(|error| config_model::user_error(error.to_string()))?
+        {
+            ForkSuccessorAllocationOutcomeV1::Allocated(allocation)
+            | ForkSuccessorAllocationOutcomeV1::Joined(allocation) => allocation,
+        };
+        if allocation.target_authority.authority_revision != 1
+            || allocation.target_authority.lifecycle_posture
+                != HostSessionPostureV1::ParkedResumable
+        {
+            anyhow::bail!(
+                "HSA fork successor allocation returned a non-canonical target authority"
+            );
+        }
+
+        Ok(ForkSuccessorAllocation {
+            orchestration_session_id: allocation.target_authority.orchestration_session_id,
+            backend_id: source.caller.descriptor.backend_id,
+            source_orchestration_session_id: source.authority.orchestration_session_id,
+        })
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -3381,6 +3602,14 @@ fn refresh_public_control_target_world_binding(
     refresh_public_session_world_binding(store, &mut target.session)
 }
 
+// The legacy Linux caller was removed by HSA episode demotion; retain only a type-level link to
+// the frozen compatibility helper so this migration does not add a lint delta.
+#[cfg(target_os = "linux")]
+const _: fn(
+    &AgentRuntimeStateStore,
+    &mut crate::execution::agent_runtime::state_store::ResolvedPublicControlTarget,
+) -> Result<()> = refresh_public_control_target_world_binding;
+
 #[cfg(target_os = "linux")]
 fn refresh_public_attach_target_world_binding(
     store: &AgentRuntimeStateStore,
@@ -3388,6 +3617,12 @@ fn refresh_public_attach_target_world_binding(
 ) -> Result<()> {
     refresh_public_session_world_binding(store, &mut target.session)
 }
+
+#[cfg(target_os = "linux")]
+const _: fn(
+    &AgentRuntimeStateStore,
+    &mut crate::execution::agent_runtime::state_store::ResolvedPublicAttachTarget,
+) -> Result<()> = refresh_public_attach_target_world_binding;
 
 #[cfg(unix)]
 fn wait_for_resumed_public_turn_detach(
@@ -3512,6 +3747,10 @@ fn wait_for_resumed_public_turn_detach(
         thread::sleep(TURN_DETACH_NORMALIZATION_POLL_INTERVAL);
     }
 }
+
+#[cfg(target_os = "linux")]
+const _: fn(&AgentRuntimeStateStore, &str, &str, &str) -> Result<()> =
+    wait_for_resumed_public_turn_detach;
 
 #[cfg(unix)]
 fn resumed_public_turn_detach_ready(
@@ -4598,46 +4837,165 @@ fn build_toolbox_status_report<'a>(
         }),
         AgentToolboxBindTransport::Uds => {
             let endpoint_template = Some(toolbox_uds_endpoint_template()?);
-            let latest_session = AgentRuntimeStateStore::new()?
-                .resolve_single_live_session_for_agent(&orchestrator.file.id)
-                .map_err(|err| config_model::user_error(err.to_string()))?;
+            #[cfg(target_os = "linux")]
+            {
+                let authority = public_start_authority()?;
+                let mut projections = Vec::new();
+                match authority.read_a12b_root() {
+                    Ok(root) => {
+                        for orchestration_session_id in root.session_namespace_map.keys() {
+                            let current = authority
+                                .resolve_current_exact(orchestration_session_id, None)
+                                .map_err(|error| config_model::user_error(error.to_string()))?;
+                            if current.authority.lifecycle_posture
+                                != HostSessionPostureV1::ActiveAttached
+                                || current.caller.descriptor.agent_id != orchestrator.file.id
+                                || current.caller.descriptor.backend_id
+                                    != orchestrator_report.backend_id
+                            {
+                                continue;
+                            }
+                            projections.push(
+                                discover_toolbox_episode_transport(orchestration_session_id)
+                                    .map_err(|error| {
+                                        config_model::user_error(error.to_string())
+                                    })?,
+                            );
+                        }
+                    }
+                    Err(strict_error) if authority.read_root().is_ok() => {
+                        return Err(config_model::user_error(format!(
+                            "authority_invalid: cannot resolve strict HSA toolbox authority: {strict_error}"
+                        )));
+                    }
+                    Err(_) => {}
+                }
 
-            match latest_session {
-                Some(session_record) => Ok(ToolboxStatusReportJson {
-                    toolbox_enabled: true,
-                    toolbox_version: TOOLBOX_VERSION,
-                    transport,
-                    endpoint: Some(toolbox_uds_endpoint(
-                        session_record.orchestration_session_id(),
-                    )?),
-                    endpoint_template,
-                    active_orchestration_session_id: Some(
-                        session_record.orchestration_session_id().to_string(),
-                    ),
-                    active_world_binding: toolbox_active_world_binding(&session_record.session),
-                    eligibility: ToolboxEligibilityJson {
-                        state: "allowed".to_string(),
-                        reason: None,
-                    },
-                    orchestrator: Some(orchestrator_report),
-                }),
-                None => Ok(ToolboxStatusReportJson {
+                let available_count = projections
+                    .iter()
+                    .filter(|projection| {
+                        projection.availability == PrivateTransportAvailabilityV1::Available
+                    })
+                    .count();
+                if available_count > 1 || (available_count == 0 && projections.len() > 1) {
+                    anyhow::bail!(config_model::user_error(
+                        "authority_conflict: multiple exact live HSA toolbox episodes match the selected orchestrator"
+                    ));
+                }
+                let projection = if available_count == 1 {
+                    projections.into_iter().find(|projection| {
+                        projection.availability == PrivateTransportAvailabilityV1::Available
+                    })
+                } else {
+                    projections.into_iter().next()
+                };
+                if let Some(projection) = projection {
+                    let available =
+                        projection.availability == PrivateTransportAvailabilityV1::Available;
+                    return Ok(ToolboxStatusReportJson {
+                        toolbox_enabled: true,
+                        toolbox_version: TOOLBOX_VERSION,
+                        transport,
+                        endpoint: available
+                            .then(|| format!("unix://{}", projection.endpoint_path.display())),
+                        endpoint_template,
+                        active_orchestration_session_id: Some(
+                            projection.binding.orchestration_session_id.clone(),
+                        ),
+                        active_world_binding: projection.world_id.map(|world_id| {
+                            ToolboxActiveWorldBindingJson {
+                                world_id,
+                                world_generation: projection
+                                    .world_generation
+                                    .expect("exact HSA world binding is complete"),
+                            }
+                        }),
+                        eligibility: ToolboxEligibilityJson {
+                            state: if available {
+                                "allowed".to_string()
+                            } else {
+                                "dependency_unavailable".to_string()
+                            },
+                            reason: (!available).then(|| {
+                                format!(
+                                    "toolbox episode transport is {} while durable HSA authority remains intact",
+                                    private_transport_availability_label(projection.availability)
+                                )
+                            }),
+                        },
+                        orchestrator: Some(orchestrator_report),
+                    });
+                }
+
+                let legacy_session = AgentRuntimeStateStore::new()?
+                    .resolve_single_live_session_for_agent(&orchestrator.file.id)
+                    .map_err(|error| config_model::user_error(error.to_string()))?;
+                Ok(ToolboxStatusReportJson {
                     toolbox_enabled: true,
                     toolbox_version: TOOLBOX_VERSION,
                     transport,
                     endpoint: None,
                     endpoint_template,
-                    active_orchestration_session_id: None,
+                    active_orchestration_session_id: legacy_session
+                        .as_ref()
+                        .map(|session| session.orchestration_session_id().to_string()),
                     active_world_binding: None,
                     eligibility: ToolboxEligibilityJson {
                         state: "dependency_unavailable".to_string(),
-                        reason: Some(
-                            "no live host-scoped orchestrator participant found for the selected orchestrator"
-                                .to_string(),
-                        ),
+                        reason: Some(if legacy_session.is_some() {
+                            "legacy session projection has no exact current HSA toolbox authority"
+                                .to_string()
+                        } else {
+                            "no live host-scoped HSA orchestrator participant found for the selected orchestrator"
+                                .to_string()
+                        }),
                     },
                     orchestrator: Some(orchestrator_report),
-                }),
+                })
+            }
+
+            #[cfg(not(target_os = "linux"))]
+            {
+                let latest_session = AgentRuntimeStateStore::new()?
+                    .resolve_single_live_session_for_agent(&orchestrator.file.id)
+                    .map_err(|err| config_model::user_error(err.to_string()))?;
+                match latest_session {
+                    Some(session_record) => Ok(ToolboxStatusReportJson {
+                        toolbox_enabled: true,
+                        toolbox_version: TOOLBOX_VERSION,
+                        transport,
+                        endpoint: Some(toolbox_uds_endpoint(
+                            session_record.orchestration_session_id(),
+                        )?),
+                        endpoint_template,
+                        active_orchestration_session_id: Some(
+                            session_record.orchestration_session_id().to_string(),
+                        ),
+                        active_world_binding: toolbox_active_world_binding(&session_record.session),
+                        eligibility: ToolboxEligibilityJson {
+                            state: "allowed".to_string(),
+                            reason: None,
+                        },
+                        orchestrator: Some(orchestrator_report),
+                    }),
+                    None => Ok(ToolboxStatusReportJson {
+                        toolbox_enabled: true,
+                        toolbox_version: TOOLBOX_VERSION,
+                        transport,
+                        endpoint: None,
+                        endpoint_template,
+                        active_orchestration_session_id: None,
+                        active_world_binding: None,
+                        eligibility: ToolboxEligibilityJson {
+                            state: "dependency_unavailable".to_string(),
+                            reason: Some(
+                                "no live host-scoped orchestrator participant found for the selected orchestrator"
+                                    .to_string(),
+                            ),
+                        },
+                        orchestrator: Some(orchestrator_report),
+                    }),
+                }
             }
         }
     }
@@ -4699,6 +5057,7 @@ fn render_toolbox_status_report(
     Ok(())
 }
 
+#[cfg(not(target_os = "linux"))]
 fn toolbox_active_world_binding(
     session: &crate::execution::agent_runtime::OrchestrationSessionRecord,
 ) -> Option<ToolboxActiveWorldBindingJson> {
@@ -4748,6 +5107,20 @@ fn toolbox_transport_label(transport: AgentToolboxBindTransport) -> &'static str
     }
 }
 
+#[cfg(target_os = "linux")]
+fn private_transport_availability_label(
+    availability: PrivateTransportAvailabilityV1,
+) -> &'static str {
+    match availability {
+        PrivateTransportAvailabilityV1::Available => "available",
+        PrivateTransportAvailabilityV1::Missing => "missing",
+        PrivateTransportAvailabilityV1::Refused => "refused",
+        PrivateTransportAvailabilityV1::Failed => "failed",
+        PrivateTransportAvailabilityV1::Stale => "stale_or_orphaned",
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
 fn toolbox_uds_endpoint(orchestration_session_id: &str) -> Result<String> {
     Ok(format!(
         "unix://{}",

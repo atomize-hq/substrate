@@ -3,6 +3,10 @@ use std::env;
 use std::fs;
 use std::future::Future;
 use std::io::{self, IsTerminal, Write};
+#[cfg(target_os = "linux")]
+use std::os::unix::fs::{DirBuilderExt, FileTypeExt, MetadataExt, PermissionsExt};
+#[cfg(unix)]
+use std::os::unix::net::UnixStream as StdUnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
@@ -61,6 +65,14 @@ use crate::execution::agent_runtime::control::{
     PrivateStopRequestReceiver, PrivateStopTransport, PublicPromptAction, PublicPromptEnvelope,
     PublicSessionPosture, ResolvedRuntimeDescriptor, SubmittedPromptStreamEvent,
     AGENT_API_SESSION_RESUME_V1, AGENT_API_TURN_LIFECYCLE_V1,
+};
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::control::{
+    discover_toolbox_episode_transport, host_execution_episode_for_current_authority,
+    validate_host_execution_episode_against_current_hsa, EpisodeExitObservationV1,
+    HostExecutionEpisodeBindingV1, HostExecutionEpisodeKindV1, HostExecutionEpisodeObservationV1,
+    HostExecutionEpisodeObserverV1, HostExecutionEpisodeV1, PrivateTransportAvailabilityV1,
+    ProcessRefV1,
 };
 use crate::execution::agent_runtime::dispatch_contract::{
     CancelWorldWorkOutcomeV1, StopWorldWorkerOutcomeV1, WorkerCancelPayloadV1,
@@ -2055,6 +2067,8 @@ enum InternalToolboxDispatchRequestKind {
     HostToolInvocation {
         request: HostToolInvocationRequestEnvelopeV1,
         runtime_context: InternalToolboxRuntimeContext,
+        #[cfg(target_os = "linux")]
+        accepted_episode: InternalToolboxEpisodeContextV1,
     },
 }
 
@@ -2062,6 +2076,15 @@ enum InternalToolboxDispatchRequestKind {
 struct InternalToolboxRuntimeContext {
     orchestration_session_id: String,
     caller_participant_id: String,
+    #[cfg(target_os = "linux")]
+    episode_context: Arc<Mutex<InternalToolboxEpisodeContextV1>>,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug)]
+struct InternalToolboxEpisodeContextV1 {
+    episode: HostExecutionEpisodeV1,
+    binding: HostExecutionEpisodeBindingV1,
 }
 
 type InternalToolboxDispatchResponseSender = mpsc::UnboundedSender<serde_json::Value>;
@@ -2079,6 +2102,17 @@ struct InternalToolboxTransport {
     shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
     task: Option<tokio::task::JoinHandle<()>>,
     path: PathBuf,
+    #[cfg(target_os = "linux")]
+    endpoint_identity: Option<InternalToolboxEndpointIdentityV1>,
+    #[cfg(target_os = "linux")]
+    episode_context: Arc<Mutex<InternalToolboxEpisodeContextV1>>,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct InternalToolboxEndpointIdentityV1 {
+    device: u64,
+    inode: u64,
 }
 
 #[cfg(target_os = "linux")]
@@ -2117,6 +2151,35 @@ fn internal_toolbox_frame_is_terminal(payload: &serde_json::Value) -> bool {
         .get("frame_kind")
         .and_then(serde_json::Value::as_str)
         .is_none_or(|kind| kind == "result")
+}
+
+#[cfg(target_os = "linux")]
+fn observe_revision_bound_host_episode(
+    observer: Option<&HostExecutionEpisodeObserverV1>,
+    domain: &str,
+    payload: &[u8],
+    observation: HostExecutionEpisodeObservationV1,
+) {
+    let Some(observer) = observer else {
+        return;
+    };
+    let mut hasher = Sha256::new();
+    hasher.update(b"substrate.host-execution-episode.observation.v1");
+    hasher.update((domain.len() as u64).to_be_bytes());
+    hasher.update(domain.as_bytes());
+    hasher.update((payload.len() as u64).to_be_bytes());
+    hasher.update(payload);
+    let key = hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let _ = observer.observe_current(&key, observation);
+}
+
+#[cfg(target_os = "linux")]
+fn host_episode_timestamp_now() -> Option<TimestampV1> {
+    TimestampV1::parse(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true)).ok()
 }
 
 enum RetainedRunControl {
@@ -2267,10 +2330,240 @@ impl InternalToolboxTransport {
         if let Some(task) = self.task.take() {
             let _ = task.await;
         }
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
+        let _ = self
+            .episode_context
+            .lock()
+            .map_err(|_| anyhow::anyhow!("internal toolbox episode context mutex poisoned"))
+            .and_then(|context| context.episode.validate_binding(&context.binding));
+        #[cfg(target_os = "linux")]
+        {
+            if let Some(identity) = self.endpoint_identity.take() {
+                let _ = remove_internal_toolbox_endpoint_if_same(&self.path, identity);
+            }
+        }
+        #[cfg(all(unix, not(target_os = "linux")))]
         {
             let _ = tokio::fs::remove_file(&self.path).await;
         }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn validate_internal_toolbox_episode_context(
+    episode_context: &Arc<Mutex<InternalToolboxEpisodeContextV1>>,
+) -> Result<()> {
+    let context = episode_context
+        .lock()
+        .map_err(|_| anyhow::anyhow!("internal toolbox episode context mutex poisoned"))?;
+    validate_host_execution_episode_against_current_hsa(&context.episode, &context.binding)
+}
+
+#[cfg(target_os = "linux")]
+fn refresh_internal_toolbox_episode_context(
+    episode_context: &Arc<Mutex<InternalToolboxEpisodeContextV1>>,
+) -> Result<bool> {
+    let orchestration_session_id = episode_context
+        .lock()
+        .map_err(|_| anyhow::anyhow!("internal toolbox episode context mutex poisoned"))?
+        .binding
+        .orchestration_session_id
+        .clone();
+    let projection = discover_toolbox_episode_transport(&orchestration_session_id)?;
+    let mut current = episode_context
+        .lock()
+        .map_err(|_| anyhow::anyhow!("internal toolbox episode context mutex poisoned"))?;
+    if projection.binding.authority_store_id != current.binding.authority_store_id
+        || projection.binding.orchestration_session_id != current.binding.orchestration_session_id
+        || projection.binding.participant_id != current.binding.participant_id
+        || projection.binding.episode_id != current.binding.episode_id
+        || projection.episode.kind != current.episode.kind
+    {
+        anyhow::bail!("a competing toolbox publisher cannot replace the exact episode identity");
+    }
+    if projection.binding.authority_revision < current.binding.authority_revision {
+        anyhow::bail!("toolbox episode publisher revision regressed");
+    }
+    if projection.binding.authority_revision == current.binding.authority_revision {
+        return Ok(false);
+    }
+    current.episode = projection.episode;
+    current.binding = projection.binding;
+    Ok(true)
+}
+
+#[cfg(target_os = "linux")]
+fn internal_toolbox_endpoint_identity(path: &Path) -> Result<InternalToolboxEndpointIdentityV1> {
+    let metadata = fs::symlink_metadata(path).with_context(|| {
+        format!(
+            "failed to inspect internal toolbox endpoint {}",
+            path.display()
+        )
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.file_type().is_socket() {
+        anyhow::bail!(
+            "internal toolbox endpoint {} is not an exact Unix socket",
+            path.display()
+        );
+    }
+    Ok(InternalToolboxEndpointIdentityV1 {
+        device: metadata.dev(),
+        inode: metadata.ino(),
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn remove_internal_toolbox_endpoint_if_same(
+    path: &Path,
+    expected: InternalToolboxEndpointIdentityV1,
+) -> Result<()> {
+    let current = match internal_toolbox_endpoint_identity(path) {
+        Ok(current) => current,
+        Err(error)
+            if error
+                .downcast_ref::<io::Error>()
+                .is_some_and(|error| error.kind() == io::ErrorKind::NotFound) =>
+        {
+            return Ok(())
+        }
+        Err(error) => return Err(error),
+    };
+    if current != expected {
+        anyhow::bail!(
+            "internal toolbox endpoint {} was replaced by a competing publisher",
+            path.display()
+        );
+    }
+    fs::remove_file(path).with_context(|| {
+        format!(
+            "failed to remove internal toolbox endpoint {}",
+            path.display()
+        )
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn ensure_internal_toolbox_owned_directory(path: &Path, expected_uid: u32) -> Result<()> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => {
+            let mode = metadata.permissions().mode() & 0o777;
+            if metadata.file_type().is_symlink()
+                || !metadata.file_type().is_dir()
+                || metadata.uid() != expected_uid
+                || mode != 0o700
+            {
+                anyhow::bail!(
+                    "internal toolbox directory {} has unsafe type, ownership, or permissions",
+                    path.display()
+                );
+            }
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            fs::DirBuilder::new()
+                .mode(0o700)
+                .create(path)
+                .with_context(|| format!("failed to create {}", path.display()))?;
+            let metadata = fs::symlink_metadata(path)
+                .with_context(|| format!("failed to revalidate {}", path.display()))?;
+            if metadata.file_type().is_symlink()
+                || !metadata.file_type().is_dir()
+                || metadata.uid() != expected_uid
+                || metadata.permissions().mode() & 0o777 != 0o700
+            {
+                anyhow::bail!(
+                    "created internal toolbox directory {} changed identity",
+                    path.display()
+                );
+            }
+        }
+        Err(error) => {
+            return Err(error).with_context(|| format!("failed to inspect {}", path.display()));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn prepare_internal_toolbox_endpoint_for_bind(
+    path: &Path,
+    expected_uid: u32,
+    trusted_namespace_root: &Path,
+) -> Result<()> {
+    let parent = path.parent().ok_or_else(|| {
+        anyhow::anyhow!(
+            "internal toolbox transport path '{}' is missing a parent directory",
+            path.display()
+        )
+    })?;
+    let relative_parent = parent.strip_prefix(trusted_namespace_root).map_err(|_| {
+        anyhow::anyhow!(
+            "internal toolbox endpoint {} escapes trusted namespace {}",
+            path.display(),
+            trusted_namespace_root.display()
+        )
+    })?;
+    if relative_parent.as_os_str().is_empty()
+        || relative_parent
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        anyhow::bail!(
+            "internal toolbox endpoint {} has an invalid namespace-relative parent",
+            path.display()
+        );
+    }
+
+    ensure_internal_toolbox_owned_directory(trusted_namespace_root, expected_uid)?;
+    let mut current = trusted_namespace_root.to_path_buf();
+    for component in relative_parent.components() {
+        let std::path::Component::Normal(component) = component else {
+            unreachable!("relative parent components were validated")
+        };
+        current.push(component);
+        ensure_internal_toolbox_owned_directory(&current, expected_uid)?;
+    }
+
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!(
+                    "failed to inspect internal toolbox transport {}",
+                    path.display()
+                )
+            });
+        }
+    };
+    if metadata.file_type().is_symlink()
+        || !metadata.file_type().is_socket()
+        || metadata.uid() != expected_uid
+        || metadata.permissions().mode() & 0o777 != 0o600
+    {
+        anyhow::bail!(
+            "internal toolbox transport {} has unsafe type, ownership, or permissions",
+            path.display()
+        );
+    }
+    let stale_identity = InternalToolboxEndpointIdentityV1 {
+        device: metadata.dev(),
+        inode: metadata.ino(),
+    };
+    match StdUnixStream::connect(path) {
+        Ok(_) => anyhow::bail!(
+            "internal toolbox transport {} is owned by an active competing publisher",
+            path.display()
+        ),
+        Err(error) if error.kind() == io::ErrorKind::ConnectionRefused => {
+            remove_internal_toolbox_endpoint_if_same(path, stale_identity)
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| {
+            format!(
+                "failed to classify existing internal toolbox transport {}",
+                path.display()
+            )
+        }),
     }
 }
 
@@ -5024,7 +5317,6 @@ async fn wait_for_hidden_owner_helper_local_runtime(
                         break HiddenOwnerHelperLocalRuntimeOutcome::Joined { join_failed };
                     }
                 };
-
                 let authority_closeout = match request.payload {
                     PrivateStopRequestPayloadV1::Legacy => {
                         if runtime_is_terminal(manifest) {
@@ -5245,7 +5537,6 @@ async fn wait_for_hidden_owner_helper_synthetic_runtime(
                     Some(request) => request,
                     None => break,
                 };
-
                 let authority_closeout = match request.payload {
                     PrivateStopRequestPayloadV1::Legacy => {
                         if runtime_is_terminal(manifest) {
@@ -6424,28 +6715,6 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
                 }
             }
 
-            let (stop_tx, stop_rx) = private_stop_request_channel();
-            let mut stop_transport = match register_durable_start_private_stop_transport(
-                &orchestration_session_id,
-                &participant_id,
-                stop_tx,
-            )
-            .await
-            {
-                Ok(transport) => transport,
-                Err(err) => {
-                    if let Some(mut transport) = startup_toolbox_transport.take() {
-                        host_toolbox_surface_authoritative.store(false, Ordering::SeqCst);
-                        transport.close().await;
-                    }
-                    return Err(RuntimeBootstrapFailure {
-                        exit_code: 1,
-                        message: format!(
-                            "failed to register authority-managed Attach stop transport: {err:#}"
-                        ),
-                    });
-                }
-            };
             let (prompt_tx, prompt_rx) = private_prompt_request_channel();
             let mut prompt_transport = match register_durable_start_private_prompt_transport(
                 &orchestration_session_id,
@@ -6456,7 +6725,6 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
             {
                 Ok(transport) => transport,
                 Err(err) => {
-                    stop_transport.close().await;
                     if let Some(mut transport) = startup_toolbox_transport.take() {
                         host_toolbox_surface_authoritative.store(false, Ordering::SeqCst);
                         transport.close().await;
@@ -6465,6 +6733,29 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
                         exit_code: 1,
                         message: format!(
                             "failed to register authority-managed Attach prompt transport: {err:#}"
+                        ),
+                    });
+                }
+            };
+            let (stop_tx, stop_rx) = private_stop_request_channel();
+            let mut stop_transport = match register_durable_start_private_stop_transport(
+                &orchestration_session_id,
+                &participant_id,
+                stop_tx,
+            )
+            .await
+            {
+                Ok(transport) => transport,
+                Err(err) => {
+                    prompt_transport.close().await;
+                    if let Some(mut transport) = startup_toolbox_transport.take() {
+                        host_toolbox_surface_authoritative.store(false, Ordering::SeqCst);
+                        transport.close().await;
+                    }
+                    return Err(RuntimeBootstrapFailure {
+                        exit_code: 1,
+                        message: format!(
+                            "failed to register authority-managed Attach stop transport: {err:#}"
                         ),
                     });
                 }
@@ -6839,6 +7130,30 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
             return Err(failure);
         }
     };
+    #[cfg(target_os = "linux")]
+    let execution_episode_observer = if authority_managed {
+        let orchestration_session_id = startup_context.orchestration_session_id();
+        Some(
+            host_execution_episode_for_current_authority(
+                &orchestration_session_id,
+                HostExecutionEpisodeKindV1::ReplAttachedEpisode,
+                &run_id,
+                Some(ProcessRefV1 {
+                    pid: std::process::id(),
+                }),
+                PrivateTransportAvailabilityV1::Missing,
+            )
+            .and_then(|(episode, binding)| HostExecutionEpisodeObserverV1::new(episode, binding))
+            .map_err(|error| RuntimeBootstrapFailure {
+                exit_code: 1,
+                message: format!(
+                    "failed to bind REPL execution episode to exact current HSA authority: {error:#}"
+                ),
+            })?,
+        )
+    } else {
+        None
+    };
     let agent_api::AgentWrapperRunHandle { events, completion } = control.handle;
     let cancel = control.cancel;
     let shutdown_requested = Arc::new(AtomicBool::new(false));
@@ -6876,6 +7191,12 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
     };
     #[cfg(target_os = "linux")]
     let successor_for_events = authority_successor.clone();
+    #[cfg(target_os = "linux")]
+    let execution_episode_for_events = execution_episode_observer.clone();
+    #[cfg(target_os = "linux")]
+    let toolbox_episode_for_events = startup_toolbox_transport
+        .as_ref()
+        .map(|transport| Arc::clone(&transport.episode_context));
     let successor_for_events_active = authority_successor_active;
     let shutdown_for_events = Arc::clone(&shutdown_requested);
     let runtime_role_for_events = runtime_role.clone();
@@ -6890,6 +7211,15 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
         let mut successor_lifecycle_state: Option<AuthoritativeStartLifecycleStateV1> = None;
         let mut latched_start_continuity_error: Option<String> = None;
         while let Some(wrapper_event) = events.next().await {
+            #[cfg(target_os = "linux")]
+            if let Some(observed_at) = host_episode_timestamp_now() {
+                observe_revision_bound_host_episode(
+                    execution_episode_for_events.as_ref(),
+                    "event",
+                    format!("{wrapper_event:?}").as_bytes(),
+                    HostExecutionEpisodeObservationV1::Heartbeat { observed_at },
+                );
+            }
             let mut startup_turn_phase = if start_authority_for_events.is_none()
                 && !successor_for_events_active
             {
@@ -7353,6 +7683,10 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
                     let _ = park_after_turn_tx.send(());
                 }
             }
+            #[cfg(target_os = "linux")]
+            if let Some(episode_context) = toolbox_episode_for_events.as_ref() {
+                let _ = refresh_internal_toolbox_episode_context(episode_context);
+            }
             let _ = publish_agent_event(event);
 
             if startup_became_live {
@@ -7366,6 +7700,14 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
                 signal_runtime_startup(&startup_signal_for_events, RuntimeStartupSignal::Running);
             }
         }
+
+        #[cfg(target_os = "linux")]
+        observe_revision_bound_host_episode(
+            execution_episode_for_events.as_ref(),
+            "terminal-loss",
+            b"event-stream-closed",
+            HostExecutionEpisodeObservationV1::Stream { active: false },
+        );
 
         let mut publish_events = Vec::new();
         let mut startup_failure: Option<String> = None;
@@ -7521,6 +7863,8 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
     });
 
     let completion_store = startup_context.store.clone();
+    #[cfg(target_os = "linux")]
+    let execution_episode_for_completion = execution_episode_observer.clone();
     let completion_authority_managed = authority_managed;
     let completion_orchestration_session = Arc::clone(&startup_context.orchestration_session);
     let completion_manifest = Arc::clone(&manifest);
@@ -7541,6 +7885,23 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
     let completion_task = tokio::spawn(async move {
         let controls_parent_session = runtime_controls_parent_session(&runtime_role_for_completion);
         let completion = completion.await;
+        #[cfg(target_os = "linux")]
+        if let Some(observed_at) = host_episode_timestamp_now() {
+            let exit_code = completion
+                .as_ref()
+                .ok()
+                .and_then(|completion| completion.status.code());
+            observe_revision_bound_host_episode(
+                execution_episode_for_completion.as_ref(),
+                "completion",
+                format!("{completion:?}").as_bytes(),
+                HostExecutionEpisodeObservationV1::Exit(EpisodeExitObservationV1 {
+                    observed_at,
+                    exit_code,
+                    signal: None,
+                }),
+            );
+        }
         let shutdown_requested = shutdown_for_completion.load(Ordering::SeqCst);
         let mut startup_failure: Option<String> = None;
         let mut publish_events = Vec::new();
@@ -8125,6 +8486,52 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
     } else {
         (None, None)
     };
+    let (prompt_tx, prompt_rx) = private_prompt_request_channel();
+    let prompt_transport_result = if authority_managed {
+        register_durable_start_private_prompt_transport(
+            &stop_orchestration_session_id,
+            &stop_participant_id,
+            prompt_tx,
+        )
+        .await
+    } else {
+        register_private_prompt_transport(
+            &startup_context.store,
+            &stop_orchestration_session_id,
+            &stop_participant_id,
+            prompt_tx,
+        )
+        .await
+    };
+    let mut prompt_transport = match prompt_transport_result {
+        Ok(prompt_transport) => prompt_transport,
+        Err(err) => {
+            abort_bootstrap_runtime(
+                &shutdown_requested,
+                &mut retained_control,
+                &mut heartbeat_stop_tx,
+                &mut heartbeat_task,
+            )
+            .await;
+            if let Some(mut transport) = startup_toolbox_transport.take() {
+                host_toolbox_surface_authoritative.store(false, Ordering::SeqCst);
+                transport.close().await;
+            }
+            let message = format!("failed to register private prompt transport: {err:#}");
+            if !authority_managed {
+                mark_runtime_startup_failed(
+                    &startup_context.store,
+                    &startup_context.orchestration_session,
+                    &manifest,
+                    &message,
+                );
+            }
+            return Err(RuntimeBootstrapFailure {
+                exit_code: 1,
+                message,
+            });
+        }
+    };
     let stop_transport_result = if authority_managed {
         register_durable_start_private_stop_transport(
             &stop_orchestration_session_id,
@@ -8144,6 +8551,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
     let stop_transport = match stop_transport_result {
         Ok(stop_transport) => stop_transport,
         Err(err) => {
+            prompt_transport.close().await;
             abort_bootstrap_runtime(
                 &shutdown_requested,
                 &mut retained_control,
@@ -8184,52 +8592,6 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
                 stop_rx,
             )),
         )
-    };
-    let (prompt_tx, prompt_rx) = private_prompt_request_channel();
-    let prompt_transport_result = if authority_managed {
-        register_durable_start_private_prompt_transport(
-            &stop_orchestration_session_id,
-            &stop_participant_id,
-            prompt_tx,
-        )
-        .await
-    } else {
-        register_private_prompt_transport(
-            &startup_context.store,
-            &stop_orchestration_session_id,
-            &stop_participant_id,
-            prompt_tx,
-        )
-        .await
-    };
-    let prompt_transport = match prompt_transport_result {
-        Ok(prompt_transport) => prompt_transport,
-        Err(err) => {
-            abort_bootstrap_runtime(
-                &shutdown_requested,
-                &mut retained_control,
-                &mut heartbeat_stop_tx,
-                &mut heartbeat_task,
-            )
-            .await;
-            if let Some(mut transport) = startup_toolbox_transport.take() {
-                host_toolbox_surface_authoritative.store(false, Ordering::SeqCst);
-                transport.close().await;
-            }
-            let message = format!("failed to register private prompt transport: {err:#}");
-            if !authority_managed {
-                mark_runtime_startup_failed(
-                    &startup_context.store,
-                    &startup_context.orchestration_session,
-                    &manifest,
-                    &message,
-                );
-            }
-            return Err(RuntimeBootstrapFailure {
-                exit_code: 1,
-                message,
-            });
-        }
     };
     let prompt_owner_task = spawn_local_private_prompt_owner(
         prompt_runtime_from_parts(
@@ -8959,8 +9321,46 @@ fn internal_toolbox_surface_enabled(
         .role
         .clone();
 
+    #[cfg(target_os = "linux")]
+    let episode_input_is_current = {
+        let RuntimeAuthorityContext::Bound(_) = &startup_context.authority else {
+            return false;
+        };
+        let manifest = runtime
+            .manifest
+            .lock()
+            .expect("runtime manifest mutex poisoned");
+        let episode_seed = manifest
+            .internal
+            .latest_run_id
+            .as_deref()
+            .unwrap_or(manifest.handle.participant_id.as_str());
+        let kind = if matches!(&runtime.retained_control, RetainedRunControl::Synthetic(_)) {
+            HostExecutionEpisodeKindV1::SyntheticOrRecoveredEpisode
+        } else {
+            HostExecutionEpisodeKindV1::ReplAttachedEpisode
+        };
+        host_execution_episode_for_current_authority(
+            &startup_context.orchestration_session_id(),
+            kind,
+            episode_seed,
+            Some(ProcessRefV1 {
+                pid: std::process::id(),
+            }),
+            PrivateTransportAvailabilityV1::Missing,
+        )
+        .and_then(|(episode, binding)| {
+            validate_host_execution_episode_against_current_hsa(&episode, &binding)
+        })
+        .is_ok()
+    };
+
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
+        #[cfg(target_os = "linux")]
+        if !episode_input_is_current {
+            return false;
+        }
         authoritative_host_toolbox_surface_enabled(
             &runtime.descriptor.backend_id,
             runtime.descriptor.execution_scope,
@@ -9018,28 +9418,63 @@ async fn register_internal_toolbox_transport_for_session_at_path(
     use tokio::io::{AsyncBufReadExt, BufReader};
     use tokio::net::UnixListener;
 
-    let parent = path.parent().ok_or_else(|| {
-        anyhow::anyhow!(
-            "internal toolbox transport path '{}' is missing a parent directory",
-            path.display()
-        )
-    })?;
-    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
-    match fs::symlink_metadata(&path) {
-        Ok(_) => fs::remove_file(&path).with_context(|| {
-            format!(
-                "failed to remove stale internal toolbox transport {}",
+    #[cfg(target_os = "linux")]
+    let projection = discover_toolbox_episode_transport(orchestration_session_id)?;
+    #[cfg(target_os = "linux")]
+    if projection.binding.participant_id != caller_participant_id
+        || projection.endpoint_path != path
+        || projection.availability == PrivateTransportAvailabilityV1::Available
+    {
+        anyhow::bail!(
+            "internal toolbox publisher does not match the exact current HSA episode binding"
+        );
+    }
+    #[cfg(target_os = "linux")]
+    let expected_uid = unsafe { libc::geteuid() };
+    #[cfg(target_os = "linux")]
+    let trusted_namespace_root = {
+        let substrate_home = substrate_paths::substrate_home()?;
+        if path.starts_with(&substrate_home) {
+            substrate_home
+        } else {
+            let fallback = PathBuf::from(format!("/tmp/substrate-agent-toolbox-u{expected_uid}"));
+            if !path.starts_with(&fallback) {
+                anyhow::bail!(
+                    "internal toolbox endpoint {} is outside its exact HSA store namespace",
+                    path.display()
+                );
+            }
+            fallback
+        }
+    };
+    #[cfg(target_os = "linux")]
+    prepare_internal_toolbox_endpoint_for_bind(&path, expected_uid, &trusted_namespace_root)?;
+    #[cfg(not(target_os = "linux"))]
+    {
+        let parent = path.parent().ok_or_else(|| {
+            anyhow::anyhow!(
+                "internal toolbox transport path '{}' is missing a parent directory",
                 path.display()
             )
-        })?,
-        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-        Err(err) => {
-            return Err(err).with_context(|| {
+        })?;
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+        match fs::symlink_metadata(&path) {
+            Ok(_) => fs::remove_file(&path).with_context(|| {
                 format!(
-                    "failed to inspect internal toolbox transport {}",
+                    "failed to remove stale internal toolbox transport {}",
                     path.display()
                 )
-            });
+            })?,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+            Err(err) => {
+                return Err(err).with_context(|| {
+                    format!(
+                        "failed to inspect internal toolbox transport {}",
+                        path.display()
+                    )
+                });
+            }
         }
     }
     let listener = UnixListener::bind(&path).with_context(|| {
@@ -9048,11 +9483,38 @@ async fn register_internal_toolbox_transport_for_session_at_path(
             path.display()
         )
     })?;
+    #[cfg(target_os = "linux")]
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).with_context(|| {
+        format!(
+            "failed to secure internal toolbox transport {}",
+            path.display()
+        )
+    })?;
+    #[cfg(target_os = "linux")]
+    let endpoint_identity = internal_toolbox_endpoint_identity(&path)?;
+    #[cfg(target_os = "linux")]
+    let bound_metadata = fs::symlink_metadata(&path)?;
+    #[cfg(target_os = "linux")]
+    if bound_metadata.uid() != expected_uid || bound_metadata.permissions().mode() & 0o777 != 0o600
+    {
+        let _ = remove_internal_toolbox_endpoint_if_same(&path, endpoint_identity);
+        anyhow::bail!(
+            "internal toolbox transport {} did not retain exact owner-only permissions",
+            path.display()
+        );
+    }
     let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel();
     let path_for_task = path.clone();
+    #[cfg(target_os = "linux")]
+    let episode_context = Arc::new(Mutex::new(InternalToolboxEpisodeContextV1 {
+        episode: projection.episode,
+        binding: projection.binding,
+    }));
     let runtime_context = InternalToolboxRuntimeContext {
         orchestration_session_id: orchestration_session_id.to_string(),
         caller_participant_id: caller_participant_id.to_string(),
+        #[cfg(target_os = "linux")]
+        episode_context: Arc::clone(&episode_context),
     };
     let task = tokio::spawn(async move {
         loop {
@@ -9134,6 +9596,9 @@ async fn register_internal_toolbox_transport_for_session_at_path(
                 }
             }
         }
+        #[cfg(target_os = "linux")]
+        let _ = remove_internal_toolbox_endpoint_if_same(&path_for_task, endpoint_identity);
+        #[cfg(not(target_os = "linux"))]
         let _ = tokio::fs::remove_file(&path_for_task).await;
     });
 
@@ -9141,6 +9606,10 @@ async fn register_internal_toolbox_transport_for_session_at_path(
         shutdown_tx: Some(shutdown_tx),
         task: Some(task),
         path,
+        #[cfg(target_os = "linux")]
+        endpoint_identity: Some(endpoint_identity),
+        #[cfg(target_os = "linux")]
+        episode_context,
     })
 }
 
@@ -9173,6 +9642,17 @@ async fn ensure_internal_toolbox_transport_registered(
     let Some(runtime) = runtime else {
         return Ok(());
     };
+    #[cfg(target_os = "linux")]
+    if runtime.toolbox_transport.as_ref().is_some_and(|transport| {
+        validate_internal_toolbox_episode_context(&transport.episode_context).is_err()
+    }) {
+        if let Some(mut stale) = runtime.toolbox_transport.take() {
+            runtime
+                .host_toolbox_surface_authoritative
+                .store(false, Ordering::SeqCst);
+            stale.close().await;
+        }
+    }
     if runtime.toolbox_transport.is_some()
         || !internal_toolbox_surface_enabled(startup_context, runtime)
     {
@@ -9533,7 +10013,19 @@ async fn handle_internal_toolbox_dispatch_request(
         InternalToolboxDispatchRequestKind::HostToolInvocation {
             request,
             runtime_context,
+            #[cfg(target_os = "linux")]
+            accepted_episode,
         } => {
+            #[cfg(target_os = "linux")]
+            if let Err(error) = validate_host_execution_episode_against_current_hsa(
+                &accepted_episode.episode,
+                &accepted_episode.binding,
+            ) {
+                let _ = response_tx.send(internal_toolbox_error_result_frame(format!(
+                    "stale internal toolbox request episode: {error}"
+                )));
+                return;
+            }
             let Some(startup_context) = startup_context else {
                 let _ = response_tx.send(internal_toolbox_error_result_frame(
                     "owner_unreachable: internal world dispatch bootstrap requires a live orchestrator runtime",
@@ -9912,11 +10404,42 @@ fn decode_internal_toolbox_dispatch_request(
     raw: &str,
     runtime_context: &InternalToolboxRuntimeContext,
 ) -> anyhow::Result<InternalToolboxDispatchRequestKind> {
+    #[cfg(target_os = "linux")]
+    return decode_internal_toolbox_dispatch_request_with_episode_validator(
+        raw,
+        runtime_context,
+        validate_host_execution_episode_against_current_hsa,
+    );
+    #[cfg(not(target_os = "linux"))]
+    {
+        let request = serde_json::from_str::<HostToolInvocationRequestEnvelopeV1>(raw)
+            .context("expected a host tool invocation envelope")?;
+        Ok(InternalToolboxDispatchRequestKind::HostToolInvocation {
+            request,
+            runtime_context: runtime_context.clone(),
+        })
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn decode_internal_toolbox_dispatch_request_with_episode_validator(
+    raw: &str,
+    runtime_context: &InternalToolboxRuntimeContext,
+    validate_episode: impl FnOnce(&HostExecutionEpisodeV1, &HostExecutionEpisodeBindingV1) -> Result<()>,
+) -> anyhow::Result<InternalToolboxDispatchRequestKind> {
+    let accepted_episode = runtime_context
+        .episode_context
+        .lock()
+        .map_err(|_| anyhow::anyhow!("internal toolbox episode context mutex poisoned"))?
+        .clone();
+    validate_episode(&accepted_episode.episode, &accepted_episode.binding)
+        .context("stale internal toolbox episode")?;
     let request = serde_json::from_str::<HostToolInvocationRequestEnvelopeV1>(raw)
         .context("expected a host tool invocation envelope")?;
     Ok(InternalToolboxDispatchRequestKind::HostToolInvocation {
         request,
         runtime_context: runtime_context.clone(),
+        accepted_episode,
     })
 }
 
@@ -15575,6 +16098,76 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn decoded_toolbox_request_keeps_immutable_episode_when_publisher_revision_advances() {
+        use crate::execution::agent_runtime::control::HostExecutionEpisodeTransportStatusV1;
+        use crate::execution::agent_runtime::host_session_authority::schema::TimestampV1;
+
+        let started_at = TimestampV1::parse("2026-08-31T12:00:00.000000000Z").unwrap();
+        let episode = HostExecutionEpisodeV1 {
+            schema_version: 1,
+            episode_id: "hee_queue_race".to_string(),
+            kind: HostExecutionEpisodeKindV1::RuntimeToolboxEpisode,
+            orchestration_session_id: "session_queue_race".to_string(),
+            observed_authority_revision: 7,
+            backend_id: Some("cli:codex-host".to_string()),
+            process_ref: Some(ProcessRefV1 { pid: 42 }),
+            transport_status: HostExecutionEpisodeTransportStatusV1::Available,
+            started_at,
+            last_heartbeat_at: None,
+            ended_at: None,
+            exit_observation: None,
+        };
+        let binding = HostExecutionEpisodeBindingV1 {
+            authority_store_id: "store_queue_race".to_string(),
+            orchestration_session_id: episode.orchestration_session_id.clone(),
+            participant_id: "participant_queue_race".to_string(),
+            episode_id: episode.episode_id.clone(),
+            authority_revision: episode.observed_authority_revision,
+        };
+        let episode_context = Arc::new(Mutex::new(InternalToolboxEpisodeContextV1 {
+            episode,
+            binding,
+        }));
+        let runtime_context = InternalToolboxRuntimeContext {
+            orchestration_session_id: "session_queue_race".to_string(),
+            caller_participant_id: "participant_queue_race".to_string(),
+            episode_context: Arc::clone(&episode_context),
+        };
+        let decoded = decode_internal_toolbox_dispatch_request_with_episode_validator(
+            r#"{"version":1,"tool_name":"run_world_task","tool_call_id":"queue-race","arguments":{}}"#,
+            &runtime_context,
+            |episode, binding| {
+                assert_eq!(binding.authority_revision, 7);
+                episode.validate_binding(binding)
+            },
+        )
+        .expect("decode request at accepted revision");
+
+        {
+            let mut publisher = episode_context.lock().expect("episode context");
+            publisher.episode.observed_authority_revision = 8;
+            publisher.binding.authority_revision = 8;
+        }
+        let InternalToolboxDispatchRequestKind::HostToolInvocation {
+            accepted_episode, ..
+        } = decoded;
+        assert_eq!(
+            accepted_episode.binding.authority_revision, 7,
+            "a queued request must retain the revision accepted during decode"
+        );
+        let publisher = episode_context.lock().expect("advanced episode context");
+        assert_eq!(publisher.binding.authority_revision, 8);
+        assert!(
+            accepted_episode
+                .episode
+                .validate_binding(&publisher.binding)
+                .is_err(),
+            "pre-dispatch exact-current validation must reject the immutable stale snapshot"
+        );
+    }
+
     #[cfg(unix)]
     #[test]
     fn terminalize_startup_prompt_failure_marks_accepted_prompt_failed() {
@@ -20107,7 +20700,7 @@ mod tests {
             });
             let mut member_runtimes = RetainedMemberRuntimeMap::new();
             let mut telemetry = ReplSessionTelemetry::new(startup_config, "async-test");
-            let host_runtime =
+            let mut host_runtime =
                 start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_request_tx(
                     Some(prepared),
                     Some(&world_binding),
@@ -20129,11 +20722,94 @@ mod tests {
                 .await
                 .expect("host runtime start should succeed")
                 .expect("host runtime");
-            let outcome = tokio::time::timeout(Duration::from_secs(15), startup_request_task)
+            let authority_root_path = substrate_home.join("authority-v1/state-root-v1.json");
+            let authority_before_stale_rejection =
+                fs::read(&authority_root_path).expect("read authority before stale toolbox retry");
+            let stale_error = tokio::time::timeout(Duration::from_secs(15), startup_request_task)
                 .await
                 .expect("startup-time toolbox request must finish before readiness")
                 .expect("startup-time toolbox task")
-                .expect("startup-time toolbox Spawn must succeed");
+                .expect_err("revision-raced startup toolbox episode must reject stale delivery");
+            assert!(
+                stale_error
+                    .to_string()
+                    .contains("stale internal toolbox episode"),
+                "stale startup toolbox delivery must be classified explicitly: {stale_error:#}"
+            );
+            assert_eq!(
+                fs::read(&authority_root_path)
+                    .expect("read authority after stale toolbox rejection"),
+                authority_before_stale_rejection,
+                "stale toolbox delivery must perform zero HSA mutation"
+            );
+            assert_eq!(
+                dispatch_count.load(Ordering::SeqCst),
+                0,
+                "stale toolbox delivery must fail before retained dispatch"
+            );
+
+            ensure_internal_toolbox_transport_registered(
+                Some(&mut host_runtime),
+                Some(&startup_context),
+                &toolbox_tx,
+            )
+            .await
+            .expect("republish toolbox transport at current HSA revision");
+            let refreshed_transport_path =
+                durable_start_toolbox_transport_path(&startup_context.orchestration_session_id())
+                    .expect("resolve refreshed durable Start toolbox path");
+            assert_eq!(
+                refreshed_transport_path, transport_path,
+                "one exact publisher must retain the provider-injected logical endpoint across revision advances"
+            );
+            assert!(
+                refreshed_transport_path.exists(),
+                "the newer exact episode binding must be published"
+            );
+            assert!(StdUnixStream::connect(&transport_path).is_ok());
+            let retry_request = WorldDispatchRequestV1 {
+                request_id: Some("req_startup_toolbox_spawn".to_string()),
+                idempotency_key: Some("idem_startup_toolbox_spawn".to_string()),
+                orchestration_session_id: Some(startup_context.orchestration_session_id()),
+                caller_participant_id: Some(host_participant_id.clone()),
+                action: WorldDispatchActionV1::SpawnWorldWorker,
+                mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
+                target_backend_id: Some("cli:codex-world".to_string()),
+                task_run_id: None,
+                target_participant_id: None,
+                world_id: Some(world_binding.world_id.clone()),
+                world_generation: Some(world_binding.world_generation),
+                payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
+                    prompt: "startup toolbox retained worker".to_string(),
+                }),
+            };
+            let retry_task = tokio::spawn({
+                let refreshed_transport_path = refreshed_transport_path.clone();
+                async move {
+                    request_internal_toolbox_world_dispatch(
+                        &refreshed_transport_path,
+                        &retry_request,
+                    )
+                    .await
+                }
+            });
+            let retry = tokio::time::timeout(Duration::from_secs(3), toolbox_rx.recv())
+                .await
+                .expect("timed out waiting for refreshed toolbox request")
+                .expect("refreshed toolbox request");
+            handle_internal_toolbox_dispatch_request(
+                retry,
+                Some(&startup_context),
+                &mut member_runtimes,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
+            let outcome = tokio::time::timeout(Duration::from_secs(15), retry_task)
+                .await
+                .expect("refreshed toolbox request must finish")
+                .expect("refreshed toolbox task")
+                .expect("current-revision toolbox Spawn must succeed");
             let spawn = match outcome {
                 WorldDispatchOutcomeV1::SpawnWorldWorker(outcome) => outcome,
                 other => panic!("expected startup Spawn outcome, got {other:?}"),
@@ -20155,7 +20831,7 @@ mod tests {
                 runtime_manifest_snapshot(runtime).handle.participant_id == spawn.participant_id
             }));
             assert!(
-                host_runtime.toolbox_transport.is_some() && transport_path.exists(),
+                host_runtime.toolbox_transport.is_some() && refreshed_transport_path.exists(),
                 "steady-state runtime must retain the exact startup toolbox transport"
             );
             for directory in [
@@ -23995,6 +24671,118 @@ mod tests {
             calls.into_inner(),
             vec![b"abcdef".to_vec(), b"cdef".to_vec()]
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn internal_toolbox_endpoint_reclaims_only_owned_stale_socket() {
+        use std::os::unix::net::UnixListener as StdUnixListener;
+
+        let temp = tempfile::tempdir().expect("toolbox endpoint tempdir");
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))
+            .expect("secure toolbox endpoint tempdir");
+        let path = temp.path().join("private").join("toolbox.sock");
+        let uid = unsafe { libc::geteuid() };
+        prepare_internal_toolbox_endpoint_for_bind(&path, uid, temp.path())
+            .expect("prepare absent endpoint");
+        let listener = StdUnixListener::bind(&path).expect("bind stale endpoint");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+            .expect("secure stale endpoint");
+        drop(listener);
+
+        prepare_internal_toolbox_endpoint_for_bind(&path, uid, temp.path())
+            .expect("owned refused socket is safe to reclaim");
+        assert!(!path.exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn internal_toolbox_endpoint_rejects_active_symlink_and_wrong_permissions() {
+        use std::os::unix::fs::symlink;
+        use std::os::unix::net::UnixListener as StdUnixListener;
+
+        let temp = tempfile::tempdir().expect("toolbox endpoint tempdir");
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))
+            .expect("secure toolbox endpoint tempdir");
+        let uid = unsafe { libc::geteuid() };
+
+        let active = temp.path().join("active").join("toolbox.sock");
+        prepare_internal_toolbox_endpoint_for_bind(&active, uid, temp.path())
+            .expect("prepare active endpoint");
+        let active_listener = StdUnixListener::bind(&active).expect("bind active endpoint");
+        fs::set_permissions(&active, fs::Permissions::from_mode(0o600))
+            .expect("secure active endpoint");
+        assert!(prepare_internal_toolbox_endpoint_for_bind(&active, uid, temp.path()).is_err());
+        assert!(active.exists());
+        drop(active_listener);
+
+        let symlink_path = temp.path().join("symlink").join("toolbox.sock");
+        prepare_internal_toolbox_endpoint_for_bind(&symlink_path, uid, temp.path())
+            .expect("prepare symlink parent");
+        let symlink_target = temp.path().join("symlink-target");
+        fs::write(&symlink_target, b"do-not-remove").expect("write symlink target");
+        symlink(&symlink_target, &symlink_path).expect("create endpoint symlink");
+        assert!(
+            prepare_internal_toolbox_endpoint_for_bind(&symlink_path, uid, temp.path()).is_err()
+        );
+        assert_eq!(fs::read(&symlink_target).unwrap(), b"do-not-remove");
+        assert!(fs::symlink_metadata(&symlink_path)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+
+        let permissive = temp.path().join("permissive").join("toolbox.sock");
+        prepare_internal_toolbox_endpoint_for_bind(&permissive, uid, temp.path())
+            .expect("prepare permissive endpoint");
+        let permissive_listener =
+            StdUnixListener::bind(&permissive).expect("bind permissive endpoint");
+        fs::set_permissions(&permissive, fs::Permissions::from_mode(0o660))
+            .expect("set unsafe endpoint permissions");
+        drop(permissive_listener);
+        assert!(prepare_internal_toolbox_endpoint_for_bind(&permissive, uid, temp.path()).is_err());
+        assert!(permissive.exists());
+
+        let parent_target = temp.path().join("parent-target");
+        fs::create_dir(&parent_target).expect("create parent symlink target");
+        fs::set_permissions(&parent_target, fs::Permissions::from_mode(0o700))
+            .expect("secure parent symlink target");
+        let parent_symlink = temp.path().join("parent-symlink");
+        symlink(&parent_target, &parent_symlink).expect("create parent symlink");
+        let escaped_endpoint = parent_symlink.join("nested").join("toolbox.sock");
+        assert!(
+            prepare_internal_toolbox_endpoint_for_bind(&escaped_endpoint, uid, temp.path())
+                .is_err()
+        );
+        assert!(
+            !parent_target.join("nested").exists(),
+            "a symlinked parent must not be followed or mutated"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn internal_toolbox_endpoint_rejects_wrong_uid_without_removal() {
+        use std::os::unix::net::UnixListener as StdUnixListener;
+
+        let temp = tempfile::tempdir().expect("toolbox endpoint tempdir");
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))
+            .expect("secure toolbox endpoint tempdir");
+        let path = temp.path().join("wrong-owner").join("toolbox.sock");
+        let uid = unsafe { libc::geteuid() };
+        prepare_internal_toolbox_endpoint_for_bind(&path, uid, temp.path())
+            .expect("prepare owned endpoint");
+        let listener = StdUnixListener::bind(&path).expect("bind owned endpoint");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+            .expect("secure owned endpoint");
+        drop(listener);
+
+        assert!(prepare_internal_toolbox_endpoint_for_bind(
+            &path,
+            uid.wrapping_add(1),
+            temp.path(),
+        )
+        .is_err());
+        assert!(path.exists());
     }
 
     #[test]
