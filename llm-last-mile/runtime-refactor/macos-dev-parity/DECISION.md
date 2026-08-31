@@ -5,9 +5,9 @@
 - **Status:** accepted macOS-lane decision; global blocking status superseded on 2026-08-20.
 - **Effective date:** 2026-08-19.
 - **macOS lane authority gate:** `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`.
-- **Active global implementation packet:** none. [`A1.3-P1`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md)
-  is terminally complete; A1.4 is only the named successor awaiting fresh admission and explicit
-  dispatch.
+- **Active global implementation packet:** none. [`A1.3-P1`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md),
+  A1.4, and the enclosing A1 slice are terminally complete; the A2 remainder awaits fresh
+  admission and explicit dispatch.
 - **Phase 0 preservation:** verified read-only at protected lifecycle checkpoint
   `ff48da180db4515147486f8b95f05626ca38e89b` on
   `refs/heads/feat/archive-r3-macos-protected-lifecycle-20260819` and its remote-tracking ref;
@@ -143,10 +143,10 @@ gate remains closed as historical selection, and the separately selected
 [`A1.3-P1 packet`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md)
 is terminally complete.
 The held A1.3 and A1.3-P0 records remain preserved as historical runtime fences only. Closing
-either lane does not dispatch the other's successor. A1.4 is only the named implementation
-successor awaiting fresh admission and explicit dispatch. This decision does not authorize macOS
-work within A1.3-P1, dispatch A1.4, Windows, E03, protected-lifecycle revival, or any other
-successor.
+either lane does not dispatch the other's successor. A1.4 and the enclosing A1 slice are
+terminally complete; the A2 remainder awaits fresh admission and explicit dispatch. This decision
+does not authorize macOS work within A1.3-P1, dispatch A2, Windows, E03, protected-lifecycle
+revival, or any other successor.
 
 ## Rollback and revival rule
 

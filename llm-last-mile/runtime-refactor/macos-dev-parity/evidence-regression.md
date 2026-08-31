@@ -2,7 +2,7 @@
 **Stable ID:** `macOS-dev-parity-family`
 **Canonical for:** current cross-lane regression ledger projection
 **Status:** canonical current projection with preserved packet-era body
-**Authority scope:** exact extracted macOS-parity source body plus the A1.3-P1 closure-status overlay only; no implementation, proof, gate, or successor authority
+**Authority scope:** exact extracted macOS-parity source body plus the current A1 closure-status overlay only; no implementation, proof, gate, or successor authority
 **Source span:** [`05-debug-regression-ledger.md#current-cross-lane-regression-ledger-2026-08-20-controlling`](../05-debug-regression-ledger.md#current-cross-lane-regression-ledger-2026-08-20-controlling), D6 pre-extraction lines 3715–3738
 **Supersedes:** canonical ownership of that source body; the source heading remains a compatibility anchor
 **Superseded by:** none
@@ -12,13 +12,13 @@
 > “the retirement/orphan table above,” still refer to the linked pre-extraction root document
 > rather than standalone surrounding content in this canonical file.
 
-## A1.3-P1 closure-status overlay (2026-08-29; current)
+## A1 closure-status overlay (2026-08-30; current)
 
-The dated extracted regression projection below remains byte-stable as its packet-era snapshot;
-its A1.3-P1 failure rule does not keep the review-clean completed packet open. A1.3-P1 is
-terminally complete under its exact packet closure identities. `RG-BASE-01` remains open,
-blocking, unwaived, and not green under A1.4's final A1 wall. A1.4 is only the named successor
-awaiting fresh admission and explicit dispatch and receives no authority from this overlay.
+The dated extracted regression projection below remains byte-stable as its packet-era snapshot.
+A1.3-P1, A1.4, and the enclosing A1 slice are terminally complete under their exact closure
+identities. A1.4's final Linux wall makes `RG-BASE-01` and `RG-BASE-02` green for A1. The A2
+remainder awaits fresh admission and explicit dispatch and receives no authority from this
+overlay.
 
 ## Current cross-lane regression ledger (2026-08-20; controlling)
 

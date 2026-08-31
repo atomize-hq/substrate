@@ -5,9 +5,9 @@
 - **Status:** accepted for active scheduling; documentation-only decision.
 - **Effective date:** 2026-08-20.
 - **Reentry gate:** `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY` (closed by the selection below).
-- **Active global implementation packet:** none. [`A1.3-P1`](A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md)
-  is terminally complete; A1.4 is only the named successor awaiting fresh admission and explicit
-  dispatch.
+- **Active global implementation packet:** none. [`A1.3-P1`](A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md),
+  A1.4, and the enclosing A1 slice are terminally complete; the A2 remainder awaits fresh
+  admission and explicit dispatch.
 - **Supersedes:** the 2026-08-19 macOS developer-parity decision only where it made
   `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` the global product-work predecessor. It does not weaken,
   close, or authorize the macOS parity lane.
@@ -148,6 +148,7 @@ proof rather than a historical label. That rebind later selected A1.3.
   R3, or perform a Linux proof run. Its separately recorded reentry selection first selected A1.3,
   the later frozen amendment selected A1.3-P0 as a narrower preparatory split, and the corrective
   replan held both older fences while selecting the now-terminally-complete A1.3-P1 atomic
-  public-adoption packet.
+  public-adoption packet. The later A1.4 implementation and enclosing A1 slice are terminally
+  complete under their separate closure identities.
 - This decision does not dispatch Windows, protected macOS lifecycle revival, Keychain activity,
   Attempt 4 inspection or remediation, installer execution, Lima actions, or native operations.

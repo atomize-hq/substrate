@@ -1,7 +1,7 @@
 **Kind:** slice
 **Stable ID:** `a1-host-session-authority`
 **Canonical for:** extracted A1 slice row plus bounded packet-decomposition projection only
-**Status:** canonical slice record
+**Status:** terminally complete
 **Authority scope:** exact extracted Track A A1 row plus the extracted A1 bounded packet-decomposition framing/projection only; no schedule, dispatch, or implementation authority
 **Source span:** composite of [`../03-phase-slice-map.md`](../03-phase-slice-map.md) line 130 and lines 134–146
 **Supersedes:** canonical ownership of the extracted `A1 — HostSessionAuthority facade` row and bounded packet-decomposition framing/projection
@@ -10,12 +10,15 @@
 
 # A1 — HostSessionAuthority facade
 
-> **Authority boundary:** This file owns only the extracted Track A A1 row and the bounded packet-decomposition framing/projection below. A1.1–A1.4 remain substeps/checkpoints inside A1 rather than independent slices; A1.1d and historical entries remain checkpoints, not slices; held `A1.3-P0` and `A1.3` remain preserved history only; [`../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md) is terminally complete; and A1.4 is an active bounded corrective checkpoint whose canonical fence is owned by its linked task record. This file does not independently widen or close A1.4.
+> **Authority boundary:** This file owns only the extracted Track A A1 row and the bounded packet-decomposition framing/projection below. A1.1–A1.4 remain substeps/checkpoints inside A1 rather than independent slices; A1.1d and historical entries remain checkpoints, not slices; held `A1.3-P0` and `A1.3` remain preserved history only; [`../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md) and [A1.4](tasks/a1-4-auto-attach-producer-adoption.md) are terminally complete. This record closes A1 without dispatching A2/A3 or widening any completed packet.
 
-Current disposition: A1.3-P1 is complete under its exact closure identities. `RG-BASE-01` remains
-open, unwaived, and not green; its positive real-path Linux smoke belongs to A1.4's final A1 wall.
-A1.4 corrective remediation is authorized but is not complete or terminally closed here; it cannot
-claim final completion without the complete Linux proof and distinct successor review.
+Current disposition: A1.3-P1 and A1.4 are terminally complete under their exact closure identities.
+The final A1 wall makes `RG-BASE-01`, `RG-BASE-02`, the A1-scoped clauses of `RG-AUTH-01` and
+`RG-AUTH-02`, and all of `RG-AUTH-03` green. Earlier A1 packets are complete, the Linux A1.1d
+closeout is landed, and native macOS is a separate non-predecessor lane under the controlling
+Linux-first decision. No other A1 condition remains, so A1 is terminally complete. The
+ledger-wide remainder of `RG-AUTH-01`/`RG-AUTH-02` and all A2/A3 work remain open and
+undispatched.
 
 | Slice | Goal | Must-read docs | Sibling context | Allowed code areas | Explicit non-goals | Exit gate | Regression gates |
 |---|---|---|---|---|---|---|---|

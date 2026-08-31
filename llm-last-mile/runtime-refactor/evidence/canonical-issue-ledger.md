@@ -4,6 +4,15 @@
 **Source provenance:** extracted byte-for-byte from [`../05-debug-regression-ledger.md#canonical-issue-ledger`](../05-debug-regression-ledger.md#canonical-issue-ledger), baseline lines 16–97 inclusive; the exact 41492-byte source body is preserved between the boundary markers below
 **Baseline span SHA-256:** `191a62ea0c77064941947280d87c539163ab69b772a8018f6b2f4e3d3e5aae3e`
 
+## Current A1 gate disposition
+
+The exact extracted ledger body below remains byte-stable. Under the terminal
+[A1.4 closure](../slices/tasks/a1-4-auto-attach-producer-adoption.md#terminal-closure), the
+A1-scoped clauses of `RG-AUTH-01` and `RG-AUTH-02`, and all of `RG-AUTH-03`, are green at
+implementation commit `9cb9fc78b8f2efdc7a8e90a456f6abaf13dbf851`. The ledger-wide
+`RG-AUTH-01`/`RG-AUTH-02` rows remain unresolved for A2/A3 and their other named owners; no
+successor is admitted or dispatched by this status overlay.
+
 <!-- exact-extracted-body:start -->
 ## Canonical issue ledger
 
