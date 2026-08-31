@@ -51,13 +51,14 @@ B4 + C1 + D2 + E2 + E3 -> D3 `RG-OBS-01` integration closure
 D2 and E1 must agree on PolicySnapshotV3, but may land in either order behind fail-closed gates.
 ```
 
-Current A1 closure disposition: the controlling
+Current A1/A2 closure disposition: the controlling
 [Linux-first decision](../linux-first-runtime-resumption/DECISION.md#macos-lane) supersedes only
 the native-macOS predecessor edge shown in the preserved spine by making that lane separate and
 non-blocking. The landed Linux A1.1d closeout, completed A1.1/A1.2 and A1.3-P1 predecessors, and
 the terminal [A1.4 closure](tasks/a1-4-auto-attach-producer-adoption.md#terminal-closure) leave no
-other A1 condition. A1 is terminally complete. A2/A3 still require fresh admission and explicit
-dispatch.
+other A1 condition. A1 is terminally complete. [A2](a2-host-execution-episode-demotion.md#terminal-closure)
+is also terminally complete under its separate closure identities. A3 awaits fresh admission and
+explicit dispatch.
 
 This graph is acyclic. `B1-3a/B1-3b receipt core` is a review state, not a claim that B1 is
 production-complete: it supplies the exact proposal, acknowledgement, activated-store acceptance

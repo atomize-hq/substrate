@@ -10,7 +10,7 @@
 
 # B1/B2.1 receipt-and-supervision family index
 
-> **Authority boundary:** This index assembles the completed B0 → B1 receipt → B2.1 supervision/replay corridor, its R0/B3.2a/B3.2a-WA prerequisites, B1/B2.1-0, and the joint production closeout. It promotes no seam and grants no implementation authority. It does not extract or reopen B3.1/C1, B2.2, remaining B3.2, B4, A1.2, earlier A1 history, R3, R2-3, renewed R2-2, F/RP, or D7+. `A1.3-P1`, A1.4, and the enclosing A1 slice are terminally complete; the A2 remainder awaits fresh admission and explicit dispatch.
+> **Authority boundary:** This index assembles the completed B0 → B1 receipt → B2.1 supervision/replay corridor, its R0/B3.2a/B3.2a-WA prerequisites, B1/B2.1-0, and the joint production closeout. It promotes no seam and grants no implementation authority. It does not extract or reopen B3.1/C1, B2.2, remaining B3.2, B4, A1.2, earlier A1 history, R3, R2-3, renewed R2-2, F/RP, or D7+. `A1.3-P1`, A1.4, the enclosing A1 slice, and A2 are terminally complete; A3 awaits fresh admission and explicit dispatch.
 
 | Component | Canonical owner |
 |---|---|

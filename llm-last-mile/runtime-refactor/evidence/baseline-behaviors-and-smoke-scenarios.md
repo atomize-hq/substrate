@@ -17,12 +17,15 @@
 
 Context note: the exact fourteen historical B1/B2.1 names and production routes referenced by RG-DIFF-01's source-relative phrase `inventory above` remain canonically owned in [`../b1-b2-1/evidence-regression.md#b1b21-core-recovery-and-b1b21-0-recorded-result`](../b1-b2-1/evidence-regression.md#b1b21-core-recovery-and-b1b21-0-recorded-result). This destination-local link clarifies that referent only; it does not duplicate or re-extract packet-local evidence and does not change any evidence, gate, implementation, or authority status.
 
-**Current A1 baseline disposition:** the preserved baseline rows below remain byte-stable.
+**Current A1/A2 baseline disposition:** the preserved baseline rows below remain byte-stable.
 [A1.4's terminal closure](../slices/tasks/a1-4-auto-attach-producer-adoption.md#terminal-closure)
 records the positive real-path Linux wall at implementation commit
-`9cb9fc78b8f2efdc7a8e90a456f6abaf13dbf851`. `RG-BASE-01` and `RG-BASE-02` are green for A1;
-the historical row wording below remains the permanent behavior contract rather than current
-status.
+`9cb9fc78b8f2efdc7a8e90a456f6abaf13dbf851`. `RG-BASE-01` and `RG-BASE-02` are green for A1.
+The [A2 terminal closure](../slices/a2-host-execution-episode-demotion.md#terminal-closure) records
+the installed-witness S1 Start/Turn/reattach/Stop proof and the exact-parent differential at
+implementation commit `1d7176a25b7662368e6e1fb3f65b3521e6cab78b`; `RG-BASE-01` remains green
+through A2, and the A1-owned `run_stop` semantics remain unchanged. The historical row wording
+below remains the permanent behavior contract rather than current status.
 
 <!-- exact-extracted-body:baseline-behaviors:start -->
 ## Baseline behaviors that all tracks preserve

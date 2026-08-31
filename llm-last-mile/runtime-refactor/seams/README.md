@@ -2,7 +2,7 @@
 **Stable ID:** `shared-seam-crosswalk`
 **Canonical for:** shared seam-crosswalk reading rules, shared table-column meanings, classification consequences, and extracted seam-family navigation
 **Status:** canonical shared seam-crosswalk record
-**Authority scope:** exact extracted shared seam-crosswalk source bodies plus navigation for extracted seam families only; no implementation authority
+**Authority scope:** exact extracted shared seam-crosswalk source bodies, the current A2 closure-status qualification, and navigation for extracted seam families only; no implementation authority
 **Source span:** D8 shared seam extraction from `02-seam-crosswalk.md`
 **Supersedes:** canonical ownership of the extracted root `Reading rule` and `Classification consequences` spans; repeated seam-table headers are projections of this file's shared column definitions
 **Superseded by:** none
@@ -10,7 +10,16 @@
 
 # Runtime seam crosswalk index
 
-> **Authority boundary:** This file owns only the extracted shared seam-crosswalk reading rules, repeated table-column meanings, classification consequences, and navigation for extracted seam families. It does not authorize implementation, promote any seam, alter packet/gate status, reopen D5/D6/D7 families, or move the A0 authority-leak inventory out of `02-seam-crosswalk.md`.
+> **Authority boundary:** This file owns only the extracted shared seam-crosswalk reading rules, repeated table-column meanings, classification consequences, the current A2 qualification below, and navigation for extracted seam families. It does not authorize implementation, independently promote a seam, alter packet/gate status, reopen D5/D6/D7 families, or move the A0 authority-leak inventory out of `02-seam-crosswalk.md`.
+
+## A2 closure-status qualification (2026-08-31; current)
+
+The shared rule below remains canonical, while its packet-era sentence that no required seam met
+all four conditions is preserved as historical source wording. Under the exact implementation and
+proof identities in the [A2 terminal closure](../slices/a2-host-execution-episode-demotion.md#terminal-closure)
+and the current [host/session authority overlay](host-session-authority.md#a2-closure-status-overlay-2026-08-31-current),
+only the A2-scoped `SurfaceAdapter / HostExecutionEpisode` seam is now
+`ContractCorrectAndProven`. No sibling seam is promoted or completed by this qualification.
 
 ## Reading rule
 

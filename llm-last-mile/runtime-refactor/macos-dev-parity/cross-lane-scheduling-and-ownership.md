@@ -2,7 +2,7 @@
 **Stable ID:** `macOS-dev-parity-family`
 **Canonical for:** current cross-lane scheduling and ownership projection
 **Status:** canonical current projection with preserved packet-era body
-**Authority scope:** exact extracted macOS-parity source body plus the current A1 closure-status overlay only; no implementation or successor authority
+**Authority scope:** exact extracted macOS-parity source body plus the current A1/A2 closure-status overlay only; no implementation or successor authority
 **Source span:** [`02-seam-crosswalk.md#current-cross-lane-scheduling-and-ownership-2026-08-20-controlling`](../02-seam-crosswalk.md#current-cross-lane-scheduling-and-ownership-2026-08-20-controlling), D6 pre-extraction lines 1694–1721
 **Supersedes:** canonical ownership of that source body; the source heading remains a compatibility anchor
 **Superseded by:** none
@@ -12,13 +12,13 @@
 > “this file,” still refer to the linked pre-extraction root document rather than standalone
 > surrounding content in this canonical file.
 
-## A1 closure-status overlay (2026-08-30; current)
+## A1/A2 closure-status overlay (2026-08-31; current)
 
 The dated extracted projection below remains byte-stable as its packet-era snapshot. Current
 global status is projected by [`../index/current.md`](../index/current.md) and controlled by its
 linked canonical decisions and owners: A1.3-P1, A1.4, and the enclosing A1 slice are terminally
-complete. The A2 remainder awaits fresh admission and explicit dispatch. Neither this projection
-nor the macOS lane grants A2 authority.
+complete. A2 is terminally complete under its separate closure identities. A3 awaits fresh
+admission and explicit dispatch. Neither this projection nor the macOS lane grants A3 authority.
 
 ## Current cross-lane scheduling and ownership (2026-08-20; controlling)
 

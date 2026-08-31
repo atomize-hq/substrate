@@ -286,7 +286,7 @@
 | `a0-authority-leak-inventory` | [`slices/a0-authority-leak-inventory.md`](../slices/a0-authority-leak-inventory.md) | canonical slice row record |
 | `a1-4-auto-attach-producer-adoption` | [`slices/tasks/a1-4-auto-attach-producer-adoption.md`](../slices/tasks/a1-4-auto-attach-producer-adoption.md) | canonical task row record |
 | `a1-host-session-authority` | [`slices/a1-host-session-authority.md`](../slices/a1-host-session-authority.md) | canonical slice record |
-| `a2-host-execution-episode-demotion` | [`slices/a2-host-execution-episode-demotion.md`](../slices/a2-host-execution-episode-demotion.md) | canonical slice row record |
+| `a2-host-execution-episode-demotion` | [`slices/a2-host-execution-episode-demotion.md`](../slices/a2-host-execution-episode-demotion.md) | canonical slice row and terminal closure record |
 | `a3-persistence-and-compatibility-split` | [`slices/a3-persistence-and-compatibility-split.md`](../slices/a3-persistence-and-compatibility-split.md) | canonical slice row record |
 | `b2-2-foreground-receipt-return` | [`slices/b2-2-foreground-receipt-return.md`](../slices/b2-2-foreground-receipt-return.md) | canonical slice row record |
 | `b3-2-retained-receipt-messaging-and-lifecycle` | [`slices/b3-2-retained-receipt-messaging-and-lifecycle.md`](../slices/b3-2-retained-receipt-messaging-and-lifecycle.md) | canonical slice row record |
@@ -364,7 +364,7 @@
 | `a0-authority-leak-inventory` | [`slices/a0-authority-leak-inventory.md`](../slices/a0-authority-leak-inventory.md) | canonical slice row record |
 | `a1-4-auto-attach-producer-adoption` | [`slices/tasks/a1-4-auto-attach-producer-adoption.md`](../slices/tasks/a1-4-auto-attach-producer-adoption.md) | canonical task row record |
 | `a1-host-session-authority` | [`slices/a1-host-session-authority.md`](../slices/a1-host-session-authority.md) | canonical slice record |
-| `a2-host-execution-episode-demotion` | [`slices/a2-host-execution-episode-demotion.md`](../slices/a2-host-execution-episode-demotion.md) | canonical slice row record |
+| `a2-host-execution-episode-demotion` | [`slices/a2-host-execution-episode-demotion.md`](../slices/a2-host-execution-episode-demotion.md) | canonical slice row and terminal closure record |
 | `a3-persistence-and-compatibility-split` | [`slices/a3-persistence-and-compatibility-split.md`](../slices/a3-persistence-and-compatibility-split.md) | canonical slice row record |
 | `b2-2-foreground-receipt-return` | [`slices/b2-2-foreground-receipt-return.md`](../slices/b2-2-foreground-receipt-return.md) | canonical slice row record |
 | `b3-2-retained-receipt-messaging-and-lifecycle` | [`slices/b3-2-retained-receipt-messaging-and-lifecycle.md`](../slices/b3-2-retained-receipt-messaging-and-lifecycle.md) | canonical slice row record |

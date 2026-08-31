@@ -11,8 +11,8 @@
 # A1.3 Linux-first packet family index
 
 > **Authority boundary:** This file only assembles links for terminally complete `A1.3-P1`,
-> terminally complete A1.4/A1, and the inseparable held predecessors `A1.3-P0` and `A1.3`. The A2
-> remainder awaits fresh admission and explicit dispatch. This index does not dispatch
+> terminally complete A1.4/A1 and A2, and the inseparable held predecessors `A1.3-P0` and `A1.3`.
+> A3 awaits fresh admission and explicit dispatch. This index does not dispatch
 > implementation, reopen the closed reentry gate, broaden macOS or Windows scope, or replace the
 > linked canonical owners.
 
@@ -29,7 +29,7 @@
 
 A1.3-P1 and A1.4 are terminally complete under their exact commit, tree, reviewed fingerprint,
 CLEAN review, and verification-evidence identities recorded in their owners; the enclosing A1
-slice is terminally complete. This family index does not admit or dispatch the A2 remainder.
+slice and A2 are terminally complete. This family index does not admit or dispatch A3.
 
 Historical predecessors stay linked in their preserved packet records. The macOS developer-parity
 lane remains separate under [`../macos-dev-parity/DECISION.md`](../macos-dev-parity/DECISION.md),

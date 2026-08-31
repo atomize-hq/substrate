@@ -13,6 +13,7 @@
 |---|---|---|---|
 | `A1.3-P1` | completed packet | [`linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md) | `terminally complete` |
 | `A1.4` | completed checkpoint | [`slices/tasks/a1-4-auto-attach-producer-adoption.md`](../slices/tasks/a1-4-auto-attach-producer-adoption.md) | `terminally complete`; enclosing A1 terminally complete |
+| `A2` | completed slice | [`slices/a2-host-execution-episode-demotion.md`](../slices/a2-host-execution-episode-demotion.md) | `terminally complete`; A3 awaits fresh admission and explicit dispatch |
 | `A1.3-P0` | held packet | [`linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md`](../linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md) | `held/non-implementable historical preparatory packet` |
 | `A1.3` | held packet | [`linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md`](../linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md) | `preserved held historical Linux-first packet` |
 
@@ -37,7 +38,7 @@
 | Need | Start here |
 |---|---|
 | Current global status | [`current.md`](current.md) |
-| Completed A1.3-P1 packet, completed A1.4/A1 closure, and held predecessors | [`../linux-first-runtime-resumption/README.md`](../linux-first-runtime-resumption/README.md), [`../slices/tasks/a1-4-auto-attach-producer-adoption.md`](../slices/tasks/a1-4-auto-attach-producer-adoption.md) |
+| Completed A1.3-P1 packet, completed A1.4/A1 and A2 closures, held predecessors, and undispatched A3 successor | [`../linux-first-runtime-resumption/README.md`](../linux-first-runtime-resumption/README.md), [`../slices/tasks/a1-4-auto-attach-producer-adoption.md`](../slices/tasks/a1-4-auto-attach-producer-adoption.md), [`../slices/a2-host-execution-episode-demotion.md`](../slices/a2-host-execution-episode-demotion.md), [`../slices/a3-persistence-and-compatibility-split.md`](../slices/a3-persistence-and-compatibility-split.md) |
 | macOS developer-parity lane | [`../macos-dev-parity/README.md`](../macos-dev-parity/README.md) |
 | Historical A1.2 and earlier corridor | [`../a1-2-earlier-histories/README.md`](../a1-2-earlier-histories/README.md) |
 | Historical B1/B2.1 corridor | [`../b1-b2-1/README.md`](../b1-b2-1/README.md) |

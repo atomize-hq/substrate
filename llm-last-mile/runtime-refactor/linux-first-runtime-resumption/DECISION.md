@@ -6,8 +6,8 @@
 - **Effective date:** 2026-08-20.
 - **Reentry gate:** `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY` (closed by the selection below).
 - **Active global implementation packet:** none. [`A1.3-P1`](A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md),
-  A1.4, and the enclosing A1 slice are terminally complete; the A2 remainder awaits fresh
-  admission and explicit dispatch.
+  A1.4, the enclosing A1 slice, and A2 are terminally complete; A3 awaits fresh admission and
+  explicit dispatch.
 - **Supersedes:** the 2026-08-19 macOS developer-parity decision only where it made
   `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` the global product-work predecessor. It does not weaken,
   close, or authorize the macOS parity lane.
@@ -101,6 +101,20 @@ implementation successor. It awaits fresh admission and explicit dispatch. This 
 schedule, authorize, admit, dispatch, implement, or complete A1.4, and A1.4 cannot claim final
 completion until it supplies the required `RG-BASE-01` proof.
 
+## A2 closure (2026-08-31; controlling)
+
+[A2 — HostExecutionEpisode demotion](../slices/a2-host-execution-episode-demotion.md#terminal-closure)
+is terminally complete at implementation commit
+`1d7176a25b7662368e6e1fb3f65b3521e6cab78b` and tree
+`e71f731c279a8d65e1111245fc3d31940edd3afd` under its exact reviewed closure identities. It
+consumed the landed HSA fork-successor prerequisite, while the public `run_stop` disposition
+remains unchanged A1 work. Its Linux proof closes only A2's episode-demotion scope and does not
+claim Track A, macOS, Windows, Track B, or Track C completion.
+
+A3 — persistence and compatibility split — is only the existing canonical successor. It awaits
+fresh admission and explicit dispatch; this closure does not admit, dispatch, implement, or
+complete it.
+
 ## macOS lane
 
 `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` remains the lane-local gate for the ordinary user-prefix
@@ -149,6 +163,7 @@ proof rather than a historical label. That rebind later selected A1.3.
   the later frozen amendment selected A1.3-P0 as a narrower preparatory split, and the corrective
   replan held both older fences while selecting the now-terminally-complete A1.3-P1 atomic
   public-adoption packet. The later A1.4 implementation and enclosing A1 slice are terminally
-  complete under their separate closure identities.
+  complete under their separate closure identities. The still-later A2 implementation is also
+  terminally complete under its separate closure identities; A3 remains undispatched.
 - This decision does not dispatch Windows, protected macOS lifecycle revival, Keychain activity,
   Attempt 4 inspection or remediation, installer execution, Lima actions, or native operations.

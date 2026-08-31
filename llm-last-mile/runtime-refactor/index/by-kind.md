@@ -351,7 +351,7 @@
 | Stable ID | Canonical owner | Status | Canonical for |
 |---|---|---|---|
 | `a0-authority-leak-inventory` | [`slices/a0-authority-leak-inventory.md`](../slices/a0-authority-leak-inventory.md) | canonical slice row record | extracted A0 slice row only |
-| `a2-host-execution-episode-demotion` | [`slices/a2-host-execution-episode-demotion.md`](../slices/a2-host-execution-episode-demotion.md) | canonical slice row record | extracted A2 slice row only |
+| `a2-host-execution-episode-demotion` | [`slices/a2-host-execution-episode-demotion.md`](../slices/a2-host-execution-episode-demotion.md) | canonical slice row and terminal closure record | extracted A2 slice row plus its terminal closure |
 | `a3-persistence-and-compatibility-split` | [`slices/a3-persistence-and-compatibility-split.md`](../slices/a3-persistence-and-compatibility-split.md) | canonical slice row record | extracted A3 slice row only |
 | `b2-2-foreground-receipt-return` | [`slices/b2-2-foreground-receipt-return.md`](../slices/b2-2-foreground-receipt-return.md) | canonical slice row record | extracted B2.2 slice row only |
 | `b3-2-retained-receipt-messaging-and-lifecycle` | [`slices/b3-2-retained-receipt-messaging-and-lifecycle.md`](../slices/b3-2-retained-receipt-messaging-and-lifecycle.md) | canonical slice row record | extracted B3.2 slice row only |

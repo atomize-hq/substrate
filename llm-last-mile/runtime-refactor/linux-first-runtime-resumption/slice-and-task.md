@@ -14,8 +14,8 @@
 Current disposition: A1.3-P1 is terminally complete under the exact closure identities in
 [`A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md).
 A1.4 and the enclosing A1 slice are also terminally complete under their separate closure
-identities. The A2 remainder awaits fresh admission and explicit dispatch and receives no
-authority here.
+identities. A2 is terminally complete under its separate closure identities. A3 awaits fresh
+admission and explicit dispatch and receives no authority here.
 
 | Packet | Goal and authority boundary | Exact code and test areas | Contract fields or transitions | Explicit non-goals | Test-first or test-alongside proof and packet exit | Slice gates not yet claimable |
 |---|---|---|---|---|---|---|

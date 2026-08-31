@@ -17,8 +17,9 @@ The final A1 wall makes `RG-BASE-01`, `RG-BASE-02`, the A1-scoped clauses of `RG
 `RG-AUTH-02`, and all of `RG-AUTH-03` green. Earlier A1 packets are complete, the Linux A1.1d
 closeout is landed, and native macOS is a separate non-predecessor lane under the controlling
 Linux-first decision. No other A1 condition remains, so A1 is terminally complete. The
-ledger-wide remainder of `RG-AUTH-01`/`RG-AUTH-02` and all A2/A3 work remain open and
-undispatched.
+ledger-wide remainder of `RG-AUTH-01`/`RG-AUTH-02` and all A2/A3 work remained open and
+undispatched at A1 close. A2 later completed under its own authority and closure identities; A3
+remains undispatched.
 
 | Slice | Goal | Must-read docs | Sibling context | Allowed code areas | Explicit non-goals | Exit gate | Regression gates |
 |---|---|---|---|---|---|---|---|
