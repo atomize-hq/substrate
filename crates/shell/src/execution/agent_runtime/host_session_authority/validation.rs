@@ -490,6 +490,82 @@ impl ValidatedCanonicalV1 for HostSessionTransitionPayloadHashInputV1 {
     }
 }
 
+impl sealed::Sealed for HostSessionStopPayloadHashInputV1 {}
+impl ValidatedCanonicalV1 for HostSessionStopPayloadHashInputV1 {
+    fn validate(&self) -> Result<(), ValidationError> {
+        schema_v1(self.schema_version)?;
+        for value in [
+            self.intent_id.as_str(),
+            self.request_id.as_str(),
+            self.authority_store_id.as_str(),
+            self.orchestration_session_id.as_str(),
+            self.shell_trace_session_id.as_str(),
+            self.authoritative_participant_id.as_str(),
+        ] {
+            required(value)?;
+        }
+        validate_directory(&self.bootstrap_home)?;
+        validate_caller(&self.caller)?;
+        validate_canonical_commitment(&self.authority_record_commitment)?;
+        validate_canonical_commitment(&self.authoritative_lineage_commitment)?;
+        if self.authority_revision == 0
+            || self.authoritative_lineage.is_empty()
+            || self
+                .authoritative_lineage
+                .iter()
+                .any(|value| value.is_empty())
+            || self.authoritative_lineage.last() != Some(&self.authoritative_participant_id)
+            || self
+                .authoritative_lineage
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                != self.authoritative_lineage.len()
+            || matches!(
+                self.lifecycle_posture,
+                HostSessionPostureV1::Terminal | HostSessionPostureV1::Invalid
+            )
+        {
+            return Err(ValidationError("invalid HSA Stop payload identity"));
+        }
+        Ok(())
+    }
+}
+
+impl sealed::Sealed for HostSessionStopResultHashInputV1 {}
+impl ValidatedCanonicalV1 for HostSessionStopResultHashInputV1 {
+    fn validate(&self) -> Result<(), ValidationError> {
+        schema_v1(self.schema_version)?;
+        for value in [
+            self.result_id.as_str(),
+            self.intent_id.as_str(),
+            self.request_id.as_str(),
+            self.authority_store_id.as_str(),
+            self.orchestration_session_id.as_str(),
+            self.authoritative_participant_id.as_str(),
+        ] {
+            required(value)?;
+        }
+        if let Some(value) = self.delivery_acceptance_id.as_deref() {
+            required(value)?;
+        }
+        validate_canonical_commitment(&self.payload_commitment)?;
+        validate_canonical_commitment(&self.authority_record_commitment_before)?;
+        validate_canonical_commitment(&self.authority_record_commitment_after)?;
+        if self.authority_revision_before == 0
+            || self.authority_revision_after
+                != self
+                    .authority_revision_before
+                    .checked_add(1)
+                    .ok_or(ValidationError("HSA Stop authority revision overflows"))?
+            || self.resulting_posture != HostSessionPostureV1::Terminal
+        {
+            return Err(ValidationError("invalid HSA Stop result identity"));
+        }
+        Ok(())
+    }
+}
+
 impl sealed::Sealed for TransitionTransportPayloadObjectV1 {}
 impl ValidatedCanonicalV1 for TransitionTransportPayloadObjectV1 {
     fn validate(&self) -> Result<(), ValidationError> {
@@ -945,6 +1021,8 @@ impl CanonicalHashInputV1 for RetainedWorkerObjectHashInputV1 {}
 impl CanonicalHashInputV1 for AuthoritativeLineageHashInputV1 {}
 impl CanonicalHashInputV1 for DurableSessionAuthorityHashInputV1 {}
 impl CanonicalHashInputV1 for HostSessionTransitionPayloadHashInputV1 {}
+impl CanonicalHashInputV1 for HostSessionStopPayloadHashInputV1 {}
+impl CanonicalHashInputV1 for HostSessionStopResultHashInputV1 {}
 impl CanonicalHashInputV1 for ApplicationResultHashInputV1 {}
 impl CanonicalHashInputV1 for InputAcceptanceHashInputV1 {}
 impl CanonicalHashInputV1 for StartupOwnershipResultHashInputV1 {}

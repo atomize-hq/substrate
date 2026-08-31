@@ -43,7 +43,8 @@ use crate::execution::agent_runtime::control::spawn_remote_private_prompt_owner;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::control::AuthorityManagedSuccessorLaunchPlanV1;
 use crate::execution::agent_runtime::control::{
-    apply_runtime_cancel_closeout, apply_runtime_stop_closeout, build_session_resume_extension,
+    accept_authority_managed_stop, apply_runtime_cancel_closeout, apply_runtime_stop_closeout,
+    build_session_resume_extension, complete_authority_managed_stop,
     durable_start_toolbox_transport_path, invalidate_stale_world_members_after_binding,
     mark_orchestration_session_failed, mark_runtime_startup_failed,
     maybe_build_runtime_owned_toolbox_env, note_runtime_stop_requested, persist_runtime_snapshots,
@@ -54,11 +55,12 @@ use crate::execution::agent_runtime::control::{
     register_private_stop_transport, runtime_controls_parent_session, runtime_is_terminal,
     runtime_stop_transport_ids, spawn_local_private_cancel_owner, spawn_local_private_prompt_owner,
     spawn_local_private_stop_owner, submit_host_prompt_turn, toolbox_transport_path,
-    HiddenOwnerHelperLaunchPlan, OwnerHelperMode, PersistedWorldBinding,
-    PrivateCancelRequestReceiver, PrivateCancelTransport, PrivatePromptTransport,
-    PrivateStopOutcome, PrivateStopRequestReceiver, PrivateStopTransport, PublicPromptAction,
-    PublicPromptEnvelope, PublicSessionPosture, ResolvedRuntimeDescriptor,
-    SubmittedPromptStreamEvent, AGENT_API_SESSION_RESUME_V1, AGENT_API_TURN_LIFECYCLE_V1,
+    AuthorityManagedStopAcceptanceV1, HiddenOwnerHelperLaunchPlan, OwnerHelperMode,
+    PersistedWorldBinding, PrivateCancelRequestReceiver, PrivateCancelTransport,
+    PrivatePromptTransport, PrivateStopOutcome, PrivateStopRequestPayloadV1,
+    PrivateStopRequestReceiver, PrivateStopTransport, PublicPromptAction, PublicPromptEnvelope,
+    PublicSessionPosture, ResolvedRuntimeDescriptor, SubmittedPromptStreamEvent,
+    AGENT_API_SESSION_RESUME_V1, AGENT_API_TURN_LIFECYCLE_V1,
 };
 use crate::execution::agent_runtime::dispatch_contract::{
     CancelWorldWorkOutcomeV1, StopWorldWorkerOutcomeV1, WorkerCancelPayloadV1,
@@ -2067,6 +2069,11 @@ type InternalToolboxDispatchRequestReceiver =
     mpsc::UnboundedReceiver<InternalToolboxDispatchRequest>;
 type InternalToolboxDispatchRequestSender = mpsc::UnboundedSender<InternalToolboxDispatchRequest>;
 
+struct StartupToolboxDispatchState<'a> {
+    request_rx: &'a mut InternalToolboxDispatchRequestReceiver,
+    member_runtimes: &'a mut RetainedMemberRuntimeMap,
+}
+
 #[derive(Debug)]
 struct InternalToolboxTransport {
     shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
@@ -2405,6 +2412,10 @@ fn turn_lifecycle_observation(
             "codex",
             TurnLifecyclePhaseV1::ExchangeOpened,
             "thread.started"
+        ) | (
+            "codex",
+            TurnLifecyclePhaseV1::ExchangeOpened,
+            "thread.resumed"
         ) | ("codex", TurnLifecyclePhaseV1::Started, "turn.started")
             | ("codex", TurnLifecyclePhaseV1::Completed, "turn.completed")
             | ("codex", TurnLifecyclePhaseV1::Failed, "turn.failed")
@@ -2819,6 +2830,19 @@ fn settle_real_start_turn(
     let root = authority
         .read_a12b_root()
         .map_err(|error| start_continuity_failure("read", error))?;
+    let settlement_authority = authority
+        .resolve_current_exact(&resolved.authority.orchestration_session_id, None)
+        .map_err(|error| start_continuity_failure("authenticate", error))?;
+    if settlement_authority.observation.root_revision != root.root_revision
+        || settlement_authority.observation.authority_store_id != root.authority_store_id
+        || settlement_authority.caller != resolved.caller
+        || settlement_authority.authority.origin != resolved.authority.origin
+    {
+        return Err(start_continuity_failure(
+            "authenticate",
+            "current Start settlement authority does not match the authenticated invocation",
+        ));
+    }
     let crate::execution::agent_runtime::host_session_authority::schema::DurableSessionAuthorityOriginV1::StartIntent {
         intent_id,
         issuer_request_id,
@@ -2842,6 +2866,7 @@ fn settle_real_start_turn(
         TimestampV1::parse(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true))
             .map_err(|error| start_continuity_failure("timestamp", error))?;
     let obligation_ledger_read = applicable_start_obligation_ledger_read(
+        &authority,
         state_store,
         resolved,
         &root,
@@ -2864,7 +2889,7 @@ fn settle_real_start_turn(
             backend_id: resolved.caller.descriptor.backend_id.clone(),
             protocol: resolved.caller.descriptor.protocol.clone(),
             registered_resume_handle_ref: registration.resume_handle_ref.clone(),
-            expected_authority_revision: registration.authority_revision_after,
+            expected_authority_revision: settlement_authority.observation.authority_revision,
             protocol_actor: HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant {
                 participant_id: resolved.caller.participant_id.clone(),
             },
@@ -2886,6 +2911,7 @@ fn settle_real_start_turn(
 }
 
 fn applicable_start_obligation_ledger_read(
+    authority: &HostSessionAuthority,
     state_store: &AgentRuntimeStateStore,
     resolved: &ResolvedCurrentAuthorityV1,
     root: &crate::execution::agent_runtime::host_session_authority::store_schema::StateRootV3,
@@ -2905,12 +2931,59 @@ fn applicable_start_obligation_ledger_read(
             None,
         )
         .map_err(|error| start_continuity_failure("obligation_authority", error))?;
-    if registry.authority_store_id != root.authority_store_id
-        || registry.authority_revision_observed != registration.authority_revision_after
+    if registry.authority_store_id != root.authority_store_id {
+        return Err(start_continuity_failure(
+            "obligation_authority",
+            "canonical obligation authority store does not match Start registration",
+        ));
+    }
+    let registered_authority = authority
+        .resolve_exact_at_revision(
+            &resolved.authority.orchestration_session_id,
+            registration.authority_revision_after,
+        )
+        .map_err(|error| start_continuity_failure("obligation_authority", error))?;
+    let acceptance_authority = authority
+        .resolve_exact_at_revision(
+            &resolved.authority.orchestration_session_id,
+            registry.authority_revision_observed,
+        )
+        .map_err(|error| start_continuity_failure("obligation_authority", error))?;
+    if registered_authority.root_revision != root.root_revision
+        || acceptance_authority.root_revision != root.root_revision
+        || registry.authority_revision_observed < registration.authority_revision_after
+        || registered_authority
+            .authority
+            .internal_resume_handle_refs
+            .last()
+            != Some(&registration.resume_handle_ref)
+        || !acceptance_authority
+            .authority
+            .internal_resume_handle_refs
+            .contains(&registration.resume_handle_ref)
+        || acceptance_authority
+            .authority
+            .active_authoritative_participant_id
+            .as_deref()
+            != Some(resolved.caller.participant_id.as_str())
+        || acceptance_authority
+            .authority
+            .workspace_binding
+            .workspace_root
+            .physical_path
+            != registry.workspace_root
+        || acceptance_authority.authority.world_binding.as_ref() != Some(world_binding)
+        || acceptance_authority.authority.current_policy_ref.as_ref()
+            != Some(&registry.current_policy_snapshot_ref)
+        || acceptance_authority
+            .authority
+            .current_policy_revision
+            .as_deref()
+            != Some(registry.current_policy_revision.as_str())
     {
         return Err(start_continuity_failure(
             "obligation_authority",
-            "canonical obligation authority revision does not match Start registration",
+            "canonical obligation authority is not an exact descendant of Start registration",
         ));
     }
     let correlation = HostTransitionWorkCorrelationV1 {
@@ -2924,10 +2997,10 @@ fn applicable_start_obligation_ledger_read(
         transition_payload_commitment: opaque_start_commitment(
             &transaction.start_payload_commitment,
         ),
-        authority_revision_observed: registration.authority_revision_after,
+        authority_revision_observed: registry.authority_revision_observed,
     };
     read_exact_start_obligation_ledger_snapshot(state_store, &registry, &correlation)
-        .map_err(|error| start_continuity_failure("obligation_snapshot", error))
+        .map_err(|error| start_continuity_failure("obligation_snapshot", format!("{error:#}")))
 }
 
 fn opaque_start_commitment(
@@ -4383,8 +4456,9 @@ fn validate_authority_managed_successor_runtime(
         ));
     }
     let lease_token = authority
-        .read_authority_object_v2_at(
+        .read_successor_sensitive_object_v3_at(
             root.root_revision,
+            current,
             &current.target_participant_lease_token_ref,
         )
         .map_err(|error| fail(error.to_string()))?;
@@ -4401,7 +4475,7 @@ fn validate_authority_managed_successor_runtime(
         (HostSessionTransitionModeV1::Attach, None, None) => {}
         (HostSessionTransitionModeV1::ResumeOneTurn, Some(input_ref), Some(prompt)) => {
             let input = authority
-                .read_authority_object_v2_at(root.root_revision, input_ref)
+                .read_successor_sensitive_object_v3_at(root.root_revision, current, input_ref)
                 .map_err(|error| fail(error.to_string()))?;
             if input != prompt.prompt_text.as_bytes() {
                 return Err(fail(
@@ -4605,6 +4679,7 @@ async fn wait_for_hidden_owner_helper_completion(
     runtime: AsyncReplAgentRuntime,
     startup_context: Option<&RuntimeOrchestrationContext>,
     toolbox_request_rx: Option<InternalToolboxDispatchRequestReceiver>,
+    mut member_runtimes: RetainedMemberRuntimeMap,
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) -> Result<i32> {
@@ -4633,7 +4708,6 @@ async fn wait_for_hidden_owner_helper_completion(
 
     let mut join_failed = false;
     let mut toolbox_request_rx = toolbox_request_rx;
-    let mut member_runtimes = RetainedMemberRuntimeMap::new();
 
     match &mut retained_control {
         RetainedRunControl::Local(retained_control) => {
@@ -4951,27 +5025,46 @@ async fn wait_for_hidden_owner_helper_local_runtime(
                     }
                 };
 
-                if runtime_is_terminal(manifest) {
-                    let _ = request.response_tx.send(PrivateStopOutcome::AlreadyTerminal);
-                    join_failed |= completion_task.await.is_err();
-                    break HiddenOwnerHelperLocalRuntimeOutcome::Joined { join_failed };
-                }
-
-                if let Err(err) = note_runtime_stop_requested(store, orchestration_session, manifest) {
-                    persist_hidden_owner_helper_stop_failure(
-                        store,
-                        orchestration_session,
-                        manifest,
-                        format!("failed to persist stop request before shutdown: {err:#}"),
-                    );
-                    let _ = request.response_tx.send(PrivateStopOutcome::ProtocolError);
-                    shutdown_requested.store(true, Ordering::SeqCst);
-                    retained_control.cancel.cancel();
-                    join_failed |= completion_task.await.is_err();
-                    break HiddenOwnerHelperLocalRuntimeOutcome::Joined { join_failed };
-                }
-
-                let _ = request.response_tx.send(PrivateStopOutcome::Accepted);
+                let authority_closeout = match request.payload {
+                    PrivateStopRequestPayloadV1::Legacy => {
+                        if runtime_is_terminal(manifest) {
+                            let _ = request.response_tx.send(PrivateStopOutcome::AlreadyTerminal);
+                            join_failed |= completion_task.await.is_err();
+                            break HiddenOwnerHelperLocalRuntimeOutcome::Joined { join_failed };
+                        }
+                        if let Err(err) = note_runtime_stop_requested(store, orchestration_session, manifest) {
+                            persist_hidden_owner_helper_stop_failure(
+                                store,
+                                orchestration_session,
+                                manifest,
+                                format!("failed to persist stop request before shutdown: {err:#}"),
+                            );
+                            let _ = request.response_tx.send(PrivateStopOutcome::ProtocolError);
+                            shutdown_requested.store(true, Ordering::SeqCst);
+                            retained_control.cancel.cancel();
+                            join_failed |= completion_task.await.is_err();
+                            break HiddenOwnerHelperLocalRuntimeOutcome::Joined { join_failed };
+                        }
+                        let _ = request.response_tx.send(PrivateStopOutcome::Accepted);
+                        None
+                    }
+                    PrivateStopRequestPayloadV1::AuthorityManaged(delivery) => {
+                        match accept_authority_managed_stop(&delivery) {
+                            Ok(AuthorityManagedStopAcceptanceV1::Accepted(closeout)) => {
+                                let _ = request.response_tx.send(PrivateStopOutcome::Accepted);
+                                Some(closeout)
+                            }
+                            Ok(AuthorityManagedStopAcceptanceV1::AlreadyTerminal) => {
+                                let _ = request.response_tx.send(PrivateStopOutcome::AlreadyTerminal);
+                                None
+                            }
+                            Err(_) => {
+                                let _ = request.response_tx.send(PrivateStopOutcome::ProtocolError);
+                                continue;
+                            }
+                        }
+                    }
+                };
                 if let Some(mut owned_stop_transport) = stop_transport.take() {
                     owned_stop_transport.close().await;
                 }
@@ -5016,7 +5109,15 @@ async fn wait_for_hidden_owner_helper_local_runtime(
                     let _ = task.await;
                 }
 
-                if stop_failed || !completion_observed {
+                if !stop_failed && completion_observed {
+                    if let Some(closeout) = authority_closeout.as_ref() {
+                        if complete_authority_managed_stop(closeout).is_err() {
+                            stop_failed = true;
+                            join_failed = true;
+                        }
+                    }
+                }
+                if (stop_failed || !completion_observed) && authority_closeout.is_none() {
                     persist_hidden_owner_helper_stop_failure(
                         store,
                         orchestration_session,
@@ -5145,23 +5246,42 @@ async fn wait_for_hidden_owner_helper_synthetic_runtime(
                     None => break,
                 };
 
-                if runtime_is_terminal(manifest) {
-                    let _ = request.response_tx.send(PrivateStopOutcome::AlreadyTerminal);
-                    break;
-                }
-
-                if let Err(err) = note_runtime_stop_requested(store, orchestration_session, manifest) {
-                    persist_hidden_owner_helper_stop_failure(
-                        store,
-                        orchestration_session,
-                        manifest,
-                        format!("failed to persist stop request before shutdown: {err:#}"),
-                    );
-                    let _ = request.response_tx.send(PrivateStopOutcome::ProtocolError);
-                    break;
-                }
-
-                let _ = request.response_tx.send(PrivateStopOutcome::Accepted);
+                let authority_closeout = match request.payload {
+                    PrivateStopRequestPayloadV1::Legacy => {
+                        if runtime_is_terminal(manifest) {
+                            let _ = request.response_tx.send(PrivateStopOutcome::AlreadyTerminal);
+                            break;
+                        }
+                        if let Err(err) = note_runtime_stop_requested(store, orchestration_session, manifest) {
+                            persist_hidden_owner_helper_stop_failure(
+                                store,
+                                orchestration_session,
+                                manifest,
+                                format!("failed to persist stop request before shutdown: {err:#}"),
+                            );
+                            let _ = request.response_tx.send(PrivateStopOutcome::ProtocolError);
+                            break;
+                        }
+                        let _ = request.response_tx.send(PrivateStopOutcome::Accepted);
+                        None
+                    }
+                    PrivateStopRequestPayloadV1::AuthorityManaged(delivery) => {
+                        match accept_authority_managed_stop(&delivery) {
+                            Ok(AuthorityManagedStopAcceptanceV1::Accepted(closeout)) => {
+                                let _ = request.response_tx.send(PrivateStopOutcome::Accepted);
+                                Some(closeout)
+                            }
+                            Ok(AuthorityManagedStopAcceptanceV1::AlreadyTerminal) => {
+                                let _ = request.response_tx.send(PrivateStopOutcome::AlreadyTerminal);
+                                None
+                            }
+                            Err(_) => {
+                                let _ = request.response_tx.send(PrivateStopOutcome::ProtocolError);
+                                continue;
+                            }
+                        }
+                    }
+                };
                 if let Some(mut owned_stop_transport) = stop_transport.take() {
                     owned_stop_transport.close().await;
                 }
@@ -5180,6 +5300,11 @@ async fn wait_for_hidden_owner_helper_synthetic_runtime(
                 }
                 if let Some(task) = heartbeat_task.take() {
                     let _ = task.await;
+                }
+
+                if let Some(closeout) = authority_closeout.as_ref() {
+                    let _ = complete_authority_managed_stop(closeout);
+                    break;
                 }
 
                 let (orchestration_snapshot, manifest_snapshot) = {
@@ -5331,7 +5456,9 @@ pub(crate) fn run_hidden_owner_helper(
                 stream_path: startup_prompt.stream_path.clone(),
             }
         });
-        let (toolbox_request_tx, toolbox_request_rx) = internal_toolbox_dispatch_request_channel();
+        let (toolbox_request_tx, mut toolbox_request_rx) =
+            internal_toolbox_dispatch_request_channel();
+        let mut member_runtimes = RetainedMemberRuntimeMap::new();
         let runtime = start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_request_tx(
             Some(prepared),
             initial_world_binding.as_ref(),
@@ -5343,6 +5470,10 @@ pub(crate) fn run_hidden_owner_helper(
                 OwnerHelperMode::Start | OwnerHelperMode::ResumeOneTurn
             ),
             Some(&toolbox_request_tx),
+            Some(StartupToolboxDispatchState {
+                request_rx: &mut toolbox_request_rx,
+                member_runtimes: &mut member_runtimes,
+            }),
             &ReplPrinter::Stdout,
             &mut telemetry,
         )
@@ -5355,6 +5486,7 @@ pub(crate) fn run_hidden_owner_helper(
             runtime,
             Some(&helper_startup_context),
             Some(toolbox_request_rx),
+            member_runtimes,
             &ReplPrinter::Stdout,
             &mut telemetry,
         )
@@ -5394,6 +5526,7 @@ async fn start_host_orchestrator_runtime_with_prepared_with_toolbox_request_tx(
         false,
         false,
         startup_toolbox_request_tx,
+        None,
         agent_printer,
         telemetry,
     )
@@ -5418,6 +5551,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
         control_only_attach,
         runtime_owns_private_stop,
         auto_park_after_public_turn,
+        None,
         None,
         agent_printer,
         telemetry,
@@ -6063,6 +6197,45 @@ fn settle_authority_managed_resume_terminal_failure(
     }
 }
 
+async fn await_startup_with_toolbox_dispatch<T>(
+    startup: impl Future<Output = T>,
+    startup_toolbox_dispatch: Option<StartupToolboxDispatchState<'_>>,
+    startup_context: Option<&RuntimeOrchestrationContext>,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) -> std::result::Result<T, RuntimeBootstrapFailure> {
+    let Some(StartupToolboxDispatchState {
+        request_rx,
+        member_runtimes,
+    }) = startup_toolbox_dispatch
+    else {
+        return Ok(startup.await);
+    };
+    let mut startup = Box::pin(startup);
+    loop {
+        tokio::select! {
+            biased;
+            maybe_request = request_rx.recv() => {
+                let Some(request) = maybe_request else {
+                    return Err(RuntimeBootstrapFailure {
+                        exit_code: 1,
+                        message: "owner_unreachable: startup internal toolbox request channel closed before provider control became ready".to_string(),
+                    });
+                };
+                Box::pin(handle_internal_toolbox_dispatch_request(
+                    request,
+                    startup_context,
+                    member_runtimes,
+                    agent_printer,
+                    telemetry,
+                ))
+                .await;
+            }
+            result = &mut startup => return Ok(result),
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_request_tx(
     prepared: Option<PreparedAgentRuntime>,
@@ -6072,6 +6245,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
     runtime_owns_private_stop: bool,
     auto_park_after_public_turn: bool,
     startup_toolbox_request_tx: Option<&InternalToolboxDispatchRequestSender>,
+    startup_toolbox_dispatch: Option<StartupToolboxDispatchState<'_>>,
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
@@ -6400,6 +6574,41 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
     };
     #[cfg(not(target_os = "linux"))]
     let successor_input_accepted = false;
+    #[cfg(target_os = "linux")]
+    let authority_managed_resume_session_id = if successor_input_accepted {
+        let successor = authority_successor
+            .as_ref()
+            .ok_or_else(|| RuntimeBootstrapFailure {
+                exit_code: 1,
+                message: "authority-managed ResumeOneTurn lost its authenticated successor"
+                    .to_string(),
+            })?;
+        if successor.applied_transition.mode != HostSessionTransitionModeV1::ResumeOneTurn {
+            return Err(RuntimeBootstrapFailure {
+                exit_code: 1,
+                message:
+                    "authority-managed prompt submission selected a non-ResumeOneTurn successor"
+                        .to_string(),
+            });
+        }
+        Some(
+            successor
+                .helper_plan
+                .participant
+                .internal_uaa_session_id
+                .clone()
+                .filter(|session_id| !session_id.trim().is_empty())
+                .ok_or_else(|| RuntimeBootstrapFailure {
+                    exit_code: 1,
+                    message: "authority-managed ResumeOneTurn is missing its authenticated provider session ID"
+                        .to_string(),
+                })?,
+        )
+    } else {
+        None
+    };
+    #[cfg(not(target_os = "linux"))]
+    let authority_managed_resume_session_id: Option<String> = None;
     if let Some(backchannel) = startup_backchannel.as_ref() {
         let (orchestration_snapshot, manifest_snapshot) = {
             let mut orchestration_guard = startup_context
@@ -6527,17 +6736,38 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
             },
             extensions: startup_extensions,
         };
-        if durable_start && startup_backchannel.is_some() {
-            let RuntimeAuthorityContext::Bound(resolved) = &startup_context.authority else {
-                return Err(RuntimeBootstrapFailure {
-                    exit_code: 1,
-                    message: "durable Start transport is missing bound authority".to_string(),
-                });
-            };
-            mark_bound_start_submission_no_replay_barrier(resolved)?;
-            prompt_fulfillment.run_durable_start_control(request).await
-        } else {
-            prompt_fulfillment.run_control(request).await
+        let startup_control = async {
+            if durable_start && startup_backchannel.is_some() {
+                let RuntimeAuthorityContext::Bound(resolved) = &startup_context.authority else {
+                    return Err(RuntimeBootstrapFailure {
+                        exit_code: 1,
+                        message: "durable Start transport is missing bound authority".to_string(),
+                    });
+                };
+                mark_bound_start_submission_no_replay_barrier(resolved)?;
+                Ok(prompt_fulfillment.run_durable_start_control(request).await)
+            } else if let Some(expected_session_id) = authority_managed_resume_session_id.as_deref()
+            {
+                Ok(prompt_fulfillment
+                    .run_authority_managed_resume_one_turn_control(expected_session_id, request)
+                    .await)
+            } else {
+                Ok(prompt_fulfillment.run_control(request).await)
+            }
+        };
+        match await_startup_with_toolbox_dispatch(
+            startup_control,
+            startup_toolbox_dispatch,
+            Some(&startup_context),
+            agent_printer,
+            telemetry,
+        )
+        .await
+        {
+            Ok(control) => control?,
+            Err(failure) => Err(agent_api::AgentWrapperError::Backend {
+                message: failure.message,
+            }),
         }
     };
     let control = match control_result {
@@ -6812,7 +7042,20 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
                         } else {
                             match observation.phase {
                                 TurnLifecyclePhaseV1::ExchangeOpened => {
-                                    if successor_lifecycle_state.is_some() {
+                                    let exact_exchange = matches!(
+                                        (
+                                            observation.provider.as_str(),
+                                            observation.provider_event_kind.as_str(),
+                                        ),
+                                        ("codex", "thread.resumed")
+                                            | ("claude_code", "system.init")
+                                    );
+                                    if !exact_exchange {
+                                        start_continuity_error = Some(
+                                            "wrapper substituted the native ResumeOneTurn exchange"
+                                                .to_string(),
+                                        );
+                                    } else if successor_lifecycle_state.is_some() {
                                         start_continuity_error = Some(
                                             "wrapper duplicated or reordered the ResumeOneTurn exchange"
                                                 .to_string(),
@@ -8594,6 +8837,7 @@ async fn dispatch_targeted_follow_up_turn(
                     false,
                     false,
                     Some(toolbox_request_tx),
+                    None,
                     agent_printer,
                     telemetry,
                 )
@@ -10729,7 +10973,9 @@ fn spawn_remote_private_stop_owner(
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         while let Some(request) = stop_rx.recv().await {
-            let outcome = if runtime_is_terminal(&manifest) {
+            let outcome = if !matches!(request.payload, PrivateStopRequestPayloadV1::Legacy) {
+                PrivateStopOutcome::ProtocolError
+            } else if runtime_is_terminal(&manifest) {
                 PrivateStopOutcome::AlreadyTerminal
             } else {
                 shutdown_requested.store(true, Ordering::SeqCst);
@@ -15626,6 +15872,31 @@ mod tests {
     }
 
     #[cfg(unix)]
+    fn write_fake_codex_script_with_startup_delay(temp: &TempDir) -> (PathBuf, PathBuf, PathBuf) {
+        let path = temp.path().join("fake-codex-startup-delay.sh");
+        let count_path = temp.path().join("fake-codex-startup-delay.count");
+        let request_announced_path = temp.path().join("startup-toolbox-request-announced");
+        fs::write(
+            &path,
+            format!(
+                "#!/bin/sh\ncount=0\nif [ -f '{}' ]; then count=$(tr -cd '0-9' < '{}'); fi\ncount=$((count + 1))\nprintf '%s' \"$count\" > '{}'\ntrap 'exit 0' INT TERM\nwhile [ ! -f '{}' ]; do sleep 0.01; done\nsleep 1\nprintf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}}\\r\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\nwhile :; do sleep 1; done\n",
+                count_path.display(),
+                count_path.display(),
+                count_path.display(),
+                request_announced_path.display(),
+            ),
+        )
+        .expect("write delayed fake Codex script");
+        let mut perms = fs::metadata(&path)
+            .expect("delayed fake Codex metadata")
+            .permissions();
+        use std::os::unix::fs::PermissionsExt;
+        perms.set_mode(0o755);
+        fs::set_permissions(&path, perms).expect("chmod delayed fake Codex script");
+        (path, count_path, request_announced_path)
+    }
+
+    #[cfg(unix)]
     fn write_fake_codex_exec_sleep_script(temp: &TempDir) -> PathBuf {
         let path = temp.path().join("fake-codex-exec-sleep.sh");
         fs::write(
@@ -16610,6 +16881,7 @@ mod tests {
                     runtime,
                     None,
                     None,
+                    RetainedMemberRuntimeMap::new(),
                     &ReplPrinter::Stdout,
                     &mut helper_telemetry,
                 )
@@ -16862,6 +17134,7 @@ mod tests {
                     false,
                     false,
                     Some(&toolbox_request_tx),
+                    None,
                     &ReplPrinter::Stdout,
                     &mut telemetry,
                 )
@@ -18389,6 +18662,7 @@ mod tests {
                     runtime,
                     Some(&startup_context),
                     None,
+                    RetainedMemberRuntimeMap::new(),
                     &ReplPrinter::Stdout,
                     &mut telemetry,
                 ),
@@ -19516,6 +19790,422 @@ mod tests {
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
+    fn startup_toolbox_dispatches_retained_spawn_once_before_provider_readiness() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        let temp = private_authority_test_tempdir();
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("h");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let (fake_orchestrator, provider_count_path, request_announced_path) =
+            write_fake_codex_script_with_startup_delay(&temp);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
+
+        _authority_env.install_home(&substrate_home);
+        fs::write(
+            substrate_home.join("config.yaml"),
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+        )
+        .expect("write config");
+        fs::write(
+            substrate_home.join("policy.yaml"),
+            "agents:\n  allowed_backends:\n    - cli:codex-host\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"spawn_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+        )
+        .expect("write policy");
+        let agents_dir = substrate_home.join("agents");
+        fs::create_dir_all(&agents_dir).expect("agents dir");
+        fs::write(
+            agents_dir.join("codex-host.yaml"),
+            runtime_agent_file("codex-host", "host", "codex", &fake_orchestrator),
+        )
+        .expect("write host agent file");
+        fs::write(
+            agents_dir.join("codex.yaml"),
+            runtime_agent_file_host_and_world("codex", "codex", &fake_orchestrator, &fake_member),
+        )
+        .expect("write placement-aware agent file");
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&substrate_home, fs::Permissions::from_mode(0o700))
+            .expect("set private authority home mode");
+        fs::set_permissions(&agents_dir, fs::Permissions::from_mode(0o700))
+            .expect("set private inventory mode");
+        for trusted_file in [
+            substrate_home.join("config.yaml"),
+            substrate_home.join("policy.yaml"),
+            agents_dir.join("codex-host.yaml"),
+            agents_dir.join("codex.yaml"),
+        ] {
+            fs::set_permissions(&trusted_file, fs::Permissions::from_mode(0o600))
+                .expect("set private authority file mode");
+        }
+
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let socket_path = temp.path().join("startup-toolbox-world.sock");
+            let listener = tokio::net::UnixListener::bind(&socket_path)
+                .expect("bind startup toolbox world socket");
+            let dispatch_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let dispatch_count_for_server = Arc::clone(&dispatch_count);
+            let world_server = tokio::spawn(async move {
+                let mut launch_stream = None::<(tokio::net::UnixStream, String, String)>;
+                while let Ok((mut stream, _)) = listener.accept().await {
+                    let Some((header, body)) = read_test_world_http_request(&mut stream).await
+                    else {
+                        continue;
+                    };
+                    let request_line = header.lines().next().unwrap_or_default();
+                    if request_line.starts_with("GET /v1/capabilities ") {
+                        write_test_world_http_json(
+                            &mut stream,
+                            "200 OK",
+                            r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                        )
+                        .await;
+                        continue;
+                    }
+                    if request_line.starts_with("POST /v1/execute/stream ") {
+                        let execute: transport_api_types::ExecuteRequest =
+                            serde_json::from_slice(&body)
+                                .expect("strict startup toolbox member request");
+                        let member_dispatch = execute
+                            .member_dispatch
+                            .expect("startup Spawn must use member dispatch");
+                        assert_eq!(
+                            member_dispatch.initial_prompt.as_deref(),
+                            Some("startup toolbox retained worker")
+                        );
+                        let proof = member_dispatch
+                            .retained_worker_launch_authority
+                            .expect("startup Spawn must carry exact retained authority");
+                        assert_eq!(
+                            proof.orchestration_session_id,
+                            member_dispatch.orchestration_session_id
+                        );
+                        assert_eq!(
+                            proof.retained_participant_id,
+                            member_dispatch.participant_id
+                        );
+                        dispatch_count_for_server.fetch_add(1, Ordering::SeqCst);
+
+                        let stream_id = "rts_startup_toolbox_spawn".to_string();
+                        let span_id = "spn_startup_toolbox_spawn".to_string();
+                        start_test_world_chunked_stream(&mut stream).await;
+                        write_test_world_stream_frame(
+                            &mut stream,
+                            &ExecuteStreamFrame::Start {
+                                frame_identity: test_world_frame_identity(&stream_id, 1),
+                                span_id: span_id.clone(),
+                            },
+                        )
+                        .await;
+                        write_test_world_stream_frame(
+                            &mut stream,
+                            &ExecuteStreamFrame::Event {
+                                frame_identity: test_world_frame_identity(&stream_id, 2),
+                                event: AgentEvent {
+                                    ts: chrono::Utc::now(),
+                                    kind: AgentEventKind::Registered,
+                                    data: serde_json::json!({
+                                        "schema": SESSION_HANDLE_SCHEMA_V1,
+                                        "session": {"id": "thread-startup-toolbox-spawn"}
+                                    }),
+                                    agent_id: execute.agent_id,
+                                    orchestration_session_id: member_dispatch
+                                        .orchestration_session_id
+                                        .clone(),
+                                    run_id: member_dispatch.run_id.clone(),
+                                    parent_run_id: None,
+                                    participant_id: Some(member_dispatch.participant_id.clone()),
+                                    parent_participant_id: None,
+                                    resumed_from_participant_id: None,
+                                    backend_id: Some(member_dispatch.backend_id.clone()),
+                                    thread_id: Some("thread-startup-toolbox-spawn".to_string()),
+                                    role: Some(MEMBER_ROLE.to_string()),
+                                    world_id: Some(member_dispatch.world_id.clone()),
+                                    world_generation: Some(member_dispatch.world_generation),
+                                    cmd_id: None,
+                                    span_id: Some(span_id.clone()),
+                                    event_identity: Some(
+                                        transport_api_types::RuntimeEventIdentityV1 {
+                                            event_id: "evt_startup_toolbox_registered".to_string(),
+                                            event_sequence: 1,
+                                        },
+                                    ),
+                                    worker_event: None,
+                                    channel: None,
+                                    identity_tuple: None,
+                                    placement_posture: None,
+                                    project: None,
+                                },
+                            },
+                        )
+                        .await;
+                        launch_stream = Some((stream, stream_id, span_id));
+                        continue;
+                    }
+                    if request_line.starts_with("POST /v1/execute/cancel ") {
+                        let cancel: ExecuteCancelRequestV1 = serde_json::from_slice(&body)
+                            .expect("strict startup toolbox cancel request");
+                        assert_eq!(cancel.sig, "INT");
+                        let response =
+                            serde_json::to_string(&transport_api_types::ExecuteCancelResponseV1 {
+                                schema_version: 1,
+                                delivered: true,
+                            })
+                            .expect("serialize startup toolbox cancel response");
+                        write_test_world_http_json(&mut stream, "200 OK", &response).await;
+                        let (mut launch_stream, stream_id, span_id) = launch_stream
+                            .take()
+                            .expect("retained launch stream must precede cancellation");
+                        let terminal_event = transport_api_types::RuntimeEventIdentityV1 {
+                            event_id: "evt_startup_toolbox_terminal".to_string(),
+                            event_sequence: 2,
+                        };
+                        write_test_world_stream_frame(
+                            &mut launch_stream,
+                            &ExecuteStreamFrame::Exit {
+                                frame_identity: test_world_frame_identity(&stream_id, 3),
+                                event_identity: terminal_event.clone(),
+                                terminal_identity:
+                                    transport_api_types::RuntimeTerminalIdentityV1::from(
+                                        &terminal_event,
+                                    ),
+                                exit: 130,
+                                span_id,
+                                scopes_used: Vec::new(),
+                                fs_diff: None,
+                                process_telemetry: Default::default(),
+                            },
+                        )
+                        .await;
+                        finish_test_world_chunked_stream(&mut launch_stream).await;
+                        return;
+                    }
+                    write_test_world_http_json(
+                        &mut stream,
+                        "404 Not Found",
+                        r#"{"error":"not_found"}"#,
+                    )
+                    .await;
+                }
+            });
+            let _world_socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+            let world_binding = PersistedWorldBinding {
+                world_id: "wld_startup_toolbox".to_string(),
+                world_generation: 9,
+            };
+            let caller_prompt = "production-faithful startup toolbox prompt";
+            let startup_stream_path = temp.path().join("startup-toolbox-continuity.sock");
+            let startup_stream_listener = tokio::net::UnixListener::bind(&startup_stream_path)
+                .expect("bind startup continuity stream");
+            let startup_envelopes_task = tokio::spawn(async move {
+                use tokio::io::{AsyncBufReadExt as _, BufReader};
+
+                let (stream, _) = startup_stream_listener
+                    .accept()
+                    .await
+                    .expect("accept startup continuity stream");
+                let mut lines = BufReader::new(stream).lines();
+                while lines.next_line().await.ok().flatten().is_some() {}
+            });
+            let mut descriptor = test_runtime_selection_descriptor();
+            descriptor.binary_path = fake_orchestrator.clone();
+            let start_plan = HiddenOwnerHelperLaunchPlan {
+                mode: OwnerHelperMode::Start,
+                descriptor: ResolvedRuntimeDescriptor::from(&descriptor),
+                session: HiddenOwnerHelperSessionPlan {
+                    orchestration_session_id: "orch-startup-toolbox".to_string(),
+                    shell_trace_session_id: "trace-startup-toolbox".to_string(),
+                    workspace_root: workspace_root.display().to_string(),
+                    world_id: Some(world_binding.world_id.clone()),
+                    world_generation: Some(world_binding.world_generation),
+                },
+                participant: HiddenOwnerHelperParticipantPlan {
+                    participant_id: "ash-startup-toolbox".to_string(),
+                    lease_token: "lease-startup-toolbox".to_string(),
+                    run_id: "run-startup-toolbox".to_string(),
+                    resumed_from_participant_id: None,
+                    internal_uaa_session_id: None,
+                },
+                host_attach_contract: None,
+                startup_prompt: Some(HiddenOwnerHelperStartupPromptPlan {
+                    prompt_text: caller_prompt.to_string(),
+                    stream_path: startup_stream_path.clone(),
+                    request_key_sha256: Some("a".repeat(64)),
+                    prompt_sha256: Some("b".repeat(64)),
+                    public_backend_id: Some(descriptor.backend_id.clone()),
+                    public_scope: Some(AgentExecutionScope::Host),
+                }),
+                source_orchestration_session_id: None,
+            };
+            prepare_public_start_authority_before_transport(&start_plan)
+                .expect("prepare activated V3 public Start authority");
+            let startup_config = Arc::new(
+                owner_helper_shell_config(&start_plan)
+                    .expect("resolve activated startup toolbox config"),
+            );
+            let intended_host_principal =
+                crate::execution::install_bootstrap::current_unix_principal_and_home()
+                    .expect("resolve startup toolbox principal")
+                    .0;
+            let prepared = prepare_hidden_owner_helper_runtime(
+                &startup_config,
+                &start_plan,
+                None,
+                intended_host_principal,
+            )
+            .expect("prepare HSA-bound startup toolbox runtime");
+            let startup_role = prepared
+                .manifest
+                .lock()
+                .expect("startup toolbox runtime manifest")
+                .handle
+                .role
+                .clone();
+            assert!(authoritative_host_toolbox_surface_enabled(
+                &prepared.descriptor.backend_id,
+                prepared.descriptor.execution_scope,
+                &startup_role,
+                &prepared.startup_context.effective_config,
+                &prepared.startup_context.base_policy,
+            ));
+            let startup_context = prepared.startup_context.clone();
+            let host_participant_id = start_plan.participant.participant_id.clone();
+            let (toolbox_tx, mut toolbox_rx) = internal_toolbox_dispatch_request_channel();
+            let transport_path =
+                durable_start_toolbox_transport_path(&startup_context.orchestration_session_id())
+                    .expect("resolve durable Start toolbox path");
+            let startup_request = WorldDispatchRequestV1 {
+                request_id: Some("req_startup_toolbox_spawn".to_string()),
+                idempotency_key: Some("idem_startup_toolbox_spawn".to_string()),
+                orchestration_session_id: Some(startup_context.orchestration_session_id()),
+                caller_participant_id: Some(host_participant_id.clone()),
+                action: WorldDispatchActionV1::SpawnWorldWorker,
+                mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
+                target_backend_id: Some("cli:codex-world".to_string()),
+                task_run_id: None,
+                target_participant_id: None,
+                world_id: Some(world_binding.world_id.clone()),
+                world_generation: Some(world_binding.world_generation),
+                payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
+                    prompt: "startup toolbox retained worker".to_string(),
+                }),
+            };
+            let startup_request_task = tokio::spawn({
+                let transport_path = transport_path.clone();
+                async move {
+                    while !transport_path.exists() {
+                        tokio::task::yield_now().await;
+                    }
+                    fs::write(&request_announced_path, b"announced")
+                        .expect("announce startup toolbox request before provider readiness");
+                    request_internal_toolbox_world_dispatch(&transport_path, &startup_request).await
+                }
+            });
+            let mut member_runtimes = RetainedMemberRuntimeMap::new();
+            let mut telemetry = ReplSessionTelemetry::new(startup_config, "async-test");
+            let host_runtime =
+                start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_request_tx(
+                    Some(prepared),
+                    Some(&world_binding),
+                    Some(InitialExecPromptPlan::StartupPrompt {
+                        prompt: caller_prompt.to_string(),
+                        stream_path: startup_stream_path,
+                    }),
+                    false,
+                    false,
+                    false,
+                    Some(&toolbox_tx),
+                    Some(StartupToolboxDispatchState {
+                        request_rx: &mut toolbox_rx,
+                        member_runtimes: &mut member_runtimes,
+                    }),
+                    &ReplPrinter::Stdout,
+                    &mut telemetry,
+                )
+                .await
+                .expect("host runtime start should succeed")
+                .expect("host runtime");
+            let outcome = tokio::time::timeout(Duration::from_secs(15), startup_request_task)
+                .await
+                .expect("startup-time toolbox request must finish before readiness")
+                .expect("startup-time toolbox task")
+                .expect("startup-time toolbox Spawn must succeed");
+            let spawn = match outcome {
+                WorldDispatchOutcomeV1::SpawnWorldWorker(outcome) => outcome,
+                other => panic!("expected startup Spawn outcome, got {other:?}"),
+            };
+            assert_eq!(
+                runtime_manifest_snapshot(&host_runtime)
+                    .handle
+                    .participant_id,
+                host_participant_id
+            );
+            assert_eq!(
+                fs::read_to_string(&provider_count_path)
+                    .expect("read startup provider invocation count"),
+                "1",
+                "startup dispatch must not replay the provider prompt"
+            );
+            assert_eq!(dispatch_count.load(Ordering::SeqCst), 1);
+            assert!(member_runtimes.values().any(|runtime| {
+                runtime_manifest_snapshot(runtime).handle.participant_id == spawn.participant_id
+            }));
+            assert!(
+                host_runtime.toolbox_transport.is_some() && transport_path.exists(),
+                "steady-state runtime must retain the exact startup toolbox transport"
+            );
+            for directory in [
+                substrate_home.join("run"),
+                substrate_home.join("run/agent-hub"),
+            ] {
+                let mode = fs::symlink_metadata(&directory)
+                    .expect("startup authority runtime directory")
+                    .permissions()
+                    .mode()
+                    & 0o777;
+                assert_eq!(
+                    mode,
+                    0o700,
+                    "startup authority runtime directory must remain private: {}",
+                    directory.display()
+                );
+            }
+            let receipt_authority = startup_context
+                .store
+                .resolve_world_work_registry_authority(
+                    &startup_context.orchestration_session_id(),
+                    &host_participant_id,
+                    &world_binding.world_id,
+                    world_binding.world_generation,
+                    None,
+                )
+                .expect("resolve post-startup receipt-registry authority");
+            receipt_authority
+                .receipt_registry
+                .persisted_acceptances_for_recovery()
+                .expect("read post-startup receipt registry without legacy mutation");
+
+            for runtime in std::mem::take(&mut member_runtimes).into_values() {
+                shutdown_host_orchestrator_runtime(runtime, &ReplPrinter::Stdout, &mut telemetry)
+                    .await;
+            }
+            shutdown_host_orchestrator_runtime(host_runtime, &ReplPrinter::Stdout, &mut telemetry)
+                .await;
+            tokio::time::timeout(Duration::from_secs(10), world_server)
+                .await
+                .expect("startup toolbox world server must stop")
+                .expect("startup toolbox world server task");
+            startup_envelopes_task.abort();
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
     fn orchestrator_world_dispatch_surface_spawns_authoritative_member_runtime() {
         let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
@@ -19552,10 +20242,23 @@ mod tests {
             runtime_agent_file_host_and_world("codex", "codex", &fake_orchestrator, &fake_member),
         )
         .expect("write placement-aware codex agent file");
-
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&substrate_home, fs::Permissions::from_mode(0o700))
+            .expect("set private toolbox authority home mode");
+        fs::set_permissions(&agents_dir, fs::Permissions::from_mode(0o700))
+            .expect("set private toolbox inventory mode");
+        for trusted_file in [
+            substrate_home.join("config.yaml"),
+            substrate_home.join("policy.yaml"),
+            agents_dir.join("codex-host.yaml"),
+            agents_dir.join("codex.yaml"),
+        ] {
+            fs::set_permissions(&trusted_file, fs::Permissions::from_mode(0o600))
+                .expect("set private toolbox authority file mode");
+        }
         let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
-        rt.block_on(async {
+        rt.block_on(Box::pin(async {
             let socket_path = temp.path().join("toolbox-authority-world.sock");
             let listener = tokio::net::UnixListener::bind(&socket_path)
                 .expect("bind toolbox authority world socket");
@@ -20729,7 +21432,7 @@ mod tests {
                 .await
                 .expect("timed out joining toolbox authority world server")
                 .expect("toolbox authority world server task");
-        });
+        }));
     }
 
     #[cfg(target_os = "linux")]
@@ -20771,6 +21474,20 @@ mod tests {
             runtime_agent_file_host_and_world("codex", "codex", &fake_orchestrator, &fake_member),
         )
         .expect("write placement-aware codex agent file");
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&substrate_home, fs::Permissions::from_mode(0o700))
+            .expect("set private toolbox authority home mode");
+        fs::set_permissions(&agents_dir, fs::Permissions::from_mode(0o700))
+            .expect("set private toolbox inventory mode");
+        for trusted_file in [
+            substrate_home.join("config.yaml"),
+            substrate_home.join("policy.yaml"),
+            agents_dir.join("codex-host.yaml"),
+            agents_dir.join("codex.yaml"),
+        ] {
+            fs::set_permissions(&trusted_file, fs::Permissions::from_mode(0o600))
+                .expect("set private toolbox authority file mode");
+        }
 
         let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");

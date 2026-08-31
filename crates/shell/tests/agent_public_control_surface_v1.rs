@@ -154,6 +154,39 @@ impl AgentControlFixture {
         cmd
     }
 
+    #[cfg(target_os = "linux")]
+    fn spawn_with_installed_invocation_witness(&self, args: &[&str]) -> Child {
+        ensure_substrate_built();
+        let install_bin = self.substrate_home.join("bin");
+        fs::create_dir_all(&install_bin).expect("create installed invocation bin");
+        let witness = install_bin.join("substrate");
+        if !witness.exists() {
+            std::os::unix::fs::symlink(binary_path(), &witness)
+                .expect("create installed invocation witness");
+        }
+        std::process::Command::new(witness)
+            .env("HOME", &self.home)
+            .env("USERPROFILE", &self.home)
+            .env("SUBSTRATE_HOME", &self.substrate_home)
+            .env(
+                "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+                &self.fake_world_deps_bin,
+            )
+            .env("SUBSTRATE_MANAGER_MANIFEST", manager_manifest_path())
+            .env("SHIM_TRACE_LOG", self.trace_path())
+            .env_remove("SHIM_ORIGINAL_PATH")
+            .env_remove("SUBSTRATE_WORLD")
+            .env_remove("SUBSTRATE_WORLD_ENABLED")
+            .env_remove("SUBSTRATE_WORLD_ID")
+            .env("SUBSTRATE_OVERRIDE_WORLD", "disabled")
+            .current_dir(&self.workspace_root)
+            .args(args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn installed substrate invocation")
+    }
+
     fn init_workspace(&self) {
         let output = self
             .command()
@@ -817,6 +850,23 @@ exit 0
     path
 }
 
+#[cfg(target_os = "linux")]
+fn write_fake_codex_script_with_active_reattach_for_stop(dir: &Path) -> PathBuf {
+    let path = dir.join("fake-codex-active-hsa-stop.sh");
+    let count_path = dir.join("fake-codex-active-hsa-stop.count");
+    let body = format!(
+        "#!/bin/sh\nset -eu\nSTATE_FILE='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then count=$(cat \"$STATE_FILE\"); fi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\ncat >/dev/null\ntrap 'exit 0' INT TERM\nif [ \"$count\" -eq 1 ]; then\n  printf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-stop\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-stop\",\"turn_id\":\"turn-start\"}}\\r\\n'\n  printf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-stop\",\"turn_id\":\"turn-start\",\"item_id\":\"msg-start\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"start ready\"}}}}\\r\\n'\n  printf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-stop\",\"turn_id\":\"turn-start\"}}\\r\\n'\nelse\n  printf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-stop\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-stop\",\"turn_id\":\"turn-attach\"}}\\r\\n'\nfi\nwhile :; do sleep 1; done\n",
+        count_path.display(),
+    );
+    fs::write(&path, body).expect("write active HSA Stop fake codex script");
+    let mut perms = fs::metadata(&path)
+        .expect("active HSA Stop fake codex metadata")
+        .permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("set active HSA Stop fake codex permissions");
+    path
+}
+
 fn write_fake_codex_script_with_indeterminate_start_handoff(dir: &Path) -> PathBuf {
     let path = dir.join("fake-codex-indeterminate-start.sh");
     let count_path = dir.join("fake-codex.count");
@@ -1324,6 +1374,29 @@ fn stop_transport_path(
     if preferred.as_os_str().len() > PRIVATE_STOP_UNIX_PATH_MAX {
         return PathBuf::from("/tmp")
             .join("substrate-agent-hub-stop")
+            .join(socket_name);
+    }
+    preferred
+}
+
+#[cfg(target_os = "linux")]
+fn durable_start_stop_transport_path_for_fixture(
+    fixture: &AgentControlFixture,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> PathBuf {
+    let socket_name = format!(
+        "{}-{}.stop.sock",
+        compact_stop_transport_fragment(orchestration_session_id),
+        compact_stop_transport_fragment(participant_id)
+    );
+    let preferred = fixture
+        .substrate_home
+        .join("runtime-control/durable-start/stop")
+        .join(&socket_name);
+    if preferred.as_os_str().len() > PRIVATE_STOP_UNIX_PATH_MAX {
+        return PathBuf::from("/tmp")
+            .join("substrate-durable-start/stop")
             .join(socket_name);
     }
     preferred
@@ -3016,6 +3089,18 @@ fn public_turn_applies_retained_resume_correlation_and_exact_terminal_cut() {
         "workspace init through an installed invocation witness must succeed: {workspace_init:?}"
     );
     fixture.write_runtime_inventory_with_member_backend(Some("codex-world"));
+    fs::set_permissions(
+        fixture.substrate_home.join("agents"),
+        fs::Permissions::from_mode(0o700),
+    )
+    .expect("set private accepted-home inventory mode");
+    for relative in ["config.yaml", "policy.yaml", "agents/codex.yaml"] {
+        fs::set_permissions(
+            fixture.substrate_home.join(relative),
+            fs::Permissions::from_mode(0o600),
+        )
+        .unwrap_or_else(|_| panic!("set private accepted-home file mode for {relative}"));
+    }
 
     let socket_home = tempfile::Builder::new()
         .prefix("sac-a13p1-resume-")
@@ -3040,18 +3125,33 @@ fn public_turn_applies_retained_resume_correlation_and_exact_terminal_cut() {
             "agent",
             "start",
             "--backend",
-            "cli:codex-host",
+            "cli:codex-world",
             "--scope",
-            "host",
+            "world",
             "--prompt",
             "start retained correlation proof",
             "--json",
         ])
         .output()
         .expect("run world-bound public Start");
+    let authority_runtime_directory_modes = [
+        "run",
+        "run/agent-hub",
+        "run/agent-hub/handles",
+        "run/agent-hub/handles/cancel",
+        "run/agent-hub/handles/stop",
+        "run/agent-hub/handles/prompt",
+        "run/agent-hub/sessions",
+        "run/agent-hub/participants",
+    ]
+    .map(|relative| {
+        fs::symlink_metadata(fixture.substrate_home.join(relative))
+            .ok()
+            .map(|metadata| metadata.permissions().mode() & 0o7777)
+    });
     assert!(
         start_output.status.success(),
-        "world-bound Start must succeed before retained ResumeOneTurn: {start_output:?}"
+        "world-bound Start must succeed before retained ResumeOneTurn (authority runtime modes: {authority_runtime_directory_modes:?}): {start_output:?}"
     );
     wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(5));
     let start_records = parse_ndjson_output(&start_output);
@@ -3067,11 +3167,19 @@ fn public_turn_applies_retained_resume_correlation_and_exact_terminal_cut() {
             .and_then(Value::as_str),
         Some("ParkedResumable")
     );
-    assert!(
+    assert_eq!(
         settled_start
-            .get("world_binding")
-            .is_none_or(Value::is_null),
-        "host Start must not synthesize a world binding"
+            .pointer("/world_binding/world_id")
+            .and_then(Value::as_str),
+        Some("wld_stub_0001"),
+        "world Start must preserve the exact shared-world binding"
+    );
+    assert_eq!(
+        settled_start
+            .pointer("/world_binding/world_generation")
+            .and_then(Value::as_u64),
+        Some(0),
+        "world Start must preserve the exact shared-world generation"
     );
 
     let turn_output = fixture
@@ -3185,6 +3293,274 @@ fn public_turn_applies_retained_resume_correlation_and_exact_terminal_cut() {
             .pointer("/lifecycle_posture/kind")
             .and_then(Value::as_str),
         Some("ParkedResumable")
+    );
+
+    let stop_output = fixture
+        .command_with_installed_invocation_witness()
+        .current_dir(&fixture.workspace_root)
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .args([
+            "agent",
+            "stop",
+            "--session",
+            &orchestration_session_id,
+            "--json",
+        ])
+        .output()
+        .expect("run public HSA Stop after retained ResumeOneTurn terminal cut");
+    assert!(
+        stop_output.status.success(),
+        "public HSA Stop must close the parked retained session without a helper launch: {stop_output:?}"
+    );
+    let stop_result = parse_json_output(&stop_output);
+    assert_eq!(
+        stop_result.get("state").and_then(Value::as_str),
+        Some("terminal")
+    );
+    let stopped = fixture.load_hsa_authority(&orchestration_session_id);
+    assert_eq!(
+        stopped
+            .pointer("/lifecycle_posture/kind")
+            .and_then(Value::as_str),
+        Some("Terminal"),
+        "public Stop success must be backed by durable HSA Terminal authority"
+    );
+    let stopped_root = read_json_file(
+        &fixture
+            .substrate_home
+            .join("authority-v1/state-root-v1.json"),
+    );
+    let stop_transactions = stopped_root
+        .get("stop_transaction_map")
+        .and_then(Value::as_object)
+        .expect("strict HSA Stop transaction map");
+    assert_eq!(stop_transactions.len(), 1);
+    assert_eq!(
+        stop_transactions
+            .values()
+            .next()
+            .and_then(|transaction| transaction.pointer("/state/kind"))
+            .and_then(Value::as_str),
+        Some("Completed")
+    );
+
+    let retry_output = fixture
+        .command_with_installed_invocation_witness()
+        .current_dir(&fixture.workspace_root)
+        .args([
+            "agent",
+            "stop",
+            "--session",
+            &orchestration_session_id,
+            "--json",
+        ])
+        .output()
+        .expect("retry public HSA Stop");
+    assert!(
+        retry_output.status.success(),
+        "committed HSA Stop retry must exact-join durable Terminal truth: {retry_output:?}"
+    );
+    let retried_root = read_json_file(
+        &fixture
+            .substrate_home
+            .join("authority-v1/state-root-v1.json"),
+    );
+    assert_eq!(
+        retried_root.get("stop_transaction_map"),
+        stopped_root.get("stop_transaction_map"),
+        "Stop retry must not create a second intent or result"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn public_stop_active_hsa_owner_requires_bound_delivery_and_terminal_closeout() {
+    let mut fixture = AgentControlFixture::new_with_fake_codex(
+        write_fake_codex_script_with_active_reattach_for_stop,
+    );
+    let safe_install_parent =
+        PathBuf::from(std::env::var_os("HOME").expect("active HSA Stop test requires HOME"));
+    let install_home = tempfile::Builder::new()
+        .prefix("sac-hsa-stop-install-")
+        .tempdir_in(safe_install_parent)
+        .expect("create private installed invocation prefix");
+    fs::set_permissions(install_home.path(), fs::Permissions::from_mode(0o700))
+        .expect("set installed invocation prefix mode");
+    fixture.substrate_home = install_home.path().to_path_buf();
+    let workspace_init = fixture
+        .command_with_installed_invocation_witness()
+        .arg("workspace")
+        .arg("init")
+        .arg(&fixture.workspace_root)
+        .arg("--force")
+        .output()
+        .expect("initialize active HSA Stop workspace");
+    assert!(workspace_init.status.success(), "{workspace_init:?}");
+    fixture.write_runtime_inventory(false);
+    fs::set_permissions(
+        fixture.substrate_home.join("agents"),
+        fs::Permissions::from_mode(0o700),
+    )
+    .expect("set private accepted-home inventory mode");
+    for relative in ["config.yaml", "policy.yaml", "agents/codex.yaml"] {
+        fs::set_permissions(
+            fixture.substrate_home.join(relative),
+            fs::Permissions::from_mode(0o600),
+        )
+        .unwrap_or_else(|_| panic!("set private accepted-home file mode for {relative}"));
+    }
+
+    let start_output = fixture
+        .command_with_installed_invocation_witness()
+        .current_dir(&fixture.workspace_root)
+        .args([
+            "agent",
+            "start",
+            "--backend",
+            "cli:codex-host",
+            "--prompt",
+            "establish active HSA Stop proof",
+            "--json",
+        ])
+        .output()
+        .expect("run active HSA Stop Start");
+    assert!(start_output.status.success(), "{start_output:?}");
+    let start_records = parse_ndjson_output(&start_output);
+    let start = find_ndjson_record(&start_records, "completed");
+    let orchestration_session_id = start["orchestration_session_id"]
+        .as_str()
+        .expect("Start session id")
+        .to_string();
+    assert_eq!(
+        fixture
+            .load_hsa_authority(&orchestration_session_id)
+            .pointer("/lifecycle_posture/kind")
+            .and_then(Value::as_str),
+        Some("ParkedResumable")
+    );
+
+    let mut turn_child = fixture.spawn_with_installed_invocation_witness(&[
+        "agent",
+        "turn",
+        "--session",
+        &orchestration_session_id,
+        "--backend",
+        "cli:codex-host",
+        "--prompt",
+        "hold the exact active owner until authenticated Stop",
+        "--json",
+    ]);
+    let active_deadline = Instant::now() + Duration::from_secs(10);
+    let active_authority = loop {
+        let authority = fixture.load_hsa_authority(&orchestration_session_id);
+        if authority
+            .pointer("/lifecycle_posture/kind")
+            .and_then(Value::as_str)
+            == Some("ActiveAttached")
+        {
+            break authority;
+        }
+        if let Some(status) = turn_child
+            .try_wait()
+            .expect("inspect active HSA ResumeOneTurn")
+        {
+            panic!("ResumeOneTurn exited before establishing ActiveAttached: {status}");
+        }
+        if Instant::now() >= active_deadline {
+            let _ = turn_child.kill();
+            let _ = turn_child.wait();
+            panic!("timed out waiting for HSA ResumeOneTurn to become ActiveAttached");
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    };
+    let active_participant_id = active_authority
+        .get("active_authoritative_participant_id")
+        .and_then(Value::as_str)
+        .expect("active HSA participant");
+    let stop_transport_path = durable_start_stop_transport_path_for_fixture(
+        &fixture,
+        &orchestration_session_id,
+        active_participant_id,
+    );
+    assert!(
+        wait_for_path(&stop_transport_path, Duration::from_secs(10)),
+        "authority-managed owner must register its exact Stop transport at {}",
+        stop_transport_path.display()
+    );
+
+    let stop_output = fixture
+        .command_with_installed_invocation_witness()
+        .current_dir(&fixture.workspace_root)
+        .args([
+            "agent",
+            "stop",
+            "--session",
+            &orchestration_session_id,
+            "--json",
+        ])
+        .output()
+        .expect("run active HSA Stop");
+    assert!(
+        stop_output.status.success(),
+        "active HSA Stop must wait for authenticated owner closeout: {stop_output:?}"
+    );
+    let turn_output = turn_child
+        .wait_with_output()
+        .expect("collect stopped HSA ResumeOneTurn");
+    assert!(
+        !turn_output.status.success(),
+        "the stopped in-flight ResumeOneTurn must not report provider completion: {turn_output:?}"
+    );
+    let turn_records = parse_ndjson_output(&turn_output);
+    assert_eq!(
+        turn_records
+            .first()
+            .and_then(|record| record.get("kind"))
+            .and_then(Value::as_str),
+        Some("accepted"),
+        "ResumeOneTurn input acceptance must precede bound Stop: {turn_records:?}"
+    );
+    assert_eq!(
+        turn_records
+            .last()
+            .and_then(|record| record.get("error_code"))
+            .and_then(Value::as_str),
+        Some("owner_unreachable"),
+        "bound Stop must end the in-flight public Turn without fabricating terminal provider evidence: {turn_records:?}"
+    );
+    assert_eq!(
+        parse_json_output(&stop_output)
+            .get("state")
+            .and_then(Value::as_str),
+        Some("terminal")
+    );
+    assert_eq!(
+        fixture
+            .load_hsa_authority(&orchestration_session_id)
+            .pointer("/lifecycle_posture/kind")
+            .and_then(Value::as_str),
+        Some("Terminal")
+    );
+    let root = read_json_file(
+        &fixture
+            .substrate_home
+            .join("authority-v1/state-root-v1.json"),
+    );
+    let stop = root
+        .get("stop_transaction_map")
+        .and_then(Value::as_object)
+        .and_then(|transactions| transactions.values().next())
+        .expect("one exact HSA Stop transaction");
+    assert!(
+        stop.pointer("/state/value/delivery_acceptance_id")
+            .is_some_and(|value| !value.is_null()),
+        "active Stop terminal truth must retain exact private delivery acceptance"
+    );
+    assert!(
+        !canonical_orchestration_session_path(&fixture.substrate_home, &orchestration_session_id,)
+            .exists(),
+        "HSA Stop must not manufacture a legacy orchestration-session projection"
     );
 }
 

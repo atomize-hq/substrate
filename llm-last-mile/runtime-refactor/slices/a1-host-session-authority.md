@@ -10,12 +10,12 @@
 
 # A1 — HostSessionAuthority facade
 
-> **Authority boundary:** This file owns only the extracted Track A A1 row and the bounded packet-decomposition framing/projection below. A1.1–A1.4 remain substeps/checkpoints inside A1 rather than independent slices; A1.1d and historical entries remain checkpoints, not slices; held `A1.3-P0` and `A1.3` remain preserved history only; [`../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md) is terminally complete; A1.4 is only the named successor awaiting fresh admission and explicit dispatch; and this file does not dispatch A1 or A1.4.
+> **Authority boundary:** This file owns only the extracted Track A A1 row and the bounded packet-decomposition framing/projection below. A1.1–A1.4 remain substeps/checkpoints inside A1 rather than independent slices; A1.1d and historical entries remain checkpoints, not slices; held `A1.3-P0` and `A1.3` remain preserved history only; [`../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md) is terminally complete; and A1.4 is an active bounded corrective checkpoint whose canonical fence is owned by its linked task record. This file does not independently widen or close A1.4.
 
 Current disposition: A1.3-P1 is complete under its exact closure identities. `RG-BASE-01` remains
 open, unwaived, and not green; its positive real-path Linux smoke belongs to A1.4's final A1 wall.
-A1.4 is not authorized, admitted, dispatched, implemented, scheduled, or complete here and cannot
-claim final completion without that proof.
+A1.4 corrective remediation is authorized but is not complete or terminally closed here; it cannot
+claim final completion without the complete Linux proof and distinct successor review.
 
 | Slice | Goal | Must-read docs | Sibling context | Allowed code areas | Explicit non-goals | Exit gate | Regression gates |
 |---|---|---|---|---|---|---|---|

@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "packet_id": "A1.4-auto-attach-producer-adoption",
+  "status": "bounded_stop",
+  "stop_reason": "unrelated_blocker",
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:4c9352564997b18d0c048b70ae6151c8f19b85fcb7b9a80910344e068ece7e73",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "a1-4-auto-attach-producer-adoption-discovery-review.txt",
+        "codex-agent:/root/a14_independent_review"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "A14-DISC-P1-001",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "A14-DISC-P2-001",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:61beccb5f9a24ebbfa339ea6f43fbfe0ce4595cac8055b0434dba26b538f374a",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": [
+        "A14-DISC-P1-001",
+        "A14-DISC-P2-001"
+      ],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "a1-4-auto-attach-producer-adoption-correction-review.txt",
+        "codex-agent:/root/a14_successor_review"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "A14-SUCC1-P1-001",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "A14-SUCC1-P1-002",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "A14-SUCC1-P1-003",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "A14-SUCC1-P2-001",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "supplemental-causal-1",
+      "kind": "supplemental_causal",
+      "subject_fingerprint": "sha256:25f9db25ffc9a3cfeab2772cad4b931ab3f8265e0bb414de7efa441b37f04e2c",
+      "trigger_cycle_id": "closure-1",
+      "trigger_finding_ids": [
+        "A14-SUCC1-P1-001",
+        "A14-SUCC1-P1-002",
+        "A14-SUCC1-P1-003",
+        "A14-SUCC1-P2-001"
+      ],
+      "causal_evidence_refs": [
+        "crates/shell/src/execution/agent_runtime/auto_attach.rs",
+        "crates/shell/src/execution/agent_runtime/obligation_ledger.rs",
+        "crates/shell/src/execution/agent_runtime/host_session_authority/facade.rs",
+        "crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs",
+        "crates/shell/src/execution/agent_runtime/host_session_authority/start_continuity.rs",
+        "src/bin/substrate-lifecycle-macos.rs"
+      ],
+      "review_refs": [
+        "a1-4-auto-attach-producer-adoption-correction-review.txt",
+        "codex-agent:/root/a14_successor_review"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "A14-SUPP1-E1-001",
+          "priority": "P1"
+        }
+      ]
+    }
+  ]
+}

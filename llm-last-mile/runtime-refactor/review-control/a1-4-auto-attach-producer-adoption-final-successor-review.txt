@@ -1,0 +1,70 @@
+A1.4 final successor review and closure
+
+Review record: codex-agent:/root/a14_successor_review
+Base: 9d1b84d62e213450acbb28de7c9a98a91811c2b5
+Discovery subject: sha256:1c06360f43fc96fdded3f9cab7d72cf4fb75e6a1a3b9a966c39fc1e1a14aa0bf
+Closure subject: sha256:fc8b5a2cdda50a3dee44089b6a8f62f047feafbcfc202b05cc7822e693dba800
+
+Independent final verdict: CLEAN
+Landing disposition: CLEAN pending the mechanical commit gate
+
+Complete candidate scope reviewed
+
+- preserved RouterAutoAttach producer adoption and exact retry/restart convergence;
+- ObligationLedger-owned post-HSA claim and non-empty exact settlement;
+- strict fresh StateRootV1 Start retry lookup and authenticated Start upgrade;
+- installed invocation context propagation to both authority helper launchers;
+- startup-time toolbox dispatch with one retained runtime map;
+- mixed HSA Start-continuation and R0 authority ancestry;
+- ordinary retained Continue translation through authenticated HSA/R0 truth;
+- native typed ResumeOneTurn terminal evidence and no-replay behavior;
+- versioned HSA publication atomicity and released-object validation;
+- dedicated HSA-owned public Stop intent, delivery acceptance, authenticated closeout, and exact retry;
+- exact binary-target selection and installed-witness public integration fixtures.
+
+Discovery finding and closure
+
+A14-FINAL-P1-001 identified an unbounded read of the private HSA Stop response. A silent owner
+could accept the Unix socket and prevent public Stop from reaching its later HSA closeout deadline.
+
+The closure subject bounds the exact response read with a production deadline and a distinct
+`timeout_transport` error. Focused transport tests distinguish missing, refused, malformed, and
+silent-owner failures. These failures perform no delivery acceptance or terminal closeout; HSA
+authority remains ActiveAttached until the exact authenticated completion is committed.
+
+The reviewer confirmed that committed Stop results and exact terminal retries authenticate the
+request, payload, delivery, participant, revision, authority commitment, and result identities.
+No other P1 or P2 finding remains.
+
+Verification inspected by the reviewer and closure owner
+
+- private HSA Stop transport tests: 3 passed, 0 failed;
+- HSA authority suite: 207 passed, 0 failed;
+- active HSA Stop bound-delivery executable proof: 1 passed, 0 failed;
+- installed-witness Start -> retained Turn/reattach -> exact terminal-cut -> Stop proof: 1 passed,
+  0 failed;
+- auto_attach module: 18 passed, 0 failed;
+- ObligationLedger module: 18 passed, 0 failed (the current module contains 18 tests);
+- RetainedWorkerRuntime module: 84 passed, 0 failed;
+- typed prompt-fulfillment module: 7 passed, 0 failed;
+- startup toolbox dispatch regression: 1 passed, 0 failed;
+- trusted-filesystem coverage: 53 passed as part of the HSA suite;
+- cargo check -p shell --lib: passed;
+- cargo build -p substrate --bin substrate: passed;
+- cargo build -p substrate --bin substrate-shim: passed;
+- cargo fmt --all -- --check: passed;
+- git diff --check: passed.
+
+The prior Linux real-path evidence also recorded a green installed-witness world doctor and a real
+world command. Shim doctor and health exited successfully while reporting that the isolated
+temporary proof prefix had no separately deployed passive shims; this is environmental evidence,
+not a waived product assertion. The executable public lifecycle proofs themselves completed.
+
+GitNexus change detection on the closure subject reports CRITICAL aggregate breadth, 418 changed
+symbols, 65 affected processes, and 27 indexed changed files. The breadth is the expected complete
+A1.4 corrective candidate spanning public Start, retained dispatch, HSA, auto-attach, and public
+Stop. No unrelated product path or execution-process family was found.
+
+RG-BASE-01, RG-BASE-02, and the A1-scoped RG-AUTH executable requirements are GREEN for this
+candidate. This record does not mark A1.4 terminally closed and does not dispatch the remainder of
+A2.

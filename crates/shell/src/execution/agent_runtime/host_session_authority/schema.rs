@@ -357,6 +357,46 @@ pub(crate) struct HostSessionTransitionPayloadHashInputV1 {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
+pub(crate) struct HostSessionStopPayloadHashInputV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) intent_id: String,
+    pub(crate) request_id: String,
+    pub(crate) authority_store_id: String,
+    pub(crate) bootstrap_home: CanonicalDirectoryV1,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) shell_trace_session_id: String,
+    pub(crate) caller: HostSessionTransitionCallerV1,
+    pub(crate) authority_revision: u64,
+    pub(crate) authority_record_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) authoritative_lineage_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) authoritative_participant_id: String,
+    pub(crate) authoritative_lineage: Vec<String>,
+    pub(crate) lifecycle_posture: HostSessionPostureV1,
+    pub(crate) issued_at: TimestampV1,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct HostSessionStopResultHashInputV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) result_id: String,
+    pub(crate) intent_id: String,
+    pub(crate) request_id: String,
+    pub(crate) payload_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) authority_store_id: String,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) authoritative_participant_id: String,
+    pub(crate) delivery_acceptance_id: Option<String>,
+    pub(crate) authority_revision_before: u64,
+    pub(crate) authority_record_commitment_before: AuthorityObjectCommitmentV1,
+    pub(crate) authority_revision_after: u64,
+    pub(crate) authority_record_commitment_after: AuthorityObjectCommitmentV1,
+    pub(crate) resulting_posture: HostSessionPostureV1,
+    pub(crate) completed_at: TimestampV1,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct TransitionTransportPayloadObjectV1 {
     pub(crate) schema_version: u32,
     pub(crate) intent_id: String,

@@ -955,9 +955,9 @@ fn reserved_ref_id_vacancy_rejects_v3_only_orphan_kinds() {
         let orphan = directory.join(format!("{ref_id}.obj"));
         fs::write(&orphan, b"orphan").unwrap();
         fs::set_permissions(&orphan, fs::Permissions::from_mode(0o600)).unwrap();
-        assert!(
-            !platform::reserved_object_ref_id_is_globally_absent_test(root.path(), ref_id).unwrap()
-        );
+        let error = platform::reserved_object_ref_id_is_globally_absent_test(root.path(), ref_id)
+            .expect_err("a V3-only orphan must fail strict V2 preflight closed");
+        assert_eq!(error.to_string(), "read existing versioned authority root");
         fs::remove_file(orphan).unwrap();
     }
 }

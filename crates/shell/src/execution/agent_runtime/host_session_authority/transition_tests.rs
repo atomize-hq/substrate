@@ -9,11 +9,14 @@ use crate::execution::agent_runtime::obligation_ledger::{
     ObligationSnapshotHashInputV1 as LedgerObligationSnapshotHashInputV1,
     SupervisorJournalEventRefV1,
 };
+use crate::execution::agent_runtime::retained_worker_runtime::{
+    RetainedWorkerRegistrationPlanV1, RetainedWorkerRuntime,
+};
 use crate::execution::agent_runtime::state_store::AcceptedWorldWorkIdentityV1;
 
 use super::facade::{
-    AuthorityParticipantRoleV1, HostSessionAuthority, ResolvedCurrentAuthorityV1,
-    RetainedWorkerAuthorityPreconditionV1,
+    exact_v3_authority_history_with_reader, AuthorityParticipantRoleV1, HostSessionAuthority,
+    ResolvedCurrentAuthorityV1, RetainedWorkerAuthorityPreconditionV1,
 };
 use super::schema::{
     AgentDescriptorHashInputV1, AgentDescriptorV1, AgentExecutionScopeV1,
@@ -29,14 +32,22 @@ use super::schema::{
     TerminalHandoffHashInputV2, TimestampV1, WorkspaceBindingV1, WorldBindingV1,
 };
 use super::start_continuity::{
-    EstablishStartContinuationCrashPointV1, EstablishStartContinuationRequestV1,
-    SettleStartTurnCrashPointV1, SettleStartTurnRequestV1, StartContinuationOutcomeV1,
-    StartTransactionBeginOutcomeV1, StartTurnCompletionKindV1, StartTurnSettlementOutcomeV1,
+    retryable_start_transaction_from_v1, EstablishStartContinuationCrashPointV1,
+    EstablishStartContinuationRequestV1, SettleStartTurnCrashPointV1, SettleStartTurnRequestV1,
+    StartContinuationOutcomeV1, StartTransactionBeginOutcomeV1, StartTurnCompletionKindV1,
+    StartTurnSettlementOutcomeV1,
+};
+use super::stop::{
+    AcceptHostSessionStopDeliveryRequestV1, CompleteHostSessionStopRequestV1,
+    HostSessionStopCompletionOutcomeV1, HostSessionStopDeliveryOutcomeV1,
+    HostSessionStopIssueOutcomeV1, IssueHostSessionStopRequestV1,
 };
 use super::store_schema::{
-    DurableSessionAuthorityV1, HostSessionPostTurnApplicationV1, HostSessionPostTurnApplicationV2,
+    AuthorityObjectIndexEntryV1, AuthorityObjectStorageStateV1, DurableSessionAuthorityV1,
+    HostSessionPostTurnApplicationV1, HostSessionPostTurnApplicationV2,
     HostSessionStartupOwnershipApplicationV1, HostSessionTransitionInputHandoffV1,
     HostSessionTransitionIntentStateV2, HostSessionTransitionIntentStateV3,
+    HostSessionTransitionIntentV2, HostSessionTransitionIntentV3,
     HostSessionTransitionTransportPayloadStateV1,
     RetainedWorkerAuthorityRegistrationRequestStateV1,
     RetainedWorkerAuthorityRegistrationRequestV1, RetainedWorkerAuthorityRegistrationV1,
@@ -235,26 +246,16 @@ fn issue_and_claim_start(
     }
 }
 
-fn applied_start_for_continuity() -> (
-    tempfile::TempDir,
-    HostSessionAuthority,
-    IssueHostSessionTransitionRequestV1,
-    EstablishStartContinuationRequestV1,
-) {
-    let (parent, authority, binding) = authority();
-    let request = start_request(binding);
-    let application = issue_and_claim_start(&authority, &request);
-    let TransitionApplicationOutcomeV1::Applied(intent) = authority
-        .apply_start_at(&application, timestamp("2026-07-14T12:01:10.000000000Z"))
-        .unwrap()
-    else {
-        panic!("first Start application must commit")
-    };
+fn prepare_start_continuity_transaction(
+    authority: &HostSessionAuthority,
+    request: &IssueHostSessionTransitionRequestV1,
+    intent: &HostSessionTransitionIntentV2,
+) -> EstablishStartContinuationRequestV1 {
     let HostSessionTransitionIntentStateV2::Applied {
         application_result_ref,
         authority_revision_after,
         ..
-    } = intent.state
+    } = &intent.state
     else {
         panic!("Start must remain applied")
     };
@@ -266,10 +267,10 @@ fn applied_start_for_continuity() -> (
         orchestration_session_id: request.orchestration_session_id.clone(),
         intent_id: request.intent_id.clone(),
         issuer_request_id: request.issuer_request_id.clone(),
-        payload_commitment: intent.payload_commitment,
-        application_result_ref,
+        payload_commitment: intent.payload_commitment.clone(),
+        application_result_ref: application_result_ref.clone(),
         run_id: request.run_id.clone(),
-        expected_authority_revision: authority_revision_after,
+        expected_authority_revision: *authority_revision_after,
         authoritative_participant_id: request.target_authoritative_participant_id.clone(),
         backend_id: request.start_contract.descriptor.backend_id.clone(),
         protocol: request.start_contract.descriptor.protocol.clone(),
@@ -305,7 +306,11 @@ fn applied_start_for_continuity() -> (
             .as_ref()
             .map(|binding| binding.world_generation),
         public_backend_id: registration.backend_id.clone(),
-        public_scope: "host".into(),
+        public_scope: if request.world_binding.is_some() {
+            "world".into()
+        } else {
+            "host".into()
+        },
         start_intent_id: registration.intent_id.clone(),
         start_issuer_request_id: registration.issuer_request_id.clone(),
         start_payload_commitment: registration.payload_commitment.clone(),
@@ -327,6 +332,49 @@ fn applied_start_for_continuity() -> (
             timestamp("2026-07-14T12:01:15.000000000Z"),
         )
         .unwrap();
+    registration
+}
+
+fn applied_start_for_continuity() -> (
+    tempfile::TempDir,
+    HostSessionAuthority,
+    IssueHostSessionTransitionRequestV1,
+    EstablishStartContinuationRequestV1,
+) {
+    applied_start_for_continuity_with_world(None)
+}
+
+fn applied_world_start_for_continuity() -> (
+    tempfile::TempDir,
+    HostSessionAuthority,
+    IssueHostSessionTransitionRequestV1,
+    EstablishStartContinuationRequestV1,
+) {
+    applied_start_for_continuity_with_world(Some(WorldBindingV1 {
+        world_id: "world-start-continuity-1".into(),
+        world_generation: 7,
+    }))
+}
+
+fn applied_start_for_continuity_with_world(
+    world_binding: Option<WorldBindingV1>,
+) -> (
+    tempfile::TempDir,
+    HostSessionAuthority,
+    IssueHostSessionTransitionRequestV1,
+    EstablishStartContinuationRequestV1,
+) {
+    let (parent, authority, binding) = authority();
+    let mut request = start_request(binding);
+    request.world_binding = world_binding;
+    let application = issue_and_claim_start(&authority, &request);
+    let TransitionApplicationOutcomeV1::Applied(intent) = authority
+        .apply_start_at(&application, timestamp("2026-07-14T12:01:10.000000000Z"))
+        .unwrap()
+    else {
+        panic!("first Start application must commit")
+    };
+    let registration = prepare_start_continuity_transaction(&authority, &request, &intent);
     (parent, authority, request, registration)
 }
 
@@ -538,182 +586,38 @@ fn park_with_resume_handle(
     authority: &HostSessionAuthority,
     request: &IssueHostSessionTransitionRequestV1,
 ) -> (ResolvedCurrentAuthorityV1, AuthorityObjectRefV1) {
-    let home = request
-        .workspace_binding
-        .authority_store_root
-        .physical_path
-        .clone();
     let application = issue_and_claim_start(authority, request);
-    authority
+    let TransitionApplicationOutcomeV1::Applied(intent) = authority
         .apply_start_at(&application, timestamp("2026-07-14T12:01:10.000000000Z"))
+        .unwrap()
+    else {
+        panic!("first Start application must commit")
+    };
+    let registration = prepare_start_continuity_transaction(authority, request, &intent);
+    let StartContinuationOutcomeV1::Applied(registered) = authority
+        .establish_start_continuation(&registration)
+        .unwrap()
+    else {
+        panic!("Start continuation registration must commit")
+    };
+    let settlement_request = clean_start_settlement_request(
+        &registration,
+        registered.resume_handle_ref,
+        registered.authority_revision_after,
+    );
+    let StartTurnSettlementOutcomeV1::Applied(settled) =
+        authority.settle_start_turn(&settlement_request).unwrap()
+    else {
+        panic!("Start continuation settlement must commit")
+    };
+    let current = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
         .unwrap();
-
-    let exact_v2 = authority.read_a12a_root().unwrap();
-    let exact_v3 = super::store::upgrade_v2_root_to_v3_test(Path::new(&home), &exact_v2).unwrap();
-    let trusted_root = super::trusted_fs::TrustedAuthorityRoot::open(Path::new(&home)).unwrap();
-    let start_authority = match exact_v3.session_namespace_map[&request.orchestration_session_id] {
-        SessionNamespaceRecordV1::Authority(ref authority) => authority.as_ref().clone(),
-        _ => panic!("expected detached authority"),
-    };
-    let start_commitment = canonical_commitment(&authority_hash_input(&start_authority));
-    let start_intent = exact_v3.transition_intent_map[&request.intent_id].clone();
-    let super::store_schema::HostSessionTransitionIntentStateV2::Applied {
-        claim_id,
-        claimant_attempt_id,
-        application_result_ref,
-        ..
-    } = &start_intent.state
-    else {
-        panic!("expected applied start")
-    };
-    let resume_handle_value = ResumeHandleHashInputV1 {
-        schema_version: 1,
-        orchestration_session_id: request.orchestration_session_id.clone(),
-        participant_id: request.target_authoritative_participant_id.clone(),
-        backend_id: request.start_contract.descriptor.backend_id.clone(),
-        protocol: request.start_contract.descriptor.protocol.clone(),
-        internal_uaa_session_id: "uaa-session-1".into(),
-    };
-    let resume_handle_bytes = super::canonical_json::to_vec(&resume_handle_value).unwrap();
-    let resume_handle = super::store::prepare_generated_object_v3_opened(
-        &trusted_root,
-        exact_v3.root_revision,
-        AuthorityObjectKindV1::ResumeHandle,
-        &resume_handle_bytes,
-        None,
-    )
-    .unwrap();
-    let reconciled_at = timestamp("2026-07-14T12:02:00.000000000Z");
-    let evidence_id = "startup-reject-resume-1".to_string();
-    let mut detached_authority = start_authority.clone();
-    detached_authority.authority_revision = 2;
-    detached_authority.lifecycle_posture = HostSessionPostureV1::DetachedReconciled;
-    detached_authority
-        .internal_resume_handle_refs
-        .push(resume_handle.reference.clone());
-    detached_authority.updated_at = reconciled_at.clone();
-    let detached_commitment = canonical_commitment(&authority_hash_input(&detached_authority));
-    let startup_result = super::schema::StartupOwnershipResultHashInputV1 {
-        schema_version: 1,
-        evidence: super::schema::HostStartupOwnershipEvidenceV1 {
-            schema_version: 1,
-            evidence_id: evidence_id.clone(),
-            authority_store_id: exact_v3.authority_store_id.clone(),
-            orchestration_session_id: request.orchestration_session_id.clone(),
-            intent_id: request.intent_id.clone(),
-            claim_id: claim_id.clone(),
-            claimant_attempt_id: claimant_attempt_id.clone(),
-            run_id: request.run_id.clone(),
-            application_result_ref: application_result_ref.clone(),
-            expected_authority_revision: 1,
-            active_authoritative_participant_id: request
-                .target_authoritative_participant_id
-                .clone(),
-            protocol_actor:
-                super::schema::HostStartupOwnershipProtocolActorV1::LaunchApplicationClaimant {
-                    claim_id: claim_id.clone(),
-                    claimant_attempt_id: claimant_attempt_id.clone(),
-                },
-            protocol_event:
-                super::schema::HostStartupOwnershipProtocolEventV1::RuntimeCreationRejected {
-                    rejection_id: evidence_id.clone(),
-                },
-            observed_at: reconciled_at.clone(),
-        },
-        outcome: super::schema::StartupOwnershipOutcomeV1::TerminalReconciled {
-            reason: super::schema::HostStartupTerminalReasonV1::RuntimeCreationRejected,
-            authority_revision_after: 2,
-            resulting_posture: HostSessionPostureV1::DetachedReconciled,
-            authority_record_commitment: detached_commitment.clone(),
-        },
-        resolved_at: reconciled_at.clone(),
-    };
-    let startup_result_bytes = super::canonical_json::to_vec(&startup_result).unwrap();
-    let startup_result_object = super::store::prepare_generated_object_v3_opened(
-        &trusted_root,
-        exact_v3.root_revision,
-        AuthorityObjectKindV1::StartupOwnershipResult,
-        &startup_result_bytes,
-        None,
-    )
-    .unwrap();
-    let mut detached_root = exact_v3.clone();
-    detached_root.root_revision += 1;
-    let super::store_schema::HostSessionTransitionIntentStateV2::Applied {
-        startup_ownership, ..
-    } = &mut detached_root
-        .transition_intent_map
-        .get_mut(&request.intent_id)
-        .unwrap()
-        .state
-    else {
-        panic!("expected applied start")
-    };
-    *startup_ownership = Box::new(
-        super::store_schema::HostSessionStartupOwnershipApplicationV1::TerminalReconciled {
-            evidence_id: evidence_id.clone(),
-            result_ref: startup_result_object.reference.clone(),
-            authority_revision_before: 1,
-            authority_revision_after: 2,
-            resulting_posture: HostSessionPostureV1::DetachedReconciled,
-            reconciled_at: reconciled_at.clone(),
-        },
+    assert_eq!(
+        current.authority.lifecycle_posture,
+        HostSessionPostureV1::ParkedResumable
     );
-    detached_root
-        .transition_intent_map
-        .get_mut(&request.intent_id)
-        .unwrap()
-        .intent_revision = 4;
-    detached_root
-        .transition_intent_map
-        .get_mut(&request.intent_id)
-        .unwrap()
-        .updated_at = reconciled_at.clone();
-    detached_root.session_namespace_map.insert(
-        request.orchestration_session_id.clone(),
-        SessionNamespaceRecordV1::Authority(Box::new(detached_authority)),
-    );
-    detached_root
-        .application_journal
-        .get_mut(&request.intent_id)
-        .unwrap()
-        .startup_terminal_application = Some(
-        super::store_schema::StartupOwnershipTerminalApplicationJournalV1 {
-            schema_version: 1,
-            startup_ownership_result_ref: startup_result_object.reference.clone(),
-            evidence_id: evidence_id.clone(),
-            authority_revision_before: 1,
-            authority_record_commitment_before: start_commitment,
-            authority_revision_after: 2,
-            resulting_posture: HostSessionPostureV1::DetachedReconciled,
-            authority_record_commitment_after: detached_commitment,
-            applied_at: reconciled_at.clone(),
-        },
-    );
-    insert_present_v3(
-        &mut detached_root,
-        &startup_result_object.reference,
-        startup_result_object.byte_length as usize,
-    );
-    insert_present_v3(
-        &mut detached_root,
-        &resume_handle.reference,
-        resume_handle.byte_length as usize,
-    );
-    detached_root.validate().unwrap();
-    super::store::commit_v3_root_exact_current_opened(
-        &trusted_root,
-        &exact_v3,
-        &detached_root,
-        || Ok(()),
-    )
-    .unwrap();
-    (
-        authority
-            .resolve_current_exact(&request.orchestration_session_id, None)
-            .unwrap(),
-        resume_handle.reference,
-    )
+    (current, settled.continuation_resume_handle_ref)
 }
 
 fn attach_successor_request(
@@ -919,6 +823,17 @@ fn post_turn_request(
         host_transition_correlation: transition_correlation(intent, authority_revision_observed),
         completed_at: timestamp(completed_at),
     }
+}
+
+fn applied_successor_authority_revision(intent: &HostSessionTransitionIntentV3) -> u64 {
+    let HostSessionTransitionIntentStateV3::Applied {
+        authority_revision_after,
+        ..
+    } = intent.state
+    else {
+        panic!("successor transition must be applied")
+    };
+    authority_revision_after
 }
 
 fn pending_ledger_read(
@@ -2785,7 +2700,10 @@ fn successor_attach_issue_claim_apply_retries_to_one_initial_application() {
     else {
         panic!("successor application must retain a durable authority")
     };
-    assert_eq!(current_authority.authority_revision, 3);
+    assert_eq!(
+        current_authority.authority_revision,
+        applied_successor_authority_revision(&applied)
+    );
     assert_eq!(
         current_authority
             .active_authoritative_participant_id
@@ -4144,7 +4062,10 @@ fn successor_resume_issue_claim_apply_retries_to_one_pending_post_turn() {
     else {
         panic!("resume application must retain a durable authority")
     };
-    assert_eq!(current_authority.authority_revision, 3);
+    assert_eq!(
+        current_authority.authority_revision,
+        applied_successor_authority_revision(&applied)
+    );
     assert_eq!(
         current_authority
             .active_authoritative_participant_id
@@ -4176,8 +4097,9 @@ fn successor_resume_issue_claim_apply_retries_to_one_pending_post_turn() {
         post_turn.as_ref(),
         HostSessionPostTurnApplicationV2::Pending {
             expected_run_id,
-            expected_authority_revision: 3,
+            expected_authority_revision,
         } if expected_run_id == "run-resume-1"
+            && *expected_authority_revision == applied_successor_authority_revision(&applied)
     ));
     assert!(matches!(
         intent.input_handoff,
@@ -4214,10 +4136,12 @@ fn successor_resume_input_acceptance_and_obligation_cut_consumption_retries() {
             .unwrap(),
         InputAcceptanceOutcomeV1::Joined(accepted_intent.clone())
     );
+    let successor_authority_revision = applied_successor_authority_revision(&accepted_intent);
+    let settled_authority_revision = successor_authority_revision.checked_add(1).unwrap();
 
     let resume_post_turn = post_turn_request(
         &accepted_intent,
-        3,
+        successor_authority_revision,
         HostPostTurnProtocolEventKindV1::ResumableClean,
         HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant {
             participant_id: accepted_intent.target_authoritative_participant_id.clone(),
@@ -4245,13 +4169,13 @@ fn successor_resume_input_acceptance_and_obligation_cut_consumption_retries() {
         intent_id: awaiting_cut_intent.intent_id.clone(),
         issuer_request_id: awaiting_cut_intent.issuer_request_id.clone(),
         payload_commitment: awaiting_cut_intent.payload_commitment.clone(),
-        ledger_read: pending_ledger_read(&accepted_intent, 3),
+        ledger_read: pending_ledger_read(&accepted_intent, successor_authority_revision),
     };
     let pending_cut = ConsumeObligationSnapshotRequestV1 {
         intent_id: intent_id.clone(),
         issuer_request_id: issuer_request_id.clone(),
         payload_commitment: payload_commitment.clone(),
-        ledger_read: pending_ledger_read(&accepted_intent, 3),
+        ledger_read: pending_ledger_read(&accepted_intent, successor_authority_revision),
     };
     assert_eq!(
         authority.consume_obligation_snapshot(&pending_cut).unwrap(),
@@ -4266,7 +4190,7 @@ fn successor_resume_input_acceptance_and_obligation_cut_consumption_retries() {
         ledger_read: ObligationLedgerSnapshotReadV1::Complete {
             snapshot: complete_ledger_snapshot(
                 &accepted_intent,
-                3,
+                successor_authority_revision,
                 ObligationAttentionDispositionV1::NoUnresolvedAttention,
             ),
         },
@@ -4290,7 +4214,10 @@ fn successor_resume_input_acceptance_and_obligation_cut_consumption_retries() {
     else {
         panic!("resume obligation-cut completion must retain a durable authority")
     };
-    assert_eq!(current_authority.authority_revision, 4);
+    assert_eq!(
+        current_authority.authority_revision,
+        settled_authority_revision
+    );
     assert_eq!(
         current_authority.lifecycle_posture,
         HostSessionPostureV1::ParkedResumable
@@ -4314,11 +4241,12 @@ fn successor_resume_input_acceptance_and_obligation_cut_consumption_retries() {
         post_turn.as_ref(),
         HostSessionPostTurnApplicationV2::Applied {
             obligation_snapshot_ref: Some(_),
-            authority_revision_before: 3,
-            authority_revision_after: 4,
+            authority_revision_before,
+            authority_revision_after,
             resulting_posture: HostSessionPostureV1::ParkedResumable,
             ..
-        }
+        } if *authority_revision_before == successor_authority_revision
+            && *authority_revision_after == settled_authority_revision
     ));
     assert!(matches!(
         final_intent.input_handoff,
@@ -4339,10 +4267,12 @@ fn successor_resume_pre_acceptance_terminal_failure_terminalizes_input_and_retri
     let successor = applied_resume_successor(&authority, &request);
     let applied_root = authority.read_a12b_root().unwrap();
     let applied_intent = applied_root.successor_transition_intent_map[&successor.intent_id].clone();
+    let successor_authority_revision = applied_successor_authority_revision(&applied_intent);
+    let terminal_authority_revision = successor_authority_revision.checked_add(1).unwrap();
 
     let terminal_failure = post_turn_request(
         &applied_intent,
-        3,
+        successor_authority_revision,
         HostPostTurnProtocolEventKindV1::TerminalFailure {
             reason: HostPostTurnTerminalReasonV1::ResumeRuntimeCreationRejected,
         },
@@ -4369,7 +4299,10 @@ fn successor_resume_pre_acceptance_terminal_failure_terminalizes_input_and_retri
     else {
         panic!("terminal failure must retain a durable authority")
     };
-    assert_eq!(current_authority.authority_revision, 4);
+    assert_eq!(
+        current_authority.authority_revision,
+        terminal_authority_revision
+    );
     assert_eq!(
         current_authority.lifecycle_posture,
         HostSessionPostureV1::Terminal
@@ -4389,11 +4322,12 @@ fn successor_resume_pre_acceptance_terminal_failure_terminalizes_input_and_retri
         post_turn.as_ref(),
         HostSessionPostTurnApplicationV2::Applied {
             obligation_snapshot_ref: None,
-            authority_revision_before: 3,
-            authority_revision_after: 4,
+            authority_revision_before,
+            authority_revision_after,
             resulting_posture: HostSessionPostureV1::Terminal,
             ..
-        }
+        } if *authority_revision_before == successor_authority_revision
+            && *authority_revision_after == terminal_authority_revision
     ));
     assert!(matches!(
         final_intent.input_handoff,
@@ -4434,9 +4368,11 @@ fn successor_resume_complete_cut_with_unresolved_attention_advances_to_awaiting_
     let accepted_root = authority.read_a12b_root().unwrap();
     let accepted_intent =
         accepted_root.successor_transition_intent_map[&successor.intent_id].clone();
+    let successor_authority_revision = applied_successor_authority_revision(&accepted_intent);
+    let settled_authority_revision = successor_authority_revision.checked_add(1).unwrap();
     let awaiting_cut_request = post_turn_request(
         &accepted_intent,
-        3,
+        successor_authority_revision,
         HostPostTurnProtocolEventKindV1::ResumableClean,
         HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant {
             participant_id: accepted_intent.target_authoritative_participant_id.clone(),
@@ -4453,7 +4389,7 @@ fn successor_resume_complete_cut_with_unresolved_attention_advances_to_awaiting_
         ledger_read: ObligationLedgerSnapshotReadV1::Complete {
             snapshot: complete_ledger_snapshot(
                 &accepted_intent,
-                3,
+                successor_authority_revision,
                 ObligationAttentionDispositionV1::HasUnresolvedAttention,
             ),
         },
@@ -4477,7 +4413,10 @@ fn successor_resume_complete_cut_with_unresolved_attention_advances_to_awaiting_
     else {
         panic!("attention cut must retain a durable authority")
     };
-    assert_eq!(current_authority.authority_revision, 4);
+    assert_eq!(
+        current_authority.authority_revision,
+        settled_authority_revision
+    );
     assert_eq!(
         current_authority.lifecycle_posture,
         HostSessionPostureV1::AwaitingAttention
@@ -4491,11 +4430,12 @@ fn successor_resume_complete_cut_with_unresolved_attention_advances_to_awaiting_
         post_turn.as_ref(),
         HostSessionPostTurnApplicationV2::Applied {
             obligation_snapshot_ref: Some(_),
-            authority_revision_before: 3,
-            authority_revision_after: 4,
+            authority_revision_before,
+            authority_revision_after,
             resulting_posture: HostSessionPostureV1::AwaitingAttention,
             ..
-        }
+        } if *authority_revision_before == successor_authority_revision
+            && *authority_revision_after == settled_authority_revision
     ));
     assert!(matches!(
         final_intent.transport_payload_state,
@@ -4525,9 +4465,10 @@ fn successor_resume_complete_cut_rejects_materialization_watermark_beyond_termin
     let accepted_root = authority.read_a12b_root().unwrap();
     let accepted_intent =
         accepted_root.successor_transition_intent_map[&successor.intent_id].clone();
+    let successor_authority_revision = applied_successor_authority_revision(&accepted_intent);
     let awaiting_cut_request = post_turn_request(
         &accepted_intent,
-        3,
+        successor_authority_revision,
         HostPostTurnProtocolEventKindV1::ResumableClean,
         HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant {
             participant_id: accepted_intent.target_authoritative_participant_id.clone(),
@@ -4539,7 +4480,7 @@ fn successor_resume_complete_cut_rejects_materialization_watermark_beyond_termin
 
     let mut overrun_snapshot = complete_ledger_snapshot(
         &accepted_intent,
-        3,
+        successor_authority_revision,
         ObligationAttentionDispositionV1::NoUnresolvedAttention,
     );
     overrun_snapshot
@@ -4587,9 +4528,11 @@ fn successor_resume_complete_cut_join_and_current_resolution_survive_released_tr
     let accepted_root = authority.read_a12b_root().unwrap();
     let accepted_intent =
         accepted_root.successor_transition_intent_map[&successor.intent_id].clone();
+    let successor_authority_revision = applied_successor_authority_revision(&accepted_intent);
+    let settled_authority_revision = successor_authority_revision.checked_add(1).unwrap();
     let awaiting_cut_request = post_turn_request(
         &accepted_intent,
-        3,
+        successor_authority_revision,
         HostPostTurnProtocolEventKindV1::ResumableClean,
         HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant {
             participant_id: accepted_intent.target_authoritative_participant_id.clone(),
@@ -4606,7 +4549,7 @@ fn successor_resume_complete_cut_join_and_current_resolution_survive_released_tr
         ledger_read: ObligationLedgerSnapshotReadV1::Complete {
             snapshot: complete_ledger_snapshot(
                 &accepted_intent,
-                3,
+                successor_authority_revision,
                 ObligationAttentionDispositionV1::NoUnresolvedAttention,
             ),
         },
@@ -4679,7 +4622,10 @@ fn successor_resume_complete_cut_join_and_current_resolution_survive_released_tr
     let resolved = authority
         .resolve_current_exact(&request.orchestration_session_id, None)
         .unwrap();
-    assert_eq!(resolved.authority.authority_revision, 4);
+    assert_eq!(
+        resolved.authority.authority_revision,
+        settled_authority_revision
+    );
     assert_eq!(
         resolved.authority.lifecycle_posture,
         HostSessionPostureV1::ParkedResumable
@@ -4774,6 +4720,46 @@ fn start_submission_barrier_durably_fails_closed_as_indeterminate() {
             .unwrap(),
         Some(indeterminate)
     );
+}
+
+#[test]
+fn fresh_greenfield_v1_has_no_retryable_start_transaction() {
+    let (_parent, authority, _binding) = authority();
+    let root = authority.read_root().unwrap();
+    root.validate().unwrap();
+    assert_eq!(root.schema_version, 1);
+    assert!(root.session_namespace_map.is_empty());
+    assert!(root.transition_intent_map.is_empty());
+    assert!(root.issuer_request_index.is_empty());
+    assert!(root.application_journal.is_empty());
+    assert!(root.object_index.is_empty());
+
+    assert_eq!(
+        authority
+            .retryable_start_transaction(&"a".repeat(64))
+            .unwrap(),
+        None
+    );
+}
+
+#[test]
+fn invalid_non_greenfield_v1_is_not_treated_as_an_empty_start_lookup() {
+    let (_parent, authority, _binding) = authority();
+    let mut root = authority.read_root().unwrap();
+    root.object_index.insert(
+        "ao_non_greenfield_start_lookup".into(),
+        AuthorityObjectIndexEntryV1 {
+            schema_version: 1,
+            ref_id: "ao_non_greenfield_start_lookup".into(),
+            object_kind: AuthorityObjectKindV1::Policy,
+            object_schema_version: 1,
+            byte_length: 1,
+            storage_state: AuthorityObjectStorageStateV1::Present,
+        },
+    );
+    let error =
+        retryable_start_transaction_from_v1(&root).expect_err("non-greenfield V1 must fail closed");
+    assert!(error.to_string().contains("UnsupportedNonGreenfieldRootV1"));
 }
 
 #[test]
@@ -5007,6 +4993,256 @@ fn start_continuity_registration_and_settlement_are_durable_and_resumable() {
             .resume_handle_ref
             .as_ref()
             .expect("issued ResumeOneTurn continuity")
+    );
+}
+
+#[test]
+fn mixed_start_continuation_and_r0_ancestry_resolves_every_exact_revision() {
+    let (_parent, authority, request, registration) = applied_world_start_for_continuity();
+    let revision_1 = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .unwrap();
+    assert_eq!(revision_1.authority.authority_revision, 1);
+
+    let StartContinuationOutcomeV1::Applied(registered) = authority
+        .establish_start_continuation(&registration)
+        .unwrap()
+    else {
+        panic!("first continuation registration must commit")
+    };
+    let revision_2 = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .unwrap();
+    assert_eq!(revision_2.authority.authority_revision, 2);
+
+    let retained_runtime = RetainedWorkerRuntime;
+    let first_plan = RetainedWorkerRegistrationPlanV1 {
+        registration_request_id: "mixed-ancestry-r0-1".into(),
+        orchestration_session_id: request.orchestration_session_id.clone(),
+        expected_authority: RetainedWorkerAuthorityPreconditionV1 {
+            authority_store_id: revision_2.observation.authority_store_id.clone(),
+            authority_revision: revision_2.observation.authority_revision,
+            authority_record_commitment: revision_2.observation.authority_record_commitment.clone(),
+        },
+        retained_participant_id: "mixed-ancestry-worker-1".into(),
+        descriptor: AgentDescriptorV1 {
+            schema_version: 1,
+            agent_id: "mixed-worker-1".into(),
+            backend_id: "cli:codex-world".into(),
+            backend_kind: RuntimeBackendKindV1::Codex,
+            protocol: "substrate.agent.session".into(),
+            execution_scope: AgentExecutionScopeV1::World,
+            binary_path: "/usr/bin/codex".into(),
+        },
+        internal_uaa_session_id: "uaa-mixed-worker-1".into(),
+    };
+    let first_retained = retained_runtime
+        .register_retained_target(&authority, &first_plan)
+        .expect("R0 registration must follow an authenticated continuation edge");
+    let revision_3 = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .unwrap();
+    assert_eq!(revision_3.authority.authority_revision, 3);
+
+    let first_registered_at = authority
+        .read_a12b_root()
+        .unwrap()
+        .retained_worker_registration_journal
+        .get(&first_retained.registration_id)
+        .expect("first R0 journal")
+        .registered_at
+        .clone();
+    let mut settlement = clean_start_settlement_request(
+        &registration,
+        registered.resume_handle_ref.clone(),
+        revision_3.observation.authority_revision,
+    );
+    settlement.completed_at = first_registered_at;
+    let StartTurnSettlementOutcomeV1::Applied(settled) =
+        authority.settle_start_turn(&settlement).unwrap()
+    else {
+        panic!("Start settlement must follow the interleaved R0 edge")
+    };
+    let revision_4 = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .unwrap();
+    assert_eq!(revision_4.authority.authority_revision, 4);
+
+    let second_plan = RetainedWorkerRegistrationPlanV1 {
+        registration_request_id: "mixed-ancestry-r0-2".into(),
+        orchestration_session_id: request.orchestration_session_id.clone(),
+        expected_authority: RetainedWorkerAuthorityPreconditionV1 {
+            authority_store_id: revision_4.observation.authority_store_id.clone(),
+            authority_revision: revision_4.observation.authority_revision,
+            authority_record_commitment: revision_4.observation.authority_record_commitment.clone(),
+        },
+        retained_participant_id: "mixed-ancestry-worker-2".into(),
+        descriptor: AgentDescriptorV1 {
+            agent_id: "mixed-worker-2".into(),
+            ..first_plan.descriptor.clone()
+        },
+        internal_uaa_session_id: "uaa-mixed-worker-2".into(),
+    };
+    retained_runtime
+        .register_retained_target(&authority, &second_plan)
+        .expect("later R0 registration must follow authenticated Start settlement");
+    let revision_5 = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .unwrap();
+    assert_eq!(revision_5.authority.authority_revision, 5);
+
+    for expected in [
+        &revision_1,
+        &revision_2,
+        &revision_3,
+        &revision_4,
+        &revision_5,
+    ] {
+        let resolved = authority
+            .resolve_exact_at_revision(
+                &request.orchestration_session_id,
+                expected.authority.authority_revision,
+            )
+            .expect("every mixed typed revision must resolve on the exact chain");
+        let resolved_observation = resolved.observation();
+        assert_eq!(resolved.authority, expected.authority);
+        assert_eq!(
+            resolved.authority_record_commitment,
+            expected.observation.authority_record_commitment
+        );
+        assert_eq!(
+            resolved.authoritative_lineage_commitment,
+            expected.observation.authoritative_lineage_commitment
+        );
+        assert_eq!(
+            resolved_observation.authority_store_id,
+            expected.observation.authority_store_id
+        );
+        assert_eq!(
+            resolved_observation.bootstrap_home,
+            expected.observation.bootstrap_home
+        );
+    }
+    assert_eq!(
+        revision_5.authority.authoritative_participant_lineage,
+        vec![
+            request.target_authoritative_participant_id,
+            first_plan.retained_participant_id,
+            second_plan.retained_participant_id,
+        ]
+    );
+    assert!(revision_5
+        .authority
+        .internal_resume_handle_refs
+        .contains(&registered.resume_handle_ref));
+    assert!(revision_5
+        .authority
+        .internal_resume_handle_refs
+        .contains(&settled.continuation_resume_handle_ref));
+    assert_eq!(revision_5.authority.retained_worker_refs.len(), 2);
+    assert_eq!(
+        revision_5.authority.lifecycle_posture,
+        HostSessionPostureV1::ParkedResumable
+    );
+
+    let root = authority.read_a12b_root().unwrap();
+    let exact_history_is_rejected = |candidate: &StateRootV3| {
+        exact_v3_authority_history_with_reader(
+            candidate,
+            &request.orchestration_session_id,
+            |reference| {
+                authority
+                    .read_authority_object_v2_at(root.root_revision, reference)
+                    .map_err(|error| error.to_string())
+            },
+        )
+        .is_err()
+    };
+
+    let mut missing = root.clone();
+    missing
+        .retained_worker_registration_journal
+        .remove(&first_retained.registration_id);
+    assert!(
+        exact_history_is_rejected(&missing),
+        "a missing mixed authority edge must fail closed"
+    );
+
+    let original_registration = root
+        .retained_worker_registration_journal
+        .get(&first_retained.registration_id)
+        .expect("first mixed R0 registration")
+        .clone();
+    let original_request = root
+        .retained_worker_registration_request_index
+        .get(&original_registration.issuer_request_id)
+        .expect("first mixed R0 request")
+        .clone();
+    let mut forked = root.clone();
+    let mut forked_registration = original_registration.clone();
+    forked_registration.registration_id = "mixed-ancestry-fork".into();
+    forked_registration.issuer_request_id = "mixed-ancestry-fork-request".into();
+    let mut forked_request = original_request.clone();
+    forked_request.registration_id = forked_registration.registration_id.clone();
+    forked_request.issuer_request_id = forked_registration.issuer_request_id.clone();
+    forked
+        .retained_worker_registration_request_index
+        .insert(forked_request.issuer_request_id.clone(), forked_request);
+    forked.retained_worker_registration_journal.insert(
+        forked_registration.registration_id.clone(),
+        forked_registration,
+    );
+    assert!(
+        exact_history_is_rejected(&forked),
+        "two authenticated candidates at one authority revision must fail closed"
+    );
+
+    let mut substituted = root.clone();
+    substituted
+        .retained_worker_registration_journal
+        .get_mut(&first_retained.registration_id)
+        .expect("substituted mixed R0 registration")
+        .retained_participant_id = "substituted-mixed-worker".into();
+    assert!(
+        exact_history_is_rejected(&substituted),
+        "a substituted authority edge must fail closed"
+    );
+
+    let mut reordered = root.clone();
+    let reordered_registration = reordered
+        .retained_worker_registration_journal
+        .get_mut(&first_retained.registration_id)
+        .expect("reordered mixed R0 registration");
+    reordered_registration.authority_revision_before += 1;
+    assert!(
+        exact_history_is_rejected(&reordered),
+        "a reordered authority edge must fail closed"
+    );
+
+    let mismatched_commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+        digest_hex: "0".repeat(64),
+    };
+    let mut commitment_mismatched = root.clone();
+    let commitment_registration = commitment_mismatched
+        .retained_worker_registration_journal
+        .get_mut(&first_retained.registration_id)
+        .expect("commitment-mismatched mixed R0 registration");
+    commitment_registration.authority_record_commitment_after = mismatched_commitment.clone();
+    let commitment_request = commitment_mismatched
+        .retained_worker_registration_request_index
+        .get_mut(&commitment_registration.issuer_request_id)
+        .expect("commitment-mismatched mixed R0 request");
+    let RetainedWorkerAuthorityRegistrationRequestStateV1::Applied {
+        authority_record_commitment_after,
+        ..
+    } = &mut commitment_request.state
+    else {
+        panic!("mixed R0 request must be applied")
+    };
+    *authority_record_commitment_after = mismatched_commitment;
+    assert!(
+        exact_history_is_rejected(&commitment_mismatched),
+        "an authority edge with a mismatched resulting commitment must fail closed"
     );
 }
 
@@ -5258,4 +5494,288 @@ fn start_continuity_exact_retry_never_joins_across_authority_revisions() {
             .is_err(),
         "settlement retry with substituted typed completion evidence must fail closed"
     );
+}
+
+fn stop_request(current: &ResolvedCurrentAuthorityV1) -> IssueHostSessionStopRequestV1 {
+    IssueHostSessionStopRequestV1 {
+        intent_id: "stop-intent-1".into(),
+        request_id: "stop-request-1".into(),
+        orchestration_session_id: current.authority.orchestration_session_id.clone(),
+        caller: HostSessionTransitionCallerV1 {
+            kind: HostSessionTransitionCallerKindV1::PublicCli,
+            caller_participant_id: None,
+            auto_attach_obligation_id: None,
+            auto_attach_claim_owner: None,
+        },
+        expected_authority: current.observation.clone(),
+        authoritative_participant_id: current.caller.participant_id.clone(),
+        authoritative_lineage: current.authority.authoritative_participant_lineage.clone(),
+        issued_at: timestamp("2026-07-14T12:10:00.000000000Z"),
+    }
+}
+
+fn stop_completion_request(
+    intent: &super::store_schema::HostSessionStopIntentV1,
+    delivery_acceptance_id: Option<&str>,
+) -> CompleteHostSessionStopRequestV1 {
+    let active_delivery = delivery_acceptance_id.is_some();
+    CompleteHostSessionStopRequestV1 {
+        intent_id: intent.intent_id.clone(),
+        request_id: intent.request_id.clone(),
+        payload_commitment: intent.payload_commitment.clone(),
+        orchestration_session_id: intent.orchestration_session_id.clone(),
+        authoritative_participant_id: intent.authoritative_participant_id.clone(),
+        caller: HostSessionTransitionCallerV1 {
+            kind: if active_delivery {
+                HostSessionTransitionCallerKindV1::Repl
+            } else {
+                HostSessionTransitionCallerKindV1::PublicCli
+            },
+            caller_participant_id: active_delivery
+                .then(|| intent.authoritative_participant_id.clone()),
+            auto_attach_obligation_id: None,
+            auto_attach_claim_owner: None,
+        },
+        delivery_acceptance_id: delivery_acceptance_id.map(str::to_string),
+        result_id: "stop-result-1".into(),
+        completed_at: timestamp("2026-07-14T12:10:20.000000000Z"),
+    }
+}
+
+#[test]
+fn parked_hsa_stop_terminalizes_without_delivery_and_exact_retry_joins() {
+    let (_parent, authority, binding) = authority();
+    let request = start_request(binding);
+    let (current, _) = park_with_resume_handle(&authority, &request);
+    let stop_request = stop_request(&current);
+
+    let HostSessionStopIssueOutcomeV1::Issued(intent) =
+        authority.issue_stop(&current, &stop_request).unwrap()
+    else {
+        panic!("first parked Stop issuance must commit")
+    };
+    let completion_request = stop_completion_request(&intent, None);
+    let HostSessionStopCompletionOutcomeV1::Completed(result) =
+        authority.complete_stop(&completion_request).unwrap()
+    else {
+        panic!("first parked Stop closeout must commit")
+    };
+    assert_eq!(result.resulting_posture, HostSessionPostureV1::Terminal);
+    assert_eq!(
+        authority
+            .resolve_current_exact(&request.orchestration_session_id, None)
+            .unwrap()
+            .authority
+            .lifecycle_posture,
+        HostSessionPostureV1::Terminal
+    );
+
+    assert!(matches!(
+        authority.complete_stop(&completion_request).unwrap(),
+        HostSessionStopCompletionOutcomeV1::Joined(joined) if joined == result
+    ));
+    assert!(matches!(
+        authority.issue_stop(&current, &stop_request).unwrap(),
+        HostSessionStopIssueOutcomeV1::AlreadyTerminal(joined) if joined == result
+    ));
+
+    let mut substituted = stop_request;
+    substituted.request_id = "stop-request-substituted".into();
+    assert!(authority.issue_stop(&current, &substituted).is_err());
+}
+
+#[test]
+fn active_hsa_stop_requires_exact_delivery_and_authenticated_closeout() {
+    let (_parent, authority, request, _registration) = applied_start_for_continuity();
+    let current = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .unwrap();
+    let HostSessionStopIssueOutcomeV1::Issued(intent) = authority
+        .issue_stop(&current, &stop_request(&current))
+        .unwrap()
+    else {
+        panic!("first active Stop issuance must commit")
+    };
+
+    assert!(authority
+        .complete_stop(&stop_completion_request(&intent, None))
+        .is_err());
+    assert_eq!(
+        authority
+            .resolve_current_exact(&request.orchestration_session_id, None)
+            .unwrap()
+            .authority
+            .lifecycle_posture,
+        HostSessionPostureV1::ActiveAttached
+    );
+
+    let delivery = AcceptHostSessionStopDeliveryRequestV1 {
+        intent_id: intent.intent_id.clone(),
+        request_id: intent.request_id.clone(),
+        payload_commitment: intent.payload_commitment.clone(),
+        orchestration_session_id: intent.orchestration_session_id.clone(),
+        authoritative_participant_id: intent.authoritative_participant_id.clone(),
+        authority_revision: intent.authority_before.authority_revision,
+        authority_record_commitment: intent.authority_record_commitment_before.clone(),
+        acceptance_id: "stop-acceptance-1".into(),
+        accepted_at: timestamp("2026-07-14T12:10:10.000000000Z"),
+    };
+    let HostSessionStopDeliveryOutcomeV1::Accepted(accepted) =
+        authority.accept_stop_delivery(&delivery).unwrap()
+    else {
+        panic!("first active Stop delivery must commit")
+    };
+    assert!(matches!(
+        authority.accept_stop_delivery(&delivery).unwrap(),
+        HostSessionStopDeliveryOutcomeV1::Joined(joined) if joined == accepted
+    ));
+    assert_eq!(
+        authority
+            .resolve_current_exact(&request.orchestration_session_id, None)
+            .unwrap()
+            .authority
+            .lifecycle_posture,
+        HostSessionPostureV1::ActiveAttached,
+        "delivery acceptance is not terminal authority"
+    );
+
+    let mut wrong_participant = delivery.clone();
+    wrong_participant.authoritative_participant_id = "participant-substituted".into();
+    assert!(authority.accept_stop_delivery(&wrong_participant).is_err());
+    let mut stale_revision = delivery.clone();
+    stale_revision.authority_revision += 1;
+    assert!(authority.accept_stop_delivery(&stale_revision).is_err());
+    let mut wrong_request = delivery.clone();
+    wrong_request.request_id = "stop-request-substituted".into();
+    assert!(authority.accept_stop_delivery(&wrong_request).is_err());
+    let mut wrong_payload = delivery.clone();
+    wrong_payload.payload_commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+        digest_hex: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee".into(),
+    };
+    assert!(authority.accept_stop_delivery(&wrong_payload).is_err());
+    let mut regressing_delivery = delivery.clone();
+    regressing_delivery.accepted_at = timestamp("2026-07-14T12:09:59.000000000Z");
+    assert!(authority
+        .accept_stop_delivery(&regressing_delivery)
+        .is_err());
+    let mut wrong_acceptance = stop_completion_request(&intent, Some(&delivery.acceptance_id));
+    wrong_acceptance.delivery_acceptance_id = Some("stop-acceptance-substituted".into());
+    assert!(authority.complete_stop(&wrong_acceptance).is_err());
+    let mut wrong_completion_request =
+        stop_completion_request(&intent, Some(&delivery.acceptance_id));
+    wrong_completion_request.request_id = "stop-request-substituted".into();
+    assert!(authority.complete_stop(&wrong_completion_request).is_err());
+    let mut wrong_completion_participant =
+        stop_completion_request(&intent, Some(&delivery.acceptance_id));
+    wrong_completion_participant.authoritative_participant_id = "participant-substituted".into();
+    assert!(authority
+        .complete_stop(&wrong_completion_participant)
+        .is_err());
+    let mut regressing_completion = stop_completion_request(&intent, Some(&delivery.acceptance_id));
+    regressing_completion.completed_at = timestamp("2026-07-14T12:10:09.000000000Z");
+    assert!(authority.complete_stop(&regressing_completion).is_err());
+
+    let completion = stop_completion_request(&intent, Some(&delivery.acceptance_id));
+    let HostSessionStopCompletionOutcomeV1::Completed(result) =
+        authority.complete_stop(&completion).unwrap()
+    else {
+        panic!("authenticated active Stop closeout must commit")
+    };
+    assert_eq!(result.resulting_posture, HostSessionPostureV1::Terminal);
+    assert!(matches!(
+        authority.complete_stop(&completion).unwrap(),
+        HostSessionStopCompletionOutcomeV1::Joined(joined) if joined == result
+    ));
+    let mut conflicting_retry = completion;
+    conflicting_retry.completed_at = timestamp("2026-07-14T12:10:21.000000000Z");
+    assert!(authority.complete_stop(&conflicting_retry).is_err());
+}
+
+#[test]
+fn hsa_stop_restart_exact_joins_each_committed_stage() {
+    let (_parent, authority, request, _registration) = applied_start_for_continuity();
+    let current = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .unwrap();
+    let home = current.observation.bootstrap_home.physical_path.clone();
+    let stop_request = stop_request(&current);
+    let HostSessionStopIssueOutcomeV1::Issued(intent) =
+        authority.issue_stop(&current, &stop_request).unwrap()
+    else {
+        panic!("first active Stop issuance must commit")
+    };
+
+    drop(authority);
+    let authority = HostSessionAuthority::open(Path::new(&home)).unwrap();
+    assert!(matches!(
+        authority.issue_stop(&current, &stop_request).unwrap(),
+        HostSessionStopIssueOutcomeV1::Joined(joined) if joined == intent
+    ));
+
+    let delivery = AcceptHostSessionStopDeliveryRequestV1 {
+        intent_id: intent.intent_id.clone(),
+        request_id: intent.request_id.clone(),
+        payload_commitment: intent.payload_commitment.clone(),
+        orchestration_session_id: intent.orchestration_session_id.clone(),
+        authoritative_participant_id: intent.authoritative_participant_id.clone(),
+        authority_revision: intent.authority_before.authority_revision,
+        authority_record_commitment: intent.authority_record_commitment_before.clone(),
+        acceptance_id: "stop-acceptance-restart".into(),
+        accepted_at: timestamp("2026-07-14T12:10:10.000000000Z"),
+    };
+    let HostSessionStopDeliveryOutcomeV1::Accepted(accepted) =
+        authority.accept_stop_delivery(&delivery).unwrap()
+    else {
+        panic!("first Stop delivery must commit")
+    };
+
+    drop(authority);
+    let authority = HostSessionAuthority::open(Path::new(&home)).unwrap();
+    assert!(matches!(
+        authority.accept_stop_delivery(&delivery).unwrap(),
+        HostSessionStopDeliveryOutcomeV1::Joined(joined) if joined == accepted
+    ));
+    let completion = stop_completion_request(&intent, Some(&delivery.acceptance_id));
+    let HostSessionStopCompletionOutcomeV1::Completed(result) =
+        authority.complete_stop(&completion).unwrap()
+    else {
+        panic!("first Stop completion must commit")
+    };
+
+    drop(authority);
+    let authority = HostSessionAuthority::open(Path::new(&home)).unwrap();
+    assert!(matches!(
+        authority.complete_stop(&completion).unwrap(),
+        HostSessionStopCompletionOutcomeV1::Joined(joined) if joined == result
+    ));
+    assert_eq!(
+        authority
+            .resolve_current_exact(&request.orchestration_session_id, None)
+            .unwrap()
+            .authority
+            .lifecycle_posture,
+        HostSessionPostureV1::Terminal
+    );
+}
+
+#[test]
+fn hsa_stop_capability_denial_precedes_intent_mutation() {
+    let (_parent, authority, binding) = authority();
+    let mut request = start_request(binding);
+    request.start_contract.capabilities.session_stop = false;
+    let application = issue_and_claim_start(&authority, &request);
+    authority
+        .apply_start_at(&application, timestamp("2026-07-14T12:01:10.000000000Z"))
+        .unwrap();
+    let current = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .unwrap();
+    assert!(authority
+        .issue_stop(&current, &stop_request(&current))
+        .is_err());
+    assert!(authority
+        .read_a12b_root()
+        .unwrap()
+        .stop_transaction_map
+        .is_empty());
 }

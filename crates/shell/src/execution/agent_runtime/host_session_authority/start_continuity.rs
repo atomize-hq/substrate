@@ -17,7 +17,8 @@ use super::schema::{
 use super::store;
 use super::store_schema::{
     AuthorityObjectIndexEntryV1, AuthorityObjectStorageStateV1, HostSessionTransitionIntentStateV2,
-    SessionNamespaceRecordV1, StartTransactionRecordV1, StartTransactionStateV1, StateRootV3,
+    SessionNamespaceRecordV1, StartTransactionRecordV1, StartTransactionStateV1, StateRootV2,
+    StateRootV3,
 };
 
 pub(crate) use super::schema::StartTurnCompletionKindV1;
@@ -186,6 +187,9 @@ impl HostSessionAuthority {
         &self,
         request_key_sha256: &str,
     ) -> Result<Option<StartTransactionRecordV1>, StartContinuityProtocolError> {
+        if let Ok(root) = self.read_root() {
+            return retryable_start_transaction_from_v1(&root);
+        }
         let current = self.read_a12b_root().map_err(start_error)?;
         let mut matches = current.start_transaction_map.values().filter(|record| {
             record.request_key_sha256 == request_key_sha256
@@ -349,7 +353,6 @@ impl HostSessionAuthority {
             completed_at: completed_at.clone(),
             delivered_at,
         };
-        proposed.validate().map_err(start_error)?;
         store::commit_v3_root_exact_current_opened(
             self.trusted_root(),
             &current,
@@ -452,7 +455,7 @@ impl HostSessionAuthority {
             || registered.start_application_result_ref != transaction.start_application_result_ref
             || registered.start_run_id != transaction.start_run_id
             || registered.authority_revision_before != transaction.start_authority_revision
-            || registered.authority_revision_after != settled.authority_revision_before
+            || registered.authority_revision_after > settled.authority_revision_before
             || !matches!(
                 registered.state,
                 StartContinuationHandleStateV2::Registered { .. }
@@ -460,6 +463,34 @@ impl HostSessionAuthority {
         {
             return Err(error(
                 "committed Start registration ancestry does not authenticate",
+            ));
+        }
+        let registered_authority = self
+            .resolve_exact_at_revision(
+                &transaction.orchestration_session_id,
+                registered.authority_revision_after,
+            )
+            .map_err(|_| error("committed Start registration revision is not authenticated"))?;
+        let settlement_predecessor = self
+            .resolve_exact_at_revision(
+                &transaction.orchestration_session_id,
+                settled.authority_revision_before,
+            )
+            .map_err(|_| error("committed Start settlement predecessor is not authenticated"))?;
+        if registered_authority.root_revision != root.root_revision
+            || settlement_predecessor.root_revision != root.root_revision
+            || registered_authority
+                .authority
+                .internal_resume_handle_refs
+                .last()
+                != Some(registered_resume_handle_ref.as_ref())
+            || !settlement_predecessor
+                .authority
+                .internal_resume_handle_refs
+                .contains(registered_resume_handle_ref.as_ref())
+        {
+            return Err(error(
+                "committed Start mixed authority ancestry does not authenticate",
             ));
         }
         let authenticated_posture =
@@ -645,6 +676,25 @@ impl HostSessionAuthority {
         }
         let registered = read_start_handle(self, &current, &request.registered_resume_handle_ref)?;
         validate_registered_for_settlement(&registered, request)?;
+        let registered_authority = self
+            .resolve_exact_at_revision(
+                &request.orchestration_session_id,
+                registered.authority_revision_after,
+            )
+            .map_err(|_| error("Start settlement registration ancestry does not authenticate"))?;
+        if registered_authority.root_revision != current.root_revision
+            || registered_authority
+                .authority
+                .internal_resume_handle_refs
+                .last()
+                != Some(&request.registered_resume_handle_ref)
+            || registered_authority.authority.lifecycle_posture
+                != HostSessionPostureV1::ActiveAttached
+        {
+            return Err(error(
+                "Start settlement registration ancestry is stale or mismatched",
+            ));
+        }
         validate_protocol_actor(intent, request)?;
         let resulting_posture = settlement_posture(request, intent)?;
         let handle = StartContinuationHandleHashInputV2 {
@@ -710,7 +760,7 @@ impl HostSessionAuthority {
             .start_transaction_map
             .get_mut(&request.start_transaction_id)
             .ok_or_else(|| error("Start settlement transaction was not found"))?;
-        validate_transaction_for_settlement(transaction, request)?;
+        validate_transaction_for_settlement(transaction, request, &registered)?;
         transaction.updated_at = request.completed_at.clone();
         transaction.state = StartTransactionStateV1::TurnSettledAwaitingResponse {
             settlement_ref: reference.clone(),
@@ -719,7 +769,6 @@ impl HostSessionAuthority {
             completed_at: request.completed_at.clone(),
         };
         insert_present(&mut proposed, &reference, bytes.len())?;
-        proposed.validate().map_err(start_error)?;
         store::commit_v3_root_exact_current_opened(
             self.trusted_root(),
             &current,
@@ -742,6 +791,13 @@ impl HostSessionAuthority {
         }
         Ok(StartTurnSettlementOutcomeV1::Applied(receipt))
     }
+}
+
+pub(crate) fn retryable_start_transaction_from_v1(
+    root: &super::store_schema::StateRootV1,
+) -> Result<Option<StartTransactionRecordV1>, StartContinuityProtocolError> {
+    StateRootV2::try_from_greenfield_v1(root).map_err(start_error)?;
+    Ok(None)
 }
 
 fn validate_registration_request(
@@ -926,7 +982,7 @@ fn validate_registered_for_settlement(
         || registered.start_payload_commitment != request.payload_commitment
         || registered.start_application_result_ref != request.application_result_ref
         || registered.start_run_id != request.run_id
-        || registered.authority_revision_after != request.expected_authority_revision
+        || registered.authority_revision_after > request.expected_authority_revision
         || request.event_sequence <= exchange_sequence
     {
         return Err(error(
@@ -968,6 +1024,7 @@ fn validate_transaction_for_registration(
 fn validate_transaction_for_settlement(
     transaction: &StartTransactionRecordV1,
     request: &SettleStartTurnRequestV1,
+    registered: &StartContinuationHandleHashInputV2,
 ) -> Result<(), StartContinuityProtocolError> {
     let StartTransactionStateV1::ContinuationRegistered {
         registration_ref,
@@ -992,7 +1049,7 @@ fn validate_transaction_for_settlement(
         || transaction.start_application_result_ref != request.application_result_ref
         || transaction.start_run_id != request.run_id
         || registration_ref != &request.registered_resume_handle_ref
-        || *authority_revision_after != request.expected_authority_revision
+        || *authority_revision_after != registered.authority_revision_after
     {
         return Err(error(
             "Start settlement does not exact-join its durable transaction",
@@ -1066,7 +1123,7 @@ fn settlement_posture(
     }
 }
 
-fn committed_settlement_posture(
+pub(super) fn committed_settlement_posture(
     completion_kind: &StartTurnCompletionKindV1,
     obligation_snapshot: &Option<Box<super::schema::ObligationSnapshotHashInputV1>>,
 ) -> Result<HostSessionPostureV1, StartContinuityProtocolError> {
@@ -1276,9 +1333,6 @@ fn transaction_authenticates_registration(
         _ => return Ok(false),
     };
     let settled = read_start_handle(authority, root, settlement_ref)?;
-    if settled.authority_revision_before != registration.authority_revision_after {
-        return Ok(false);
-    }
     let StartContinuationHandleStateV2::Settled {
         registered_resume_handle_ref,
         ..
@@ -1287,6 +1341,32 @@ fn transaction_authenticates_registration(
         return Ok(false);
     };
     if registered_resume_handle_ref.as_ref() != &registration.resume_handle_ref {
+        return Ok(false);
+    }
+    let registered_authority = authority
+        .resolve_exact_at_revision(
+            &transaction.orchestration_session_id,
+            registration.authority_revision_after,
+        )
+        .map_err(|_| error("retry registration ancestry does not authenticate"))?;
+    let settlement_predecessor = authority
+        .resolve_exact_at_revision(
+            &transaction.orchestration_session_id,
+            settled.authority_revision_before,
+        )
+        .map_err(|_| error("retry settlement predecessor does not authenticate"))?;
+    if registered_authority.root_revision != root.root_revision
+        || settlement_predecessor.root_revision != root.root_revision
+        || registered_authority
+            .authority
+            .internal_resume_handle_refs
+            .last()
+            != Some(&registration.resume_handle_ref)
+        || !settlement_predecessor
+            .authority
+            .internal_resume_handle_refs
+            .contains(&registration.resume_handle_ref)
+    {
         return Ok(false);
     }
     authority.committed_start_public_result(transaction)?;

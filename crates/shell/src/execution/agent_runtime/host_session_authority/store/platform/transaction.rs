@@ -12,6 +12,9 @@ const WORLD_WORK_EXECUTION_SUPERVISOR_FILE: &str = "world-work-execution-supervi
 const WORLD_WORK_EXECUTION_SUPERVISOR_PREFIX: &str = "world-work-execution-supervisor-v1";
 const WORLD_WORK_EXECUTION_SUPERVISOR_TEMP_PREFIX: &str = "world-work-execution-supervisor-v1--";
 const WORLD_WORK_EXECUTION_SUPERVISOR_TEMP_SUFFIX: &str = ".tmp";
+const POST_HSA_OBLIGATION_LEDGER_DIRECTORY: &str = "obligation-ledger";
+const POST_HSA_OBLIGATION_LEDGER_TEMP_PREFIX: &str = ".auto-attach-ledger--";
+const POST_HSA_OBLIGATION_LEDGER_TEMP_SUFFIX: &str = ".tmp";
 
 struct WorldWorkReceiptRegistryStorageInnerV1 {
     root: TrustedAuthorityRoot,
@@ -47,6 +50,7 @@ pub(crate) struct WorldWorkReceiptRegistryTransactionV1<'storage> {
     run: TrustedDirectory,
     agent_hub_entry: DirectoryEntry,
     agent_hub: TrustedDirectory,
+    retained_post_hsa_ledger_directories: RetainedPostHsaLedgerDirectories,
     _lock: TrustedOwnedFileLock,
 }
 
@@ -194,6 +198,185 @@ struct RetainedDirectory {
     entry: DirectoryEntry,
     directory: TrustedDirectory,
     children: RetainedDirectoryChildren,
+}
+
+#[derive(Default)]
+struct RetainedPostHsaLedgerDirectories {
+    children: RetainedDirectoryChildren,
+}
+
+impl RetainedPostHsaLedgerDirectories {
+    fn with_directory<T>(
+        &mut self,
+        root: &TrustedDirectory,
+        components: &[&str],
+        create_missing: bool,
+        operation: impl FnOnce(
+            &TrustedDirectory,
+            &mut RetainedDirectoryChildren,
+        ) -> Result<T, BootstrapError>,
+    ) -> Result<Option<T>, BootstrapError> {
+        Self::with_child_directory(
+            root,
+            &mut self.children,
+            components,
+            create_missing,
+            operation,
+        )
+    }
+
+    fn with_child_directory<T>(
+        parent: &TrustedDirectory,
+        retained: &mut RetainedDirectoryChildren,
+        components: &[&str],
+        create_missing: bool,
+        operation: impl FnOnce(
+            &TrustedDirectory,
+            &mut RetainedDirectoryChildren,
+        ) -> Result<T, BootstrapError>,
+    ) -> Result<Option<T>, BootstrapError> {
+        let Some((component, remaining)) = components.split_first() else {
+            return operation(parent, retained).map(Some);
+        };
+        validate_post_hsa_obligation_ledger_component(component)?;
+
+        if retained.absent.contains_key(*component) {
+            if parent
+                .entry_kind(component)
+                .map_err(|_| BootstrapError("revalidate absent post-HSA ledger directory"))?
+                .is_some()
+            {
+                return Err(BootstrapError(
+                    "post-HSA ledger directory appeared after transaction admission",
+                ));
+            }
+            if !create_missing {
+                return Ok(None);
+            }
+            retained.absent.remove(*component);
+        }
+
+        if !retained.opened.contains_key(*component) {
+            match parent
+                .entry_kind(component)
+                .map_err(|_| BootstrapError("inspect post-HSA ledger directory"))?
+            {
+                None if !create_missing => {
+                    retained.absent.insert(
+                        (*component).to_string(),
+                        RetainedDirectoryChildren::default(),
+                    );
+                    return Ok(None);
+                }
+                None => {
+                    parent
+                        .create_directory(component)
+                        .map(drop)
+                        .map_err(|_| BootstrapError("create post-HSA ledger directory"))?;
+                }
+                Some(EntryKind::Directory) => {}
+                Some(EntryKind::RegularFile | EntryKind::Symlink | EntryKind::Other) => {
+                    return Err(BootstrapError("post-HSA ledger directory is unsafe"));
+                }
+            }
+            let entry = parent
+                .entries()
+                .map_err(|_| BootstrapError("enumerate post-HSA ledger parent"))?
+                .into_iter()
+                .find(|entry| entry.name == *component && entry.kind == EntryKind::Directory)
+                .ok_or(BootstrapError(
+                    "post-HSA ledger directory was not safely enumerated",
+                ))?;
+            let directory = parent
+                .open_controlled_directory_entry(&entry)
+                .map_err(|_| BootstrapError("retain post-HSA ledger directory"))?;
+            retained.opened.insert(
+                (*component).to_string(),
+                RetainedDirectory {
+                    entry,
+                    directory,
+                    children: RetainedDirectoryChildren::default(),
+                },
+            );
+        }
+
+        let child = retained
+            .opened
+            .get_mut(*component)
+            .ok_or(BootstrapError("post-HSA ledger directory was not retained"))?;
+        parent
+            .open_controlled_directory_entry(&child.entry)
+            .map(drop)
+            .map_err(|_| BootstrapError("post-HSA ledger directory changed identity"))?;
+        Self::with_child_directory(
+            &child.directory,
+            &mut child.children,
+            remaining,
+            create_missing,
+            operation,
+        )
+    }
+
+    fn revalidate(&self, root: &TrustedDirectory) -> Result<(), BootstrapError> {
+        Self::revalidate_children(root, &self.children)
+    }
+
+    fn retain_enumerated_child(
+        parent: &TrustedDirectory,
+        retained: &mut RetainedDirectoryChildren,
+        entry: DirectoryEntry,
+    ) -> Result<(), BootstrapError> {
+        if retained.absent.contains_key(&entry.name) {
+            return Err(BootstrapError(
+                "enumerated post-HSA ledger directory conflicts with retained absence",
+            ));
+        }
+        if let Some(existing) = retained.opened.get(&entry.name) {
+            if existing.entry != entry {
+                return Err(BootstrapError(
+                    "enumerated post-HSA ledger directory changed identity",
+                ));
+            }
+            return Ok(());
+        }
+        let directory = parent
+            .open_controlled_directory_entry(&entry)
+            .map_err(|_| BootstrapError("retain enumerated post-HSA ledger directory"))?;
+        retained.opened.insert(
+            entry.name.clone(),
+            RetainedDirectory {
+                entry,
+                directory,
+                children: RetainedDirectoryChildren::default(),
+            },
+        );
+        Ok(())
+    }
+
+    fn revalidate_children(
+        parent: &TrustedDirectory,
+        retained: &RetainedDirectoryChildren,
+    ) -> Result<(), BootstrapError> {
+        for absent in retained.absent.keys() {
+            if parent
+                .entry_kind(absent)
+                .map_err(|_| BootstrapError("revalidate absent post-HSA ledger directory"))?
+                .is_some()
+            {
+                return Err(BootstrapError(
+                    "absent post-HSA ledger directory appeared during transaction",
+                ));
+            }
+        }
+        for child in retained.opened.values() {
+            parent
+                .open_controlled_directory_entry(&child.entry)
+                .map(drop)
+                .map_err(|_| BootstrapError("post-HSA ledger directory changed identity"))?;
+            Self::revalidate_children(&child.directory, &child.children)?;
+        }
+        Ok(())
+    }
 }
 
 impl RetainedLegacyDirectories {
@@ -1012,6 +1195,250 @@ impl LegacyStateStoreTransactionV1 {
 }
 
 impl WorldWorkReceiptRegistryTransactionV1<'_> {
+    pub(crate) fn verify_post_hsa_authority_binding(
+        &mut self,
+        expected_observation: &crate::execution::agent_runtime::host_session_authority::facade::AuthorityObservationV1,
+        expected_router_auto_attach_intent: Option<
+            &crate::execution::agent_runtime::host_session_authority::store_schema::HostSessionTransitionIntentV3,
+        >,
+    ) -> Result<(), BootstrapError> {
+        self.verify_scope()?;
+        crate::execution::agent_runtime::host_session_authority::facade::validate_locked_post_hsa_authority_binding(
+            &self.locked_root,
+            expected_observation,
+            expected_router_auto_attach_intent,
+        )
+        .map_err(|_| BootstrapError("validate locked post-HSA authority binding"))?;
+        self.verify_scope()
+    }
+
+    pub(crate) fn read_post_hsa_obligation_ledger_file(
+        &mut self,
+        expected_root_revision: u64,
+        orchestration_session_id: &str,
+        relative_path: &[&str],
+    ) -> Result<Option<Vec<u8>>, BootstrapError> {
+        self.verify_post_hsa_obligation_ledger_scope(expected_root_revision)?;
+        let (target, directories) = relative_path
+            .split_last()
+            .ok_or(BootstrapError("post-HSA obligation ledger path is empty"))?;
+        validate_post_hsa_obligation_ledger_component(target)?;
+        let bytes = self
+            .with_post_hsa_obligation_ledger_directory(
+                orchestration_session_id,
+                directories,
+                false,
+                |parent, _| read_exact_regular_file(parent, target),
+            )?
+            .flatten();
+        self.verify_post_hsa_obligation_ledger_scope(expected_root_revision)?;
+        Ok(bytes)
+    }
+
+    pub(crate) fn list_post_hsa_obligation_ledger_files(
+        &mut self,
+        expected_root_revision: u64,
+        orchestration_session_id: &str,
+        relative_directory: &[&str],
+    ) -> Result<Vec<(String, Vec<u8>)>, BootstrapError> {
+        self.verify_post_hsa_obligation_ledger_scope(expected_root_revision)?;
+        let files = self
+            .with_post_hsa_obligation_ledger_directory(
+                orchestration_session_id,
+                relative_directory,
+                false,
+                |directory, _| {
+                    reconcile_post_hsa_obligation_ledger_temps(directory)?;
+                    let entries = directory.entries().map_err(|_| {
+                        BootstrapError("enumerate post-HSA obligation ledger directory")
+                    })?;
+                    let mut files = Vec::new();
+                    for entry in entries {
+                        if entry.kind != EntryKind::RegularFile || !entry.name.ends_with(".json") {
+                            return Err(BootstrapError(
+                                "post-HSA obligation ledger directory contains an unsafe entry",
+                            ));
+                        }
+                        let bytes = directory
+                            .open_file_entry(&entry)
+                            .and_then(|file| file.read_all())
+                            .and_then(|bytes| directory.revalidate_entry(&entry).map(|()| bytes))
+                            .map_err(|_| {
+                                BootstrapError("read post-HSA obligation ledger artifact")
+                            })?;
+                        files.push((entry.name, bytes));
+                    }
+                    files.sort_by(|left, right| left.0.cmp(&right.0));
+                    Ok(files)
+                },
+            )?
+            .unwrap_or_default();
+        self.verify_post_hsa_obligation_ledger_scope(expected_root_revision)?;
+        Ok(files)
+    }
+
+    pub(crate) fn list_post_hsa_obligation_ledger_directories(
+        &mut self,
+        expected_root_revision: u64,
+        orchestration_session_id: &str,
+        relative_directory: &[&str],
+    ) -> Result<Vec<String>, BootstrapError> {
+        self.verify_post_hsa_obligation_ledger_scope(expected_root_revision)?;
+        let names = self
+            .with_post_hsa_obligation_ledger_directory(
+                orchestration_session_id,
+                relative_directory,
+                false,
+                |directory, retained_children| {
+                    let mut names = Vec::new();
+                    for entry in directory.entries().map_err(|_| {
+                        BootstrapError("enumerate post-HSA obligation ledger directories")
+                    })? {
+                        if entry.kind != EntryKind::Directory {
+                            return Err(BootstrapError(
+                                "post-HSA obligation ledger collection contains a non-directory entry",
+                            ));
+                        }
+                        let name = entry.name.clone();
+                        RetainedPostHsaLedgerDirectories::retain_enumerated_child(
+                            directory,
+                            retained_children,
+                            entry,
+                        )?;
+                        names.push(name);
+                    }
+                    names.sort();
+                    Ok(names)
+                },
+            )?
+            .unwrap_or_default();
+        self.verify_post_hsa_obligation_ledger_scope(expected_root_revision)?;
+        Ok(names)
+    }
+
+    pub(crate) fn replace_post_hsa_obligation_ledger_file(
+        &mut self,
+        expected_root_revision: u64,
+        orchestration_session_id: &str,
+        relative_path: &[&str],
+        expected_bytes: &[u8],
+        replacement_bytes: &[u8],
+    ) -> Result<(), BootstrapError> {
+        self.verify_post_hsa_obligation_ledger_scope(expected_root_revision)?;
+        let (target, directories) = relative_path
+            .split_last()
+            .ok_or(BootstrapError("post-HSA obligation ledger path is empty"))?;
+        validate_post_hsa_obligation_ledger_component(target)?;
+        self.with_post_hsa_obligation_ledger_directory(
+            orchestration_session_id,
+            directories,
+            false,
+            |parent, _| {
+                reconcile_post_hsa_obligation_ledger_temps(parent)?;
+                let current = read_exact_regular_file(parent, target)?.ok_or(BootstrapError(
+                    "expected post-HSA obligation ledger artifact is absent",
+                ))?;
+                if current != expected_bytes {
+                    return Err(BootstrapError(
+                        "stale or conflicting post-HSA obligation ledger artifact",
+                    ));
+                }
+                publish_post_hsa_obligation_ledger_file(parent, target, replacement_bytes, true)
+            },
+        )?
+        .ok_or(BootstrapError(
+            "expected post-HSA obligation ledger parent is absent",
+        ))?;
+        self.root
+            .directory()
+            .sync()
+            .map_err(|_| BootstrapError("sync post-HSA obligation ledger root"))?;
+        self.verify_post_hsa_obligation_ledger_scope(expected_root_revision)
+    }
+
+    pub(crate) fn publish_post_hsa_obligation_ledger_file(
+        &mut self,
+        expected_root_revision: u64,
+        orchestration_session_id: &str,
+        relative_path: &[&str],
+        bytes: &[u8],
+    ) -> Result<(), BootstrapError> {
+        self.verify_post_hsa_obligation_ledger_scope(expected_root_revision)?;
+        let (target, directories) = relative_path
+            .split_last()
+            .ok_or(BootstrapError("post-HSA obligation ledger path is empty"))?;
+        validate_post_hsa_obligation_ledger_component(target)?;
+        self.with_post_hsa_obligation_ledger_directory(
+            orchestration_session_id,
+            directories,
+            true,
+            |parent, _| {
+                reconcile_post_hsa_obligation_ledger_temps(parent)?;
+                if read_exact_regular_file(parent, target)?.is_some() {
+                    return Err(BootstrapError(
+                        "post-HSA obligation ledger publication target already exists",
+                    ));
+                }
+                publish_post_hsa_obligation_ledger_file(parent, target, bytes, false)
+            },
+        )?
+        .ok_or(BootstrapError("create post-HSA obligation ledger parent"))?;
+        self.root
+            .directory()
+            .sync()
+            .map_err(|_| BootstrapError("sync post-HSA obligation ledger root"))?;
+        self.verify_post_hsa_obligation_ledger_scope(expected_root_revision)
+    }
+
+    fn with_post_hsa_obligation_ledger_directory<T>(
+        &mut self,
+        orchestration_session_id: &str,
+        relative_directory: &[&str],
+        create_missing: bool,
+        operation: impl FnOnce(
+            &TrustedDirectory,
+            &mut RetainedDirectoryChildren,
+        ) -> Result<T, BootstrapError>,
+    ) -> Result<Option<T>, BootstrapError> {
+        validate_post_hsa_obligation_ledger_component(orchestration_session_id)?;
+        let base = [
+            POST_HSA_OBLIGATION_LEDGER_DIRECTORY,
+            orchestration_session_id,
+        ];
+        if self
+            .retained_post_hsa_ledger_directories
+            .with_directory(self.root.directory(), &base, false, |_, _| Ok(()))?
+            .is_none()
+        {
+            return Ok(None);
+        }
+        let mut components = base.to_vec();
+        components.extend_from_slice(relative_directory);
+        self.retained_post_hsa_ledger_directories.with_directory(
+            self.root.directory(),
+            &components,
+            create_missing,
+            operation,
+        )
+    }
+
+    fn verify_post_hsa_obligation_ledger_scope(
+        &self,
+        expected_root_revision: u64,
+    ) -> Result<(), BootstrapError> {
+        self.verify_scope()?;
+        match &self.locked_root {
+            VersionedStateRoot::V2(root) if root.root_revision == expected_root_revision => Ok(()),
+            VersionedStateRoot::V3(root) if root.root_revision == expected_root_revision => Ok(()),
+            VersionedStateRoot::V1(_) => Err(BootstrapError(
+                "post-HSA obligation ledger mutation requires strict StateRootV2 or StateRootV3",
+            )),
+            VersionedStateRoot::V2(_) | VersionedStateRoot::V3(_) => Err(BootstrapError(
+                "stale post-HSA obligation ledger authority observation",
+            )),
+        }
+    }
+
     pub(crate) fn read_registry(&mut self) -> Result<Option<Vec<u8>>, BootstrapError> {
         self.verify_scope()?;
         validate_world_work_receipt_registry_namespace(&self.agent_hub)?;
@@ -1135,6 +1562,8 @@ impl WorldWorkReceiptRegistryTransactionV1<'_> {
                     .map(drop)
             })
             .map_err(|_| BootstrapError("B1 receipt agent-hub directory changed identity"))?;
+        self.retained_post_hsa_ledger_directories
+            .revalidate(self.root.directory())?;
         self.verify_named_root_lock_scope()
     }
 
@@ -1148,6 +1577,135 @@ impl WorldWorkReceiptRegistryTransactionV1<'_> {
             &self.root_lock_entry,
         )
     }
+}
+
+fn validate_post_hsa_obligation_ledger_component(value: &str) -> Result<(), BootstrapError> {
+    if value.is_empty()
+        || value == "."
+        || value == ".."
+        || value.contains('/')
+        || value.contains('\\')
+        || value.contains('\0')
+    {
+        return Err(BootstrapError(
+            "post-HSA obligation ledger path component is unsafe",
+        ));
+    }
+    Ok(())
+}
+
+fn read_exact_regular_file(
+    parent: &TrustedDirectory,
+    target: &str,
+) -> Result<Option<Vec<u8>>, BootstrapError> {
+    validate_post_hsa_obligation_ledger_component(target)?;
+    let entry = parent
+        .entries()
+        .map_err(|_| BootstrapError("enumerate post-HSA obligation ledger artifact"))?
+        .into_iter()
+        .find(|entry| entry.name == target);
+    let Some(entry) = entry else {
+        return Ok(None);
+    };
+    if entry.kind != EntryKind::RegularFile {
+        return Err(BootstrapError(
+            "post-HSA obligation ledger artifact is not a regular file",
+        ));
+    }
+    let bytes = parent
+        .open_file_entry(&entry)
+        .and_then(|file| file.read_all())
+        .and_then(|bytes| parent.revalidate_entry(&entry).map(|()| bytes))
+        .map_err(|_| BootstrapError("read exact post-HSA obligation ledger artifact"))?;
+    Ok(Some(bytes))
+}
+
+fn reconcile_post_hsa_obligation_ledger_temps(
+    directory: &TrustedDirectory,
+) -> Result<(), BootstrapError> {
+    let entries = directory
+        .entries()
+        .map_err(|_| BootstrapError("enumerate post-HSA obligation ledger temps"))?;
+    for entry in entries.into_iter().filter(|entry| {
+        entry
+            .name
+            .starts_with(POST_HSA_OBLIGATION_LEDGER_TEMP_PREFIX)
+    }) {
+        let suffix = entry
+            .name
+            .strip_prefix(POST_HSA_OBLIGATION_LEDGER_TEMP_PREFIX)
+            .and_then(|value| value.strip_suffix(POST_HSA_OBLIGATION_LEDGER_TEMP_SUFFIX));
+        if entry.kind != EntryKind::RegularFile
+            || !suffix.is_some_and(|hex| {
+                hex.len() == 32
+                    && hex
+                        .bytes()
+                        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            })
+        {
+            return Err(BootstrapError(
+                "post-HSA obligation ledger namespace contains an unsafe temp",
+            ));
+        }
+        directory
+            .open_file_entry(&entry)
+            .and_then(|file| file.sync())
+            .and_then(|()| directory.revalidate_entry(&entry))
+            .map_err(|_| BootstrapError("revalidate post-HSA obligation ledger temp"))?;
+        directory
+            .unlink_file(&entry.name)
+            .map_err(|_| BootstrapError("remove post-HSA obligation ledger temp"))?;
+    }
+    Ok(())
+}
+
+fn publish_post_hsa_obligation_ledger_file(
+    parent: &TrustedDirectory,
+    target: &str,
+    bytes: &[u8],
+    replace: bool,
+) -> Result<(), BootstrapError> {
+    use rand::RngCore as _;
+
+    validate_post_hsa_obligation_ledger_component(target)?;
+    let mut nonce_bytes = [0_u8; 16];
+    rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
+    let temp_name = format!(
+        "{POST_HSA_OBLIGATION_LEDGER_TEMP_PREFIX}{}{POST_HSA_OBLIGATION_LEDGER_TEMP_SUFFIX}",
+        nonce(nonce_bytes)
+    );
+    let mut temp = parent
+        .create_file(&temp_name)
+        .map_err(|_| BootstrapError("create post-HSA obligation ledger temp"))?;
+    temp.write_all(bytes)
+        .map_err(|_| BootstrapError("write post-HSA obligation ledger temp"))?;
+    temp.sync()
+        .map_err(|_| BootstrapError("sync post-HSA obligation ledger temp"))?;
+    if !replace
+        && parent
+            .entry_kind(target)
+            .map_err(|_| BootstrapError("revalidate post-HSA obligation publication target"))?
+            .is_some()
+    {
+        return Err(BootstrapError(
+            "post-HSA obligation ledger publication target appeared",
+        ));
+    }
+    parent
+        .rename_replace(&temp_name, temp, parent, target)
+        .map_err(|_| BootstrapError("publish post-HSA obligation ledger artifact"))?;
+    parent
+        .sync()
+        .map_err(|_| BootstrapError("sync post-HSA obligation ledger publication"))?;
+    let published = read_exact_regular_file(parent, target)?.ok_or(BootstrapError(
+        "published post-HSA obligation ledger artifact is absent",
+    ))?;
+    if published != bytes {
+        return Err(BootstrapError(
+            "published post-HSA obligation ledger artifact changed",
+        ));
+    }
+    Ok(())
 }
 
 impl WorldWorkExecutionSupervisorTransactionV1<'_> {
@@ -1396,6 +1954,7 @@ fn begin_world_work_receipt_registry_transaction<'storage>(
         run,
         agent_hub_entry,
         agent_hub,
+        retained_post_hsa_ledger_directories: RetainedPostHsaLedgerDirectories::default(),
         _lock: lock,
     };
     transaction.verify_scope()?;

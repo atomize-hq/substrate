@@ -631,6 +631,7 @@ pub(super) struct RetainedWorkerApplicationV1 {
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod platform {
+    use std::borrow::Cow;
     use std::fmt;
 
     use rand::RngCore;
@@ -730,7 +731,7 @@ mod platform {
         compare_and_swap_root_with, with_existing_semantic_preflight,
         with_existing_versioned_semantic_preflight, with_opened_existing_semantic_preflight,
         with_opened_existing_versioned_semantic_preflight, with_opened_semantic_preflight,
-        SemanticPreflightMode,
+        SemanticPreflightMode, VersionedSemanticTransaction,
     };
     pub(crate) use transaction::{
         LegacyStateStoreTransactionV1, WorldWorkExecutionSupervisorStorageV1,
@@ -1853,6 +1854,135 @@ mod platform {
         )
     }
 
+    fn retained_v2_view(root: &VersionedStateRoot) -> Result<Cow<'_, StateRootV2>, BootstrapError> {
+        match root {
+            VersionedStateRoot::V2(root) => Ok(Cow::Borrowed(root)),
+            VersionedStateRoot::V3(root) => Ok(Cow::Owned(root.preserved_v2_view())),
+            VersionedStateRoot::V1(_) => Err(BootstrapError(
+                "retained authority requires strict StateRootV2 or StateRootV3",
+            )),
+        }
+    }
+
+    fn retained_versioned_candidate(
+        current: &VersionedStateRoot,
+        proposed: StateRootV2,
+    ) -> Result<VersionedStateRoot, BootstrapError> {
+        match current {
+            VersionedStateRoot::V2(_) => Ok(VersionedStateRoot::V2(proposed)),
+            VersionedStateRoot::V3(current) => {
+                let mut candidate = current.clone();
+                candidate.root_revision = proposed.root_revision;
+                candidate.active_commitment_key_id = proposed.active_commitment_key_id;
+                candidate.commitment_key_registry = proposed.commitment_key_registry;
+                candidate.greenfield_namespace_certificate =
+                    proposed.greenfield_namespace_certificate;
+                candidate.session_namespace_map = proposed.session_namespace_map;
+                candidate.transition_intent_map = proposed.transition_intent_map;
+                candidate.issuer_request_index = proposed.issuer_request_index;
+                candidate.application_journal = proposed.application_journal;
+                candidate.retained_worker_registration_request_index =
+                    proposed.retained_worker_registration_request_index;
+                candidate.retained_worker_registration_journal =
+                    proposed.retained_worker_registration_journal;
+                candidate.object_index = proposed.object_index;
+                Ok(VersionedStateRoot::V3(candidate))
+            }
+            VersionedStateRoot::V1(_) => Err(BootstrapError(
+                "retained authority requires strict StateRootV2 or StateRootV3",
+            )),
+        }
+    }
+
+    fn validate_retained_v3_semantics_and_storage(
+        layout: &StoreLayout<'_>,
+        root: &StateRootV3,
+    ) -> Result<(), BootstrapError> {
+        super::super::facade::validate_v3_schema_with_external_exact_authority_history(root)
+            .map_err(|_| BootstrapError("validate retained V3 authority candidate semantics"))?;
+        for (session_id, record) in &root.session_namespace_map {
+            if matches!(record, SessionNamespaceRecordV1::Authority(_)) {
+                super::super::facade::exact_v3_authority_history_with_reader(
+                    root,
+                    session_id,
+                    |reference| {
+                        let bytes = layout
+                            .read_object_bytes(reference)
+                            .map_err(|error| error.to_string())?;
+                        verify_object_bytes(layout, root, reference, &bytes, None, false)
+                            .map_err(|error| error.to_string())?;
+                        Ok(bytes)
+                    },
+                )
+                .map_err(|_| {
+                    BootstrapError("authenticate mixed V3 authority ancestry for retained mutation")
+                })?;
+            }
+        }
+        layout
+            .validate_existing_keys_v3(root)
+            .map_err(|_| BootstrapError("validate retained V3 commitment keys"))?;
+        layout
+            .validate_existing_objects_v3(root, false)
+            .map_err(|_| BootstrapError("validate retained V3 authority objects"))?;
+        layout
+            .validate_reachable_objects_v3_with_external_start_ancestry(root)
+            .map_err(|_| BootstrapError("validate retained V3 object reachability"))
+    }
+
+    fn validate_retained_v3_publication_candidate(
+        transaction: &VersionedSemanticTransaction<'_, '_>,
+        expected_root_revision: u64,
+        candidate: &VersionedStateRoot,
+    ) -> Result<(), BootstrapError> {
+        let VersionedStateRoot::V3(candidate) = candidate else {
+            return transaction.validate_publication_candidate(expected_root_revision, candidate);
+        };
+        transaction
+            .trusted_root
+            .revalidate()
+            .map_err(|_| BootstrapError("revalidate trusted root for retained V3 candidate"))?;
+        transaction.require_expected_root(expected_root_revision)?;
+        let current = transaction
+            .layout
+            .read_existing_versioned_without_reconciliation(transaction.root.bootstrap_home())
+            .map_err(|_| BootstrapError("reread locked root for retained V3 candidate"))?;
+        if current != transaction.root
+            || candidate.root_revision
+                != expected_root_revision
+                    .checked_add(1)
+                    .ok_or(BootstrapError("retained V3 root revision overflow"))?
+            || candidate.authority_store_id != current.authority_store_id()
+            || &candidate.bootstrap_home != current.bootstrap_home()
+            || &candidate.greenfield_namespace_certificate
+                != current.greenfield_namespace_certificate()
+            || !matches!(current, VersionedStateRoot::V3(_))
+        {
+            return Err(BootstrapError(
+                "retained V3 publication identity or revision is invalid",
+            ));
+        }
+        validate_retained_v3_semantics_and_storage(transaction.layout, candidate)?;
+        transaction
+            .legacy
+            .revalidate(transaction.layout.bootstrap)
+            .map_err(|_| BootstrapError("revalidate legacy state for retained V3 candidate"))?;
+        transaction
+            .trusted_root
+            .revalidate()
+            .map_err(|_| BootstrapError("revalidate trusted root after retained V3 candidate"))?;
+        let current = transaction
+            .layout
+            .read_existing_versioned_without_reconciliation(transaction.root.bootstrap_home())
+            .map_err(|_| BootstrapError("reread retained V3 locked root after validation"))?;
+        if current != transaction.root {
+            return Err(BootstrapError(
+                "locked authority root changed during retained V3 validation",
+            ));
+        }
+        validate_retained_v3_semantics_and_storage(transaction.layout, candidate)
+    }
+
     #[cfg(test)]
     pub(super) fn reserve_retained_worker_registration_at_opened(
         root_handle: &TrustedAuthorityRoot,
@@ -1888,11 +2018,8 @@ mod platform {
         ) -> Result<Vec<u8>, &'static str>,
     ) -> Result<RetainedWorkerReservationV1, BootstrapError> {
         with_opened_existing_versioned_semantic_preflight(root_handle, |transaction| {
-            let VersionedStateRoot::V2(root) = &transaction.root else {
-                return Err(BootstrapError(
-                    "retained registration requires strict StateRootV2",
-                ));
-            };
+            let versioned_root = &transaction.root;
+            let root = retained_v2_view(versioned_root)?;
             if input.issuer_request_id.is_empty()
                 || !input
                     .issuer_request_id
@@ -1983,7 +2110,7 @@ mod platform {
                 }
                 validate_reserved_graph(
                     transaction.layout,
-                    root,
+                    &root,
                     existing,
                     &descriptor_ref,
                     &input.descriptor_bytes,
@@ -1996,7 +2123,7 @@ mod platform {
                     existing.state,
                     RetainedWorkerAuthorityRegistrationRequestStateV1::Reserved
                 ) {
-                    validate_reservation_authority(root, input)?;
+                    validate_reservation_authority(&root, input)?;
                 }
                 transaction.reconcile()?;
                 return Ok(RetainedWorkerReservationV1 {
@@ -2011,7 +2138,7 @@ mod platform {
                 });
             }
 
-            validate_reservation_authority(root, input)?;
+            validate_reservation_authority(&root, input)?;
             if root
                 .issuer_request_index
                 .contains_key(&input.issuer_request_id)
@@ -2050,7 +2177,7 @@ mod platform {
             let mut allocated_ref_ids = std::collections::BTreeSet::new();
             let descriptor_ref = allocate_reserved_canonical_ref(
                 transaction.layout,
-                root,
+                &root,
                 AuthorityObjectKindV1::AgentDescriptor,
                 &input.descriptor_bytes,
                 &allocated_ref_ids,
@@ -2058,7 +2185,7 @@ mod platform {
             allocated_ref_ids.insert(descriptor_ref.ref_id.clone());
             let resume_handle_ref = allocate_reserved_canonical_ref(
                 transaction.layout,
-                root,
+                &root,
                 AuthorityObjectKindV1::ResumeHandle,
                 &input.resume_handle_bytes,
                 &allocated_ref_ids,
@@ -2073,12 +2200,12 @@ mod platform {
             .map_err(BootstrapError)?;
             let retained_worker_ref = allocate_reserved_canonical_ref(
                 transaction.layout,
-                root,
+                &root,
                 AuthorityObjectKindV1::RetainedWorker,
                 &worker_bytes,
                 &allocated_ref_ids,
             )?;
-            let registration_id = allocate_registration_id(root)?;
+            let registration_id = allocate_registration_id(&root)?;
             let registered_at = match &registered_at_override {
                 Some(value) => value.clone(),
                 None => system_timestamp()?,
@@ -2104,7 +2231,7 @@ mod platform {
             };
             validate_reserved_graph(
                 transaction.layout,
-                root,
+                &root,
                 &request,
                 &descriptor_ref,
                 &input.descriptor_bytes,
@@ -2113,15 +2240,19 @@ mod platform {
                 &retained_worker_ref,
                 &worker_bytes,
             )?;
-            let mut proposed = root.clone();
+            let mut proposed = root.as_ref().clone();
             proposed.root_revision = proposed.root_revision.checked_add(1).ok_or(
                 BootstrapError("retained reservation root revision overflow"),
             )?;
             proposed
                 .retained_worker_registration_request_index
                 .insert(input.issuer_request_id.clone(), request.clone());
-            let candidate = VersionedStateRoot::V2(proposed);
-            transaction.validate_publication_candidate(root.root_revision, &candidate)?;
+            let candidate = retained_versioned_candidate(versioned_root, proposed)?;
+            validate_retained_v3_publication_candidate(
+                transaction,
+                root.root_revision,
+                &candidate,
+            )?;
             transaction.reconcile()?;
             publish_versioned_replacement_root(
                 transaction.layout,
@@ -2130,7 +2261,11 @@ mod platform {
                 &candidate,
                 system_material()?.root_nonce,
                 || {
-                    transaction.validate_publication_candidate(root.root_revision, &candidate)?;
+                    validate_retained_v3_publication_candidate(
+                        transaction,
+                        root.root_revision,
+                        &candidate,
+                    )?;
                     if crash_point == Some(RetainedReservationCrashPointV1::BeforeRootPublication) {
                         return Err(BootstrapError(
                             "injected crash before retained reservation publication",
@@ -2164,11 +2299,7 @@ mod platform {
         bytes: &[u8],
     ) -> Result<ObjectPublicationOutcomeV1, BootstrapError> {
         with_opened_existing_versioned_semantic_preflight(root_handle, |transaction| {
-            let VersionedStateRoot::V2(root) = &transaction.root else {
-                return Err(BootstrapError(
-                    "retained object publication requires strict StateRootV2",
-                ));
-            };
+            let root = retained_v2_view(&transaction.root)?;
             let persisted = root
                 .retained_worker_registration_request_index
                 .get(&reserved.request.issuer_request_id)
@@ -2185,7 +2316,7 @@ mod platform {
                 ));
             }
             validate_reservation_authority(
-                root,
+                &root,
                 &RetainedWorkerReservationInputV1 {
                     issuer_request_id: persisted.issuer_request_id.clone(),
                     orchestration_session_id: persisted.orchestration_session_id.clone(),
@@ -2201,7 +2332,7 @@ mod platform {
             )?;
             validate_reserved_graph(
                 transaction.layout,
-                root,
+                &root,
                 persisted,
                 &reserved.descriptor_ref,
                 &reserved.descriptor_bytes,
@@ -2226,11 +2357,11 @@ mod platform {
                     "retained object publication bytes differ from reservation",
                 ));
             }
-            validate_orphan_candidate(transaction.layout, root, reference, bytes, None)?;
+            validate_orphan_candidate(transaction.layout, root.as_ref(), reference, bytes, None)?;
             transaction.reconcile()?;
             publish_or_join_orphan(
                 transaction.layout,
-                root,
+                root.as_ref(),
                 reference,
                 bytes,
                 None,
@@ -2265,11 +2396,8 @@ mod platform {
         crash_point: Option<RetainedApplicationCrashPointV1>,
     ) -> Result<RetainedWorkerApplicationV1, BootstrapError> {
         with_opened_existing_versioned_semantic_preflight(root_handle, |transaction| {
-            let VersionedStateRoot::V2(root) = &transaction.root else {
-                return Err(BootstrapError(
-                    "retained authority application requires strict StateRootV2",
-                ));
-            };
+            let versioned_root = &transaction.root;
+            let root = retained_v2_view(versioned_root)?;
             let persisted = root
                 .retained_worker_registration_request_index
                 .get(&reserved.request.issuer_request_id)
@@ -2285,7 +2413,7 @@ mod platform {
             }
             validate_reserved_graph(
                 transaction.layout,
-                root,
+                &root,
                 persisted,
                 &reserved.descriptor_ref,
                 &reserved.descriptor_bytes,
@@ -2317,7 +2445,14 @@ mod platform {
                         "reserved retained object bytes changed before application",
                     ));
                 }
-                verify_object_bytes(transaction.layout, root, reference, &actual, None, false)?;
+                verify_object_bytes(
+                    transaction.layout,
+                    root.as_ref(),
+                    reference,
+                    &actual,
+                    None,
+                    false,
+                )?;
             }
             if matches!(
                 persisted.state,
@@ -2335,7 +2470,7 @@ mod platform {
                 });
             }
             validate_reservation_authority(
-                root,
+                &root,
                 &RetainedWorkerReservationInputV1 {
                     issuer_request_id: persisted.issuer_request_id.clone(),
                     orchestration_session_id: persisted.orchestration_session_id.clone(),
@@ -2417,7 +2552,7 @@ mod platform {
                 registered_at: persisted.registered_at.clone(),
             };
 
-            let mut proposed = root.clone();
+            let mut proposed = root.as_ref().clone();
             proposed.root_revision = proposed.root_revision.checked_add(1).ok_or(
                 BootstrapError("retained application root revision overflow"),
             )?;
@@ -2460,8 +2595,12 @@ mod platform {
                     "retained registration journal identity already exists",
                 ));
             }
-            let candidate = VersionedStateRoot::V2(proposed);
-            transaction.validate_publication_candidate(root.root_revision, &candidate)?;
+            let candidate = retained_versioned_candidate(versioned_root, proposed)?;
+            validate_retained_v3_publication_candidate(
+                transaction,
+                root.root_revision,
+                &candidate,
+            )?;
             transaction.reconcile()?;
             publish_versioned_replacement_root(
                 transaction.layout,
@@ -2470,7 +2609,11 @@ mod platform {
                 &candidate,
                 system_material()?.root_nonce,
                 || {
-                    transaction.validate_publication_candidate(root.root_revision, &candidate)?;
+                    validate_retained_v3_publication_candidate(
+                        transaction,
+                        root.root_revision,
+                        &candidate,
+                    )?;
                     if crash_point == Some(RetainedApplicationCrashPointV1::BeforeRootPublication) {
                         return Err(BootstrapError(
                             "injected crash before retained authority root publication",

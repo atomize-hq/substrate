@@ -42,9 +42,18 @@ use uuid::Uuid;
 #[cfg(unix)]
 use crate::execution::agent_events::format_event_line;
 use crate::execution::agent_runtime::dispatch_contract::WorkerCancelPayloadV1;
-use crate::execution::agent_runtime::host_session_authority::schema::HostSessionPostureV1;
+use crate::execution::agent_runtime::host_session_authority::schema::{
+    HostSessionPostureV1, HostSessionTransitionCallerKindV1, HostSessionTransitionCallerV1,
+    TimestampV1,
+};
 #[cfg(unix)]
 use crate::execution::agent_runtime::host_session_authority::start_continuity::StartTurnCompletionKindV1;
+#[cfg(unix)]
+use crate::execution::agent_runtime::host_session_authority::stop::{
+    stop_delivery, AcceptHostSessionStopDeliveryRequestV1, CompleteHostSessionStopRequestV1,
+    HostSessionStopCompletionOutcomeV1, HostSessionStopDeliveryOutcomeV1,
+    HostSessionStopDeliveryV1,
+};
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::host_session_authority::store_schema::{
     HostSessionPostTurnApplicationV2, HostSessionStartupOwnershipApplicationV1,
@@ -88,6 +97,8 @@ const OWNER_HELPER_READY_TIMEOUT_ERROR_PREFIX: &str =
 const OWNER_HELPER_READY_TIMEOUT: Duration = Duration::from_secs(30);
 const OWNER_HELPER_READY_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const PRIVATE_STOP_UNIX_PATH_MAX: usize = 100;
+#[cfg(unix)]
+const PRIVATE_HSA_STOP_RESPONSE_TIMEOUT: Duration = Duration::from_secs(10);
 #[cfg(unix)]
 const PRIVATE_PROMPT_READY_TIMEOUT: Duration = Duration::from_secs(10);
 #[cfg(unix)]
@@ -587,6 +598,20 @@ pub(crate) fn launch_hidden_owner_helper(
     })
 }
 
+#[cfg(target_os = "linux")]
+fn append_checked_install_bootstrap_context_arg(command: &mut Command) -> Result<()> {
+    let carrier =
+        crate::execution::install_bootstrap::checked_install_bootstrap_context_from_projections()
+            .context(
+            "failed to obtain authenticated install bootstrap context for owner-helper launch",
+        )?;
+    let encoded = carrier.encode().context(
+        "failed to encode authenticated install bootstrap context for owner-helper launch",
+    )?;
+    command.arg("--install-bootstrap-context-v1").arg(encoded);
+    Ok(())
+}
+
 /// Starts the real public Start exchange without consulting the legacy
 /// compatibility projection for readiness. The startup backchannel and HSA
 /// settlement are the caller's completion authority.
@@ -606,6 +631,8 @@ pub(crate) fn launch_hidden_owner_helper_for_durable_start(
     let exe = env::current_exe()
         .context("failed to resolve current substrate executable for hidden owner-helper launch")?;
     let mut command = Command::new(exe);
+    #[cfg(target_os = "linux")]
+    append_checked_install_bootstrap_context_arg(&mut command)?;
     if world {
         command.arg("--world");
     } else if no_world {
@@ -664,6 +691,7 @@ pub(crate) fn launch_authority_managed_successor_owner_helper(
         "failed to resolve current substrate executable for authority-managed owner-helper launch",
     )?;
     let mut command = Command::new(exe);
+    append_checked_install_bootstrap_context_arg(&mut command)?;
     if world {
         command.arg("--world");
     } else if no_world {
@@ -1354,7 +1382,28 @@ pub(crate) enum PrivateCancelOutcome {
 
 #[derive(Debug)]
 pub(crate) struct PrivateStopRequest {
+    pub(crate) payload: PrivateStopRequestPayloadV1,
     pub response_tx: oneshot::Sender<PrivateStopOutcome>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum PrivateStopRequestPayloadV1 {
+    Legacy,
+    AuthorityManaged(HostSessionStopDeliveryV1),
+}
+
+#[cfg(unix)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct AuthorityManagedStopCloseoutV1 {
+    delivery: HostSessionStopDeliveryV1,
+    acceptance_id: String,
+}
+
+#[cfg(unix)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum AuthorityManagedStopAcceptanceV1 {
+    Accepted(AuthorityManagedStopCloseoutV1),
+    AlreadyTerminal,
 }
 
 #[derive(Debug)]
@@ -1622,6 +1671,14 @@ fn durable_start_private_transport_path(
             .join(socket_name));
     }
     Ok(preferred)
+}
+
+#[cfg(unix)]
+pub(crate) fn durable_start_stop_transport_path(
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> Result<PathBuf> {
+    durable_start_private_transport_path("stop", "stop", orchestration_session_id, participant_id)
 }
 
 #[cfg(unix)]
@@ -2672,6 +2729,8 @@ pub(crate) async fn register_private_stop_transport(
     participant_id: &str,
     stop_tx: PrivateStopRequestSender,
 ) -> Result<PrivateStopTransport> {
+    use std::os::unix::fs::DirBuilderExt;
+
     let path = private_stop_transport_path(store, orchestration_session_id, participant_id);
     let parent = path.parent().ok_or_else(|| {
         anyhow::anyhow!(
@@ -2679,7 +2738,11 @@ pub(crate) async fn register_private_stop_transport(
             path.display()
         )
     })?;
-    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
+    let mut directory_builder = fs::DirBuilder::new();
+    directory_builder.recursive(true).mode(0o700);
+    directory_builder
+        .create(parent)
+        .with_context(|| format!("failed to create private directory {}", parent.display()))?;
     remove_existing_stop_transport_path(&path)?;
     let listener = UnixListener::bind(&path)
         .with_context(|| format!("failed to bind private stop transport {}", path.display()))?;
@@ -2768,6 +2831,8 @@ pub(crate) async fn register_private_cancel_transport(
     participant_id: &str,
     cancel_tx: PrivateCancelRequestSender,
 ) -> Result<PrivateCancelTransport> {
+    use std::os::unix::fs::DirBuilderExt;
+
     let path = private_cancel_transport_path(store, orchestration_session_id, participant_id);
     let parent = path.parent().ok_or_else(|| {
         anyhow::anyhow!(
@@ -2775,7 +2840,11 @@ pub(crate) async fn register_private_cancel_transport(
             path.display()
         )
     })?;
-    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
+    let mut directory_builder = fs::DirBuilder::new();
+    directory_builder.recursive(true).mode(0o700);
+    directory_builder
+        .create(parent)
+        .with_context(|| format!("failed to create private directory {}", parent.display()))?;
     remove_existing_private_cancel_transport_path(&path)?;
     let listener = UnixListener::bind(&path)
         .with_context(|| format!("failed to bind private cancel transport {}", path.display()))?;
@@ -2843,7 +2912,9 @@ pub(crate) fn spawn_local_private_stop_owner(
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         while let Some(request) = stop_rx.recv().await {
-            let outcome = if runtime_is_terminal(&manifest) {
+            let outcome = if !matches!(request.payload, PrivateStopRequestPayloadV1::Legacy) {
+                PrivateStopOutcome::ProtocolError
+            } else if runtime_is_terminal(&manifest) {
                 PrivateStopOutcome::AlreadyTerminal
             } else {
                 shutdown_requested.store(true, Ordering::SeqCst);
@@ -3435,6 +3506,209 @@ pub(crate) async fn request_private_stop(path: &Path) -> Result<PrivateStopOutco
 }
 
 #[cfg(unix)]
+pub(crate) async fn request_private_authority_managed_stop(
+    path: &Path,
+    delivery: &HostSessionStopDeliveryV1,
+) -> Result<PrivateStopOutcome> {
+    request_private_authority_managed_stop_with_response_timeout(
+        path,
+        delivery,
+        PRIVATE_HSA_STOP_RESPONSE_TIMEOUT,
+    )
+    .await
+}
+
+#[cfg(unix)]
+async fn request_private_authority_managed_stop_with_response_timeout(
+    path: &Path,
+    delivery: &HostSessionStopDeliveryV1,
+    response_timeout: Duration,
+) -> Result<PrivateStopOutcome> {
+    let mut stream = match UnixStream::connect(path).await {
+        Ok(stream) => stream,
+        Err(err) => {
+            let kind = err.kind();
+            return Err(anyhow::Error::new(err)
+                .context(format_private_stop_transport_connect_error(path, kind)));
+        }
+    };
+    let request = PrivateStopRequestV2 {
+        version: 2,
+        action: "stop".into(),
+        hsa_stop: delivery.clone(),
+    };
+    stream
+        .write_all(serde_json::to_string(&request)?.as_bytes())
+        .await?;
+    stream.write_all(b"\n").await?;
+    stream.flush().await?;
+
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    let bytes_read = tokio::time::timeout(response_timeout, reader.read_line(&mut line))
+        .await
+        .with_context(|| {
+            format!(
+                "timeout_transport: timed out waiting for exact private HSA Stop response from {}",
+                path.display()
+            )
+        })??;
+    if bytes_read == 0 {
+        anyhow::bail!("private HSA Stop transport closed before its exact response");
+    }
+    let response: PrivateStopResponse = serde_json::from_str(line.trim()).with_context(|| {
+        format!(
+            "failed to decode private HSA Stop transport response from {}",
+            path.display()
+        )
+    })?;
+    Ok(response.outcome)
+}
+
+#[cfg(unix)]
+pub(crate) fn accept_authority_managed_stop(
+    delivery: &HostSessionStopDeliveryV1,
+) -> Result<AuthorityManagedStopAcceptanceV1> {
+    let authority = authority_for_stop_delivery(delivery)?;
+    let intent = authority
+        .stop_transaction_for_session(&delivery.orchestration_session_id)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?
+        .ok_or_else(|| anyhow::anyhow!("exact HSA Stop intent was not found"))?;
+    if stop_delivery(&intent) != *delivery {
+        anyhow::bail!("private HSA Stop delivery is substituted or mismatched");
+    }
+    let (acceptance_id, accepted_at) = match &intent.state {
+        super::host_session_authority::store_schema::HostSessionStopIntentStateV1::Issued => (
+            format!("{}:delivery", intent.intent_id),
+            hsa_stop_timestamp()?,
+        ),
+        super::host_session_authority::store_schema::HostSessionStopIntentStateV1::DeliveryAccepted {
+            acceptance_id,
+            accepted_by_participant_id,
+            accepted_at,
+        } if accepted_by_participant_id == &delivery.authoritative_participant_id => {
+            (acceptance_id.clone(), accepted_at.clone())
+        }
+        super::host_session_authority::store_schema::HostSessionStopIntentStateV1::Completed { .. } => {
+            return Ok(AuthorityManagedStopAcceptanceV1::AlreadyTerminal);
+        }
+        _ => anyhow::bail!("private HSA Stop delivery conflicts with committed authority"),
+    };
+    let outcome = authority
+        .accept_stop_delivery(&AcceptHostSessionStopDeliveryRequestV1 {
+            intent_id: delivery.intent_id.clone(),
+            request_id: delivery.request_id.clone(),
+            payload_commitment: delivery.payload_commitment.clone(),
+            orchestration_session_id: delivery.orchestration_session_id.clone(),
+            authoritative_participant_id: delivery.authoritative_participant_id.clone(),
+            authority_revision: delivery.authority_revision,
+            authority_record_commitment: delivery.authority_record_commitment.clone(),
+            acceptance_id: acceptance_id.clone(),
+            accepted_at,
+        })
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    if !matches!(
+        outcome,
+        HostSessionStopDeliveryOutcomeV1::Accepted(_) | HostSessionStopDeliveryOutcomeV1::Joined(_)
+    ) {
+        anyhow::bail!("private HSA Stop delivery did not commit exact acceptance");
+    }
+    Ok(AuthorityManagedStopAcceptanceV1::Accepted(
+        AuthorityManagedStopCloseoutV1 {
+            delivery: delivery.clone(),
+            acceptance_id,
+        },
+    ))
+}
+
+#[cfg(unix)]
+pub(crate) fn complete_authority_managed_stop(
+    closeout: &AuthorityManagedStopCloseoutV1,
+) -> Result<()> {
+    let authority = authority_for_stop_delivery(&closeout.delivery)?;
+    let intent = authority
+        .stop_transaction_for_session(&closeout.delivery.orchestration_session_id)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?
+        .ok_or_else(|| anyhow::anyhow!("exact HSA Stop intent was not found"))?;
+    if stop_delivery(&intent) != closeout.delivery {
+        anyhow::bail!("private HSA Stop closeout is substituted or mismatched");
+    }
+    let (result_id, completed_at) = match &intent.state {
+        super::host_session_authority::store_schema::HostSessionStopIntentStateV1::DeliveryAccepted {
+            acceptance_id,
+            ..
+        } if acceptance_id == &closeout.acceptance_id => (
+            format!("{}:result", intent.intent_id),
+            hsa_stop_timestamp()?,
+        ),
+        super::host_session_authority::store_schema::HostSessionStopIntentStateV1::Completed {
+            delivery_acceptance_id,
+            result_id,
+            completed_at,
+            ..
+        } if delivery_acceptance_id.as_ref() == Some(&closeout.acceptance_id) => {
+            (result_id.clone(), completed_at.clone())
+        }
+        _ => anyhow::bail!("private HSA Stop closeout has no exact accepted delivery"),
+    };
+    let outcome = authority
+        .complete_stop(&CompleteHostSessionStopRequestV1 {
+            intent_id: intent.intent_id.clone(),
+            request_id: intent.request_id.clone(),
+            payload_commitment: intent.payload_commitment.clone(),
+            orchestration_session_id: intent.orchestration_session_id.clone(),
+            authoritative_participant_id: intent.authoritative_participant_id.clone(),
+            caller: HostSessionTransitionCallerV1 {
+                kind: HostSessionTransitionCallerKindV1::Repl,
+                caller_participant_id: Some(intent.authoritative_participant_id.clone()),
+                auto_attach_obligation_id: None,
+                auto_attach_claim_owner: None,
+            },
+            delivery_acceptance_id: Some(closeout.acceptance_id.clone()),
+            result_id,
+            completed_at,
+        })
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    if !matches!(
+        outcome,
+        HostSessionStopCompletionOutcomeV1::Completed(_)
+            | HostSessionStopCompletionOutcomeV1::Joined(_)
+    ) {
+        anyhow::bail!("private HSA Stop closeout did not commit exact terminal truth");
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn authority_for_stop_delivery(
+    delivery: &HostSessionStopDeliveryV1,
+) -> Result<HostSessionAuthority> {
+    let authority = HostSessionAuthority::from_trusted_root(
+        TrustedAuthorityRoot::open(Path::new(&delivery.bootstrap_home.physical_path))
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let root = authority
+        .read_a12b_root()
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    if root.authority_store_id != delivery.authority_store_id
+        || root.bootstrap_home != delivery.bootstrap_home
+        || !root
+            .session_namespace_map
+            .contains_key(&delivery.orchestration_session_id)
+    {
+        anyhow::bail!("private HSA Stop authority store or session identity is mismatched");
+    }
+    Ok(authority)
+}
+
+#[cfg(unix)]
+fn hsa_stop_timestamp() -> Result<TimestampV1> {
+    TimestampV1::parse(Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true))
+        .map_err(|error| anyhow::anyhow!(error.to_string()))
+}
+
+#[cfg(unix)]
 pub(crate) fn private_stop_transport_error_kind(err: &anyhow::Error) -> Option<io::ErrorKind> {
     err.chain()
         .find_map(|cause| cause.downcast_ref::<io::Error>().map(std::io::Error::kind))
@@ -3645,11 +3919,17 @@ async fn handle_private_stop_connection(
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
     let bytes_read = reader.read_line(&mut line).await?;
-    let outcome = if bytes_read == 0 || parse_private_stop_request(line.trim()).is_err() {
+    let outcome = if bytes_read == 0 {
         PrivateStopOutcome::ProtocolError
-    } else {
+    } else if let Ok(payload) = parse_private_stop_request(line.trim()) {
         let (response_tx, response_rx) = oneshot::channel();
-        if stop_tx.send(PrivateStopRequest { response_tx }).is_err() {
+        if stop_tx
+            .send(PrivateStopRequest {
+                payload,
+                response_tx,
+            })
+            .is_err()
+        {
             PrivateStopOutcome::OwnerUnreachable
         } else {
             match tokio::time::timeout(Duration::from_secs(5), response_rx).await {
@@ -3657,6 +3937,8 @@ async fn handle_private_stop_connection(
                 Ok(Err(_)) | Err(_) => PrivateStopOutcome::OwnerUnreachable,
             }
         }
+    } else {
+        PrivateStopOutcome::ProtocolError
     };
 
     let response = PrivateStopResponse {
@@ -3721,13 +4003,35 @@ async fn handle_private_cancel_connection(
 }
 
 #[cfg(unix)]
-fn parse_private_stop_request(payload: &str) -> Result<PrivateStopRequestV1> {
-    let request: PrivateStopRequestV1 =
+fn parse_private_stop_request(payload: &str) -> Result<PrivateStopRequestPayloadV1> {
+    let syntax: serde_json::Value =
         serde_json::from_str(payload).context("failed to decode private stop request")?;
-    if request.version != 1 || request.action != "stop" {
-        anyhow::bail!("unsupported private stop request");
+    let version = syntax
+        .as_object()
+        .and_then(|object| object.get("version"))
+        .and_then(serde_json::Value::as_u64)
+        .ok_or_else(|| anyhow::anyhow!("private stop request has no exact version"))?;
+    match version {
+        1 => {
+            let request: PrivateStopRequestV1 = serde_json::from_value(syntax)
+                .context("failed to decode legacy private stop request")?;
+            if request.version != 1 || request.action != "stop" {
+                anyhow::bail!("unsupported private stop request");
+            }
+            Ok(PrivateStopRequestPayloadV1::Legacy)
+        }
+        2 => {
+            let request: PrivateStopRequestV2 = serde_json::from_value(syntax)
+                .context("failed to decode HSA private stop request")?;
+            if request.version != 2 || request.action != "stop" {
+                anyhow::bail!("unsupported private stop request");
+            }
+            Ok(PrivateStopRequestPayloadV1::AuthorityManaged(
+                request.hsa_stop,
+            ))
+        }
+        _ => anyhow::bail!("unsupported private stop request"),
     }
-    Ok(request)
 }
 
 #[cfg(unix)]
@@ -3746,6 +4050,15 @@ fn parse_private_cancel_request(payload: &str) -> Result<PrivateCancelRequestV1>
 struct PrivateStopRequestV1 {
     version: u8,
     action: String,
+}
+
+#[cfg(unix)]
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct PrivateStopRequestV2 {
+    version: u8,
+    action: String,
+    hsa_stop: HostSessionStopDeliveryV1,
 }
 
 #[cfg(unix)]
@@ -4792,8 +5105,9 @@ mod tests {
     };
     #[cfg(unix)]
     use super::{
-        failed_prompt_envelope, handle_private_prompt_connection, private_prompt_request_channel,
-        structured_prompt_event_fallback_text, PromptRenderBuffer, PublicPromptEnvelope,
+        failed_prompt_envelope, handle_private_prompt_connection, parse_private_stop_request,
+        private_prompt_request_channel, structured_prompt_event_fallback_text,
+        PrivateStopRequestPayloadV1, PromptRenderBuffer, PublicPromptEnvelope,
         PublicPromptRenderer,
     };
     use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
@@ -4875,6 +5189,115 @@ mod tests {
         challenger
             .try_lock_exclusive()
             .expect("launch guard must release after child exit");
+    }
+
+    #[cfg(target_os = "linux")]
+    fn owner_helper_install_context_for_test(
+        selected_prefix: &std::path::Path,
+    ) -> transport_api_types::InstallBootstrapContextCarrierV1 {
+        let (principal, _) = crate::execution::install_bootstrap::current_unix_principal_and_home()
+            .expect("current Unix principal");
+        let transport_api_types::PlatformPrincipalV1::Unix { account, uid } = principal else {
+            panic!("expected Unix principal");
+        };
+        let context = transport_api_types::InstallBootstrapContextV1::new_unix(
+            selected_prefix
+                .to_str()
+                .expect("UTF-8 selected install prefix"),
+            &account,
+            uid,
+        )
+        .expect("install bootstrap context");
+        transport_api_types::InstallBootstrapContextCarrierV1::from_context(context)
+            .expect("install bootstrap carrier")
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial_test::serial]
+    fn authority_owner_helper_child_args_carry_exact_checked_install_context() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        let temp = tempfile::tempdir().expect("install context tempdir");
+        let carrier = owner_helper_install_context_for_test(&temp.path().join("selected-prefix"));
+        let encoded = crate::execution::install_bootstrap::install_bootstrap_projections(&carrier)
+            .expect("install bootstrap projections");
+        let mut command = std::process::Command::new("/bin/true");
+
+        super::append_checked_install_bootstrap_context_arg(&mut command)
+            .expect("checked install bootstrap child argument");
+
+        let args = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            args,
+            vec![
+                "--install-bootstrap-context-v1".to_string(),
+                encoded.clone(),
+            ]
+        );
+        let child_carrier = transport_api_types::InstallBootstrapContextCarrierV1::decode(&args[1])
+            .expect("child carrier authenticates");
+        assert_eq!(child_carrier, carrier);
+        assert_eq!(
+            child_carrier.context.selected_host_prefix,
+            temp.path().join("selected-prefix").display().to_string()
+        );
+        assert_eq!(
+            child_carrier.context.intended_host_principal,
+            carrier.context.intended_host_principal
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial_test::serial]
+    fn authority_owner_helper_child_args_reject_conflicting_projection_before_spawn() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        let temp = tempfile::tempdir().expect("install context tempdir");
+        let carrier = owner_helper_install_context_for_test(&temp.path().join("selected-prefix"));
+        crate::execution::install_bootstrap::install_bootstrap_projections(&carrier)
+            .expect("install bootstrap projections");
+        std::env::set_var("SUBSTRATE_INSTALL_PRIMARY_UID", "4294967295");
+        let mut command = std::process::Command::new("/bin/true");
+
+        let error = super::append_checked_install_bootstrap_context_arg(&mut command)
+            .expect_err("conflicting projection must fail closed");
+
+        assert!(format!("{error:#}")
+            .contains("install bootstrap environment projection is missing or conflicting"));
+        assert_eq!(command.get_args().count(), 0);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial_test::serial]
+    fn authority_owner_helper_child_args_reject_malformed_carrier_before_spawn() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        std::env::set_var("SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1", "not%canonical");
+        let mut command = std::process::Command::new("/bin/true");
+
+        let error = super::append_checked_install_bootstrap_context_arg(&mut command)
+            .expect_err("malformed carrier must fail closed");
+
+        assert!(format!("{error:#}").contains("checked install bootstrap projection is invalid"));
+        assert_eq!(command.get_args().count(), 0);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial_test::serial]
+    fn authority_owner_helper_child_args_do_not_fabricate_installed_authority() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        std::env::remove_var("SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1");
+        let mut command = std::process::Command::new("/bin/true");
+
+        let error = super::append_checked_install_bootstrap_context_arg(&mut command)
+            .expect_err("missing carrier must fail closed");
+
+        assert!(format!("{error:#}").contains("checked install bootstrap projection is missing"));
+        assert_eq!(command.get_args().count(), 0);
     }
 
     fn with_store(test: impl FnOnce(&AgentRuntimeStateStore)) {
@@ -5138,6 +5561,197 @@ mod tests {
             PrivateStopOutcome::ProtocolError,
         ];
         assert_eq!(outcomes.len(), 4);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn authority_managed_private_stop_wire_is_closed_and_versioned() {
+        let exact = serde_json::json!({
+            "version": 2,
+            "action": "stop",
+            "hsa_stop": {
+                "schema_version": 1,
+                "authority_store_id": "store-1",
+                "bootstrap_home": {
+                    "physical_path": "/private/home",
+                    "physical_identity": {
+                        "kind": "Linux",
+                        "value": { "device_id": 7, "inode": 11 }
+                    }
+                },
+                "orchestration_session_id": "session-1",
+                "intent_id": "stop-intent-1",
+                "request_id": "stop-request-1",
+                "payload_commitment": {
+                    "kind": "CanonicalSha256",
+                    "value": {
+                        "digest_hex": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                    }
+                },
+                "authority_revision": 3,
+                "authority_record_commitment": {
+                    "kind": "CanonicalSha256",
+                    "value": {
+                        "digest_hex": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                    }
+                },
+                "authoritative_participant_id": "participant-1"
+            }
+        });
+        assert!(matches!(
+            parse_private_stop_request(&exact.to_string()).unwrap(),
+            PrivateStopRequestPayloadV1::AuthorityManaged(delivery)
+                if delivery.intent_id == "stop-intent-1"
+                    && delivery.authoritative_participant_id == "participant-1"
+        ));
+
+        let mut missing_delivery = exact.clone();
+        missing_delivery.as_object_mut().unwrap().remove("hsa_stop");
+        assert!(parse_private_stop_request(&missing_delivery.to_string()).is_err());
+
+        let mut extra_top_level = exact.clone();
+        extra_top_level
+            .as_object_mut()
+            .unwrap()
+            .insert("unexpected".into(), serde_json::Value::Bool(true));
+        assert!(parse_private_stop_request(&extra_top_level.to_string()).is_err());
+
+        let mut extra_delivery_field = exact.clone();
+        extra_delivery_field["hsa_stop"]["unexpected"] = serde_json::Value::Bool(true);
+        assert!(parse_private_stop_request(&extra_delivery_field.to_string()).is_err());
+
+        let mut wrong_action = exact;
+        wrong_action["action"] = serde_json::Value::String("cancel".into());
+        assert!(parse_private_stop_request(&wrong_action.to_string()).is_err());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test(flavor = "current_thread")]
+    async fn authority_managed_private_stop_silent_peer_is_bounded() {
+        let temp = tempfile::tempdir().expect("private HSA Stop tempdir");
+        let path = temp.path().join("silent-owner.sock");
+        let listener = tokio::net::UnixListener::bind(&path).expect("bind silent owner");
+        let server = tokio::spawn(async move {
+            let (_stream, _) = listener.accept().await.expect("accept Stop delivery");
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        });
+        let delivery = authority_managed_stop_delivery_fixture();
+
+        let result = tokio::time::timeout(
+            std::time::Duration::from_millis(500),
+            super::request_private_authority_managed_stop_with_response_timeout(
+                &path,
+                &delivery,
+                std::time::Duration::from_millis(50),
+            ),
+        )
+        .await;
+        server.abort();
+
+        let error = result
+            .expect("private HSA Stop response wait must be internally bounded")
+            .expect_err("silent owner must fail closed");
+        assert!(
+            error
+                .to_string()
+                .contains("timed out waiting for exact private HSA Stop response"),
+            "unexpected error: {error:#}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test(flavor = "current_thread")]
+    async fn authority_managed_private_stop_transport_failures_remain_distinct() {
+        let temp = tempfile::tempdir().expect("private HSA Stop tempdir");
+        let delivery = authority_managed_stop_delivery_fixture();
+
+        let missing = temp.path().join("missing-owner.sock");
+        let missing_error = super::request_private_authority_managed_stop_with_response_timeout(
+            &missing,
+            &delivery,
+            std::time::Duration::from_millis(50),
+        )
+        .await
+        .expect_err("missing owner transport must fail closed");
+        assert!(
+            missing_error.to_string().contains("missing_transport:"),
+            "unexpected missing transport error: {missing_error:#}"
+        );
+
+        let refused = temp.path().join("refused-owner.sock");
+        let stale_listener =
+            std::os::unix::net::UnixListener::bind(&refused).expect("bind refused socket");
+        drop(stale_listener);
+        let refused_error = super::request_private_authority_managed_stop_with_response_timeout(
+            &refused,
+            &delivery,
+            std::time::Duration::from_millis(50),
+        )
+        .await
+        .expect_err("refused owner transport must fail closed");
+        assert!(
+            refused_error.to_string().contains("refused_transport:"),
+            "unexpected refused transport error: {refused_error:#}"
+        );
+
+        let protocol = temp.path().join("protocol-owner.sock");
+        let listener = tokio::net::UnixListener::bind(&protocol).expect("bind protocol owner");
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.expect("accept Stop delivery");
+            stream
+                .write_all(b"not-json\n")
+                .await
+                .expect("write invalid Stop response");
+        });
+        let protocol_error = super::request_private_authority_managed_stop_with_response_timeout(
+            &protocol,
+            &delivery,
+            std::time::Duration::from_millis(50),
+        )
+        .await
+        .expect_err("malformed owner response must fail closed");
+        server.await.expect("protocol owner task");
+        assert!(
+            protocol_error
+                .to_string()
+                .contains("failed to decode private HSA Stop transport response"),
+            "unexpected protocol error: {protocol_error:#}"
+        );
+    }
+
+    #[cfg(unix)]
+    fn authority_managed_stop_delivery_fixture(
+    ) -> crate::execution::agent_runtime::host_session_authority::stop::HostSessionStopDeliveryV1
+    {
+        serde_json::from_value(serde_json::json!({
+            "schema_version": 1,
+            "authority_store_id": "store-1",
+            "bootstrap_home": {
+                "physical_path": "/private/home",
+                "physical_identity": {
+                    "kind": "Linux",
+                    "value": { "device_id": 7, "inode": 11 }
+                }
+            },
+            "orchestration_session_id": "session-1",
+            "intent_id": "stop-intent-1",
+            "request_id": "stop-request-1",
+            "payload_commitment": {
+                "kind": "CanonicalSha256",
+                "value": {
+                    "digest_hex": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                }
+            },
+            "authority_revision": 3,
+            "authority_record_commitment": {
+                "kind": "CanonicalSha256",
+                "value": {
+                    "digest_hex": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                }
+            },
+            "authoritative_participant_id": "participant-1"
+        }))
+        .expect("valid Stop delivery")
     }
 
     #[test]

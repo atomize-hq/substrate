@@ -1,0 +1,48 @@
+A1.4 bounded auto-attach producer adoption — independent discovery review
+
+Review record: codex-agent:/root/a14_independent_review
+Subject fingerprint: sha256:4c9352564997b18d0c048b70ae6151c8f19b85fcb7b9a80910344e068ece7e73
+Base: 9d1b84d62e213450acbb28de7c9a98a91811c2b5
+Product subject:
+  100644 bc9a373359bf27b6da58bc4b8975f3e96499e553 crates/shell/src/execution/agent_runtime/auto_attach.rs
+
+Independent verdict: FINDINGS
+Landing disposition: NO
+
+A14-DISC-P1-001 (P1) — HSA-activated auto-attach is unreachable through the production claim path
+
+The candidate routes the new HSA Attach producer through execute_session_auto_attach only after
+list_router_auto_attach_candidate_session_ids and claim_session_auto_attach or
+claim_exact_session_auto_attach_obligation. Those StateStore APIs use the legacy snapshot
+transaction. The exact base deliberately rejects all legacy participant, session, obligation,
+claim, release, and settlement writers after HSA activation. A public HSA Start does not create a
+parallel legacy session-authority record. The candidate's focused positive tests invoke the HSA
+builder/finalizer directly and therefore do not prove the required discovery -> claim -> Attach ->
+helper -> settlement production path.
+
+Required remediation: exercise execute_session_auto_attach end to end from an activated HSA
+session and route claims through the existing post-A1 obligation authority. If no such API exists,
+the claim seam must be separately re-admitted; the legacy writer-exclusion invariant must not be
+bypassed.
+
+A14-DISC-P2-001 (P2) — finalization can report Attached without durable settlement
+
+finalize_session_auto_attach_after_launch accepts exact HSA completion, but when the legacy Stop
+target cannot be resolved it returns Attached with SessionAutoAttachSettleResult::default(). The
+candidate includes a test that approves this empty result. That violates the required preservation
+of existing settlement ownership and the rule that settlement occurs only after exact authenticated
+HSA completion.
+
+Required remediation: after exact HSA completion, invoke the existing post-A1 settlement owner and
+require the exact claimed obligation plus coalesced siblings to settle, failing closed if durable
+settlement cannot be established.
+
+P3/P4 findings: none.
+
+The reviewer found the isolated HSA plan identity, producer separation, immutable commitment,
+exact-retry, and helper-launch coalescing checks otherwise consistent with the bounded producer
+adoption. The findings remain unresolved because the repository exposes no post-HSA auto-attach
+claim/settlement API within the admitted auto_attach.rs-only production fence. Remediation would
+expand authority and edit scope beyond this dispatch.
+
+Independent final verdict: FINDINGS

@@ -9,7 +9,8 @@ use super::schema::{
     AuthoritativeLineageHashInputV1, AuthorityObjectCommitmentV1, AuthorityObjectKindV1,
     AuthorityObjectRefV1, CanonicalDirectoryV1, DurableSessionAuthorityHashInputV1,
     DurableSessionAuthorityOriginV1, HostPostTurnDispositionV1, HostSessionAuthorityPreconditionV1,
-    HostSessionPostureV1, HostSessionTransitionCallerV1, HostSessionTransitionModeV1,
+    HostSessionPostureV1, HostSessionStopPayloadHashInputV1, HostSessionStopResultHashInputV1,
+    HostSessionTransitionCallerV1, HostSessionTransitionModeV1,
     HostSessionTransitionTerminalRejectionV1, TimestampV1, WorkspaceBindingV1, WorldBindingV1,
 };
 use super::store_format::{validate_key_id, validate_ref_id, validate_store_id};
@@ -121,6 +122,8 @@ pub(crate) struct StateRootV3 {
         BTreeMap<String, HostSessionTransitionApplicationJournalV3>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) start_transaction_map: BTreeMap<String, StartTransactionRecordV1>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) stop_transaction_map: BTreeMap<String, HostSessionStopIntentV1>,
     pub(crate) object_index: BTreeMap<String, AuthorityObjectIndexEntryV1>,
 }
 
@@ -182,6 +185,49 @@ pub(crate) struct StartTransactionRecordV1 {
     pub(crate) created_at: TimestampV1,
     pub(crate) updated_at: TimestampV1,
     pub(crate) state: StartTransactionStateV1,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "value", deny_unknown_fields)]
+pub(crate) enum HostSessionStopIntentStateV1 {
+    Issued,
+    DeliveryAccepted {
+        acceptance_id: String,
+        accepted_by_participant_id: String,
+        accepted_at: TimestampV1,
+    },
+    Completed {
+        delivery_acceptance_id: Option<String>,
+        delivery_accepted_by_participant_id: Option<String>,
+        delivery_accepted_at: Option<TimestampV1>,
+        result_id: String,
+        result_commitment: AuthorityObjectCommitmentV1,
+        authority_revision_after: u64,
+        authority_record_commitment_after: AuthorityObjectCommitmentV1,
+        completed_at: TimestampV1,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct HostSessionStopIntentV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) intent_id: String,
+    pub(crate) request_id: String,
+    pub(crate) authority_store_id: String,
+    pub(crate) bootstrap_home: CanonicalDirectoryV1,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) shell_trace_session_id: String,
+    pub(crate) caller: HostSessionTransitionCallerV1,
+    pub(crate) payload_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) expected_root_revision: u64,
+    pub(crate) authority_before: Box<DurableSessionAuthorityV1>,
+    pub(crate) authority_record_commitment_before: AuthorityObjectCommitmentV1,
+    pub(crate) authoritative_lineage_commitment_before: AuthorityObjectCommitmentV1,
+    pub(crate) authoritative_participant_id: String,
+    pub(crate) issued_at: TimestampV1,
+    pub(crate) updated_at: TimestampV1,
+    pub(crate) state: HostSessionStopIntentStateV1,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1694,6 +1740,7 @@ impl StateRootV3 {
             successor_issuer_request_index: BTreeMap::new(),
             successor_application_journal: BTreeMap::new(),
             start_transaction_map: BTreeMap::new(),
+            stop_transaction_map: BTreeMap::new(),
             object_index: root.object_index.clone(),
         };
         upgraded.validate()?;
@@ -1712,6 +1759,7 @@ impl StateRootV3 {
             || !self.successor_issuer_request_index.is_empty()
             || !self.successor_application_journal.is_empty()
             || !self.start_transaction_map.is_empty()
+            || !self.stop_transaction_map.is_empty()
             || !self.object_index.is_empty()
         {
             return Err(StoreSchemaError(
@@ -1792,6 +1840,18 @@ impl StateRootV3 {
         }
         for (session_id, record) in &mut preserved.session_namespace_map {
             if let SessionNamespaceRecordV1::Authority(authority) = record {
+                let mut completed_stops = self.stop_transaction_map.values().filter(|stop| {
+                    stop.orchestration_session_id == *session_id
+                        && matches!(stop.state, HostSessionStopIntentStateV1::Completed { .. })
+                });
+                if let Some(stop) = completed_stops.next() {
+                    if completed_stops.next().is_some() {
+                        return Err(StoreSchemaError(
+                            "multiple completed HSA Stops target one session",
+                        ));
+                    }
+                    **authority = stop.authority_before.as_ref().clone();
+                }
                 if self.has_any_successor_transition(session_id)
                     || authority.authority_revision != 1
                     || authority.lifecycle_posture != HostSessionPostureV1::ActiveAttached
@@ -1981,6 +2041,207 @@ impl StateRootV3 {
                 ));
             }
         }
+        let mut stop_sessions = std::collections::BTreeSet::new();
+        let mut stop_requests = std::collections::BTreeSet::new();
+        for (key, stop) in &self.stop_transaction_map {
+            if key != &stop.intent_id
+                || stop.schema_version != 1
+                || stop.authority_store_id != self.authority_store_id
+                || stop.bootstrap_home != self.bootstrap_home
+                || stop.expected_root_revision == 0
+                || stop.expected_root_revision >= self.root_revision
+                || stop.authority_before.schema_version != 1
+                || stop.authority_before.orchestration_session_id != stop.orchestration_session_id
+                || stop.authority_before.shell_trace_session_id != stop.shell_trace_session_id
+                || stop
+                    .authority_before
+                    .active_authoritative_participant_id
+                    .as_deref()
+                    != Some(stop.authoritative_participant_id.as_str())
+                || stop
+                    .authority_before
+                    .authoritative_participant_lineage
+                    .last()
+                    != Some(&stop.authoritative_participant_id)
+                || stop.authority_before.lifecycle_posture == HostSessionPostureV1::Terminal
+                || stop.authority_before.lifecycle_posture == HostSessionPostureV1::Invalid
+                || stop.updated_at.as_str() < stop.issued_at.as_str()
+                || !stop_sessions.insert(stop.orchestration_session_id.as_str())
+                || !stop_requests.insert(stop.request_id.as_str())
+            {
+                return Err(StoreSchemaError("invalid HSA Stop transaction identity"));
+            }
+            required(&stop.intent_id)?;
+            required(&stop.request_id)?;
+            required(&stop.orchestration_session_id)?;
+            required(&stop.shell_trace_session_id)?;
+            required(&stop.authoritative_participant_id)?;
+            if stop.caller.kind != super::schema::HostSessionTransitionCallerKindV1::PublicCli
+                || stop.caller.caller_participant_id.is_some()
+                || stop.caller.auto_attach_obligation_id.is_some()
+                || stop.caller.auto_attach_claim_owner.is_some()
+            {
+                return Err(StoreSchemaError("invalid HSA Stop caller identity"));
+            }
+            validate_registration_commitment(&stop.payload_commitment)?;
+            validate_registration_commitment(&stop.authority_record_commitment_before)?;
+            validate_registration_commitment(&stop.authoritative_lineage_commitment_before)?;
+            let before_commitment = authority_record_commitment(stop.authority_before.as_ref())?;
+            let before_lineage_commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: super::hash::canonical_sha256(&AuthoritativeLineageHashInputV1 {
+                    schema_version: 1,
+                    orchestration_session_id: stop.orchestration_session_id.clone(),
+                    participant_ids: stop
+                        .authority_before
+                        .authoritative_participant_lineage
+                        .clone(),
+                })
+                .map_err(|_| StoreSchemaError("commit HSA Stop predecessor lineage"))?,
+            };
+            if before_commitment != stop.authority_record_commitment_before
+                || before_lineage_commitment != stop.authoritative_lineage_commitment_before
+            {
+                return Err(StoreSchemaError("HSA Stop predecessor commitment mismatch"));
+            }
+            let payload = HostSessionStopPayloadHashInputV1 {
+                schema_version: 1,
+                intent_id: stop.intent_id.clone(),
+                request_id: stop.request_id.clone(),
+                authority_store_id: stop.authority_store_id.clone(),
+                bootstrap_home: stop.bootstrap_home.clone(),
+                orchestration_session_id: stop.orchestration_session_id.clone(),
+                shell_trace_session_id: stop.shell_trace_session_id.clone(),
+                caller: stop.caller.clone(),
+                authority_revision: stop.authority_before.authority_revision,
+                authority_record_commitment: stop.authority_record_commitment_before.clone(),
+                authoritative_lineage_commitment: stop
+                    .authoritative_lineage_commitment_before
+                    .clone(),
+                authoritative_participant_id: stop.authoritative_participant_id.clone(),
+                authoritative_lineage: stop
+                    .authority_before
+                    .authoritative_participant_lineage
+                    .clone(),
+                lifecycle_posture: stop.authority_before.lifecycle_posture,
+                issued_at: stop.issued_at.clone(),
+            };
+            let expected_payload_commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: super::hash::canonical_sha256(&payload)
+                    .map_err(|_| StoreSchemaError("invalid HSA Stop payload"))?,
+            };
+            if stop.payload_commitment != expected_payload_commitment {
+                return Err(StoreSchemaError("HSA Stop payload commitment mismatch"));
+            }
+            let current = self
+                .session_namespace_map
+                .get(&stop.orchestration_session_id)
+                .and_then(|record| match record {
+                    SessionNamespaceRecordV1::Authority(authority) => Some(authority.as_ref()),
+                    _ => None,
+                })
+                .ok_or(StoreSchemaError("HSA Stop references no current authority"))?;
+            match &stop.state {
+                HostSessionStopIntentStateV1::Issued => {
+                    if current != stop.authority_before.as_ref()
+                        || stop.updated_at != stop.issued_at
+                    {
+                        return Err(StoreSchemaError("issued HSA Stop is stale or mismatched"));
+                    }
+                }
+                HostSessionStopIntentStateV1::DeliveryAccepted {
+                    acceptance_id,
+                    accepted_by_participant_id,
+                    accepted_at,
+                } => {
+                    required(acceptance_id)?;
+                    required(accepted_by_participant_id)?;
+                    if stop.authority_before.lifecycle_posture
+                        != HostSessionPostureV1::ActiveAttached
+                        || accepted_by_participant_id != &stop.authoritative_participant_id
+                        || accepted_at.as_str() < stop.issued_at.as_str()
+                        || &stop.updated_at != accepted_at
+                        || current != stop.authority_before.as_ref()
+                    {
+                        return Err(StoreSchemaError(
+                            "accepted HSA Stop delivery is stale or mismatched",
+                        ));
+                    }
+                }
+                HostSessionStopIntentStateV1::Completed {
+                    delivery_acceptance_id,
+                    delivery_accepted_by_participant_id,
+                    delivery_accepted_at,
+                    result_id,
+                    result_commitment,
+                    authority_revision_after,
+                    authority_record_commitment_after,
+                    completed_at,
+                } => {
+                    required(result_id)?;
+                    let active_delivery = stop.authority_before.lifecycle_posture
+                        == HostSessionPostureV1::ActiveAttached;
+                    if delivery_acceptance_id.is_some() != active_delivery
+                        || delivery_accepted_by_participant_id.is_some() != active_delivery
+                        || delivery_accepted_at.is_some() != active_delivery
+                        || delivery_accepted_by_participant_id
+                            .as_deref()
+                            .is_some_and(|value| value != stop.authoritative_participant_id)
+                        || delivery_accepted_at
+                            .as_ref()
+                            .is_some_and(|value| completed_at.as_str() < value.as_str())
+                        || completed_at.as_str() < stop.issued_at.as_str()
+                        || &stop.updated_at != completed_at
+                    {
+                        return Err(StoreSchemaError(
+                            "completed HSA Stop delivery identity is invalid",
+                        ));
+                    }
+                    let mut expected_after = stop.authority_before.as_ref().clone();
+                    expected_after.authority_revision = expected_after
+                        .authority_revision
+                        .checked_add(1)
+                        .ok_or(StoreSchemaError("HSA Stop authority revision overflow"))?;
+                    expected_after.lifecycle_posture = HostSessionPostureV1::Terminal;
+                    expected_after.updated_at = completed_at.clone();
+                    let expected_after_commitment = authority_record_commitment(&expected_after)?;
+                    if *authority_revision_after != expected_after.authority_revision
+                        || authority_record_commitment_after != &expected_after_commitment
+                        || current != &expected_after
+                    {
+                        return Err(StoreSchemaError(
+                            "completed HSA Stop authority result is inconsistent",
+                        ));
+                    }
+                    let result = HostSessionStopResultHashInputV1 {
+                        schema_version: 1,
+                        result_id: result_id.clone(),
+                        intent_id: stop.intent_id.clone(),
+                        request_id: stop.request_id.clone(),
+                        payload_commitment: stop.payload_commitment.clone(),
+                        authority_store_id: stop.authority_store_id.clone(),
+                        orchestration_session_id: stop.orchestration_session_id.clone(),
+                        authoritative_participant_id: stop.authoritative_participant_id.clone(),
+                        delivery_acceptance_id: delivery_acceptance_id.clone(),
+                        authority_revision_before: stop.authority_before.authority_revision,
+                        authority_record_commitment_before: stop
+                            .authority_record_commitment_before
+                            .clone(),
+                        authority_revision_after: *authority_revision_after,
+                        authority_record_commitment_after: authority_record_commitment_after
+                            .clone(),
+                        resulting_posture: HostSessionPostureV1::Terminal,
+                        completed_at: completed_at.clone(),
+                    };
+                    let expected_result_commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+                        digest_hex: super::hash::canonical_sha256(&result)
+                            .map_err(|_| StoreSchemaError("invalid HSA Stop result"))?,
+                    };
+                    if result_commitment != &expected_result_commitment {
+                        return Err(StoreSchemaError("HSA Stop result commitment mismatch"));
+                    }
+                }
+            }
+        }
         let mut successor_histories = BTreeMap::new();
         for (key, record) in &self.session_namespace_map {
             if key != record.orchestration_session_id() {
@@ -1993,14 +2254,21 @@ impl StateRootV3 {
                 true,
             )?;
             if let SessionNamespaceRecordV1::Authority(authority) = record {
+                let completed_stop = self.stop_transaction_map.values().find(|stop| {
+                    stop.orchestration_session_id == *key
+                        && matches!(stop.state, HostSessionStopIntentStateV1::Completed { .. })
+                });
+                let history_authority = completed_stop
+                    .map(|stop| stop.authority_before.as_ref())
+                    .unwrap_or(authority.as_ref());
                 let history = if self.has_any_successor_transition(key) {
                     let history =
-                        self.reconstruct_successor_authority_history(authority.as_ref())?;
+                        self.reconstruct_successor_authority_history(history_authority)?;
                     let reconstructed = history
                         .last_key_value()
                         .map(|(_, state)| &state.authority)
                         .ok_or(StoreSchemaError("V3 successor authority history is empty"))?;
-                    if reconstructed != authority.as_ref() {
+                    if reconstructed != history_authority {
                         return Err(StoreSchemaError(
                             "current V3 authority is not the exact reconstructed successor state",
                         ));
@@ -2008,18 +2276,45 @@ impl StateRootV3 {
                     history
                 } else {
                     let history =
-                        self.reconstruct_v2_runtime_authority_history(authority.as_ref())?;
+                        self.reconstruct_v2_runtime_authority_history(history_authority)?;
                     let reconstructed = history
                         .last_key_value()
                         .map(|(_, state)| &state.authority)
                         .ok_or(StoreSchemaError("V3 runtime V2 history is empty"))?;
-                    if reconstructed != authority.as_ref() {
+                    if reconstructed != history_authority {
                         return Err(StoreSchemaError(
                             "current V3 authority is not the exact reconstructed V2 runtime state",
                         ));
                     }
                     history
                 };
+                let mut history = history;
+                if let Some(stop) = completed_stop {
+                    let HostSessionStopIntentStateV1::Completed {
+                        authority_revision_after,
+                        authority_record_commitment_after,
+                        completed_at,
+                        ..
+                    } = &stop.state
+                    else {
+                        unreachable!("completed Stop filter must retain completed state")
+                    };
+                    if *authority_revision_after != history_authority.authority_revision + 1
+                        || authority_record_commitment_after
+                            != &authority_record_commitment(authority.as_ref())?
+                        || authority.authority_revision != *authority_revision_after
+                        || authority.lifecycle_posture != HostSessionPostureV1::Terminal
+                        || &authority.updated_at != completed_at
+                    {
+                        return Err(StoreSchemaError(
+                            "current V3 authority is not the exact completed HSA Stop state",
+                        ));
+                    }
+                    history.insert(
+                        *authority_revision_after,
+                        reconstruct_authority_state(authority.as_ref().clone())?,
+                    );
+                }
                 successor_histories.insert(key.clone(), history);
             }
         }

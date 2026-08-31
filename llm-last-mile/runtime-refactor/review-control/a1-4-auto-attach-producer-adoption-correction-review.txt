@@ -1,0 +1,69 @@
+A1.4 corrective post-HSA claim/settlement and fresh-Start review
+
+Review record: codex-agent:/root/a14_successor_review
+Base: 9d1b84d62e213450acbb28de7c9a98a91811c2b5
+Preserved discovery subject: sha256:4c9352564997b18d0c048b70ae6151c8f19b85fcb7b9a80910344e068ece7e73
+Closure-1 subject: sha256:61beccb5f9a24ebbfa339ea6f43fbfe0ce4595cac8055b0434dba26b538f374a
+Supplemental-causal-1 subject: sha256:25f9db25ffc9a3cfeab2772cad4b931ab3f8265e0bb414de7efa441b37f04e2c
+
+Independent successor verdict: NON_CLEAN overall
+Product-code verdict after supplemental review: CLEAN
+Landing disposition: NO
+
+Inherited accepted findings
+
+A14-DISC-P1-001 is remediated by the typed ObligationLedger-owned post-HSA claim and settlement
+surface. It uses the trusted authority root transaction and does not call or weaken the disabled
+legacy writer.
+
+A14-DISC-P2-001 is remediated by exact non-empty settlement. Attached requires the exact target
+obligation in the satisfied result, and exact retry joins the same committed result.
+
+Closure-1 findings and causal remediation
+
+A14-SUCC1-P1-001 is closed. Activated-HSA policy resolution uses the authenticated HSA workspace
+binding instead of falling back merely because no legacy session projection exists.
+
+A14-SUCC1-P1-002 is closed. Claim and settlement revalidate the full HSA observation under the
+trusted-root lock; success binds the exact persisted RouterAutoAttach V3 intent and applied journal,
+the exact source participant, and the retained ledger directory identity and absence chain.
+
+A14-SUCC1-P1-003 is closed. Settlement compares the exact sibling obligation set and state. The
+target-first mutation makes a partial settlement retry converge without accepting substituted
+terminal state.
+
+A14-SUCC1-P2-001 is closed. The post-HSA persistence surface is Linux-gated consistently.
+
+Focused verification inspected by the reviewer
+
+- auto_attach module: 18 passed, 0 failed
+- greenfield_v1 filter: 3 passed, 0 failed
+- indeterminate Start no-replay filter: 1 passed, 0 failed
+- durable/resumable Start continuity filter: 1 passed, 0 failed
+- cargo check -p shell --lib: passed
+- cargo build -p substrate --bin substrate: passed
+- cargo fmt --all -- --check: passed
+- git diff --check: passed
+
+The subsequent strict `cargo clippy -p shell --lib -- -D warnings` gate stopped on 39 existing
+diagnostics in unchanged/excluded lifecycle, control, command, and world-dependency surfaces plus
+pre-existing unused StateStore public-attach APIs. It emitted no diagnostic against the post-HSA
+claim/settlement seam or fresh-Start correction. This is additional non-clean wall evidence, not a
+new product-code finding in the corrective subject.
+
+Remaining evidence and landing blocker
+
+A14-SUPP1-E1-001 (P1) remains open. The canonical public Start test invokes
+`cargo build -p substrate`, which builds every binary and fails with 33 errors in the unchanged,
+excluded `src/bin/substrate-lifecycle-macos.rs`. The test therefore never reaches the public Start
+path, and the complete Start -> Turn/reattach -> Stop Linux wall is not proven. No excluded path was
+edited to bypass this blocker.
+
+GitNexus detect_changes on the exact dirty worktree reports CRITICAL scope: 156 changed symbols,
+25 affected flows, and 11 tracked files. The reviewer inspected the product paths as belonging to
+the authorized corrective fence; the process list includes coarse cross-community attribution from
+shared indexed symbols. This result does not satisfy a CLEAN landing gate while the wall is blocked.
+
+RG-BASE-01, RG-BASE-02, and the A1-scoped RG-AUTH clauses remain OPEN and unwaived.
+
+Independent final verdict: FINDINGS (evidence/landing blocker only; no new product-code defect)

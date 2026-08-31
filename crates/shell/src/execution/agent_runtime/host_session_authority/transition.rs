@@ -1398,7 +1398,8 @@ impl HostSessionAuthority {
                 input.byte_length,
             )?;
         }
-        proposed.validate().map_err(protocol_error)?;
+        super::facade::validate_v3_schema_with_external_exact_authority_history(&proposed)
+            .map_err(protocol_error)?;
         workspace.revalidate().map_err(protocol_error)?;
         store::commit_v3_root_exact_current_opened(
             self.trusted_root(),
@@ -1526,7 +1527,8 @@ impl HostSessionAuthority {
             claim_expires_at,
         };
         next.updated_at = claimed_at;
-        proposed.validate().map_err(protocol_error)?;
+        super::facade::validate_v3_schema_with_external_exact_authority_history(&proposed)
+            .map_err(protocol_error)?;
         workspace.revalidate().map_err(protocol_error)?;
         store::commit_v3_root_exact_current_opened(
             self.trusted_root(),
@@ -1760,7 +1762,8 @@ impl HostSessionAuthority {
             AuthorityObjectKindV1::ApplicationResult,
             application.byte_length,
         )?;
-        proposed.validate().map_err(protocol_error)?;
+        super::facade::validate_v3_schema_with_external_exact_authority_history(&proposed)
+            .map_err(protocol_error)?;
         workspace.revalidate().map_err(protocol_error)?;
         store::commit_v3_root_exact_current_opened(
             self.trusted_root(),
@@ -1896,7 +1899,8 @@ impl HostSessionAuthority {
             AuthorityObjectKindV1::TerminalHandoff,
             terminal.byte_length,
         )?;
-        proposed.validate().map_err(protocol_error)?;
+        super::facade::validate_v3_schema_with_external_exact_authority_history(&proposed)
+            .map_err(protocol_error)?;
         workspace.revalidate().map_err(protocol_error)?;
         store::commit_v3_root_exact_current_opened(
             self.trusted_root(),
@@ -2396,7 +2400,8 @@ impl HostSessionAuthority {
                 AuthorityObjectKindV1::StartupOwnershipResult,
                 result.byte_length,
             )?;
-            proposed.validate().map_err(protocol_error)?;
+            super::facade::validate_v3_schema_with_external_exact_authority_history(&proposed)
+                .map_err(protocol_error)?;
             workspace.revalidate().map_err(protocol_error)?;
             store::commit_v3_root_exact_current_opened(
                 self.trusted_root(),
@@ -2827,7 +2832,8 @@ impl HostSessionAuthority {
             AuthorityObjectKindV1::StartupOwnershipResult,
             result.byte_length,
         )?;
-        proposed.validate().map_err(protocol_error)?;
+        super::facade::validate_v3_schema_with_external_exact_authority_history(&proposed)
+            .map_err(protocol_error)?;
         workspace.revalidate().map_err(protocol_error)?;
         store::commit_v3_root_exact_current_opened(
             self.trusted_root(),
@@ -3019,7 +3025,8 @@ impl HostSessionAuthority {
             AuthorityObjectKindV1::InputAcceptance,
             acceptance.byte_length,
         )?;
-        proposed.validate().map_err(protocol_error)?;
+        super::facade::validate_v3_schema_with_external_exact_authority_history(&proposed)
+            .map_err(protocol_error)?;
         workspace.revalidate().map_err(protocol_error)?;
         store::commit_v3_root_exact_current_opened(
             self.trusted_root(),
@@ -3395,7 +3402,8 @@ impl HostSessionAuthority {
                     AuthorityObjectKindV1::PostTurnCompletion,
                     completion.byte_length,
                 )?;
-                proposed.validate().map_err(protocol_error)?;
+                super::facade::validate_v3_schema_with_external_exact_authority_history(&proposed)
+                    .map_err(protocol_error)?;
                 workspace.revalidate().map_err(protocol_error)?;
                 store::commit_v3_root_exact_current_opened(
                     self.trusted_root(),
@@ -3552,7 +3560,8 @@ impl HostSessionAuthority {
         ] {
             insert_present_index_v3(&mut proposed, reference, kind, byte_length)?;
         }
-        proposed.validate().map_err(protocol_error)?;
+        super::facade::validate_v3_schema_with_external_exact_authority_history(&proposed)
+            .map_err(protocol_error)?;
         workspace.revalidate().map_err(protocol_error)?;
         store::commit_v3_root_exact_current_opened(
             self.trusted_root(),
@@ -3977,7 +3986,8 @@ impl HostSessionAuthority {
                 ] {
                     insert_present_index_v3(&mut proposed, reference, kind, byte_length)?;
                 }
-                proposed.validate().map_err(protocol_error)?;
+                super::facade::validate_v3_schema_with_external_exact_authority_history(&proposed)
+                    .map_err(protocol_error)?;
                 workspace.revalidate().map_err(protocol_error)?;
                 store::commit_v3_root_exact_current_opened(
                     self.trusted_root(),

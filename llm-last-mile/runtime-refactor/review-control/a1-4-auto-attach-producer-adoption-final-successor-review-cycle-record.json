@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "packet_id": "A1.4-auto-attach-producer-adoption-final-successor",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:1c06360f43fc96fdded3f9cab7d72cf4fb75e6a1a3b9a966c39fc1e1a14aa0bf",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "a1-4-auto-attach-producer-adoption-final-successor-review.txt",
+        "codex-agent:/root/a14_successor_review"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "A14-FINAL-P1-001",
+          "priority": "P1"
+        }
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:fc8b5a2cdda50a3dee44089b6a8f62f047feafbcfc202b05cc7822e693dba800",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": [
+        "A14-FINAL-P1-001"
+      ],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "a1-4-auto-attach-producer-adoption-final-successor-review.txt",
+        "codex-agent:/root/a14_successor_review"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}

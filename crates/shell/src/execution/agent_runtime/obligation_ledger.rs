@@ -10,7 +10,18 @@ use substrate_common::{
 use transport_api_types::ExecuteStreamFrame;
 
 use super::{
-    host_session_authority::{canonical_json, schema::AuthorityObjectCommitmentV1},
+    host_session_authority::{
+        canonical_json,
+        schema::{
+            AuthorityObjectCommitmentV1, CanonicalDirectoryV1, HostSessionPostureV1,
+            HostSessionTransitionCallerKindV1, HostSessionTransitionModeV1,
+        },
+        store_schema::{
+            HostSessionStartupOwnershipApplicationV1, HostSessionTransitionIntentStateV3,
+            HostSessionTransitionIntentV3,
+        },
+        AuthorityObservationV1,
+    },
     state_store::{
         is_stale_or_conflicting_c1_obligation_ledger_materialization_plan_error,
         AcceptedWorldWorkIdentityV1, AgentRuntimeStateStore, ResolvedWorldWorkRegistryAuthorityV1,
@@ -210,6 +221,89 @@ pub(crate) struct ObligationLedgerMaterializationPlanV1 {
     pub(crate) next_state: ObligationLedgerSessionStateV1,
     pub(crate) materialized_events: Vec<MaterializedObligationLedgerEventV1>,
     pub(crate) projected_obligations: Vec<OrchestrationObligationRecord>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct PostHsaAutoAttachLedgerSnapshotV1 {
+    pub(crate) authority_observation: AuthorityObservationV1,
+    pub(crate) revision_cursor: ObligationLedgerRevisionCursorV1,
+    pub(crate) acceptance_states: Vec<ObligationLedgerSessionStateV1>,
+    pub(crate) obligations: Vec<OrchestrationObligationRecord>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct PostHsaAutoAttachClaimRequestV1 {
+    pub(crate) expected_ledger: PostHsaAutoAttachLedgerSnapshotV1,
+    pub(crate) obligation_id: String,
+    pub(crate) claim_owner: String,
+    pub(crate) claimed_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum PostHsaAutoAttachClaimOutcomeV1 {
+    Claimed(OrchestrationObligationRecord),
+    Joined(OrchestrationObligationRecord),
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum PostHsaAutoAttachSettlementKindV1 {
+    Satisfied,
+    FailedClosed,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PostHsaAutoAttachSettlementResultV1 {
+    pub(crate) satisfied_obligation_ids: Vec<String>,
+    pub(crate) superseded_obligation_ids: Vec<String>,
+    pub(crate) failed_closed_obligation_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct PostHsaAuthorityObservationBindingV1 {
+    schema_version: u32,
+    authority_store_id: String,
+    bootstrap_home: CanonicalDirectoryV1,
+    orchestration_session_id: String,
+    root_revision: u64,
+    authority_revision: u64,
+    authority_record_commitment: AuthorityObjectCommitmentV1,
+    authoritative_lineage_commitment: AuthorityObjectCommitmentV1,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct PostHsaAutoAttachSettlementReceiptV1 {
+    schema_version: u32,
+    authority_observation: PostHsaAuthorityObservationBindingV1,
+    orchestration_session_id: String,
+    obligation_id: String,
+    claim_owner: String,
+    completion_reason: String,
+    settlement_kind: PostHsaAutoAttachSettlementKindV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    router_auto_attach_intent: Option<HostSessionTransitionIntentV3>,
+    result: PostHsaAutoAttachSettlementResultV1,
+    settled_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct PostHsaAutoAttachSettlementRequestV1 {
+    pub(crate) expected_ledger: PostHsaAutoAttachLedgerSnapshotV1,
+    pub(crate) obligation_id: String,
+    pub(crate) claim_owner: String,
+    pub(crate) completion_reason: String,
+    pub(crate) settlement_kind: PostHsaAutoAttachSettlementKindV1,
+    pub(crate) router_auto_attach_intent: Option<HostSessionTransitionIntentV3>,
+    pub(crate) settled_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum PostHsaAutoAttachSettlementOutcomeV1 {
+    Settled(PostHsaAutoAttachSettlementResultV1),
+    Joined(PostHsaAutoAttachSettlementResultV1),
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -1155,6 +1249,714 @@ impl ObligationLedgerRevisionCursorV1 {
         }
         Ok(())
     }
+}
+
+impl PostHsaAuthorityObservationBindingV1 {
+    fn from_observation(observation: &AuthorityObservationV1) -> Self {
+        Self {
+            schema_version: 1,
+            authority_store_id: observation.authority_store_id.clone(),
+            bootstrap_home: observation.bootstrap_home.clone(),
+            orchestration_session_id: observation.orchestration_session_id.clone(),
+            root_revision: observation.root_revision,
+            authority_revision: observation.authority_revision,
+            authority_record_commitment: observation.authority_record_commitment.clone(),
+            authoritative_lineage_commitment: observation.authoritative_lineage_commitment.clone(),
+        }
+    }
+
+    fn matches(&self, observation: &AuthorityObservationV1) -> bool {
+        self == &Self::from_observation(observation)
+    }
+}
+
+impl PostHsaAutoAttachLedgerSnapshotV1 {
+    pub(crate) fn validate(&self) -> Result<()> {
+        validate_exact_identity(
+            &self.authority_observation.authority_store_id,
+            "authority_store_id",
+        )?;
+        validate_exact_identity(
+            &self.authority_observation.orchestration_session_id,
+            "orchestration_session_id",
+        )?;
+        if self.authority_observation.root_revision == 0
+            || self.authority_observation.authority_revision == 0
+        {
+            anyhow::bail!("post-HSA obligation ledger observation must use positive revisions");
+        }
+        self.revision_cursor.validate()?;
+        if self.revision_cursor.current_session_ledger_revision == 0 {
+            anyhow::bail!("post-HSA auto-attach requires a materialized ledger revision");
+        }
+
+        let mut acceptance_ids = Vec::new();
+        let mut max_revision = 0_u64;
+        for state in &self.acceptance_states {
+            state.validate()?;
+            if state.authority_store_id != self.authority_observation.authority_store_id
+                || state.orchestration_session_id
+                    != self.authority_observation.orchestration_session_id
+            {
+                anyhow::bail!("post-HSA obligation ledger state changed authority scope");
+            }
+            acceptance_ids.push(state.acceptance_record_id.clone());
+            max_revision = max_revision.max(state.session_ledger_revision);
+        }
+        let mut canonical_acceptance_ids = acceptance_ids.clone();
+        canonical_acceptance_ids.sort();
+        canonical_acceptance_ids.dedup();
+        if acceptance_ids != canonical_acceptance_ids
+            || max_revision != self.revision_cursor.current_session_ledger_revision
+        {
+            anyhow::bail!("post-HSA obligation ledger acceptance/revision cut is not exact");
+        }
+
+        let mut obligation_ids = Vec::new();
+        for obligation in &self.obligations {
+            obligation.validate()?;
+            if !obligation.has_c1_materialization_identity()
+                || obligation.authority_store_id.as_deref()
+                    != Some(self.authority_observation.authority_store_id.as_str())
+                || obligation.orchestration_session_id
+                    != self.authority_observation.orchestration_session_id
+            {
+                anyhow::bail!("post-HSA auto-attach obligation lacks exact C1 authority identity");
+            }
+            let source = obligation.source_journal_event.as_ref().ok_or_else(|| {
+                anyhow::anyhow!("post-HSA auto-attach obligation omitted its source journal event")
+            })?;
+            let state = self
+                .acceptance_states
+                .iter()
+                .find(|state| state.acceptance_record_id == source.acceptance_record_id)
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "post-HSA auto-attach obligation has no exact acceptance ledger state"
+                    )
+                })?;
+            if state.acceptance_record_revision != source.acceptance_record_revision
+                || state.accepted_work_identity != source.accepted_work_identity
+                || state.stream_id != source.stream_id
+                || obligation.authoritative_participant_id.as_deref()
+                    != Some(state.authoritative_participant_id.as_str())
+            {
+                anyhow::bail!("post-HSA auto-attach obligation acceptance identity drifted");
+            }
+            obligation_ids.push(obligation.obligation_id.clone());
+        }
+        let mut canonical_obligation_ids = obligation_ids.clone();
+        canonical_obligation_ids.sort();
+        canonical_obligation_ids.dedup();
+        if obligation_ids != canonical_obligation_ids {
+            anyhow::bail!("post-HSA auto-attach obligation set is not canonical and unique");
+        }
+        Ok(())
+    }
+}
+
+impl PostHsaAutoAttachSettlementResultV1 {
+    fn validate_exact_target(
+        &self,
+        obligation_id: &str,
+        kind: PostHsaAutoAttachSettlementKindV1,
+    ) -> Result<()> {
+        let mut all = self
+            .satisfied_obligation_ids
+            .iter()
+            .chain(self.superseded_obligation_ids.iter())
+            .chain(self.failed_closed_obligation_ids.iter())
+            .collect::<Vec<_>>();
+        let original_len = all.len();
+        all.sort();
+        all.dedup();
+        if all.len() != original_len || all.is_empty() {
+            anyhow::bail!("post-HSA auto-attach settlement must be non-empty and unique");
+        }
+        match kind {
+            PostHsaAutoAttachSettlementKindV1::Satisfied
+                if self.satisfied_obligation_ids == [obligation_id]
+                    && self.failed_closed_obligation_ids.is_empty() => {}
+            PostHsaAutoAttachSettlementKindV1::FailedClosed
+                if self.failed_closed_obligation_ids == [obligation_id]
+                    && self.satisfied_obligation_ids.is_empty()
+                    && self.superseded_obligation_ids.is_empty() => {}
+            _ => anyhow::bail!(
+                "post-HSA auto-attach settlement does not identify the exact target obligation"
+            ),
+        }
+        Ok(())
+    }
+}
+
+impl PostHsaAutoAttachSettlementRequestV1 {
+    fn validate(&self) -> Result<()> {
+        self.expected_ledger.validate()?;
+        validate_exact_identity(&self.obligation_id, "obligation_id")?;
+        validate_exact_identity(&self.claim_owner, "claim_owner")?;
+        validate_exact_identity(&self.completion_reason, "completion_reason")?;
+        if !self
+            .expected_ledger
+            .obligations
+            .iter()
+            .any(|obligation| obligation.obligation_id == self.obligation_id)
+        {
+            anyhow::bail!("post-HSA settlement target is absent from the expected ledger cut");
+        }
+        match self.settlement_kind {
+            PostHsaAutoAttachSettlementKindV1::Satisfied => {
+                let intent = self.router_auto_attach_intent.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "successful post-HSA settlement requires the exact RouterAutoAttach intent"
+                    )
+                })?;
+                let HostSessionTransitionIntentStateV3::Applied {
+                    active_authoritative_participant_id,
+                    resulting_posture,
+                    startup_ownership,
+                    ..
+                } = &intent.state
+                else {
+                    anyhow::bail!("successful post-HSA settlement intent is not Applied");
+                };
+                if intent.mode != HostSessionTransitionModeV1::Attach
+                    || intent.caller.kind != HostSessionTransitionCallerKindV1::RouterAutoAttach
+                    || intent.caller.caller_participant_id.is_some()
+                    || intent.caller.auto_attach_obligation_id.as_deref()
+                        != Some(self.obligation_id.as_str())
+                    || intent.caller.auto_attach_claim_owner.as_deref()
+                        != Some(self.claim_owner.as_str())
+                    || intent.orchestration_session_id
+                        != self
+                            .expected_ledger
+                            .authority_observation
+                            .orchestration_session_id
+                    || *resulting_posture != HostSessionPostureV1::ActiveAttached
+                    || active_authoritative_participant_id
+                        != &intent.target_authoritative_participant_id
+                    || !matches!(startup_ownership.as_ref(),
+                        HostSessionStartupOwnershipApplicationV1::Accepted { authority_revision, .. }
+                            if *authority_revision
+                                == self.expected_ledger.authority_observation.authority_revision)
+                {
+                    anyhow::bail!(
+                        "successful post-HSA settlement has mismatched RouterAutoAttach completion identity"
+                    );
+                }
+            }
+            PostHsaAutoAttachSettlementKindV1::FailedClosed => {
+                if self.router_auto_attach_intent.is_some() {
+                    anyhow::bail!(
+                        "failed-closed post-HSA settlement must not substitute a success intent"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn capture_post_hsa_auto_attach_ledger_snapshot(
+    store: &AgentRuntimeStateStore,
+    authority_observation: &AuthorityObservationV1,
+) -> Result<PostHsaAutoAttachLedgerSnapshotV1> {
+    let revision_cursor = store
+        .load_obligation_ledger_revision_cursor(&authority_observation.orchestration_session_id)?;
+    let acceptance_ids = store.list_post_hsa_obligation_ledger_acceptance_ids(
+        &authority_observation.orchestration_session_id,
+    )?;
+    let mut acceptance_states = Vec::new();
+    for acceptance_id in acceptance_ids {
+        let state = store
+            .load_obligation_ledger_state(
+                &authority_observation.orchestration_session_id,
+                &acceptance_id,
+            )?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "post-HSA obligation ledger acceptance {acceptance_id} omitted state.json"
+                )
+            })?;
+        acceptance_states.push(state);
+    }
+    acceptance_states
+        .sort_by(|left, right| left.acceptance_record_id.cmp(&right.acceptance_record_id));
+    let mut obligations =
+        store.list_obligations(&authority_observation.orchestration_session_id)?;
+    obligations.sort_by(|left, right| left.obligation_id.cmp(&right.obligation_id));
+    let snapshot = PostHsaAutoAttachLedgerSnapshotV1 {
+        authority_observation: authority_observation.clone(),
+        revision_cursor,
+        acceptance_states,
+        obligations,
+    };
+    snapshot.validate()?;
+    Ok(snapshot)
+}
+
+macro_rules! load_locked_post_hsa_auto_attach_snapshot {
+    ($transaction:expr, $expected:expr) => {{
+        let expected = $expected;
+        let observation = &expected.authority_observation;
+        let session_id = observation.orchestration_session_id.as_str();
+        let root_revision = observation.root_revision;
+        let cursor_bytes = $transaction
+            .read_post_hsa_obligation_ledger_file(
+                root_revision,
+                session_id,
+                &["revision-cursor.json"],
+            )
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?
+            .ok_or_else(|| anyhow::anyhow!("post-HSA obligation ledger cursor is absent"))?;
+        let expected_cursor_bytes = serde_json::to_vec_pretty(&expected.revision_cursor)
+            .context("serialize expected post-HSA obligation ledger cursor")?;
+        if cursor_bytes != expected_cursor_bytes {
+            anyhow::bail!("stale or conflicting post-HSA obligation ledger cursor");
+        }
+
+        let expected_acceptance_ids = expected
+            .acceptance_states
+            .iter()
+            .map(|state| state.acceptance_record_id.clone())
+            .collect::<Vec<_>>();
+        let current_acceptance_ids = $transaction
+            .list_post_hsa_obligation_ledger_directories(
+                root_revision,
+                session_id,
+                &["acceptances"],
+            )
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        if current_acceptance_ids != expected_acceptance_ids {
+            anyhow::bail!("stale or substituted post-HSA obligation ledger acceptance set");
+        }
+
+        let mut current_obligations = Vec::new();
+        for state in &expected.acceptance_states {
+            let state_bytes = $transaction
+                .read_post_hsa_obligation_ledger_file(
+                    root_revision,
+                    session_id,
+                    &[
+                        "acceptances",
+                        state.acceptance_record_id.as_str(),
+                        "state.json",
+                    ],
+                )
+                .map_err(|error| anyhow::anyhow!(error.to_string()))?
+                .ok_or_else(|| anyhow::anyhow!("post-HSA obligation ledger state is absent"))?;
+            let expected_state_bytes = serde_json::to_vec_pretty(state)
+                .context("serialize expected post-HSA obligation ledger state")?;
+            if state_bytes != expected_state_bytes {
+                anyhow::bail!("stale or conflicting post-HSA obligation ledger state");
+            }
+            for (file_name, bytes) in $transaction
+                .list_post_hsa_obligation_ledger_files(
+                    root_revision,
+                    session_id,
+                    &[
+                        "acceptances",
+                        state.acceptance_record_id.as_str(),
+                        "obligations",
+                    ],
+                )
+                .map_err(|error| anyhow::anyhow!(error.to_string()))?
+            {
+                let obligation: OrchestrationObligationRecord = serde_json::from_slice(&bytes)
+                    .with_context(|| format!("decode post-HSA obligation {file_name}"))?;
+                if file_name != format!("{}.json", obligation.obligation_id) {
+                    anyhow::bail!("post-HSA obligation filename substituted its identity");
+                }
+                current_obligations.push(obligation);
+            }
+        }
+        current_obligations.sort_by(|left, right| left.obligation_id.cmp(&right.obligation_id));
+        let current = PostHsaAutoAttachLedgerSnapshotV1 {
+            authority_observation: observation.clone(),
+            revision_cursor: expected.revision_cursor.clone(),
+            acceptance_states: expected.acceptance_states.clone(),
+            obligations: current_obligations,
+        };
+        current.validate()?;
+        current
+    }};
+}
+
+fn ensure_exact_obligation_set(
+    current: &PostHsaAutoAttachLedgerSnapshotV1,
+    expected: &PostHsaAutoAttachLedgerSnapshotV1,
+) -> Result<()> {
+    if current.obligations != expected.obligations {
+        anyhow::bail!("stale or substituted post-HSA obligation set or state");
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn claim_post_hsa_auto_attach_obligation(
+    store: &AgentRuntimeStateStore,
+    request: &PostHsaAutoAttachClaimRequestV1,
+) -> Result<PostHsaAutoAttachClaimOutcomeV1> {
+    request.expected_ledger.validate()?;
+    validate_exact_identity(&request.obligation_id, "obligation_id")?;
+    validate_exact_identity(&request.claim_owner, "claim_owner")?;
+    let storage = store
+        .bind_post_hsa_obligation_ledger_storage(&request.expected_ledger.authority_observation)?;
+    let mut transaction = storage
+        .begin_transaction()
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    transaction
+        .verify_post_hsa_authority_binding(&request.expected_ledger.authority_observation, None)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let current = load_locked_post_hsa_auto_attach_snapshot!(transaction, &request.expected_ledger);
+    ensure_exact_obligation_set(&current, &request.expected_ledger)?;
+    if current.obligations.iter().any(|obligation| {
+        obligation.obligation_id != request.obligation_id && obligation.is_auto_attach_claimed()
+    }) {
+        anyhow::bail!("conflicting post-HSA auto-attach claim already exists");
+    }
+    let target = current
+        .obligations
+        .iter()
+        .find(|obligation| obligation.obligation_id == request.obligation_id)
+        .ok_or_else(|| anyhow::anyhow!("exact post-HSA auto-attach obligation is absent"))?;
+    if target.is_auto_attach_claimed() {
+        if target.attach_claim_owner.as_deref() != Some(request.claim_owner.as_str()) {
+            anyhow::bail!("post-HSA auto-attach obligation is claimed by another owner");
+        }
+        transaction
+            .finish()
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        return Ok(PostHsaAutoAttachClaimOutcomeV1::Joined(target.clone()));
+    }
+    if !target.is_auto_attach_eligible() {
+        anyhow::bail!("exact post-HSA auto-attach obligation is not eligible for claim");
+    }
+    let mut claimed = target.clone();
+    claimed.mark_attach_claimed(&request.claim_owner, request.claimed_at);
+    claimed.validate()?;
+    let acceptance_id = claimed
+        .source_journal_event
+        .as_ref()
+        .expect("validated C1 obligation must have source journal event")
+        .acceptance_record_id
+        .as_str();
+    let expected_bytes = serde_json::to_vec_pretty(target)
+        .context("serialize expected post-HSA auto-attach obligation")?;
+    let claimed_bytes = serde_json::to_vec_pretty(&claimed)
+        .context("serialize claimed post-HSA auto-attach obligation")?;
+    transaction
+        .replace_post_hsa_obligation_ledger_file(
+            request.expected_ledger.authority_observation.root_revision,
+            &request
+                .expected_ledger
+                .authority_observation
+                .orchestration_session_id,
+            &[
+                "acceptances",
+                acceptance_id,
+                "obligations",
+                &format!("{}.json", claimed.obligation_id),
+            ],
+            &expected_bytes,
+            &claimed_bytes,
+        )
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    transaction
+        .finish()
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    Ok(PostHsaAutoAttachClaimOutcomeV1::Claimed(claimed))
+}
+
+fn validate_post_hsa_settlement_receipt_matches_request(
+    receipt: &PostHsaAutoAttachSettlementReceiptV1,
+    request: &PostHsaAutoAttachSettlementRequestV1,
+) -> Result<()> {
+    if receipt.schema_version != 1
+        || !receipt
+            .authority_observation
+            .matches(&request.expected_ledger.authority_observation)
+        || receipt.orchestration_session_id
+            != request
+                .expected_ledger
+                .authority_observation
+                .orchestration_session_id
+        || receipt.obligation_id != request.obligation_id
+        || receipt.claim_owner != request.claim_owner
+        || receipt.completion_reason != request.completion_reason
+        || receipt.settlement_kind != request.settlement_kind
+        || receipt.router_auto_attach_intent != request.router_auto_attach_intent
+    {
+        anyhow::bail!("post-HSA auto-attach settlement receipt conflicts with exact retry");
+    }
+    receipt
+        .result
+        .validate_exact_target(&request.obligation_id, request.settlement_kind)
+}
+
+fn validate_post_hsa_settlement_result_against_ledger(
+    result: &PostHsaAutoAttachSettlementResultV1,
+    request: &PostHsaAutoAttachSettlementRequestV1,
+    obligations: &[OrchestrationObligationRecord],
+) -> Result<()> {
+    result.validate_exact_target(&request.obligation_id, request.settlement_kind)?;
+    let target = obligations
+        .iter()
+        .find(|obligation| obligation.obligation_id == request.obligation_id)
+        .ok_or_else(|| anyhow::anyhow!("settled post-HSA obligation disappeared"))?;
+    let expected_target_state = match request.settlement_kind {
+        PostHsaAutoAttachSettlementKindV1::Satisfied => {
+            OrchestrationObligationAttachState::Satisfied
+        }
+        PostHsaAutoAttachSettlementKindV1::FailedClosed => {
+            OrchestrationObligationAttachState::FailedClosed
+        }
+    };
+    if request.settlement_kind == PostHsaAutoAttachSettlementKindV1::Satisfied
+        && request
+            .router_auto_attach_intent
+            .as_ref()
+            .and_then(|intent| intent.source_authoritative_participant_id.as_deref())
+            != target.authoritative_participant_id.as_deref()
+    {
+        anyhow::bail!(
+            "settled post-HSA obligation is not bound to the RouterAutoAttach source participant"
+        );
+    }
+    if target.attach_state != expected_target_state
+        || target.attach_claim_owner.as_deref() != Some(request.claim_owner.as_str())
+        || target.attach_completion_reason.as_deref() != Some(request.completion_reason.as_str())
+    {
+        anyhow::bail!("settled post-HSA target obligation changed owner, reason, or result");
+    }
+    for obligation_id in &result.superseded_obligation_ids {
+        let obligation = obligations
+            .iter()
+            .find(|obligation| obligation.obligation_id == *obligation_id)
+            .ok_or_else(|| anyhow::anyhow!("superseded post-HSA obligation disappeared"))?;
+        if obligation.attach_state != OrchestrationObligationAttachState::Superseded
+            || obligation.attach_completion_reason.as_deref()
+                != Some(request.completion_reason.as_str())
+        {
+            anyhow::bail!("post-HSA sibling settlement changed its exact disposition");
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn settle_post_hsa_auto_attach_obligation(
+    store: &AgentRuntimeStateStore,
+    request: &PostHsaAutoAttachSettlementRequestV1,
+) -> Result<PostHsaAutoAttachSettlementOutcomeV1> {
+    request.validate()?;
+    let storage = store
+        .bind_post_hsa_obligation_ledger_storage(&request.expected_ledger.authority_observation)?;
+    let mut transaction = storage
+        .begin_transaction()
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    transaction
+        .verify_post_hsa_authority_binding(
+            &request.expected_ledger.authority_observation,
+            request.router_auto_attach_intent.as_ref(),
+        )
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let current = load_locked_post_hsa_auto_attach_snapshot!(transaction, &request.expected_ledger);
+    ensure_exact_obligation_set(&current, &request.expected_ledger)?;
+
+    let receipt_name = format!("{}.json", request.obligation_id);
+    if let Some(bytes) = transaction
+        .read_post_hsa_obligation_ledger_file(
+            request.expected_ledger.authority_observation.root_revision,
+            &request
+                .expected_ledger
+                .authority_observation
+                .orchestration_session_id,
+            &["auto-attach-settlements", &receipt_name],
+        )
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?
+    {
+        let receipt: PostHsaAutoAttachSettlementReceiptV1 = serde_json::from_slice(&bytes)
+            .context("decode post-HSA auto-attach settlement receipt")?;
+        validate_post_hsa_settlement_receipt_matches_request(&receipt, request)?;
+        validate_post_hsa_settlement_result_against_ledger(
+            &receipt.result,
+            request,
+            &current.obligations,
+        )?;
+        transaction
+            .finish()
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        return Ok(PostHsaAutoAttachSettlementOutcomeV1::Joined(receipt.result));
+    }
+
+    let target = current
+        .obligations
+        .iter()
+        .find(|obligation| obligation.obligation_id == request.obligation_id)
+        .ok_or_else(|| anyhow::anyhow!("exact post-HSA settlement target is absent"))?;
+    let target_terminal_state = match request.settlement_kind {
+        PostHsaAutoAttachSettlementKindV1::Satisfied => {
+            OrchestrationObligationAttachState::Satisfied
+        }
+        PostHsaAutoAttachSettlementKindV1::FailedClosed => {
+            OrchestrationObligationAttachState::FailedClosed
+        }
+    };
+    let settled_at = if target.attach_state == target_terminal_state {
+        if target.attach_claim_owner.as_deref() != Some(request.claim_owner.as_str())
+            || target.attach_completion_reason.as_deref()
+                != Some(request.completion_reason.as_str())
+        {
+            anyhow::bail!("terminal post-HSA target conflicts with exact settlement retry");
+        }
+        target.updated_at
+    } else {
+        if target.attach_state != OrchestrationObligationAttachState::Claimed
+            || target.attach_claim_owner.as_deref() != Some(request.claim_owner.as_str())
+        {
+            anyhow::bail!("post-HSA settlement requires the exact claimed obligation and owner");
+        }
+        request.settled_at
+    };
+
+    if current.obligations.iter().any(|obligation| {
+        obligation.obligation_id != request.obligation_id
+            && obligation.attach_state == OrchestrationObligationAttachState::Claimed
+    }) {
+        anyhow::bail!("post-HSA settlement observed a conflicting sibling claim");
+    }
+
+    let mut proposed = current.obligations.clone();
+    for obligation in &mut proposed {
+        if obligation.obligation_id == request.obligation_id {
+            if obligation.attach_state != target_terminal_state {
+                match request.settlement_kind {
+                    PostHsaAutoAttachSettlementKindV1::Satisfied => {
+                        obligation.mark_attach_satisfied(&request.completion_reason, settled_at)
+                    }
+                    PostHsaAutoAttachSettlementKindV1::FailedClosed => {
+                        obligation.mark_attach_failed_closed(&request.completion_reason, settled_at)
+                    }
+                }
+            }
+            continue;
+        }
+        if request.settlement_kind == PostHsaAutoAttachSettlementKindV1::Satisfied
+            && obligation.attach_state == OrchestrationObligationAttachState::Eligible
+            && obligation.is_pending()
+        {
+            obligation.mark_attach_superseded(&request.completion_reason, settled_at);
+        } else if obligation.attach_state == OrchestrationObligationAttachState::Superseded
+            && obligation.attach_completion_reason.as_deref()
+                == Some(request.completion_reason.as_str())
+            && obligation.updated_at != settled_at
+        {
+            anyhow::bail!("partially settled post-HSA sibling used a conflicting result identity");
+        }
+    }
+
+    let mut result = PostHsaAutoAttachSettlementResultV1::default();
+    match request.settlement_kind {
+        PostHsaAutoAttachSettlementKindV1::Satisfied => {
+            result
+                .satisfied_obligation_ids
+                .push(request.obligation_id.clone());
+            result.superseded_obligation_ids = proposed
+                .iter()
+                .filter(|obligation| {
+                    obligation.obligation_id != request.obligation_id
+                        && obligation.attach_state == OrchestrationObligationAttachState::Superseded
+                        && obligation.attach_completion_reason.as_deref()
+                            == Some(request.completion_reason.as_str())
+                        && obligation.updated_at == settled_at
+                })
+                .map(|obligation| obligation.obligation_id.clone())
+                .collect();
+        }
+        PostHsaAutoAttachSettlementKindV1::FailedClosed => result
+            .failed_closed_obligation_ids
+            .push(request.obligation_id.clone()),
+    }
+    result.satisfied_obligation_ids.sort();
+    result.superseded_obligation_ids.sort();
+    result.failed_closed_obligation_ids.sort();
+    result.validate_exact_target(&request.obligation_id, request.settlement_kind)?;
+
+    let mut mutations = current
+        .obligations
+        .iter()
+        .zip(&proposed)
+        .filter(|(current, proposed)| current != proposed)
+        .collect::<Vec<_>>();
+    mutations.sort_by(|(_, left), (_, right)| {
+        (left.obligation_id != request.obligation_id)
+            .cmp(&(right.obligation_id != request.obligation_id))
+            .then(left.obligation_id.cmp(&right.obligation_id))
+    });
+    for (current, proposed) in mutations {
+        proposed.validate()?;
+        let acceptance_id = proposed
+            .source_journal_event
+            .as_ref()
+            .expect("validated C1 obligation must have source journal event")
+            .acceptance_record_id
+            .as_str();
+        let current_bytes = serde_json::to_vec_pretty(current)
+            .context("serialize current post-HSA settlement obligation")?;
+        let proposed_bytes = serde_json::to_vec_pretty(proposed)
+            .context("serialize proposed post-HSA settlement obligation")?;
+        let file_name = format!("{}.json", proposed.obligation_id);
+        transaction
+            .replace_post_hsa_obligation_ledger_file(
+                request.expected_ledger.authority_observation.root_revision,
+                &request
+                    .expected_ledger
+                    .authority_observation
+                    .orchestration_session_id,
+                &["acceptances", acceptance_id, "obligations", &file_name],
+                &current_bytes,
+                &proposed_bytes,
+            )
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    }
+
+    validate_post_hsa_settlement_result_against_ledger(&result, request, &proposed)?;
+    let receipt = PostHsaAutoAttachSettlementReceiptV1 {
+        schema_version: 1,
+        authority_observation: PostHsaAuthorityObservationBindingV1::from_observation(
+            &request.expected_ledger.authority_observation,
+        ),
+        orchestration_session_id: request
+            .expected_ledger
+            .authority_observation
+            .orchestration_session_id
+            .clone(),
+        obligation_id: request.obligation_id.clone(),
+        claim_owner: request.claim_owner.clone(),
+        completion_reason: request.completion_reason.clone(),
+        settlement_kind: request.settlement_kind,
+        router_auto_attach_intent: request.router_auto_attach_intent.clone(),
+        result: result.clone(),
+        settled_at,
+    };
+    let receipt_bytes = serde_json::to_vec_pretty(&receipt)
+        .context("serialize post-HSA auto-attach settlement receipt")?;
+    transaction
+        .publish_post_hsa_obligation_ledger_file(
+            request.expected_ledger.authority_observation.root_revision,
+            &request
+                .expected_ledger
+                .authority_observation
+                .orchestration_session_id,
+            &["auto-attach-settlements", &receipt_name],
+            &receipt_bytes,
+        )
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    transaction
+        .finish()
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    Ok(PostHsaAutoAttachSettlementOutcomeV1::Settled(result))
 }
 
 impl MaterializedObligationLedgerEventV1 {

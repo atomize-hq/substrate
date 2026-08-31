@@ -3,8 +3,6 @@ use crate::execution::agent_inventory::{
     AgentInventoryEntryV1,
 };
 use crate::execution::agent_runtime::auto_attach::SessionAutoAttachClaim;
-#[cfg(unix)]
-use crate::execution::agent_runtime::control::request_private_stop;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::control::PersistedWorldBinding;
 #[cfg(target_os = "linux")]
@@ -22,6 +20,10 @@ use crate::execution::agent_runtime::control::{
     toolbox_transport_path_for_home, HiddenOwnerHelperLaunchPlan, HiddenOwnerHelperLaunchReceipt,
     HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan, OwnerHelperMode,
     PublicPromptAction, PublicPromptCommandRequest, PublicPromptInput, PublicSessionPosture,
+};
+#[cfg(unix)]
+use crate::execution::agent_runtime::control::{
+    durable_start_stop_transport_path, request_private_authority_managed_stop, request_private_stop,
 };
 #[cfg(all(unix, not(target_os = "linux")))]
 use crate::execution::agent_runtime::control::{
@@ -51,9 +53,14 @@ use crate::execution::agent_runtime::host_session_authority::schema::{
     StartContinuationHandleHashInputV2, StartContinuationHandleStateV2,
 };
 #[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::host_session_authority::stop::{
+    stop_delivery, CompleteHostSessionStopRequestV1, HostSessionStopCompletionOutcomeV1,
+    HostSessionStopIssueOutcomeV1, IssueHostSessionStopRequestV1,
+};
+#[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::host_session_authority::store_schema::{
-    HostSessionTransitionInputHandoffV1, HostSessionTransitionIntentStateV3,
-    HostSessionTransitionIntentV3,
+    HostSessionStopIntentStateV1, HostSessionTransitionInputHandoffV1,
+    HostSessionTransitionIntentStateV3, HostSessionTransitionIntentV3,
 };
 #[cfg(unix)]
 use crate::execution::agent_runtime::host_session_authority::store_schema::{
@@ -129,7 +136,7 @@ use std::process::Command;
 #[cfg(target_os = "linux")]
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use substrate_broker::Policy;
 use substrate_common::paths as substrate_paths;
 use substrate_common::{AgentEvent, PlacementExecution};
@@ -1776,6 +1783,11 @@ fn run_fork(args: &AgentSessionControlArgs, _cli: &Cli) -> Result<()> {
 }
 
 fn run_stop(args: &AgentSessionControlArgs, _cli: &Cli) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    if let Some(authority) = hsa_stop_authority_for_session(&args.session)? {
+        return run_hsa_stop(args, &authority);
+    }
+
     let store = AgentRuntimeStateStore::new()?;
     let target = store
         .resolve_public_control_target(&args.session, PublicControlAction::Stop)
@@ -1873,6 +1885,234 @@ fn run_stop(args: &AgentSessionControlArgs, _cli: &Cli) -> Result<()> {
             },
         )
     }
+}
+
+#[cfg(target_os = "linux")]
+fn hsa_stop_authority_for_session(
+    orchestration_session_id: &str,
+) -> Result<Option<HostSessionAuthority>> {
+    let authority = public_start_authority()?;
+    if authority
+        .resolve_current_exact(orchestration_session_id, None)
+        .is_ok()
+    {
+        return Ok(Some(authority));
+    }
+    match authority.read_a12b_root() {
+        Ok(root)
+            if root
+                .session_namespace_map
+                .contains_key(orchestration_session_id) =>
+        {
+            Err(config_model::user_error(
+                "authority_invalid: discovered HSA Stop session failed exact authority resolution",
+            )
+            .into())
+        }
+        Ok(_) => Ok(None),
+        Err(strict_error) => {
+            let greenfield_v1 = authority.read_root().is_ok_and(|root| {
+                crate::execution::agent_runtime::host_session_authority::start_continuity::retryable_start_transaction_from_v1(&root).is_ok()
+            });
+            if greenfield_v1 {
+                Ok(None)
+            } else {
+                Err(config_model::user_error(format!(
+                    "authority_invalid: cannot resolve strict HSA Stop authority: {strict_error}"
+                ))
+                .into())
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn run_hsa_stop(args: &AgentSessionControlArgs, authority: &HostSessionAuthority) -> Result<()> {
+    let current = authority
+        .resolve_current_exact(&args.session, None)
+        .map_err(|error| config_model::user_error(error.to_string()))?;
+    let backend_id = current.caller.descriptor.backend_id.clone();
+    let participant_id = current.caller.participant_id.clone();
+
+    if current.authority.lifecycle_posture == HostSessionPostureV1::Terminal {
+        return render_hsa_stop_result(args, &backend_id, &participant_id);
+    }
+    let intent = match authority
+        .stop_transaction_for_session(&args.session)
+        .map_err(|error| config_model::user_error(error.to_string()))?
+    {
+        Some(intent) => intent,
+        None => {
+            let authority_revision = current.observation.authority_revision.to_string();
+            let request_digest = public_start_digest(
+                "substrate.hsa-public-stop-request.v1",
+                &[
+                    current.observation.authority_store_id.as_bytes(),
+                    args.session.as_bytes(),
+                    participant_id.as_bytes(),
+                    authority_revision.as_bytes(),
+                ],
+            );
+            let request = IssueHostSessionStopRequestV1 {
+                intent_id: format!("stop-intent-{request_digest}"),
+                request_id: format!("stop-request-{request_digest}"),
+                orchestration_session_id: args.session.clone(),
+                caller: HostSessionTransitionCallerV1 {
+                    kind: HostSessionTransitionCallerKindV1::PublicCli,
+                    caller_participant_id: None,
+                    auto_attach_obligation_id: None,
+                    auto_attach_claim_owner: None,
+                },
+                expected_authority: current.observation.clone(),
+                authoritative_participant_id: participant_id.clone(),
+                authoritative_lineage: current.authority.authoritative_participant_lineage.clone(),
+                issued_at: current_timestamp_v1()?,
+            };
+            match authority
+                .issue_stop(&current, &request)
+                .map_err(|error| config_model::user_error(error.to_string()))?
+            {
+                HostSessionStopIssueOutcomeV1::Issued(intent)
+                | HostSessionStopIssueOutcomeV1::Joined(intent) => intent,
+                HostSessionStopIssueOutcomeV1::AlreadyTerminal(_) => {
+                    return render_hsa_stop_result(args, &backend_id, &participant_id)
+                }
+            }
+        }
+    };
+
+    match &intent.state {
+        HostSessionStopIntentStateV1::Completed { .. } => {
+            return render_hsa_stop_result(args, &backend_id, &participant_id);
+        }
+        HostSessionStopIntentStateV1::Issued
+            if intent.authority_before.lifecycle_posture
+                != HostSessionPostureV1::ActiveAttached =>
+        {
+            let completion = CompleteHostSessionStopRequestV1 {
+                intent_id: intent.intent_id.clone(),
+                request_id: intent.request_id.clone(),
+                payload_commitment: intent.payload_commitment.clone(),
+                orchestration_session_id: intent.orchestration_session_id.clone(),
+                authoritative_participant_id: intent.authoritative_participant_id.clone(),
+                caller: HostSessionTransitionCallerV1 {
+                    kind: HostSessionTransitionCallerKindV1::PublicCli,
+                    caller_participant_id: None,
+                    auto_attach_obligation_id: None,
+                    auto_attach_claim_owner: None,
+                },
+                delivery_acceptance_id: None,
+                result_id: format!("{}:result", intent.intent_id),
+                completed_at: current_timestamp_v1()?,
+            };
+            match authority
+                .complete_stop(&completion)
+                .map_err(|error| config_model::user_error(error.to_string()))?
+            {
+                HostSessionStopCompletionOutcomeV1::Completed(_)
+                | HostSessionStopCompletionOutcomeV1::Joined(_) => {
+                    return render_hsa_stop_result(args, &backend_id, &participant_id)
+                }
+            }
+        }
+        HostSessionStopIntentStateV1::Issued
+        | HostSessionStopIntentStateV1::DeliveryAccepted { .. } => {}
+    }
+
+    if intent.authority_before.lifecycle_posture != HostSessionPostureV1::ActiveAttached {
+        anyhow::bail!(config_model::user_error(
+            "authority_conflict: non-active HSA Stop unexpectedly requires private delivery"
+        ));
+    }
+    let transport_path = durable_start_stop_transport_path(&args.session, &participant_id)
+        .map_err(|error| config_model::user_error(error.to_string()))?;
+    let delivery = stop_delivery(&intent);
+    let runtime = TokioRuntimeBuilder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("failed to initialize HSA Stop transport runtime")?;
+    let outcome = runtime
+        .block_on(request_private_authority_managed_stop(
+            &transport_path,
+            &delivery,
+        ))
+        .map_err(|error| config_model::user_error(format!("owner_unreachable: {error:#}")))?;
+    match outcome {
+        crate::execution::agent_runtime::control::PrivateStopOutcome::Accepted
+        | crate::execution::agent_runtime::control::PrivateStopOutcome::AlreadyTerminal => {}
+        crate::execution::agent_runtime::control::PrivateStopOutcome::OwnerUnreachable => {
+            anyhow::bail!(config_model::user_error(format!(
+                "owner_unreachable: orchestration session {} no longer has a reachable bound HSA owner",
+                args.session
+            )))
+        }
+        crate::execution::agent_runtime::control::PrivateStopOutcome::ProtocolError => {
+            anyhow::bail!(config_model::user_error(format!(
+                "protocol_error: bound HSA owner rejected Stop identity for orchestration session {}",
+                args.session
+            )))
+        }
+    }
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let transaction = authority
+            .stop_transaction_for_session(&args.session)
+            .map_err(|error| config_model::user_error(error.to_string()))?
+            .ok_or_else(|| {
+                config_model::user_error(
+                    "authority_conflict: committed HSA Stop intent disappeared",
+                )
+            })?;
+        if matches!(
+            transaction.state,
+            HostSessionStopIntentStateV1::Completed { .. }
+        ) {
+            let resolved = authority
+                .resolve_current_exact(&args.session, None)
+                .map_err(|error| config_model::user_error(error.to_string()))?;
+            if resolved.authority.lifecycle_posture != HostSessionPostureV1::Terminal {
+                anyhow::bail!(config_model::user_error(
+                    "authority_conflict: HSA Stop result does not resolve durable Terminal authority"
+                ));
+            }
+            return render_hsa_stop_result(args, &backend_id, &participant_id);
+        }
+        if Instant::now() >= deadline {
+            anyhow::bail!(config_model::user_error(format!(
+                "owner_unreachable: timed out waiting for authenticated HSA Stop closeout for orchestration session {}",
+                args.session
+            )));
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn render_hsa_stop_result(
+    args: &AgentSessionControlArgs,
+    backend_id: &str,
+    participant_id: &str,
+) -> Result<()> {
+    render_agent_control_result(
+        args.json,
+        &AgentControlResultJson {
+            action: "stop",
+            orchestration_session_id: &args.session,
+            backend_id,
+            scope: "host",
+            state: "terminal",
+            warnings: Vec::new(),
+            participant_id: Some(participant_id),
+            source_orchestration_session_id: None,
+        },
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn current_timestamp_v1() -> Result<TimestampV1> {
+    TimestampV1::parse(Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true))
+        .map_err(|error| anyhow::anyhow!(error.to_string()))
 }
 
 fn build_start_launch_plan(

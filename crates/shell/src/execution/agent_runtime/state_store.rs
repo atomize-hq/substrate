@@ -2863,8 +2863,6 @@ fn resolve_canonical_retained_world_dispatch_target(
     if admission.authority_store_id != current.observation.authority_store_id
         || admission.orchestration_session_id != current.authority.orchestration_session_id
         || admission.retained_participant_id != retained_participant_id
-        || admission.backend_id != target_backend_id
-        || admission.world_binding != *world_binding
         || admission.current_policy_ref != *current_policy_ref
         || admission.current_policy_revision != current.current_policy.policy_revision
     {
@@ -2873,8 +2871,24 @@ fn resolve_canonical_retained_world_dispatch_target(
             retained_participant_id
         );
     }
+    if admission.backend_id != target_backend_id {
+        anyhow::bail!(
+            "backend_mismatch: orchestration session {} retained worker {} backend is {} not {}",
+            current.authority.orchestration_session_id,
+            retained_participant_id,
+            admission.backend_id,
+            target_backend_id
+        );
+    }
+    if admission.world_binding != *world_binding {
+        anyhow::bail!(
+            "world_binding_mismatch: orchestration session {} retained worker {} no longer matches the authoritative world binding",
+            current.authority.orchestration_session_id,
+            retained_participant_id
+        );
+    }
     let root = authority
-        .read_a12a_root()
+        .read_preserved_start_root_v2()
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     let durable_registration = root
         .retained_worker_registration_journal
@@ -2908,9 +2922,22 @@ fn resolve_canonical_retained_world_dispatch_target(
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     if resolved.descriptor.backend_id != target_backend_id
         || resolved.resume_handle.backend_id != target_backend_id
-        || resolved.resume_handle.protocol != resolved.descriptor.protocol
+    {
+        anyhow::bail!(
+            "backend_mismatch: orchestration session {} retained worker {} admission backend conflicts with exact R0 target",
+            current.authority.orchestration_session_id,
+            retained_participant_id
+        );
+    }
+    if resolved.retained_worker.world_binding != *world_binding {
+        anyhow::bail!(
+            "world_binding_mismatch: orchestration session {} retained worker {} exact R0 target conflicts with current world binding",
+            current.authority.orchestration_session_id,
+            retained_participant_id
+        );
+    }
+    if resolved.resume_handle.protocol != resolved.descriptor.protocol
         || resolved.retained_worker.participant_id != retained_participant_id
-        || resolved.retained_worker.world_binding != *world_binding
         || resolved.retained_worker.policy_ref != *current_policy_ref
         || resolved.current_policy != current.current_policy
     {
@@ -3521,6 +3548,101 @@ impl AgentRuntimeStateStore {
         })
     }
 
+    #[cfg(any(target_os = "linux", test))]
+    pub(crate) fn bind_post_hsa_obligation_ledger_storage(
+        &self,
+        observation: &super::host_session_authority::AuthorityObservationV1,
+    ) -> Result<super::host_session_authority::store::WorldWorkReceiptRegistryStorageV1> {
+        if Path::new(&observation.bootstrap_home.physical_path) != self.substrate_home {
+            anyhow::bail!(
+                "post-HSA obligation ledger bootstrap home differs from the StateStore root"
+            );
+        }
+        super::host_session_authority::store::WorldWorkReceiptRegistryStorageV1::bind(
+            &self.substrate_home,
+            &observation.bootstrap_home,
+            &observation.authority_store_id,
+        )
+        .map_err(|error| anyhow::anyhow!(error.to_string()))
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    pub(crate) fn list_post_hsa_obligation_ledger_session_ids(&self) -> Result<Vec<String>> {
+        let ledger = self.substrate_home.join("obligation-ledger");
+        let Some(entries) = safe_read_dir(&ledger)? else {
+            return Ok(Vec::new());
+        };
+        let mut session_ids = Vec::new();
+        for entry in entries {
+            let entry = entry.with_context(|| format!("failed to read {}", ledger.display()))?;
+            let path = entry.path();
+            if !entry
+                .file_type()
+                .with_context(|| format!("inspect {}", path.display()))?
+                .is_dir()
+            {
+                anyhow::bail!("obligation ledger root contains a non-directory session entry");
+            }
+            let session_id = entry
+                .file_name()
+                .into_string()
+                .map_err(|_| anyhow::anyhow!("obligation ledger session ID is not UTF-8"))?;
+            if session_id.trim().is_empty()
+                || session_id == "."
+                || session_id == ".."
+                || session_id.contains('/')
+                || session_id.contains('\\')
+            {
+                anyhow::bail!("obligation ledger session ID is unsafe");
+            }
+            session_ids.push(session_id);
+        }
+        session_ids.sort();
+        session_ids.dedup();
+        Ok(session_ids)
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    pub(crate) fn list_post_hsa_obligation_ledger_acceptance_ids(
+        &self,
+        orchestration_session_id: &str,
+    ) -> Result<Vec<String>> {
+        let acceptances =
+            self.canonical_obligation_ledger_acceptances_dir(orchestration_session_id);
+        let Some(entries) = safe_read_dir(&acceptances)? else {
+            return Ok(Vec::new());
+        };
+        let mut acceptance_ids = Vec::new();
+        for entry in entries {
+            let entry =
+                entry.with_context(|| format!("failed to read {}", acceptances.display()))?;
+            let path = entry.path();
+            if !entry
+                .file_type()
+                .with_context(|| format!("inspect {}", path.display()))?
+                .is_dir()
+            {
+                anyhow::bail!("obligation ledger acceptances contain a non-directory entry");
+            }
+            let acceptance_id = entry
+                .file_name()
+                .into_string()
+                .map_err(|_| anyhow::anyhow!("obligation ledger acceptance ID is not UTF-8"))?;
+            if acceptance_id.trim().is_empty()
+                || acceptance_id == "."
+                || acceptance_id == ".."
+                || acceptance_id.contains('/')
+                || acceptance_id.contains('\\')
+            {
+                anyhow::bail!("obligation ledger acceptance ID is unsafe");
+            }
+            acceptance_ids.push(acceptance_id);
+        }
+        acceptance_ids.sort();
+        acceptance_ids.dedup();
+        Ok(acceptance_ids)
+    }
+
     #[allow(
         dead_code,
         reason = "A1.1e establishes exact home binding before A1.3 adopts it"
@@ -3539,6 +3661,114 @@ impl AgentRuntimeStateStore {
             },
         })
     }
+
+    #[cfg(any(target_os = "linux", test))]
+    pub(crate) fn resolve_hsa_retained_continue_translation_authority(
+        &self,
+        orchestration_session_id: &str,
+        caller_participant_id: &str,
+        retained_participant_id: &str,
+    ) -> Result<Option<ResolvedWorldWorkRegistryAuthorityV1>> {
+        use super::host_session_authority::{
+            facade::HostSessionAuthority, store::BootstrapClassificationV1,
+            trusted_fs::TrustedAuthorityRoot,
+        };
+        use super::retained_worker_runtime::{
+            RetainedWorkerAdmissionStateV1, RetainedWorkerRuntime,
+        };
+
+        let trusted_root = TrustedAuthorityRoot::open(&self.substrate_home)
+            .context("open exact retained Continue authority root")?;
+        let authority = HostSessionAuthority::from_trusted_root(trusted_root)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))
+            .context("bind exact retained Continue authority")?;
+        let current = match authority.resolve_current_exact(orchestration_session_id, None) {
+            Ok(current) => current,
+            Err(resolve_error) => match authority.classify() {
+                BootstrapClassificationV1::FreshAbsent
+                | BootstrapClassificationV1::UnsupportedLegacyState => return Ok(None),
+                BootstrapClassificationV1::InitializationPending => {
+                    anyhow::bail!("retained Continue authority initialization is incomplete")
+                }
+                BootstrapClassificationV1::CorruptOrUnsupported
+                | BootstrapClassificationV1::ValidExisting => {
+                    return Err(anyhow::anyhow!(resolve_error.to_string()))
+                        .context("resolve exact current retained Continue authority")
+                }
+            },
+        };
+        if current.authority.orchestration_session_id != orchestration_session_id
+            || current.caller.participant_id != caller_participant_id
+            || current.authority.workspace_binding.authority_store_id
+                != current.observation.authority_store_id
+        {
+            anyhow::bail!("retained Continue authority session/caller/store scope mismatch");
+        }
+        let world_binding =
+            current.authority.world_binding.as_ref().ok_or_else(|| {
+                anyhow::anyhow!("retained Continue authority omits world binding")
+            })?;
+        let admission = RetainedWorkerRuntime
+            .read_admission_record(
+                &authority,
+                orchestration_session_id,
+                retained_participant_id,
+            )
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "target_not_in_session: orchestration session {} has no exact retained worker {}",
+                    orchestration_session_id,
+                    retained_participant_id
+                )
+            })?;
+        RetainedWorkerRuntime
+            .validate_admission_authority_ancestry(&authority, &admission)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        if admission.authority_store_id != current.observation.authority_store_id
+            || admission.orchestration_session_id != orchestration_session_id
+            || admission.retained_participant_id != retained_participant_id
+        {
+            anyhow::bail!(
+                "stale_linkage: retained worker {} admission scope conflicts with current authority",
+                retained_participant_id
+            );
+        }
+        if admission.world_binding != *world_binding {
+            anyhow::bail!(
+                "world_binding_mismatch: orchestration session {} retained worker {} no longer matches the authoritative world binding",
+                orchestration_session_id,
+                retained_participant_id
+            );
+        }
+        match admission.state {
+            RetainedWorkerAdmissionStateV1::Routable { .. } => {}
+            RetainedWorkerAdmissionStateV1::Terminal { .. } => {
+                anyhow::bail!(
+                    "target_already_terminal: orchestration session {} retained worker {} is terminal",
+                    orchestration_session_id,
+                    retained_participant_id
+                )
+            }
+            _ => {
+                anyhow::bail!(
+                    "stale_linkage: orchestration session {} retained worker {} is not durably routable",
+                    orchestration_session_id,
+                    retained_participant_id
+                )
+            }
+        }
+        let target_backend_id = admission.backend_id;
+        self.resolve_world_work_registry_authority(
+            orchestration_session_id,
+            caller_participant_id,
+            &world_binding.world_id,
+            world_binding.world_generation,
+            Some((retained_participant_id, &target_backend_id)),
+        )
+        .map(Some)
+    }
+
     #[cfg(any(target_os = "linux", target_os = "macos", test))]
     pub(crate) fn resolve_world_work_registry_authority(
         &self,

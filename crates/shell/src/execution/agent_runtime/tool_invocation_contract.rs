@@ -845,6 +845,18 @@ pub(crate) fn resolve_follow_up_dispatch_authority_v1(
     tool_name: HostToolNameV1,
     handle: &HostToolFollowUpHandleV1,
 ) -> anyhow::Result<ResolvedFollowUpDispatchAuthorityV1> {
+    resolve_follow_up_dispatch_authority_with_hsa_continue_v1(
+        store, metadata, tool_name, handle, true,
+    )
+}
+
+fn resolve_follow_up_dispatch_authority_with_hsa_continue_v1(
+    store: &AgentRuntimeStateStore,
+    metadata: &HostToolRuntimeDispatchMetadataV1,
+    tool_name: HostToolNameV1,
+    handle: &HostToolFollowUpHandleV1,
+    allow_hsa_retained_continue: bool,
+) -> anyhow::Result<ResolvedFollowUpDispatchAuthorityV1> {
     metadata.validate()?;
     ensure_tool_accepts_follow_up_handle(tool_name, handle)?;
 
@@ -1081,6 +1093,40 @@ pub(crate) fn resolve_follow_up_dispatch_authority_v1(
             }
         }
         HostToolFollowUpHandleV1::RetainedWorker(retained_worker) => {
+            #[cfg(any(target_os = "linux", test))]
+            if allow_hsa_retained_continue && tool_name == HostToolNameV1::ContinueWorldWorker {
+                if let Some(authority) = store.resolve_hsa_retained_continue_translation_authority(
+                    &metadata.orchestration_session_id,
+                    &metadata.caller_participant_id,
+                    &retained_worker.participant_id,
+                )? {
+                    let target = authority.retained_target.ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "target_not_in_session: orchestration session {} has no exact retained worker {}",
+                            metadata.orchestration_session_id,
+                            retained_worker.participant_id
+                        )
+                    })?;
+                    if target.participant_id != retained_worker.participant_id {
+                        bail!(
+                            "stale_linkage: retained Continue target {} was substituted by {}",
+                            retained_worker.participant_id,
+                            target.participant_id
+                        );
+                    }
+                    return Ok(ResolvedFollowUpDispatchAuthorityV1 {
+                        mode: WorldDispatchModeV1::Retained,
+                        target_backend_id: target.backend_id,
+                        task_run_id: None,
+                        target_participant_id: Some(retained_worker.participant_id.clone()),
+                        world_binding: HostToolRuntimeWorldBindingV1 {
+                            world_id: authority.world_id,
+                            world_generation: authority.world_generation,
+                        },
+                    });
+                }
+            }
+
             let authority = store.resolve_internal_world_dispatch_caller(
                 &metadata.orchestration_session_id,
                 &metadata.caller_participant_id,
@@ -1199,7 +1245,17 @@ pub(crate) fn translate_follow_up_tool_to_internal_dispatch_request_v1(
     handle: HostToolFollowUpHandleV1,
     payload: WorldDispatchPayloadV1,
 ) -> anyhow::Result<WorldDispatchRequestV1> {
-    let authority = resolve_follow_up_dispatch_authority_v1(store, metadata, tool_name, &handle)?;
+    let allow_hsa_retained_continue = !matches!(
+        &payload,
+        WorldDispatchPayloadV1::WorkerContinueForkCommand(_)
+    );
+    let authority = resolve_follow_up_dispatch_authority_with_hsa_continue_v1(
+        store,
+        metadata,
+        tool_name,
+        &handle,
+        allow_hsa_retained_continue,
+    )?;
     build_dispatch_request_v1(
         metadata,
         &authority.world_binding,

@@ -539,26 +539,29 @@ impl<'a> StoreLayout<'a> {
                 .map_err(|_| StoreError("read versioned state root"))?,
         )
         .map_err(|_| StoreError("decode versioned state root"))?;
-        root.validate()
-            .map_err(|_| StoreError("validate versioned state root"))?;
         if root.bootstrap_home() != bootstrap_home {
             return Err(StoreError("versioned state root home mismatch"));
         }
         match &root {
             VersionedStateRoot::V1(root) => {
+                root.validate()
+                    .map_err(|_| StoreError("validate versioned StateRootV1"))?;
                 self.validate_existing_keys(root)?;
                 self.validate_existing_objects(root, true)?;
                 self.validate_reachable_objects(root)?;
             }
             VersionedStateRoot::V2(root) => {
+                root.validate()
+                    .map_err(|_| StoreError("validate versioned StateRootV2"))?;
                 self.validate_existing_keys_v2(root)?;
                 self.validate_existing_objects_v2(root, true)?;
                 self.validate_reachable_objects_v2(root)?;
             }
             VersionedStateRoot::V3(root) => {
+                self.validate_v3_semantics_and_exact_history(root)?;
                 self.validate_existing_keys_v3(root)?;
                 self.validate_existing_objects_v3(root, true)?;
-                self.validate_reachable_objects_v3(root)?;
+                self.validate_reachable_objects_v3_with_external_start_ancestry(root)?;
             }
         }
         Ok(root)
@@ -776,11 +779,37 @@ impl<'a> StoreLayout<'a> {
     }
 
     pub(super) fn validate_root_candidate_v3(&self, root: &StateRootV3) -> Result<(), StoreError> {
-        root.validate()
-            .map_err(|_| StoreError("validate proposed V3 state root"))?;
+        self.validate_v3_semantics_and_exact_history(root)?;
         self.validate_existing_keys_v3(root)?;
         self.validate_existing_objects_v3(root, false)?;
-        self.validate_reachable_objects_v3(root)
+        self.validate_reachable_objects_v3_with_external_start_ancestry(root)
+    }
+
+    fn validate_v3_semantics_and_exact_history(
+        &self,
+        root: &StateRootV3,
+    ) -> Result<(), StoreError> {
+        super::super::super::facade::validate_v3_schema_with_external_exact_authority_history(root)
+            .map_err(|_| StoreError("validate V3 state-root semantics"))?;
+        for (session_id, record) in &root.session_namespace_map {
+            if !matches!(record, SessionNamespaceRecordV1::Authority(_)) {
+                continue;
+            }
+            super::super::super::facade::exact_v3_authority_history_with_reader(
+                root,
+                session_id,
+                |reference| {
+                    let bytes = self
+                        .read_object_bytes(reference)
+                        .map_err(|error| error.to_string())?;
+                    verify_object_bytes(self, root, reference, &bytes, None, false)
+                        .map_err(|error| error.to_string())?;
+                    Ok(bytes)
+                },
+            )
+            .map_err(|_| StoreError("authenticate exact V3 authority history"))?;
+        }
+        Ok(())
     }
 
     pub(super) fn validate_existing_keys(&self, root: &StateRootV1) -> Result<(), StoreError> {
@@ -1445,6 +1474,21 @@ impl<'a> StoreLayout<'a> {
         &self,
         root: &StateRootV3,
     ) -> Result<(), StoreError> {
+        self.validate_reachable_objects_v3_with_mode(root, true)
+    }
+
+    pub(super) fn validate_reachable_objects_v3_with_external_start_ancestry(
+        &self,
+        root: &StateRootV3,
+    ) -> Result<(), StoreError> {
+        self.validate_reachable_objects_v3_with_mode(root, false)
+    }
+
+    fn validate_reachable_objects_v3_with_mode(
+        &self,
+        root: &StateRootV3,
+        validate_start_ancestry: bool,
+    ) -> Result<(), StoreError> {
         let mut reachable = super::reachability::collect_reachable_objects_v3(root)?;
         let mut pending = reachable.keys().cloned().collect::<Vec<_>>();
         let mut processed = std::collections::BTreeSet::new();
@@ -1614,6 +1658,7 @@ impl<'a> StoreLayout<'a> {
                 terminal_handoffs_v1: &terminal_handoffs_v1,
                 terminal_handoffs_v2: &terminal_handoffs_v2,
             },
+            validate_start_ancestry,
         )?;
         Ok(())
     }
@@ -1799,6 +1844,7 @@ impl<'a> StoreLayout<'a> {
         &self,
         root: &StateRootV3,
         graphs: DecodedObjectGraphsV3<'_>,
+        validate_start_ancestry: bool,
     ) -> Result<(), StoreError> {
         for (ref_id, attach) in graphs.attach_contracts {
             let descriptor = graphs
@@ -2022,7 +2068,9 @@ impl<'a> StoreLayout<'a> {
                 }
             }
         }
-        validate_start_continuation_graphs_v3(root, &graphs)?;
+        if validate_start_ancestry {
+            validate_start_continuation_graphs_v3(root, &graphs)?;
+        }
         for intent in root.transition_intent_map.values() {
             let terminal_ref = match &intent.state {
                 HostSessionTransitionIntentStateV2::Rejected {

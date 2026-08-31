@@ -30,7 +30,7 @@ use super::host_session_authority::canonical_json;
 #[cfg(test)]
 use super::host_session_authority::facade::RetainedReservationCrashPointV1;
 use super::host_session_authority::facade::{
-    ReservedRetainedWorkerRegistrationV1, ResolvedCurrentAuthorityV1,
+    ReservedRetainedWorkerRegistrationV1, ResolvedCurrentAuthorityV1, ResolvedSessionAuthorityV1,
     RetainedWorkerAuthorityPreconditionV1,
 };
 use super::host_session_authority::schema::{
@@ -370,6 +370,7 @@ struct ResolvedPostR0RegisteredGraphV1 {
 
 struct ResolvedPostR0RegistryGraphV1 {
     current_exact_authority: CanonicalExactCurrentAuthorityV1,
+    typed_authority_history: Option<BTreeMap<u64, ResolvedSessionAuthorityV1>>,
     registered_graph: ResolvedPostR0RegisteredGraphV1,
 }
 
@@ -769,6 +770,9 @@ impl RetainedWorkerRuntime {
             .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let mut current_plan = presented_plan.clone();
         current_plan.exact_authority = CanonicalExactCurrentAuthorityV1::from_resolved(&resolved);
+        let typed_history = authority
+            .resolve_exact_typed_history(&presented_plan.spawn_request.orchestration_session_id)
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let post_r0_graphs = self.resolve_all_post_r0_registry_graphs(authority)?;
         let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
             std::path::Path::new(
@@ -875,10 +879,11 @@ impl RetainedWorkerRuntime {
                 &mut semantic_failure,
             )?;
             retain_semantic_error(
-                validate_admission_to_current_r0_only(
+                validate_admission_to_current_exact_authority_ancestry(
                     root.as_ref(),
                     &current_plan.exact_authority,
                     record,
+                    typed_history.as_ref(),
                 ),
                 &mut semantic_failure,
             )?;
@@ -888,6 +893,7 @@ impl RetainedWorkerRuntime {
                     root.as_ref(),
                     &current_plan.exact_authority,
                     record.admission_authority_revision,
+                    typed_history.as_ref(),
                 ),
                 &mut semantic_failure,
             )?;
@@ -897,6 +903,7 @@ impl RetainedWorkerRuntime {
                     &current_plan.exact_authority,
                     &canonical_plan.exact_authority,
                     record,
+                    typed_history.as_ref(),
                 ),
                 &mut semantic_failure,
             )?;
@@ -992,6 +999,9 @@ impl RetainedWorkerRuntime {
             .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let mut current_plan = plan.clone();
         current_plan.exact_authority = CanonicalExactCurrentAuthorityV1::from_resolved(&resolved);
+        let typed_history = authority
+            .resolve_exact_typed_history(&plan.spawn_request.orchestration_session_id)
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let mut fingerprint_plan = plan.clone();
         self.initialize_admission_registry(authority)?;
         let post_r0_graphs = self.resolve_all_post_r0_registry_graphs(authority)?;
@@ -1043,10 +1053,11 @@ impl RetainedWorkerRuntime {
                     &mut semantic_failure,
                 )?;
                 retain_semantic_error(
-                    validate_admission_to_current_r0_only(
+                    validate_admission_to_current_exact_authority_ancestry(
                         root.as_ref(),
                         &current_plan.exact_authority,
                         record,
+                        typed_history.as_ref(),
                     ),
                     &mut semantic_failure,
                 )?;
@@ -1055,6 +1066,7 @@ impl RetainedWorkerRuntime {
                         root.as_ref(),
                         &current_plan.exact_authority,
                         record.admission_authority_revision,
+                        typed_history.as_ref(),
                     ),
                     &mut semantic_failure,
                 )?;
@@ -1064,6 +1076,7 @@ impl RetainedWorkerRuntime {
                         &current_plan.exact_authority,
                         &fingerprint_plan.exact_authority,
                         record,
+                        typed_history.as_ref(),
                     ),
                     &mut semantic_failure,
                 )?;
@@ -1111,6 +1124,7 @@ impl RetainedWorkerRuntime {
                     reserved_at,
                     participant_entropy,
                     bootstrap_run_entropy,
+                    typed_history.as_ref(),
                 ),
                 &mut semantic_failure,
             )?;
@@ -1226,6 +1240,36 @@ impl RetainedWorkerRuntime {
             return Err(error);
         }
         result.map_err(|error| RetainedWorkerRuntimeError(error.to_string()))
+    }
+
+    pub(crate) fn validate_admission_authority_ancestry(
+        &self,
+        authority: &HostSessionAuthority,
+        record: &RetainedWorkerAdmissionRecordV1,
+    ) -> Result<(), RetainedWorkerRuntimeError> {
+        let current = authority
+            .resolve_current_exact(&record.orchestration_session_id, None)
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        if current.observation.authority_store_id != record.authority_store_id
+            || current.observation.orchestration_session_id != record.orchestration_session_id
+        {
+            return Err(RetainedWorkerRuntimeError(
+                "retained admission authority store or session is inexact".into(),
+            ));
+        }
+        let root = authority
+            .read_preserved_start_root_v2()
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        let current_exact = CanonicalExactCurrentAuthorityV1::from_resolved(&current);
+        let typed_history = authority
+            .resolve_exact_typed_history(&record.orchestration_session_id)
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        validate_admission_to_current_exact_authority_ancestry(
+            &root,
+            &current_exact,
+            record,
+            typed_history.as_ref(),
+        )
     }
 
     pub(crate) fn register_admitted_worker(
@@ -1354,6 +1398,9 @@ impl RetainedWorkerRuntime {
             .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let mut current_plan = plan.clone();
         current_plan.exact_authority = CanonicalExactCurrentAuthorityV1::from_resolved(&resolved);
+        let typed_history = authority
+            .resolve_exact_typed_history(&plan.spawn_request.orchestration_session_id)
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let storage =
             super::host_session_authority::store::retained_worker_admission_storage_for_authority(
                 authority,
@@ -1390,6 +1437,7 @@ impl RetainedWorkerRuntime {
                     retained_participant_id,
                     &envelope.secret_key,
                     head_acquired_at,
+                    typed_history.as_ref(),
                 ),
                 &mut semantic_failure,
             )?;
@@ -1473,6 +1521,9 @@ impl RetainedWorkerRuntime {
             .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let mut current_plan = plan.clone();
         current_plan.exact_authority = CanonicalExactCurrentAuthorityV1::from_resolved(&resolved);
+        let typed_history = authority
+            .resolve_exact_typed_history(&plan.spawn_request.orchestration_session_id)
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let storage =
             super::host_session_authority::store::retained_worker_admission_storage_for_authority(
                 authority,
@@ -1511,6 +1562,7 @@ impl RetainedWorkerRuntime {
                         secret_key: &envelope.secret_key,
                         post_r0_graph,
                     },
+                    typed_history.as_ref(),
                 ),
                 &mut semantic_failure,
             )?;
@@ -1618,6 +1670,9 @@ impl RetainedWorkerRuntime {
         let mut current_plan = plan.clone();
         current_plan.exact_authority =
             CanonicalExactCurrentAuthorityV1::from_resolved(&resolved_authority);
+        let typed_history = authority
+            .resolve_exact_typed_history(&plan.spawn_request.orchestration_session_id)
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let root = authority
             .read_preserved_start_root_v2()
             .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
@@ -1633,6 +1688,7 @@ impl RetainedWorkerRuntime {
             registration,
             &post_r0_graph.result,
             &post_r0_graph.resolved_target,
+            typed_history.as_ref(),
         )
     }
 
@@ -1707,6 +1763,9 @@ impl RetainedWorkerRuntime {
             let current = authority
                 .resolve_current_exact(&record.orchestration_session_id, None)
                 .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+            let typed_authority_history = authority
+                .resolve_exact_typed_history(&record.orchestration_session_id)
+                .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
             let key = (
                 record.orchestration_session_id.clone(),
                 record.retained_participant_id.clone(),
@@ -1718,6 +1777,7 @@ impl RetainedWorkerRuntime {
                         current_exact_authority: CanonicalExactCurrentAuthorityV1::from_resolved(
                             &current,
                         ),
+                        typed_authority_history,
                         registered_graph,
                     },
                 )
@@ -1797,6 +1857,9 @@ impl RetainedWorkerRuntime {
             .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let mut current_plan = plan.clone();
         current_plan.exact_authority = CanonicalExactCurrentAuthorityV1::from_resolved(&resolved);
+        let typed_history = authority
+            .resolve_exact_typed_history(&plan.spawn_request.orchestration_session_id)
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let post_r0_graph = self
             .read_admission_record(
                 authority,
@@ -1846,6 +1909,7 @@ impl RetainedWorkerRuntime {
                         claim_entropy: publication.claim_entropy,
                         post_r0_graph: post_r0_graph.as_ref(),
                     },
+                    typed_history.as_ref(),
                 ),
                 &mut semantic_failure,
             )?;
@@ -2081,6 +2145,9 @@ impl RetainedWorkerRuntime {
             .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let mut current_plan = plan.clone();
         current_plan.exact_authority = CanonicalExactCurrentAuthorityV1::from_resolved(&resolved);
+        let typed_history = authority
+            .resolve_exact_typed_history(&plan.spawn_request.orchestration_session_id)
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let post_r0_graphs = self.resolve_all_post_r0_registry_graphs(authority)?;
         let storage =
             super::host_session_authority::store::retained_worker_admission_storage_for_authority(
@@ -2137,6 +2204,7 @@ impl RetainedWorkerRuntime {
                     &envelope.secret_key,
                     &graph.registered_graph,
                     truth,
+                    typed_history.as_ref(),
                 ),
                 &mut semantic_failure,
             )?;
@@ -2488,21 +2556,67 @@ impl RetainedWorkerRuntime {
                 "retained target request, proof, or authority membership is inexact".into(),
             ));
         }
-        let highest_proof_revision = root
-            .retained_worker_registration_journal
-            .values()
-            .filter(|candidate| {
-                candidate.orchestration_session_id == target.orchestration_session_id
-            })
-            .map(|candidate| candidate.authority_revision_after)
-            .max()
-            .ok_or_else(|| {
-                RetainedWorkerRuntimeError("retained target authority proof is absent".into())
-            })?;
-        if highest_proof_revision != current.authority.authority_revision {
-            return Err(RetainedWorkerRuntimeError(
-                "retained target proof revision is behind current authority".into(),
-            ));
+        let typed_history = authority
+            .resolve_exact_typed_history(&target.orchestration_session_id)
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        if let Some(typed_history) = typed_history {
+            let authority_before = typed_history
+                .get(&registration.authority_revision_before)
+                .ok_or_else(|| {
+                    RetainedWorkerRuntimeError(
+                        "retained target registration predecessor is absent from typed ancestry"
+                            .into(),
+                    )
+                })?;
+            let authority_after = typed_history
+                .get(&registration.authority_revision_after)
+                .ok_or_else(|| {
+                    RetainedWorkerRuntimeError(
+                        "retained target registration is absent from typed ancestry".into(),
+                    )
+                })?;
+            let exact_current = typed_history
+                .get(&current.authority.authority_revision)
+                .ok_or_else(|| {
+                    RetainedWorkerRuntimeError(
+                        "retained target typed ancestry does not reach current authority".into(),
+                    )
+                })?;
+            if authority_before.observation().authority_record_commitment
+                != registration.authority_record_commitment_before
+                || authority_after.observation().authority_record_commitment
+                    != registration.authority_record_commitment_after
+                || authority_after
+                    .authority
+                    .retained_worker_refs
+                    .iter()
+                    .filter(|reference| *reference == &target.retained_worker_ref)
+                    .count()
+                    != 1
+                || exact_current.authority != current.authority
+                || exact_current.observation() != current.observation
+            {
+                return Err(RetainedWorkerRuntimeError(
+                    "retained target registration is not on exact current typed ancestry".into(),
+                ));
+            }
+        } else {
+            let highest_proof_revision = root
+                .retained_worker_registration_journal
+                .values()
+                .filter(|candidate| {
+                    candidate.orchestration_session_id == target.orchestration_session_id
+                })
+                .map(|candidate| candidate.authority_revision_after)
+                .max()
+                .ok_or_else(|| {
+                    RetainedWorkerRuntimeError("retained target authority proof is absent".into())
+                })?;
+            if highest_proof_revision != current.authority.authority_revision {
+                return Err(RetainedWorkerRuntimeError(
+                    "retained target proof revision is behind current authority".into(),
+                ));
+            }
         }
 
         let descriptor_bytes = authority
@@ -2719,11 +2833,13 @@ fn validate_supplied_admission_authority(
     current_exact_authority: &CanonicalExactCurrentAuthorityV1,
     supplied_exact_authority: &CanonicalExactCurrentAuthorityV1,
     record: &RetainedWorkerAdmissionRecordV1,
+    typed_history: Option<&BTreeMap<u64, ResolvedSessionAuthorityV1>>,
 ) -> Result<(), RetainedWorkerRuntimeError> {
     let admission_authority = reconstruct_exact_authority_at_revision(
         root,
         current_exact_authority,
         record.admission_authority_revision,
+        typed_history,
     )?;
     if supplied_exact_authority != &admission_authority {
         return Err(RetainedWorkerRuntimeError(
@@ -2733,32 +2849,69 @@ fn validate_supplied_admission_authority(
     Ok(())
 }
 
-fn validate_admission_to_current_r0_only(
+fn validate_admission_to_current_exact_authority_ancestry(
     root: &StateRootV2,
     current_exact_authority: &CanonicalExactCurrentAuthorityV1,
     record: &RetainedWorkerAdmissionRecordV1,
+    typed_history: Option<&BTreeMap<u64, ResolvedSessionAuthorityV1>>,
 ) -> Result<(), RetainedWorkerRuntimeError> {
+    if let Some(history) = typed_history {
+        let admission_authority = history
+            .get(&record.admission_authority_revision)
+            .ok_or_else(|| {
+                RetainedWorkerRuntimeError(
+                    "admission authority revision is absent from exact typed ancestry".into(),
+                )
+            })?;
+        let admission_observation = admission_authority.observation();
+        if admission_observation.authority_store_id != current_exact_authority.authority_store_id
+            || admission_observation.orchestration_session_id
+                != current_exact_authority.orchestration_session_id
+            || admission_observation.authority_revision != record.admission_authority_revision
+            || admission_observation.authority_record_commitment
+                != record.admission_authority_record_commitment
+        {
+            return Err(RetainedWorkerRuntimeError(
+                "admission-time authority is not the exact recorded typed ancestor".into(),
+            ));
+        }
+        let reconstructed_current = reconstruct_exact_authority_at_revision(
+            root,
+            current_exact_authority,
+            current_exact_authority.authority_revision,
+            Some(history),
+        )?;
+        if &reconstructed_current != current_exact_authority {
+            return Err(RetainedWorkerRuntimeError(
+                "admission-to-current authority interval is not complete exact typed ancestry"
+                    .into(),
+            ));
+        }
+        return Ok(());
+    }
+
     let admission_authority = reconstruct_exact_authority_at_revision(
         root,
         current_exact_authority,
         record.admission_authority_revision,
+        None,
     )?;
     if admission_authority.authority_record_commitment
         != record.admission_authority_record_commitment
     {
         return Err(RetainedWorkerRuntimeError(
-            "admission-time authority is not the exact recorded R0-only ancestor".into(),
+            "admission-time authority is not the exact recorded typed ancestor".into(),
         ));
     }
     let reconstructed_current = reconstruct_exact_authority_at_revision(
         root,
         current_exact_authority,
         current_exact_authority.authority_revision,
+        None,
     )?;
     if &reconstructed_current != current_exact_authority {
         return Err(RetainedWorkerRuntimeError(
-            "admission-to-current authority interval is not complete contiguous R0-only ancestry"
-                .into(),
+            "admission-to-current authority interval is not complete exact typed ancestry".into(),
         ));
     }
     Ok(())
@@ -2772,6 +2925,7 @@ fn prepare_registration_head_in_registry(
     retained_participant_id: &str,
     secret_key: &[u8; 32],
     head_acquired_at: TimestampV1,
+    typed_history: Option<&BTreeMap<u64, ResolvedSessionAuthorityV1>>,
 ) -> Result<(AdmissionHeadPreparationV1, bool), RetainedWorkerRuntimeError> {
     validate_admission_plan(authority_root, current_plan)?;
     let root = preserved_start_root_view(authority_root)?;
@@ -2786,6 +2940,7 @@ fn prepare_registration_head_in_registry(
         &current_plan.exact_authority,
         &supplied_plan.exact_authority,
         &record,
+        typed_history,
     )?;
     verify_admission_record_fingerprint(supplied_plan, &record, secret_key)?;
     match &record.state {
@@ -2836,7 +2991,12 @@ fn prepare_registration_head_in_registry(
     if lowest.is_none_or(|(_, participant_id)| participant_id != retained_participant_id) {
         return Ok((AdmissionHeadPreparationV1::Queued, false));
     }
-    validate_admission_to_current_r0_only(root.as_ref(), &current_plan.exact_authority, &record)?;
+    validate_admission_to_current_exact_authority_ancestry(
+        root.as_ref(),
+        &current_plan.exact_authority,
+        &record,
+        typed_history,
+    )?;
     record.state = RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead {
         authority_revision_expected: current_plan.exact_authority.authority_revision,
         authority_record_commitment_expected: current_plan
@@ -2889,6 +3049,7 @@ fn advance_registration_head_in_registry(
     current_plan: &RetainedWorkerAdmissionPlanV1,
     supplied_plan: &RetainedWorkerAdmissionPlanV1,
     input: &AdmissionRegistrationAdvanceInputV1<'_>,
+    typed_history: Option<&BTreeMap<u64, ResolvedSessionAuthorityV1>>,
 ) -> Result<(RetainedWorkerAdmissionRecordV1, bool), RetainedWorkerRuntimeError> {
     validate_admission_plan(authority_root, current_plan)?;
     let root = preserved_start_root_view(authority_root)?;
@@ -2903,6 +3064,7 @@ fn advance_registration_head_in_registry(
         &current_plan.exact_authority,
         &supplied_plan.exact_authority,
         &record,
+        typed_history,
     )?;
     verify_admission_record_fingerprint(supplied_plan, &record, input.secret_key)?;
     if let Some(registration) = admission_registration(&record.state) {
@@ -2919,6 +3081,7 @@ fn advance_registration_head_in_registry(
             registration,
             &input.post_r0_graph.result,
             &input.post_r0_graph.resolved_target,
+            typed_history,
         )?;
         validate_admission_registry(registry, authority_root)?;
         return Ok((record, false));
@@ -2950,6 +3113,7 @@ fn advance_registration_head_in_registry(
         &registration,
         &input.post_r0_graph.result,
         &input.post_r0_graph.resolved_target,
+        typed_history,
     )?;
     record.state = RetainedWorkerAdmissionStateV1::PreTransportNonterminal { registration };
     record.record_revision = record
@@ -2973,6 +3137,7 @@ fn claim_transport_in_registry(
     retained_participant_id: &str,
     secret_key: &[u8; 32],
     claim_input: &AdmissionTransportClaimInputV1<'_>,
+    typed_history: Option<&BTreeMap<u64, ResolvedSessionAuthorityV1>>,
 ) -> Result<RetainedWorkerTransportClaimV1, RetainedWorkerRuntimeError> {
     validate_admission_plan(authority_root, current_plan)?;
     let root = preserved_start_root_view(authority_root)?;
@@ -2987,6 +3152,7 @@ fn claim_transport_in_registry(
         &current_plan.exact_authority,
         &supplied_plan.exact_authority,
         &record,
+        typed_history,
     )?;
     verify_admission_record_fingerprint(supplied_plan, &record, secret_key)?;
     if let Some(registration) = admission_registration(&record.state) {
@@ -3002,6 +3168,7 @@ fn claim_transport_in_registry(
             registration,
             &post_r0_graph.result,
             &post_r0_graph.resolved_target,
+            typed_history,
         )?;
     }
     let registration = match &record.state {
@@ -3075,6 +3242,7 @@ fn advance_admission_runtime_truth_in_registry(
     secret_key: &[u8; 32],
     post_r0_graph: &ResolvedPostR0RegisteredGraphV1,
     truth: &AdmissionRuntimeTruthInputV1<'_>,
+    typed_history: Option<&BTreeMap<u64, ResolvedSessionAuthorityV1>>,
 ) -> Result<(RetainedWorkerAdmissionRecordV1, bool), RetainedWorkerRuntimeError> {
     validate_admission_plan(authority_root, current_plan)?;
     let root = preserved_start_root_view(authority_root)?;
@@ -3089,6 +3257,7 @@ fn advance_admission_runtime_truth_in_registry(
         &current_plan.exact_authority,
         &supplied_plan.exact_authority,
         &record,
+        typed_history,
     )?;
     verify_admission_record_fingerprint(supplied_plan, &record, secret_key)?;
     let registration = admission_registration(&record.state)
@@ -3105,6 +3274,7 @@ fn advance_admission_runtime_truth_in_registry(
         &registration,
         &post_r0_graph.result,
         &post_r0_graph.resolved_target,
+        typed_history,
     )?;
 
     let next_state = match truth {
@@ -3450,6 +3620,7 @@ fn validate_post_r0_registered_graph(
     admission_registration: &RetainedWorkerAdmissionRegistrationV1,
     result: &RetainedWorkerRegistrationResultV1,
     resolved: &ResolvedRetainedTargetV1,
+    typed_history: Option<&BTreeMap<u64, ResolvedSessionAuthorityV1>>,
 ) -> Result<(), RetainedWorkerRuntimeError> {
     validate_post_r0_registered_graph_against_expectation(
         root,
@@ -3461,6 +3632,7 @@ fn validate_post_r0_registered_graph(
         admission_registration,
         result,
         resolved,
+        typed_history,
     )
 }
 
@@ -3478,6 +3650,7 @@ fn validate_post_r0_registered_graph_against_expectation(
     admission_registration: &RetainedWorkerAdmissionRegistrationV1,
     result: &RetainedWorkerRegistrationResultV1,
     resolved: &ResolvedRetainedTargetV1,
+    typed_history: Option<&BTreeMap<u64, ResolvedSessionAuthorityV1>>,
 ) -> Result<(), RetainedWorkerRuntimeError> {
     let SessionNamespaceRecordV1::Authority(current_authority) = root
         .session_namespace_map
@@ -3501,6 +3674,7 @@ fn validate_post_r0_registered_graph_against_expectation(
         root,
         current_exact_authority,
         registration.authority_revision_after,
+        typed_history,
     )?;
     let registration_commitment = canonical_registration_commitment(registration)?;
     let expected_internal_uaa_session_id = format!("uaa_{}", record.bootstrap_run_id);
@@ -3651,6 +3825,7 @@ fn validate_complete_post_r0_registry_graphs(
             &registration,
             &resolved.registered_graph.result,
             &resolved.registered_graph.resolved_target,
+            resolved.typed_authority_history.as_ref(),
         )?;
         validated_count = validated_count.checked_add(1).ok_or_else(|| {
             RetainedWorkerRuntimeError("complete post-R0 graph count overflow".into())
@@ -3710,6 +3885,7 @@ fn reserve_slot_in_registry(
     reserved_at: TimestampV1,
     participant_entropy: [u8; 16],
     bootstrap_run_entropy: [u8; 16],
+    typed_history: Option<&BTreeMap<u64, ResolvedSessionAuthorityV1>>,
 ) -> Result<RetainedWorkerAdmissionSlotV1, RetainedWorkerRuntimeError> {
     validate_admission_plan(authority_root, current_plan)?;
     let root = preserved_start_root_view(authority_root)?;
@@ -3729,6 +3905,7 @@ fn reserve_slot_in_registry(
             &current_plan.exact_authority,
             &supplied_plan.exact_authority,
             record,
+            typed_history,
         )?;
         let fingerprint = canonical_spawn_fingerprint(
             &registry.commitment_key.key_id,
@@ -4039,6 +4216,7 @@ fn reconstruct_exact_authority_at_revision(
     root: &StateRootV2,
     current: &CanonicalExactCurrentAuthorityV1,
     target_revision: u64,
+    typed_history: Option<&BTreeMap<u64, ResolvedSessionAuthorityV1>>,
 ) -> Result<CanonicalExactCurrentAuthorityV1, RetainedWorkerRuntimeError> {
     if current.authority_store_id != root.authority_store_id
         || current.authority.authority_revision != current.authority_revision
@@ -4048,6 +4226,62 @@ fn reconstruct_exact_authority_at_revision(
         return Err(RetainedWorkerRuntimeError(
             "admission authority ancestry bounds are invalid".into(),
         ));
+    }
+    if let Some(history) = typed_history {
+        let expected_revisions = usize::try_from(current.authority_revision).map_err(|_| {
+            RetainedWorkerRuntimeError("typed authority history length overflows usize".into())
+        })?;
+        let resolved_current = history.get(&current.authority_revision).ok_or_else(|| {
+            RetainedWorkerRuntimeError(
+                "typed authority history does not reach the exact current authority".into(),
+            )
+        })?;
+        let current_observation = resolved_current.observation();
+        if history.len() != expected_revisions
+            || history.keys().copied().ne(1..=current.authority_revision)
+            || current_observation.authority_store_id != current.authority_store_id
+            || current_observation.orchestration_session_id != current.orchestration_session_id
+            || current_observation.authority_revision != current.authority_revision
+            || current_observation.authority_record_commitment
+                != current.authority_record_commitment
+            || current_observation.authoritative_lineage_commitment
+                != current.authoritative_lineage_commitment
+            || resolved_current.authority != current.authority
+        {
+            return Err(RetainedWorkerRuntimeError(
+                "typed authority history does not authenticate the exact current authority".into(),
+            ));
+        }
+        let resolved = history.get(&target_revision).ok_or_else(|| {
+            RetainedWorkerRuntimeError(
+                "target authority revision is absent from the exact typed history".into(),
+            )
+        })?;
+        let observation = resolved.observation();
+        if observation.authority_store_id != current.authority_store_id
+            || observation.orchestration_session_id != current.orchestration_session_id
+            || observation.authority_revision != target_revision
+            || resolved
+                .authority
+                .active_authoritative_participant_id
+                .as_deref()
+                != Some(current.caller_participant_id.as_str())
+            || resolved.authority.host_attach_contract_ref
+                != current.authority.host_attach_contract_ref
+            || resolved.authority.current_policy_ref != current.authority.current_policy_ref
+        {
+            return Err(RetainedWorkerRuntimeError(
+                "typed historical authority cannot be projected as the exact admission caller"
+                    .into(),
+            ));
+        }
+        let mut reconstructed = current.clone();
+        reconstructed.authority_revision = target_revision;
+        reconstructed.authority_record_commitment = observation.authority_record_commitment;
+        reconstructed.authoritative_lineage_commitment =
+            observation.authoritative_lineage_commitment;
+        reconstructed.authority = resolved.authority.clone();
+        return Ok(reconstructed);
     }
     let DurableSessionAuthorityOriginV1::StartIntent { intent_id, .. } = &current.authority.origin;
     let intent = root.transition_intent_map.get(intent_id).ok_or_else(|| {
@@ -4112,7 +4346,7 @@ fn reconstruct_exact_authority_at_revision(
             .collect::<Vec<_>>();
         let [registration] = candidates.as_slice() else {
             return Err(RetainedWorkerRuntimeError(
-                "admission authority ancestry is not uniquely contiguous R0".into(),
+                "legacy V2 admission authority ancestry is not uniquely contiguous R0".into(),
             ));
         };
         if registration.authority_revision_after
@@ -4633,6 +4867,11 @@ mod tests {
 
     fn timestamp(value: &str) -> TimestampV1 {
         TimestampV1::parse(value).unwrap()
+    }
+
+    fn write_private_test_file(path: &std::path::Path, bytes: &[u8]) {
+        fs::write(path, bytes).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600)).unwrap();
     }
 
     fn started_authority() -> (
@@ -6662,11 +6901,10 @@ mod tests {
                     .unwrap()
                     .path();
                 fs::rename(staged, &registry_path).unwrap();
-                fs::write(
-                    tmp_root.join(format!("admission-registry--{}.tmp", "ee".repeat(16))),
+                write_private_test_file(
+                    &tmp_root.join(format!("admission-registry--{}.tmp", "ee".repeat(16))),
                     b"conflicting registry orphan",
-                )
-                .unwrap();
+                );
             } else {
                 let staged = fs::read_dir(&keys_root)
                     .unwrap()
@@ -6676,11 +6914,10 @@ mod tests {
                     .path();
                 let key_id = format!("adk_{}", lower_hex(&key_entropy));
                 fs::rename(staged, keys_root.join(format!("{key_id}.key"))).unwrap();
-                fs::write(
-                    keys_root.join(format!("admission-key--{}.tmp", "dd".repeat(16))),
+                write_private_test_file(
+                    &keys_root.join(format!("admission-key--{}.tmp", "dd".repeat(16))),
                     b"conflicting key orphan",
-                )
-                .unwrap();
+                );
             }
             let registry_before_retry = fs::read(&registry_path).ok();
             let reopened = HostSessionAuthority::open(&parent.path().join("home")).unwrap();
@@ -7209,6 +7446,303 @@ mod tests {
             event_sequence: 1,
         });
         (frame, event)
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn hsa_retained_continue_translation_uses_exact_r0_truth_without_legacy_projection() {
+        struct SubstrateHomeGuard(Option<std::ffi::OsString>);
+
+        impl Drop for SubstrateHomeGuard {
+            fn drop(&mut self) {
+                match self.0.take() {
+                    Some(value) => std::env::set_var("SUBSTRATE_HOME", value),
+                    None => std::env::remove_var("SUBSTRATE_HOME"),
+                }
+            }
+        }
+
+        use crate::execution::agent_runtime::dispatch_contract::{
+            WorkerContinuePayloadV1, WorldDispatchModeV1, WorldDispatchPayloadV1,
+        };
+        use crate::execution::agent_runtime::state_store::AgentRuntimeStateStore;
+        use crate::execution::agent_runtime::tool_invocation_contract::{
+            translate_follow_up_tool_to_internal_dispatch_request_v1, HostToolFollowUpHandleV1,
+            HostToolNameV1, HostToolRuntimeDispatchMetadataV1, RetainedWorkerHandleV1,
+        };
+        use crate::execution::orchestrator_world_dispatch::prepare_orchestrator_world_dispatch;
+
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "translate-continue", "prompt", 1);
+        let admitted = runtime
+            .register_admitted_worker(&authority, &plan)
+            .expect("register retained Continue target");
+        let claim = runtime
+            .claim_admission_transport(&authority, &plan, &admitted.record.retained_participant_id)
+            .expect("claim retained Continue transport");
+        let (frame, event) =
+            registered_runtime_truth(&plan, &claim.record, "stream-translate-continue");
+        let routable = runtime
+            .mark_admission_routable(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                &frame,
+                &event,
+                timestamp("2026-07-15T21:30:00.000000000Z"),
+            )
+            .expect("publish exact routable retained Continue truth");
+
+        let previous_home = std::env::var_os("SUBSTRATE_HOME");
+        let _home_guard = SubstrateHomeGuard(previous_home);
+        std::env::set_var("SUBSTRATE_HOME", parent.path().join("home"));
+        let store = AgentRuntimeStateStore::new().expect("bind exact retained Continue store");
+        assert!(store
+            .load_session("r0-session")
+            .expect("inspect absent legacy session projection")
+            .is_none());
+        assert!(store
+            .load_participant(&routable.retained_participant_id)
+            .expect("inspect absent legacy participant projection")
+            .is_none());
+
+        let metadata = HostToolRuntimeDispatchMetadataV1 {
+            request_id: "request-translate-continue".into(),
+            idempotency_key: "idempotency-translate-continue".into(),
+            orchestration_session_id: "r0-session".into(),
+            caller_participant_id: "r0-orchestrator".into(),
+        };
+        let request = translate_follow_up_tool_to_internal_dispatch_request_v1(
+            &store,
+            &metadata,
+            HostToolNameV1::ContinueWorldWorker,
+            HostToolFollowUpHandleV1::RetainedWorker(RetainedWorkerHandleV1 {
+                participant_id: routable.retained_participant_id.clone(),
+            }),
+            WorldDispatchPayloadV1::WorkerContinue(WorkerContinuePayloadV1 {
+                prompt: "continue exact retained worker".into(),
+                thread_id: Some("thread-translate-continue".into()),
+            }),
+        )
+        .expect("translate HSA-owned retained Continue without legacy projections");
+
+        assert_eq!(request.mode, WorldDispatchModeV1::Retained);
+        assert_eq!(
+            request.target_backend_id.as_deref(),
+            Some("cli:codex-worker")
+        );
+        assert_eq!(request.world_id.as_deref(), Some("r0-world"));
+        assert_eq!(request.world_generation, Some(7));
+        prepare_orchestrator_world_dispatch(&store, request)
+            .expect("existing B-owned preparation must exact-revalidate translated Continue");
+        assert!(store
+            .load_session("r0-session")
+            .expect("reinspect absent legacy session projection")
+            .is_none());
+        assert!(store
+            .load_participant(&routable.retained_participant_id)
+            .expect("reinspect absent legacy participant projection")
+            .is_none());
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn hsa_retained_continue_translation_rejects_inexact_or_non_routable_truth() {
+        struct SubstrateHomeGuard(Option<std::ffi::OsString>);
+
+        impl Drop for SubstrateHomeGuard {
+            fn drop(&mut self) {
+                match self.0.take() {
+                    Some(value) => std::env::set_var("SUBSTRATE_HOME", value),
+                    None => std::env::remove_var("SUBSTRATE_HOME"),
+                }
+            }
+        }
+
+        use crate::execution::agent_runtime::dispatch_contract::{
+            WorkerContinuePayloadV1, WorldDispatchPayloadV1,
+        };
+        use crate::execution::agent_runtime::state_store::AgentRuntimeStateStore;
+        use crate::execution::agent_runtime::tool_invocation_contract::{
+            translate_follow_up_tool_to_internal_dispatch_request_v1, HostToolFollowUpHandleV1,
+            HostToolNameV1, HostToolRuntimeDispatchMetadataV1, RetainedWorkerHandleV1,
+        };
+
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "translate-rejections", "prompt", 1);
+        let admitted = runtime
+            .register_admitted_worker(&authority, &plan)
+            .expect("register retained rejection target");
+        let participant_id = admitted.record.retained_participant_id.clone();
+
+        let previous_home = std::env::var_os("SUBSTRATE_HOME");
+        let _home_guard = SubstrateHomeGuard(previous_home);
+        std::env::set_var("SUBSTRATE_HOME", parent.path().join("home"));
+        let store = AgentRuntimeStateStore::new().expect("bind retained rejection store");
+        let metadata = HostToolRuntimeDispatchMetadataV1 {
+            request_id: "request-translate-rejections".into(),
+            idempotency_key: "idempotency-translate-rejections".into(),
+            orchestration_session_id: "r0-session".into(),
+            caller_participant_id: "r0-orchestrator".into(),
+        };
+        let translate = |metadata: &HostToolRuntimeDispatchMetadataV1, participant_id: &str| {
+            translate_follow_up_tool_to_internal_dispatch_request_v1(
+                &store,
+                metadata,
+                HostToolNameV1::ContinueWorldWorker,
+                HostToolFollowUpHandleV1::RetainedWorker(RetainedWorkerHandleV1 {
+                    participant_id: participant_id.to_string(),
+                }),
+                WorldDispatchPayloadV1::WorkerContinue(WorkerContinuePayloadV1 {
+                    prompt: "continue exact retained worker".into(),
+                    thread_id: Some("thread-translate-rejections".into()),
+                }),
+            )
+        };
+
+        let absent = translate(&metadata, "rwp_00000000000000000000000000000000")
+            .expect_err("absent exact target must fail closed");
+        assert!(absent.to_string().contains("target_not_in_session"));
+        let not_routable = translate(&metadata, &participant_id)
+            .expect_err("pre-transport target must fail closed");
+        assert!(not_routable.to_string().contains("not durably routable"));
+        let mut wrong_caller = metadata.clone();
+        wrong_caller.caller_participant_id = "substituted-caller".into();
+        let caller_mismatch = translate(&wrong_caller, &participant_id)
+            .expect_err("substituted caller must fail closed");
+        assert!(caller_mismatch
+            .to_string()
+            .contains("session/caller/store scope mismatch"));
+        let mut cross_session = metadata.clone();
+        cross_session.orchestration_session_id = "other-session".into();
+        assert!(translate(&cross_session, &participant_id).is_err());
+
+        let claim = runtime
+            .claim_admission_transport(&authority, &plan, &participant_id)
+            .expect("claim rejection target transport");
+        let (registered_frame, registered_event) =
+            registered_runtime_truth(&plan, &claim.record, "stream-translate-rejections");
+        runtime
+            .mark_admission_routable(
+                &authority,
+                &plan,
+                &participant_id,
+                &registered_frame,
+                &registered_event,
+                timestamp("2026-07-15T21:40:00.000000000Z"),
+            )
+            .expect("publish rejection target routable truth");
+        translate(&metadata, &participant_id).expect("exact routable truth must translate");
+
+        let registry_path = parent
+            .path()
+            .join("home/authority-v1/retained-worker-admission-v1/registry-v1.json");
+        let exact_registry_bytes = fs::read(&registry_path).expect("read exact admission registry");
+        let exact_registry: RetainedWorkerAdmissionRegistryV1 =
+            decode_canonical(&exact_registry_bytes, "decode exact admission registry")
+                .expect("decode exact admission registry");
+
+        let mut stale_registry = exact_registry.clone();
+        stale_registry
+            .records_by_session
+            .get_mut("r0-session")
+            .expect("stale session bucket")
+            .get_mut(&participant_id)
+            .expect("stale participant record")
+            .admission_authority_record_commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+            digest_hex: "f".repeat(64),
+        };
+        fs::write(
+            &registry_path,
+            encode_canonical(&stale_registry, "encode stale admission registry")
+                .expect("encode stale admission registry"),
+        )
+        .expect("write stale admission registry");
+        let stale = translate(&metadata, &participant_id)
+            .expect_err("stale admission ancestry must fail closed");
+        assert!(stale
+            .to_string()
+            .contains("admission-time authority is not the exact recorded typed ancestor"));
+        fs::write(&registry_path, &exact_registry_bytes).expect("restore exact admission registry");
+
+        let mut backend_registry = exact_registry.clone();
+        backend_registry
+            .records_by_session
+            .get_mut("r0-session")
+            .expect("backend session bucket")
+            .get_mut(&participant_id)
+            .expect("backend participant record")
+            .backend_id = "cli:substituted-worker".into();
+        fs::write(
+            &registry_path,
+            encode_canonical(
+                &backend_registry,
+                "encode backend-mismatched admission registry",
+            )
+            .expect("encode backend-mismatched admission registry"),
+        )
+        .expect("write backend-mismatched admission registry");
+        let backend = translate(&metadata, &participant_id)
+            .expect_err("backend-substituted admission must fail closed");
+        assert!(backend.to_string().contains("backend_mismatch"));
+        fs::write(&registry_path, &exact_registry_bytes).expect("restore exact admission registry");
+
+        let mut world_registry = exact_registry;
+        world_registry
+            .records_by_session
+            .get_mut("r0-session")
+            .expect("world session bucket")
+            .get_mut(&participant_id)
+            .expect("world participant record")
+            .world_binding
+            .world_generation += 1;
+        fs::write(
+            &registry_path,
+            encode_canonical(
+                &world_registry,
+                "encode world-mismatched admission registry",
+            )
+            .expect("encode world-mismatched admission registry"),
+        )
+        .expect("write world-mismatched admission registry");
+        assert!(translate(&metadata, &participant_id).is_err());
+        fs::write(&registry_path, &exact_registry_bytes).expect("restore exact admission registry");
+
+        let terminal_frame = RuntimeFrameIdentityV1 {
+            schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: registered_frame.stream_id,
+            frame_sequence: 2,
+        };
+        let terminal_event = RuntimeEventIdentityV1 {
+            event_id: "event-stream-translate-rejections-terminal".into(),
+            event_sequence: 2,
+        };
+        let terminal_identity = RuntimeTerminalIdentityV1::from(&terminal_event);
+        runtime
+            .mark_admission_terminal(
+                &authority,
+                &plan,
+                &participant_id,
+                &terminal_frame,
+                &terminal_event,
+                &terminal_identity,
+                0,
+                timestamp("2026-07-15T21:41:00.000000000Z"),
+            )
+            .expect("publish exact terminal retained truth");
+        let terminal = translate(&metadata, &participant_id)
+            .expect_err("terminal retained target must fail closed");
+        assert!(terminal.to_string().contains("target_already_terminal"));
+        assert!(store
+            .load_session("r0-session")
+            .expect("inspect absent legacy session after rejections")
+            .is_none());
+        assert!(store
+            .load_participant(&participant_id)
+            .expect("inspect absent legacy participant after rejections")
+            .is_none());
     }
 
     #[test]
@@ -7780,13 +8314,15 @@ mod tests {
             .unwrap()
             .physical_path
             .clone();
+        let policy_path = std::path::Path::new(&bootstrap_home).join("policy.yaml");
         fs::write(
-            std::path::Path::new(&bootstrap_home).join("policy.yaml"),
+            &policy_path,
             format!(
                 "agents:\n  allowed_backends:\n    - \"{target_backend_id}\"\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"{target_backend_id}\"\n    allowed_actions:\n      - \"spawn_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: {max_live_retained_workers}\n    max_concurrent_ephemeral: 4\n"
             ),
         )
         .unwrap();
+        fs::set_permissions(&policy_path, fs::Permissions::from_mode(0o600)).unwrap();
         RetainedWorkerAdmissionPlanV1 {
             issuer_request_id: issuer_request_id.into(),
             spawn_request: CanonicalValidatedSpawnRequestV1 {
@@ -8653,11 +9189,10 @@ mod tests {
                 );
             }
 
-            fs::write(
-                tmp_root.join(format!("admission-registry--{}.tmp", "ed".repeat(16))),
+            write_private_test_file(
+                &tmp_root.join(format!("admission-registry--{}.tmp", "ed".repeat(16))),
                 b"conflicting slot orphan",
-            )
-            .unwrap();
+            );
             let reopened = HostSessionAuthority::open(&parent.path().join("home")).unwrap();
             let retried = runtime.reserve_admission_slot(&reopened, &plan).unwrap();
             assert_eq!(
@@ -8713,11 +9248,10 @@ mod tests {
             &registry_path,
         )
         .unwrap();
-        fs::write(
-            tmp_root.join(format!("admission-registry--{}.tmp", "ec".repeat(16))),
+        write_private_test_file(
+            &tmp_root.join(format!("admission-registry--{}.tmp", "ec".repeat(16))),
             b"conflicting slot orphan after rename",
-        )
-        .unwrap();
+        );
         let reopened = HostSessionAuthority::open(&parent.path().join("home")).unwrap();
         let retried = runtime.reserve_admission_slot(&reopened, &plan).unwrap();
         assert!(retried.joined);
@@ -9136,6 +9670,7 @@ mod tests {
             &earliest.record.retained_participant_id,
             &envelope.secret_key,
             timestamp("2026-07-15T14:13:00.000000000Z"),
+            None,
         )
         .is_err());
         assert_eq!(changed_bootstrap_registry, changed_bootstrap_before);
@@ -9489,7 +10024,7 @@ mod tests {
     }
 
     #[test]
-    fn queued_head_promotion_requires_complete_admission_to_current_r0_only_ancestry() {
+    fn queued_head_promotion_requires_complete_legacy_v2_r0_ancestry() {
         let (_parent, authority, _) = started_authority();
         let runtime = RetainedWorkerRuntime;
         let first_plan = admission_plan(&authority, "ancestry-first", "first prompt", 3);
@@ -9506,13 +10041,23 @@ mod tests {
         let root = authority.read_a12a_root().unwrap();
         let resolved = authority.resolve_current_exact("r0-session", None).unwrap();
         let current = CanonicalExactCurrentAuthorityV1::from_resolved(&resolved);
-        assert!(validate_admission_to_current_r0_only(&root, &current, &queued.record).is_ok());
+        assert!(validate_admission_to_current_exact_authority_ancestry(
+            &root,
+            &current,
+            &queued.record,
+            None,
+        )
+        .is_ok());
 
         let mut missing_link = root.clone();
         missing_link.retained_worker_registration_journal.clear();
-        assert!(
-            validate_admission_to_current_r0_only(&missing_link, &current, &queued.record).is_err()
-        );
+        assert!(validate_admission_to_current_exact_authority_ancestry(
+            &missing_link,
+            &current,
+            &queued.record,
+            None,
+        )
+        .is_err());
 
         let mut skipped_revision = root.clone();
         skipped_revision
@@ -9521,10 +10066,13 @@ mod tests {
             .next()
             .unwrap()
             .authority_revision_after += 1;
-        assert!(
-            validate_admission_to_current_r0_only(&skipped_revision, &current, &queued.record,)
-                .is_err()
-        );
+        assert!(validate_admission_to_current_exact_authority_ancestry(
+            &skipped_revision,
+            &current,
+            &queued.record,
+            None,
+        )
+        .is_err());
 
         let mut ambiguous_parent = root.clone();
         let duplicate = ambiguous_parent
@@ -9536,17 +10084,24 @@ mod tests {
         ambiguous_parent
             .retained_worker_registration_journal
             .insert("ambiguous-registration-parent".into(), duplicate);
-        assert!(
-            validate_admission_to_current_r0_only(&ambiguous_parent, &current, &queued.record,)
-                .is_err()
-        );
+        assert!(validate_admission_to_current_exact_authority_ancestry(
+            &ambiguous_parent,
+            &current,
+            &queued.record,
+            None,
+        )
+        .is_err());
 
         let mut changed_caller = current.clone();
         changed_caller.authority.active_authoritative_participant_id =
             Some("changed-caller".into());
-        assert!(
-            validate_admission_to_current_r0_only(&root, &changed_caller, &queued.record).is_err()
-        );
+        assert!(validate_admission_to_current_exact_authority_ancestry(
+            &root,
+            &changed_caller,
+            &queued.record,
+            None,
+        )
+        .is_err());
 
         let mut changed_workspace = current.clone();
         changed_workspace
@@ -9554,10 +10109,13 @@ mod tests {
             .workspace_binding
             .workspace_root
             .physical_path = "/changed-workspace".into();
-        assert!(
-            validate_admission_to_current_r0_only(&root, &changed_workspace, &queued.record)
-                .is_err()
-        );
+        assert!(validate_admission_to_current_exact_authority_ancestry(
+            &root,
+            &changed_workspace,
+            &queued.record,
+            None,
+        )
+        .is_err());
 
         let mut changed_world = current.clone();
         changed_world
@@ -9566,9 +10124,13 @@ mod tests {
             .as_mut()
             .unwrap()
             .world_id = "changed-world".into();
-        assert!(
-            validate_admission_to_current_r0_only(&root, &changed_world, &queued.record).is_err()
-        );
+        assert!(validate_admission_to_current_exact_authority_ancestry(
+            &root,
+            &changed_world,
+            &queued.record,
+            None,
+        )
+        .is_err());
 
         let mut changed_policy = current.clone();
         changed_policy
@@ -9577,18 +10139,26 @@ mod tests {
             .as_mut()
             .unwrap()
             .ref_id = "changed-policy-ref".into();
-        assert!(
-            validate_admission_to_current_r0_only(&root, &changed_policy, &queued.record).is_err()
-        );
+        assert!(validate_admission_to_current_exact_authority_ancestry(
+            &root,
+            &changed_policy,
+            &queued.record,
+            None,
+        )
+        .is_err());
 
         let mut changed_origin = current.clone();
         let DurableSessionAuthorityOriginV1::StartIntent {
             issuer_request_id, ..
         } = &mut changed_origin.authority.origin;
         *issuer_request_id = "changed-origin".into();
-        assert!(
-            validate_admission_to_current_r0_only(&root, &changed_origin, &queued.record).is_err()
-        );
+        assert!(validate_admission_to_current_exact_authority_ancestry(
+            &root,
+            &changed_origin,
+            &queued.record,
+            None,
+        )
+        .is_err());
 
         let mut changed_unrelated_refs = current.clone();
         let mut unrelated_ref = current.caller_descriptor_ref.clone();
@@ -9597,27 +10167,33 @@ mod tests {
             .authority
             .internal_resume_handle_refs
             .push(unrelated_ref);
-        assert!(validate_admission_to_current_r0_only(
+        assert!(validate_admission_to_current_exact_authority_ancestry(
             &root,
             &changed_unrelated_refs,
             &queued.record,
+            None,
         )
         .is_err());
 
         let mut changed_posture = current.clone();
         changed_posture.authority.lifecycle_posture =
             super::super::host_session_authority::schema::HostSessionPostureV1::AwaitingAttention;
-        assert!(
-            validate_admission_to_current_r0_only(&root, &changed_posture, &queued.record).is_err()
-        );
+        assert!(validate_admission_to_current_exact_authority_ancestry(
+            &root,
+            &changed_posture,
+            &queued.record,
+            None,
+        )
+        .is_err());
 
         let mut transition_or_terminal_change = current.clone();
         transition_or_terminal_change.authority_revision += 1;
         transition_or_terminal_change.authority.authority_revision += 1;
-        assert!(validate_admission_to_current_r0_only(
+        assert!(validate_admission_to_current_exact_authority_ancestry(
             &root,
             &transition_or_terminal_change,
             &queued.record,
+            None,
         )
         .is_err());
 
@@ -9658,6 +10234,7 @@ mod tests {
             &root,
             &current,
             queued.record.admission_authority_revision,
+            None,
         )
         .unwrap();
 
@@ -9767,6 +10344,7 @@ mod tests {
             admission_registration,
             &result,
             &resolved,
+            None,
         )
         .unwrap();
 
@@ -9831,6 +10409,7 @@ mod tests {
                 admission_registration,
                 &result,
                 &changed,
+                None,
             )
             .is_err());
         }
@@ -9846,6 +10425,7 @@ mod tests {
             admission_registration,
             &changed_result,
             &resolved,
+            None,
         )
         .is_err());
 
@@ -9858,6 +10438,7 @@ mod tests {
             admission_registration,
             &changed_result,
             &resolved,
+            None,
         )
         .is_err());
 
@@ -9873,6 +10454,7 @@ mod tests {
             admission_registration,
             &changed_result,
             &resolved,
+            None,
         )
         .is_err());
 
@@ -9945,6 +10527,7 @@ mod tests {
                 admission_registration,
                 &result,
                 &resolved,
+                None,
             )
             .is_err());
         }
@@ -9958,6 +10541,7 @@ mod tests {
             admission_registration,
             &result,
             &resolved,
+            None,
         )
         .is_err());
     }
@@ -10000,6 +10584,7 @@ mod tests {
                 secret_key: &envelope.secret_key,
                 post_r0_graph: &post_r0_graph,
             },
+            None,
         )
         .is_err());
     }
@@ -10107,11 +10692,10 @@ mod tests {
                     .collect::<Vec<_>>();
                 assert_eq!(staged.len(), 1);
                 fs::rename(&staged[0], &registry_path).unwrap();
-                fs::write(
-                    tmp_root.join(format!("admission-registry--{}.tmp", "ff".repeat(16))),
+                write_private_test_file(
+                    &tmp_root.join(format!("admission-registry--{}.tmp", "ff".repeat(16))),
                     b"conflicting orphan",
-                )
-                .unwrap();
+                );
             }
             let registry: RetainedWorkerAdmissionRegistryV1 = decode_canonical(
                 &fs::read(&registry_path).unwrap(),
@@ -10262,13 +10846,12 @@ mod tests {
                 );
             }
 
-            fs::write(
-                admission_root
+            write_private_test_file(
+                &admission_root
                     .join("tmp")
                     .join(format!("admission-registry--{}.tmp", "eb".repeat(16))),
                 b"conflicting transport-claim orphan",
-            )
-            .unwrap();
+            );
 
             let retried = runtime
                 .claim_admission_transport_at(
@@ -10345,11 +10928,10 @@ mod tests {
             &registry_path,
         )
         .unwrap();
-        fs::write(
-            tmp_root.join(format!("admission-registry--{}.tmp", "ea".repeat(16))),
+        write_private_test_file(
+            &tmp_root.join(format!("admission-registry--{}.tmp", "ea".repeat(16))),
             b"conflicting transport-claim orphan after rename",
-        )
-        .unwrap();
+        );
         let reopened = HostSessionAuthority::open(&parent.path().join("home")).unwrap();
         let retried = runtime
             .claim_admission_transport_at(
