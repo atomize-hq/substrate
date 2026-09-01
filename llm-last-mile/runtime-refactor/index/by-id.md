@@ -438,7 +438,7 @@
 | `RG-AUTH-03` | [`evidence/canonical-issue-ledger.md`](../evidence/canonical-issue-ledger.md) |
 | `RG-BASE-01` | [`evidence/canonical-issue-ledger.md`](../evidence/canonical-issue-ledger.md) |
 | `RG-BASE-02` | [`evidence/canonical-issue-ledger.md`](../evidence/canonical-issue-ledger.md) |
-| `RG-BASE-03` | [`evidence/canonical-issue-ledger.md`](../evidence/canonical-issue-ledger.md) |
+| `RG-BASE-03` | [`evidence/baseline-behaviors-and-smoke-scenarios.md#a3-scoped-rg-base-03-disposition`](../evidence/baseline-behaviors-and-smoke-scenarios.md#a3-scoped-rg-base-03-disposition) |
 | `RG-BASE-04` | [`evidence/canonical-issue-ledger.md`](../evidence/canonical-issue-ledger.md) |
 | `RG-CANCEL-01` | [`evidence/canonical-issue-ledger.md`](../evidence/canonical-issue-ledger.md) |
 | `RG-CANCEL-02` | [`evidence/canonical-issue-ledger.md`](../evidence/canonical-issue-ledger.md) |

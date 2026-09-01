@@ -1,13 +1,13 @@
 **Kind:** evidence/regression
 **Status:** canonical
-**Canonical for:** exact extracted `Baseline behaviors that all tracks preserve` and `Cross-gate smoke scenarios` bodies
-**Authority scope:** documentation decomposition only; exact extracted evidence/regression source bodies only
+**Canonical for:** exact extracted `Baseline behaviors that all tracks preserve` and `Cross-gate smoke scenarios` bodies; bounded A3-scoped `RG-BASE-03` disposition
+**Authority scope:** documentation decomposition only; exact extracted evidence/regression source bodies plus the bounded A3-scoped `RG-BASE-03` disposition outside those bodies
 **Baseline behaviors source provenance:** extracted byte-for-byte from [`../05-debug-regression-ledger.md#baseline-behaviors-that-all-tracks-preserve`](../05-debug-regression-ledger.md#baseline-behaviors-that-all-tracks-preserve), baseline lines 80–92 inclusive (`3644` bytes); this exact source body is preserved independently between its matching boundary markers below
 **Baseline behaviors source SHA-256:** `5f9ec8d98324015986c846208db1c567b49c909baa714428ac3a644709fe9132`
 **Cross-gate smoke scenarios source provenance:** extracted byte-for-byte from [`../05-debug-regression-ledger.md#cross-gate-smoke-scenarios`](../05-debug-regression-ledger.md#cross-gate-smoke-scenarios), baseline lines 93–192 inclusive (`11714` bytes); this exact source body is preserved independently between its matching boundary markers below
 **Cross-gate smoke scenarios source SHA-256:** `586e5402b92b6e4e98ab7cbdd04e67121ff209ccf23c7f1ff115c188bedbca85`
 **Source relationship:** the preserved bodies are distinct extractions with separate provenance and are not represented as one contiguous source span
-**Supersedes:** canonical ownership of the extracted source bodies; the source headings remain compatibility anchors
+**Supersedes:** canonical ownership of the extracted source bodies; the source headings remain compatibility anchors; the bounded A3-scoped `RG-BASE-03` disposition resolves only A3 completion responsibility against the unchanged gate
 **Superseded by:** none
 **Receipt boundary:** [`../review-control/README.md`](../review-control/README.md) remains the canonical receipt, review-record, and closeout artifact store
 **Authority boundary:** this evidence/regression owner does not satisfy a gate, claim a current pass, authorize implementation, promotion, remediation, dispatch, or successor authority
@@ -26,6 +26,34 @@ the installed-witness S1 Start/Turn/reattach/Stop proof and the exact-parent dif
 implementation commit `1d7176a25b7662368e6e1fb3f65b3521e6cab78b`; `RG-BASE-01` remains green
 through A2, and the A1-owned `run_stop` semantics remain unchanged. The historical row wording
 below remains the permanent behavior contract rather than current status.
+
+## A3-scoped RG-BASE-03 disposition
+
+`RG-BASE-03` remains open, blocking, unwaived, and unchanged as a stable gate. The full later
+targeted-host-turn/UAA continuity witness is not green. Its existing downstream proof owner is
+[C2](../slices/c2-inbox-and-auto-attach-projections.md#rg-base-03-continuity-proof-owner-projection), whose
+declared prerequisites include A3 and B4; B4 transitively supplies E2, B2.2, and B3.2. The
+dependency direction therefore does not make that full witness an A3 prerequisite or authorize A3
+to implement later HSA settlement, receipt/supervisor, retained-lifecycle, or obligation-cut
+semantics.
+
+For A3 only, the `RG-BASE-03` completion observation is bounded to honest differential evidence at
+the persistence/compatibility boundary: canonical and compatibility behavior remains unchanged;
+unprefixed `ls`/`pwd` remains usable; the policy-required `cd ../` cage denial remains; compatibility
+reads perform zero mutation; and the extraction introduces no regression relative to the exact
+baseline. A candidate-specific persistence or compatibility defect still blocks A3; matching a
+baseline failure is not a waiver or a pass.
+
+The exact baseline is commit `d6c06082c9287256a9d56005991bf9962059660c`, tree
+`cae84c2add3b1820fa305d353b1b09608da1dd94`, with parent
+`1d7176a25b7662368e6e1fb3f65b3521e6cab78b`. That baseline and the protected A3 extraction
+identified by `compatibility.rs`
+`6206353354fd2467ac8c8043e7cf917500dbcf1de005d53510d27f75e33e6da7`, `state_store.rs`
+`ba61b7ce109cd81576617d6679ed6bf7a9b38a3a84251366ce91ca614d6b300d`, and `mod.rs`
+`1b6bbba0ebaf0640116a90d2d86fade126e6fe2bc587f1ddd0b42f838fea56e3` fail identically at the
+later post-HSA legacy-writer rejection boundary. This records a shared later lifecycle blocker, not
+an A3-created pass or an A3 implementation obligation. It neither dispatches C2 nor marks A3
+complete.
 
 <!-- exact-extracted-body:baseline-behaviors:start -->
 ## Baseline behaviors that all tracks preserve

@@ -184,7 +184,7 @@
 | `A1.1d-5R2-2F-family` | [`a1.1d-5r2-2f/evidence-regression.md`](../a1.1d-5r2-2f/evidence-regression.md) | canonical | A1.1d-5R2-2F family evidence and regression |
 | `A1.1d-5R2-4` | [`a1.1d-5r2-4/evidence-regression.md`](../a1.1d-5r2-4/evidence-regression.md) | canonical | A1.1d-5R2-4 terminal evidence and regression disposition |
 | `A1.1d-5R3-family` | [`a1.1d-5r3/evidence-regression.md`](../a1.1d-5r3/evidence-regression.md) | canonical | R3 planned proof and regression ledger |
-| — | [`evidence/baseline-behaviors-and-smoke-scenarios.md`](../evidence/baseline-behaviors-and-smoke-scenarios.md) | canonical | exact extracted `Baseline behaviors that all tracks preserve` and `Cross-gate smoke scenarios` bodies |
+| — | [`evidence/baseline-behaviors-and-smoke-scenarios.md`](../evidence/baseline-behaviors-and-smoke-scenarios.md) | canonical | exact extracted `Baseline behaviors that all tracks preserve` and `Cross-gate smoke scenarios` bodies; bounded A3-scoped `RG-BASE-03` disposition |
 | — | [`evidence/canonical-issue-ledger.md`](../evidence/canonical-issue-ledger.md) | canonical | complete extracted `Canonical issue ledger` table and `A1.2a-WB gate assignment` |
 | — | [`evidence/closeout-and-review-calibration.md`](../evidence/closeout-and-review-calibration.md) | canonical | exact extracted `Closeout rule` and `Review-process calibration` bodies |
 
