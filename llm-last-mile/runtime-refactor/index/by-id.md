@@ -287,7 +287,7 @@
 | `a1-4-auto-attach-producer-adoption` | [`slices/tasks/a1-4-auto-attach-producer-adoption.md`](../slices/tasks/a1-4-auto-attach-producer-adoption.md) | canonical task row record |
 | `a1-host-session-authority` | [`slices/a1-host-session-authority.md`](../slices/a1-host-session-authority.md) | canonical slice record |
 | `a2-host-execution-episode-demotion` | [`slices/a2-host-execution-episode-demotion.md`](../slices/a2-host-execution-episode-demotion.md) | canonical slice row and terminal closure record |
-| `a3-persistence-and-compatibility-split` | [`slices/a3-persistence-and-compatibility-split.md`](../slices/a3-persistence-and-compatibility-split.md) | canonical slice row record |
+| `a3-persistence-and-compatibility-split` | [`slices/a3-persistence-and-compatibility-split.md`](../slices/a3-persistence-and-compatibility-split.md) | canonical slice row and terminal closure record |
 | `b2-2-foreground-receipt-return` | [`slices/b2-2-foreground-receipt-return.md`](../slices/b2-2-foreground-receipt-return.md) | canonical slice row record |
 | `b3-2-retained-receipt-messaging-and-lifecycle` | [`slices/b3-2-retained-receipt-messaging-and-lifecycle.md`](../slices/b3-2-retained-receipt-messaging-and-lifecycle.md) | canonical slice row record |
 | `b4-receipt-targeted-cancel-inspect-stop` | [`slices/b4-receipt-targeted-cancel-inspect-stop.md`](../slices/b4-receipt-targeted-cancel-inspect-stop.md) | canonical slice row record |
@@ -342,7 +342,7 @@
 | `shared-seam-crosswalk` | [`seams/README.md`](../seams/README.md) | canonical shared seam-crosswalk record |
 | `shared-slice-map` | [`slices/README.md`](../slices/README.md) | canonical shared slice-map record |
 | `shared-target-architecture` | [`architecture/README.md`](../architecture/README.md) | non-authoritative navigation |
-| `track-a-authority-and-surface-neutrality` | [`slices/track-a-authority-and-surface-neutrality.md`](../slices/track-a-authority-and-surface-neutrality.md) | non-authoritative navigation |
+| `track-a-authority-and-surface-neutrality` | [`slices/track-a-authority-and-surface-neutrality.md`](../slices/track-a-authority-and-surface-neutrality.md) | non-authoritative navigation; Track A terminally complete |
 | `track-b-world-dispatch-receipts-supervision-and-cancel` | [`slices/track-b-world-dispatch-receipts-supervision-and-cancel.md`](../slices/track-b-world-dispatch-receipts-supervision-and-cancel.md) | non-authoritative navigation |
 | `track-c-obligations-inbox-auto-attach-and-router-attach` | [`slices/track-c-obligations-inbox-auto-attach-and-router-attach.md`](../slices/track-c-obligations-inbox-auto-attach-and-router-attach.md) | non-authoritative navigation |
 | `track-d-uaa-execution-envelope-and-side-effect-mediation` | [`slices/track-d-uaa-execution-envelope-and-side-effect-mediation.md`](../slices/track-d-uaa-execution-envelope-and-side-effect-mediation.md) | non-authoritative navigation |
@@ -365,7 +365,7 @@
 | `a1-4-auto-attach-producer-adoption` | [`slices/tasks/a1-4-auto-attach-producer-adoption.md`](../slices/tasks/a1-4-auto-attach-producer-adoption.md) | canonical task row record |
 | `a1-host-session-authority` | [`slices/a1-host-session-authority.md`](../slices/a1-host-session-authority.md) | canonical slice record |
 | `a2-host-execution-episode-demotion` | [`slices/a2-host-execution-episode-demotion.md`](../slices/a2-host-execution-episode-demotion.md) | canonical slice row and terminal closure record |
-| `a3-persistence-and-compatibility-split` | [`slices/a3-persistence-and-compatibility-split.md`](../slices/a3-persistence-and-compatibility-split.md) | canonical slice row record |
+| `a3-persistence-and-compatibility-split` | [`slices/a3-persistence-and-compatibility-split.md`](../slices/a3-persistence-and-compatibility-split.md) | canonical slice row and terminal closure record |
 | `b2-2-foreground-receipt-return` | [`slices/b2-2-foreground-receipt-return.md`](../slices/b2-2-foreground-receipt-return.md) | canonical slice row record |
 | `b3-2-retained-receipt-messaging-and-lifecycle` | [`slices/b3-2-retained-receipt-messaging-and-lifecycle.md`](../slices/b3-2-retained-receipt-messaging-and-lifecycle.md) | canonical slice row record |
 | `b4-receipt-targeted-cancel-inspect-stop` | [`slices/b4-receipt-targeted-cancel-inspect-stop.md`](../slices/b4-receipt-targeted-cancel-inspect-stop.md) | canonical slice row record |
@@ -379,7 +379,7 @@
 | `e3-agent-config-projection-and-gateway-adoption` | [`slices/e3-agent-config-projection-and-gateway-adoption.md`](../slices/e3-agent-config-projection-and-gateway-adoption.md) | canonical slice row record |
 | `e4-host-visible-write-sync-contract` | [`slices/e4-host-visible-write-sync-contract.md`](../slices/e4-host-visible-write-sync-contract.md) | canonical slice row record |
 | `shared-slice-map` | [`slices/README.md`](../slices/README.md) | canonical shared slice-map record |
-| `track-a-authority-and-surface-neutrality` | [`slices/track-a-authority-and-surface-neutrality.md`](../slices/track-a-authority-and-surface-neutrality.md) | non-authoritative navigation |
+| `track-a-authority-and-surface-neutrality` | [`slices/track-a-authority-and-surface-neutrality.md`](../slices/track-a-authority-and-surface-neutrality.md) | non-authoritative navigation; Track A terminally complete |
 | `track-b-world-dispatch-receipts-supervision-and-cancel` | [`slices/track-b-world-dispatch-receipts-supervision-and-cancel.md`](../slices/track-b-world-dispatch-receipts-supervision-and-cancel.md) | non-authoritative navigation |
 | `track-c-obligations-inbox-auto-attach-and-router-attach` | [`slices/track-c-obligations-inbox-auto-attach-and-router-attach.md`](../slices/track-c-obligations-inbox-auto-attach-and-router-attach.md) | non-authoritative navigation |
 | `track-d-uaa-execution-envelope-and-side-effect-mediation` | [`slices/track-d-uaa-execution-envelope-and-side-effect-mediation.md`](../slices/track-d-uaa-execution-envelope-and-side-effect-mediation.md) | non-authoritative navigation |

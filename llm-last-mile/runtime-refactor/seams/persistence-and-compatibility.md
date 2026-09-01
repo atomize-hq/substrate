@@ -2,7 +2,7 @@
 **Stable ID:** `persistence-and-compatibility-family`
 **Canonical for:** persistence and compatibility projection seam extraction
 **Status:** canonical current seam-family record
-**Authority scope:** exact extracted family-local source bodies only; no implementation authority
+**Authority scope:** exact extracted family-local source bodies plus the current A3 closure-status overlay only; no implementation or successor authority
 **Source span:** D8 persistence and compatibility family extraction from `02-seam-crosswalk.md`
 **Supersedes:** canonical ownership of the extracted `StateStore` and `CompatibilityReadModel` rows
 **Superseded by:** none
@@ -10,7 +10,22 @@
 
 # Persistence and compatibility projection seam extraction
 
-> **Authority boundary:** This file owns only the extracted `StateStore` and `CompatibilityReadModel` seam rows. It does not promote either seam, move the A0 authority-leak inventory, reopen D5/D6/D7 families, or authorize A1/A3 implementation work.
+> **Authority boundary:** This file owns only the extracted `StateStore` and `CompatibilityReadModel` seam rows and the current A3 closure overlay. It does not move the A0 authority-leak inventory, reopen D5/D6/D7 families, promote sibling seams, or authorize successor implementation work.
+
+## A3 closure-status overlay (2026-09-01; current)
+
+The extracted packet-era rows below remain byte-stable. Under the exact implementation and proof
+identities in the [A3 terminal closure](../slices/a3-persistence-and-compatibility-split.md#terminal-closure),
+the bounded StateStore/CompatibilityReadModel ownership transition is
+`ContractCorrectAndProven`: production StateStore reads enter the separate read model only through
+a read-only capability; capability construction, trusted-root identity, locking, atomic
+persistence, rollback, publication, and file/directory `fsync` remain in StateStore; and focused
+plus bounded differential proof exercises that path. No durable format, schema version, migration,
+or public interface changed.
+
+This qualification promotes the A3 read-model boundary only. It does not move semantic authority
+back into StateStore, promote unrelated StateStore surfaces or InboxProjection, close the full
+`RG-BASE-03` continuity witness, or admit E2 or C2.
 
 ## StateStore
 

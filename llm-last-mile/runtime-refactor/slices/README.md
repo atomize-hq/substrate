@@ -51,14 +51,17 @@ B4 + C1 + D2 + E2 + E3 -> D3 `RG-OBS-01` integration closure
 D2 and E1 must agree on PolicySnapshotV3, but may land in either order behind fail-closed gates.
 ```
 
-Current A1/A2 closure disposition: the controlling
+Current Track A closure disposition: the controlling
 [Linux-first decision](../linux-first-runtime-resumption/DECISION.md#macos-lane) supersedes only
 the native-macOS predecessor edge shown in the preserved spine by making that lane separate and
 non-blocking. The landed Linux A1.1d closeout, completed A1.1/A1.2 and A1.3-P1 predecessors, and
 the terminal [A1.4 closure](tasks/a1-4-auto-attach-producer-adoption.md#terminal-closure) leave no
 other A1 condition. A1 is terminally complete. [A2](a2-host-execution-episode-demotion.md#terminal-closure)
-is also terminally complete under its separate closure identities. A3 awaits fresh admission and
-explicit dispatch.
+and [A3](a3-persistence-and-compatibility-split.md#terminal-closure) are terminally complete under
+their separate closure identities. A0's committed inventory already satisfies its diagnostic exit,
+so the four-row Track A is terminally complete. The dependency spine names
+[E2](e2-policy-commitments-on-work-and-workers.md) as the canonical successor, while E1 remains a
+separate unresolved prerequisite; E2 awaits fresh admission and explicit dispatch.
 
 This graph is acyclic. `B1-3a/B1-3b receipt core` is a review state, not a claim that B1 is
 production-complete: it supplies the exact proposal, acknowledgement, activated-store acceptance
@@ -150,7 +153,7 @@ All code areas below are allowlists for planning, not permission to edit every l
 
 | Track | Canonical owner | Extracted navigation scope |
 |---|---|---|
-| Track A — Authority and surface neutrality | [`track-a-authority-and-surface-neutrality.md`](track-a-authority-and-surface-neutrality.md) | Navigation for the extracted A0/A1/A2/A3 rows while keeping A1 packet decomposition inside the A1 owner and preserving held `A1.3-P0`/`A1.3` plus the selected existing `A1.3-P1` owner. |
+| Track A — Authority and surface neutrality | [`track-a-authority-and-surface-neutrality.md`](track-a-authority-and-surface-neutrality.md) | Terminally complete navigation for the extracted A0/A1/A2/A3 rows while keeping A1 packet decomposition inside the A1 owner and preserving held `A1.3-P0`/`A1.3` plus the completed `A1.3-P1` owner. |
 | Track B — World-dispatch receipts, supervision, and cancel | [`track-b-world-dispatch-receipts-supervision-and-cancel.md`](track-b-world-dispatch-receipts-supervision-and-cancel.md) | Navigation for the extracted B2.2/B3.2/B4 rows while preserving the recorded B0 through joint-closeout and B3.1 family owners at their existing D6 locations. |
 | Track C — Obligations, inbox, auto-attach, and router attach | [`track-c-obligations-inbox-auto-attach-and-router-attach.md`](track-c-obligations-inbox-auto-attach-and-router-attach.md) | Navigation for the extracted C2/C3 rows while preserving the completed C1 family owner at its existing D6 location. |
 | Track D — UAA execution envelope and side-effect mediation | [`track-d-uaa-execution-envelope-and-side-effect-mediation.md`](track-d-uaa-execution-envelope-and-side-effect-mediation.md) | Navigation for the extracted D1/D2/D3 rows plus the preserved fail-closed staging rule. |

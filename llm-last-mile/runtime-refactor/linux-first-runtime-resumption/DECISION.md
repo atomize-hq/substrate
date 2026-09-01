@@ -6,8 +6,8 @@
 - **Effective date:** 2026-08-20.
 - **Reentry gate:** `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY` (closed by the selection below).
 - **Active global implementation packet:** none. [`A1.3-P1`](A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md),
-  A1.4, the enclosing A1 slice, and A2 are terminally complete; A3 awaits fresh admission and
-  explicit dispatch.
+  A1.4, the enclosing A1 slice, A2, A3, and Track A are terminally complete; E2 awaits fresh
+  admission and explicit dispatch.
 - **Supersedes:** the 2026-08-19 macOS developer-parity decision only where it made
   `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` the global product-work predecessor. It does not weaken,
   close, or authorize the macOS parity lane.
@@ -115,6 +115,23 @@ A3 — persistence and compatibility split — is only the existing canonical su
 fresh admission and explicit dispatch; this closure does not admit, dispatch, implement, or
 complete it.
 
+## A3 and Track A closure (2026-09-01; controlling)
+
+[A3 — persistence and compatibility split](../slices/a3-persistence-and-compatibility-split.md#terminal-closure)
+is terminally complete at implementation commit
+`627e0febf9e0a5143a8b92ba54f1c9377d3ffae5` and tree
+`2fe1acc6d0abe2a50c2f44dc47f636f51223d390` under its exact reviewed closure identities. The
+compatibility boundary is structurally read-only, while StateStore retains trusted-root locking,
+atomic persistence, rollback, publication, and `fsync` ownership. No durable format, schema
+version, or migration changed.
+
+The Track A table contains only A0 through A3. A0's committed classified inventory satisfies its
+diagnostic exit, and A1/A2/A3 are terminally complete, so Track A is terminally complete. The hard
+dependency spine names E2 as the canonical successor, while E1 remains a separate unresolved
+prerequisite; E2 awaits fresh admission and explicit dispatch. The full `RG-BASE-03` continuity
+witness remains open, blocking, unwaived, and not green under C2. This closure admits or dispatches
+none of E1, E2, or C2 and exercises no later-track authority.
+
 ## macOS lane
 
 `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` remains the lane-local gate for the ordinary user-prefix
@@ -163,7 +180,8 @@ proof rather than a historical label. That rebind later selected A1.3.
   the later frozen amendment selected A1.3-P0 as a narrower preparatory split, and the corrective
   replan held both older fences while selecting the now-terminally-complete A1.3-P1 atomic
   public-adoption packet. The later A1.4 implementation and enclosing A1 slice are terminally
-  complete under their separate closure identities. The still-later A2 implementation is also
-  terminally complete under its separate closure identities; A3 remains undispatched.
+  complete under their separate closure identities. The still-later A2 and A3 implementations and
+  Track A are also terminally complete under their separate closure identities; E2 remains
+  undispatched.
 - This decision does not dispatch Windows, protected macOS lifecycle revival, Keychain activity,
   Attempt 4 inspection or remediation, installer execution, Lima actions, or native operations.

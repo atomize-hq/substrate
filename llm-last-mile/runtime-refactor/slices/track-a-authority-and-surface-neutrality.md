@@ -1,8 +1,8 @@
 **Kind:** track index
 **Stable ID:** `track-a-authority-and-surface-neutrality`
 **Canonical for:** Track A navigation only
-**Status:** non-authoritative navigation
-**Authority scope:** exact extracted Track A heading/table only; no schedule, dispatch, or implementation authority
+**Status:** non-authoritative navigation; Track A terminally complete
+**Authority scope:** exact extracted Track A heading/table plus its current completion projection only; no schedule, dispatch, or implementation authority
 **Source span:** [`../03-phase-slice-map.md`](../03-phase-slice-map.md) lines 125–133
 **Supersedes:** canonical ownership of the extracted Track A heading/table
 **Superseded by:** none
@@ -10,7 +10,18 @@
 
 # Track A — Authority and surface neutrality
 
-> **Authority boundary:** This file is a navigation index only. A0/A1/A2/A3 remain independent slices; A1.1–A1.4 remain substeps/checkpoints inside A1 rather than independent slices; A1.1d and historical entries remain checkpoints, not slices; held `A1.3-P0` and `A1.3` remain preserved history only; [`../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md), [A1.4](tasks/a1-4-auto-attach-producer-adoption.md), the enclosing [A1 slice](a1-host-session-authority.md), and [A2](a2-host-execution-episode-demotion.md) are terminally complete. A3 and later slices remain undispatched and authority-gated here.
+> **Authority boundary:** This file is a navigation index only. A0/A1/A2/A3 remain independent slices; A1.1–A1.4 remain substeps/checkpoints inside A1 rather than independent slices; A1.1d and historical entries remain checkpoints, not slices; held `A1.3-P0` and `A1.3` remain preserved history only; [`../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md), [A1.4](tasks/a1-4-auto-attach-producer-adoption.md), the enclosing [A1 slice](a1-host-session-authority.md), [A2](a2-host-execution-episode-demotion.md), and [A3](a3-persistence-and-compatibility-split.md) are terminally complete. No later slice receives authority here.
+
+## Track A terminal completion (2026-09-01; current)
+
+The extracted table below contains exactly A0 through A3. A0's exit artifact is the committed
+[authority-leak inventory](../a1-2-earlier-histories/crosswalk.md#a0-authority-leak-inventory-contract);
+A1 and A2 are terminally complete under their existing closure owners; and A3 is terminally
+complete under its [exact closure identities](a3-persistence-and-compatibility-split.md#terminal-closure).
+Those current dependency and completion records complete Track A. The hard dependency spine names
+[E2](e2-policy-commitments-on-work-and-workers.md) as the canonical successor, but E1 remains a
+separate unresolved prerequisite and E2 awaits fresh admission and explicit dispatch. This
+projection exercises no E1, E2, or later-track authority.
 
 | Slice | Goal | Must-read docs | Sibling context | Allowed code areas | Explicit non-goals | Exit gate | Regression gates |
 |---|---|---|---|---|---|---|---|
@@ -19,4 +30,4 @@
 | [**A2 — HostExecutionEpisode demotion**](a2-host-execution-episode-demotion.md) | Represent REPL/helper/toolbox/recovered processes as episodes whose PID/socket/readiness data are observations only. | `01` invariants 1–2; `02` SurfaceAdapter row; `04` HostExecutionEpisodeV1; `DESIGN-internal-toolbox-transport-and-session-binding.md` | HostSessionAuthority; InternalToolboxTransport; RouterAttachTrigger | `agent_runtime/control.rs`; `execution/agents_cmd.rs`; `repl/async_repl.rs`; episode-focused tests | No deletion of `__owner-helper`; no transport protocol rewrite; no auto-attach redesign. | Killing/orphaning an episode leaves durable session truth intact; stale episode updates are revision-rejected; transport classification is explicit. | `RG-AUTH-01`, `RG-AUTH-02`, `RG-CLOSE-01`, `RG-BASE-01` |
 | [**A3 — Persistence and compatibility split**](a3-persistence-and-compatibility-split.md) | Reduce StateStore to atomic persistence/schema evolution and isolate diagnostic compatibility reads from new authority writes. | `02` StateStore + CompatibilityReadModel rows; `01` authority map; `04` durable revision rules | HostSessionAuthority; InboxProjection; receipt persistence | `agent_runtime/state_store.rs`; a bounded new facade/module under `agent_runtime/`; persistence/read-model tests | No wholesale database rewrite; no conversion of pre-A1 authority artifacts into A1 authority; no behavior changes outside moved ownership. | New authority writes bypass compatibility projection; torn-root/unsupported-state diagnostics remain read-only; newer revisions always win. | `RG-AUTH-02`, `RG-BASE-01`, `RG-BASE-03` |
 
-A1 packet decomposition remains inside [`a1-host-session-authority.md#a1-bounded-packet-decomposition`](a1-host-session-authority.md#a1-bounded-packet-decomposition), and the terminal A1.4 task/checkpoint record remains at [`tasks/a1-4-auto-attach-producer-adoption.md`](tasks/a1-4-auto-attach-producer-adoption.md). The completed HSA-owned public Stop adoption was not repeated in A2. A2 is terminally complete under its own closure identities; A3 awaits fresh admission and explicit dispatch. This file does not reopen the preserved D6 packet-history owners or authorize A3 work.
+A1 packet decomposition remains inside [`a1-host-session-authority.md#a1-bounded-packet-decomposition`](a1-host-session-authority.md#a1-bounded-packet-decomposition), and the terminal A1.4 task/checkpoint record remains at [`tasks/a1-4-auto-attach-producer-adoption.md`](tasks/a1-4-auto-attach-producer-adoption.md). The completed HSA-owned public Stop adoption was not repeated in A2. A2 and A3 are terminally complete under their own closure identities. This file does not reopen the preserved D6 packet-history owners or authorize E2 work.

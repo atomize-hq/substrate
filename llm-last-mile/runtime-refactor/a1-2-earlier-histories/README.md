@@ -10,7 +10,7 @@
 
 # A1.2 and earlier packet-histories family index
 
-> **Authority boundary:** This index assembles the completed internal A1.2a/A1.2b corridor and the earlier A0/A1.1/A1.1d/A1.1e packet histories. The completed [`B1/B2.1 predecessor family`](../b1-b2-1/README.md) and [`B3.1/C1 successor-family history`](../b3-1-c1/README.md) remain preserved and are not reopened. [`A1.3-P1`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md), A1.4, the enclosing A1 slice, and A2 are terminally complete; A3 awaits fresh admission and explicit dispatch. This family promotes no seam, grants no implementation or native-operation authority, and does not reopen A1.3, A1.4, A2/A3, B2.2, remaining B3.2/B4, R3, R2-3, renewed R2-2, F/RP, macOS parity, D7+, or implementation work. Linux/macOS scheduling and authority remain separate and unchanged.
+> **Authority boundary:** This index assembles the completed internal A1.2a/A1.2b corridor and the earlier A0/A1.1/A1.1d/A1.1e packet histories. The completed [`B1/B2.1 predecessor family`](../b1-b2-1/README.md) and [`B3.1/C1 successor-family history`](../b3-1-c1/README.md) remain preserved and are not reopened. [`A1.3-P1`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md), A1.4, the enclosing A1 slice, A2, A3, and Track A are terminally complete; E2 awaits fresh admission and explicit dispatch. This family promotes no seam, grants no implementation or native-operation authority, and does not reopen A1.3, A1.4, A2/A3, B2.2, remaining B3.2/B4, R3, R2-3, renewed R2-2, F/RP, macOS parity, D7+, or implementation work. Linux/macOS scheduling and authority remain separate and unchanged.
 
 | Component | Canonical owner |
 |---|---|

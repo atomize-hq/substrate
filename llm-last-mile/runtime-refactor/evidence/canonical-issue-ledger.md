@@ -4,7 +4,7 @@
 **Source provenance:** extracted byte-for-byte from [`../05-debug-regression-ledger.md#canonical-issue-ledger`](../05-debug-regression-ledger.md#canonical-issue-ledger), baseline lines 16–97 inclusive; the exact 41492-byte source body is preserved between the boundary markers below
 **Baseline span SHA-256:** `191a62ea0c77064941947280d87c539163ab69b772a8018f6b2f4e3d3e5aae3e`
 
-## Current A1/A2 gate disposition
+## Current A1/A2/A3 gate disposition
 
 The exact extracted ledger body below remains byte-stable. Under the terminal
 [A1.4 closure](../slices/tasks/a1-4-auto-attach-producer-adoption.md#terminal-closure), the
@@ -13,8 +13,11 @@ implementation commit `9cb9fc78b8f2efdc7a8e90a456f6abaf13dbf851`. Under the
 [A2 terminal closure](../slices/a2-host-execution-episode-demotion.md#terminal-closure), the
 A2-scoped clauses of `RG-AUTH-01` and `RG-AUTH-02` are green at implementation commit
 `1d7176a25b7662368e6e1fb3f65b3521e6cab78b`; `RG-CLOSE-01` remains green. The ledger-wide rows
-remain unresolved for A3 and their other named owners. A3 is not admitted or dispatched by this
-status overlay.
+remain unresolved for their other named owners. Under the
+[A3 terminal closure](../slices/a3-persistence-and-compatibility-split.md#terminal-closure), the
+A3-scoped clause of `RG-AUTH-02` is green at implementation commit
+`627e0febf9e0a5143a8b92ba54f1c9377d3ffae5`; no ledger-wide gate or successor is closed,
+admitted, or dispatched by this status overlay.
 
 <!-- exact-extracted-body:start -->
 ## Canonical issue ledger

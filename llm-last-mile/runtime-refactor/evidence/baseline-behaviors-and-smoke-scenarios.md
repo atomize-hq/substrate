@@ -17,15 +17,18 @@
 
 Context note: the exact fourteen historical B1/B2.1 names and production routes referenced by RG-DIFF-01's source-relative phrase `inventory above` remain canonically owned in [`../b1-b2-1/evidence-regression.md#b1b21-core-recovery-and-b1b21-0-recorded-result`](../b1-b2-1/evidence-regression.md#b1b21-core-recovery-and-b1b21-0-recorded-result). This destination-local link clarifies that referent only; it does not duplicate or re-extract packet-local evidence and does not change any evidence, gate, implementation, or authority status.
 
-**Current A1/A2 baseline disposition:** the preserved baseline rows below remain byte-stable.
+**Current A1/A2/A3 baseline disposition:** the preserved baseline rows below remain byte-stable.
 [A1.4's terminal closure](../slices/tasks/a1-4-auto-attach-producer-adoption.md#terminal-closure)
 records the positive real-path Linux wall at implementation commit
 `9cb9fc78b8f2efdc7a8e90a456f6abaf13dbf851`. `RG-BASE-01` and `RG-BASE-02` are green for A1.
 The [A2 terminal closure](../slices/a2-host-execution-episode-demotion.md#terminal-closure) records
 the installed-witness S1 Start/Turn/reattach/Stop proof and the exact-parent differential at
 implementation commit `1d7176a25b7662368e6e1fb3f65b3521e6cab78b`; `RG-BASE-01` remains green
-through A2, and the A1-owned `run_stop` semantics remain unchanged. The historical row wording
-below remains the permanent behavior contract rather than current status.
+through A2, and the A1-owned `run_stop` semantics remain unchanged. The
+[A3 terminal closure](../slices/a3-persistence-and-compatibility-split.md#terminal-closure) records
+the read-only compatibility boundary at implementation commit
+`627e0febf9e0a5143a8b92ba54f1c9377d3ffae5`; `RG-BASE-01` remains green through A3. The
+historical row wording below remains the permanent behavior contract rather than current status.
 
 ## A3-scoped RG-BASE-03 disposition
 
@@ -47,13 +50,13 @@ baseline failure is not a waiver or a pass.
 The exact baseline is commit `d6c06082c9287256a9d56005991bf9962059660c`, tree
 `cae84c2add3b1820fa305d353b1b09608da1dd94`, with parent
 `1d7176a25b7662368e6e1fb3f65b3521e6cab78b`. That baseline and the protected A3 extraction
-identified by `compatibility.rs`
+identified by final `compatibility.rs`
 `6206353354fd2467ac8c8043e7cf917500dbcf1de005d53510d27f75e33e6da7`, `state_store.rs`
-`ba61b7ce109cd81576617d6679ed6bf7a9b38a3a84251366ce91ca614d6b300d`, and `mod.rs`
+`2c8c042cf356bc4e757cf4e077437727dd8ed82bcb914e001b4234c540c1f17b`, and `mod.rs`
 `1b6bbba0ebaf0640116a90d2d86fade126e6fe2bc587f1ddd0b42f838fea56e3` fail identically at the
 later post-HSA legacy-writer rejection boundary. This records a shared later lifecycle blocker, not
-an A3-created pass or an A3 implementation obligation. It neither dispatches C2 nor marks A3
-complete.
+an A3-created pass or an A3 implementation obligation. It neither dispatches C2 nor marks the full
+`RG-BASE-03` witness green; A3's terminal status is recorded only in its closure owner.
 
 <!-- exact-extracted-body:baseline-behaviors:start -->
 ## Baseline behaviors that all tracks preserve

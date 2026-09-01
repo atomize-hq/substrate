@@ -352,7 +352,7 @@
 |---|---|---|---|
 | `a0-authority-leak-inventory` | [`slices/a0-authority-leak-inventory.md`](../slices/a0-authority-leak-inventory.md) | canonical slice row record | extracted A0 slice row only |
 | `a2-host-execution-episode-demotion` | [`slices/a2-host-execution-episode-demotion.md`](../slices/a2-host-execution-episode-demotion.md) | canonical slice row and terminal closure record | extracted A2 slice row plus its terminal closure |
-| `a3-persistence-and-compatibility-split` | [`slices/a3-persistence-and-compatibility-split.md`](../slices/a3-persistence-and-compatibility-split.md) | canonical slice row record | extracted A3 slice row only |
+| `a3-persistence-and-compatibility-split` | [`slices/a3-persistence-and-compatibility-split.md`](../slices/a3-persistence-and-compatibility-split.md) | terminally complete | extracted A3 slice row plus its terminal closure |
 | `b2-2-foreground-receipt-return` | [`slices/b2-2-foreground-receipt-return.md`](../slices/b2-2-foreground-receipt-return.md) | canonical slice row record | extracted B2.2 slice row only |
 | `b3-2-retained-receipt-messaging-and-lifecycle` | [`slices/b3-2-retained-receipt-messaging-and-lifecycle.md`](../slices/b3-2-retained-receipt-messaging-and-lifecycle.md) | canonical slice row record | extracted B3.2 slice row only |
 | `b4-receipt-targeted-cancel-inspect-stop` | [`slices/b4-receipt-targeted-cancel-inspect-stop.md`](../slices/b4-receipt-targeted-cancel-inspect-stop.md) | canonical slice row record | extracted B4 slice row only |
@@ -408,7 +408,7 @@
 
 | Stable ID | Canonical owner | Status | Canonical for |
 |---|---|---|---|
-| `track-a-authority-and-surface-neutrality` | [`slices/track-a-authority-and-surface-neutrality.md`](../slices/track-a-authority-and-surface-neutrality.md) | non-authoritative navigation | Track A navigation only |
+| `track-a-authority-and-surface-neutrality` | [`slices/track-a-authority-and-surface-neutrality.md`](../slices/track-a-authority-and-surface-neutrality.md) | non-authoritative navigation; Track A terminally complete | Track A navigation and current completion projection only |
 | `track-b-world-dispatch-receipts-supervision-and-cancel` | [`slices/track-b-world-dispatch-receipts-supervision-and-cancel.md`](../slices/track-b-world-dispatch-receipts-supervision-and-cancel.md) | non-authoritative navigation | Track B navigation only |
 | `track-c-obligations-inbox-auto-attach-and-router-attach` | [`slices/track-c-obligations-inbox-auto-attach-and-router-attach.md`](../slices/track-c-obligations-inbox-auto-attach-and-router-attach.md) | non-authoritative navigation | Track C navigation only |
 | `track-d-uaa-execution-envelope-and-side-effect-mediation` | [`slices/track-d-uaa-execution-envelope-and-side-effect-mediation.md`](../slices/track-d-uaa-execution-envelope-and-side-effect-mediation.md) | non-authoritative navigation | Track D navigation and staging-rule preservation only |

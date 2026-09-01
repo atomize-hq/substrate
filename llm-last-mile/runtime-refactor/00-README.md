@@ -13,7 +13,7 @@
 **Repo-truth snapshot:** 2026-08-02 at
 `4ceecd50e20d822dda7cbd8f0e1bef4ccad65d8e` / tree
 `8ed5dc7a354b731016a103b68091864b6a09223a`; re-check live code before every slice.
-**Current scheduling projection:** [`index/current.md`](index/current.md) is the visibly non-authoritative current-state projection for terminally complete A1.3-P1, terminally complete A1.4 and A1, terminally complete A2, A3 awaiting fresh admission and explicit dispatch, held A1.3-P0/A1.3 records, the separate macOS lane, and deferred Windows work; canonical decisions, packets, and gates remain at their linked path-stable owners.
+**Current scheduling projection:** [`index/current.md`](index/current.md) is the visibly non-authoritative current-state projection for terminally complete A1.3-P1, A1.4/A1, A2, A3, and Track A; E2 awaiting fresh admission and explicit dispatch; held A1.3-P0/A1.3 records; the separate macOS lane; and deferred Windows work. Canonical decisions, packets, and gates remain at their linked path-stable owners.
 **Navigation indexes:** [`index/README.md`](index/README.md) by stable title/owner, [`index/by-id.md`](index/by-id.md), [`index/by-kind.md`](index/by-kind.md), and [`index/by-packet.md`](index/by-packet.md).
 **Historical scheduling state (superseded for active scheduling on 2026-08-19):**
 Canonical historical content: [`history/cross-cutting-control-pack-checkpoints.md#historical-scheduling-state-superseded-for-active-scheduling-on-2026-08-19`](history/cross-cutting-control-pack-checkpoints.md#historical-scheduling-state-superseded-for-active-scheduling-on-2026-08-19). Use [`index/current.md`](index/current.md) and its linked owners—not this historical record—for active, held, lane-local, and deferred state.
