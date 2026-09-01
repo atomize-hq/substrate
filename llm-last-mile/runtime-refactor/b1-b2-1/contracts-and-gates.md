@@ -1187,15 +1187,15 @@ immutable retained-worker cap or final receipt commitment.
 
 The B1 acceptance record is an internal durable anchor, not the returnable active receipt described
 below. It captures exact current-policy and B0 acknowledgement truth. E2 must create the final
-immutable policy/cap commitment and B2.1 must persist its separate observation claim before B2.2
-may return the linked active receipt.
+immutable policy/cap commitment and B2.1 must persist its separate
+`WorldWorkExecutionClaimV1` before B2.2 may return the linked active receipt.
 
 A foreground call may return an accepted receipt only after all of the following are durable:
 
 1. exact session, caller, backend, world, and task/worker target identity;
 2. the accepted immutable `PolicySnapshotV3` ref/hash;
 3. exact `task_run_id` or `active_run_id` plus retained `message_id` where applicable;
-4. a supervisor observation cursor or resumable observation claim; and
+4. the exact source-owned B2.1 `WorldWorkExecutionClaimV1` and its durable claim identity; and
 5. runtime submission acknowledgement that is joined to the same identity.
 
 The persisted acceptance evidence has this minimum shape:
@@ -1219,16 +1219,17 @@ enum RuntimeAcceptanceAcknowledgementKindV1 {
     StartFrame,
     RegisteredFrame,
 }
-
-struct SupervisorObservationClaimV1 {
-    stream_id: String,
-    last_durable_frame_sequence: u64,
-    last_durable_event_sequence: Option<u64>,
-    claim_revision: u64,
-    lease_epoch: u64,
-    resumable: bool,
-}
 ```
+
+The source-owned B2.1 evidence is the exact canonical `WorldWorkExecutionClaimV1` defined in
+`crates/shell/src/execution/agent_runtime/world_work_execution_supervisor.rs`. Its durable identity
+is the bound supervisor store plus the exact
+`WorldWorkExecutionSupervisorStateV1.executions_by_acceptance_record_id` key, which equals the B1
+acceptance-record ID. The claim carries its own acceptance revision, observer identity/epoch, claim
+revision, runtime submission, stream, subject, store/session/caller/backend/world, and optional
+HSA-owned transition correlation. Durable frame/event cursors and interruption are separate
+supervisor-owned state, not fields of that claim. B2.1 defines no `resumable` field and E2 must not
+infer one.
 
 V1 acceptance boundaries:
 
@@ -1268,6 +1269,12 @@ The claim identity binds the exact authority store, B1 acceptance-record ID and 
 orchestration session, accepted task/active-run identity, B0 stream, world ID/generation, and claim
 revision/observer epoch. An exact duplicate claim joins; a conflicting or stale claim fails closed.
 Neither the receipt registry nor the physical store may mutate or infer supervisor state.
+
+For future E2 linkage only, B2.1 may expose one read-only, behavior-neutral accessor/projection of
+the exact claim identity, canonical claim preimage/hash inputs, and durable claim key. That accessor
+does not alter supervisor state, reinterpret lifecycle, create acceptance, infer resumability,
+mutate receipts or observations, or expose cursor/interruption references unless a separately
+authorized E2 subject requires them. B2.1 remains the sole semantic owner of the returned evidence.
 
 B2.1 is reviewed in three ordered subpackets:
 

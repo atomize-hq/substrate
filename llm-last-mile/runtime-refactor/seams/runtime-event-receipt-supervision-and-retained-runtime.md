@@ -14,15 +14,43 @@
 
 ## Current E2 ownership correction
 
-E2 consumes but does not mutate B1 acceptance, B2.1 observation, or fresh-Spawn B3.2a admission truth and
-persists the separate immutable
-[`DispatchPolicyCommitmentV1`](../contracts/dispatch-policy-commitment-v1.md). ReceiptRegistry and
-Supervisor do not become policy owners. B2.2/B3.2 later consume the exact ref for receipts and
-retained lifecycle; the later full manifest also waits for D1/E3 identities. RetainedWorkerRuntime
-must return typed unsupported-legacy state before continue/fork when canonical cap bytes/ref are
-missing or hash-invalid; it may not reconstruct a cap from a newer parent. Fork uses an E2-owned
-strict request-to-cap link and gains no B3.2a admission authority. No supervisor, observation,
-cancellation, or lifecycle behavior is authorized by this correction.
+E2 consumes but does not mutate B1 acceptance, the exact source-owned B2.1
+`WorldWorkExecutionClaimV1`, or fresh-Spawn B3.2a admission truth and persists the separate immutable
+[`DispatchPolicyCommitmentV1`](../contracts/dispatch-policy-commitment-v1.md). B2.1 may expose one
+read-only, behavior-neutral projection of the exact claim identity, canonical preimage/hash inputs,
+and durable `executions_by_acceptance_record_id` key. It exposes no invented
+`SupervisorObservationClaimV1`/`resumable` field, does not change state or lifecycle meaning, and
+does not mutate receipts/observations. Cursor/interruption references remain separate B2.1-owned
+facts and are absent unless an E2 subject actually requires them.
+
+For Fresh Spawn, E2 first-writer CAS-stores the immutable complete
+patch/snapshot/cap/subject/binding reservation and ref, an E2-keyed complete validated-request
+commitment with no prompt/payload preimage, and stable worker/bootstrap identity,
+completes publication and `fsync`, privately recomputes/equality-checks the request commitment, then
+supplies only an opaque authenticated reservation capability/ref plus the identities through the
+bounded B3.2a reservation input. B3.2a consumes the preallocated identities in its
+unchanged fingerprint. Only the existing `allow_capability_narrowing == true` rejection may admit an
+authenticated E2 narrowing attestation so a nonempty `RestrictedWorldFs` E1 patch can pass;
+`UnchangedParent` and empty patches cannot obtain that attestation. The opaque proof is threaded
+through all seven validator call sites and only their minimum wrappers, including
+`mark_admission_routable`, `mark_admission_terminal`, and `mark_admission_interrupted`, without entering B3.2a
+plan/fingerprint/record bytes. After the first
+registration-bearing state, E2 retains the reservation ref,
+CAS-links all stable source-record fields plus exact registration, and publishes the commitment.
+Mutable B3.2a state/revision is excluded from that stable link. The reservation grants no admission,
+lifecycle, or routability and cannot change B3.2a's fingerprint, schema, other validation, registry,
+cap accounting, ordering, registration, transport, or lifecycle semantics. Crash/retry joins reservation, B3.2a admission, or
+commitment at their exact durable boundary; changed material conflicts before B3.2a.
+
+RetainedWorkerRuntime keeps all target, admission, identity, routability, and launch-policy/cap
+authentication and returns the immutable cap separately from current parent. It must return typed
+unsupported-legacy state before Continue/Fork when canonical cap bytes/ref are missing or
+hash-invalid; it may not reconstruct a cap from a newer parent. Launch-policy/current-parent
+equality is not required, so later parent narrowing restricts future work and broadening remains
+capped. Fork uses an E2-owned strict request-to-cap link and gains no B3.2a admission authority.
+ReceiptRegistry and Supervisor do not become policy owners. B2.2/B3.2 later consume the exact ref;
+the full manifest also waits for D1/E3 identities. No routing, supervisor, cancellation, receipt,
+manifest, or lifecycle behavior is authorized by this correction.
 
 ## RuntimeEventTransport
 

@@ -12,7 +12,7 @@
 
 > **Authority boundary:** This file is a navigation index only. E1 is terminally complete at
 > `18f719898ce2a48f65e95b3b23f3b2cfd685c4af`; E2 is the corrected successor eligible only for
-> fresh admission and explicit dispatch; E2/E3/E4 remain undispatched here. Schedule authority
+> another fresh admission and explicit dispatch; E2/E3/E4 remain undispatched here. Schedule authority
 > remains with the controlling decision, packet, and gate owners.
 
 The extracted E2 row below is pre-correction navigation. Its current authority is the

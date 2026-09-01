@@ -14,6 +14,12 @@ add/consume the exact `DispatchPolicyCommitmentRefV1`; the extracted
 be independently recomputed. The receipt must not be exposed before that ref is durable and
 exact-linked.
 
+The preserved extracted body's `observation_claim: SupervisorObservationClaimV1` spelling is
+chronology only and does not name an E2 input or a current source type. Current B2.1 evidence is the
+exact source-owned `WorldWorkExecutionClaimV1`; E2 stores only its exact claim link, and the later
+receipt owner consumes that link without inventing `resumable`, cursor, interruption, acceptance,
+or supervisor semantics.
+
 <!-- exact-extracted-body:start -->
 ## 3. `ActiveEphemeralTaskReceiptV1`
 

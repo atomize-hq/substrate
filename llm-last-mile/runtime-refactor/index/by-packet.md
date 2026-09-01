@@ -14,9 +14,9 @@
 | `A1.3-P1` | completed packet | [`linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md) | `terminally complete` |
 | `A1.4` | completed checkpoint | [`slices/tasks/a1-4-auto-attach-producer-adoption.md`](../slices/tasks/a1-4-auto-attach-producer-adoption.md) | `terminally complete`; enclosing A1 terminally complete |
 | `A2` | completed slice | [`slices/a2-host-execution-episode-demotion.md`](../slices/a2-host-execution-episode-demotion.md) | `terminally complete` |
-| `A3` | completed slice | [`slices/a3-persistence-and-compatibility-split.md`](../slices/a3-persistence-and-compatibility-split.md) | `terminally complete`; Track A terminally complete; E2 awaits fresh admission and explicit dispatch |
+| `A3` | completed slice | [`slices/a3-persistence-and-compatibility-split.md`](../slices/a3-persistence-and-compatibility-split.md) | `terminally complete`; Track A terminally complete; E2 awaits another fresh admission and explicit dispatch |
 | `E1` | completed slice | [`slices/e1-restricted-world-fs-narrowing.md`](../slices/e1-restricted-world-fs-narrowing.md) | `terminally complete` at closure `18f719898ce2a48f65e95b3b23f3b2cfd685c4af` over implementation `6194788d45267d91b4428a42e24c02dfcaae3c1e` |
-| `E2` | awaiting-admission slice | [`slices/e2-policy-commitments-on-work-and-workers.md`](../slices/e2-policy-commitments-on-work-and-workers.md) | authority corrected; eligible only for fresh admission and explicit dispatch; currently undispatched |
+| `E2` | awaiting-admission slice | [`slices/e2-policy-commitments-on-work-and-workers.md`](../slices/e2-policy-commitments-on-work-and-workers.md) | authority corrected; eligible only for another fresh admission and explicit dispatch; currently undispatched |
 | `A1.3-P0` | held packet | [`linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md`](../linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md) | `held/non-implementable historical preparatory packet` |
 | `A1.3` | held packet | [`linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md`](../linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md) | `preserved held historical Linux-first packet` |
 

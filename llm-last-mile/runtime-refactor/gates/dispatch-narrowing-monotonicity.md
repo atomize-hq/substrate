@@ -20,7 +20,14 @@ remain E2-owned and unimplemented under the independent
 [`DispatchPolicyCommitmentV1`](../contracts/dispatch-policy-commitment-v1.md). E2 owns neither
 receipt nor full-manifest construction. D2 per-operation mediation and E4 host-visibility
 synchronization remain open. This bounded disposition completes E1 and makes E2 eligible only for
-fresh admission and explicit dispatch; it does not admit or dispatch E2.
+another fresh admission and explicit dispatch; it does not admit or dispatch E2.
+
+For the future E2 formulas, current parent is resolved independently at Continue/Fork time and the
+immutable worker/source-worker cap is authenticated from launch/fork truth. The retained-target
+resolver must not require launch policy/ref/revision to equal current parent. All non-policy target,
+admission, backend, world, ancestry, lifecycle, and routing checks remain. Current-parent narrowing
+may further restrict future work; broadening remains bounded by the immutable cap. Missing
+verifiable cap bytes/ref/hash returns typed `UnsupportedLegacyState` before dispatch.
 
 <!-- exact-extracted-body:start -->
 ## 13. Dispatch narrowing monotonicity rules

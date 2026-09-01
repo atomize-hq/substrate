@@ -7,10 +7,28 @@
 ## Current E2 promotion disposition
 
 This authority correction does not land or promote E2. Any later fresh E2 dispatch must prove the
-new commitment's canonical serialization/hash, atomic persistence and exact retry, strict real
-tool-to-`WorldDispatchRequestV1` translation, real `ExecuteRequest`/retained-turn carrier use,
-B1/B2.1, fresh-Spawn B3.2a, or E2 fork-dispatch linkage before reporting, restart behavior, typed
-mixed-version failure, and the mandatory `RG-DIFF-01` differential wall. D1/E3 receipt/manifest
+commitment's record/index/link serialization; exact E1/B1
+`serde_json::to_vec(PolicySnapshotV3)` bytes/hash without a second canonicalization; strict real
+tool-to-`WorldDispatchRequestV1` translation; real `ExecuteRequest`/retained-turn carrier use; exact
+B1 plus source-owned B2.1 `WorldWorkExecutionClaimV1` linkage; retained current-parent drift with
+immutable cap preservation; E2 fork-dispatch linkage; typed mixed-version failure; and the mandatory
+`RG-DIFF-01` differential wall.
+
+Fresh Spawn additionally proves first-writer immutable E2 reservation-object/ref publication with a
+keyed commitment over the complete validated request and no prompt/payload preimage, plus
+file/directory `fsync` before B3.2a; private E2 recomputation/equality of that commitment followed by
+injection of only an opaque authenticated reservation capability/ref and the reservation's
+preallocated identities through the bounded admission input; the exact
+`allow_capability_narrowing` validation exception gated by a distinct opaque attestation that only
+authenticated nonempty `RestrictedWorldFs` E1 narrowing can obtain, never `UnchangedParent` or an
+empty patch; use of the
+unchanged B3.2a plan/fingerprint/schema; a stable
+source-field/registration admission link that survives mutable B3.2a revisions; retained
+reservation ref and exact full-request commitment in the committed index and final record;
+post-admission E2 CAS publication;
+identical retry joins; changed-request/material pre-admission conflicts; and restart at every
+reservation/admission/publication boundary. An unreserved production B3.2a admission is unsupported
+after activation. D1/E3 receipt/manifest
 composition is later-owner proof, not an E2 prerequisite.
 
 <!-- exact-extracted-body:start -->

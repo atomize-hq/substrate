@@ -306,7 +306,7 @@
 | `d3-codex-uaa-end-to-end-closure` | [`slices/d3-codex-uaa-end-to-end-closure.md`](../slices/d3-codex-uaa-end-to-end-closure.md) | canonical slice row record |
 | `dispatch-and-episode-transport-family` | [`seams/dispatch-and-episode-transport.md`](../seams/dispatch-and-episode-transport.md) | canonical current seam-family record |
 | `e1-restricted-world-fs-narrowing` | [`slices/e1-restricted-world-fs-narrowing.md`](../slices/e1-restricted-world-fs-narrowing.md) | terminally complete slice and exact closure record |
-| `e2-policy-commitments-on-work-and-workers` | [`slices/e2-policy-commitments-on-work-and-workers.md`](../slices/e2-policy-commitments-on-work-and-workers.md) | corrected E2 authority record; eligible for fresh admission, undispatched |
+| `e2-policy-commitments-on-work-and-workers` | [`slices/e2-policy-commitments-on-work-and-workers.md`](../slices/e2-policy-commitments-on-work-and-workers.md) | corrected E2 authority record; eligible only for another fresh admission, undispatched |
 | `e3-agent-config-projection-and-gateway-adoption` | [`slices/e3-agent-config-projection-and-gateway-adoption.md`](../slices/e3-agent-config-projection-and-gateway-adoption.md) | canonical slice row record |
 | `e4-host-visible-write-sync-contract` | [`slices/e4-host-visible-write-sync-contract.md`](../slices/e4-host-visible-write-sync-contract.md) | canonical slice row record |
 | `host-session-authority-family` | [`seams/host-session-authority.md`](../seams/host-session-authority.md) | canonical current seam-family record |
@@ -382,7 +382,7 @@
 | `d2-world-command-execution-broker` | [`slices/d2-world-command-execution-broker.md`](../slices/d2-world-command-execution-broker.md) | canonical slice row record |
 | `d3-codex-uaa-end-to-end-closure` | [`slices/d3-codex-uaa-end-to-end-closure.md`](../slices/d3-codex-uaa-end-to-end-closure.md) | canonical slice row record |
 | `e1-restricted-world-fs-narrowing` | [`slices/e1-restricted-world-fs-narrowing.md`](../slices/e1-restricted-world-fs-narrowing.md) | terminally complete slice and exact closure record |
-| `e2-policy-commitments-on-work-and-workers` | [`slices/e2-policy-commitments-on-work-and-workers.md`](../slices/e2-policy-commitments-on-work-and-workers.md) | corrected E2 authority record; eligible for fresh admission, undispatched |
+| `e2-policy-commitments-on-work-and-workers` | [`slices/e2-policy-commitments-on-work-and-workers.md`](../slices/e2-policy-commitments-on-work-and-workers.md) | corrected E2 authority record; eligible only for another fresh admission, undispatched |
 | `e3-agent-config-projection-and-gateway-adoption` | [`slices/e3-agent-config-projection-and-gateway-adoption.md`](../slices/e3-agent-config-projection-and-gateway-adoption.md) | canonical slice row record |
 | `e4-host-visible-write-sync-contract` | [`slices/e4-host-visible-write-sync-contract.md`](../slices/e4-host-visible-write-sync-contract.md) | canonical slice row record |
 | `shared-slice-map` | [`slices/README.md`](../slices/README.md) | canonical shared slice-map record |

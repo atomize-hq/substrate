@@ -64,7 +64,7 @@ is also terminally complete at exact closure commit
 `18f719898ce2a48f65e95b3b23f3b2cfd685c4af` over implementation commit
 `6194788d45267d91b4428a42e24c02dfcaae3c1e`. The dependency spine therefore names
 [E2](e2-policy-commitments-on-work-and-workers.md#current-e2-authority-correction-2026-09-01-controlling)
-as the canonical successor, eligible only for fresh admission and explicit dispatch.
+as the canonical successor, eligible only for another fresh admission and explicit dispatch.
 
 This graph is acyclic. `B1-3a/B1-3b receipt core` is a review state, not a claim that B1 is
 production-complete: it supplies the exact proposal, acknowledgement, activated-store acceptance

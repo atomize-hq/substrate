@@ -8,16 +8,26 @@
 
 The E2 completion unit is the independently valid
 [`DispatchPolicyCommitmentV1`](../contracts/dispatch-policy-commitment-v1.md), not a final receipt
-or retained manifest. E2 persists it and atomically links it to exact B1/B2.1 truth before accepted
-work is reported, or to exact B3.2a admission before fresh-Spawn success is reported. Fork instead
-uses the exact E2-owned fork-dispatch link before child-launch success and creates no B3.2a
-authority. B2.2/B3.2 later consume the E2 ref when constructing receipts. D1/E3 later compose their
-owned identities when the full retained manifest is produced.
+or retained manifest. E2 persists it and atomically links it to exact B1 plus source-owned B2.1
+`WorldWorkExecutionClaimV1` truth before accepted work is reported. For fresh Spawn, the complete
+E2 reservation object/ref is durable and `fsync`ed before B3.2a; B3.2a consumes its authenticated
+preallocated identities; then E2 retains that ref, links the stable B3.2a source fields and exact
+registration, and publishes the immutable commitment before success is reported. Mutable B3.2a
+state/revision is not used as the durable link. Fork instead uses the exact E2-owned fork-dispatch link before child-launch success and
+creates no B3.2a authority. B2.2/B3.2 later consume the E2 ref when constructing receipts. D1/E3
+later compose their owned identities when the full retained manifest is produced.
 
 Accordingly, extracted condition 8 is a downstream receipt/envelope composition wall, not an E2
-prerequisite, and condition 11 is satisfied by the receipt owner's exact consumption of the
-already-durable E2 ref. No E2-only record may masquerade as a final receipt or complete retained
-manifest.
+prerequisite. The `resumable` requirement in extracted condition 10 is historical and
+noncontrolling: B2.1's exact `WorldWorkExecutionClaimV1` has no such field, and resumability remains
+with its existing HSA/retained-runtime owner. Condition 11 is satisfied by the receipt owner's exact
+consumption of the already-durable E2 ref and the exact source-owned B2.1 link. No E2-only record may
+masquerade as a final receipt or complete retained manifest.
+
+The snapshot bytes in conditions 6–7 are exactly E1's
+`serde_json::to_vec(PolicySnapshotV3)` bytes, and the hash is the existing E1/B1 SHA-256 over that
+same sequence. E2 record/index/link hashes may use their own domain-separated deterministic
+preimages, but no recursively key-sorted replacement is a policy snapshot hash.
 
 <!-- exact-extracted-body:start -->
 ## 12. Final-receipt immutable `PolicySnapshotV3` acceptance rules

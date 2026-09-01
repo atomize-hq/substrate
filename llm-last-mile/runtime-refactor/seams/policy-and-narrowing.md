@@ -21,7 +21,18 @@ closed at `18f719898ce2a48f65e95b3b23f3b2cfd685c4af` over implementation
 immutable [`DispatchPolicyCommitmentV1`](../contracts/dispatch-policy-commitment-v1.md), not
 receipt/full-manifest construction. EffectivePolicyResolver composes; the bounded
 DispatchPolicyCommitmentRegistry persists and links; later receipt/manifest owners consume the
-exact ref.
+exact ref. For retained Continue/Fork, the resolver consumes independently authenticated current
+parent and immutable worker/source-worker cap; launch-policy equality with current parent is not a
+prerequisite. Parent narrowing may further restrict future work and broadening cannot widen the
+cap.
+
+E2 policy-snapshot bytes are exactly the landed E1
+`serde_json::to_vec(PolicySnapshotV3)` bytes, and E2 uses the exact E1/B1 SHA-256 over that sequence.
+It decodes and equality-checks the supplied bytes against the expected E1 snapshot and requires
+reserialization to be byte-identical. E2 record/index/link hashes remain separately
+domain-separated deterministic preimages; their recursive key sorting does not redefine the policy
+snapshot hash. This correction changes no `PolicySnapshotV3`, E1 serialization, schema 3, B1 stored
+hash, broker composition, or enforcement behavior.
 
 ## SteeringPolicyEngine
 

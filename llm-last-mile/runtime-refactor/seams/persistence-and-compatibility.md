@@ -1,8 +1,8 @@
 **Kind:** seam family
 **Stable ID:** `persistence-and-compatibility-family`
-**Canonical for:** persistence and compatibility projection seam extraction
+**Canonical for:** persistence and compatibility projection seam extraction plus the bounded future E2 retained-policy resolver exception
 **Status:** canonical current seam-family record
-**Authority scope:** exact extracted family-local source bodies plus the current A3 closure-status overlay only; no implementation or successor authority
+**Authority scope:** exact extracted family-local source bodies plus the current A3 closure-status overlay and documentation-only E2 resolver fence; no implementation authority
 **Source span:** D8 persistence and compatibility family extraction from `02-seam-crosswalk.md`
 **Supersedes:** canonical ownership of the extracted `StateStore` and `CompatibilityReadModel` rows
 **Superseded by:** none
@@ -26,6 +26,24 @@ or public interface changed.
 This qualification promotes the A3 read-model boundary only. It does not move semantic authority
 back into StateStore, promote unrelated StateStore surfaces or InboxProjection, close the full
 `RG-BASE-03` continuity witness, or admit E2 or C2.
+
+## Bounded future E2 retained-policy resolver exception (controlling)
+
+Future E2 may change only the comparisons in
+`resolve_canonical_retained_world_dispatch_target` of the admission and resolved launch-policy
+identity with current parent, and the comparison in `RetainedWorkerRuntime::resolve_retained_target`
+of `current.authority.current_policy_ref` with the retained worker's launch policy, plus their result
+carriers, directly necessary E2 callers, and focused tests. The resolver continues to authenticate retained
+identity, session/participant/backend/world binding, B3.2a admission, registration, descriptor,
+resume handle, retained-worker object graph, ancestry, lifecycle, and routability. It returns the
+authenticated immutable worker-cap identity separately from the independently resolved current
+parent so E2 can intersect both.
+
+This exception does not authorize any other StateStore or RetainedWorkerRuntime persistence,
+schema, compatibility, routing, registration, reconciliation, or lifecycle change. A missing or
+unverifiable immutable cap fails as typed `UnsupportedLegacyState`; StateStore does not reconstruct
+it from current parent policy. E2 remains undispatched and this fence exercises no implementation
+authority.
 
 ## StateStore
 
