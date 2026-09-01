@@ -32,6 +32,455 @@ pub enum PlatformPrincipalV1 {
     Windows { account: String, sid: String },
 }
 
+/// Bounded identity for the concrete world targeted by one narrowing request.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorldBindingRefV1 {
+    pub world_id: String,
+    pub world_generation: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthorityObjectKindV1 {
+    AgentDescriptor,
+    RetainedWorker,
+    ResumeHandle,
+    Policy,
+    HostAttachContract,
+    TransitionTransportPayload,
+    TransitionInput,
+    LeaseToken,
+    ApplicationResult,
+    InputAcceptance,
+    StartupOwnershipResult,
+    ObligationSnapshot,
+    PostTurnProtocolEvent,
+    PostTurnCompletion,
+    TerminalHandoff,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AuthorityObjectRefV1 {
+    pub ref_id: String,
+    pub object_kind: AuthorityObjectKindV1,
+    pub schema_version: u32,
+    pub commitment: OpaqueAuthorityCommitmentV1,
+}
+
+pub type PolicyRefV1 = AuthorityObjectRefV1;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AuthorityObjectRefV1Def {
+    ref_id: String,
+    object_kind: AuthorityObjectKindV1,
+    schema_version: u32,
+    commitment: OpaqueAuthorityCommitmentV1,
+}
+
+impl<'de> Deserialize<'de> for AuthorityObjectRefV1 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = AuthorityObjectRefV1Def::deserialize(deserializer)?;
+        let reference = Self {
+            ref_id: value.ref_id,
+            object_kind: value.object_kind,
+            schema_version: value.schema_version,
+            commitment: value.commitment,
+        };
+        reference.validate().map_err(serde::de::Error::custom)?;
+        Ok(reference)
+    }
+}
+
+impl AuthorityObjectRefV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        let suffix = self.ref_id.strip_prefix("ao_").ok_or_else(|| {
+            "parent_policy_ref.ref_id must be 'ao_' plus 32 lowercase hexadecimal characters"
+                .to_string()
+        })?;
+        if suffix.len() != 32
+            || !suffix
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(
+                "parent_policy_ref.ref_id must be 'ao_' plus 32 lowercase hexadecimal characters"
+                    .to_string(),
+            );
+        }
+        if self.object_kind != AuthorityObjectKindV1::Policy {
+            return Err("parent_policy_ref.object_kind must be policy".to_string());
+        }
+        if self.schema_version == 0 {
+            return Err("parent_policy_ref.schema_version must be positive".to_string());
+        }
+        self.commitment.validate()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum DispatchCapabilitySubjectV1 {
+    EphemeralTask,
+    RetainedWorkerSpawn,
+    RetainedWorkerTurn { retained_participant_id: String },
+    RetainedWorkerFork { source_participant_id: String },
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RestrictedPolicyPatchV1 {
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_non_null"
+    )]
+    pub world_fs: Option<RestrictedWorldFsPatchV1>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RestrictedWorldFsPatchV1 {
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_non_null"
+    )]
+    pub host_visible: Option<bool>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_non_null"
+    )]
+    pub fail_closed: Option<RestrictedWorldFsFailClosedPatchV1>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_non_null"
+    )]
+    pub deny_enforcement: Option<WorldFsDenyEnforcementV3>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_non_null"
+    )]
+    pub caged_required: Option<bool>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_non_null"
+    )]
+    pub discover: Option<RestrictedWorldFsDimensionPatchV1>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_non_null"
+    )]
+    pub read: Option<RestrictedWorldFsDimensionPatchV1>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_non_null"
+    )]
+    pub write: Option<RestrictedWorldFsWritePatchV1>,
+}
+
+impl RestrictedWorldFsPatchV1 {
+    pub fn is_empty(&self) -> bool {
+        self == &Self::default()
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RestrictedWorldFsFailClosedPatchV1 {
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_non_null"
+    )]
+    pub routing: Option<bool>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RestrictedWorldFsDimensionPatchV1 {
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_non_null"
+    )]
+    pub allow_list: Option<Vec<String>>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_non_null"
+    )]
+    pub deny_list: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RestrictedWorldFsWritePatchV1 {
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_non_null"
+    )]
+    pub enabled: Option<bool>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_non_null"
+    )]
+    pub allow_list: Option<Vec<String>>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_non_null"
+    )]
+    pub deny_list: Option<Vec<String>>,
+}
+
+fn deserialize_optional_non_null<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DispatchPolicyNarrowingPatchV1 {
+    pub schema_version: u32,
+    pub request_id: String,
+    pub orchestration_session_id: String,
+    pub caller_participant_id: String,
+    pub target_backend_id: String,
+    pub target_world: WorldBindingRefV1,
+    pub applies_to: DispatchCapabilitySubjectV1,
+    pub parent_policy_ref: PolicyRefV1,
+    pub parent_policy_revision: String,
+    pub restricted_policy_patch: RestrictedPolicyPatchV1,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DispatchPolicyNarrowingPatchV1Def {
+    schema_version: u32,
+    request_id: String,
+    orchestration_session_id: String,
+    caller_participant_id: String,
+    target_backend_id: String,
+    target_world: WorldBindingRefV1,
+    applies_to: DispatchCapabilitySubjectV1,
+    parent_policy_ref: PolicyRefV1,
+    parent_policy_revision: String,
+    restricted_policy_patch: RestrictedPolicyPatchV1,
+    reason: Option<String>,
+}
+
+impl<'de> Deserialize<'de> for DispatchPolicyNarrowingPatchV1 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = DispatchPolicyNarrowingPatchV1Def::deserialize(deserializer)?;
+        let carrier = Self {
+            schema_version: value.schema_version,
+            request_id: value.request_id,
+            orchestration_session_id: value.orchestration_session_id,
+            caller_participant_id: value.caller_participant_id,
+            target_backend_id: value.target_backend_id,
+            target_world: value.target_world,
+            applies_to: value.applies_to,
+            parent_policy_ref: value.parent_policy_ref,
+            parent_policy_revision: value.parent_policy_revision,
+            restricted_policy_patch: value.restricted_policy_patch,
+            reason: value.reason,
+        };
+        carrier.validate().map_err(serde::de::Error::custom)?;
+        Ok(carrier)
+    }
+}
+
+impl DispatchPolicyNarrowingPatchV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 1 {
+            return Err(format!(
+                "unsupported dispatch narrowing schema_version {} (expected 1)",
+                self.schema_version
+            ));
+        }
+        for (name, value) in [
+            ("request_id", self.request_id.as_str()),
+            (
+                "orchestration_session_id",
+                self.orchestration_session_id.as_str(),
+            ),
+            ("caller_participant_id", self.caller_participant_id.as_str()),
+            ("target_backend_id", self.target_backend_id.as_str()),
+            ("target_world.world_id", self.target_world.world_id.as_str()),
+            (
+                "parent_policy_revision",
+                self.parent_policy_revision.as_str(),
+            ),
+        ] {
+            validate_narrowing_identity(name, value)?;
+        }
+        if self.target_world.world_generation == 0 {
+            return Err("target_world.world_generation must be positive".to_string());
+        }
+        match &self.applies_to {
+            DispatchCapabilitySubjectV1::RetainedWorkerTurn {
+                retained_participant_id,
+            } => validate_narrowing_identity(
+                "applies_to.retained_participant_id",
+                retained_participant_id,
+            )?,
+            DispatchCapabilitySubjectV1::RetainedWorkerFork {
+                source_participant_id,
+            } => validate_narrowing_identity(
+                "applies_to.source_participant_id",
+                source_participant_id,
+            )?,
+            DispatchCapabilitySubjectV1::EphemeralTask
+            | DispatchCapabilitySubjectV1::RetainedWorkerSpawn => {}
+        }
+        self.parent_policy_ref.validate()?;
+        if let Some(reason) = &self.reason {
+            validate_narrowing_identity("reason", reason)?;
+        }
+        Ok(())
+    }
+}
+
+fn validate_narrowing_identity(name: &str, value: &str) -> Result<(), String> {
+    if value.is_empty()
+        || value.trim() != value
+        || value.contains('\0')
+        || value.chars().any(char::is_control)
+    {
+        return Err(format!("{name} must be a nonempty canonical identity"));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod e1_dispatch_policy_narrowing_schema_tests {
+    use super::*;
+    use serde_json::{json, Value};
+
+    fn valid_carrier_json() -> Value {
+        json!({
+            "schema_version": 1,
+            "request_id": "req_e1_0001",
+            "orchestration_session_id": "session_e1_0001",
+            "caller_participant_id": "participant_e1_caller",
+            "target_backend_id": "codex",
+            "target_world": {
+                "world_id": "world_e1_0001",
+                "world_generation": 7
+            },
+            "applies_to": { "kind": "ephemeral_task" },
+            "parent_policy_ref": {
+                "ref_id": "ao_0123456789abcdef0123456789abcdef",
+                "object_kind": "policy",
+                "schema_version": 1,
+                "commitment": {
+                    "kind": "CanonicalSha256",
+                    "value": {
+                        "digest_hex": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                    }
+                }
+            },
+            "parent_policy_revision": "policy-revision-e1-0001",
+            "restricted_policy_patch": {
+                "world_fs": {
+                    "host_visible": false,
+                    "read": { "allow_list": ["src/lib.rs"] }
+                }
+            },
+            "reason": "restrict delegated read authority"
+        })
+    }
+
+    #[test]
+    fn dispatch_narrowing_v1_decodes_only_the_strict_world_fs_schema() {
+        let decoded: DispatchPolicyNarrowingPatchV1 =
+            serde_json::from_value(valid_carrier_json()).expect("strict carrier");
+        decoded.validate().expect("valid carrier");
+
+        for mutation in [
+            ("schema_version", json!(2)),
+            ("request_id", json!(" request")),
+            ("parent_policy_revision", json!("")),
+        ] {
+            let mut value = valid_carrier_json();
+            value[mutation.0] = mutation.1;
+            assert!(serde_json::from_value::<DispatchPolicyNarrowingPatchV1>(value).is_err());
+        }
+
+        let mut unknown = valid_carrier_json();
+        unknown["unexpected"] = json!(true);
+        assert!(serde_json::from_value::<DispatchPolicyNarrowingPatchV1>(unknown).is_err());
+
+        let mut non_world_fs = valid_carrier_json();
+        non_world_fs["restricted_policy_patch"]["net_allowed"] = json!(["example.com"]);
+        assert!(serde_json::from_value::<DispatchPolicyNarrowingPatchV1>(non_world_fs).is_err());
+
+        let mut nested_unknown = valid_carrier_json();
+        nested_unknown["restricted_policy_patch"]["world_fs"]["read"]["unknown"] = json!(true);
+        assert!(serde_json::from_value::<DispatchPolicyNarrowingPatchV1>(nested_unknown).is_err());
+
+        let mut unsupported_glob_material = valid_carrier_json();
+        unsupported_glob_material["restricted_policy_patch"]["world_fs"]["read"]["deny_list"] =
+            json!(["src/[ab].rs"]);
+        let decoded: DispatchPolicyNarrowingPatchV1 =
+            serde_json::from_value(unsupported_glob_material).expect("transport is not authority");
+        assert_eq!(decoded.schema_version, 1);
+    }
+
+    #[test]
+    fn dispatch_narrowing_v1_rejects_missing_substituted_or_ambiguous_identity() {
+        for key in [
+            "request_id",
+            "orchestration_session_id",
+            "caller_participant_id",
+            "target_backend_id",
+            "target_world",
+            "applies_to",
+            "parent_policy_ref",
+            "parent_policy_revision",
+            "restricted_policy_patch",
+        ] {
+            let mut value = valid_carrier_json();
+            value.as_object_mut().unwrap().remove(key);
+            assert!(serde_json::from_value::<DispatchPolicyNarrowingPatchV1>(value).is_err());
+        }
+
+        let mut wrong_kind = valid_carrier_json();
+        wrong_kind["parent_policy_ref"]["object_kind"] = json!("resume_handle");
+        assert!(serde_json::from_value::<DispatchPolicyNarrowingPatchV1>(wrong_kind).is_err());
+
+        let mut null_patch_field = valid_carrier_json();
+        null_patch_field["restricted_policy_patch"]["world_fs"]["host_visible"] = Value::Null;
+        assert!(
+            serde_json::from_value::<DispatchPolicyNarrowingPatchV1>(null_patch_field).is_err()
+        );
+
+        let mut zero_generation = valid_carrier_json();
+        zero_generation["target_world"]["world_generation"] = json!(0);
+        assert!(serde_json::from_value::<DispatchPolicyNarrowingPatchV1>(zero_generation).is_err());
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct InstallBootstrapContextV1 {

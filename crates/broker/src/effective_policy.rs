@@ -417,6 +417,223 @@ pub struct WorldFsWritePatch {
     pub deny_list: Option<Vec<String>>,
 }
 
+/// Broker-owned, world-fs-only narrowing material used by dispatch and inventory.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RestrictedWorldFsPatchV1 {
+    pub host_visible: Option<bool>,
+    pub fail_closed_routing: Option<bool>,
+    pub deny_enforcement: Option<WorldFsDenyEnforcement>,
+    pub caged_required: Option<bool>,
+    pub discover: Option<RestrictedWorldFsDimensionPatchV1>,
+    pub read: Option<RestrictedWorldFsDimensionPatchV1>,
+    pub write: Option<RestrictedWorldFsWritePatchV1>,
+}
+
+impl RestrictedWorldFsPatchV1 {
+    pub fn is_empty(&self) -> bool {
+        self == &Self::default()
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RestrictedWorldFsDimensionPatchV1 {
+    pub allow_list: Option<Vec<String>>,
+    pub deny_list: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RestrictedWorldFsWritePatchV1 {
+    pub enabled: Option<bool>,
+    pub allow_list: Option<Vec<String>>,
+    pub deny_list: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorldBindingRefV1 {
+    pub world_id: String,
+    pub world_generation: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DispatchCapabilitySubjectV1 {
+    EphemeralTask,
+    RetainedWorkerSpawn,
+    RetainedWorkerTurn { retained_participant_id: String },
+    RetainedWorkerFork { source_participant_id: String },
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct PolicyReferenceBindingV1 {
+    pub ref_id: String,
+    pub object_kind: String,
+    pub schema_version: u32,
+    /// Exact canonical serialization of the opaque commitment.
+    pub commitment: String,
+}
+
+impl std::fmt::Debug for PolicyReferenceBindingV1 {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("PolicyReferenceBindingV1")
+            .field("ref_id", &self.ref_id)
+            .field("object_kind", &self.object_kind)
+            .field("schema_version", &self.schema_version)
+            .field("commitment", &"[REDACTED]")
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DispatchPolicyNarrowingBindingsV1 {
+    pub schema_version: u32,
+    pub request_id: String,
+    pub orchestration_session_id: String,
+    pub caller_participant_id: String,
+    pub target_backend_id: String,
+    pub target_world: WorldBindingRefV1,
+    pub applies_to: DispatchCapabilitySubjectV1,
+    pub parent_policy_ref: PolicyReferenceBindingV1,
+    pub parent_policy_revision: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DispatchWorldFsNarrowingRequestV1 {
+    pub bindings: DispatchPolicyNarrowingBindingsV1,
+    pub world_fs: Option<RestrictedWorldFsPatchV1>,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthenticatedDispatchPolicyNarrowingContextV1 {
+    pub bindings: DispatchPolicyNarrowingBindingsV1,
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolvedDispatchWorldFsNarrowingV1 {
+    pub policy: Policy,
+    pub bindings: DispatchPolicyNarrowingBindingsV1,
+    pub reason: Option<String>,
+}
+
+/// Canonical broker authority for additive effective-policy resolution.
+pub struct EffectivePolicyResolver;
+
+impl EffectivePolicyResolver {
+    pub fn resolve_dispatch_world_fs_narrowing(
+        parent: &Policy,
+        request: &DispatchWorldFsNarrowingRequestV1,
+        authenticated: &AuthenticatedDispatchPolicyNarrowingContextV1,
+        world_root: &Path,
+    ) -> Result<ResolvedDispatchWorldFsNarrowingV1> {
+        validate_dispatch_narrowing_bindings(&request.bindings)?;
+        validate_dispatch_narrowing_bindings(&authenticated.bindings)?;
+        if request.bindings != authenticated.bindings {
+            return Err(anyhow!(
+                "dispatch narrowing identity does not match authenticated request context"
+            ));
+        }
+        if request.reason.as_ref().is_some_and(|reason| {
+            reason.is_empty() || reason.trim() != reason || reason.contains('\0')
+        }) {
+            return Err(anyhow!("dispatch narrowing reason is not canonical"));
+        }
+
+        let policy = match request.world_fs.as_ref() {
+            None => parent.clone(),
+            Some(patch) if patch.is_empty() => parent.clone(),
+            Some(patch) => {
+                if !parent.agents_world_dispatch_allow_capability_narrowing {
+                    return Err(anyhow!(
+                        "agents.world_dispatch.allow_capability_narrowing is disabled"
+                    ));
+                }
+                resolve_restricted_world_fs_narrowing(parent, patch, world_root)?
+            }
+        };
+
+        Ok(ResolvedDispatchWorldFsNarrowingV1 {
+            policy,
+            bindings: request.bindings.clone(),
+            reason: request.reason.clone(),
+        })
+    }
+}
+
+fn validate_dispatch_narrowing_bindings(
+    bindings: &DispatchPolicyNarrowingBindingsV1,
+) -> Result<()> {
+    if bindings.schema_version != 1 {
+        return Err(anyhow!(
+            "unsupported dispatch narrowing schema_version {}",
+            bindings.schema_version
+        ));
+    }
+    for (name, value) in [
+        ("request_id", bindings.request_id.as_str()),
+        (
+            "orchestration_session_id",
+            bindings.orchestration_session_id.as_str(),
+        ),
+        (
+            "caller_participant_id",
+            bindings.caller_participant_id.as_str(),
+        ),
+        ("target_backend_id", bindings.target_backend_id.as_str()),
+        (
+            "target_world.world_id",
+            bindings.target_world.world_id.as_str(),
+        ),
+        (
+            "parent_policy_ref.ref_id",
+            bindings.parent_policy_ref.ref_id.as_str(),
+        ),
+        (
+            "parent_policy_ref.commitment",
+            bindings.parent_policy_ref.commitment.as_str(),
+        ),
+        (
+            "parent_policy_revision",
+            bindings.parent_policy_revision.as_str(),
+        ),
+    ] {
+        if value.is_empty()
+            || value.trim() != value
+            || value.contains('\0')
+            || value.chars().any(char::is_control)
+        {
+            return Err(anyhow!("{name} is not a canonical identity"));
+        }
+    }
+    if bindings.target_world.world_generation == 0 {
+        return Err(anyhow!("target_world.world_generation must be positive"));
+    }
+    if bindings.parent_policy_ref.object_kind != "policy"
+        || bindings.parent_policy_ref.schema_version == 0
+    {
+        return Err(anyhow!(
+            "parent_policy_ref is not an exact policy reference"
+        ));
+    }
+    match &bindings.applies_to {
+        DispatchCapabilitySubjectV1::RetainedWorkerTurn {
+            retained_participant_id,
+        } if retained_participant_id.is_empty()
+            || retained_participant_id.trim() != retained_participant_id =>
+        {
+            return Err(anyhow!("retained participant identity is not canonical"));
+        }
+        DispatchCapabilitySubjectV1::RetainedWorkerFork {
+            source_participant_id,
+        } if source_participant_id.is_empty()
+            || source_participant_id.trim() != source_participant_id =>
+        {
+            return Err(anyhow!("source participant identity is not canonical"));
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
 impl WorldFsWritePatch {
     fn is_empty(&self) -> bool {
         self.enabled.is_none() && self.allow_list.is_none() && self.deny_list.is_none()
@@ -2446,6 +2663,440 @@ fn apply_world_fs_dimension_patch(
     }
 }
 
+/// Resolve `parent ∧ patch` with the same broker-owned containment rules used by dispatch and
+/// inventory. The parent is borrowed and never mutated.
+pub fn resolve_restricted_world_fs_narrowing(
+    parent: &Policy,
+    patch: &RestrictedWorldFsPatchV1,
+    world_root: &Path,
+) -> Result<Policy> {
+    let canonical_root = fs::canonicalize(world_root)
+        .with_context(|| format!("canonicalize world root {}", world_root.display()))?;
+    if !canonical_root.is_dir() {
+        return Err(anyhow!(
+            "world root {} is not a directory",
+            world_root.display()
+        ));
+    }
+
+    let mut narrowed = parent.clone();
+    if let Some(requested) = patch.host_visible {
+        if requested && !parent.world_fs_host_visible {
+            return Err(anyhow!("world_fs.host_visible would broaden authority"));
+        }
+        narrowed.world_fs_host_visible = requested;
+    }
+    if let Some(requested) = patch.fail_closed_routing {
+        if !requested && parent.world_fs_fail_closed_routing {
+            return Err(anyhow!(
+                "world_fs.fail_closed.routing would broaden authority"
+            ));
+        }
+        narrowed.world_fs_fail_closed_routing = requested;
+    }
+    if let Some(requested) = patch.caged_required {
+        if !requested && parent.world_fs_caged_required {
+            return Err(anyhow!("world_fs.caged_required would broaden authority"));
+        }
+        narrowed.world_fs_caged_required = requested;
+    }
+    if let Some(requested) = patch.deny_enforcement {
+        if deny_enforcement_rank(Some(requested))
+            < deny_enforcement_rank(parent.world_fs_deny_enforcement)
+        {
+            return Err(anyhow!("world_fs.deny_enforcement would weaken denial"));
+        }
+        narrowed.world_fs_deny_enforcement = Some(requested);
+    }
+
+    if patch
+        .write
+        .as_ref()
+        .is_some_and(|write| write.enabled == Some(true))
+        && !parent.world_fs_write_enabled
+    {
+        return Err(anyhow!("world_fs.write.enabled would broaden authority"));
+    }
+
+    let has_path_material =
+        patch.discover.as_ref().is_some_and(|dimension| {
+            dimension.allow_list.is_some() || dimension.deny_list.is_some()
+        }) || patch.read.as_ref().is_some_and(|dimension| {
+            dimension.allow_list.is_some() || dimension.deny_list.is_some()
+        }) || patch
+            .write
+            .as_ref()
+            .is_some_and(|write| write.allow_list.is_some() || write.deny_list.is_some());
+    if narrowed.world_fs_host_visible && has_path_material {
+        return Err(anyhow!(
+            "world_fs containment is unprovable while host_visible remains true"
+        ));
+    }
+
+    if !narrowed.world_fs_host_visible {
+        let parent_read = effective_parent_dimension(parent, parent.world_fs_read.as_ref());
+        let parent_discover = effective_parent_dimension(
+            parent,
+            parent
+                .world_fs_discover
+                .as_ref()
+                .or(parent.world_fs_read.as_ref()),
+        );
+        let parent_write = effective_parent_dimension(parent, parent.world_fs_write.as_ref());
+
+        narrowed.world_fs_read = Some(resolve_dimension_narrowing(
+            "world_fs.read",
+            &parent_read,
+            patch.read.as_ref(),
+            &canonical_root,
+        )?);
+        narrowed.world_fs_discover = Some(resolve_dimension_narrowing(
+            "world_fs.discover",
+            &parent_discover,
+            patch.discover.as_ref(),
+            &canonical_root,
+        )?);
+
+        let requested_write_enabled = patch
+            .write
+            .as_ref()
+            .and_then(|write| write.enabled)
+            .unwrap_or(parent.world_fs_write_enabled);
+        if requested_write_enabled && !parent.world_fs_write_enabled {
+            return Err(anyhow!("world_fs.write.enabled would broaden authority"));
+        }
+        narrowed.world_fs_write_enabled = requested_write_enabled;
+        if requested_write_enabled {
+            narrowed.world_fs_write = Some(resolve_write_narrowing(
+                &parent_write,
+                patch.write.as_ref(),
+                &canonical_root,
+            )?);
+        } else {
+            if patch
+                .write
+                .as_ref()
+                .is_some_and(|write| write.allow_list.is_some() || write.deny_list.is_some())
+            {
+                return Err(anyhow!(
+                    "world_fs.write lists are ambiguous when write.enabled=false"
+                ));
+            }
+            narrowed.world_fs_write = None;
+        }
+    } else if let Some(write) = &patch.write {
+        if write.enabled == Some(false) {
+            narrowed.world_fs_write_enabled = false;
+        }
+    }
+
+    validate_and_finalize_effective_policy(&mut narrowed)?;
+    canonicalize_policy_world_fs_lists(&mut narrowed);
+    Ok(narrowed)
+}
+
+fn effective_parent_dimension(
+    parent: &Policy,
+    dimension: Option<&WorldFsDimensionPolicy>,
+) -> WorldFsDimensionPolicy {
+    if parent.world_fs_host_visible {
+        WorldFsDimensionPolicy {
+            allow_list: vec![".".to_string()],
+            deny_list: Vec::new(),
+        }
+    } else {
+        dimension.cloned().unwrap_or(WorldFsDimensionPolicy {
+            allow_list: vec![".".to_string()],
+            deny_list: Vec::new(),
+        })
+    }
+}
+
+fn resolve_write_narrowing(
+    parent: &WorldFsDimensionPolicy,
+    patch: Option<&RestrictedWorldFsWritePatchV1>,
+    canonical_root: &Path,
+) -> Result<WorldFsDimensionPolicy> {
+    let dimension_patch = patch.map(|patch| RestrictedWorldFsDimensionPatchV1 {
+        allow_list: patch.allow_list.clone(),
+        deny_list: patch.deny_list.clone(),
+    });
+    resolve_dimension_narrowing(
+        "world_fs.write",
+        parent,
+        dimension_patch.as_ref(),
+        canonical_root,
+    )
+}
+
+fn resolve_dimension_narrowing(
+    key: &str,
+    parent: &WorldFsDimensionPolicy,
+    patch: Option<&RestrictedWorldFsDimensionPatchV1>,
+    canonical_root: &Path,
+) -> Result<WorldFsDimensionPolicy> {
+    let parent_allow = normalize_and_prove_allow_list(
+        &format!("{key}.parent.allow_list"),
+        &parent.allow_list,
+        canonical_root,
+    )?;
+    let parent_deny = normalize_and_prove_deny_list(
+        &format!("{key}.parent.deny_list"),
+        &parent.deny_list,
+        canonical_root,
+    )?;
+    let Some(patch) = patch else {
+        return Ok(WorldFsDimensionPolicy {
+            allow_list: parent_allow,
+            deny_list: parent_deny,
+        });
+    };
+
+    let allow_list = if let Some(requested) = &patch.allow_list {
+        if requested.is_empty() {
+            return Err(anyhow!("{key}.allow_list must be non-empty"));
+        }
+        let requested = normalize_and_prove_allow_list(
+            &format!("{key}.allow_list"),
+            requested,
+            canonical_root,
+        )?;
+        for child in &requested {
+            if !parent_allow.iter().any(|parent| {
+                path_authority_contains(canonical_root, parent, child).unwrap_or(false)
+            }) {
+                return Err(anyhow!(
+                    "{key}.allow_list entry '{child}' broadens beyond parent authority"
+                ));
+            }
+        }
+        requested
+    } else {
+        parent_allow
+    };
+
+    let deny_list = if let Some(requested) = &patch.deny_list {
+        let requested =
+            normalize_and_prove_deny_list(&format!("{key}.deny_list"), requested, canonical_root)?;
+        if parent_deny.iter().any(|denial| !requested.contains(denial)) {
+            return Err(anyhow!("{key}.deny_list removes a parent denial"));
+        }
+        requested
+    } else {
+        parent_deny
+    };
+
+    Ok(WorldFsDimensionPolicy {
+        allow_list,
+        deny_list,
+    })
+}
+
+fn normalize_and_prove_allow_list(
+    key: &str,
+    values: &[String],
+    canonical_root: &Path,
+) -> Result<Vec<String>> {
+    let mut normalized = Vec::with_capacity(values.len());
+    for raw in values {
+        let value =
+            normalize_restricted_path(raw, false).map_err(|error| anyhow!("{key}: {error}"))?;
+        prove_relative_path(canonical_root, &value)?;
+        normalized.push(value);
+    }
+    normalized.sort();
+    normalized.dedup();
+    Ok(normalized)
+}
+
+fn normalize_and_prove_deny_list(
+    key: &str,
+    values: &[String],
+    canonical_root: &Path,
+) -> Result<Vec<String>> {
+    let mut normalized = Vec::with_capacity(values.len());
+    for raw in values {
+        let value =
+            normalize_restricted_path(raw, true).map_err(|error| anyhow!("{key}: {error}"))?;
+        let static_prefix = value
+            .split('/')
+            .take_while(|segment| !segment.contains('*'))
+            .collect::<Vec<_>>()
+            .join("/");
+        prove_relative_path(
+            canonical_root,
+            if static_prefix.is_empty() {
+                "."
+            } else {
+                &static_prefix
+            },
+        )?;
+        normalized.push(value);
+    }
+    normalized.sort();
+    normalized.dedup();
+    Ok(normalized)
+}
+
+fn normalize_restricted_path(raw: &str, deny: bool) -> Result<String, String> {
+    if raw.is_empty() || raw.trim() != raw {
+        return Err(
+            "path must be nonempty and must not contain surrounding whitespace".to_string(),
+        );
+    }
+    if raw.contains('\0') {
+        return Err("path must not contain NUL".to_string());
+    }
+    if raw.starts_with('/')
+        || raw.starts_with('\\')
+        || raw.as_bytes().get(1) == Some(&b':')
+        || Path::new(raw).is_absolute()
+    {
+        return Err("absolute paths, including Windows absolute paths, are invalid".to_string());
+    }
+    if raw.contains('\\') {
+        return Err("backslash path separators are unsupported".to_string());
+    }
+
+    let mut segments = Vec::new();
+    for segment in raw.split('/') {
+        if segment.is_empty() || segment == "." {
+            continue;
+        }
+        if segment == ".." {
+            return Err("path traversal is invalid".to_string());
+        }
+        if segment.contains(['?', '[', ']']) || (!deny && segment.contains('*')) {
+            return Err("unsupported glob syntax".to_string());
+        }
+        segments.push(segment);
+    }
+    let normalized = if segments.is_empty() {
+        ".".to_string()
+    } else {
+        segments.join("/")
+    };
+    if deny {
+        validate_deny_wildcards(&normalized)?;
+    }
+    Ok(normalized)
+}
+
+#[derive(Debug)]
+struct ProvenRelativePath {
+    normalized: String,
+    resolved: PathBuf,
+    exists: bool,
+    is_file: bool,
+}
+
+fn prove_relative_path(canonical_root: &Path, normalized: &str) -> Result<ProvenRelativePath> {
+    let mut resolved = canonical_root.to_path_buf();
+    let mut exists = true;
+    let mut is_file = false;
+    if normalized != "." {
+        for segment in normalized.split('/') {
+            let next = resolved.join(segment);
+            if exists {
+                match fs::symlink_metadata(&next) {
+                    Ok(_) => {
+                        let canonical = fs::canonicalize(&next)
+                            .with_context(|| format!("resolve world_fs path {}", next.display()))?;
+                        if !canonical.starts_with(canonical_root) {
+                            return Err(anyhow!(
+                                "world_fs path '{}' escapes the world root through a symlink",
+                                normalized
+                            ));
+                        }
+                        let metadata = fs::metadata(&canonical).with_context(|| {
+                            format!("stat world_fs path {}", canonical.display())
+                        })?;
+                        resolved = canonical;
+                        is_file = metadata.is_file();
+                    }
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                        exists = false;
+                        is_file = false;
+                        resolved = next;
+                    }
+                    Err(error) => {
+                        return Err(error)
+                            .with_context(|| format!("inspect world_fs path {}", next.display()));
+                    }
+                }
+            } else {
+                resolved.push(segment);
+            }
+        }
+    }
+    if !resolved.starts_with(canonical_root) {
+        return Err(anyhow!(
+            "world_fs path '{normalized}' escapes the world root"
+        ));
+    }
+    Ok(ProvenRelativePath {
+        normalized: normalized.to_string(),
+        resolved,
+        exists,
+        is_file,
+    })
+}
+
+fn path_authority_contains(canonical_root: &Path, parent: &str, child: &str) -> Result<bool> {
+    let parent = prove_relative_path(canonical_root, parent)?;
+    let child = prove_relative_path(canonical_root, child)?;
+    if parent.normalized == "." {
+        return Ok(true);
+    }
+    if parent.exists && parent.is_file {
+        return Ok(child.exists
+            && child.is_file
+            && child.resolved == parent.resolved
+            && child.normalized == parent.normalized);
+    }
+    if parent.exists {
+        return Ok(child.resolved.starts_with(&parent.resolved));
+    }
+    let parent_components = parent.normalized.split('/').collect::<Vec<_>>();
+    let child_components = child.normalized.split('/').collect::<Vec<_>>();
+    Ok(child_components.starts_with(&parent_components))
+}
+
+fn deny_enforcement_rank(value: Option<WorldFsDenyEnforcement>) -> u8 {
+    match value {
+        Some(WorldFsDenyEnforcement::Strict) => 3,
+        Some(WorldFsDenyEnforcement::PreferStrict) => 2,
+        Some(WorldFsDenyEnforcement::Weak) => 1,
+        None => 0,
+    }
+}
+
+fn canonicalize_policy_world_fs_lists(policy: &mut Policy) {
+    for dimension in [
+        policy.world_fs_read.as_mut(),
+        policy.world_fs_discover.as_mut(),
+        policy.world_fs_write.as_mut(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        dimension.allow_list.sort();
+        dimension.allow_list.dedup();
+        dimension.deny_list.sort();
+        dimension.deny_list.dedup();
+    }
+    policy.fs_read = policy
+        .world_fs_read
+        .as_ref()
+        .map(|dimension| dimension.allow_list.clone())
+        .unwrap_or_default();
+    policy.fs_write = policy
+        .world_fs_write
+        .as_ref()
+        .map(|dimension| dimension.allow_list.clone())
+        .unwrap_or_default();
+}
+
 fn validate_and_finalize_effective_policy(policy: &mut Policy) -> Result<()> {
     // Derive legacy V2 fields from V3 intent keys.
     policy.world_fs_isolation = if policy.world_fs_host_visible {
@@ -2774,6 +3425,512 @@ fn hashmap_to_btree(map: &HashMap<String, String>) -> BTreeMap<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn restricted_parent(root: &Path) -> Policy {
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("src/lib.rs"), "lib").unwrap();
+        fs::write(root.join("src/sibling.rs"), "sibling").unwrap();
+        Policy {
+            agents_world_dispatch_allow_capability_narrowing: true,
+            world_fs_host_visible: false,
+            world_fs_fail_closed_routing: true,
+            world_fs_caged_required: false,
+            world_fs_write_enabled: true,
+            world_fs_deny_enforcement: Some(WorldFsDenyEnforcement::Weak),
+            world_fs_read: Some(WorldFsDimensionPolicy {
+                allow_list: vec!["src".to_string()],
+                deny_list: vec!["src/private/**".to_string()],
+            }),
+            world_fs_discover: Some(WorldFsDimensionPolicy {
+                allow_list: vec!["src".to_string()],
+                deny_list: vec!["src/private/**".to_string()],
+            }),
+            world_fs_write: Some(WorldFsDimensionPolicy {
+                allow_list: vec!["src".to_string()],
+                deny_list: vec!["src/private/**".to_string()],
+            }),
+            ..Default::default()
+        }
+    }
+
+    fn bindings() -> DispatchPolicyNarrowingBindingsV1 {
+        DispatchPolicyNarrowingBindingsV1 {
+            schema_version: 1,
+            request_id: "req_e1_0001".to_string(),
+            orchestration_session_id: "session_e1_0001".to_string(),
+            caller_participant_id: "participant_e1_caller".to_string(),
+            target_backend_id: "codex".to_string(),
+            target_world: WorldBindingRefV1 {
+                world_id: "world_e1_0001".to_string(),
+                world_generation: 7,
+            },
+            applies_to: DispatchCapabilitySubjectV1::EphemeralTask,
+            parent_policy_ref: PolicyReferenceBindingV1 {
+                ref_id: "ao_0123456789abcdef0123456789abcdef".to_string(),
+                object_kind: "policy".to_string(),
+                schema_version: 1,
+                commitment: "canonical-sha256:0123456789abcdef".to_string(),
+            },
+            parent_policy_revision: "policy-revision-e1-0001".to_string(),
+        }
+    }
+
+    #[test]
+    fn e1_omitted_patch_is_identity_and_gate_off_rejects_nonempty_patch() {
+        let root = tempfile::tempdir().unwrap();
+        let mut parent = restricted_parent(root.path());
+        parent.agents_world_dispatch_allow_capability_narrowing = false;
+        let request = DispatchWorldFsNarrowingRequestV1 {
+            bindings: bindings(),
+            world_fs: None,
+            reason: Some("identity".to_string()),
+        };
+        let resolved = EffectivePolicyResolver::resolve_dispatch_world_fs_narrowing(
+            &parent,
+            &request,
+            &AuthenticatedDispatchPolicyNarrowingContextV1 {
+                bindings: bindings(),
+            },
+            root.path(),
+        )
+        .unwrap();
+        assert_eq!(
+            resolved.policy.world_fs_read.as_ref().unwrap().allow_list,
+            parent.world_fs_read.as_ref().unwrap().allow_list
+        );
+
+        let mut request = request;
+        request.world_fs = Some(RestrictedWorldFsPatchV1 {
+            host_visible: Some(false),
+            ..Default::default()
+        });
+        assert!(
+            EffectivePolicyResolver::resolve_dispatch_world_fs_narrowing(
+                &parent,
+                &request,
+                &AuthenticatedDispatchPolicyNarrowingContextV1 {
+                    bindings: bindings(),
+                },
+                root.path(),
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn e1_authentication_binds_every_identity_parent_revision_world_and_subject() {
+        let root = tempfile::tempdir().unwrap();
+        let parent = restricted_parent(root.path());
+        let request = DispatchWorldFsNarrowingRequestV1 {
+            bindings: bindings(),
+            world_fs: Some(RestrictedWorldFsPatchV1 {
+                read: Some(RestrictedWorldFsDimensionPatchV1 {
+                    allow_list: Some(vec!["src/lib.rs".to_string()]),
+                    deny_list: None,
+                }),
+                ..Default::default()
+            }),
+            reason: Some("child file".to_string()),
+        };
+        for mutate in 0..8 {
+            let mut authenticated = bindings();
+            match mutate {
+                0 => authenticated.request_id.push('x'),
+                1 => authenticated.orchestration_session_id.push('x'),
+                2 => authenticated.caller_participant_id.push('x'),
+                3 => authenticated.target_backend_id.push('x'),
+                4 => authenticated.target_world.world_id.push('x'),
+                5 => authenticated.target_world.world_generation += 1,
+                6 => authenticated.parent_policy_revision.push('x'),
+                _ => authenticated.applies_to = DispatchCapabilitySubjectV1::RetainedWorkerSpawn,
+            }
+            assert!(
+                EffectivePolicyResolver::resolve_dispatch_world_fs_narrowing(
+                    &parent,
+                    &request,
+                    &AuthenticatedDispatchPolicyNarrowingContextV1 {
+                        bindings: authenticated,
+                    },
+                    root.path(),
+                )
+                .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn e1_gate_table_allows_only_monotonic_boolean_rank_and_list_composition() {
+        let root = tempfile::tempdir().unwrap();
+        let parent = restricted_parent(root.path());
+        let narrowed = resolve_restricted_world_fs_narrowing(
+            &parent,
+            &RestrictedWorldFsPatchV1 {
+                host_visible: Some(false),
+                fail_closed_routing: Some(true),
+                deny_enforcement: Some(WorldFsDenyEnforcement::Strict),
+                caged_required: Some(true),
+                discover: Some(RestrictedWorldFsDimensionPatchV1 {
+                    allow_list: Some(vec!["src/lib.rs".to_string()]),
+                    deny_list: Some(vec![
+                        "src/private/**".to_string(),
+                        "src/generated/**".to_string(),
+                    ]),
+                }),
+                read: Some(RestrictedWorldFsDimensionPatchV1 {
+                    allow_list: Some(vec!["src/lib.rs".to_string()]),
+                    deny_list: Some(vec!["src/private/**".to_string()]),
+                }),
+                write: Some(RestrictedWorldFsWritePatchV1 {
+                    enabled: Some(false),
+                    allow_list: None,
+                    deny_list: None,
+                }),
+            },
+            root.path(),
+        )
+        .unwrap();
+        assert!(narrowed.world_fs_caged_required);
+        assert!(!narrowed.world_fs_write_enabled);
+        assert_eq!(
+            narrowed.world_fs_read.unwrap().allow_list,
+            vec!["src/lib.rs"]
+        );
+
+        let broadenings = [
+            RestrictedWorldFsPatchV1 {
+                fail_closed_routing: Some(false),
+                ..Default::default()
+            },
+            RestrictedWorldFsPatchV1 {
+                read: Some(RestrictedWorldFsDimensionPatchV1 {
+                    allow_list: Some(vec!["outside".to_string()]),
+                    deny_list: None,
+                }),
+                ..Default::default()
+            },
+            RestrictedWorldFsPatchV1 {
+                read: Some(RestrictedWorldFsDimensionPatchV1 {
+                    allow_list: None,
+                    deny_list: Some(Vec::new()),
+                }),
+                ..Default::default()
+            },
+        ];
+        for patch in broadenings {
+            assert!(resolve_restricted_world_fs_narrowing(&parent, &patch, root.path()).is_err());
+        }
+
+        let mut strict_parent = parent.clone();
+        strict_parent.world_fs_deny_enforcement = Some(WorldFsDenyEnforcement::Strict);
+        assert!(resolve_restricted_world_fs_narrowing(
+            &strict_parent,
+            &RestrictedWorldFsPatchV1 {
+                deny_enforcement: Some(WorldFsDenyEnforcement::Weak),
+                ..Default::default()
+            },
+            root.path(),
+        )
+        .is_err());
+
+        let mut caged_parent = parent.clone();
+        caged_parent.world_fs_caged_required = true;
+        assert!(resolve_restricted_world_fs_narrowing(
+            &caged_parent,
+            &RestrictedWorldFsPatchV1 {
+                caged_required: Some(false),
+                ..Default::default()
+            },
+            root.path(),
+        )
+        .is_err());
+
+        let mut read_only_parent = parent.clone();
+        read_only_parent.world_fs_write_enabled = false;
+        read_only_parent.world_fs_write = None;
+        assert!(resolve_restricted_world_fs_narrowing(
+            &read_only_parent,
+            &RestrictedWorldFsPatchV1 {
+                write: Some(RestrictedWorldFsWritePatchV1 {
+                    enabled: Some(true),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+            root.path(),
+        )
+        .is_err());
+
+        assert!(resolve_restricted_world_fs_narrowing(
+            &parent,
+            &RestrictedWorldFsPatchV1 {
+                host_visible: Some(true),
+                ..Default::default()
+            },
+            root.path(),
+        )
+        .is_err());
+
+        for (parent_rank, requested_rank, allowed) in [
+            (
+                WorldFsDenyEnforcement::Weak,
+                WorldFsDenyEnforcement::Weak,
+                true,
+            ),
+            (
+                WorldFsDenyEnforcement::Weak,
+                WorldFsDenyEnforcement::PreferStrict,
+                true,
+            ),
+            (
+                WorldFsDenyEnforcement::PreferStrict,
+                WorldFsDenyEnforcement::Strict,
+                true,
+            ),
+            (
+                WorldFsDenyEnforcement::Strict,
+                WorldFsDenyEnforcement::PreferStrict,
+                false,
+            ),
+            (
+                WorldFsDenyEnforcement::PreferStrict,
+                WorldFsDenyEnforcement::Weak,
+                false,
+            ),
+        ] {
+            let mut ranked_parent = parent.clone();
+            ranked_parent.world_fs_deny_enforcement = Some(parent_rank);
+            assert_eq!(
+                resolve_restricted_world_fs_narrowing(
+                    &ranked_parent,
+                    &RestrictedWorldFsPatchV1 {
+                        deny_enforcement: Some(requested_rank),
+                        ..Default::default()
+                    },
+                    root.path(),
+                )
+                .is_ok(),
+                allowed,
+                "unexpected rank row {parent_rank:?} -> {requested_rank:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn e1_host_visible_relationships_fail_closed_unless_full_isolation_is_bound() {
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir_all(root.path().join("src")).unwrap();
+        fs::write(root.path().join("src/lib.rs"), "lib").unwrap();
+        let host_visible_parent = Policy {
+            agents_world_dispatch_allow_capability_narrowing: true,
+            ..Default::default()
+        };
+        let path_patch = RestrictedWorldFsPatchV1 {
+            read: Some(RestrictedWorldFsDimensionPatchV1 {
+                allow_list: Some(vec!["src/lib.rs".to_string()]),
+                deny_list: None,
+            }),
+            ..Default::default()
+        };
+        assert!(resolve_restricted_world_fs_narrowing(
+            &host_visible_parent,
+            &path_patch,
+            root.path(),
+        )
+        .is_err());
+
+        let isolated_patch = RestrictedWorldFsPatchV1 {
+            host_visible: Some(false),
+            ..path_patch
+        };
+        assert!(resolve_restricted_world_fs_narrowing(
+            &host_visible_parent,
+            &isolated_patch,
+            root.path(),
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn e1_host_visible_boolean_gate_rows_are_monotonic() {
+        let root = tempfile::tempdir().unwrap();
+        let host_visible_parent = Policy {
+            agents_world_dispatch_allow_capability_narrowing: true,
+            world_fs_host_visible: true,
+            world_fs_fail_closed_routing: false,
+            world_fs_caged_required: false,
+            world_fs_write_enabled: true,
+            ..Default::default()
+        };
+
+        let narrowed = resolve_restricted_world_fs_narrowing(
+            &host_visible_parent,
+            &RestrictedWorldFsPatchV1 {
+                host_visible: Some(true),
+                fail_closed_routing: Some(true),
+                caged_required: Some(true),
+                write: Some(RestrictedWorldFsWritePatchV1 {
+                    enabled: Some(false),
+                    allow_list: None,
+                    deny_list: None,
+                }),
+                ..Default::default()
+            },
+            root.path(),
+        )
+        .expect("valid host-visible boolean narrowing");
+        assert!(narrowed.world_fs_host_visible);
+        assert!(narrowed.world_fs_fail_closed_routing);
+        assert!(narrowed.world_fs_caged_required);
+        assert!(!narrowed.world_fs_write_enabled);
+
+        let mut isolated_parent = host_visible_parent.clone();
+        isolated_parent.world_fs_host_visible = false;
+        assert!(resolve_restricted_world_fs_narrowing(
+            &isolated_parent,
+            &RestrictedWorldFsPatchV1 {
+                host_visible: Some(true),
+                ..Default::default()
+            },
+            root.path(),
+        )
+        .is_err());
+
+        let mut fail_closed_parent = host_visible_parent.clone();
+        fail_closed_parent.world_fs_fail_closed_routing = true;
+        assert!(resolve_restricted_world_fs_narrowing(
+            &fail_closed_parent,
+            &RestrictedWorldFsPatchV1 {
+                fail_closed_routing: Some(false),
+                ..Default::default()
+            },
+            root.path(),
+        )
+        .is_err());
+
+        let mut caged_parent = host_visible_parent.clone();
+        caged_parent.world_fs_caged_required = true;
+        assert!(resolve_restricted_world_fs_narrowing(
+            &caged_parent,
+            &RestrictedWorldFsPatchV1 {
+                caged_required: Some(false),
+                ..Default::default()
+            },
+            root.path(),
+        )
+        .is_err());
+
+        let mut read_only_parent = host_visible_parent;
+        read_only_parent.world_fs_write_enabled = false;
+        assert!(resolve_restricted_world_fs_narrowing(
+            &read_only_parent,
+            &RestrictedWorldFsPatchV1 {
+                write: Some(RestrictedWorldFsWritePatchV1 {
+                    enabled: Some(true),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+            root.path(),
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn e1_containment_accepts_directory_child_and_limits_file_authority_exactly() {
+        let root = tempfile::tempdir().unwrap();
+        let parent = restricted_parent(root.path());
+        let child = RestrictedWorldFsPatchV1 {
+            read: Some(RestrictedWorldFsDimensionPatchV1 {
+                allow_list: Some(vec!["src/lib.rs".to_string()]),
+                deny_list: None,
+            }),
+            ..Default::default()
+        };
+        assert!(resolve_restricted_world_fs_narrowing(&parent, &child, root.path()).is_ok());
+
+        let mut file_parent = parent.clone();
+        file_parent.world_fs_read.as_mut().unwrap().allow_list = vec!["src/lib.rs".to_string()];
+        assert!(resolve_restricted_world_fs_narrowing(&file_parent, &child, root.path()).is_ok());
+        let sibling = RestrictedWorldFsPatchV1 {
+            read: Some(RestrictedWorldFsDimensionPatchV1 {
+                allow_list: Some(vec!["src/sibling.rs".to_string()]),
+                deny_list: None,
+            }),
+            ..Default::default()
+        };
+        assert!(
+            resolve_restricted_world_fs_narrowing(&file_parent, &sibling, root.path()).is_err()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn e1_paths_fail_closed_and_nonexistent_lexical_child_is_provable() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let parent = restricted_parent(root.path());
+        symlink(outside.path(), root.path().join("src/escape")).unwrap();
+
+        for path in [
+            "/etc/passwd",
+            "C:/Windows/System32",
+            "\\\\server\\share",
+            "src/../outside",
+            "src/a\0b",
+            "src/[abc]",
+            "src/escape/secret",
+        ] {
+            let patch = RestrictedWorldFsPatchV1 {
+                read: Some(RestrictedWorldFsDimensionPatchV1 {
+                    allow_list: Some(vec![path.to_string()]),
+                    deny_list: None,
+                }),
+                ..Default::default()
+            };
+            assert!(
+                resolve_restricted_world_fs_narrowing(&parent, &patch, root.path()).is_err(),
+                "accepted {path:?}"
+            );
+        }
+
+        let lexical = RestrictedWorldFsPatchV1 {
+            read: Some(RestrictedWorldFsDimensionPatchV1 {
+                allow_list: Some(vec!["src/future/generated.rs".to_string()]),
+                deny_list: None,
+            }),
+            ..Default::default()
+        };
+        assert!(resolve_restricted_world_fs_narrowing(&parent, &lexical, root.path()).is_ok());
+    }
+
+    #[test]
+    fn e1_parent_is_not_mutated_and_result_is_deterministic() {
+        let root = tempfile::tempdir().unwrap();
+        let parent = restricted_parent(root.path());
+        let original_allow = parent.world_fs_read.as_ref().unwrap().allow_list.clone();
+        let patch = RestrictedWorldFsPatchV1 {
+            read: Some(RestrictedWorldFsDimensionPatchV1 {
+                allow_list: Some(vec!["src/lib.rs".to_string(), "src/lib.rs".to_string()]),
+                deny_list: Some(vec!["src/private/**".to_string()]),
+            }),
+            ..Default::default()
+        };
+        let first = resolve_restricted_world_fs_narrowing(&parent, &patch, root.path()).unwrap();
+        let second = resolve_restricted_world_fs_narrowing(&parent, &patch, root.path()).unwrap();
+        assert_eq!(
+            first.world_fs_read.as_ref().unwrap().allow_list,
+            second.world_fs_read.as_ref().unwrap().allow_list
+        );
+        assert_eq!(
+            first.world_fs_read.as_ref().unwrap().allow_list,
+            vec!["src/lib.rs"]
+        );
+        assert_eq!(
+            parent.world_fs_read.as_ref().unwrap().allow_list,
+            original_allow
+        );
+    }
 
     #[test]
     fn packet_one_router_auto_attach_gates_apply_to_effective_policy() {

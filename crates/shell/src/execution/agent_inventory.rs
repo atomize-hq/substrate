@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
-use substrate_broker::{validate_backend_id, validate_dotted_id, Policy, WorldFsDenyEnforcement};
+use substrate_broker::{validate_backend_id, validate_dotted_id, Policy};
 use substrate_common::derive_agent_backend_id;
 use substrate_common::paths as substrate_paths;
 
@@ -512,6 +512,7 @@ pub(crate) fn load_effective_agent_inventory(
     cwd: &Path,
     base_policy: &Policy,
 ) -> Result<BTreeMap<String, AgentInventoryEntryV1>> {
+    let world_root = authoritative_inventory_world_root(cwd);
     let mut effective = BTreeMap::new();
     for root in discover_agent_inventory_roots(cwd)? {
         if !root.exists() {
@@ -526,7 +527,7 @@ pub(crate) fn load_effective_agent_inventory(
         let mut validated_files = Vec::new();
         let mut root_shadowed_agent_ids = BTreeSet::new();
         for path in collect_agent_files_in_root(&root)? {
-            let file = parse_and_validate_agent_file(&path, base_policy)?;
+            let file = parse_and_validate_agent_file(&path, base_policy, Some(&world_root))?;
             if let ParsedAgentInventoryFile::V2(parsed) = &file {
                 root_shadowed_agent_ids.extend(legacy_shadowed_agent_ids_from_v2(parsed));
             }
@@ -552,6 +553,7 @@ pub(crate) fn load_effective_agent_inventory_for_bootstrap_home(
     base_policy: &Policy,
     bootstrap_home: &crate::execution::agent_runtime::OpenedBootstrapHomeV1<'_>,
 ) -> Result<BTreeMap<String, AgentInventoryEntryV1>> {
+    let world_root = authoritative_inventory_world_root(cwd);
     let mut effective = BTreeMap::new();
     let mut global_files = Vec::new();
     let mut global_shadowed = BTreeSet::new();
@@ -570,7 +572,7 @@ pub(crate) fn load_effective_agent_inventory_for_bootstrap_home(
         let raw = std::str::from_utf8(&bytes).map_err(|_| {
             config_model::user_error(format!("invalid UTF-8 in {}", path.display()))
         })?;
-        let file = parse_and_validate_agent_file_raw(&path, raw, base_policy)?;
+        let file = parse_and_validate_agent_file_raw(&path, raw, base_policy, Some(&world_root))?;
         if let ParsedAgentInventoryFile::V2(parsed) = &file {
             global_shadowed.extend(legacy_shadowed_agent_ids_from_v2(parsed));
         }
@@ -592,7 +594,7 @@ pub(crate) fn load_effective_agent_inventory_for_bootstrap_home(
             let mut workspace_files = Vec::new();
             let mut workspace_shadowed = BTreeSet::new();
             for path in collect_agent_files_in_root(&root)? {
-                let file = parse_and_validate_agent_file(&path, base_policy)?;
+                let file = parse_and_validate_agent_file(&path, base_policy, Some(&world_root))?;
                 if let ParsedAgentInventoryFile::V2(parsed) = &file {
                     workspace_shadowed.extend(legacy_shadowed_agent_ids_from_v2(parsed));
                 }
@@ -793,7 +795,8 @@ pub(crate) fn resolve_gateway_backend_inventory_entry_for_bootstrap_home(
 }
 
 pub(crate) fn validate_agent_file(path: &Path, base_policy: &Policy) -> Result<AgentFileV1> {
-    match parse_and_validate_agent_file(path, base_policy)? {
+    let world_root = inventory_workspace_root_from_path(path);
+    match parse_and_validate_agent_file(path, base_policy, world_root.as_deref())? {
         ParsedAgentInventoryFile::V1(parsed) => Ok(parsed),
         ParsedAgentInventoryFile::V2(parsed) => Ok(compatibility_inventory_file_from_v2(&parsed)),
     }
@@ -802,17 +805,19 @@ pub(crate) fn validate_agent_file(path: &Path, base_policy: &Policy) -> Result<A
 fn parse_and_validate_agent_file(
     path: &Path,
     base_policy: &Policy,
+    world_root: Option<&Path>,
 ) -> Result<ParsedAgentInventoryFile> {
     let raw = fs::read_to_string(path).map_err(|err| {
         config_model::user_error(format!("failed to read {}: {err}", path.display()))
     })?;
-    parse_and_validate_agent_file_raw(path, &raw, base_policy)
+    parse_and_validate_agent_file_raw(path, &raw, base_policy, world_root)
 }
 
 fn parse_and_validate_agent_file_raw(
     path: &Path,
     raw: &str,
     base_policy: &Policy,
+    world_root: Option<&Path>,
 ) -> Result<ParsedAgentInventoryFile> {
     match detect_agent_inventory_version(path, raw)? {
         1 => {
@@ -824,7 +829,7 @@ fn parse_and_validate_agent_file_raw(
                 ))
             })?;
 
-            validate_agent_schema(path, &parsed, base_policy)?;
+            validate_agent_schema(path, &parsed, base_policy, world_root)?;
             Ok(ParsedAgentInventoryFile::V1(parsed))
         }
         2 => {
@@ -836,7 +841,7 @@ fn parse_and_validate_agent_file_raw(
                 ))
             })?;
 
-            validate_agent_schema_v2(path, &parsed, base_policy)?;
+            validate_agent_schema_v2(path, &parsed, base_policy, world_root)?;
             Ok(ParsedAgentInventoryFile::V2(parsed))
         }
         version => Err(config_model::user_error(format!(
@@ -857,6 +862,10 @@ fn discover_agent_inventory_roots(cwd: &Path) -> Result<Vec<PathBuf>> {
         );
     }
     Ok(roots)
+}
+
+fn authoritative_inventory_world_root(cwd: &Path) -> PathBuf {
+    workspace::find_workspace_root(cwd).unwrap_or_else(|| cwd.to_path_buf())
 }
 
 fn collect_agent_files_in_root(dir: &Path) -> Result<Vec<PathBuf>> {
@@ -886,7 +895,12 @@ fn is_yaml_file(path: &Path) -> bool {
     matches!(path.extension().and_then(OsStr::to_str), Some("yaml"))
 }
 
-fn validate_agent_schema(path: &Path, parsed: &AgentFileV1, base_policy: &Policy) -> Result<()> {
+fn validate_agent_schema(
+    path: &Path,
+    parsed: &AgentFileV1,
+    base_policy: &Policy,
+    world_root: Option<&Path>,
+) -> Result<()> {
     if parsed.version != 1 {
         return Err(config_model::user_error(format!(
             "invalid agent file in {}: version must be 1 (got {})",
@@ -912,7 +926,7 @@ fn validate_agent_schema(path: &Path, parsed: &AgentFileV1, base_policy: &Policy
 
     validate_agent_config(path, &parsed.config)?;
     if let Some(overlay) = &parsed.policy_overlay {
-        validate_policy_overlay(path, overlay, base_policy)?;
+        validate_policy_overlay(path, overlay, base_policy, world_root)?;
     }
 
     Ok(())
@@ -929,7 +943,12 @@ fn detect_agent_inventory_version(path: &Path, raw: &str) -> Result<u32> {
     Ok(version_probe.version)
 }
 
-fn validate_agent_schema_v2(path: &Path, parsed: &AgentFileV2, base_policy: &Policy) -> Result<()> {
+fn validate_agent_schema_v2(
+    path: &Path,
+    parsed: &AgentFileV2,
+    base_policy: &Policy,
+    world_root: Option<&Path>,
+) -> Result<()> {
     if parsed.version != 2 {
         return Err(config_model::user_error(format!(
             "invalid agent file in {}: version must be 2 (got {})",
@@ -994,7 +1013,7 @@ fn validate_agent_schema_v2(path: &Path, parsed: &AgentFileV2, base_policy: &Pol
     }
 
     if let Some(overlay) = &parsed.policy_overlay {
-        validate_policy_overlay(path, overlay, base_policy)?;
+        validate_policy_overlay(path, overlay, base_policy, world_root)?;
     }
 
     Ok(())
@@ -1218,6 +1237,7 @@ fn validate_policy_overlay(
     path: &Path,
     overlay: &crate::execution::policy_model::PolicyPatch,
     base_policy: &Policy,
+    world_root: Option<&Path>,
 ) -> Result<()> {
     if overlay.id.is_some() {
         return Err(config_model::user_error(format!(
@@ -1280,7 +1300,7 @@ fn validate_policy_overlay(
     if let Some(values) = overlay.llm.secrets.env_allowed.as_deref() {
         validate_env_name_list(path, values, "policy_overlay.llm.secrets.env_allowed")?;
     }
-    validate_world_fs_overlay(path, overlay, base_policy)?;
+    validate_world_fs_overlay(path, overlay, base_policy, world_root)?;
     validate_overlay_subset(
         path,
         "policy_overlay.agents.host_credentials.read.allowed_backends",
@@ -1306,105 +1326,68 @@ fn validate_world_fs_overlay(
     path: &Path,
     overlay: &crate::execution::policy_model::PolicyPatch,
     base_policy: &Policy,
+    world_root: Option<&Path>,
 ) -> Result<()> {
-    if let Some(overlay_host_visible) = overlay.world_fs.host_visible {
-        if overlay_host_visible && !base_policy.world_fs_host_visible {
-            return Err(config_model::user_error(format!(
-                "invalid agent file in {}: policy_overlay.world_fs.host_visible=true broadens beyond the effective base policy (base is host_visible=false)",
+    let dimension = |value: &crate::execution::policy_model::WorldFsDimensionPatch| {
+        if value.allow_list.is_none() && value.deny_list.is_none() {
+            None
+        } else {
+            Some(substrate_broker::RestrictedWorldFsDimensionPatchV1 {
+                allow_list: value.allow_list.clone(),
+                deny_list: value.deny_list.clone(),
+            })
+        }
+    };
+    let write = &overlay.world_fs.write;
+    let patch = substrate_broker::RestrictedWorldFsPatchV1 {
+        host_visible: overlay.world_fs.host_visible,
+        fail_closed_routing: overlay.world_fs.fail_closed.routing,
+        deny_enforcement: overlay.world_fs.deny_enforcement,
+        caged_required: overlay.world_fs.caged_required,
+        discover: dimension(&overlay.world_fs.discover),
+        read: dimension(&overlay.world_fs.read),
+        write: if write.enabled.is_none() && write.allow_list.is_none() && write.deny_list.is_none()
+        {
+            None
+        } else {
+            Some(substrate_broker::RestrictedWorldFsWritePatchV1 {
+                enabled: write.enabled,
+                allow_list: write.allow_list.clone(),
+                deny_list: write.deny_list.clone(),
+            })
+        },
+    };
+    if patch.is_empty() {
+        return Ok(());
+    }
+    let world_root = world_root.ok_or_else(|| {
+        config_model::user_error(format!(
+            "invalid agent file in {}: policy_overlay.world_fs requires an authoritative project or workspace root",
+            path.display()
+        ))
+    })?;
+    substrate_broker::resolve_restricted_world_fs_narrowing(base_policy, &patch, world_root)
+        .map(|_| ())
+        .map_err(|error| {
+            config_model::user_error(format!(
+                "invalid agent file in {}: policy_overlay.world_fs broadens beyond the effective base policy or cannot be proven: {error}",
                 path.display()
-            )));
-        }
-    }
-
-    if let Some(overlay_fail_closed) = overlay.world_fs.fail_closed.routing {
-        if !overlay_fail_closed && base_policy.world_fs_fail_closed_routing {
-            return Err(config_model::user_error(format!(
-                "invalid agent file in {}: policy_overlay.world_fs.fail_closed.routing=false broadens beyond the effective base policy",
-                path.display()
-            )));
-        }
-    }
-
-    if let Some(overlay_caged_required) = overlay.world_fs.caged_required {
-        if !overlay_caged_required && base_policy.world_fs_caged_required {
-            return Err(config_model::user_error(format!(
-                "invalid agent file in {}: policy_overlay.world_fs.caged_required=false broadens beyond the effective base policy",
-                path.display()
-            )));
-        }
-    }
-
-    if let Some(overlay_write_enabled) = overlay.world_fs.write.enabled {
-        if overlay_write_enabled && !base_policy.world_fs_write_enabled {
-            return Err(config_model::user_error(format!(
-                "invalid agent file in {}: policy_overlay.world_fs.write.enabled=true broadens beyond the effective base policy",
-                path.display()
-            )));
-        }
-    }
-
-    if let Some(overlay_deny_enforcement) = overlay.world_fs.deny_enforcement {
-        let base_rank = world_fs_deny_enforcement_rank(base_policy.world_fs_deny_enforcement);
-        let overlay_rank = world_fs_deny_enforcement_rank(Some(overlay_deny_enforcement));
-        if overlay_rank < base_rank {
-            return Err(config_model::user_error(format!(
-                "invalid agent file in {}: policy_overlay.world_fs.deny_enforcement={:?} broadens beyond the effective base policy",
-                path.display(),
-                overlay_deny_enforcement
-            )));
-        }
-    }
-
-    validate_overlay_subset(
-        path,
-        "policy_overlay.world_fs.read.allow_list",
-        overlay.world_fs.read.allow_list.as_deref(),
-        base_policy
-            .world_fs_read
-            .as_ref()
-            .map(|dim| dim.allow_list.as_slice())
-            .or_else(|| {
-                base_policy
-                    .world_fs_discover
-                    .as_ref()
-                    .map(|dim| dim.allow_list.as_slice())
-            }),
-    )?;
-    validate_overlay_subset(
-        path,
-        "policy_overlay.world_fs.discover.allow_list",
-        overlay.world_fs.discover.allow_list.as_deref(),
-        base_policy
-            .world_fs_discover
-            .as_ref()
-            .map(|dim| dim.allow_list.as_slice())
-            .or_else(|| {
-                base_policy
-                    .world_fs_read
-                    .as_ref()
-                    .map(|dim| dim.allow_list.as_slice())
-            }),
-    )?;
-    validate_overlay_subset(
-        path,
-        "policy_overlay.world_fs.write.allow_list",
-        overlay.world_fs.write.allow_list.as_deref(),
-        base_policy
-            .world_fs_write
-            .as_ref()
-            .map(|dim| dim.allow_list.as_slice()),
-    )?;
-
-    Ok(())
+            ))
+        })
 }
 
-fn world_fs_deny_enforcement_rank(value: Option<WorldFsDenyEnforcement>) -> u8 {
-    match value {
-        Some(WorldFsDenyEnforcement::Strict) => 3,
-        Some(WorldFsDenyEnforcement::PreferStrict) => 2,
-        Some(WorldFsDenyEnforcement::Weak) => 1,
-        None => 0,
-    }
+fn inventory_workspace_root_from_path(path: &Path) -> Option<PathBuf> {
+    path.parent()
+        .filter(|parent| parent.file_name().is_some_and(|name| name == "agents"))
+        .and_then(Path::parent)
+        .filter(|parent| {
+            parent
+                .file_name()
+                .is_some_and(|name| name == workspace::SUBSTRATE_DIR_NAME)
+                && parent.join(workspace::WORKSPACE_MARKER_FILENAME).is_file()
+        })
+        .and_then(Path::parent)
+        .map(Path::to_path_buf)
 }
 
 fn validate_overlay_subset(
@@ -1436,12 +1419,122 @@ mod tests {
         compatibility_inventory_file_from_v2, inventory_entry_origin,
         load_effective_agent_inventory, materialize_effective_inventory_entries_from_v2,
         normalize_inventory_origin_path, project_inventory_entry, project_inventory_v2_entry,
-        validate_agent_schema_v2, AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily,
-        AgentConfigKind, AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentFileV2,
-        AgentInventoryBaselineOrigin, AgentInventoryEntryV1, AgentPlacement,
+        validate_agent_schema_v2, validate_world_fs_overlay, AgentCapabilitiesV1, AgentCliConfigV1,
+        AgentCliRuntimeFamily, AgentConfigKind, AgentConfigV1, AgentExecutionConfigV1, AgentFileV1,
+        AgentFileV2, AgentInventoryBaselineOrigin, AgentInventoryEntryV1, AgentPlacement,
     };
     use crate::execution::config_model::{AgentCliMode, SubstrateConfig};
     use crate::execution::workspace::{workspace_marker_path, SUBSTRATE_DIR_NAME};
+    use std::path::{Path, PathBuf};
+
+    fn e1_inventory_parent(root: &Path) -> Policy {
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("src/lib.rs"), "lib").unwrap();
+        fs::write(root.join("src/sibling.rs"), "sibling").unwrap();
+        let mut parent = Policy::default();
+        parent.world_fs_host_visible = false;
+        parent.world_fs_fail_closed_routing = true;
+        parent.world_fs_write_enabled = false;
+        parent.world_fs_read = Some(substrate_broker::WorldFsDimensionPolicy {
+            allow_list: vec!["src".to_string()],
+            deny_list: Vec::new(),
+        });
+        parent.world_fs_discover = parent.world_fs_read.clone();
+        parent.world_fs_write = None;
+        parent
+    }
+
+    fn e1_inventory_agent_path(root: &Path) -> PathBuf {
+        let substrate_dir = root.join(SUBSTRATE_DIR_NAME);
+        fs::create_dir_all(substrate_dir.join("agents")).unwrap();
+        fs::write(workspace_marker_path(root), "{}\n").unwrap();
+        substrate_dir.join("agents/e1.yaml")
+    }
+
+    #[test]
+    fn e1_inventory_uses_broker_directory_to_child_containment() {
+        let root = tempfile::tempdir().unwrap();
+        let path = e1_inventory_agent_path(root.path());
+        let parent = e1_inventory_parent(root.path());
+        let mut overlay = crate::execution::policy_model::PolicyPatch::default();
+        overlay.world_fs.read.allow_list = Some(vec!["src/lib.rs".to_string()]);
+        validate_world_fs_overlay(&path, &overlay, &parent, Some(root.path()))
+            .expect("directory authority narrows to child file");
+
+        overlay.world_fs.read.allow_list = Some(vec!["outside.txt".to_string()]);
+        assert!(validate_world_fs_overlay(&path, &overlay, &parent, Some(root.path())).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn e1_inventory_reuses_broker_symlink_escape_rejection() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let path = e1_inventory_agent_path(root.path());
+        let parent = e1_inventory_parent(root.path());
+        symlink(outside.path(), root.path().join("src/escape")).unwrap();
+        let mut overlay = crate::execution::policy_model::PolicyPatch::default();
+        overlay.world_fs.read.allow_list = Some(vec!["src/escape/secret".to_string()]);
+        assert!(validate_world_fs_overlay(&path, &overlay, &parent, Some(root.path())).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn e1_global_inventory_uses_authoritative_project_root_not_process_cwd() {
+        use std::os::unix::fs::symlink;
+
+        struct CurrentDirGuard(PathBuf);
+        impl Drop for CurrentDirGuard {
+            fn drop(&mut self) {
+                std::env::set_current_dir(&self.0).expect("restore process cwd");
+            }
+        }
+
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        let root = tempfile::tempdir().unwrap();
+        let project = root.path().join("project");
+        let process_cwd = root.path().join("ambient-cwd");
+        let external = root.path().join("external");
+        let substrate_home = root.path().join("substrate-home");
+        fs::create_dir_all(project.join("src")).unwrap();
+        fs::write(project.join("src/lib.rs"), "project").unwrap();
+        fs::create_dir_all(process_cwd.join("src")).unwrap();
+        fs::create_dir_all(&external).unwrap();
+        fs::write(external.join("secret"), "secret").unwrap();
+        symlink(external.join("secret"), process_cwd.join("src/lib.rs")).unwrap();
+        fs::create_dir_all(substrate_home.join("agents")).unwrap();
+        fs::write(
+            substrate_home.join("agents/e1.yaml"),
+            r#"
+version: 1
+id: e1
+config:
+  kind: cli
+  enabled: true
+  protocol: transport.iframe.v1
+  cli:
+    binary: e1
+policy_overlay:
+  world_fs:
+    read:
+      allow_list:
+        - src/lib.rs
+"#,
+        )
+        .unwrap();
+
+        let parent = e1_inventory_parent(&project);
+        let original_cwd = std::env::current_dir().unwrap();
+        let _cwd_guard = CurrentDirGuard(original_cwd);
+        std::env::set_current_dir(&process_cwd).unwrap();
+        _authority_env.install_home(&substrate_home);
+
+        let inventory = load_effective_agent_inventory(&project, &parent)
+            .expect("global inventory must bind containment to the requested project root");
+        assert!(inventory.contains_key("e1"));
+    }
     use std::fs;
     use substrate_broker::Policy;
     use tempfile::tempdir;
@@ -1662,7 +1755,7 @@ config:
         runtime_family: codex
 "#;
         let parsed: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
-        let err = validate_agent_schema_v2(&path, &parsed, &base_policy)
+        let err = validate_agent_schema_v2(&path, &parsed, &base_policy, None)
             .expect_err("inventory without enabled placements should fail validation");
         assert!(
             err.to_string()
@@ -1697,7 +1790,7 @@ config:
         runtime_family: codex
 "#;
         let parsed: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
-        validate_agent_schema_v2(&path, &parsed, &base_policy)
+        validate_agent_schema_v2(&path, &parsed, &base_policy, None)
             .expect("top-level disabled inventory should preserve disabled semantics");
     }
 
@@ -1726,7 +1819,7 @@ config:
         runtime_family: codex
         "#;
         let parsed: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
-        validate_agent_schema_v2(&path, &parsed, &base_policy)
+        validate_agent_schema_v2(&path, &parsed, &base_policy, None)
             .expect("Packet 2 should accept multi-enabled placement-aware inventory");
     }
 

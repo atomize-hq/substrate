@@ -1,3 +1,6 @@
+use crate::execution::agent_runtime::host_session_authority::{
+    hash::canonical_sha256, schema::PolicyObjectHashInputV1,
+};
 use anyhow::{anyhow, Context, Result};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -26,6 +29,64 @@ const WORLD_FS_ENFORCEMENT_PLAN_B64_ENV: &str = "SUBSTRATE_WORLD_FS_ENFORCEMENT_
 pub(crate) struct ResolvedPolicySnapshot {
     pub(crate) snapshot: PolicySnapshotV3,
     pub(crate) snapshot_hash: String,
+}
+
+#[allow(
+    dead_code,
+    reason = "E1 exposes the authenticated narrowing entrypoint before dispatch adoption"
+)]
+#[derive(Debug, Clone)]
+pub(crate) struct AuthenticatedDispatchPolicyNarrowingContextV1 {
+    authority: ResolvedDispatchPolicyNarrowingAuthorityV1,
+}
+
+/// Values independently resolved from the live request, session, runtime, world, and policy
+/// authorities. This carrier is intentionally distinct from the untrusted transport request.
+#[allow(
+    dead_code,
+    reason = "E1 exposes the resolved authority input before dispatch adoption"
+)]
+#[derive(Debug, Clone)]
+pub(crate) struct ResolvedDispatchPolicyNarrowingAuthorityV1 {
+    pub(crate) request_id: String,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) caller_participant_id: String,
+    pub(crate) target_backend_id: String,
+    pub(crate) target_world: transport_api_types::WorldBindingRefV1,
+    pub(crate) applies_to: transport_api_types::DispatchCapabilitySubjectV1,
+    pub(crate) parent_policy_ref: transport_api_types::PolicyRefV1,
+    pub(crate) parent_policy: PolicyObjectHashInputV1,
+    pub(crate) parent_allows_capability_narrowing: bool,
+}
+
+#[allow(
+    dead_code,
+    reason = "E1 exposes the authenticated narrowing entrypoint before dispatch adoption"
+)]
+impl AuthenticatedDispatchPolicyNarrowingContextV1 {
+    pub(crate) fn from_resolved_authority(
+        authority: ResolvedDispatchPolicyNarrowingAuthorityV1,
+    ) -> Result<Self> {
+        authority
+            .parent_policy_ref
+            .validate()
+            .map_err(|error| anyhow!("invalid resolved parent policy reference: {error}"))?;
+        canonical_sha256(&authority.parent_policy)
+            .map_err(|error| anyhow!("invalid resolved parent policy identity: {error}"))?;
+        Ok(Self { authority })
+    }
+}
+
+#[allow(
+    dead_code,
+    reason = "E1 exposes the narrowed snapshot result before dispatch adoption"
+)]
+#[derive(Debug, Clone)]
+pub(crate) struct ResolvedDispatchPolicySnapshotV1 {
+    pub(crate) snapshot: PolicySnapshotV3,
+    pub(crate) snapshot_hash: String,
+    pub(crate) bindings: substrate_broker::DispatchPolicyNarrowingBindingsV1,
+    pub(crate) reason: Option<String>,
 }
 
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
@@ -497,6 +558,234 @@ fn snapshot_from_policy(policy: &substrate_broker::Policy) -> Result<PolicySnaps
     Ok(canonical)
 }
 
+#[allow(
+    dead_code,
+    reason = "E1 exposes the broker-backed snapshot entrypoint before dispatch adoption"
+)]
+pub(crate) fn resolve_dispatch_narrowed_policy_snapshot(
+    parent: &substrate_broker::Policy,
+    carrier: &transport_api_types::DispatchPolicyNarrowingPatchV1,
+    authenticated: &AuthenticatedDispatchPolicyNarrowingContextV1,
+    world_root: &Path,
+) -> Result<ResolvedDispatchPolicySnapshotV1> {
+    carrier
+        .validate()
+        .map_err(|error| anyhow!("invalid dispatch narrowing carrier: {error}"))?;
+    authenticate_parent_policy(parent, authenticated)?;
+    let request = substrate_broker::DispatchWorldFsNarrowingRequestV1 {
+        bindings: broker_bindings_from_carrier(carrier)?,
+        world_fs: carrier
+            .restricted_policy_patch
+            .world_fs
+            .as_ref()
+            .map(broker_world_fs_patch_from_transport),
+        reason: carrier.reason.clone(),
+    };
+    let authenticated = substrate_broker::AuthenticatedDispatchPolicyNarrowingContextV1 {
+        bindings: broker_bindings_from_authenticated(authenticated)?,
+    };
+    let resolved = substrate_broker::EffectivePolicyResolver::resolve_dispatch_world_fs_narrowing(
+        parent,
+        &request,
+        &authenticated,
+        world_root,
+    )?;
+    let mut snapshot = snapshot_from_policy(&resolved.policy)?;
+    if request
+        .world_fs
+        .as_ref()
+        .is_some_and(|patch| !patch.is_empty())
+        && !snapshot.world_fs.write.enabled
+    {
+        let read = snapshot
+            .world_fs
+            .read
+            .as_ref()
+            .ok_or_else(|| anyhow!("narrowed PolicySnapshotV3 is missing world_fs.read"))?;
+        snapshot.world_fs.write.allow_list = read.allow_list.clone();
+        snapshot = snapshot.canonicalize().map_err(|error| {
+            anyhow!("invalid PolicySnapshotV3 after restricted write/read alignment: {error}")
+        })?;
+    }
+    let snapshot_hash = compute_snapshot_hash(&snapshot)?;
+    Ok(ResolvedDispatchPolicySnapshotV1 {
+        snapshot,
+        snapshot_hash,
+        bindings: resolved.bindings,
+        reason: resolved.reason,
+    })
+}
+
+#[allow(dead_code)]
+fn broker_bindings_from_carrier(
+    carrier: &transport_api_types::DispatchPolicyNarrowingPatchV1,
+) -> Result<substrate_broker::DispatchPolicyNarrowingBindingsV1> {
+    broker_bindings(
+        carrier.schema_version,
+        &carrier.request_id,
+        &carrier.orchestration_session_id,
+        &carrier.caller_participant_id,
+        &carrier.target_backend_id,
+        &carrier.target_world,
+        &carrier.applies_to,
+        &carrier.parent_policy_ref,
+        &carrier.parent_policy_revision,
+    )
+}
+
+#[allow(dead_code)]
+fn broker_bindings_from_authenticated(
+    authenticated: &AuthenticatedDispatchPolicyNarrowingContextV1,
+) -> Result<substrate_broker::DispatchPolicyNarrowingBindingsV1> {
+    let authenticated = &authenticated.authority;
+    broker_bindings(
+        1,
+        &authenticated.request_id,
+        &authenticated.orchestration_session_id,
+        &authenticated.caller_participant_id,
+        &authenticated.target_backend_id,
+        &authenticated.target_world,
+        &authenticated.applies_to,
+        &authenticated.parent_policy_ref,
+        &authenticated.parent_policy.policy_revision,
+    )
+}
+
+#[allow(dead_code)]
+fn authenticate_parent_policy(
+    parent: &substrate_broker::Policy,
+    authenticated: &AuthenticatedDispatchPolicyNarrowingContextV1,
+) -> Result<()> {
+    let authority = &authenticated.authority;
+    if authority.parent_policy_ref.schema_version != authority.parent_policy.schema_version {
+        return Err(anyhow!(
+            "resolved parent policy reference schema does not match policy identity"
+        ));
+    }
+
+    let actual_snapshot = snapshot_from_policy(parent)?;
+    let actual_snapshot_hash = compute_snapshot_hash(&actual_snapshot)?;
+    if actual_snapshot_hash != authority.parent_policy.canonical_policy_snapshot_sha256 {
+        return Err(anyhow!(
+            "supplied parent policy does not match the resolved canonical parent snapshot"
+        ));
+    }
+    if parent.agents_world_dispatch_allow_capability_narrowing
+        != authority.parent_allows_capability_narrowing
+    {
+        return Err(anyhow!(
+            "supplied parent policy does not match the resolved narrowing gate"
+        ));
+    }
+
+    let expected_commitment = canonical_sha256(&authority.parent_policy)
+        .map_err(|error| anyhow!("hash resolved parent policy identity: {error}"))?;
+    match &authority.parent_policy_ref.commitment {
+        transport_api_types::OpaqueAuthorityCommitmentV1::CanonicalSha256 { digest_hex }
+            if digest_hex == &expected_commitment =>
+        {
+            Ok(())
+        }
+        transport_api_types::OpaqueAuthorityCommitmentV1::CanonicalSha256 { .. } => Err(anyhow!(
+            "resolved parent policy reference commitment does not match policy identity"
+        )),
+        transport_api_types::OpaqueAuthorityCommitmentV1::StoreHmacSha256 { .. } => Err(anyhow!(
+            "resolved parent policy reference must use canonical sha256"
+        )),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+#[allow(dead_code)]
+fn broker_bindings(
+    schema_version: u32,
+    request_id: &str,
+    orchestration_session_id: &str,
+    caller_participant_id: &str,
+    target_backend_id: &str,
+    target_world: &transport_api_types::WorldBindingRefV1,
+    applies_to: &transport_api_types::DispatchCapabilitySubjectV1,
+    parent_policy_ref: &transport_api_types::PolicyRefV1,
+    parent_policy_revision: &str,
+) -> Result<substrate_broker::DispatchPolicyNarrowingBindingsV1> {
+    let applies_to = match applies_to {
+        transport_api_types::DispatchCapabilitySubjectV1::EphemeralTask => {
+            substrate_broker::DispatchCapabilitySubjectV1::EphemeralTask
+        }
+        transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerSpawn => {
+            substrate_broker::DispatchCapabilitySubjectV1::RetainedWorkerSpawn
+        }
+        transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerTurn {
+            retained_participant_id,
+        } => substrate_broker::DispatchCapabilitySubjectV1::RetainedWorkerTurn {
+            retained_participant_id: retained_participant_id.clone(),
+        },
+        transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerFork {
+            source_participant_id,
+        } => substrate_broker::DispatchCapabilitySubjectV1::RetainedWorkerFork {
+            source_participant_id: source_participant_id.clone(),
+        },
+    };
+    let object_kind = match parent_policy_ref.object_kind {
+        transport_api_types::AuthorityObjectKindV1::Policy => "policy",
+        _ => "non_policy",
+    };
+    Ok(substrate_broker::DispatchPolicyNarrowingBindingsV1 {
+        schema_version,
+        request_id: request_id.to_string(),
+        orchestration_session_id: orchestration_session_id.to_string(),
+        caller_participant_id: caller_participant_id.to_string(),
+        target_backend_id: target_backend_id.to_string(),
+        target_world: substrate_broker::WorldBindingRefV1 {
+            world_id: target_world.world_id.clone(),
+            world_generation: target_world.world_generation,
+        },
+        applies_to,
+        parent_policy_ref: substrate_broker::PolicyReferenceBindingV1 {
+            ref_id: parent_policy_ref.ref_id.clone(),
+            object_kind: object_kind.to_string(),
+            schema_version: parent_policy_ref.schema_version,
+            commitment: serde_json::to_string(&parent_policy_ref.commitment)
+                .context("serialize exact parent policy commitment")?,
+        },
+        parent_policy_revision: parent_policy_revision.to_string(),
+    })
+}
+
+#[allow(dead_code)]
+fn broker_world_fs_patch_from_transport(
+    patch: &transport_api_types::RestrictedWorldFsPatchV1,
+) -> substrate_broker::RestrictedWorldFsPatchV1 {
+    let dimension = |patch: &transport_api_types::RestrictedWorldFsDimensionPatchV1| {
+        substrate_broker::RestrictedWorldFsDimensionPatchV1 {
+            allow_list: patch.allow_list.clone(),
+            deny_list: patch.deny_list.clone(),
+        }
+    };
+    substrate_broker::RestrictedWorldFsPatchV1 {
+        host_visible: patch.host_visible,
+        fail_closed_routing: patch.fail_closed.as_ref().and_then(|value| value.routing),
+        deny_enforcement: patch.deny_enforcement.map(|value| match value {
+            WorldFsDenyEnforcementV3::Strict => substrate_broker::WorldFsDenyEnforcement::Strict,
+            WorldFsDenyEnforcementV3::PreferStrict => {
+                substrate_broker::WorldFsDenyEnforcement::PreferStrict
+            }
+            WorldFsDenyEnforcementV3::Weak => substrate_broker::WorldFsDenyEnforcement::Weak,
+        }),
+        caged_required: patch.caged_required,
+        discover: patch.discover.as_ref().map(dimension),
+        read: patch.read.as_ref().map(dimension),
+        write: patch
+            .write
+            .as_ref()
+            .map(|write| substrate_broker::RestrictedWorldFsWritePatchV1 {
+                enabled: write.enabled,
+                allow_list: write.allow_list.clone(),
+                deny_list: write.deny_list.clone(),
+            }),
+    }
+}
+
 fn compute_snapshot_hash(snapshot: &PolicySnapshotV3) -> Result<String> {
     let bytes = serde_json::to_vec(snapshot).context("serialize PolicySnapshotV3")?;
     let mut hasher = Sha256::new();
@@ -507,6 +796,447 @@ fn compute_snapshot_hash(snapshot: &PolicySnapshotV3) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const E1_PARENT_POLICY_REVISION: &str = "policy-revision-e1-0001";
+
+    fn e1_policy_identity(parent: &substrate_broker::Policy) -> PolicyObjectHashInputV1 {
+        let snapshot = snapshot_from_policy(parent).unwrap();
+        PolicyObjectHashInputV1 {
+            schema_version: 1,
+            policy_revision: E1_PARENT_POLICY_REVISION.to_string(),
+            canonical_policy_snapshot_sha256: compute_snapshot_hash(&snapshot).unwrap(),
+        }
+    }
+
+    fn e1_policy_reference(parent: &substrate_broker::Policy) -> transport_api_types::PolicyRefV1 {
+        let identity = e1_policy_identity(parent);
+        transport_api_types::PolicyRefV1 {
+            ref_id: "ao_0123456789abcdef0123456789abcdef".to_string(),
+            object_kind: transport_api_types::AuthorityObjectKindV1::Policy,
+            schema_version: 1,
+            commitment: transport_api_types::OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                digest_hex: canonical_sha256(&identity).unwrap(),
+            },
+        }
+    }
+
+    fn e1_carrier(
+        parent: &substrate_broker::Policy,
+        world_fs: Option<transport_api_types::RestrictedWorldFsPatchV1>,
+    ) -> transport_api_types::DispatchPolicyNarrowingPatchV1 {
+        transport_api_types::DispatchPolicyNarrowingPatchV1 {
+            schema_version: 1,
+            request_id: "req_e1_0001".to_string(),
+            orchestration_session_id: "session_e1_0001".to_string(),
+            caller_participant_id: "participant_e1_caller".to_string(),
+            target_backend_id: "codex".to_string(),
+            target_world: transport_api_types::WorldBindingRefV1 {
+                world_id: "world_e1_0001".to_string(),
+                world_generation: 7,
+            },
+            applies_to: transport_api_types::DispatchCapabilitySubjectV1::EphemeralTask,
+            parent_policy_ref: e1_policy_reference(parent),
+            parent_policy_revision: E1_PARENT_POLICY_REVISION.to_string(),
+            restricted_policy_patch: transport_api_types::RestrictedPolicyPatchV1 { world_fs },
+            reason: Some("narrow to delegated file".to_string()),
+        }
+    }
+
+    fn e1_authenticated_context(
+        parent: &substrate_broker::Policy,
+    ) -> AuthenticatedDispatchPolicyNarrowingContextV1 {
+        AuthenticatedDispatchPolicyNarrowingContextV1::from_resolved_authority(
+            ResolvedDispatchPolicyNarrowingAuthorityV1 {
+                request_id: "req_e1_0001".to_string(),
+                orchestration_session_id: "session_e1_0001".to_string(),
+                caller_participant_id: "participant_e1_caller".to_string(),
+                target_backend_id: "codex".to_string(),
+                target_world: transport_api_types::WorldBindingRefV1 {
+                    world_id: "world_e1_0001".to_string(),
+                    world_generation: 7,
+                },
+                applies_to: transport_api_types::DispatchCapabilitySubjectV1::EphemeralTask,
+                parent_policy_ref: e1_policy_reference(parent),
+                parent_policy: e1_policy_identity(parent),
+                parent_allows_capability_narrowing: parent
+                    .agents_world_dispatch_allow_capability_narrowing,
+            },
+        )
+        .expect("independently resolved authenticated context")
+    }
+
+    fn e1_parent_policy() -> substrate_broker::Policy {
+        let mut policy = substrate_broker::Policy::default();
+        policy.agents_world_dispatch_allow_capability_narrowing = true;
+        policy.world_fs_host_visible = false;
+        policy.world_fs_fail_closed_routing = true;
+        policy.world_fs_write_enabled = false;
+        policy.world_fs_deny_enforcement = None;
+        policy.world_fs_read = Some(substrate_broker::WorldFsDimensionPolicy {
+            allow_list: vec!["src".to_string()],
+            deny_list: Vec::new(),
+        });
+        policy.world_fs_discover = policy.world_fs_read.clone();
+        policy.world_fs_write = None;
+        policy
+    }
+
+    #[test]
+    fn e1_narrowed_snapshot_is_deterministic_schema_3_and_parent_is_unchanged() {
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir_all(root.path().join("src")).unwrap();
+        fs::write(root.path().join("src/lib.rs"), "lib").unwrap();
+        let parent = e1_parent_policy();
+        let original_allow = parent.world_fs_read.as_ref().unwrap().allow_list.clone();
+        let carrier = e1_carrier(
+            &parent,
+            Some(transport_api_types::RestrictedWorldFsPatchV1 {
+                read: Some(transport_api_types::RestrictedWorldFsDimensionPatchV1 {
+                    allow_list: Some(vec!["src/lib.rs".to_string()]),
+                    deny_list: None,
+                }),
+                ..Default::default()
+            }),
+        );
+        let authenticated = e1_authenticated_context(&parent);
+
+        let first = resolve_dispatch_narrowed_policy_snapshot(
+            &parent,
+            &carrier,
+            &authenticated,
+            root.path(),
+        )
+        .unwrap();
+        let second = resolve_dispatch_narrowed_policy_snapshot(
+            &parent,
+            &carrier,
+            &authenticated,
+            root.path(),
+        )
+        .unwrap();
+        assert_eq!(first.snapshot.schema_version, 3);
+        assert_eq!(first.snapshot_hash, second.snapshot_hash);
+        assert_eq!(
+            serde_json::to_vec(&first.snapshot).unwrap(),
+            serde_json::to_vec(&second.snapshot).unwrap()
+        );
+        assert_eq!(
+            first.snapshot.world_fs.read.unwrap().allow_list,
+            vec!["src/lib.rs"]
+        );
+        assert_eq!(
+            parent.world_fs_read.as_ref().unwrap().allow_list,
+            original_allow
+        );
+        assert_eq!(first.bindings.request_id, "req_e1_0001");
+        assert_eq!(first.reason.as_deref(), Some("narrow to delegated file"));
+    }
+
+    #[test]
+    fn e1_omitted_patch_preserves_parent_snapshot_identity_and_binding_mismatch_fails() {
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir_all(root.path().join("src")).unwrap();
+        let parent = e1_parent_policy();
+        let carrier = e1_carrier(&parent, None);
+        let authenticated = e1_authenticated_context(&parent);
+        let resolved = resolve_dispatch_narrowed_policy_snapshot(
+            &parent,
+            &carrier,
+            &authenticated,
+            root.path(),
+        )
+        .unwrap();
+        let parent_snapshot = snapshot_from_policy(&parent).unwrap();
+        assert_eq!(
+            resolved.snapshot_hash,
+            compute_snapshot_hash(&parent_snapshot).unwrap()
+        );
+
+        let mut mismatch = authenticated;
+        mismatch.authority.parent_policy.policy_revision.push('x');
+        assert!(resolve_dispatch_narrowed_policy_snapshot(
+            &parent,
+            &carrier,
+            &mismatch,
+            root.path(),
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn e1_authenticated_parent_reference_rejects_substituted_policy_material() {
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir_all(root.path().join("src")).unwrap();
+        fs::write(root.path().join("src/lib.rs"), "lib").unwrap();
+        let parent = e1_parent_policy();
+        let carrier = e1_carrier(
+            &parent,
+            Some(transport_api_types::RestrictedWorldFsPatchV1 {
+                read: Some(transport_api_types::RestrictedWorldFsDimensionPatchV1 {
+                    allow_list: Some(vec!["src/lib.rs".to_string()]),
+                    deny_list: None,
+                }),
+                ..Default::default()
+            }),
+        );
+        let authenticated = e1_authenticated_context(&parent);
+
+        let mut substituted = parent;
+        substituted.world_fs_read.as_mut().unwrap().allow_list = vec![".".to_string()];
+        substituted.world_fs_discover = substituted.world_fs_read.clone();
+        assert!(resolve_dispatch_narrowed_policy_snapshot(
+            &substituted,
+            &carrier,
+            &authenticated,
+            root.path(),
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn e1_authenticated_parent_rejects_gate_only_policy_substitution() {
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir_all(root.path().join("src")).unwrap();
+        fs::write(root.path().join("src/lib.rs"), "lib").unwrap();
+        let mut parent = e1_parent_policy();
+        parent.agents_world_dispatch_allow_capability_narrowing = false;
+        let carrier = e1_carrier(
+            &parent,
+            Some(transport_api_types::RestrictedWorldFsPatchV1 {
+                read: Some(transport_api_types::RestrictedWorldFsDimensionPatchV1 {
+                    allow_list: Some(vec!["src/lib.rs".to_string()]),
+                    deny_list: None,
+                }),
+                ..Default::default()
+            }),
+        );
+        let authenticated = e1_authenticated_context(&parent);
+
+        let mut substituted = parent;
+        substituted.agents_world_dispatch_allow_capability_narrowing = true;
+        assert!(resolve_dispatch_narrowed_policy_snapshot(
+            &substituted,
+            &carrier,
+            &authenticated,
+            root.path(),
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn e1_shell_authentication_rejects_every_carrier_identity_substitution() {
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir_all(root.path().join("src")).unwrap();
+        fs::write(root.path().join("src/lib.rs"), "lib").unwrap();
+        let parent = e1_parent_policy();
+        let authenticated = e1_authenticated_context(&parent);
+        let carrier = e1_carrier(&parent, None);
+
+        for mutation in 0..10 {
+            let mut substituted = carrier.clone();
+            match mutation {
+                0 => substituted.request_id.push('x'),
+                1 => substituted.orchestration_session_id.push('x'),
+                2 => substituted.caller_participant_id.push('x'),
+                3 => substituted.target_backend_id.push('x'),
+                4 => substituted.target_world.world_id.push('x'),
+                5 => substituted.target_world.world_generation += 1,
+                6 => {
+                    substituted.applies_to =
+                        transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerSpawn
+                }
+                7 => substituted.parent_policy_revision.push('x'),
+                8 => {
+                    substituted.parent_policy_ref.ref_id =
+                        "ao_1123456789abcdef0123456789abcdef".to_string()
+                }
+                _ => {
+                    substituted.parent_policy_ref.commitment =
+                        transport_api_types::OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                            digest_hex: "f".repeat(64),
+                        }
+                }
+            }
+            assert!(
+                resolve_dispatch_narrowed_policy_snapshot(
+                    &parent,
+                    &substituted,
+                    &authenticated,
+                    root.path(),
+                )
+                .is_err(),
+                "carrier identity substitution {mutation} was accepted"
+            );
+        }
+    }
+
+    #[cfg(all(unix, target_os = "linux"))]
+    #[test]
+    fn e1_linux_world_service_enforces_candidate_narrowed_snapshot() {
+        use base64::Engine as _;
+        use std::collections::HashMap;
+        use std::os::unix::fs::symlink;
+        use substrate_broker::{set_global_broker, BrokerHandle};
+        use transport_api_types::ExecuteRequest;
+        use world_service::WorldService;
+
+        if unsafe { libc::geteuid() } != 0
+            || !fs::read_to_string("/proc/filesystems")
+                .map(|contents| contents.contains("overlay"))
+                .unwrap_or(false)
+        {
+            eprintln!("E1 live proof requires root and overlayfs; run the compiled test as root");
+            return;
+        }
+
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir(root.path().join("delegated")).unwrap();
+        fs::write(root.path().join("delegated/allowed.txt"), "ALLOWED\n").unwrap();
+        fs::write(root.path().join("delegated/sibling.txt"), "SIBLING\n").unwrap();
+        fs::create_dir(root.path().join("outside")).unwrap();
+        fs::write(root.path().join("outside/outside.txt"), "OUTSIDE\n").unwrap();
+        let external = tempfile::tempdir().unwrap();
+        fs::write(external.path().join("secret.txt"), "ESCAPE\n").unwrap();
+        symlink(external.path(), root.path().join("delegated/escape")).unwrap();
+
+        let mut parent = e1_parent_policy();
+        parent.world_fs_read.as_mut().unwrap().allow_list = vec![".".to_string()];
+        parent.world_fs_discover = parent.world_fs_read.clone();
+        let parent_snapshot_before = snapshot_from_policy(&parent).unwrap();
+        let parent_hash_before = compute_snapshot_hash(&parent_snapshot_before).unwrap();
+        let carrier = e1_carrier(
+            &parent,
+            Some(transport_api_types::RestrictedWorldFsPatchV1 {
+                deny_enforcement: Some(WorldFsDenyEnforcementV3::Weak),
+                read: Some(transport_api_types::RestrictedWorldFsDimensionPatchV1 {
+                    allow_list: Some(vec!["delegated/allowed.txt".to_string()]),
+                    deny_list: Some(vec![
+                        "delegated/sibling.txt".to_string(),
+                        "outside/**".to_string(),
+                    ]),
+                }),
+                ..Default::default()
+            }),
+        );
+        let authenticated = e1_authenticated_context(&parent);
+        let candidate = resolve_dispatch_narrowed_policy_snapshot(
+            &parent,
+            &carrier,
+            &authenticated,
+            root.path(),
+        )
+        .unwrap();
+        let repeated = resolve_dispatch_narrowed_policy_snapshot(
+            &parent,
+            &carrier,
+            &authenticated,
+            root.path(),
+        )
+        .unwrap();
+        assert_eq!(candidate.snapshot_hash, repeated.snapshot_hash);
+        assert_eq!(
+            serde_json::to_vec(&candidate.snapshot).unwrap(),
+            serde_json::to_vec(&repeated.snapshot).unwrap()
+        );
+        assert_ne!(candidate.snapshot_hash, parent_hash_before);
+
+        let _ = set_global_broker(BrokerHandle::new());
+        let service = WorldService::new().expect("real world service");
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let execute = |command: &str, snapshot: &PolicySnapshotV3| {
+            let mut env = HashMap::new();
+            env.insert("SUBSTRATE_WORLD_REQUIRE_WORLD".to_string(), "1".to_string());
+            runtime
+                .block_on(service.execute(ExecuteRequest {
+                    profile: None,
+                    cmd: format!("sh -lc 'cat {command}'"),
+                    cwd: Some(root.path().display().to_string()),
+                    env: Some(env),
+                    pty: false,
+                    agent_id: "e1-live-proof".to_string(),
+                    budget: None,
+                    policy_snapshot: snapshot.clone(),
+                    shared_world: None,
+                    world_network: None,
+                    world_fs_mode: None,
+                    acceptance_context: None,
+                    member_dispatch: None,
+                }))
+                .expect("execute through real world service")
+        };
+        let output = |response: &transport_api_types::ExecuteResponse| {
+            String::from_utf8_lossy(
+                &base64::engine::general_purpose::STANDARD
+                    .decode(&response.stdout_b64)
+                    .unwrap(),
+            )
+            .into_owned()
+        };
+        let diagnostic = |response: &transport_api_types::ExecuteResponse| {
+            format!(
+                "stdout={} stderr={}",
+                output(response),
+                String::from_utf8_lossy(
+                    &base64::engine::general_purpose::STANDARD
+                        .decode(&response.stderr_b64)
+                        .unwrap(),
+                )
+            )
+        };
+
+        let allowed = execute("./delegated/allowed.txt", &candidate.snapshot);
+        assert_eq!(
+            allowed.exit,
+            0,
+            "named file must remain readable: {}",
+            diagnostic(&allowed)
+        );
+        assert!(output(&allowed).contains("ALLOWED"));
+        for denied in [
+            "./delegated/sibling.txt",
+            "./outside/outside.txt",
+            "./delegated/escape/secret.txt",
+        ] {
+            let response = execute(denied, &candidate.snapshot);
+            assert_ne!(
+                response.exit, 0,
+                "narrowed snapshot unexpectedly read {denied}"
+            );
+        }
+
+        let late_carrier = e1_carrier(
+            &parent,
+            Some(transport_api_types::RestrictedWorldFsPatchV1 {
+                read: Some(transport_api_types::RestrictedWorldFsDimensionPatchV1 {
+                    allow_list: Some(vec!["late/secret.txt".to_string()]),
+                    deny_list: None,
+                }),
+                ..Default::default()
+            }),
+        );
+        let late_authenticated = e1_authenticated_context(&parent);
+        let late_candidate = resolve_dispatch_narrowed_policy_snapshot(
+            &parent,
+            &late_carrier,
+            &late_authenticated,
+            root.path(),
+        )
+        .expect("lexically contained nonexistent target");
+        symlink(external.path(), root.path().join("late")).unwrap();
+        let late_escape = execute("./late/secret.txt", &late_candidate.snapshot);
+        assert_ne!(
+            late_escape.exit, 0,
+            "runtime must recheck a lexical target that becomes a symlink escape"
+        );
+
+        let parent_snapshot_after = snapshot_from_policy(&parent).unwrap();
+        assert_eq!(parent_snapshot_after.schema_version, 3);
+        assert_eq!(
+            compute_snapshot_hash(&parent_snapshot_after).unwrap(),
+            parent_hash_before,
+            "child request must not alter parent snapshot identity"
+        );
+    }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn explicit_snapshot_fixture(

@@ -22,7 +22,14 @@ pub use api::{
 };
 pub use approval::{ApprovalCache, ApprovalContext, ApprovalStatus};
 pub use broker::Broker;
-pub use effective_policy::{EffectivePolicySources, PolicyExplainV1};
+pub use effective_policy::{
+    resolve_restricted_world_fs_narrowing, AuthenticatedDispatchPolicyNarrowingContextV1,
+    DispatchCapabilitySubjectV1, DispatchPolicyNarrowingBindingsV1,
+    DispatchWorldFsNarrowingRequestV1, EffectivePolicyResolver, EffectivePolicySources,
+    PolicyExplainV1, PolicyReferenceBindingV1, ResolvedDispatchWorldFsNarrowingV1,
+    RestrictedWorldFsDimensionPatchV1, RestrictedWorldFsPatchV1, RestrictedWorldFsWritePatchV1,
+    WorldBindingRefV1,
+};
 pub use handle::BrokerHandle;
 pub use mode::PolicyMode;
 pub use policy::{
