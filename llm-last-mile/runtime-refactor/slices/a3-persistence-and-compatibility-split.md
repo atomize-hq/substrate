@@ -85,6 +85,8 @@ A3's bounded `RG-BASE-03` differential disposition is satisfied, but the full ga
 blocking, unwaived, and not green under C2; no C2 authority is exercised. A3 is terminally complete
 and no longer active. Because Track A contains only A0 through A3, A0's committed inventory
 satisfies its diagnostic exit, and A1/A2 are already terminal, Track A is also terminally complete.
-The dependency spine names E2 as the canonical successor; its separate E1 prerequisite remains
-unresolved, and E2 awaits fresh admission and explicit dispatch. This closure does not admit,
+E1 subsequently reached terminal closure at
+`18f719898ce2a48f65e95b3b23f3b2cfd685c4af` over implementation
+`6194788d45267d91b4428a42e24c02dfcaae3c1e`, so the dependency spine now names E2 as the canonical
+successor; E2 awaits fresh admission and explicit dispatch. The A3 closure itself did not admit,
 dispatch, implement, or complete E1, E2, or any later track.

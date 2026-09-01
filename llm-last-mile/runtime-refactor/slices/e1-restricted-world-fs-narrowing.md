@@ -18,6 +18,13 @@
 
 ## Terminal closure
 
+The exact terminal closure is bound to:
+
+- closure commit `18f719898ce2a48f65e95b3b23f3b2cfd685c4af`, with sole parent
+  `6194788d45267d91b4428a42e24c02dfcaae3c1e`;
+- closure tree `60e94c7b5c985463d3311b8f556520dea8244287`; and
+- closure subject `docs: close E1 filesystem narrowing`.
+
 The completed implementation is bound to:
 
 - commit `6194788d45267d91b4428a42e24c02dfcaae3c1e`, with sole parent

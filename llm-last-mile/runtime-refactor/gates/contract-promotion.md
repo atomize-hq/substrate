@@ -4,6 +4,15 @@
 **Source provenance:** extracted byte-for-byte from [`../04-contracts-and-gates.md#14-contract-promotion-gates`](../04-contracts-and-gates.md#14-contract-promotion-gates), baseline lines 215–231; the exact 1106-byte source body is preserved between the boundary markers below
 **Baseline span SHA-256:** `0fa77777b7f8ae85bc4e06082454b243677d89d070ff4c510bd9e148b61b2d43`
 
+## Current E2 promotion disposition
+
+This authority correction does not land or promote E2. Any later fresh E2 dispatch must prove the
+new commitment's canonical serialization/hash, atomic persistence and exact retry, strict real
+tool-to-`WorldDispatchRequestV1` translation, real `ExecuteRequest`/retained-turn carrier use,
+B1/B2.1, fresh-Spawn B3.2a, or E2 fork-dispatch linkage before reporting, restart behavior, typed
+mixed-version failure, and the mandatory `RG-DIFF-01` differential wall. D1/E3 receipt/manifest
+composition is later-owner proof, not an E2 prerequisite.
+
 <!-- exact-extracted-body:start -->
 ## 14. Contract promotion gates
 

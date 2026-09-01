@@ -139,6 +139,13 @@
 | `DispatchPolicyNarrowingPatchV1` | [`contracts/dispatch-policy-narrowing-patch-v1.md`](../contracts/dispatch-policy-narrowing-patch-v1.md) | `exact extracted D10 contract owner` |
 | `DispatchCapabilitySubjectV1` | [`contracts/dispatch-policy-narrowing-patch-v1.md`](../contracts/dispatch-policy-narrowing-patch-v1.md) | `exact extracted narrowing-subject enum` |
 | `RestrictedPolicyPatchV1` | [`contracts/dispatch-policy-narrowing-patch-v1.md`](../contracts/dispatch-policy-narrowing-patch-v1.md) | `exact extracted restricted patch schema name` |
+| `DispatchPolicyCommitmentV1` | [`contracts/dispatch-policy-commitment-v1.md`](../contracts/dispatch-policy-commitment-v1.md) | `canonical E2 immutable policy commitment/cap record` |
+| `DispatchPolicyCommitmentSubjectV1` | [`contracts/dispatch-policy-commitment-v1.md`](../contracts/dispatch-policy-commitment-v1.md) | `subject-discriminated ephemeral/launch/turn/fork identity` |
+| `PolicyCommitmentAuthorityLinkV1` | [`contracts/dispatch-policy-commitment-v1.md`](../contracts/dispatch-policy-commitment-v1.md) | `subject-specific B1, fresh-Spawn B3.2a, or E2 fork-dispatch link` |
+| `DispatchPolicyCommitmentRefV1` | [`contracts/dispatch-policy-commitment-v1.md`](../contracts/dispatch-policy-commitment-v1.md) | `exact downstream receipt/manifest linkage identity` |
+| `DispatchPolicyCommitmentLookupKeyV1` | [`contracts/dispatch-policy-commitment-v1.md`](../contracts/dispatch-policy-commitment-v1.md) | `durable unique request/subject exact-retry index` |
+| `RetainedWorkerCapLinkV1` | [`contracts/dispatch-policy-commitment-v1.md`](../contracts/dispatch-policy-commitment-v1.md) | `self-safe new-cap or exact existing-cap linkage` |
+| `PolicyCommitmentCompatibilityResultV1` | [`contracts/dispatch-policy-commitment-v1.md`](../contracts/dispatch-policy-commitment-v1.md) | `typed E2 mixed-version continue/fork result` |
 | `WorldRuntimeAdapterExecutionEnvelopeV1` | [`contracts/world-runtime-adapter-execution-envelope-v1.md`](../contracts/world-runtime-adapter-execution-envelope-v1.md) | `exact extracted D10 contract owner` |
 | `LaunchTimeSecretHandoffV1` | [`contracts/launch-time-secret-handoff-v1.md`](../contracts/launch-time-secret-handoff-v1.md) | `exact extracted D10 contract owner` |
 | `GatewayAuthBundleV1` | [`contracts/launch-time-secret-handoff-v1.md`](../contracts/launch-time-secret-handoff-v1.md) | `exact extracted gateway-handoff primitive` |
@@ -298,8 +305,8 @@
 | `d2-world-command-execution-broker` | [`slices/d2-world-command-execution-broker.md`](../slices/d2-world-command-execution-broker.md) | canonical slice row record |
 | `d3-codex-uaa-end-to-end-closure` | [`slices/d3-codex-uaa-end-to-end-closure.md`](../slices/d3-codex-uaa-end-to-end-closure.md) | canonical slice row record |
 | `dispatch-and-episode-transport-family` | [`seams/dispatch-and-episode-transport.md`](../seams/dispatch-and-episode-transport.md) | canonical current seam-family record |
-| `e1-restricted-world-fs-narrowing` | [`slices/e1-restricted-world-fs-narrowing.md`](../slices/e1-restricted-world-fs-narrowing.md) | canonical slice row record |
-| `e2-policy-commitments-on-work-and-workers` | [`slices/e2-policy-commitments-on-work-and-workers.md`](../slices/e2-policy-commitments-on-work-and-workers.md) | canonical slice row record |
+| `e1-restricted-world-fs-narrowing` | [`slices/e1-restricted-world-fs-narrowing.md`](../slices/e1-restricted-world-fs-narrowing.md) | terminally complete slice and exact closure record |
+| `e2-policy-commitments-on-work-and-workers` | [`slices/e2-policy-commitments-on-work-and-workers.md`](../slices/e2-policy-commitments-on-work-and-workers.md) | corrected E2 authority record; eligible for fresh admission, undispatched |
 | `e3-agent-config-projection-and-gateway-adoption` | [`slices/e3-agent-config-projection-and-gateway-adoption.md`](../slices/e3-agent-config-projection-and-gateway-adoption.md) | canonical slice row record |
 | `e4-host-visible-write-sync-contract` | [`slices/e4-host-visible-write-sync-contract.md`](../slices/e4-host-visible-write-sync-contract.md) | canonical slice row record |
 | `host-session-authority-family` | [`seams/host-session-authority.md`](../seams/host-session-authority.md) | canonical current seam-family record |
@@ -374,8 +381,8 @@
 | `d1-world-adapter-execution-envelope` | [`slices/d1-world-adapter-execution-envelope.md`](../slices/d1-world-adapter-execution-envelope.md) | canonical slice row record |
 | `d2-world-command-execution-broker` | [`slices/d2-world-command-execution-broker.md`](../slices/d2-world-command-execution-broker.md) | canonical slice row record |
 | `d3-codex-uaa-end-to-end-closure` | [`slices/d3-codex-uaa-end-to-end-closure.md`](../slices/d3-codex-uaa-end-to-end-closure.md) | canonical slice row record |
-| `e1-restricted-world-fs-narrowing` | [`slices/e1-restricted-world-fs-narrowing.md`](../slices/e1-restricted-world-fs-narrowing.md) | canonical slice row record |
-| `e2-policy-commitments-on-work-and-workers` | [`slices/e2-policy-commitments-on-work-and-workers.md`](../slices/e2-policy-commitments-on-work-and-workers.md) | canonical slice row record |
+| `e1-restricted-world-fs-narrowing` | [`slices/e1-restricted-world-fs-narrowing.md`](../slices/e1-restricted-world-fs-narrowing.md) | terminally complete slice and exact closure record |
+| `e2-policy-commitments-on-work-and-workers` | [`slices/e2-policy-commitments-on-work-and-workers.md`](../slices/e2-policy-commitments-on-work-and-workers.md) | corrected E2 authority record; eligible for fresh admission, undispatched |
 | `e3-agent-config-projection-and-gateway-adoption` | [`slices/e3-agent-config-projection-and-gateway-adoption.md`](../slices/e3-agent-config-projection-and-gateway-adoption.md) | canonical slice row record |
 | `e4-host-visible-write-sync-contract` | [`slices/e4-host-visible-write-sync-contract.md`](../slices/e4-host-visible-write-sync-contract.md) | canonical slice row record |
 | `shared-slice-map` | [`slices/README.md`](../slices/README.md) | canonical shared slice-map record |

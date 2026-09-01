@@ -2,7 +2,7 @@
 **Stable ID:** `track-e-dispatch-policy-and-config-projection`
 **Canonical for:** Track E navigation only
 **Status:** non-authoritative navigation
-**Authority scope:** exact extracted Track E table only; no schedule, dispatch, or implementation authority
+**Authority scope:** exact extracted Track E table plus current navigation correction; no schedule, dispatch, or implementation authority
 **Source span:** [`../03-phase-slice-map.md`](../03-phase-slice-map.md) lines 216–224
 **Supersedes:** canonical ownership of the extracted Track E table
 **Superseded by:** none
@@ -10,7 +10,14 @@
 
 # Track E — Dispatch-scoped policy narrowing and config projection
 
-> **Authority boundary:** This file is a navigation index only. E1/E2/E3/E4 remain later independent slices, undispatched here, and schedule authority remains with the controlling decision, packet, and gate owners.
+> **Authority boundary:** This file is a navigation index only. E1 is terminally complete at
+> `18f719898ce2a48f65e95b3b23f3b2cfd685c4af`; E2 is the corrected successor eligible only for
+> fresh admission and explicit dispatch; E2/E3/E4 remain undispatched here. Schedule authority
+> remains with the controlling decision, packet, and gate owners.
+
+The extracted E2 row below is pre-correction navigation. Its current authority is the
+[E2 correction](e2-policy-commitments-on-work-and-workers.md#current-e2-authority-correction-2026-09-01-controlling):
+E2 owns the independent immutable policy commitment/cap, not receipt or full-manifest construction.
 
 | Slice | Goal | Must-read docs | Sibling context | Allowed code areas | Explicit non-goals | Exit gate | Regression gates |
 |---|---|---|---|---|---|---|---|

@@ -7,16 +7,20 @@
 ## E1 terminal implementation disposition
 
 E1's request-scoped `current_parent AND dispatch_patch` primitive and all V1 field/path rows below
-are implementation- and review-clean at commit
-`6194788d45267d91b4428a42e24c02dfcaae3c1e`, tree
+are terminally closed at exact closure commit
+`18f719898ce2a48f65e95b3b23f3b2cfd685c4af`, tree
+`60e94c7b5c985463d3311b8f556520dea8244287`, over implementation commit
+`6194788d45267d91b4428a42e24c02dfcaae3c1e`, implementation tree
 `6be705b4e957c071c05ec3a97fc973c05fa1f302`, and reviewed fingerprint
 `sha256:35b77c26e04b55b9f355268a5f28be1ff1d7cfeb9aef6b6751894cda95ab3dac`.
 The Linux ABI-7 real-service proof covers exact-file success, sibling/outside denial, and ancestor
 symlink-escape denial without changing the parent snapshot; focused Landlock coverage separately
 proves final-component symlink rejection. The `worker_cap`, future `turn`, and `fork_cap` formulas
-remain E2-owned and unimplemented; final receipt/manifest
-commitments, D2 per-operation mediation, and E4 host-visibility synchronization remain open. This
-bounded disposition completes E1 only and gives E2 no admission or dispatch authority.
+remain E2-owned and unimplemented under the independent
+[`DispatchPolicyCommitmentV1`](../contracts/dispatch-policy-commitment-v1.md). E2 owns neither
+receipt nor full-manifest construction. D2 per-operation mediation and E4 host-visibility
+synchronization remain open. This bounded disposition completes E1 and makes E2 eligible only for
+fresh admission and explicit dispatch; it does not admit or dispatch E2.
 
 <!-- exact-extracted-body:start -->
 ## 13. Dispatch narrowing monotonicity rules

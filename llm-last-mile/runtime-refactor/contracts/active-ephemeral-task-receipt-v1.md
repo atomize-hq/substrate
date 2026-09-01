@@ -1,8 +1,18 @@
 **Kind:** contract
 **Status:** canonical
-**Canonical for:** complete extracted `ActiveEphemeralTaskReceiptV1` schema, state transitions, terminal monotonicity, explicit result-class literal order, and `NeedsRetainedFollowup` negative requirements
+**Canonical for:** complete extracted `ActiveEphemeralTaskReceiptV1` schema, state transitions, terminal monotonicity, explicit result-class literal order, `NeedsRetainedFollowup` negative requirements, and the current E2 composition correction
 **Source provenance:** extracted byte-for-byte from [`../04-contracts-and-gates.md#3-activeephemeraltaskreceiptv1`](../04-contracts-and-gates.md#3-activeephemeraltaskreceiptv1), baseline lines 91–138; the exact 1557-byte source body is preserved between the boundary markers below
 **Baseline span SHA-256:** `c997752654f041de820210f03c86706551b44389994df5e8e0341aa41a34fa3b`
+
+## Current E2 composition correction
+
+E2 does not construct this receipt. E2 persists an independently valid
+[`DispatchPolicyCommitmentV1`](dispatch-policy-commitment-v1.md) after exact B1 acceptance and
+B2.1 observation linkage and before acceptance is reported. B2.2 remains the receipt owner and must
+add/consume the exact `DispatchPolicyCommitmentRefV1`; the extracted
+`policy_snapshot_ref`/hash/revision/reason fields equality-project that immutable record and cannot
+be independently recomputed. The receipt must not be exposed before that ref is durable and
+exact-linked.
 
 <!-- exact-extracted-body:start -->
 ## 3. `ActiveEphemeralTaskReceiptV1`

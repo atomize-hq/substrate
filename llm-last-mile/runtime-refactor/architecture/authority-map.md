@@ -1,14 +1,20 @@
 **Kind:** architecture
 **Stable ID:** `shared-authority-map`
-**Canonical for:** shared authority map only
+**Canonical for:** shared authority map plus the current E2 policy-commitment ownership correction
 **Status:** canonical shared-architecture record
-**Authority scope:** exact extracted shared authority-map source body only; no implementation authority
+**Authority scope:** exact extracted shared authority-map source body plus the documentation-only E2 owner row; no implementation authority
 **Source span:** [`../01-target-architecture.md#authority-map`](../01-target-architecture.md#authority-map) lines 62–83
 **Supersedes:** canonical ownership of the extracted source body; source heading remains a compatibility anchor
 **Superseded by:** none
 **Projection consumers:** [`README.md`](README.md), [`../01-target-architecture.md`](../01-target-architecture.md)
 
 # Authority map
+
+## Current E2 policy-commitment ownership correction
+
+| Boundary | Owns | Must not own |
+|---|---|---|
+| DispatchPolicyCommitmentRegistry | immutable `DispatchPolicyCommitmentV1` construction from owner-supplied exact parent/cap/patch inputs; canonical snapshot bytes/ref and hash validation; atomic persistence, exact retry, and exact B1/B2.1, fresh-Spawn B3.2a, or E2 fork-dispatch linkage before acceptance/launch is reported | B1 acceptance, B2.1 observation, B3.2a admission, fork admission/lifecycle, receipt construction/return, retained lifecycle or full-manifest construction, D1 execution-envelope identity, E3 config-projection identity, policy enforcement, migration, or cap reconstruction |
 
 ## Authority map
 

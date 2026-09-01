@@ -107,6 +107,13 @@ Canonical content: [`slices/track-d-uaa-execution-envelope-and-side-effect-media
 
 Canonical content: [`slices/track-e-dispatch-policy-and-config-projection.md`](slices/track-e-dispatch-policy-and-config-projection.md).
 
+Current correction: E1 is terminally complete at
+`18f719898ce2a48f65e95b3b23f3b2cfd685c4af`. The preserved E2 row below is pre-correction
+chronology; the controlling
+[`E2 authority correction`](slices/e2-policy-commitments-on-work-and-workers.md#current-e2-authority-correction-2026-09-01-controlling)
+owns an independent immutable policy commitment/cap and does not assign E2 receipt or full-manifest
+construction.
+
 | Slice | Goal | Must-read docs | Sibling context | Allowed code areas | Explicit non-goals | Exit gate | Regression gates |
 |---|---|---|---|---|---|---|---|
 | [**E1 — Restricted world_fs narrowing**](slices/e1-restricted-world-fs-narrowing.md) | Accept a request-scoped restricted `PolicyPatch.world_fs`, validate path-containment monotonicity, and materialize a canonical narrowed snapshot. | `02` EffectivePolicyResolver + NarrowingPatch rows; `04` narrowing contract/rules; steering policy matrix capability section | WorldCommandExecutionBroker; receipt acceptance; agent inventory overlay logic | `crates/broker`; `execution/{policy_model,policy_snapshot,agent_inventory}.rs`; transport API policy types; resolver tests | No new filesystem policy model; no broadening dimensions; no receipt/manifests yet. | Gate=false rejects; gate=true accepts only narrowing; file-under-directory containment works; escapes/symlinks/broadening fail closed. | `RG-POLICY-01`, `RG-POLICY-02` |

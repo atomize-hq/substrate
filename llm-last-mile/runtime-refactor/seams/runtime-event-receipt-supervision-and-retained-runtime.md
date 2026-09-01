@@ -1,8 +1,8 @@
 **Kind:** seam family
 **Stable ID:** `runtime-event-receipt-supervision-and-retained-runtime-family`
-**Canonical for:** runtime event, receipt, supervision, and retained-worker runtime seam extraction
+**Canonical for:** runtime event, receipt, supervision, and retained-worker runtime seam extraction plus the current E2 ownership correction
 **Status:** canonical current seam-family record
-**Authority scope:** exact extracted family-local source bodies only; no implementation authority
+**Authority scope:** exact extracted family-local source bodies plus the documentation-only E2 ownership correction; no implementation authority
 **Source span:** D8 runtime-event, receipt, supervision, and retained-runtime family extraction from `02-seam-crosswalk.md`
 **Supersedes:** canonical ownership of the extracted `RuntimeEventTransport`, `WorldWorkReceiptRegistry`, `WorldWorkExecutionSupervisor`, and `RetainedWorkerRuntime` rows
 **Superseded by:** none
@@ -11,6 +11,18 @@
 # Runtime event, receipt, supervision, and retained runtime seam extraction
 
 > **Authority boundary:** This file owns only the extracted `RuntimeEventTransport`, `WorldWorkReceiptRegistry`, `WorldWorkExecutionSupervisor`, and `RetainedWorkerRuntime` seam rows. It does not promote any seam, move the A0 authority-leak inventory, reopen D5/D6/D7 or already-extracted D8 family owners, rewrite `b1-b2-1/` or `b3-1-c1/`, extract the remaining C/D seam families, or authorize B0/B1/B2.1/B3.1/B3.2/B4/C implementation work.
+
+## Current E2 ownership correction
+
+E2 consumes but does not mutate B1 acceptance, B2.1 observation, or fresh-Spawn B3.2a admission truth and
+persists the separate immutable
+[`DispatchPolicyCommitmentV1`](../contracts/dispatch-policy-commitment-v1.md). ReceiptRegistry and
+Supervisor do not become policy owners. B2.2/B3.2 later consume the exact ref for receipts and
+retained lifecycle; the later full manifest also waits for D1/E3 identities. RetainedWorkerRuntime
+must return typed unsupported-legacy state before continue/fork when canonical cap bytes/ref are
+missing or hash-invalid; it may not reconstruct a cap from a newer parent. Fork uses an E2-owned
+strict request-to-cap link and gains no B3.2a admission authority. No supervisor, observation,
+cancellation, or lifecycle behavior is authorized by this correction.
 
 ## RuntimeEventTransport
 

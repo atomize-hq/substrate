@@ -1,8 +1,8 @@
 **Kind:** seam family
 **Stable ID:** `dispatch-and-episode-transport-family`
-**Canonical for:** dispatch and episode transport seam extraction
+**Canonical for:** dispatch and episode transport seam extraction plus the current E2 ingress correction
 **Status:** canonical current seam-family record
-**Authority scope:** exact extracted family-local source bodies only; no implementation authority
+**Authority scope:** exact extracted family-local source bodies plus the documentation-only E2 ingress correction; no implementation authority
 **Source span:** D8 dispatch and episode transport family extraction from `02-seam-crosswalk.md`
 **Supersedes:** canonical ownership of the extracted `InternalToolboxTransport`, `RuntimeToolInvocationAdapter`, and `WorldDispatchControl` rows
 **Superseded by:** none
@@ -11,6 +11,23 @@
 # Dispatch and episode transport seam extraction
 
 > **Authority boundary:** This file owns only the extracted `InternalToolboxTransport`, `RuntimeToolInvocationAdapter`, and `WorldDispatchControl` seam rows. It does not promote any seam, move the A0 authority-leak inventory, reopen D5/D6/D7 or B1/B2.1/B3.1/C1 family owners, extract `SteeringPolicyEngine`, `EffectivePolicyResolver`, or `DispatchPolicyNarrowingPatch`, or authorize B2.2/B3.2/B4/E-track implementation work.
+
+## Current E2 ingress correction
+
+The minimum future E2 ingress fence extends the strict typed carrier through
+`dispatch_contract.rs::{WorldDispatchRequestV1, ValidatedWorldDispatchRequestV1,
+WorldDispatchRequestV1::validate}` and the exact tool-translation chain
+`translate_host_tool_invocation_request_to_internal_dispatch_request_v1` → fresh
+`translate_run_world_task_to_internal_dispatch_request_v1` /
+`translate_spawn_world_worker_to_internal_dispatch_request_v1` or follow-up
+`translate_follow_up_arguments_v1` →
+`translate_follow_up_tool_to_internal_dispatch_request_v1` → `build_dispatch_request_v1`.
+
+Only the directly necessary `ExecuteRequest`/`MemberTurnSubmitRequestV1` policy carrier builders
+and the symbol-level preparation/persistence links named in the
+[E2 implementation fence](../slices/e2-policy-commitments-on-work-and-workers.md#e2-implementation-fence-for-a-future-fresh-dispatch)
+may carry the E1 result into real dispatch. This correction grants no broad file authority and no
+router, provider, cancellation, supervisor, or orchestration-lifecycle change.
 
 ## InternalToolboxTransport
 

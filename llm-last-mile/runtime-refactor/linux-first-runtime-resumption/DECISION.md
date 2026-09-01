@@ -126,11 +126,14 @@ atomic persistence, rollback, publication, and `fsync` ownership. No durable for
 version, or migration changed.
 
 The Track A table contains only A0 through A3. A0's committed classified inventory satisfies its
-diagnostic exit, and A1/A2/A3 are terminally complete, so Track A is terminally complete. The hard
-dependency spine names E2 as the canonical successor, while E1 remains a separate unresolved
-prerequisite; E2 awaits fresh admission and explicit dispatch. The full `RG-BASE-03` continuity
-witness remains open, blocking, unwaived, and not green under C2. This closure admits or dispatches
-none of E1, E2, or C2 and exercises no later-track authority.
+diagnostic exit, and A1/A2/A3 are terminally complete, so Track A is terminally complete. E1 is
+terminally complete at exact closure commit
+`18f719898ce2a48f65e95b3b23f3b2cfd685c4af` and tree
+`60e94c7b5c985463d3311b8f556520dea8244287`, over implementation commit
+`6194788d45267d91b4428a42e24c02dfcaae3c1e`. The hard dependency spine therefore names E2 as the
+canonical successor; E2 awaits fresh admission and explicit dispatch. The full `RG-BASE-03`
+continuity witness remains open, blocking, unwaived, and not green under C2. This closure admits or
+dispatches neither E2 nor C2 and exercises no later-track authority.
 
 ## macOS lane
 

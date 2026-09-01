@@ -1,8 +1,8 @@
 **Kind:** seam family
 **Stable ID:** `policy-and-narrowing-family`
-**Canonical for:** policy and narrowing seam extraction
+**Canonical for:** policy and narrowing seam extraction plus the current E1/E2 disposition
 **Status:** canonical current seam-family record
-**Authority scope:** exact extracted family-local source bodies only; no implementation authority
+**Authority scope:** exact extracted family-local source bodies plus the documentation-only E1/E2 disposition; no implementation authority
 **Source span:** D8 policy and narrowing family extraction from `02-seam-crosswalk.md`
 **Supersedes:** canonical ownership of the extracted `SteeringPolicyEngine`, `EffectivePolicyResolver`, and `DispatchPolicyNarrowingPatch` rows
 **Superseded by:** none
@@ -11,6 +11,17 @@
 # Policy and narrowing seam extraction
 
 > **Authority boundary:** This file owns only the extracted `SteeringPolicyEngine`, `EffectivePolicyResolver`, and `DispatchPolicyNarrowingPatch` seam rows. It does not promote any seam, move the A0 authority-leak inventory, reopen D5/D6/D7 or already-extracted D8 family owners, rewrite `b1-b2-1/` or `b3-1-c1/`, or authorize E-track/B3.2/B4 implementation work.
+
+## Current E1/E2 disposition
+
+The extracted rows below preserve their pre-E1 chronology. E1's strict authenticated patch,
+broker composition, canonical `PolicySnapshotV3`, and containment/enforcement scope is terminally
+closed at `18f719898ce2a48f65e95b3b23f3b2cfd685c4af` over implementation
+`6194788d45267d91b4428a42e24c02dfcaae3c1e`. E2 remains undispatched and owns the separate
+immutable [`DispatchPolicyCommitmentV1`](../contracts/dispatch-policy-commitment-v1.md), not
+receipt/full-manifest construction. EffectivePolicyResolver composes; the bounded
+DispatchPolicyCommitmentRegistry persists and links; later receipt/manifest owners consume the
+exact ref.
 
 ## SteeringPolicyEngine
 

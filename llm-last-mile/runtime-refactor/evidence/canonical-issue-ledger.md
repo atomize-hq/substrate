@@ -22,15 +22,24 @@ admitted, or dispatched by this status overlay.
 Under the
 [E1 terminal closure](../slices/e1-restricted-world-fs-narrowing.md#terminal-closure), the
 E1-scoped strict-carrier, gate, broker-resolution, canonical-snapshot, and reason-binding clause of
-`RG-POLICY-01` is green at implementation commit
-`6194788d45267d91b4428a42e24c02dfcaae3c1e`; E2 still owns receipt/manifest persistence and the
-ledger-wide row remains unresolved. The E1-scoped monotonic containment, authoritative-inventory-
+`RG-POLICY-01` is terminally closed at exact closure commit
+`18f719898ce2a48f65e95b3b23f3b2cfd685c4af` (tree
+`60e94c7b5c985463d3311b8f556520dea8244287`) over implementation commit
+`6194788d45267d91b4428a42e24c02dfcaae3c1e`. E2 still owns only the remaining immutable-policy
+linkage clause, so the ledger-wide row remains unresolved. The E1-scoped monotonic containment, authoritative-inventory-
 root, exact-file Landlock, runtime symlink-recheck, and Linux enforcement clause of
 `RG-POLICY-02` is green at the same commit; D2 per-operation mediation and E4 host-visible sync
 remain open, so that ledger-wide row also remains unresolved. `RG-UAA-02` and `RG-POLICY-03`
 remain open under their existing owners, `RG-BASE-03` remains open under C2, and `RG-DIFF-01` is
 preserved. This overlay marks E1 terminally complete and makes E2 eligible only for fresh admission
 and explicit dispatch; it does not admit, dispatch, implement, or complete E2.
+
+The current E2 authority correction is the independent immutable
+[`DispatchPolicyCommitmentV1`](../contracts/dispatch-policy-commitment-v1.md), persisted and linked
+before accepted work or worker-launch success is reported. `RG-POLICY-03` remains wholly E2-owned;
+`RG-RECEIPT-02` remains B2.2/B3.2-owned except for that immutable component; and only the E2 policy
+clauses flow into `RG-CANCEL-01` and `RG-OBS-01`. E2 does not construct receipts or a full retained
+manifest. `RG-BASE-03` remains under C2 and `RG-DIFF-01` remains mandatory.
 
 <!-- exact-extracted-body:start -->
 ## Canonical issue ledger

@@ -59,9 +59,12 @@ the terminal [A1.4 closure](tasks/a1-4-auto-attach-producer-adoption.md#terminal
 other A1 condition. A1 is terminally complete. [A2](a2-host-execution-episode-demotion.md#terminal-closure)
 and [A3](a3-persistence-and-compatibility-split.md#terminal-closure) are terminally complete under
 their separate closure identities. A0's committed inventory already satisfies its diagnostic exit,
-so the four-row Track A is terminally complete. The dependency spine names
-[E2](e2-policy-commitments-on-work-and-workers.md) as the canonical successor, while E1 remains a
-separate unresolved prerequisite; E2 awaits fresh admission and explicit dispatch.
+so the four-row Track A is terminally complete. [E1](e1-restricted-world-fs-narrowing.md#terminal-closure)
+is also terminally complete at exact closure commit
+`18f719898ce2a48f65e95b3b23f3b2cfd685c4af` over implementation commit
+`6194788d45267d91b4428a42e24c02dfcaae3c1e`. The dependency spine therefore names
+[E2](e2-policy-commitments-on-work-and-workers.md#current-e2-authority-correction-2026-09-01-controlling)
+as the canonical successor, eligible only for fresh admission and explicit dispatch.
 
 This graph is acyclic. `B1-3a/B1-3b receipt core` is a review state, not a claim that B1 is
 production-complete: it supplies the exact proposal, acknowledgement, activated-store acceptance
