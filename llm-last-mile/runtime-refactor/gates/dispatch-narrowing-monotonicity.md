@@ -1,8 +1,22 @@
 **Kind:** gate
 **Status:** canonical
-**Canonical for:** complete extracted resolver formulas, V1 field rules table, path-containment rules 1–8, host-visible fail-closed exception, rejected-not-ignored narrowing rule, and broker versus world-service enforcement boundary
+**Canonical for:** complete extracted resolver formulas, V1 field rules table, path-containment rules 1–8, host-visible fail-closed exception, rejected-not-ignored narrowing rule, broker versus world-service enforcement boundary, and the bounded E1 terminal disposition
 **Source provenance:** extracted byte-for-byte from [`../04-contracts-and-gates.md#13-dispatch-narrowing-monotonicity-rules`](../04-contracts-and-gates.md#13-dispatch-narrowing-monotonicity-rules), baseline lines 181–214; the exact 1930-byte source body is preserved between the boundary markers below
 **Baseline span SHA-256:** `b12ef2b8c8bcffad5139e196df49ba2f59094ddf024f59d2d2a645eb9be2210a`
+
+## E1 terminal implementation disposition
+
+E1's request-scoped `current_parent AND dispatch_patch` primitive and all V1 field/path rows below
+are implementation- and review-clean at commit
+`6194788d45267d91b4428a42e24c02dfcaae3c1e`, tree
+`6be705b4e957c071c05ec3a97fc973c05fa1f302`, and reviewed fingerprint
+`sha256:35b77c26e04b55b9f355268a5f28be1ff1d7cfeb9aef6b6751894cda95ab3dac`.
+The Linux ABI-7 real-service proof covers exact-file success, sibling/outside denial, and ancestor
+symlink-escape denial without changing the parent snapshot; focused Landlock coverage separately
+proves final-component symlink rejection. The `worker_cap`, future `turn`, and `fork_cap` formulas
+remain E2-owned and unimplemented; final receipt/manifest
+commitments, D2 per-operation mediation, and E4 host-visibility synchronization remain open. This
+bounded disposition completes E1 only and gives E2 no admission or dispatch authority.
 
 <!-- exact-extracted-body:start -->
 ## 13. Dispatch narrowing monotonicity rules

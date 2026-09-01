@@ -4,7 +4,7 @@
 **Source provenance:** extracted byte-for-byte from [`../05-debug-regression-ledger.md#canonical-issue-ledger`](../05-debug-regression-ledger.md#canonical-issue-ledger), baseline lines 16–97 inclusive; the exact 41492-byte source body is preserved between the boundary markers below
 **Baseline span SHA-256:** `191a62ea0c77064941947280d87c539163ab69b772a8018f6b2f4e3d3e5aae3e`
 
-## Current A1/A2/A3 gate disposition
+## Current completed-slice gate disposition
 
 The exact extracted ledger body below remains byte-stable. Under the terminal
 [A1.4 closure](../slices/tasks/a1-4-auto-attach-producer-adoption.md#terminal-closure), the
@@ -18,6 +18,19 @@ remain unresolved for their other named owners. Under the
 A3-scoped clause of `RG-AUTH-02` is green at implementation commit
 `627e0febf9e0a5143a8b92ba54f1c9377d3ffae5`; no ledger-wide gate or successor is closed,
 admitted, or dispatched by this status overlay.
+
+Under the
+[E1 terminal closure](../slices/e1-restricted-world-fs-narrowing.md#terminal-closure), the
+E1-scoped strict-carrier, gate, broker-resolution, canonical-snapshot, and reason-binding clause of
+`RG-POLICY-01` is green at implementation commit
+`6194788d45267d91b4428a42e24c02dfcaae3c1e`; E2 still owns receipt/manifest persistence and the
+ledger-wide row remains unresolved. The E1-scoped monotonic containment, authoritative-inventory-
+root, exact-file Landlock, runtime symlink-recheck, and Linux enforcement clause of
+`RG-POLICY-02` is green at the same commit; D2 per-operation mediation and E4 host-visible sync
+remain open, so that ledger-wide row also remains unresolved. `RG-UAA-02` and `RG-POLICY-03`
+remain open under their existing owners, `RG-BASE-03` remains open under C2, and `RG-DIFF-01` is
+preserved. This overlay marks E1 terminally complete and makes E2 eligible only for fresh admission
+and explicit dispatch; it does not admit, dispatch, implement, or complete E2.
 
 <!-- exact-extracted-body:start -->
 ## Canonical issue ledger
