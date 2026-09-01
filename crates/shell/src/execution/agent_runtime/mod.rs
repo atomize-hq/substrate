@@ -1,4 +1,5 @@
 pub(crate) mod auto_attach;
+mod compatibility;
 pub(crate) mod control;
 pub(crate) mod dispatch_contract;
 pub(crate) mod host_inbox;

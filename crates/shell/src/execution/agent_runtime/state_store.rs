@@ -125,6 +125,22 @@ fn stop_order_probe_log_parked_write(
 }
 
 impl AgentRuntimeSessionRecord {
+    pub(super) fn from_compatibility_projection(
+        session: OrchestrationSessionRecord,
+        participants: Vec<AgentRuntimeParticipantRecord>,
+        warnings: Vec<String>,
+        has_authoritative_parent: bool,
+        complete: bool,
+    ) -> Self {
+        Self {
+            session,
+            participants,
+            warnings,
+            has_authoritative_parent,
+            complete,
+        }
+    }
+
     pub(crate) fn orchestration_session_id(&self) -> &str {
         &self.session.orchestration_session_id
     }
@@ -940,12 +956,6 @@ impl ResolvedPublicTurnTarget {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-enum ParticipantRecordSource {
-    Canonical,
-    Flat,
-    Legacy,
-}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum WorldWorkProposalFamilyV1 {
     EphemeralTask,
@@ -2655,6 +2665,1054 @@ pub(crate) struct AgentRuntimeStateStore {
 pub(crate) struct BoundAgentRuntimeStateStore {
     store: AgentRuntimeStateStore,
 }
+
+struct TransactionCompatibilityReadSource<'a> {
+    store: &'a AgentRuntimeStateStore,
+    transaction: &'a mut super::host_session_authority::store::LegacyWriterGuard,
+}
+
+struct FilesystemCompatibilityReadSource<'a> {
+    store: &'a AgentRuntimeStateStore,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    root_guard: Option<super::host_session_authority::trusted_fs::TrustedAuthorityRoot>,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    root_synchronization: Option<CompatibilityReadRootSynchronization>,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+struct CompatibilityReadRootLockScope {
+    authority_entry: super::host_session_authority::trusted_fs::DirectoryEntry,
+    authority: super::host_session_authority::trusted_fs::TrustedDirectory,
+    lock_entry: super::host_session_authority::trusted_fs::DirectoryEntry,
+    lock_directory: super::host_session_authority::trusted_fs::TrustedDirectory,
+    root_lock_entry: super::host_session_authority::trusted_fs::DirectoryEntry,
+    root_lock_file: super::host_session_authority::trusted_fs::TrustedFile,
+    _lock: super::host_session_authority::trusted_fs::TrustedOwnedFileLock,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+enum CompatibilityReadRootSynchronization {
+    Unactivated {
+        root_entries: Vec<super::host_session_authority::trusted_fs::DirectoryEntry>,
+    },
+    Locked(CompatibilityReadRootLockScope),
+}
+
+impl<'a> FilesystemCompatibilityReadSource<'a> {
+    fn open(store: &'a AgentRuntimeStateStore) -> Result<Self> {
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            return Ok(Self { store });
+        }
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            let Some(expected) = store.bootstrap_home.as_ref() else {
+                return Ok(Self {
+                    store,
+                    root_guard: None,
+                    root_synchronization: None,
+                });
+            };
+            let root_guard = super::host_session_authority::trusted_fs::TrustedAuthorityRoot::open(
+                Path::new(&expected.physical_path),
+            )
+            .context("bind read-only compatibility root")?;
+            if root_guard.identity() != expected {
+                anyhow::bail!("read-only compatibility root identity changed");
+            }
+            let root_synchronization = Self::synchronize_root(&root_guard)?;
+            Ok(Self {
+                store,
+                root_guard: Some(root_guard),
+                root_synchronization: Some(root_synchronization),
+            })
+        }
+    }
+
+    fn finish(&self) -> Result<()> {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            if let Some(root_guard) = self.root_guard.as_ref() {
+                match self.root_synchronization.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!("bound compatibility root omitted read synchronization")
+                })? {
+                    CompatibilityReadRootSynchronization::Unactivated { root_entries } => {
+                        if root_guard
+                            .directory()
+                            .entries()
+                            .context("reenumerate unactivated compatibility root")?
+                            != *root_entries
+                        {
+                            anyhow::bail!("unactivated compatibility root changed during read");
+                        }
+                    }
+                    CompatibilityReadRootSynchronization::Locked(scope) => {
+                        root_guard
+                            .directory()
+                            .revalidate_entry(&scope.authority_entry)
+                            .and_then(|()| {
+                                root_guard
+                                    .directory()
+                                    .open_controlled_directory_entry(&scope.authority_entry)
+                                    .map(drop)
+                            })
+                            .context("revalidate compatibility authority directory")?;
+                        scope
+                            .authority
+                            .revalidate_entry(&scope.lock_entry)
+                            .and_then(|()| {
+                                scope
+                                    .authority
+                                    .open_controlled_directory_entry(&scope.lock_entry)
+                                    .map(drop)
+                            })
+                            .context("revalidate compatibility lock directory")?;
+                        scope
+                            .lock_directory
+                            .revalidate_entry(&scope.root_lock_entry)
+                            .and_then(|()| {
+                                scope
+                                    .lock_directory
+                                    .open_file_entry(&scope.root_lock_entry)
+                                    .map(drop)
+                            })
+                            .context("revalidate compatibility root lock")?;
+                        let _ = &scope.root_lock_file;
+                    }
+                }
+                root_guard
+                    .revalidate()
+                    .context("revalidate read-only compatibility root")?;
+            }
+        }
+        Ok(())
+    }
+
+    fn has_trusted_root(&self) -> bool {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            self.root_guard.is_some()
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            false
+        }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn synchronize_root(
+        root: &super::host_session_authority::trusted_fs::TrustedAuthorityRoot,
+    ) -> Result<CompatibilityReadRootSynchronization> {
+        use super::host_session_authority::trusted_fs::EntryKind;
+
+        let root_entries = root
+            .directory()
+            .entries()
+            .context("enumerate compatibility authority root")?;
+        let Some(authority_entry) = root_entries
+            .iter()
+            .find(|entry| entry.name == "authority-v1")
+            .cloned()
+        else {
+            return Ok(CompatibilityReadRootSynchronization::Unactivated { root_entries });
+        };
+        if authority_entry.kind != EntryKind::Directory {
+            anyhow::bail!("compatibility authority directory is unsafe");
+        }
+        let authority = root
+            .directory()
+            .open_controlled_directory_entry(&authority_entry)
+            .context("open compatibility authority directory")?;
+        let lock_entry = authority
+            .entries()
+            .context("enumerate compatibility authority directory")?
+            .into_iter()
+            .find(|entry| entry.name == "lock")
+            .ok_or_else(|| anyhow::anyhow!("compatibility authority lock directory is absent"))?;
+        if lock_entry.kind != EntryKind::Directory {
+            anyhow::bail!("compatibility authority lock directory is unsafe");
+        }
+        let lock_directory = authority
+            .open_controlled_directory_entry(&lock_entry)
+            .context("open compatibility authority lock directory")?;
+        let root_lock_entry = lock_directory
+            .entries()
+            .context("enumerate compatibility authority lock directory")?
+            .into_iter()
+            .find(|entry| entry.name == "root.lock")
+            .ok_or_else(|| anyhow::anyhow!("compatibility authority root lock is absent"))?;
+        if root_lock_entry.kind != EntryKind::RegularFile {
+            anyhow::bail!("compatibility authority root lock is unsafe");
+        }
+        let root_lock_file = lock_directory
+            .open_file_entry(&root_lock_entry)
+            .context("open compatibility authority root lock")?;
+        let lock = root_lock_file
+            .lock_exclusive_owned()
+            .context("acquire read-only compatibility root lock")?;
+        root.revalidate()
+            .context("revalidate compatibility root after locking")?;
+        root.directory()
+            .revalidate_entry(&authority_entry)
+            .and_then(|()| {
+                root.directory()
+                    .open_controlled_directory_entry(&authority_entry)
+                    .map(drop)
+            })
+            .context("revalidate compatibility authority directory after locking")?;
+        authority
+            .revalidate_entry(&lock_entry)
+            .and_then(|()| {
+                authority
+                    .open_controlled_directory_entry(&lock_entry)
+                    .map(drop)
+            })
+            .context("revalidate compatibility lock directory after locking")?;
+        lock_directory
+            .revalidate_entry(&root_lock_entry)
+            .and_then(|()| lock_directory.open_file_entry(&root_lock_entry).map(drop))
+            .context("revalidate compatibility root lock after locking")?;
+        Ok(CompatibilityReadRootSynchronization::Locked(
+            CompatibilityReadRootLockScope {
+                authority_entry,
+                authority,
+                lock_entry,
+                lock_directory,
+                root_lock_entry,
+                root_lock_file,
+                _lock: lock,
+            },
+        ))
+    }
+
+    fn validate_identity_component(value: &str, role: &str) -> Result<()> {
+        let mut components = Path::new(value).components();
+        if value.trim().is_empty()
+            || value.contains('\\')
+            || !matches!(
+                components.next(),
+                Some(std::path::Component::Normal(component)) if component == value
+            )
+            || components.next().is_some()
+        {
+            anyhow::bail!("{role} is not a safe compatibility path component");
+        }
+        Ok(())
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn with_trusted_directory<T, F>(&self, components: &[&str], operation: F) -> Result<Option<T>>
+    where
+        F: FnOnce(&super::host_session_authority::trusted_fs::TrustedDirectory) -> Result<T>,
+    {
+        for component in components {
+            Self::validate_identity_component(component, "compatibility path component")?;
+        }
+        let root = self
+            .root_guard
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("trusted compatibility read requires a bound root"))?;
+        Self::with_trusted_directory_from(root.directory(), components, operation)
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn with_trusted_directory_from<T, F>(
+        parent: &super::host_session_authority::trusted_fs::TrustedDirectory,
+        components: &[&str],
+        operation: F,
+    ) -> Result<Option<T>>
+    where
+        F: FnOnce(&super::host_session_authority::trusted_fs::TrustedDirectory) -> Result<T>,
+    {
+        use super::host_session_authority::trusted_fs::EntryKind;
+
+        let Some((component, descendants)) = components.split_first() else {
+            return operation(parent).map(Some);
+        };
+        let Some(entry) = parent
+            .entries()
+            .context("enumerate trusted compatibility path")?
+            .into_iter()
+            .find(|entry| entry.name == *component)
+        else {
+            return Ok(None);
+        };
+        if entry.kind != EntryKind::Directory {
+            anyhow::bail!("trusted compatibility path contains a non-directory component");
+        }
+        let child = parent
+            .open_controlled_directory_entry(&entry)
+            .context("open trusted compatibility directory")?;
+        let outcome = Self::with_trusted_directory_from(&child, descendants, operation);
+        let finish = parent
+            .revalidate_entry(&entry)
+            .and_then(|()| parent.open_controlled_directory_entry(&entry).map(drop))
+            .context("revalidate trusted compatibility directory");
+        match outcome {
+            Ok(value) => finish.map(|()| value),
+            Err(error) => {
+                let _ = finish;
+                Err(error)
+            }
+        }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn trusted_read_file(&self, components: &[&str]) -> Result<Option<Vec<u8>>> {
+        use super::host_session_authority::trusted_fs::EntryKind;
+
+        let (file_name, directories) = components
+            .split_last()
+            .ok_or_else(|| anyhow::anyhow!("compatibility file path is empty"))?;
+        Self::validate_identity_component(file_name, "compatibility file name")?;
+        self.with_trusted_directory(directories, |directory| {
+            let Some(entry) = directory
+                .entries()
+                .context("enumerate trusted compatibility file parent")?
+                .into_iter()
+                .find(|entry| entry.name == *file_name)
+            else {
+                return Ok(None);
+            };
+            if entry.kind != EntryKind::RegularFile {
+                anyhow::bail!("trusted compatibility file entry is unsafe");
+            }
+            let file = directory
+                .open_file_entry(&entry)
+                .context("open trusted compatibility file")?;
+            let bytes = file.read_all().context("read trusted compatibility file")?;
+            directory
+                .revalidate_entry(&entry)
+                .and_then(|()| directory.open_file_entry(&entry).map(drop))
+                .context("revalidate trusted compatibility file")?;
+            Ok(Some(bytes))
+        })
+        .map(Option::flatten)
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn trusted_read_directory(
+        &self,
+        components: &[&str],
+    ) -> Result<Vec<super::host_session_authority::store::LegacyStateStoreDirectoryEntryV1>> {
+        use super::host_session_authority::store::LegacyStateStoreDirectoryEntryV1;
+        use super::host_session_authority::trusted_fs::EntryKind;
+
+        self.with_trusted_directory(components, |directory| {
+            let scanned = directory
+                .entries()
+                .context("enumerate trusted compatibility directory")?;
+            let mut entries = Vec::with_capacity(scanned.len());
+            for entry in scanned {
+                let bytes = match entry.kind {
+                    EntryKind::Directory => {
+                        directory
+                            .open_controlled_directory_entry(&entry)
+                            .context("open trusted compatibility child directory")?;
+                        directory
+                            .revalidate_entry(&entry)
+                            .context("revalidate trusted compatibility child directory")?;
+                        None
+                    }
+                    EntryKind::RegularFile => {
+                        let file = directory
+                            .open_file_entry(&entry)
+                            .context("open trusted compatibility child file")?;
+                        let bytes = file
+                            .read_all()
+                            .context("read trusted compatibility child file")?;
+                        directory
+                            .revalidate_entry(&entry)
+                            .and_then(|()| directory.open_file_entry(&entry).map(drop))
+                            .context("revalidate trusted compatibility child file")?;
+                        Some(bytes)
+                    }
+                    EntryKind::Symlink | EntryKind::Other => {
+                        anyhow::bail!("trusted compatibility directory entry is unsafe")
+                    }
+                };
+                entries.push(LegacyStateStoreDirectoryEntryV1 {
+                    name: entry.name,
+                    is_directory: entry.kind == EntryKind::Directory,
+                    bytes,
+                });
+            }
+            Ok(entries)
+        })
+        .map(Option::unwrap_or_default)
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    fn trusted_read_directory(
+        &self,
+        _components: &[&str],
+    ) -> Result<Vec<super::host_session_authority::store::LegacyStateStoreDirectoryEntryV1>> {
+        anyhow::bail!("trusted compatibility reads are unsupported on this platform")
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn trusted_read_json<T: serde::de::DeserializeOwned>(
+        &self,
+        components: &[&str],
+    ) -> Result<Option<T>> {
+        self.trusted_read_file(components)?
+            .map(|bytes| serde_json::from_slice(&bytes).context("parse trusted compatibility JSON"))
+            .transpose()
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    fn trusted_read_json<T: serde::de::DeserializeOwned>(
+        &self,
+        _components: &[&str],
+    ) -> Result<Option<T>> {
+        anyhow::bail!("trusted compatibility reads are unsupported on this platform")
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn trusted_list_json<T: serde::de::DeserializeOwned>(
+        &self,
+        components: &[&str],
+    ) -> Result<Vec<T>> {
+        let mut values = Vec::new();
+        for entry in self.trusted_read_directory(components)? {
+            if entry.is_directory || !entry.name.ends_with(".json") {
+                continue;
+            }
+            let bytes = entry
+                .bytes
+                .ok_or_else(|| anyhow::anyhow!("trusted compatibility file omitted bytes"))?;
+            values
+                .push(serde_json::from_slice(&bytes).context("parse trusted compatibility JSON")?);
+        }
+        Ok(values)
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    fn trusted_list_json<T: serde::de::DeserializeOwned>(
+        &self,
+        _components: &[&str],
+    ) -> Result<Vec<T>> {
+        anyhow::bail!("trusted compatibility reads are unsupported on this platform")
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn trusted_materialized_acceptance_ids(
+        &self,
+        orchestration_session_id: &str,
+    ) -> Result<Vec<String>> {
+        let mut acceptance_ids = self
+            .trusted_read_directory(&[
+                "run",
+                "agent-hub",
+                "sessions",
+                orchestration_session_id,
+                "obligation-ledger",
+                "acceptances",
+            ])?
+            .into_iter()
+            .filter(|entry| entry.is_directory)
+            .map(|entry| entry.name)
+            .collect::<Vec<_>>();
+        acceptance_ids.sort();
+        acceptance_ids.dedup();
+        Ok(acceptance_ids)
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn trusted_materialized_obligation(
+        &self,
+        orchestration_session_id: &str,
+        obligation_id: &str,
+    ) -> Result<Option<OrchestrationObligationRecord>> {
+        let file_name = format!("{obligation_id}.json");
+        let mut found = None;
+        for acceptance_record_id in
+            self.trusted_materialized_acceptance_ids(orchestration_session_id)?
+        {
+            let Some(obligation) = self.trusted_read_json::<OrchestrationObligationRecord>(&[
+                "run",
+                "agent-hub",
+                "sessions",
+                orchestration_session_id,
+                "obligation-ledger",
+                "acceptances",
+                &acceptance_record_id,
+                "obligations",
+                &file_name,
+            ])?
+            else {
+                continue;
+            };
+            self.store.validate_obligation_record(&obligation)?;
+            if obligation.orchestration_session_id != orchestration_session_id
+                || obligation.obligation_id != obligation_id
+            {
+                anyhow::bail!("C1 materialized obligation artifact identity mismatch");
+            }
+            let Some(source_journal_event) = obligation.source_journal_event.as_ref() else {
+                anyhow::bail!("C1 materialized obligation omitted source_journal_event");
+            };
+            if source_journal_event.acceptance_record_id != acceptance_record_id {
+                anyhow::bail!("C1 materialized obligation belongs to another acceptance");
+            }
+            if found.replace(obligation).is_some() {
+                anyhow::bail!("duplicate C1 materialized obligation identity across acceptances");
+            }
+        }
+        Ok(found)
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    fn trusted_materialized_obligation(
+        &self,
+        _orchestration_session_id: &str,
+        _obligation_id: &str,
+    ) -> Result<Option<OrchestrationObligationRecord>> {
+        anyhow::bail!("trusted compatibility reads are unsupported on this platform")
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn trusted_materialized_obligations(
+        &self,
+        orchestration_session_id: &str,
+    ) -> Result<Vec<OrchestrationObligationRecord>> {
+        let mut obligations = Vec::new();
+        for acceptance_record_id in
+            self.trusted_materialized_acceptance_ids(orchestration_session_id)?
+        {
+            let mut acceptance_obligations = self
+                .trusted_list_json::<OrchestrationObligationRecord>(&[
+                    "run",
+                    "agent-hub",
+                    "sessions",
+                    orchestration_session_id,
+                    "obligation-ledger",
+                    "acceptances",
+                    &acceptance_record_id,
+                    "obligations",
+                ])?;
+            for obligation in &acceptance_obligations {
+                self.store.validate_obligation_record(obligation)?;
+                if obligation.orchestration_session_id != orchestration_session_id {
+                    anyhow::bail!("C1 materialized obligation belongs to another session");
+                }
+                let Some(source_journal_event) = obligation.source_journal_event.as_ref() else {
+                    anyhow::bail!("C1 materialized obligation omitted source_journal_event");
+                };
+                if source_journal_event.acceptance_record_id != acceptance_record_id {
+                    anyhow::bail!("C1 materialized obligation belongs to another acceptance");
+                }
+            }
+            obligations.append(&mut acceptance_obligations);
+        }
+        obligations.sort_by(|left, right| {
+            left.created_at
+                .cmp(&right.created_at)
+                .then(left.obligation_id.cmp(&right.obligation_id))
+        });
+        Ok(obligations)
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    fn trusted_materialized_obligations(
+        &self,
+        _orchestration_session_id: &str,
+    ) -> Result<Vec<OrchestrationObligationRecord>> {
+        anyhow::bail!("trusted compatibility reads are unsupported on this platform")
+    }
+}
+
+impl super::compatibility::CompatibilityReadSource for TransactionCompatibilityReadSource<'_> {
+    fn canonical_participants(&mut self) -> Result<Vec<AgentRuntimeParticipantRecord>> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        let mut participants = Vec::new();
+        for session_entry in self
+            .transaction
+            .read_directory(Sessions, &[])
+            .context("enumerate retained canonical session roots")?
+        {
+            if !session_entry.is_directory {
+                continue;
+            }
+            let records =
+                AgentRuntimeStateStore::transaction_list_json::<AgentRuntimeParticipantRecord>(
+                    self.transaction,
+                    Sessions,
+                    &[session_entry.name.as_str(), "participants"],
+                )?;
+            for participant in records {
+                self.store.validate_participant_record(&participant)?;
+                participants.push(participant);
+            }
+        }
+        Ok(participants)
+    }
+
+    fn flat_participants(&mut self) -> Result<Vec<AgentRuntimeParticipantRecord>> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Participants;
+        let participants = AgentRuntimeStateStore::transaction_list_json::<
+            AgentRuntimeParticipantRecord,
+        >(self.transaction, Participants, &[])?;
+        for participant in &participants {
+            self.store.validate_participant_record(participant)?;
+        }
+        Ok(participants)
+    }
+
+    fn legacy_handle_participants(&mut self) -> Result<Vec<AgentRuntimeParticipantRecord>> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Handles;
+        let participants = AgentRuntimeStateStore::transaction_list_json::<
+            AgentRuntimeParticipantRecord,
+        >(self.transaction, Handles, &[])?;
+        for participant in &participants {
+            self.store.validate_participant_record(participant)?;
+        }
+        Ok(participants)
+    }
+
+    fn canonical_session(
+        &mut self,
+        orchestration_session_id: &str,
+    ) -> Result<Option<OrchestrationSessionRecord>> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        let session = AgentRuntimeStateStore::transaction_read_json::<OrchestrationSessionRecord>(
+            self.transaction,
+            Sessions,
+            &[orchestration_session_id, "session.json"],
+        )?;
+        if let Some(session) = session.as_ref() {
+            self.store.validate_session_record(session)?;
+            if session.orchestration_session_id != orchestration_session_id {
+                anyhow::bail!("canonical session artifact identity mismatch");
+            }
+        }
+        Ok(session)
+    }
+
+    fn flat_session(
+        &mut self,
+        orchestration_session_id: &str,
+    ) -> Result<Option<OrchestrationSessionRecord>> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        let flat_name = format!("{orchestration_session_id}.json");
+        let session = AgentRuntimeStateStore::transaction_read_json::<OrchestrationSessionRecord>(
+            self.transaction,
+            Sessions,
+            &[flat_name.as_str()],
+        )?;
+        if let Some(session) = session.as_ref() {
+            self.store.validate_session_record(session)?;
+            if session.orchestration_session_id != orchestration_session_id {
+                anyhow::bail!("flat session artifact identity mismatch");
+            }
+        }
+        Ok(session)
+    }
+
+    fn canonical_session_ids(&mut self) -> Result<Vec<String>> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        let mut ids = self
+            .transaction
+            .read_directory(Sessions, &[])
+            .context("enumerate retained canonical session roots")?
+            .into_iter()
+            .filter(|entry| entry.is_directory)
+            .map(|entry| entry.name)
+            .collect::<Vec<_>>();
+        ids.sort();
+        Ok(ids)
+    }
+
+    fn flat_session_ids(&mut self) -> Result<Vec<String>> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        let mut ids = self
+            .transaction
+            .read_directory(Sessions, &[])
+            .context("enumerate retained flat session snapshots")?
+            .into_iter()
+            .filter_map(|entry| {
+                (!entry.is_directory)
+                    .then(|| entry.name.strip_suffix(".json").map(str::to_string))
+                    .flatten()
+            })
+            .collect::<Vec<_>>();
+        ids.sort();
+        Ok(ids)
+    }
+
+    fn legacy_obligation(
+        &mut self,
+        orchestration_session_id: &str,
+        obligation_id: &str,
+    ) -> Result<Option<OrchestrationObligationRecord>> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        let file_name = format!("{obligation_id}.json");
+        let obligation =
+            AgentRuntimeStateStore::transaction_read_json::<OrchestrationObligationRecord>(
+                self.transaction,
+                Sessions,
+                &[orchestration_session_id, "obligations", file_name.as_str()],
+            )?;
+        if let Some(obligation) = obligation.as_ref() {
+            self.store.validate_obligation_record(obligation)?;
+            if obligation.orchestration_session_id != orchestration_session_id
+                || obligation.obligation_id != obligation_id
+            {
+                anyhow::bail!("orchestration obligation artifact identity mismatch");
+            }
+        }
+        Ok(obligation)
+    }
+
+    fn materialized_obligation(
+        &mut self,
+        orchestration_session_id: &str,
+        obligation_id: &str,
+    ) -> Result<Option<OrchestrationObligationRecord>> {
+        self.store
+            .load_materialized_obligation_ledger_obligation_for_session_transaction(
+                self.transaction,
+                orchestration_session_id,
+                obligation_id,
+            )
+    }
+
+    fn legacy_obligations(
+        &mut self,
+        orchestration_session_id: &str,
+    ) -> Result<Vec<OrchestrationObligationRecord>> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        let obligations =
+            AgentRuntimeStateStore::transaction_list_json::<OrchestrationObligationRecord>(
+                self.transaction,
+                Sessions,
+                &[orchestration_session_id, "obligations"],
+            )?;
+        for obligation in &obligations {
+            self.store.validate_obligation_record(obligation)?;
+            if obligation.orchestration_session_id != orchestration_session_id {
+                anyhow::bail!("orchestration obligation belongs to another session");
+            }
+        }
+        Ok(obligations)
+    }
+
+    fn materialized_obligations(
+        &mut self,
+        orchestration_session_id: &str,
+    ) -> Result<Vec<OrchestrationObligationRecord>> {
+        self.store
+            .list_materialized_obligation_ledger_obligations_for_session_transaction(
+                self.transaction,
+                orchestration_session_id,
+            )
+    }
+}
+
+impl super::compatibility::CompatibilityReadSource for FilesystemCompatibilityReadSource<'_> {
+    fn canonical_participants(&mut self) -> Result<Vec<AgentRuntimeParticipantRecord>> {
+        if !self.has_trusted_root() {
+            return self.store.read_canonical_participants();
+        }
+        let mut participants = Vec::new();
+        for session_entry in self.trusted_read_directory(&["run", "agent-hub", "sessions"])? {
+            if !session_entry.is_directory {
+                continue;
+            }
+            let records = self.trusted_list_json::<AgentRuntimeParticipantRecord>(&[
+                "run",
+                "agent-hub",
+                "sessions",
+                &session_entry.name,
+                "participants",
+            ])?;
+            for participant in records {
+                self.store.validate_participant_record(&participant)?;
+                participants.push(participant);
+            }
+        }
+        Ok(participants)
+    }
+
+    fn flat_participants(&mut self) -> Result<Vec<AgentRuntimeParticipantRecord>> {
+        let participants = if self.has_trusted_root() {
+            self.trusted_list_json::<AgentRuntimeParticipantRecord>(&[
+                "run",
+                "agent-hub",
+                "participants",
+            ])?
+        } else {
+            self.store
+                .read_participant_dir(&self.store.participants_dir())?
+        };
+        for participant in &participants {
+            self.store.validate_participant_record(participant)?;
+        }
+        Ok(participants)
+    }
+
+    fn legacy_handle_participants(&mut self) -> Result<Vec<AgentRuntimeParticipantRecord>> {
+        let participants = if self.has_trusted_root() {
+            self.trusted_list_json::<AgentRuntimeParticipantRecord>(&[
+                "run",
+                "agent-hub",
+                "handles",
+            ])?
+        } else {
+            self.store.read_participant_dir(&self.store.handles_dir())?
+        };
+        for participant in &participants {
+            self.store.validate_participant_record(participant)?;
+        }
+        Ok(participants)
+    }
+
+    fn canonical_session(
+        &mut self,
+        orchestration_session_id: &str,
+    ) -> Result<Option<OrchestrationSessionRecord>> {
+        Self::validate_identity_component(orchestration_session_id, "orchestration session ID")?;
+        let (session, diagnostic_path) = if self.has_trusted_root() {
+            (
+                self.trusted_read_json::<OrchestrationSessionRecord>(&[
+                    "run",
+                    "agent-hub",
+                    "sessions",
+                    orchestration_session_id,
+                    "session.json",
+                ])?,
+                None,
+            )
+        } else {
+            let canonical_dir = self.store.canonical_session_dir(orchestration_session_id);
+            if !safe_metadata(&canonical_dir)?.is_some_and(|metadata| metadata.is_dir()) {
+                return Ok(None);
+            }
+            let path = self.store.canonical_session_path(orchestration_session_id);
+            (
+                read_regular_json_if_exists::<OrchestrationSessionRecord>(&path)?,
+                Some(path),
+            )
+        };
+        if let Some(session) = session.as_ref() {
+            self.store
+                .validate_session_record(session)
+                .with_context(|| {
+                    diagnostic_path.as_ref().map_or_else(
+                        || "invalid trusted canonical session record".to_string(),
+                        |path| format!("invalid session record in {}", path.display()),
+                    )
+                })?;
+            if session.orchestration_session_id != orchestration_session_id {
+                anyhow::bail!("canonical session artifact identity mismatch");
+            }
+        }
+        Ok(session)
+    }
+
+    fn flat_session(
+        &mut self,
+        orchestration_session_id: &str,
+    ) -> Result<Option<OrchestrationSessionRecord>> {
+        Self::validate_identity_component(orchestration_session_id, "orchestration session ID")?;
+        let file_name = format!("{orchestration_session_id}.json");
+        let (session, diagnostic_path) = if self.has_trusted_root() {
+            (
+                self.trusted_read_json::<OrchestrationSessionRecord>(&[
+                    "run",
+                    "agent-hub",
+                    "sessions",
+                    &file_name,
+                ])?,
+                None,
+            )
+        } else {
+            let path = self
+                .store
+                .orchestration_session_path(orchestration_session_id);
+            (
+                read_regular_json_if_exists::<OrchestrationSessionRecord>(&path)?,
+                Some(path),
+            )
+        };
+        if let Some(session) = session.as_ref() {
+            self.store
+                .validate_session_record(session)
+                .with_context(|| {
+                    diagnostic_path.as_ref().map_or_else(
+                        || "invalid trusted flat session record".to_string(),
+                        |path| format!("invalid session record in {}", path.display()),
+                    )
+                })?;
+            if session.orchestration_session_id != orchestration_session_id {
+                anyhow::bail!("flat session artifact identity mismatch");
+            }
+        }
+        Ok(session)
+    }
+
+    fn canonical_session_ids(&mut self) -> Result<Vec<String>> {
+        if !self.has_trusted_root() {
+            return self.store.canonical_session_root_ids();
+        }
+        let mut ids = self
+            .trusted_read_directory(&["run", "agent-hub", "sessions"])?
+            .into_iter()
+            .filter(|entry| entry.is_directory)
+            .map(|entry| entry.name)
+            .collect::<Vec<_>>();
+        ids.sort();
+        Ok(ids)
+    }
+
+    fn flat_session_ids(&mut self) -> Result<Vec<String>> {
+        if !self.has_trusted_root() {
+            return self.store.flat_session_ids();
+        }
+        let mut ids = self
+            .trusted_read_directory(&["run", "agent-hub", "sessions"])?
+            .into_iter()
+            .filter_map(|entry| {
+                (!entry.is_directory)
+                    .then(|| entry.name.strip_suffix(".json").map(str::to_string))
+                    .flatten()
+            })
+            .collect::<Vec<_>>();
+        ids.sort();
+        Ok(ids)
+    }
+
+    fn legacy_obligation(
+        &mut self,
+        orchestration_session_id: &str,
+        obligation_id: &str,
+    ) -> Result<Option<OrchestrationObligationRecord>> {
+        Self::validate_identity_component(orchestration_session_id, "orchestration session ID")?;
+        Self::validate_identity_component(obligation_id, "orchestration obligation ID")?;
+        let file_name = format!("{obligation_id}.json");
+        let (obligation, diagnostic_path) = if self.has_trusted_root() {
+            (
+                self.trusted_read_json::<OrchestrationObligationRecord>(&[
+                    "run",
+                    "agent-hub",
+                    "sessions",
+                    orchestration_session_id,
+                    "obligations",
+                    &file_name,
+                ])?,
+                None,
+            )
+        } else {
+            let path = self
+                .store
+                .canonical_obligation_path(orchestration_session_id, obligation_id);
+            (
+                read_regular_json_if_exists::<OrchestrationObligationRecord>(&path)?,
+                Some(path),
+            )
+        };
+        if let Some(obligation) = obligation.as_ref() {
+            self.store
+                .validate_obligation_record(obligation)
+                .with_context(|| {
+                    diagnostic_path.as_ref().map_or_else(
+                        || "invalid trusted orchestration obligation".to_string(),
+                        |path| format!("invalid orchestration obligation in {}", path.display()),
+                    )
+                })?;
+            if obligation.orchestration_session_id != orchestration_session_id {
+                anyhow::bail!(
+                    "orchestration obligation {} belongs to session {} not {}",
+                    obligation_id,
+                    obligation.orchestration_session_id,
+                    orchestration_session_id
+                );
+            }
+            if obligation.obligation_id != obligation_id {
+                anyhow::bail!("orchestration obligation artifact identity mismatch");
+            }
+        }
+        Ok(obligation)
+    }
+
+    fn materialized_obligation(
+        &mut self,
+        orchestration_session_id: &str,
+        obligation_id: &str,
+    ) -> Result<Option<OrchestrationObligationRecord>> {
+        Self::validate_identity_component(orchestration_session_id, "orchestration session ID")?;
+        Self::validate_identity_component(obligation_id, "orchestration obligation ID")?;
+        if self.has_trusted_root() {
+            self.trusted_materialized_obligation(orchestration_session_id, obligation_id)
+        } else {
+            self.store
+                .load_materialized_obligation_ledger_obligation_for_session(
+                    orchestration_session_id,
+                    obligation_id,
+                )
+        }
+    }
+
+    fn legacy_obligations(
+        &mut self,
+        orchestration_session_id: &str,
+    ) -> Result<Vec<OrchestrationObligationRecord>> {
+        Self::validate_identity_component(orchestration_session_id, "orchestration session ID")?;
+        let obligations = if self.has_trusted_root() {
+            self.trusted_list_json::<OrchestrationObligationRecord>(&[
+                "run",
+                "agent-hub",
+                "sessions",
+                orchestration_session_id,
+                "obligations",
+            ])?
+        } else {
+            let obligations_dir = self
+                .store
+                .canonical_obligations_dir(orchestration_session_id);
+            let mut obligations = Vec::new();
+            if let Some(entries) = safe_read_dir(&obligations_dir)? {
+                for entry in entries {
+                    let entry = entry
+                        .with_context(|| format!("failed to read {}", obligations_dir.display()))?;
+                    let path = entry.path();
+                    if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                        continue;
+                    }
+                    let Some(obligation) =
+                        read_regular_json_if_exists::<OrchestrationObligationRecord>(&path)?
+                    else {
+                        continue;
+                    };
+                    obligations.push(obligation);
+                }
+            }
+            obligations
+        };
+        for obligation in &obligations {
+            self.store.validate_obligation_record(obligation)?;
+            if obligation.orchestration_session_id != orchestration_session_id {
+                anyhow::bail!("orchestration obligation belongs to another session");
+            }
+        }
+        Ok(obligations)
+    }
+
+    fn materialized_obligations(
+        &mut self,
+        orchestration_session_id: &str,
+    ) -> Result<Vec<OrchestrationObligationRecord>> {
+        Self::validate_identity_component(orchestration_session_id, "orchestration session ID")?;
+        if self.has_trusted_root() {
+            self.trusted_materialized_obligations(orchestration_session_id)
+        } else {
+            self.store
+                .list_materialized_obligation_ledger_obligations_for_session(
+                    orchestration_session_id,
+                )
+        }
+    }
+}
 #[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug)]
 pub(crate) struct WorldWorkReceiptRegistry {
@@ -3942,6 +5000,22 @@ impl AgentRuntimeStateStore {
         }
     }
 
+    fn with_compatibility_read_source<T>(
+        &self,
+        operation: impl FnOnce(&mut FilesystemCompatibilityReadSource<'_>) -> Result<T>,
+    ) -> Result<T> {
+        let mut source = FilesystemCompatibilityReadSource::open(self)?;
+        let outcome = operation(&mut source);
+        let finish = source.finish();
+        match outcome {
+            Ok(value) => finish.map(|()| value),
+            Err(error) => {
+                let _ = finish;
+                Err(error)
+            }
+        }
+    }
+
     fn transaction_read_json<T: serde::de::DeserializeOwned>(
         transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
         collection: super::host_session_authority::store::LegacyStateStoreCollectionV1,
@@ -4007,52 +5081,11 @@ impl AgentRuntimeStateStore {
         &self,
         transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
     ) -> Result<Vec<AgentRuntimeParticipantRecord>> {
-        use super::host_session_authority::store::LegacyStateStoreCollectionV1::{
-            Handles, Participants, Sessions,
-        };
-        let mut participants = BTreeMap::new();
-        for session_entry in transaction
-            .read_directory(Sessions, &[])
-            .context("enumerate retained canonical session roots")?
-        {
-            if !session_entry.is_directory {
-                continue;
-            }
-            for participant in Self::transaction_list_json::<AgentRuntimeParticipantRecord>(
-                transaction,
-                Sessions,
-                &[session_entry.name.as_str(), "participants"],
-            )? {
-                self.validate_participant_record(&participant)?;
-                participants.insert(participant.handle.participant_id.clone(), participant);
-            }
-        }
-        for participant in Self::transaction_list_json::<AgentRuntimeParticipantRecord>(
+        let mut source = TransactionCompatibilityReadSource {
+            store: self,
             transaction,
-            Participants,
-            &[],
-        )? {
-            self.validate_participant_record(&participant)?;
-            participants
-                .entry(participant.handle.participant_id.clone())
-                .or_insert(participant);
-        }
-        for participant in
-            Self::transaction_list_json::<AgentRuntimeParticipantRecord>(transaction, Handles, &[])?
-        {
-            self.validate_participant_record(&participant)?;
-            participants
-                .entry(participant.handle.participant_id.clone())
-                .or_insert(participant);
-        }
-        let mut participants = participants.into_values().collect::<Vec<_>>();
-        participants.sort_by(|left, right| {
-            left.handle
-                .last_transition_at
-                .cmp(&right.handle.last_transition_at)
-                .then(left.handle.participant_id.cmp(&right.handle.participant_id))
-        });
-        Ok(participants)
+        };
+        super::compatibility::CompatibilityReadModel::new(&mut source).list_participants()
     }
 
     fn load_authoritative_session_transaction(
@@ -4060,26 +5093,12 @@ impl AgentRuntimeStateStore {
         transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
         orchestration_session_id: &str,
     ) -> Result<Option<OrchestrationSessionRecord>> {
-        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
-        let canonical = Self::transaction_read_json::<OrchestrationSessionRecord>(
+        let mut source = TransactionCompatibilityReadSource {
+            store: self,
             transaction,
-            Sessions,
-            &[orchestration_session_id, "session.json"],
-        )?;
-        if let Some(session) = canonical {
-            self.validate_session_record(&session)?;
-            return Ok(Some(session));
-        }
-        let flat_name = format!("{orchestration_session_id}.json");
-        let flat = Self::transaction_read_json::<OrchestrationSessionRecord>(
-            transaction,
-            Sessions,
-            &[flat_name.as_str()],
-        )?;
-        if let Some(session) = flat.as_ref() {
-            self.validate_session_record(session)?;
-        }
-        Ok(flat)
+        };
+        super::compatibility::CompatibilityReadModel::new(&mut source)
+            .load_authoritative_session(orchestration_session_id)
     }
 
     fn load_inbox_item_transaction(
@@ -4111,36 +5130,12 @@ impl AgentRuntimeStateStore {
         orchestration_session_id: &str,
         obligation_id: &str,
     ) -> Result<Option<OrchestrationObligationRecord>> {
-        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
-        let file_name = format!("{obligation_id}.json");
-        let legacy = Self::transaction_read_json::<OrchestrationObligationRecord>(
+        let mut source = TransactionCompatibilityReadSource {
+            store: self,
             transaction,
-            Sessions,
-            &[orchestration_session_id, "obligations", file_name.as_str()],
-        )?;
-        if let Some(obligation) = legacy.as_ref() {
-            self.validate_obligation_record(obligation)?;
-            if obligation.orchestration_session_id != orchestration_session_id
-                || obligation.obligation_id != obligation_id
-            {
-                anyhow::bail!("orchestration obligation artifact identity mismatch");
-            }
-        }
-        let materialized = self
-            .load_materialized_obligation_ledger_obligation_for_session_transaction(
-                transaction,
-                orchestration_session_id,
-                obligation_id,
-            )?;
-        match (legacy, materialized) {
-            (None, None) => Ok(None),
-            (Some(obligation), None) | (None, Some(obligation)) => Ok(Some(obligation)),
-            (Some(_), Some(_)) => {
-                anyhow::bail!(
-                    "duplicate orchestration obligation identity across compatibility surfaces"
-                )
-            }
-        }
+        };
+        super::compatibility::CompatibilityReadModel::new(&mut source)
+            .load_obligation(orchestration_session_id, obligation_id)
     }
 
     fn list_obligations_transaction(
@@ -4148,24 +5143,12 @@ impl AgentRuntimeStateStore {
         transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
         orchestration_session_id: &str,
     ) -> Result<Vec<OrchestrationObligationRecord>> {
-        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
-        let legacy = Self::transaction_list_json::<OrchestrationObligationRecord>(
+        let mut source = TransactionCompatibilityReadSource {
+            store: self,
             transaction,
-            Sessions,
-            &[orchestration_session_id, "obligations"],
-        )?;
-        for obligation in &legacy {
-            self.validate_obligation_record(obligation)?;
-            if obligation.orchestration_session_id != orchestration_session_id {
-                anyhow::bail!("orchestration obligation belongs to another session");
-            }
-        }
-        let materialized = self
-            .list_materialized_obligation_ledger_obligations_for_session_transaction(
-                transaction,
-                orchestration_session_id,
-            )?;
-        merge_compatibility_obligations(legacy, materialized)
+        };
+        super::compatibility::CompatibilityReadModel::new(&mut source)
+            .list_obligations(orchestration_session_id)
     }
 
     fn load_obligation_ledger_revision_cursor_transaction(
@@ -4366,58 +5349,12 @@ impl AgentRuntimeStateStore {
         transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
         orchestration_session_id: &str,
     ) -> Result<Option<AgentRuntimeSessionRecord>> {
-        let session =
-            self.load_authoritative_session_transaction(transaction, orchestration_session_id)?;
-        let participants = self
-            .list_participants_across_sources_transaction(transaction)?
-            .into_iter()
-            .filter(|participant| {
-                participant.handle.orchestration_session_id == orchestration_session_id
-            })
-            .collect::<Vec<_>>();
-        if session.is_none() && participants.is_empty() {
-            return Ok(None);
-        }
-        let mut record = self.build_session_record(orchestration_session_id, session, participants);
-        let obligations =
-            self.list_obligations_transaction(transaction, orchestration_session_id)?;
-        project_session_attention_compatibility(&mut record.session, &obligations)?;
-        Ok(Some(record))
-    }
-
-    fn list_sessions_transaction(
-        &self,
-        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
-    ) -> Result<Vec<AgentRuntimeSessionRecord>> {
-        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
-        let mut session_ids = BTreeSet::new();
-        for entry in transaction
-            .read_directory(Sessions, &[])
-            .context("enumerate retained session roots")?
-        {
-            if entry.is_directory {
-                session_ids.insert(entry.name);
-            } else if let Some(session_id) = entry.name.strip_suffix(".json") {
-                session_ids.insert(session_id.to_string());
-            }
-        }
-        for participant in self.list_participants_across_sources_transaction(transaction)? {
-            session_ids.insert(participant.handle.orchestration_session_id.clone());
-        }
-
-        let mut sessions = Vec::new();
-        for session_id in session_ids {
-            if let Some(record) = self.load_session_transaction(transaction, &session_id)? {
-                sessions.push(record);
-            }
-        }
-        sessions.sort_by(|left, right| {
-            left.last_updated_at().cmp(&right.last_updated_at()).then(
-                left.orchestration_session_id()
-                    .cmp(right.orchestration_session_id()),
-            )
-        });
-        Ok(sessions)
+        let mut source = TransactionCompatibilityReadSource {
+            store: self,
+            transaction,
+        };
+        super::compatibility::CompatibilityReadModel::new(&mut source)
+            .load_session(orchestration_session_id)
     }
 
     fn write_obligation_transaction(
@@ -4961,10 +5898,10 @@ impl AgentRuntimeStateStore {
         &self,
         participant_id: &str,
     ) -> Result<Option<AgentRuntimeParticipantRecord>> {
-        Ok(self
-            .list_participants_across_sources()?
-            .into_iter()
-            .find(|participant| participant.handle.participant_id == participant_id))
+        self.with_compatibility_read_source(|source| {
+            super::compatibility::CompatibilityReadModel::new(source)
+                .load_participant(participant_id)
+        })
     }
 
     pub(crate) fn list_participants(&self) -> Result<Vec<AgentRuntimeParticipantRecord>> {
@@ -4972,89 +5909,34 @@ impl AgentRuntimeStateStore {
     }
 
     pub(crate) fn list_live_participants(&self) -> Result<Vec<AgentRuntimeParticipantRecord>> {
-        Ok(self
-            .list_participants_across_sources()?
-            .into_iter()
-            .filter(|participant| {
-                participant.is_authoritative_live() && owner_process_is_alive(participant)
-            })
-            .collect())
+        self.with_compatibility_read_source(|source| {
+            super::compatibility::CompatibilityReadModel::new(source).list_live_participants()
+        })
     }
 
     #[allow(dead_code)]
     pub(crate) fn list_invalidated_participants(
         &self,
     ) -> Result<Vec<AgentRuntimeParticipantRecord>> {
-        if self.bootstrap_home.is_some() {
-            return self.with_legacy_snapshot_transaction(|transaction| {
-                use super::host_session_authority::store::LegacyStateStoreCollectionV1::Participants;
-                let participants = Self::transaction_list_json::<AgentRuntimeParticipantRecord>(
-                    transaction,
-                    Participants,
-                    &[],
-                )?;
-                participants
+        self.with_compatibility_read_source(|source| {
+            Ok(
+                super::compatibility::CompatibilityReadSource::flat_participants(source)?
                     .into_iter()
                     .filter(|participant| {
                         participant.handle.state
                             == super::session::AgentRuntimeSessionState::Invalidated
                     })
-                    .map(|participant| {
-                        self.validate_participant_record(&participant)?;
-                        Ok(participant)
-                    })
-                    .collect()
-            });
-        }
-        Ok(self
-            .read_participant_dir(&self.participants_dir())?
-            .into_iter()
-            .filter(|participant| {
-                participant.handle.state == super::session::AgentRuntimeSessionState::Invalidated
-            })
-            .collect())
+                    .collect(),
+            )
+        })
     }
 
     pub(crate) fn list_participants_across_sources(
         &self,
     ) -> Result<Vec<AgentRuntimeParticipantRecord>> {
-        if self.bootstrap_home.is_some() {
-            return self.with_legacy_snapshot_transaction(|transaction| {
-                self.list_participants_across_sources_transaction(transaction)
-            });
-        }
-        let mut participants = BTreeMap::new();
-
-        for (participant, source) in self.read_canonical_participants()? {
-            participants.insert(
-                participant.handle.participant_id.clone(),
-                (participant, source),
-            );
-        }
-
-        for participant in self.read_participant_dir(&self.participants_dir())? {
-            participants
-                .entry(participant.handle.participant_id.clone())
-                .or_insert((participant, ParticipantRecordSource::Flat));
-        }
-
-        for participant in self.read_participant_dir(&self.handles_dir())? {
-            participants
-                .entry(participant.handle.participant_id.clone())
-                .or_insert((participant, ParticipantRecordSource::Legacy));
-        }
-
-        let mut participants = participants
-            .into_values()
-            .map(|(participant, _)| participant)
-            .collect::<Vec<_>>();
-        participants.sort_by(|left, right| {
-            left.handle
-                .last_transition_at
-                .cmp(&right.handle.last_transition_at)
-                .then(left.handle.participant_id.cmp(&right.handle.participant_id))
-        });
-        Ok(participants)
+        self.with_compatibility_read_source(|source| {
+            super::compatibility::CompatibilityReadModel::new(source).list_participants()
+        })
     }
 
     pub(crate) fn list_invalidated_participants_across_sources(
@@ -5308,61 +6190,16 @@ impl AgentRuntimeStateStore {
         &self,
         orchestration_session_id: &str,
     ) -> Result<Option<AgentRuntimeSessionRecord>> {
-        if self.bootstrap_home.is_some() {
-            return self.with_legacy_snapshot_transaction(|transaction| {
-                self.load_session_transaction(transaction, orchestration_session_id)
-            });
-        }
-        let session = self.load_authoritative_session(orchestration_session_id)?;
-        let participants = self
-            .list_participants_across_sources()?
-            .into_iter()
-            .filter(|participant| {
-                participant.handle.orchestration_session_id == orchestration_session_id
-            })
-            .collect::<Vec<_>>();
-        if session.is_none() && participants.is_empty() {
-            return Ok(None);
-        }
-
-        let mut record = self.build_session_record(orchestration_session_id, session, participants);
-        let obligations = self.list_obligations(orchestration_session_id)?;
-        project_session_attention_compatibility(&mut record.session, &obligations)?;
-        Ok(Some(record))
+        self.with_compatibility_read_source(|source| {
+            super::compatibility::CompatibilityReadModel::new(source)
+                .load_session(orchestration_session_id)
+        })
     }
 
     pub(crate) fn list_sessions(&self) -> Result<Vec<AgentRuntimeSessionRecord>> {
-        if self.bootstrap_home.is_some() {
-            return self.with_legacy_snapshot_transaction(|transaction| {
-                self.list_sessions_transaction(transaction)
-            });
-        }
-        let mut session_ids = BTreeSet::new();
-
-        for session_id in self.canonical_session_root_ids()? {
-            session_ids.insert(session_id);
-        }
-        for session_id in self.flat_session_ids()? {
-            session_ids.insert(session_id);
-        }
-        for participant in self.list_participants_across_sources()? {
-            session_ids.insert(participant.handle.orchestration_session_id.clone());
-        }
-
-        let mut sessions = Vec::new();
-        for session_id in session_ids {
-            if let Some(record) = self.load_session(&session_id)? {
-                sessions.push(record);
-            }
-        }
-
-        sessions.sort_by(|left, right| {
-            left.last_updated_at().cmp(&right.last_updated_at()).then(
-                left.orchestration_session_id()
-                    .cmp(right.orchestration_session_id()),
-            )
-        });
-        Ok(sessions)
+        self.with_compatibility_read_source(|source| {
+            super::compatibility::CompatibilityReadModel::new(source).list_sessions()
+        })
     }
 
     pub(crate) fn list_status_sessions_for_agent(
@@ -5375,15 +6212,9 @@ impl AgentRuntimeStateStore {
 
     #[allow(dead_code)]
     pub(crate) fn list_live_sessions(&self) -> Result<Vec<AgentRuntimeSessionRecord>> {
-        Ok(self
-            .list_sessions()?
-            .into_iter()
-            .filter(|record| {
-                record.is_complete()
-                    && record.session.state == OrchestrationSessionState::Active
-                    && owner_pid_is_alive(record.session.shell_owner_pid)
-            })
-            .collect())
+        self.with_compatibility_read_source(|source| {
+            super::compatibility::CompatibilityReadModel::new(source).list_live_sessions()
+        })
     }
 
     pub(crate) fn resolve_single_live_session_for_agent(
@@ -7765,51 +8596,10 @@ impl AgentRuntimeStateStore {
         orchestration_session_id: &str,
         obligation_id: &str,
     ) -> Result<Option<OrchestrationObligationRecord>> {
-        if self.bootstrap_home.is_some() {
-            return self.with_legacy_snapshot_transaction(|transaction| {
-                self.load_obligation_transaction(
-                    transaction,
-                    orchestration_session_id,
-                    obligation_id,
-                )
-            });
-        }
-        let path = self.canonical_obligation_path(orchestration_session_id, obligation_id);
-        let legacy = read_regular_json_if_exists::<OrchestrationObligationRecord>(&path)?;
-        if let Some(obligation) = legacy.as_ref() {
-            self.validate_obligation_record(obligation)
-                .with_context(|| {
-                    format!("invalid orchestration obligation in {}", path.display())
-                })?;
-            if obligation.orchestration_session_id != orchestration_session_id {
-                anyhow::bail!(
-                    "orchestration obligation {} belongs to session {} not {}",
-                    obligation_id,
-                    obligation.orchestration_session_id,
-                    orchestration_session_id
-                );
-            }
-            if obligation.obligation_id != obligation_id {
-                anyhow::bail!(
-                    "orchestration obligation artifact {} stored mismatched obligation_id {}",
-                    path.display(),
-                    obligation.obligation_id
-                );
-            }
-        }
-        let materialized = self.load_materialized_obligation_ledger_obligation_for_session(
-            orchestration_session_id,
-            obligation_id,
-        )?;
-        match (legacy, materialized) {
-            (None, None) => Ok(None),
-            (Some(obligation), None) | (None, Some(obligation)) => Ok(Some(obligation)),
-            (Some(_), Some(_)) => {
-                anyhow::bail!(
-                    "duplicate orchestration obligation identity across compatibility surfaces"
-                )
-            }
-        }
+        self.with_compatibility_read_source(|source| {
+            super::compatibility::CompatibilityReadModel::new(source)
+                .load_obligation(orchestration_session_id, obligation_id)
+        })
     }
 
     #[allow(dead_code)]
@@ -7817,46 +8607,10 @@ impl AgentRuntimeStateStore {
         &self,
         orchestration_session_id: &str,
     ) -> Result<Vec<OrchestrationObligationRecord>> {
-        if self.bootstrap_home.is_some() {
-            return self.with_legacy_snapshot_transaction(|transaction| {
-                self.list_obligations_transaction(transaction, orchestration_session_id)
-            });
-        }
-        let obligations_dir = self.canonical_obligations_dir(orchestration_session_id);
-        let mut legacy = Vec::new();
-        if let Some(entries) = safe_read_dir(&obligations_dir)? {
-            for entry in entries {
-                let entry = entry
-                    .with_context(|| format!("failed to read {}", obligations_dir.display()))?;
-                let path = entry.path();
-                if path.extension().and_then(|value| value.to_str()) != Some("json") {
-                    continue;
-                }
-
-                let Some(obligation) =
-                    read_regular_json_if_exists::<OrchestrationObligationRecord>(&path)?
-                else {
-                    continue;
-                };
-                self.validate_obligation_record(&obligation)
-                    .with_context(|| {
-                        format!("invalid orchestration obligation in {}", path.display())
-                    })?;
-                if obligation.orchestration_session_id != orchestration_session_id {
-                    anyhow::bail!(
-                        "orchestration obligation {} belongs to session {} not {}",
-                        obligation.obligation_id,
-                        obligation.orchestration_session_id,
-                        orchestration_session_id
-                    );
-                }
-                legacy.push(obligation);
-            }
-        }
-        let materialized = self.list_materialized_obligation_ledger_obligations_for_session(
-            orchestration_session_id,
-        )?;
-        merge_compatibility_obligations(legacy, materialized)
+        self.with_compatibility_read_source(|source| {
+            super::compatibility::CompatibilityReadModel::new(source)
+                .list_obligations(orchestration_session_id)
+        })
     }
 
     pub(crate) fn load_obligation_ledger_revision_cursor(
@@ -8898,9 +9652,7 @@ impl AgentRuntimeStateStore {
         Ok(participants)
     }
 
-    fn read_canonical_participants(
-        &self,
-    ) -> Result<Vec<(AgentRuntimeParticipantRecord, ParticipantRecordSource)>> {
+    fn read_canonical_participants(&self) -> Result<Vec<AgentRuntimeParticipantRecord>> {
         let mut participants = Vec::new();
 
         for orchestration_session_id in self.canonical_session_root_ids()? {
@@ -8922,7 +9674,7 @@ impl AgentRuntimeStateStore {
                 };
                 self.validate_participant_record(&participant)
                     .with_context(|| format!("invalid participant record in {}", path.display()))?;
-                participants.push((participant, ParticipantRecordSource::Canonical));
+                participants.push(participant);
             }
         }
 
@@ -8934,79 +9686,17 @@ impl AgentRuntimeStateStore {
         &self,
         orchestration_session_id: &str,
     ) -> Result<Option<OrchestrationSessionRecord>> {
-        if self.bootstrap_home.is_some() {
-            return self.with_legacy_snapshot_transaction(|transaction| {
-                let Some(mut session) = self.load_authoritative_session_transaction(
-                    transaction,
-                    orchestration_session_id,
-                )?
-                else {
-                    return Ok(None);
-                };
-                let obligations =
-                    self.list_obligations_transaction(transaction, orchestration_session_id)?;
-                project_session_attention_compatibility(&mut session, &obligations)?;
-                Ok(Some(session))
-            });
-        }
-        let Some(mut session) = self.load_authoritative_session(orchestration_session_id)? else {
-            return Ok(None);
-        };
-        let obligations = self.list_obligations(orchestration_session_id)?;
-        project_session_attention_compatibility(&mut session, &obligations)?;
-        Ok(Some(session))
+        self.with_compatibility_read_source(|source| {
+            super::compatibility::CompatibilityReadModel::new(source)
+                .load_orchestration_session(orchestration_session_id)
+        })
     }
 
     #[allow(dead_code)]
     pub(crate) fn list_orchestration_sessions(&self) -> Result<Vec<OrchestrationSessionRecord>> {
-        if self.bootstrap_home.is_some() {
-            return self.with_legacy_snapshot_transaction(|transaction| {
-                use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
-                let mut session_ids = BTreeSet::new();
-                for entry in transaction
-                    .read_directory(Sessions, &[])
-                    .context("enumerate retained orchestration sessions")?
-                {
-                    if entry.is_directory {
-                        session_ids.insert(entry.name);
-                    } else if let Some(session_id) = entry.name.strip_suffix(".json") {
-                        session_ids.insert(session_id.to_string());
-                    }
-                }
-                let mut sessions = Vec::new();
-                for session_id in session_ids {
-                    if let Some(mut session) =
-                        self.load_authoritative_session_transaction(transaction, &session_id)?
-                    {
-                        let obligations =
-                            self.list_obligations_transaction(transaction, &session_id)?;
-                        project_session_attention_compatibility(&mut session, &obligations)?;
-                        sessions.push(session);
-                    }
-                }
-                sessions.sort_by_key(|session| session.last_active_at);
-                Ok(sessions)
-            });
-        }
-        let mut sessions = Vec::new();
-        let mut session_ids = BTreeSet::new();
-        for session_id in self.canonical_session_root_ids()? {
-            session_ids.insert(session_id);
-        }
-        for session_id in self.flat_session_ids()? {
-            session_ids.insert(session_id);
-        }
-
-        for session_id in session_ids {
-            if let Some(mut session) = self.load_authoritative_session(&session_id)? {
-                let obligations = self.list_obligations(&session_id)?;
-                project_session_attention_compatibility(&mut session, &obligations)?;
-                sessions.push(session);
-            }
-        }
-
-        sessions.sort_by_key(|session| session.last_active_at);
-        Ok(sessions)
+        self.with_compatibility_read_source(|source| {
+            super::compatibility::CompatibilityReadModel::new(source).list_orchestration_sessions()
+        })
     }
 
     #[allow(dead_code)]
@@ -9096,32 +9786,6 @@ impl AgentRuntimeStateStore {
     #[allow(dead_code)]
     fn load_manifest(&self, participant_id: &str) -> Result<Option<AgentRuntimeSessionManifest>> {
         self.load_participant(participant_id)
-    }
-
-    fn load_authoritative_session(
-        &self,
-        orchestration_session_id: &str,
-    ) -> Result<Option<OrchestrationSessionRecord>> {
-        let canonical_dir = self.canonical_session_dir(orchestration_session_id);
-        if safe_metadata(&canonical_dir)?.is_some_and(|metadata| metadata.is_dir()) {
-            let canonical_path = self.canonical_session_path(orchestration_session_id);
-            if let Some(session) =
-                read_regular_json_if_exists::<OrchestrationSessionRecord>(&canonical_path)?
-            {
-                self.validate_session_record(&session).with_context(|| {
-                    format!("invalid session record in {}", canonical_path.display())
-                })?;
-                return Ok(Some(session));
-            }
-        }
-
-        let flat_path = self.orchestration_session_path(orchestration_session_id);
-        if let Some(session) = read_regular_json_if_exists(&flat_path)? {
-            self.validate_session_record(&session)
-                .with_context(|| format!("invalid session record in {}", flat_path.display()))?;
-            return Ok(Some(session));
-        }
-        Ok(None)
     }
 
     fn public_session_selector_error(&self, selector: &str) -> anyhow::Error {
@@ -9293,107 +9957,6 @@ impl AgentRuntimeStateStore {
         }
         session_ids.sort();
         Ok(session_ids)
-    }
-
-    fn build_session_record(
-        &self,
-        orchestration_session_id: &str,
-        session: Option<OrchestrationSessionRecord>,
-        mut participants: Vec<AgentRuntimeParticipantRecord>,
-    ) -> AgentRuntimeSessionRecord {
-        participants.sort_by(|left, right| {
-            left.handle
-                .last_transition_at
-                .cmp(&right.handle.last_transition_at)
-                .then(left.handle.participant_id.cmp(&right.handle.participant_id))
-        });
-
-        let has_authoritative_parent = session.is_some();
-        let mut warnings = Vec::new();
-        if !has_authoritative_parent {
-            warnings.push(format!(
-                "orchestration session {orchestration_session_id} is missing authoritative parent session metadata"
-            ));
-        }
-
-        let session = session
-            .unwrap_or_else(|| synthesize_session_record(orchestration_session_id, &participants));
-
-        let contract_valid = match validate_runtime_contract(&session, &participants) {
-            Ok(()) => true,
-            Err(err) => {
-                warnings.push(format!(
-                    "orchestration session {} violates persisted runtime contract: {err}",
-                    session.orchestration_session_id
-                ));
-                false
-            }
-        };
-
-        let complete = if !has_authoritative_parent || !contract_valid {
-            false
-        } else if session.state != OrchestrationSessionState::Active {
-            true
-        } else {
-            match session_authoritative_participant_id(&session) {
-                Some(active_participant_id) => match participants
-                    .iter()
-                    .find(|participant| participant.handle.participant_id == active_participant_id)
-                {
-                    Some(participant) if participant.matches_public_parent_linkage(&session) => {
-                        if session_attached_to_participant(&session, participant) {
-                            participant.is_authoritative_live()
-                                && owner_process_is_alive(participant)
-                        } else {
-                            valid_detached_host_continuity_posture(&session, participant, true)
-                                .is_some()
-                        }
-                    }
-                    Some(participant) => {
-                        warnings.push(format!(
-                            "active orchestration session {} references incomplete live orchestrator participant {}",
-                            session.orchestration_session_id, participant.handle.participant_id
-                        ));
-                        false
-                    }
-                    None => {
-                        warnings.push(format!(
-                            "active orchestration session {} references missing participant {}",
-                            session.orchestration_session_id, active_participant_id
-                        ));
-                        false
-                    }
-                },
-                None => {
-                    if session.posture == OrchestrationSessionPosture::BornUnattached
-                        && born_unattached_status_anchor(&AgentRuntimeSessionRecord {
-                            session: session.clone(),
-                            participants: participants.clone(),
-                            warnings: Vec::new(),
-                            has_authoritative_parent,
-                            complete: false,
-                        })
-                        .is_some()
-                    {
-                        true
-                    } else {
-                        warnings.push(format!(
-                            "active orchestration session {} is missing authoritative orchestrator participant linkage",
-                            session.orchestration_session_id
-                        ));
-                        false
-                    }
-                }
-            }
-        };
-
-        AgentRuntimeSessionRecord {
-            session,
-            participants,
-            warnings,
-            has_authoritative_parent,
-            complete,
-        }
     }
 
     fn resolve_inbox_item(
@@ -9742,54 +10305,6 @@ fn obligation_c1_acceptance_record_id(obligation: &OrchestrationObligationRecord
         .ok_or_else(|| anyhow::anyhow!("C1 materialized obligation omitted source_journal_event"))
 }
 
-fn merge_compatibility_obligations(
-    legacy: Vec<OrchestrationObligationRecord>,
-    materialized: Vec<OrchestrationObligationRecord>,
-) -> Result<Vec<OrchestrationObligationRecord>> {
-    let mut obligations = BTreeMap::new();
-    for obligation in legacy.into_iter().chain(materialized) {
-        match obligations.entry(obligation.obligation_id.clone()) {
-            std::collections::btree_map::Entry::Vacant(entry) => {
-                entry.insert(obligation);
-            }
-            std::collections::btree_map::Entry::Occupied(_) => {
-                anyhow::bail!(
-                    "duplicate orchestration obligation identity across compatibility surfaces"
-                );
-            }
-        }
-    }
-    let mut obligations = obligations.into_values().collect::<Vec<_>>();
-    obligations.sort_by(|left, right| {
-        left.created_at
-            .cmp(&right.created_at)
-            .then(left.obligation_id.cmp(&right.obligation_id))
-    });
-    Ok(obligations)
-}
-
-fn project_session_attention_compatibility(
-    session: &mut OrchestrationSessionRecord,
-    obligations: &[OrchestrationObligationRecord],
-) -> Result<()> {
-    let projected_pending_count = projected_pending_inbox_count_from_obligations(obligations)?;
-    if projected_pending_count <= session.pending_inbox_count {
-        return Ok(());
-    }
-    session.pending_inbox_count = projected_pending_count;
-    if session.state.is_terminal() || session.attached_participant_id().is_some() {
-        return Ok(());
-    }
-    session.posture = if projected_pending_count > 0 {
-        OrchestrationSessionPosture::AwaitingAttention
-    } else if session.active_participant_id().is_none() {
-        OrchestrationSessionPosture::BornUnattached
-    } else {
-        OrchestrationSessionPosture::ParkedResumable
-    };
-    Ok(())
-}
-
 fn retired_public_turn_backend_guidance(backend_id: &str) -> Option<&'static str> {
     match backend_id {
         "cli:codex" => {
@@ -10062,34 +10577,12 @@ fn should_persist_orchestration_session_snapshot(
     }
 }
 
-#[cfg(unix)]
 fn owner_process_is_alive(participant: &AgentRuntimeParticipantRecord) -> bool {
-    owner_pid_is_alive(participant.internal.shell_owner_pid)
+    super::compatibility::owner_process_is_alive(participant)
 }
 
-#[cfg(unix)]
 fn owner_pid_is_alive(pid: u32) -> bool {
-    let pid = pid as libc::pid_t;
-    if pid <= 0 {
-        return false;
-    }
-
-    let rc = unsafe { libc::kill(pid, 0) };
-    if rc == 0 {
-        return true;
-    }
-
-    matches!(io::Error::last_os_error().raw_os_error(), Some(libc::EPERM))
-}
-
-#[cfg(not(unix))]
-fn owner_process_is_alive(participant: &AgentRuntimeParticipantRecord) -> bool {
-    owner_pid_is_alive(participant.internal.shell_owner_pid)
-}
-
-#[cfg(not(unix))]
-fn owner_pid_is_alive(pid: u32) -> bool {
-    pid == std::process::id()
+    super::compatibility::owner_pid_is_alive(pid)
 }
 
 fn read_json_if_exists<T>(path: &Path) -> Result<Option<T>>
@@ -10141,73 +10634,6 @@ where
     }
 
     read_json_if_exists(path)
-}
-
-fn synthesize_session_record(
-    orchestration_session_id: &str,
-    participants: &[AgentRuntimeParticipantRecord],
-) -> OrchestrationSessionRecord {
-    let template = participants
-        .iter()
-        .find(|participant| {
-            participant.handle.role == ORCHESTRATOR_ROLE
-                && participant.handle.execution.scope == AgentExecutionScope::Host
-        })
-        .or_else(|| participants.first())
-        .expect("synthetic session record requires at least one participant");
-
-    let mut session = OrchestrationSessionRecord::new(
-        orchestration_session_id.to_string(),
-        "<unknown-trace-session>".to_string(),
-        "<unknown-workspace-root>".to_string(),
-        template,
-        None,
-    );
-    session.opened_at = participants
-        .iter()
-        .map(|participant| participant.handle.opened_at)
-        .min()
-        .unwrap_or(session.opened_at);
-    session.last_active_at = participants
-        .iter()
-        .map(AgentRuntimeParticipantRecord::last_status_at)
-        .max()
-        .unwrap_or(session.last_active_at);
-
-    if let Some(orchestrator) = participants.iter().find(|participant| {
-        participant.handle.role == ORCHESTRATOR_ROLE
-            && participant.handle.execution.scope == AgentExecutionScope::Host
-    }) {
-        session.orchestrator_agent_id = orchestrator.handle.agent_id.clone();
-        session.orchestrator_backend_id = orchestrator.handle.backend_id.clone();
-        session.orchestrator_protocol = orchestrator.handle.protocol.clone();
-    }
-    session.active_session_handle_id = participants
-        .iter()
-        .find(|participant| {
-            participant.handle.role == ORCHESTRATOR_ROLE
-                && participant.handle.execution.scope == AgentExecutionScope::Host
-                && participant.is_authoritative_live()
-                && owner_process_is_alive(participant)
-        })
-        .map(|participant| participant.handle.participant_id.clone());
-    session.latest_run_id = participants
-        .iter()
-        .filter_map(|participant| {
-            participant
-                .internal
-                .latest_run_id
-                .as_ref()
-                .map(|run_id| (participant.last_status_at(), run_id.clone()))
-        })
-        .max_by(|left, right| left.0.cmp(&right.0))
-        .map(|(_, run_id)| run_id);
-    session.state = if session.active_session_handle_id.is_some() {
-        OrchestrationSessionState::Active
-    } else {
-        OrchestrationSessionState::Allocating
-    };
-    session
 }
 
 fn session_requires_linux_first_public_control_posture(record: &AgentRuntimeSessionRecord) -> bool {
@@ -10569,38 +10995,11 @@ pub(crate) fn valid_detached_host_continuity_posture(
     participant: &AgentRuntimeParticipantRecord,
     require_internal_session_id: bool,
 ) -> Option<OrchestrationSessionPosture> {
-    let contract = session.host_attach_contract()?;
-    if session.state.is_terminal() || !participant.handle.state.is_live() {
-        return None;
-    }
-    if session.active_participant_id() != Some(participant.participant_id()) {
-        return None;
-    }
-    if !participant.matches_public_parent_linkage(session) {
-        return None;
-    }
-    if session.attached_participant_id().is_some() || participant.attached_client_present() {
-        return None;
-    }
-    if !participant.is_public_attach_continuity_source() {
-        return None;
-    }
-    if !contract.supports_public_attach_continuity() {
-        return None;
-    }
-    if require_internal_session_id && contract.public_attach_continuity_session_id().is_none() {
-        return None;
-    }
-
-    match session.posture {
-        OrchestrationSessionPosture::ParkedResumable if session.pending_inbox_count == 0 => {
-            Some(OrchestrationSessionPosture::ParkedResumable)
-        }
-        OrchestrationSessionPosture::AwaitingAttention if session.pending_inbox_count > 0 => {
-            Some(OrchestrationSessionPosture::AwaitingAttention)
-        }
-        _ => None,
-    }
+    super::compatibility::valid_detached_host_continuity_posture(
+        session,
+        participant,
+        require_internal_session_id,
+    )
 }
 
 fn recoverable_stale_host_attachment(
@@ -10650,110 +11049,20 @@ fn recoverable_stale_host_attachment(
 }
 
 fn session_authoritative_participant_id(session: &OrchestrationSessionRecord) -> Option<&str> {
-    session
-        .active_participant_id()
-        .or(session.attached_participant_id())
+    super::compatibility::session_authoritative_participant_id(session)
 }
 
 fn session_attached_to_participant(
     session: &OrchestrationSessionRecord,
     participant: &AgentRuntimeParticipantRecord,
 ) -> bool {
-    session.attached_participant_id() == Some(participant.participant_id())
-}
-
-fn validate_runtime_contract(
-    session: &OrchestrationSessionRecord,
-    participants: &[AgentRuntimeParticipantRecord],
-) -> Result<()> {
-    session.validate_persisted_invariants()?;
-
-    let Some(authoritative_participant_id) = session_authoritative_participant_id(session) else {
-        if session.state == OrchestrationSessionState::Active
-            && session.posture == OrchestrationSessionPosture::BornUnattached
-        {
-            if born_unattached_status_anchor(&AgentRuntimeSessionRecord {
-                session: session.clone(),
-                participants: participants.to_vec(),
-                warnings: Vec::new(),
-                has_authoritative_parent: true,
-                complete: false,
-            })
-            .is_some()
-            {
-                return Ok(());
-            }
-            anyhow::bail!(
-                "born_unattached session requires authoritative world member launch proof"
-            );
-        }
-        if session.state == OrchestrationSessionState::Active
-            && session.posture == OrchestrationSessionPosture::ActiveAttached
-        {
-            anyhow::bail!("active_attached session is missing authoritative participant linkage");
-        }
-        return Ok(());
-    };
-
-    let participant = participants
-        .iter()
-        .find(|participant| participant.participant_id() == authoritative_participant_id)
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "authoritative participant {} is missing from the session snapshot",
-                authoritative_participant_id
-            )
-        })?;
-    if !participant.matches_public_parent_linkage(session) {
-        anyhow::bail!(
-            "authoritative participant {} no longer matches the session linkage",
-            authoritative_participant_id
-        );
-    }
-
-    match session.posture {
-        OrchestrationSessionPosture::ActiveAttached => {
-            if !participant.attached_client_present() {
-                anyhow::bail!("active_attached session requires attached host participant truth");
-            }
-        }
-        OrchestrationSessionPosture::BornUnattached => {
-            anyhow::bail!("born_unattached sessions must not retain an authoritative participant");
-        }
-        OrchestrationSessionPosture::ParkedResumable => {
-            if !participant.is_resume_eligible() {
-                anyhow::bail!("parked_resumable session requires resume-eligible host participant");
-            }
-        }
-        OrchestrationSessionPosture::AwaitingAttention => {
-            if !participant.is_resume_eligible() {
-                anyhow::bail!(
-                    "awaiting_attention session requires resume-eligible host participant"
-                );
-            }
-        }
-        OrchestrationSessionPosture::Terminal => {}
-    }
-
-    Ok(())
+    super::compatibility::session_attached_to_participant(session, participant)
 }
 
 pub(crate) fn born_unattached_status_anchor(
     record: &AgentRuntimeSessionRecord,
 ) -> Option<AgentRuntimeParticipantRecord> {
-    let session = &record.session;
-    if session.posture != OrchestrationSessionPosture::BornUnattached
-        || session.state != OrchestrationSessionState::Active
-    {
-        return None;
-    }
-
-    record
-        .participants
-        .iter()
-        .filter(|participant| participant.matches_authoritative_parent_world_binding(session))
-        .max_by(|left, right| left.last_status_at().cmp(&right.last_status_at()))
-        .cloned()
+    super::compatibility::born_unattached_status_anchor(record)
 }
 
 #[cfg(test)]
@@ -12696,6 +13005,343 @@ mod tests {
         let store = AgentRuntimeStateStore::new().expect("state store");
         test(&store);
         std::env::remove_var(SHARED_WORLD_METADATA_ROOT_TEST_ENV);
+    }
+
+    fn compatibility_tree_bytes(root: &Path) -> Vec<(PathBuf, Option<Vec<u8>>)> {
+        fn visit(root: &Path, directory: &Path, snapshot: &mut Vec<(PathBuf, Option<Vec<u8>>)>) {
+            let mut entries = fs::read_dir(directory)
+                .expect("enumerate compatibility proof tree")
+                .map(|entry| entry.expect("read compatibility proof tree entry"))
+                .collect::<Vec<_>>();
+            entries.sort_by_key(|entry| entry.file_name());
+            for entry in entries {
+                let path = entry.path();
+                let relative = path
+                    .strip_prefix(root)
+                    .expect("compatibility proof entry remains below root")
+                    .to_path_buf();
+                let metadata =
+                    fs::symlink_metadata(&path).expect("stat compatibility proof tree entry");
+                if metadata.is_dir() {
+                    snapshot.push((relative, None));
+                    visit(root, &path, snapshot);
+                } else if metadata.is_file() {
+                    snapshot.push((
+                        relative,
+                        Some(fs::read(&path).expect("read compatibility proof tree file")),
+                    ));
+                } else {
+                    panic!("unexpected compatibility proof entry: {}", path.display());
+                }
+            }
+        }
+
+        let mut snapshot = Vec::new();
+        visit(root, root, &mut snapshot);
+        snapshot
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn compatibility_reads_preserve_bytes_authority_revision_and_namespace_absence() {
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create safe compatibility proof parent");
+
+        let populated = tempfile::tempdir_in(&safe_parent).expect("create populated proof root");
+        #[cfg(unix)]
+        fs::set_permissions(populated.path(), fs::Permissions::from_mode(0o700))
+            .expect("secure populated proof root");
+        let populated_store = AgentRuntimeStateStore {
+            substrate_home: populated.path().to_path_buf(),
+            bootstrap_home: None,
+        };
+        let participant =
+            live_orchestrator("codex", "sess_read_only_boundary", "ash_read_only_boundary");
+        let session = active_parent(&participant);
+        let obligation = pending_obligation(
+            "sess_read_only_boundary",
+            "obligation_read_only_boundary",
+            OrchestrationObligationKind::ApprovalRequired,
+        );
+        populated_store
+            .persist_participant(&participant)
+            .expect("seed compatibility participant");
+        populated_store
+            .persist_orchestration_session(&session)
+            .expect("seed compatibility session");
+        populated_store
+            .persist_obligation(&obligation)
+            .expect("seed compatibility obligation");
+        let populated_before = compatibility_tree_bytes(populated.path());
+        let populated_root_path = populated.path().join("authority-v1/state-root-v1.json");
+        assert!(
+            !populated_root_path.exists(),
+            "legacy compatibility persistence must remain preactivation"
+        );
+
+        assert_eq!(
+            populated_store
+                .load_participant("ash_read_only_boundary")
+                .expect("load compatibility participant"),
+            Some(participant)
+        );
+        let loaded_session = populated_store
+            .load_orchestration_session("sess_read_only_boundary")
+            .expect("load compatibility session")
+            .expect("compatibility session exists");
+        assert_eq!(
+            loaded_session.orchestration_session_id,
+            session.orchestration_session_id
+        );
+        assert_eq!(
+            loaded_session.pending_inbox_count, 1,
+            "attention projection remains complete"
+        );
+        assert_eq!(
+            populated_store
+                .load_obligation("sess_read_only_boundary", "obligation_read_only_boundary",)
+                .expect("load compatibility obligation"),
+            Some(obligation)
+        );
+        assert_eq!(populated_store.list_participants().unwrap().len(), 1);
+        assert_eq!(populated_store.list_live_participants().unwrap().len(), 1);
+        assert_eq!(populated_store.list_sessions().unwrap().len(), 1);
+        assert_eq!(populated_store.list_live_sessions().unwrap().len(), 1);
+        assert_eq!(
+            populated_store.list_orchestration_sessions().unwrap().len(),
+            1
+        );
+        assert_eq!(
+            populated_store
+                .list_obligations("sess_read_only_boundary")
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            compatibility_tree_bytes(populated.path()),
+            populated_before,
+            "compatibility reads must not mutate durable compatibility bytes"
+        );
+        assert!(
+            !populated_root_path.exists(),
+            "compatibility reads must not activate HSA"
+        );
+
+        let activated = tempfile::tempdir_in(&safe_parent).expect("create activated proof root");
+        #[cfg(unix)]
+        fs::set_permissions(activated.path(), fs::Permissions::from_mode(0o700))
+            .expect("secure activated proof root");
+        let activated_authority = crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority::open(activated.path())
+            .expect("open activated proof authority");
+        let activated_store =
+            AgentRuntimeStateStore::for_bootstrap_home(&activated_authority.bootstrap_home())
+                .expect("bind activated compatibility reader")
+                .store;
+        crate::execution::agent_runtime::host_session_authority::store::bootstrap(activated.path())
+            .expect("activate proof authority");
+        let activated_root_path = activated.path().join("authority-v1/state-root-v1.json");
+        let activated_root_before = fs::read(&activated_root_path).expect("read authority root");
+        let revision_before = serde_json::from_slice::<Value>(&activated_root_before)
+            .expect("parse authority root")
+            .pointer("/root_revision")
+            .and_then(Value::as_u64)
+            .expect("authority root revision");
+        let activated_before = compatibility_tree_bytes(activated.path());
+        assert!(activated_store.list_participants().unwrap().is_empty());
+        assert!(activated_store.list_sessions().unwrap().is_empty());
+        assert!(activated_store
+            .list_orchestration_sessions()
+            .unwrap()
+            .is_empty());
+        assert!(activated_store
+            .list_obligations("sess_absent")
+            .unwrap()
+            .is_empty());
+        assert!(activated_store
+            .load_session("sess_absent")
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            compatibility_tree_bytes(activated.path()),
+            activated_before,
+            "compatibility reads must not create an absent namespace"
+        );
+        let activated_root_after = fs::read(&activated_root_path).expect("reread authority root");
+        assert_eq!(activated_root_after, activated_root_before);
+        let revision_after = serde_json::from_slice::<Value>(&activated_root_after)
+            .expect("reparse authority root")
+            .pointer("/root_revision")
+            .and_then(Value::as_u64)
+            .expect("authority root revision after reads");
+        assert_eq!(revision_after, revision_before);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    #[serial_test::serial]
+    fn bound_compatibility_reads_preserve_unactivated_namespace_absence() {
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create safe unactivated proof parent");
+        let root = tempfile::tempdir_in(&safe_parent).expect("create unactivated proof root");
+        #[cfg(unix)]
+        fs::set_permissions(root.path(), fs::Permissions::from_mode(0o700))
+            .expect("secure unactivated proof root");
+        let authority = crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority::open(root.path())
+            .expect("open unactivated proof authority");
+        let store = AgentRuntimeStateStore::for_bootstrap_home(&authority.bootstrap_home())
+            .expect("bind unactivated compatibility reader")
+            .store;
+        let before = compatibility_tree_bytes(root.path());
+
+        assert!(store.list_participants().unwrap().is_empty());
+        assert!(store.list_sessions().unwrap().is_empty());
+        assert!(store.list_orchestration_sessions().unwrap().is_empty());
+        assert!(store.list_obligations("sess_absent").unwrap().is_empty());
+
+        assert_eq!(compatibility_tree_bytes(root.path()), before);
+        assert!(!root.path().join("authority-v1").exists());
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    #[serial_test::serial]
+    fn bound_compatibility_reads_reject_path_escape_and_descendant_symlinks() {
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create safe path proof parent");
+        let root = tempfile::tempdir_in(&safe_parent).expect("create path proof root");
+        let external = tempfile::tempdir_in(&safe_parent).expect("create external proof root");
+        #[cfg(unix)]
+        for directory in [root.path(), external.path()] {
+            fs::set_permissions(directory, fs::Permissions::from_mode(0o700))
+                .expect("secure path proof directory");
+        }
+        let authority = crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority::open(root.path())
+            .expect("open path proof authority");
+        let store = AgentRuntimeStateStore::for_bootstrap_home(&authority.bootstrap_home())
+            .expect("bind path proof compatibility reader")
+            .store;
+        crate::execution::agent_runtime::host_session_authority::store::bootstrap(root.path())
+            .expect("activate path proof authority");
+        let escaped_participant = live_orchestrator(
+            "codex",
+            "sess_external_compatibility",
+            "ash_external_compatibility",
+        );
+        let escaped_session = active_parent(&escaped_participant);
+        let external_session_path = external.path().join("session.json");
+        fs::write(
+            &external_session_path,
+            serde_json::to_vec_pretty(&escaped_session).expect("serialize external session"),
+        )
+        .expect("write external session");
+        let external_before = fs::read(&external_session_path).expect("read external session");
+        let authority_root_path = root.path().join("authority-v1/state-root-v1.json");
+        let authority_root_before = fs::read(&authority_root_path).expect("read authority root");
+
+        assert!(store
+            .load_orchestration_session(
+                external
+                    .path()
+                    .to_str()
+                    .expect("external path must be UTF-8"),
+            )
+            .is_err());
+        assert!(store
+            .load_obligation(
+                "sess_external_compatibility",
+                external
+                    .path()
+                    .to_str()
+                    .expect("external path must be UTF-8"),
+            )
+            .is_err());
+
+        let agent_hub = root.path().join("run/agent-hub");
+        fs::create_dir_all(&agent_hub).expect("create path proof legacy parent");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(external.path(), agent_hub.join("sessions"))
+            .expect("install path proof descendant symlink");
+        assert!(store.list_sessions().is_err());
+        assert!(store.list_participants().is_err());
+
+        assert_eq!(
+            fs::read(&external_session_path).expect("reread external session"),
+            external_before
+        );
+        assert_eq!(
+            fs::read(&authority_root_path).expect("reread authority root"),
+            authority_root_before
+        );
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    #[serial_test::serial]
+    fn bound_compatibility_reads_hold_existing_root_lock() {
+        use crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot;
+
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create safe lock proof parent");
+        let root = tempfile::tempdir_in(&safe_parent).expect("create lock proof root");
+        #[cfg(unix)]
+        fs::set_permissions(root.path(), fs::Permissions::from_mode(0o700))
+            .expect("secure lock proof root");
+        let authority = crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority::open(root.path())
+            .expect("open lock proof authority");
+        let store = AgentRuntimeStateStore::for_bootstrap_home(&authority.bootstrap_home())
+            .expect("bind lock proof compatibility reader")
+            .store;
+        crate::execution::agent_runtime::host_session_authority::store::bootstrap(root.path())
+            .expect("activate lock proof authority");
+
+        let source = FilesystemCompatibilityReadSource::open(&store)
+            .expect("open synchronized compatibility reader");
+        let contender_root = TrustedAuthorityRoot::open(root.path()).expect("open contender root");
+        let contender_authority = contender_root
+            .directory()
+            .open_controlled_directory("authority-v1")
+            .expect("open contender authority directory");
+        let contender_lock_directory = contender_authority
+            .open_controlled_directory("lock")
+            .expect("open contender lock directory");
+        let contender_lock = contender_lock_directory
+            .open_file("root.lock")
+            .expect("open contender root lock");
+        assert!(
+            contender_lock
+                .try_lock_exclusive()
+                .expect("probe compatibility root lock")
+                .is_none(),
+            "bound compatibility reader must hold the physical root lock"
+        );
+        source
+            .finish()
+            .expect("finish synchronized compatibility read");
+        drop(source);
+        assert!(
+            contender_lock
+                .try_lock_exclusive()
+                .expect("reprobe compatibility root lock")
+                .is_some(),
+            "dropping the compatibility reader must release the physical root lock"
+        );
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos", test))]
