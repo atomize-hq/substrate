@@ -4341,6 +4341,313 @@ fn prompt_submit_continuity_session_id(runtime: &PromptSubmitRuntime) -> String 
 }
 
 #[cfg(target_os = "linux")]
+fn transport_policy_ref_from_authenticated_hsa(
+    reference: &super::host_session_authority::schema::AuthorityObjectRefV1,
+) -> Result<transport_api_types::PolicyRefV1> {
+    use super::host_session_authority::schema::{
+        AuthorityObjectCommitmentV1, AuthorityObjectKindV1,
+    };
+
+    if reference.object_kind != AuthorityObjectKindV1::Policy {
+        anyhow::bail!("authenticated current policy reference is not a Policy object");
+    }
+    let commitment = match &reference.commitment {
+        AuthorityObjectCommitmentV1::CanonicalSha256 { digest_hex } => {
+            transport_api_types::OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                digest_hex: digest_hex.clone(),
+            }
+        }
+        AuthorityObjectCommitmentV1::StoreHmacSha256 {
+            key_id,
+            domain,
+            digest_hex,
+        } => transport_api_types::OpaqueAuthorityCommitmentV1::StoreHmacSha256 {
+            key_id: key_id.clone(),
+            domain: domain.clone(),
+            digest_hex: digest_hex.clone(),
+        },
+    };
+    let reference = transport_api_types::PolicyRefV1 {
+        ref_id: reference.ref_id.clone(),
+        object_kind: transport_api_types::AuthorityObjectKindV1::Policy,
+        schema_version: reference.schema_version,
+        commitment,
+    };
+    reference.validate().map_err(|error| {
+        anyhow::anyhow!("invalid authenticated current policy reference: {error}")
+    })?;
+    Ok(reference)
+}
+
+/// Resolves the exact retained-turn policy carrier from independently authenticated HSA,
+/// retained-target, current-parent, and immutable-cap state. `None` is reserved for an
+/// unactivated FreshAbsent authority root; activated or unsupported legacy authority never
+/// reconstructs a missing cap.
+#[cfg(target_os = "linux")]
+pub(crate) fn resolve_retained_turn_policy_material_for_submit(
+    store: &AgentRuntimeStateStore,
+    descriptor: &RuntimeSelectionDescriptor,
+    manifest: &AgentRuntimeSessionManifest,
+    active_run_id: &str,
+    message_id: Option<&str>,
+    turn_patch: Option<&transport_api_types::DispatchPolicyNarrowingPatchV1>,
+) -> Result<Option<super::dispatch_policy_commitment::AuthenticatedRetainedTurnPolicyMaterialV1>> {
+    use super::dispatch_policy_commitment::{
+        resolve_retained_turn_policy_material, validate_policy_snapshot_material,
+        ResolvedPolicyCommitmentCompatibilityV1, RetainedTurnPolicyResolutionInputV1,
+    };
+    use super::host_session_authority::schema::PolicyObjectHashInputV1;
+    use crate::execution::policy_snapshot::{
+        resolve_dispatch_narrowed_policy_snapshot, resolve_policy_snapshot_for_bootstrap_home,
+        AuthenticatedDispatchPolicyNarrowingContextV1, ResolvedDispatchPolicyNarrowingAuthorityV1,
+    };
+
+    if active_run_id.trim().is_empty()
+        || message_id.is_some_and(|value| value.trim().is_empty())
+        || manifest.handle.backend_id != descriptor.backend_id
+        || manifest.handle.execution.scope != AgentExecutionScope::World
+    {
+        anyhow::bail!("retained-turn runtime identity is incomplete or inconsistent");
+    }
+    if let Some(turn_patch) = turn_patch {
+        turn_patch
+            .validate()
+            .map_err(|error| anyhow::anyhow!("invalid retained-turn E1 patch: {error}"))?;
+        if turn_patch
+            .restricted_policy_patch
+            .world_fs
+            .as_ref()
+            .is_none_or(|world_fs| world_fs.is_empty())
+        {
+            anyhow::bail!(
+                "retained-turn narrowing patch must carry a nonempty RestrictedWorldFs attestation"
+            );
+        }
+    }
+    let orchestration_session_id = &manifest.handle.orchestration_session_id;
+    let retained_participant_id = &manifest.handle.participant_id;
+    let caller_participant_id = manifest
+        .handle
+        .orchestrator_participant_id
+        .as_deref()
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "substrate: error: retained world-scoped member is missing orchestrator_participant_id"
+            )
+        })?;
+    let manifest_world_id = manifest.handle.world_id.as_deref().ok_or_else(|| {
+        anyhow::anyhow!("substrate: error: retained world-scoped member is missing world_id")
+    })?;
+    let manifest_world_generation = manifest.handle.world_generation.ok_or_else(|| {
+        anyhow::anyhow!(
+            "substrate: error: retained world-scoped member is missing world_generation"
+        )
+    })?;
+
+    let trusted_root = TrustedAuthorityRoot::open(store.substrate_home())
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let e2_authority_state_present = match trusted_root
+        .directory()
+        .entry_kind("authority-v1")
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?
+    {
+        None => false,
+        Some(super::host_session_authority::trusted_fs::EntryKind::Directory) => trusted_root
+            .directory()
+            .open_directory("authority-v1")
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?
+            .entry_kind("state-root-v1.json")
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?
+            .is_some(),
+        Some(_) => true,
+    };
+    let commitment_authority = HostSessionAuthority::from_trusted_root(trusted_root)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let before_target_resolution = match commitment_authority
+        .resolve_current_exact(orchestration_session_id, None)
+    {
+        Ok(current) => current,
+        Err(resolve_error) => {
+            use super::host_session_authority::store::BootstrapClassificationV1;
+
+            match commitment_authority.classify() {
+                BootstrapClassificationV1::FreshAbsent if turn_patch.is_none() => return Ok(None),
+                BootstrapClassificationV1::UnsupportedLegacyState
+                    if !e2_authority_state_present && turn_patch.is_none() =>
+                {
+                    return Ok(None)
+                }
+                BootstrapClassificationV1::FreshAbsent
+                | BootstrapClassificationV1::UnsupportedLegacyState => {
+                    anyhow::bail!(
+                        "unsupported_legacy_state: retained Continue has no exact HSA and immutable-cap authority"
+                    )
+                }
+                BootstrapClassificationV1::InitializationPending => {
+                    anyhow::bail!("retained Continue authority initialization is incomplete")
+                }
+                BootstrapClassificationV1::CorruptOrUnsupported
+                | BootstrapClassificationV1::ValidExisting => {
+                    return Err(anyhow::anyhow!(resolve_error.to_string()))
+                        .context("resolve exact retained Continue authority before target lookup")
+                }
+            }
+        }
+    };
+    let authority = match store.resolve_hsa_retained_continue_translation_authority(
+        orchestration_session_id,
+        caller_participant_id,
+        retained_participant_id,
+    )? {
+        Some(authority) => authority,
+        None => {
+            anyhow::bail!(
+                "stale_linkage: exact retained Continue authority disappeared during canonical target resolution"
+            )
+        }
+    };
+    let retained_target = authority.retained_target.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("authenticated retained-turn authority omitted its canonical target")
+    })?;
+    if authority.orchestration_session_id != *orchestration_session_id
+        || authority.caller_participant_id != caller_participant_id
+        || authority.world_id != manifest_world_id
+        || authority.world_generation != manifest_world_generation
+        || retained_target.participant_id != *retained_participant_id
+        || retained_target.backend_id != descriptor.backend_id
+    {
+        anyhow::bail!(
+            "stale_linkage: retained-turn runtime identity conflicts with authenticated authority"
+        );
+    }
+    let cap = match &retained_target.policy_cap_compatibility {
+        ResolvedPolicyCommitmentCompatibilityV1::Compatible { cap } => cap.clone(),
+        ResolvedPolicyCommitmentCompatibilityV1::UnsupportedLegacyState {
+            retained_participant_id,
+            reason,
+        } => {
+            anyhow::bail!(
+                "unsupported_legacy_state: retained worker {} has no authentic immutable policy cap ({reason:?})",
+                retained_participant_id
+            )
+        }
+    };
+
+    let reauthenticated = commitment_authority
+        .resolve_current_exact(orchestration_session_id, None)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    if before_target_resolution.observation.authority_store_id != authority.authority_store_id
+        || before_target_resolution.observation.authority_revision
+            != authority.authority_revision_observed
+        || reauthenticated.observation.authority_store_id != authority.authority_store_id
+        || reauthenticated.observation.authority_revision != authority.authority_revision_observed
+        || reauthenticated.caller.participant_id != authority.caller_participant_id
+        || reauthenticated.authority.current_policy_ref.as_ref()
+            != Some(&authority.current_policy_snapshot_ref)
+        || reauthenticated.authority.current_policy_revision.as_deref()
+            != Some(authority.current_policy_revision.as_str())
+        || reauthenticated
+            .current_policy
+            .canonical_policy_snapshot_sha256
+            != authority.current_policy_snapshot_hash
+    {
+        anyhow::bail!(
+            "stale_linkage: retained-turn authority changed during exact carrier resolution"
+        );
+    }
+    let bootstrap_home = commitment_authority.bootstrap_home();
+    let workspace_root = Path::new(&authority.workspace_root);
+    let authenticated_parent =
+        resolve_policy_snapshot_for_bootstrap_home(workspace_root, &bootstrap_home).context(
+            "resolve current parent PolicySnapshotV3 from accepted bootstrap root and authenticated workspace",
+        )?;
+    if authenticated_parent.snapshot_hash != authority.current_policy_snapshot_hash {
+        anyhow::bail!(
+            "stale_linkage: current parent policy snapshot conflicts with authenticated HSA"
+        );
+    }
+    let policy_snapshot_ref = authority.current_policy_snapshot_ref.clone();
+    let transport_policy_ref = transport_policy_ref_from_authenticated_hsa(&policy_snapshot_ref)?;
+    let (snapshot, snapshot_hash) = match turn_patch {
+        Some(turn_patch) => {
+            let parent_policy =
+                crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
+                    workspace_root,
+                    &bootstrap_home,
+                )?;
+            let authenticated =
+                AuthenticatedDispatchPolicyNarrowingContextV1::from_resolved_authority(
+                    ResolvedDispatchPolicyNarrowingAuthorityV1 {
+                        request_id: turn_patch.request_id.clone(),
+                        orchestration_session_id: authority.orchestration_session_id.clone(),
+                        caller_participant_id: authority.caller_participant_id.clone(),
+                        target_backend_id: retained_target.backend_id.clone(),
+                        target_world: transport_api_types::WorldBindingRefV1 {
+                            world_id: authority.world_id.clone(),
+                            world_generation: authority.world_generation,
+                        },
+                        applies_to:
+                            transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerTurn {
+                                retained_participant_id: retained_target.participant_id.clone(),
+                            },
+                        parent_policy_ref: transport_policy_ref,
+                        parent_policy: PolicyObjectHashInputV1 {
+                            schema_version: policy_snapshot_ref.schema_version,
+                            policy_revision: authority.current_policy_revision.clone(),
+                            canonical_policy_snapshot_sha256: authority
+                                .current_policy_snapshot_hash
+                                .clone(),
+                        },
+                        parent_allows_capability_narrowing: parent_policy
+                            .agents_world_dispatch_allow_capability_narrowing,
+                    },
+                )?;
+            let resolved = resolve_dispatch_narrowed_policy_snapshot(
+                &parent_policy,
+                turn_patch,
+                &authenticated,
+                workspace_root,
+            )?;
+            (resolved.snapshot, resolved.snapshot_hash)
+        }
+        None => (
+            authenticated_parent.snapshot,
+            authenticated_parent.snapshot_hash,
+        ),
+    };
+    let policy_snapshot_bytes =
+        serde_json::to_vec(&snapshot).context("serialize exact E1 PolicySnapshotV3")?;
+    let current_parent_and_turn_patch = validate_policy_snapshot_material(
+        &snapshot,
+        &policy_snapshot_bytes,
+        &policy_snapshot_ref,
+        &snapshot_hash,
+        &authority.current_policy_revision,
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+
+    resolve_retained_turn_policy_material(
+        &commitment_authority,
+        RetainedTurnPolicyResolutionInputV1 {
+            cap,
+            current_parent_and_turn_patch,
+            orchestration_session_id: authority.orchestration_session_id,
+            caller_participant_id: authority.caller_participant_id,
+            caller_backend_id: authority.caller_backend_id,
+            target_backend_id: retained_target.backend_id.clone(),
+            world_id: authority.world_id,
+            world_generation: authority.world_generation,
+            retained_participant_id: retained_target.participant_id.clone(),
+            active_run_id: active_run_id.to_string(),
+            message_id: message_id.map(str::to_string),
+            turn_patch: turn_patch.cloned(),
+        },
+    )
+    .map(Some)
+    .map_err(|error| anyhow::anyhow!(error.to_string()))
+}
+
+#[cfg(target_os = "linux")]
 pub(crate) async fn submit_world_prompt_turn<F>(
     runtime: &PromptSubmitRuntime,
     run_id: &str,
@@ -4352,16 +4659,25 @@ where
 {
     use http_body_util::BodyExt as _;
 
+    let manifest = runtime
+        .manifest
+        .lock()
+        .expect("runtime manifest mutex poisoned")
+        .clone();
+    let authenticated_policy = resolve_retained_turn_policy_material_for_submit(
+        &runtime.store,
+        &runtime.descriptor,
+        &manifest,
+        run_id,
+        None,
+        None,
+    )?;
     let request = {
-        let manifest_guard = runtime
-            .manifest
-            .lock()
-            .expect("runtime manifest mutex poisoned");
         MemberTurnSubmitRequestV1 {
             schema_version: 1,
-            orchestration_session_id: manifest_guard.handle.orchestration_session_id.clone(),
-            participant_id: manifest_guard.handle.participant_id.clone(),
-            orchestrator_participant_id: manifest_guard
+            orchestration_session_id: manifest.handle.orchestration_session_id.clone(),
+            participant_id: manifest.handle.participant_id.clone(),
+            orchestrator_participant_id: manifest
                 .handle
                 .orchestrator_participant_id
                 .clone()
@@ -4372,20 +4688,32 @@ where
                 })?,
             backend_id: runtime.descriptor.backend_id.clone(),
             run_id: run_id.to_string(),
-            world_id: manifest_guard.handle.world_id.clone().ok_or_else(|| {
+            world_id: manifest.handle.world_id.clone().ok_or_else(|| {
                 anyhow::anyhow!(
                     "substrate: error: retained world-scoped member is missing world_id"
                 )
             })?,
-            world_generation: manifest_guard.handle.world_generation.ok_or_else(|| {
+            world_generation: manifest.handle.world_generation.ok_or_else(|| {
                 anyhow::anyhow!(
                     "substrate: error: retained world-scoped member is missing world_generation"
                 )
             })?,
             prompt: prompt.to_string(),
             acceptance_context: None,
+            policy_snapshot_carrier: authenticated_policy
+                .as_ref()
+                .map(|material| material.carrier().clone()),
         }
     };
+    if let Some(authenticated_policy) = authenticated_policy.as_ref() {
+        request
+            .validate_against_authenticated_policy_carrier(authenticated_policy.carrier())
+            .map_err(|error| {
+                anyhow::anyhow!(
+                    "substrate: error: retained-turn policy carrier translation failed: {error}"
+                )
+            })?;
+    }
 
     let (client, _pending_diff_request, _agent_id) = build_agent_client_and_pending_diff_request()?;
     let response = client
@@ -6645,6 +6973,8 @@ fn structured_prompt_event_fallback_text(data: &serde_json::Value) -> Option<Str
 mod tests {
     #[cfg(unix)]
     use super::prompt_event_text;
+    #[cfg(target_os = "linux")]
+    use super::resolve_retained_turn_policy_material_for_submit;
     use super::{
         apply_runtime_cancel_closeout, apply_runtime_stop_closeout,
         prompt_completion_session_state, reconcile_hidden_owner_helper_start_timeout,
@@ -6871,6 +7201,91 @@ mod tests {
         authority_env.install_home(temp.path());
         let store = AgentRuntimeStateStore::new().expect("state store");
         test(&store);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn retained_turn_policy_carrier_omission_is_limited_to_unactivated_legacy_authority() {
+        with_store(|store| {
+            let descriptor = RuntimeSelectionDescriptor {
+                agent_id: "codex".to_string(),
+                backend_id: "cli:codex_world".to_string(),
+                backend_kind: AgentRuntimeBackendKind::Codex,
+                protocol: PURE_AGENT_PROTOCOL.to_string(),
+                execution_scope: AgentExecutionScope::World,
+                binary_path: PathBuf::from("/usr/bin/codex"),
+            };
+            let manifest = AgentRuntimeParticipantRecord::new_member_participant(
+                &descriptor,
+                "session_legacy_turn".to_string(),
+                "participant_legacy_turn".to_string(),
+                "participant_orchestrator".to_string(),
+                None,
+                Some(AgentRuntimeParticipantWorldBinding {
+                    world_id: "world_legacy_turn".to_string(),
+                    world_generation: 1,
+                }),
+                "lease_legacy_turn".to_string(),
+            )
+            .expect("legacy retained member manifest");
+            store
+                .persist_participant(&manifest)
+                .expect("persist pre-E2 retained compatibility manifest");
+
+            let material = resolve_retained_turn_policy_material_for_submit(
+                store,
+                &descriptor,
+                &manifest,
+                "run_legacy_turn",
+                None,
+                None,
+            )
+            .expect("unactivated legacy authority remains explicitly omittable");
+
+            assert!(material.is_none());
+        });
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn retained_turn_policy_carrier_rejects_empty_turn_subject_before_authority_resolution() {
+        with_store(|store| {
+            let descriptor = RuntimeSelectionDescriptor {
+                agent_id: "codex".to_string(),
+                backend_id: "cli:codex_world".to_string(),
+                backend_kind: AgentRuntimeBackendKind::Codex,
+                protocol: PURE_AGENT_PROTOCOL.to_string(),
+                execution_scope: AgentExecutionScope::World,
+                binary_path: PathBuf::from("/usr/bin/codex"),
+            };
+            let manifest = AgentRuntimeParticipantRecord::new_member_participant(
+                &descriptor,
+                "session_invalid_turn".to_string(),
+                "participant_invalid_turn".to_string(),
+                "participant_orchestrator".to_string(),
+                None,
+                Some(AgentRuntimeParticipantWorldBinding {
+                    world_id: "world_invalid_turn".to_string(),
+                    world_generation: 1,
+                }),
+                "lease_invalid_turn".to_string(),
+            )
+            .expect("retained member manifest");
+
+            let error = resolve_retained_turn_policy_material_for_submit(
+                store,
+                &descriptor,
+                &manifest,
+                " ",
+                None,
+                None,
+            )
+            .err()
+            .expect("empty active run identity must fail before legacy omission");
+
+            assert!(format!("{error:#}")
+                .contains("retained-turn runtime identity is incomplete or inconsistent"));
+        });
     }
 
     fn test_plan(

@@ -404,6 +404,8 @@ pub(crate) struct WorldDispatchRequestV1 {
     pub target_participant_id: Option<String>,
     pub world_id: Option<String>,
     pub world_generation: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dispatch_policy_narrowing: Option<transport_api_types::DispatchPolicyNarrowingPatchV1>,
     pub payload: WorldDispatchPayloadV1,
 }
 
@@ -421,6 +423,8 @@ pub(crate) struct ValidatedWorldDispatchRequestV1 {
     pub task_run_id: Option<String>,
     pub world_id: String,
     pub world_generation: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dispatch_policy_narrowing: Option<transport_api_types::DispatchPolicyNarrowingPatchV1>,
     pub payload: WorldDispatchPayloadV1,
 }
 
@@ -454,6 +458,19 @@ impl WorldDispatchRequestV1 {
         let target_backend_id =
             required_world_dispatch_string("target_backend_id", self.target_backend_id)?;
         validate_backend_id(&target_backend_id).map_err(|err| anyhow::anyhow!(err.to_string()))?;
+        if let Some(carrier) = self.dispatch_policy_narrowing.as_ref() {
+            validate_dispatch_policy_narrowing(
+                carrier,
+                &request_id,
+                &orchestration_session_id,
+                &caller_participant_id,
+                self.action,
+                &target_backend_id,
+                target_participant_id.as_deref(),
+                &world_id,
+                world_generation,
+            )?;
+        }
 
         Ok(ValidatedWorldDispatchRequestV1 {
             request_id,
@@ -467,9 +484,79 @@ impl WorldDispatchRequestV1 {
             task_run_id: self.task_run_id,
             world_id,
             world_generation,
+            dispatch_policy_narrowing: self.dispatch_policy_narrowing,
             payload: self.payload,
         })
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn validate_dispatch_policy_narrowing(
+    carrier: &transport_api_types::DispatchPolicyNarrowingPatchV1,
+    request_id: &str,
+    orchestration_session_id: &str,
+    caller_participant_id: &str,
+    action: WorldDispatchActionV1,
+    target_backend_id: &str,
+    target_participant_id: Option<&str>,
+    world_id: &str,
+    world_generation: u64,
+) -> anyhow::Result<()> {
+    carrier
+        .validate()
+        .map_err(|error| anyhow::anyhow!("invalid_dispatch_policy_narrowing: {error}"))?;
+    if carrier.request_id != request_id
+        || carrier.orchestration_session_id != orchestration_session_id
+        || carrier.caller_participant_id != caller_participant_id
+        || carrier.target_backend_id != target_backend_id
+        || carrier.target_world.world_id != world_id
+        || carrier.target_world.world_generation != world_generation
+    {
+        anyhow::bail!(
+            "invalid_dispatch_policy_narrowing_binding_mismatch: carrier identity must equal the validated dispatch request"
+        );
+    }
+
+    let subject_matches = match (&carrier.applies_to, action) {
+        (
+            transport_api_types::DispatchCapabilitySubjectV1::EphemeralTask,
+            WorldDispatchActionV1::RunWorldTask,
+        )
+        | (
+            transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerSpawn,
+            WorldDispatchActionV1::SpawnWorldWorker,
+        ) => true,
+        (
+            transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerTurn {
+                retained_participant_id,
+            },
+            WorldDispatchActionV1::ContinueWorldWorker,
+        ) => target_participant_id == Some(retained_participant_id.as_str()),
+        (
+            transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerFork {
+                source_participant_id,
+            },
+            WorldDispatchActionV1::ForkWorldWorker,
+        ) => target_participant_id == Some(source_participant_id.as_str()),
+        (
+            _,
+            WorldDispatchActionV1::InspectWorldWorker
+            | WorldDispatchActionV1::CancelWorldWork
+            | WorldDispatchActionV1::StopWorldWorker,
+        ) => {
+            anyhow::bail!(
+                "invalid_dispatch_policy_narrowing_unsupported_action: action {} does not accept a narrowing carrier",
+                action.as_str()
+            )
+        }
+        _ => false,
+    };
+    if !subject_matches {
+        anyhow::bail!(
+            "invalid_dispatch_policy_narrowing_subject_mismatch: carrier subject must equal the validated dispatch subject"
+        );
+    }
+    Ok(())
 }
 
 fn required_world_dispatch_string(
@@ -3351,8 +3438,178 @@ mod tests {
             target_participant_id: None,
             world_id: Some("world-17".to_string()),
             world_generation: Some(2),
+            dispatch_policy_narrowing: None,
             payload,
         }
+    }
+
+    fn dispatch_policy_narrowing_for(
+        applies_to: transport_api_types::DispatchCapabilitySubjectV1,
+    ) -> transport_api_types::DispatchPolicyNarrowingPatchV1 {
+        transport_api_types::DispatchPolicyNarrowingPatchV1 {
+            schema_version: 1,
+            request_id: "req-32".to_string(),
+            orchestration_session_id: "sess-32".to_string(),
+            caller_participant_id: "orch-32".to_string(),
+            target_backend_id: "cli:codex_world".to_string(),
+            target_world: transport_api_types::WorldBindingRefV1 {
+                world_id: "world-17".to_string(),
+                world_generation: 2,
+            },
+            applies_to,
+            parent_policy_ref: transport_api_types::PolicyRefV1 {
+                ref_id: "ao_0123456789abcdef0123456789abcdef".to_string(),
+                object_kind: transport_api_types::AuthorityObjectKindV1::Policy,
+                schema_version: 1,
+                commitment: substrate_common::OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                    digest_hex: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                        .to_string(),
+                },
+            },
+            parent_policy_revision: "policy-revision-32".to_string(),
+            restricted_policy_patch: transport_api_types::RestrictedPolicyPatchV1 {
+                world_fs: Some(transport_api_types::RestrictedWorldFsPatchV1 {
+                    host_visible: Some(false),
+                    ..Default::default()
+                }),
+            },
+            reason: Some("restrict this dispatch".to_string()),
+        }
+    }
+
+    #[test]
+    fn world_dispatch_contract_carries_exact_ephemeral_policy_narrowing() {
+        let mut request = base_world_dispatch_request(
+            WorldDispatchActionV1::RunWorldTask,
+            WorldDispatchModeV1::Ephemeral,
+            WorldDispatchPayloadV1::Task(TaskPayloadV1 {
+                prompt: "index the repo".to_string(),
+            }),
+        );
+        let narrowing = dispatch_policy_narrowing_for(
+            transport_api_types::DispatchCapabilitySubjectV1::EphemeralTask,
+        );
+        request.dispatch_policy_narrowing = Some(narrowing.clone());
+
+        let validated = request.validate().expect("narrowing carrier validates");
+
+        assert_eq!(validated.dispatch_policy_narrowing, Some(narrowing));
+    }
+
+    #[test]
+    fn world_dispatch_contract_carries_exact_spawn_continue_and_fork_subjects() {
+        let mut spawn = base_world_dispatch_request(
+            WorldDispatchActionV1::SpawnWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
+                prompt: "spawn exact worker".to_string(),
+            }),
+        );
+        spawn.dispatch_policy_narrowing = Some(dispatch_policy_narrowing_for(
+            transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerSpawn,
+        ));
+        spawn.validate().expect("spawn subject validates");
+
+        let mut retained_turn = base_world_dispatch_request(
+            WorldDispatchActionV1::ContinueWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerContinue(WorkerContinuePayloadV1 {
+                prompt: "continue exact worker".to_string(),
+                thread_id: None,
+            }),
+        )
+        .with_target_participant_id("ash-worker-32");
+        retained_turn.dispatch_policy_narrowing = Some(dispatch_policy_narrowing_for(
+            transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerTurn {
+                retained_participant_id: "ash-worker-32".to_string(),
+            },
+        ));
+        retained_turn
+            .validate()
+            .expect("retained-turn subject validates");
+
+        let mut fork = base_world_dispatch_request(
+            WorldDispatchActionV1::ForkWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerFork(WorkerForkPayloadV1 {
+                prompt: "fork exact worker".to_string(),
+                fork_reason: None,
+                fork_strategy: None,
+            }),
+        )
+        .with_target_participant_id("ash-worker-32");
+        fork.dispatch_policy_narrowing = Some(dispatch_policy_narrowing_for(
+            transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerFork {
+                source_participant_id: "ash-worker-32".to_string(),
+            },
+        ));
+        fork.validate().expect("fork subject validates");
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_subject_mismatched_policy_narrowing() {
+        let mut request = base_world_dispatch_request(
+            WorldDispatchActionV1::RunWorldTask,
+            WorldDispatchModeV1::Ephemeral,
+            WorldDispatchPayloadV1::Task(TaskPayloadV1 {
+                prompt: "index the repo".to_string(),
+            }),
+        );
+        request.dispatch_policy_narrowing = Some(dispatch_policy_narrowing_for(
+            transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerSpawn,
+        ));
+
+        let error = request
+            .validate()
+            .expect_err("subject-mismatched narrowing must fail closed");
+
+        assert!(error.to_string().contains("subject_mismatch"), "{error:#}");
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_runtime_identity_mismatched_policy_narrowing() {
+        let mut request = base_world_dispatch_request(
+            WorldDispatchActionV1::RunWorldTask,
+            WorldDispatchModeV1::Ephemeral,
+            WorldDispatchPayloadV1::Task(TaskPayloadV1 {
+                prompt: "index the repo".to_string(),
+            }),
+        );
+        let mut narrowing = dispatch_policy_narrowing_for(
+            transport_api_types::DispatchCapabilitySubjectV1::EphemeralTask,
+        );
+        narrowing.request_id = "substituted-request".to_string();
+        request.dispatch_policy_narrowing = Some(narrowing);
+
+        let error = request
+            .validate()
+            .expect_err("runtime-identity substitution must fail closed");
+
+        assert!(error.to_string().contains("binding_mismatch"), "{error:#}");
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_policy_narrowing_for_non_policy_action() {
+        let mut request = base_world_dispatch_request(
+            WorldDispatchActionV1::InspectWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerInspect(WorkerInspectPayloadV1::default()),
+        )
+        .with_target_participant_id("ash-worker-32");
+        request.dispatch_policy_narrowing = Some(dispatch_policy_narrowing_for(
+            transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerTurn {
+                retained_participant_id: "ash-worker-32".to_string(),
+            },
+        ));
+
+        let error = request
+            .validate()
+            .expect_err("inspect must not accept policy narrowing");
+
+        assert!(
+            error.to_string().contains("unsupported_action"),
+            "{error:#}"
+        );
     }
 
     trait WorldDispatchRequestTestExt {

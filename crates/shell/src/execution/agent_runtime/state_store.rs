@@ -1849,6 +1849,8 @@ struct CanonicalValidatedWorldDispatchRequestV1 {
     task_run_id: Option<String>,
     world_id: String,
     world_generation: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    dispatch_policy_narrowing: Option<transport_api_types::DispatchPolicyNarrowingPatchV1>,
     payload: CanonicalWorldDispatchPayloadV1,
 }
 
@@ -1869,6 +1871,7 @@ impl TryFrom<&ValidatedWorldDispatchRequestV1> for CanonicalValidatedWorldDispat
             task_run_id: value.task_run_id.clone(),
             world_id: value.world_id.clone(),
             world_generation: value.world_generation,
+            dispatch_policy_narrowing: value.dispatch_policy_narrowing.clone(),
             payload: CanonicalWorldDispatchPayloadV1::try_from(&value.payload)?,
         })
     }
@@ -1891,6 +1894,7 @@ impl TryFrom<CanonicalValidatedWorldDispatchRequestV1> for ValidatedWorldDispatc
             target_participant_id: value.target_participant_id,
             world_id: Some(value.world_id),
             world_generation: Some(value.world_generation),
+            dispatch_policy_narrowing: value.dispatch_policy_narrowing,
             payload: value.payload.into(),
         }
         .validate()
@@ -1999,6 +2003,7 @@ impl TryFrom<CanonicalMemberDispatchRequestV1> for transport_api_types::MemberDi
                 binary_path: value.resolved_runtime.binary_path,
             },
             retained_worker_launch_authority: None,
+            e2_launch_activation: None,
         };
         request.validate().map_err(anyhow::Error::msg)?;
         Ok(request)
@@ -3747,6 +3752,8 @@ pub(crate) struct ResolvedWorldWorkRegistryAuthorityV1 {
 pub(crate) struct ResolvedCanonicalRetainedWorldDispatchTargetV1 {
     pub(crate) participant_id: String,
     pub(crate) backend_id: String,
+    pub(crate) policy_cap_compatibility:
+        super::dispatch_policy_commitment::ResolvedPolicyCommitmentCompatibilityV1,
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos", test))]
@@ -3881,7 +3888,7 @@ fn resolve_canonical_retained_world_dispatch_target(
         .world_binding
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("canonical retained dispatch authority omits world"))?;
-    let current_policy_ref = current
+    let _current_policy_ref = current
         .authority
         .current_policy_ref
         .as_ref()
@@ -3921,8 +3928,6 @@ fn resolve_canonical_retained_world_dispatch_target(
     if admission.authority_store_id != current.observation.authority_store_id
         || admission.orchestration_session_id != current.authority.orchestration_session_id
         || admission.retained_participant_id != retained_participant_id
-        || admission.current_policy_ref != *current_policy_ref
-        || admission.current_policy_revision != current.current_policy.policy_revision
     {
         anyhow::bail!(
             "stale_linkage: retained worker {} admission truth conflicts with current dispatch authority",
@@ -3996,14 +4001,37 @@ fn resolve_canonical_retained_world_dispatch_target(
     }
     if resolved.resume_handle.protocol != resolved.descriptor.protocol
         || resolved.retained_worker.participant_id != retained_participant_id
-        || resolved.retained_worker.policy_ref != *current_policy_ref
-        || resolved.current_policy != current.current_policy
     {
         anyhow::bail!("canonical retained target graph conflicts with dispatch request");
+    }
+    let policy_cap_compatibility = super::dispatch_policy_commitment::resolve_retained_worker_cap(
+        authority,
+        &current.authority.orchestration_session_id,
+        retained_participant_id,
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    if let super::dispatch_policy_commitment::ResolvedPolicyCommitmentCompatibilityV1::Compatible {
+        cap,
+    } = &policy_cap_compatibility
+    {
+        if cap.authority_store_id() != current.observation.authority_store_id
+            || cap.orchestration_session_id() != current.authority.orchestration_session_id
+            || cap.retained_participant_id() != retained_participant_id
+            || cap.launch_parent_policy_ref() != &admission.current_policy_ref
+            || cap.launch_parent_policy_revision() != admission.current_policy_revision
+            || cap.launch_parent_policy_ref() != &resolved.retained_worker.policy_ref
+            || cap.launch_parent_policy_revision() != resolved.current_policy.policy_revision
+        {
+            anyhow::bail!(
+                "stale_linkage: retained worker {} immutable policy cap conflicts with its exact launch authority",
+                retained_participant_id
+            );
+        }
     }
     Ok(ResolvedCanonicalRetainedWorldDispatchTargetV1 {
         participant_id: retained_participant_id.to_string(),
         backend_id: resolved.descriptor.backend_id,
+        policy_cap_compatibility,
     })
 }
 
@@ -4486,6 +4514,36 @@ impl WorldWorkReceiptRegistry {
             .map(PersistedWorldWorkAcceptanceV1)
     }
 
+    pub(crate) fn inspect_world_work_proposal_for_accepted_record(
+        &self,
+        record: &WorldWorkAcceptanceRecordV1,
+    ) -> Result<Option<WorldWorkAcceptanceProposalV1>> {
+        record.validate()?;
+        if record.authority_store_id != self.authority_store_id {
+            anyhow::bail!("accepted world work record does not match bound authority store");
+        }
+        self.with_state(|state| {
+            let Some(session) = state.sessions_by_id.get(&record.orchestration_session_id) else {
+                return Ok((None, false));
+            };
+            let Some(stored_record) = session
+                .records_by_acceptance_record_id
+                .get(&record.acceptance_record_id)
+            else {
+                return Ok((None, false));
+            };
+            if stored_record != record {
+                anyhow::bail!("accepted world work record changed during exact proposal lookup");
+            }
+            let proposal = session
+                .proposals_by_request_id
+                .get(&record.request_id)
+                .ok_or_else(|| anyhow::anyhow!("accepted world work omitted its exact proposal"))?;
+            validate_acceptance_record_matches_proposal(stored_record, proposal)?;
+            Ok((Some(proposal.clone()), false))
+        })
+    }
+
     pub(crate) fn persisted_acceptances_for_recovery(
         &self,
     ) -> Result<Vec<PersistedWorldWorkAcceptanceV1>> {
@@ -4815,6 +4873,25 @@ impl AgentRuntimeStateStore {
                     retained_participant_id
                 )
             }
+        }
+        let exact_target = resolve_canonical_retained_world_dispatch_target(
+            &authority,
+            &current,
+            retained_participant_id,
+            &admission.backend_id,
+        )
+        .map_err(|error| {
+            anyhow::anyhow!("preflight canonical retained Continue target: {error:#}")
+        })?;
+        if let super::dispatch_policy_commitment::ResolvedPolicyCommitmentCompatibilityV1::UnsupportedLegacyState {
+            reason,
+            ..
+        } = exact_target.policy_cap_compatibility
+        {
+            anyhow::bail!(
+                "unsupported_legacy_state: retained worker {} has no authentic immutable policy cap ({reason:?})",
+                retained_participant_id
+            );
         }
         let target_backend_id = admission.backend_id;
         self.resolve_world_work_registry_authority(
@@ -5585,6 +5662,11 @@ impl AgentRuntimeStateStore {
             .join("run")
             .join("agent-hub")
             .join("participants")
+    }
+
+    /// Accepted bootstrap root used for trusted authority re-opening.
+    pub(crate) fn substrate_home(&self) -> &Path {
+        &self.substrate_home
     }
 
     pub(crate) fn handles_dir(&self) -> PathBuf {
@@ -11505,6 +11587,7 @@ mod tests {
             payload: WorldDispatchPayloadV1::Task(TaskPayloadV1 {
                 prompt: "perform the bounded task".to_string(),
             }),
+            dispatch_policy_narrowing: None,
         }
         .validate()?;
         let member_dispatch_request = transport_api_types::MemberDispatchRequestV1 {
@@ -11525,6 +11608,7 @@ mod tests {
                 binary_path: "/usr/bin/codex".to_string(),
             },
             retained_worker_launch_authority: None,
+            e2_launch_activation: None,
         };
         Ok(WorldWorkAcceptanceProposalV1 {
             schema_version: 1,
@@ -11597,6 +11681,7 @@ mod tests {
             world_id: Some("world-b1".to_string()),
             world_generation: Some(7),
             payload,
+            dispatch_policy_narrowing: None,
         }
         .validate()?;
         Ok(WorldWorkAcceptanceProposalV1 {
@@ -12535,6 +12620,20 @@ mod tests {
                 accepted_retry,
                 WorldWorkProposalReservationOutcomeV1::Accepted(winner.clone())
             );
+            assert_eq!(
+                store
+                    .inspect_world_work_proposal_for_accepted_record(&winner)
+                    .expect("look up exact proposal for accepted retry"),
+                Some(proposal.clone())
+            );
+
+            let mut wrong_store = winner.clone();
+            wrong_store.authority_store_id = "authority-store-other".to_string();
+            assert!(store
+                .inspect_world_work_proposal_for_accepted_record(&wrong_store)
+                .expect_err("accepted proposal lookup must enforce the bound authority store")
+                .to_string()
+                .contains("does not match bound authority store"));
 
             let conflict = store
                 .prepare_world_work_acceptance_proposal(

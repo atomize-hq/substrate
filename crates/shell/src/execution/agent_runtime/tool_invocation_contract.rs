@@ -547,6 +547,8 @@ impl HostToolRuntimeWorldBindingV1 {
 #[serde(deny_unknown_fields)]
 pub(crate) struct RunWorldTaskToolCallV1 {
     pub target_backend_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dispatch_policy_narrowing: Option<transport_api_types::DispatchPolicyNarrowingPatchV1>,
     pub payload: TaskPayloadV1,
 }
 
@@ -554,6 +556,8 @@ pub(crate) struct RunWorldTaskToolCallV1 {
 #[serde(deny_unknown_fields)]
 pub(crate) struct SpawnWorldWorkerToolCallV1 {
     pub target_backend_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dispatch_policy_narrowing: Option<transport_api_types::DispatchPolicyNarrowingPatchV1>,
     pub payload: WorkerSpawnPayloadV1,
 }
 
@@ -576,6 +580,8 @@ struct HostToolFollowUpArgumentsV1<P> {
     task_run_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     participant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    dispatch_policy_narrowing: Option<transport_api_types::DispatchPolicyNarrowingPatchV1>,
     payload: P,
 }
 
@@ -602,6 +608,7 @@ struct BuildDispatchRequestArgsV1 {
     target_backend_id: String,
     task_run_id: Option<String>,
     target_participant_id: Option<String>,
+    dispatch_policy_narrowing: Option<transport_api_types::DispatchPolicyNarrowingPatchV1>,
     payload: WorldDispatchPayloadV1,
 }
 
@@ -623,6 +630,7 @@ pub(crate) fn translate_run_world_task_to_internal_dispatch_request_v1(
             target_backend_id: call.target_backend_id,
             task_run_id: None,
             target_participant_id: None,
+            dispatch_policy_narrowing: call.dispatch_policy_narrowing,
             payload: WorldDispatchPayloadV1::Task(call.payload),
         },
     )
@@ -642,6 +650,7 @@ pub(crate) fn translate_spawn_world_worker_to_internal_dispatch_request_v1(
             target_backend_id: call.target_backend_id,
             task_run_id: None,
             target_participant_id: None,
+            dispatch_policy_narrowing: call.dispatch_policy_narrowing,
             payload: WorldDispatchPayloadV1::WorkerSpawn(call.payload),
         },
     )
@@ -1245,6 +1254,19 @@ pub(crate) fn translate_follow_up_tool_to_internal_dispatch_request_v1(
     handle: HostToolFollowUpHandleV1,
     payload: WorldDispatchPayloadV1,
 ) -> anyhow::Result<WorldDispatchRequestV1> {
+    translate_follow_up_tool_with_policy_narrowing_v1(
+        store, metadata, tool_name, handle, payload, None,
+    )
+}
+
+fn translate_follow_up_tool_with_policy_narrowing_v1(
+    store: &AgentRuntimeStateStore,
+    metadata: &HostToolRuntimeDispatchMetadataV1,
+    tool_name: HostToolNameV1,
+    handle: HostToolFollowUpHandleV1,
+    payload: WorldDispatchPayloadV1,
+    dispatch_policy_narrowing: Option<transport_api_types::DispatchPolicyNarrowingPatchV1>,
+) -> anyhow::Result<WorldDispatchRequestV1> {
     let allow_hsa_retained_continue = !matches!(
         &payload,
         WorldDispatchPayloadV1::WorkerContinueForkCommand(_)
@@ -1265,6 +1287,7 @@ pub(crate) fn translate_follow_up_tool_to_internal_dispatch_request_v1(
             target_backend_id: authority.target_backend_id,
             task_run_id: authority.task_run_id,
             target_participant_id: authority.target_participant_id,
+            dispatch_policy_narrowing,
             payload,
         },
     )
@@ -1281,6 +1304,7 @@ fn build_dispatch_request_v1(
         target_backend_id,
         task_run_id,
         target_participant_id,
+        dispatch_policy_narrowing,
         payload,
     } = args;
 
@@ -1307,6 +1331,7 @@ fn build_dispatch_request_v1(
         target_participant_id,
         world_id: Some(world_binding.world_id.clone()),
         world_generation: Some(world_binding.world_generation),
+        dispatch_policy_narrowing,
         payload,
     };
     request.clone().validate()?;
@@ -1485,12 +1510,13 @@ where
                 tool_name.as_str()
             )
         })?;
-    translate_follow_up_tool_to_internal_dispatch_request_v1(
+    translate_follow_up_tool_with_policy_narrowing_v1(
         store,
         metadata,
         tool_name,
         handle,
         payload_builder(call.payload),
+        call.dispatch_policy_narrowing,
     )
 }
 
@@ -1837,6 +1863,7 @@ mod tests {
             &world_binding,
             RunWorldTaskToolCallV1 {
                 target_backend_id: "cli:codex_world".to_string(),
+                dispatch_policy_narrowing: None,
                 payload: crate::execution::agent_runtime::TaskPayloadV1 {
                     prompt: "Scan the workspace and summarize the failing test.".to_string(),
                 },
@@ -1872,6 +1899,80 @@ mod tests {
     }
 
     #[test]
+    fn dispatch_contract_adapter_translates_exact_policy_narrowing_for_run_world_task() {
+        let narrowing = sample_dispatch_policy_narrowing(
+            transport_api_types::DispatchCapabilitySubjectV1::EphemeralTask,
+        );
+        let request = translate_run_world_task_to_internal_dispatch_request_v1(
+            &sample_runtime_metadata(),
+            &sample_world_binding(),
+            RunWorldTaskToolCallV1 {
+                target_backend_id: "cli:codex_world".to_string(),
+                payload: crate::execution::agent_runtime::TaskPayloadV1 {
+                    prompt: "Scan the workspace.".to_string(),
+                },
+                dispatch_policy_narrowing: Some(narrowing.clone()),
+            },
+        )
+        .expect("translate exact narrowing carrier");
+
+        assert_eq!(request.dispatch_policy_narrowing, Some(narrowing));
+    }
+
+    #[test]
+    fn dispatch_contract_adapter_rejects_policy_narrowing_with_runtime_owned_identity_drift() {
+        let mut narrowing = sample_dispatch_policy_narrowing(
+            transport_api_types::DispatchCapabilitySubjectV1::EphemeralTask,
+        );
+        narrowing.orchestration_session_id = "substituted-session".to_string();
+
+        let error = translate_run_world_task_to_internal_dispatch_request_v1(
+            &sample_runtime_metadata(),
+            &sample_world_binding(),
+            RunWorldTaskToolCallV1 {
+                target_backend_id: "cli:codex_world".to_string(),
+                payload: crate::execution::agent_runtime::TaskPayloadV1 {
+                    prompt: "Scan the workspace.".to_string(),
+                },
+                dispatch_policy_narrowing: Some(narrowing),
+            },
+        )
+        .expect_err("runtime-owned identity drift must fail closed");
+
+        assert!(error.to_string().contains("binding_mismatch"), "{error:#}");
+    }
+
+    #[test]
+    fn dispatch_contract_adapter_strictly_decodes_follow_up_policy_narrowing() {
+        let narrowing = sample_dispatch_policy_narrowing(
+            transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerFork {
+                source_participant_id: "ash-worker-51".to_string(),
+            },
+        );
+        let arguments = serde_json::json!({
+            "participant_id": "ash-worker-51",
+            "payload": {
+                "prompt": "Fork this worker."
+            },
+            "dispatch_policy_narrowing": narrowing,
+        });
+
+        let decoded = super::decode_tool_arguments_v1::<
+            super::HostToolFollowUpArgumentsV1<WorkerForkPayloadV1>,
+        >(HostToolNameV1::ForkWorldWorker, arguments)
+        .expect("decode exact follow-up carrier");
+
+        assert_eq!(
+            decoded.dispatch_policy_narrowing,
+            Some(sample_dispatch_policy_narrowing(
+                transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerFork {
+                    source_participant_id: "ash-worker-51".to_string(),
+                },
+            ))
+        );
+    }
+
+    #[test]
     fn dispatch_contract_adapter_translates_spawn_world_worker_with_runtime_owned_injection() {
         let metadata = sample_runtime_metadata();
         let world_binding = sample_world_binding();
@@ -1881,6 +1982,7 @@ mod tests {
             &world_binding,
             SpawnWorldWorkerToolCallV1 {
                 target_backend_id: "cli:claude_code_world".to_string(),
+                dispatch_policy_narrowing: None,
                 payload: crate::execution::agent_runtime::WorkerSpawnPayloadV1 {
                     prompt: "Bootstrap a retained worker for the integration test triage."
                         .to_string(),
@@ -3627,6 +3729,7 @@ mod tests {
                             target_participant_id: None,
                             world_id: Some(seed.world_id.to_string()),
                             world_generation: Some(seed.world_generation),
+                            dispatch_policy_narrowing: None,
                             payload: WorldDispatchPayloadV1::Task(
                                 crate::execution::agent_runtime::TaskPayloadV1 {
                                     prompt: "seed accepted active task".to_string(),
@@ -3652,6 +3755,7 @@ mod tests {
                             binary_path: "/usr/bin/codex".to_string(),
                         },
                         retained_worker_launch_authority: None,
+                        e2_launch_activation: None,
                     };
                     Ok(WorldWorkAcceptanceProposalV1 {
                         schema_version: 1,
@@ -3776,6 +3880,40 @@ mod tests {
         HostToolRuntimeWorldBindingV1 {
             world_id: "world-17".to_string(),
             world_generation: 2,
+        }
+    }
+
+    fn sample_dispatch_policy_narrowing(
+        applies_to: transport_api_types::DispatchCapabilitySubjectV1,
+    ) -> transport_api_types::DispatchPolicyNarrowingPatchV1 {
+        transport_api_types::DispatchPolicyNarrowingPatchV1 {
+            schema_version: 1,
+            request_id: "req-packet2-run".to_string(),
+            orchestration_session_id: "sess_packet2".to_string(),
+            caller_participant_id: "orch_packet2".to_string(),
+            target_backend_id: "cli:codex_world".to_string(),
+            target_world: transport_api_types::WorldBindingRefV1 {
+                world_id: "world-17".to_string(),
+                world_generation: 2,
+            },
+            applies_to,
+            parent_policy_ref: transport_api_types::PolicyRefV1 {
+                ref_id: "ao_0123456789abcdef0123456789abcdef".to_string(),
+                object_kind: transport_api_types::AuthorityObjectKindV1::Policy,
+                schema_version: 1,
+                commitment: substrate_common::OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                    digest_hex: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                        .to_string(),
+                },
+            },
+            parent_policy_revision: "policy-revision-51".to_string(),
+            restricted_policy_patch: transport_api_types::RestrictedPolicyPatchV1 {
+                world_fs: Some(transport_api_types::RestrictedWorldFsPatchV1 {
+                    host_visible: Some(false),
+                    ..Default::default()
+                }),
+            },
+            reason: Some("restrict this dispatch".to_string()),
         }
     }
 

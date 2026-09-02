@@ -26,6 +26,7 @@ use transport_api_types::{
     RetainedWorkerLaunchAuthorityProofV1, RetainedWorkerLaunchWorldBindingV1,
 };
 
+use super::dispatch_policy_commitment::AuthenticatedFreshSpawnReservationProofV1;
 use super::host_session_authority::canonical_json;
 #[cfg(test)]
 use super::host_session_authority::facade::RetainedReservationCrashPointV1;
@@ -736,6 +737,7 @@ impl RetainedWorkerRuntime {
         &self,
         authority: &HostSessionAuthority,
         plan: &RetainedWorkerAdmissionPlanV1,
+        reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
     ) -> Result<RetainedWorkerAdmissionSlotV1, RetainedWorkerRuntimeError> {
         let mut participant_entropy = [0_u8; 16];
         let mut bootstrap_run_entropy = [0_u8; 16];
@@ -751,6 +753,7 @@ impl RetainedWorkerRuntime {
         self.reserve_admission_slot_with(
             authority,
             plan,
+            reservation_proof,
             reserved_at,
             participant_entropy,
             bootstrap_run_entropy,
@@ -764,6 +767,7 @@ impl RetainedWorkerRuntime {
         authority: &HostSessionAuthority,
         presented_plan: &RetainedWorkerAdmissionPlanV1,
         expected_record: &RetainedWorkerAdmissionRecordV1,
+        reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
     ) -> Result<RetainedWorkerAdmissionPlanV1, RetainedWorkerRuntimeError> {
         let resolved = authority
             .resolve_current_exact(&presented_plan.spawn_request.orchestration_session_id, None)
@@ -830,7 +834,11 @@ impl RetainedWorkerRuntime {
                 &mut semantic_failure,
             )?;
             retain_semantic_error(
-                validate_admission_plan(transaction.authority_root(), &current_plan),
+                validate_admission_plan(
+                    transaction.authority_root(),
+                    &current_plan,
+                    reservation_proof,
+                ),
                 &mut semantic_failure,
             )?;
             let locator = retain_semantic_error(
@@ -874,6 +882,10 @@ impl RetainedWorkerRuntime {
                     &mut semantic_failure,
                 )?;
             }
+            retain_semantic_error(
+                validate_reservation_proof_identities(reservation_proof, record),
+                &mut semantic_failure,
+            )?;
             let root = retain_semantic_error(
                 preserved_start_root_view(transaction.authority_root()),
                 &mut semantic_failure,
@@ -974,6 +986,7 @@ impl RetainedWorkerRuntime {
         self.reserve_admission_slot_with(
             authority,
             plan,
+            None,
             reserved_at,
             participant_entropy,
             bootstrap_run_entropy,
@@ -987,6 +1000,7 @@ impl RetainedWorkerRuntime {
         &self,
         authority: &HostSessionAuthority,
         plan: &RetainedWorkerAdmissionPlanV1,
+        reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
         reserved_at: TimestampV1,
         participant_entropy: [u8; 16],
         bootstrap_run_entropy: [u8; 16],
@@ -1120,6 +1134,7 @@ impl RetainedWorkerRuntime {
                     transaction.authority_root(),
                     &current_plan,
                     &fingerprint_plan,
+                    reservation_proof,
                     &envelope.secret_key,
                     reserved_at,
                     participant_entropy,
@@ -1191,7 +1206,7 @@ impl RetainedWorkerRuntime {
             RetainedWorkerRuntimeError(error.to_string())
         })?;
         if slot.joined && admission_registration(&slot.record.state).is_some() {
-            self.validate_admitted_record_graph(authority, plan, &slot.record)?;
+            self.validate_admitted_record_graph(authority, plan, &slot.record, reservation_proof)?;
         }
         Ok(slot)
     }
@@ -1276,8 +1291,9 @@ impl RetainedWorkerRuntime {
         &self,
         authority: &HostSessionAuthority,
         plan: &RetainedWorkerAdmissionPlanV1,
+        reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
     ) -> Result<RetainedWorkerAdmissionRegistrationOutcomeV1, RetainedWorkerRuntimeError> {
-        self.register_admitted_worker_with(authority, plan, None)
+        self.register_admitted_worker_with(authority, plan, reservation_proof, None)
     }
 
     #[cfg(test)]
@@ -1287,17 +1303,18 @@ impl RetainedWorkerRuntime {
         plan: &RetainedWorkerAdmissionPlanV1,
         crash_point: Option<AdmissionRegistrationCrashPointV1>,
     ) -> Result<RetainedWorkerAdmissionRegistrationOutcomeV1, RetainedWorkerRuntimeError> {
-        self.register_admitted_worker_with(authority, plan, crash_point)
+        self.register_admitted_worker_with(authority, plan, None, crash_point)
     }
 
     fn register_admitted_worker_with(
         &self,
         authority: &HostSessionAuthority,
         plan: &RetainedWorkerAdmissionPlanV1,
+        reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
         #[cfg(test)] crash_point: Option<AdmissionRegistrationCrashPointV1>,
         #[cfg(not(test))] _crash_point: Option<()>,
     ) -> Result<RetainedWorkerAdmissionRegistrationOutcomeV1, RetainedWorkerRuntimeError> {
-        let slot = self.reserve_admission_slot(authority, plan)?;
+        let slot = self.reserve_admission_slot(authority, plan, reservation_proof)?;
         let head_acquired_at = TimestampV1::parse(
             chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
         )
@@ -1308,6 +1325,7 @@ impl RetainedWorkerRuntime {
             authority,
             plan,
             &slot.record.retained_participant_id,
+            reservation_proof,
             head_acquired_at,
             publication_nonce,
             #[cfg(test)]
@@ -1316,7 +1334,7 @@ impl RetainedWorkerRuntime {
             _crash_point,
         )?;
         if let AdmissionHeadPreparationV1::Complete(record) = head {
-            self.validate_admitted_record_graph(authority, plan, &record)?;
+            self.validate_admitted_record_graph(authority, plan, &record, reservation_proof)?;
             return Ok(RetainedWorkerAdmissionRegistrationOutcomeV1 {
                 record,
                 joined: true,
@@ -1353,6 +1371,7 @@ impl RetainedWorkerRuntime {
             plan,
             &record.retained_participant_id,
             &post_r0_graph,
+            reservation_proof,
             reconcile_nonce,
             #[cfg(test)]
             crash_point,
@@ -1370,6 +1389,7 @@ impl RetainedWorkerRuntime {
         authority: &HostSessionAuthority,
         plan: &RetainedWorkerAdmissionPlanV1,
         retained_participant_id: &str,
+        reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
         head_acquired_at: TimestampV1,
         publication_nonce: [u8; 16],
     ) -> Result<AdmissionHeadPreparationV1, RetainedWorkerRuntimeError> {
@@ -1377,17 +1397,20 @@ impl RetainedWorkerRuntime {
             authority,
             plan,
             retained_participant_id,
+            reservation_proof,
             head_acquired_at,
             publication_nonce,
             None,
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn prepare_admission_registration_head_with(
         &self,
         authority: &HostSessionAuthority,
         plan: &RetainedWorkerAdmissionPlanV1,
         retained_participant_id: &str,
+        reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
         head_acquired_at: TimestampV1,
         publication_nonce: [u8; 16],
         #[cfg(test)] crash_point: Option<AdmissionRegistrationCrashPointV1>,
@@ -1435,6 +1458,7 @@ impl RetainedWorkerRuntime {
                     &current_plan,
                     plan,
                     retained_participant_id,
+                    reservation_proof,
                     &envelope.secret_key,
                     head_acquired_at,
                     typed_history.as_ref(),
@@ -1494,6 +1518,7 @@ impl RetainedWorkerRuntime {
         plan: &RetainedWorkerAdmissionPlanV1,
         retained_participant_id: &str,
         post_r0_graph: &ResolvedPostR0RegisteredGraphV1,
+        reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
         publication_nonce: [u8; 16],
     ) -> Result<RetainedWorkerAdmissionRecordV1, RetainedWorkerRuntimeError> {
         self.advance_registration_head_after_r0_with(
@@ -1501,17 +1526,20 @@ impl RetainedWorkerRuntime {
             plan,
             retained_participant_id,
             post_r0_graph,
+            reservation_proof,
             publication_nonce,
             None,
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn advance_registration_head_after_r0_with(
         &self,
         authority: &HostSessionAuthority,
         plan: &RetainedWorkerAdmissionPlanV1,
         retained_participant_id: &str,
         post_r0_graph: &ResolvedPostR0RegisteredGraphV1,
+        reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
         publication_nonce: [u8; 16],
         #[cfg(test)] crash_point: Option<AdmissionRegistrationCrashPointV1>,
         #[cfg(not(test))] _crash_point: Option<()>,
@@ -1562,6 +1590,7 @@ impl RetainedWorkerRuntime {
                         secret_key: &envelope.secret_key,
                         post_r0_graph,
                     },
+                    reservation_proof,
                     typed_history.as_ref(),
                 ),
                 &mut semantic_failure,
@@ -1662,6 +1691,7 @@ impl RetainedWorkerRuntime {
         authority: &HostSessionAuthority,
         plan: &RetainedWorkerAdmissionPlanV1,
         record: &RetainedWorkerAdmissionRecordV1,
+        reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
     ) -> Result<(), RetainedWorkerRuntimeError> {
         let post_r0_graph = self.resolve_admitted_record_graph(authority, record)?;
         let resolved_authority = authority
@@ -1677,7 +1707,8 @@ impl RetainedWorkerRuntime {
             .read_preserved_start_root_v2()
             .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let versioned_root = VersionedStateRoot::V2(root.clone());
-        validate_admission_plan(&versioned_root, &current_plan)?;
+        validate_admission_plan(&versioned_root, &current_plan, reservation_proof)?;
+        validate_reservation_proof_identities(reservation_proof, record)?;
         let registration = admission_registration(&record.state).ok_or_else(|| {
             RetainedWorkerRuntimeError("post-R0 admission has no registration".into())
         })?;
@@ -1796,6 +1827,7 @@ impl RetainedWorkerRuntime {
         authority: &HostSessionAuthority,
         plan: &RetainedWorkerAdmissionPlanV1,
         retained_participant_id: &str,
+        reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
     ) -> Result<RetainedWorkerTransportClaimV1, RetainedWorkerRuntimeError> {
         let claimed_at = TimestampV1::parse(
             chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
@@ -1810,6 +1842,7 @@ impl RetainedWorkerRuntime {
             authority,
             plan,
             retained_participant_id,
+            reservation_proof,
             &AdmissionTransportPublicationInputV1 {
                 claimed_at,
                 claim_entropy,
@@ -1836,6 +1869,7 @@ impl RetainedWorkerRuntime {
             authority,
             plan,
             retained_participant_id,
+            None,
             &AdmissionTransportPublicationInputV1 {
                 claimed_at,
                 claim_entropy,
@@ -1850,6 +1884,7 @@ impl RetainedWorkerRuntime {
         authority: &HostSessionAuthority,
         plan: &RetainedWorkerAdmissionPlanV1,
         retained_participant_id: &str,
+        reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
         publication: &AdmissionTransportPublicationInputV1,
     ) -> Result<RetainedWorkerTransportClaimV1, RetainedWorkerRuntimeError> {
         let resolved = authority
@@ -1909,6 +1944,7 @@ impl RetainedWorkerRuntime {
                         claim_entropy: publication.claim_entropy,
                         post_r0_graph: post_r0_graph.as_ref(),
                     },
+                    reservation_proof,
                     typed_history.as_ref(),
                 ),
                 &mut semantic_failure,
@@ -1982,6 +2018,7 @@ impl RetainedWorkerRuntime {
         authority: &HostSessionAuthority,
         plan: &RetainedWorkerAdmissionPlanV1,
         claim: &RetainedWorkerTransportClaimV1,
+        reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
     ) -> Result<RetainedWorkerLaunchAuthorityProofV1, RetainedWorkerRuntimeError> {
         let durable = self
             .read_admission_record(
@@ -2007,7 +2044,7 @@ impl RetainedWorkerRuntime {
                 "launch proof requires the exact durable transport claim".into(),
             ));
         };
-        self.validate_admitted_record_graph(authority, plan, &durable)?;
+        self.validate_admitted_record_graph(authority, plan, &durable, reservation_proof)?;
         let graph = self.resolve_admitted_record_graph(authority, &durable)?;
         if registration.registration_id != graph.result.registration_id
             || registration.retained_worker_ref != graph.result.retained_worker_ref
@@ -2067,11 +2104,13 @@ impl RetainedWorkerRuntime {
         Ok(proof)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn mark_admission_routable(
         &self,
         authority: &HostSessionAuthority,
         plan: &RetainedWorkerAdmissionPlanV1,
         retained_participant_id: &str,
+        reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
         frame_identity: &RuntimeFrameIdentityV1,
         event: &AgentEvent,
         registered_at: TimestampV1,
@@ -2080,6 +2119,7 @@ impl RetainedWorkerRuntime {
             authority,
             plan,
             retained_participant_id,
+            reservation_proof,
             &AdmissionRuntimeTruthInputV1::Registered {
                 frame_identity,
                 event,
@@ -2094,6 +2134,7 @@ impl RetainedWorkerRuntime {
         authority: &HostSessionAuthority,
         plan: &RetainedWorkerAdmissionPlanV1,
         retained_participant_id: &str,
+        reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
         frame_identity: &RuntimeFrameIdentityV1,
         event_identity: &RuntimeEventIdentityV1,
         terminal_identity: &RuntimeTerminalIdentityV1,
@@ -2104,6 +2145,7 @@ impl RetainedWorkerRuntime {
             authority,
             plan,
             retained_participant_id,
+            reservation_proof,
             &AdmissionRuntimeTruthInputV1::Terminal {
                 frame_identity,
                 event_identity,
@@ -2119,6 +2161,7 @@ impl RetainedWorkerRuntime {
         authority: &HostSessionAuthority,
         plan: &RetainedWorkerAdmissionPlanV1,
         retained_participant_id: &str,
+        reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
         last_frame_identity: Option<&RuntimeFrameIdentityV1>,
         interrupted_at: TimestampV1,
     ) -> Result<RetainedWorkerAdmissionRecordV1, RetainedWorkerRuntimeError> {
@@ -2126,6 +2169,7 @@ impl RetainedWorkerRuntime {
             authority,
             plan,
             retained_participant_id,
+            reservation_proof,
             &AdmissionRuntimeTruthInputV1::Interrupted {
                 last_frame_identity,
                 interrupted_at,
@@ -2138,6 +2182,7 @@ impl RetainedWorkerRuntime {
         authority: &HostSessionAuthority,
         plan: &RetainedWorkerAdmissionPlanV1,
         retained_participant_id: &str,
+        reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
         truth: &AdmissionRuntimeTruthInputV1<'_>,
     ) -> Result<RetainedWorkerAdmissionRecordV1, RetainedWorkerRuntimeError> {
         let resolved = authority
@@ -2204,6 +2249,7 @@ impl RetainedWorkerRuntime {
                     &envelope.secret_key,
                     &graph.registered_graph,
                     truth,
+                    reservation_proof,
                     typed_history.as_ref(),
                 ),
                 &mut semantic_failure,
@@ -2664,7 +2710,6 @@ impl RetainedWorkerRuntime {
             || retained_worker.resume_handle_ref != registration.resume_handle_ref
             || retained_worker.policy_ref != registration.current_policy_ref
             || current.authority.world_binding.as_ref() != Some(&retained_worker.world_binding)
-            || current.authority.current_policy_ref.as_ref() != Some(&retained_worker.policy_ref)
         {
             return Err(RetainedWorkerRuntimeError(
                 "retained target immutable object graph is inexact".into(),
@@ -2917,17 +2962,19 @@ fn validate_admission_to_current_exact_authority_ancestry(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn prepare_registration_head_in_registry(
     registry: &mut RetainedWorkerAdmissionRegistryV1,
     authority_root: &VersionedStateRoot,
     current_plan: &RetainedWorkerAdmissionPlanV1,
     supplied_plan: &RetainedWorkerAdmissionPlanV1,
     retained_participant_id: &str,
+    reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
     secret_key: &[u8; 32],
     head_acquired_at: TimestampV1,
     typed_history: Option<&BTreeMap<u64, ResolvedSessionAuthorityV1>>,
 ) -> Result<(AdmissionHeadPreparationV1, bool), RetainedWorkerRuntimeError> {
-    validate_admission_plan(authority_root, current_plan)?;
+    validate_admission_plan(authority_root, current_plan, reservation_proof)?;
     let root = preserved_start_root_view(authority_root)?;
     let mut record = registry
         .records_by_session
@@ -2935,6 +2982,7 @@ fn prepare_registration_head_in_registry(
         .and_then(|records| records.get(retained_participant_id))
         .cloned()
         .ok_or_else(|| RetainedWorkerRuntimeError("admission slot is absent".into()))?;
+    validate_reservation_proof_identities(reservation_proof, &record)?;
     validate_supplied_admission_authority(
         root.as_ref(),
         &current_plan.exact_authority,
@@ -3049,9 +3097,10 @@ fn advance_registration_head_in_registry(
     current_plan: &RetainedWorkerAdmissionPlanV1,
     supplied_plan: &RetainedWorkerAdmissionPlanV1,
     input: &AdmissionRegistrationAdvanceInputV1<'_>,
+    reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
     typed_history: Option<&BTreeMap<u64, ResolvedSessionAuthorityV1>>,
 ) -> Result<(RetainedWorkerAdmissionRecordV1, bool), RetainedWorkerRuntimeError> {
-    validate_admission_plan(authority_root, current_plan)?;
+    validate_admission_plan(authority_root, current_plan, reservation_proof)?;
     let root = preserved_start_root_view(authority_root)?;
     let mut record = registry
         .records_by_session
@@ -3059,6 +3108,7 @@ fn advance_registration_head_in_registry(
         .and_then(|records| records.get(input.retained_participant_id))
         .cloned()
         .ok_or_else(|| RetainedWorkerRuntimeError("admission slot is absent".into()))?;
+    validate_reservation_proof_identities(reservation_proof, &record)?;
     validate_supplied_admission_authority(
         root.as_ref(),
         &current_plan.exact_authority,
@@ -3129,6 +3179,7 @@ fn advance_registration_head_in_registry(
     Ok((record, true))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn claim_transport_in_registry(
     registry: &mut RetainedWorkerAdmissionRegistryV1,
     authority_root: &VersionedStateRoot,
@@ -3137,9 +3188,10 @@ fn claim_transport_in_registry(
     retained_participant_id: &str,
     secret_key: &[u8; 32],
     claim_input: &AdmissionTransportClaimInputV1<'_>,
+    reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
     typed_history: Option<&BTreeMap<u64, ResolvedSessionAuthorityV1>>,
 ) -> Result<RetainedWorkerTransportClaimV1, RetainedWorkerRuntimeError> {
-    validate_admission_plan(authority_root, current_plan)?;
+    validate_admission_plan(authority_root, current_plan, reservation_proof)?;
     let root = preserved_start_root_view(authority_root)?;
     let mut record = registry
         .records_by_session
@@ -3147,6 +3199,7 @@ fn claim_transport_in_registry(
         .and_then(|records| records.get(retained_participant_id))
         .cloned()
         .ok_or_else(|| RetainedWorkerRuntimeError("admission slot is absent".into()))?;
+    validate_reservation_proof_identities(reservation_proof, &record)?;
     validate_supplied_admission_authority(
         root.as_ref(),
         &current_plan.exact_authority,
@@ -3242,9 +3295,10 @@ fn advance_admission_runtime_truth_in_registry(
     secret_key: &[u8; 32],
     post_r0_graph: &ResolvedPostR0RegisteredGraphV1,
     truth: &AdmissionRuntimeTruthInputV1<'_>,
+    reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
     typed_history: Option<&BTreeMap<u64, ResolvedSessionAuthorityV1>>,
 ) -> Result<(RetainedWorkerAdmissionRecordV1, bool), RetainedWorkerRuntimeError> {
-    validate_admission_plan(authority_root, current_plan)?;
+    validate_admission_plan(authority_root, current_plan, reservation_proof)?;
     let root = preserved_start_root_view(authority_root)?;
     let mut record = registry
         .records_by_session
@@ -3252,6 +3306,7 @@ fn advance_admission_runtime_truth_in_registry(
         .and_then(|records| records.get(retained_participant_id))
         .cloned()
         .ok_or_else(|| RetainedWorkerRuntimeError("admission slot is absent".into()))?;
+    validate_reservation_proof_identities(reservation_proof, &record)?;
     validate_supplied_admission_authority(
         root.as_ref(),
         &current_plan.exact_authority,
@@ -3881,13 +3936,14 @@ fn reserve_slot_in_registry(
     authority_root: &VersionedStateRoot,
     current_plan: &RetainedWorkerAdmissionPlanV1,
     supplied_plan: &RetainedWorkerAdmissionPlanV1,
+    reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
     secret_key: &[u8; 32],
     reserved_at: TimestampV1,
     participant_entropy: [u8; 16],
     bootstrap_run_entropy: [u8; 16],
     typed_history: Option<&BTreeMap<u64, ResolvedSessionAuthorityV1>>,
 ) -> Result<RetainedWorkerAdmissionSlotV1, RetainedWorkerRuntimeError> {
-    validate_admission_plan(authority_root, current_plan)?;
+    validate_admission_plan(authority_root, current_plan, reservation_proof)?;
     let root = preserved_start_root_view(authority_root)?;
     if let Some(locator) = registry
         .issuer_request_index
@@ -3900,6 +3956,7 @@ fn reserve_slot_in_registry(
             .ok_or_else(|| {
                 RetainedWorkerRuntimeError("admission issuer index is dangling".into())
             })?;
+        validate_reservation_proof_identities(reservation_proof, record)?;
         validate_supplied_admission_authority(
             root.as_ref(),
             &current_plan.exact_authority,
@@ -3977,8 +4034,20 @@ fn reserve_slot_in_registry(
         )));
     }
 
-    let retained_participant_id = format!("rwp_{}", lower_hex(&participant_entropy));
-    let bootstrap_run_id = format!("rwr_{}", lower_hex(&bootstrap_run_entropy));
+    let (retained_participant_id, bootstrap_run_id) = reservation_proof.map_or_else(
+        || {
+            (
+                format!("rwp_{}", lower_hex(&participant_entropy)),
+                format!("rwr_{}", lower_hex(&bootstrap_run_entropy)),
+            )
+        },
+        |proof| {
+            (
+                proof.retained_participant_id().to_owned(),
+                proof.bootstrap_run_id().to_owned(),
+            )
+        },
+    );
     if registry
         .records_by_session
         .values()
@@ -4070,11 +4139,17 @@ fn reserve_slot_in_registry(
 fn validate_admission_plan(
     authority_root: &VersionedStateRoot,
     plan: &RetainedWorkerAdmissionPlanV1,
+    reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
 ) -> Result<(), RetainedWorkerRuntimeError> {
     let request = &plan.spawn_request;
     let exact = &plan.exact_authority;
     let runtime = &plan.descriptor_and_runtime_plan;
     let policy = &plan.policy_and_admission_cap;
+    if let Some(proof) = reservation_proof {
+        proof
+            .validate_admission_plan_binding(plan)
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+    }
     let root = preserved_start_root_view(authority_root)?;
     let SessionNamespaceRecordV1::Authority(locked_authority) = root
         .session_namespace_map
@@ -4157,10 +4232,28 @@ fn validate_admission_plan(
             .any(|mode| mode == &request.mode)
         || !policy.same_session_only
         || !policy.same_world_binding_only
-        || policy.allow_capability_narrowing
+        || (policy.allow_capability_narrowing
+            && !reservation_proof.is_some_and(
+                AuthenticatedFreshSpawnReservationProofV1::permits_capability_narrowing,
+            ))
     {
         return Err(RetainedWorkerRuntimeError(
             "canonical admission plan is incomplete or conflicts with locked authority".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_reservation_proof_identities(
+    reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
+    record: &RetainedWorkerAdmissionRecordV1,
+) -> Result<(), RetainedWorkerRuntimeError> {
+    if reservation_proof.is_some_and(|proof| {
+        proof.retained_participant_id() != record.retained_participant_id
+            || proof.bootstrap_run_id() != record.bootstrap_run_id
+    }) {
+        return Err(RetainedWorkerRuntimeError(
+            "fresh-spawn reservation identities conflict with B3.2a admission".into(),
         ));
     }
     Ok(())
@@ -4848,6 +4941,7 @@ mod tests {
     };
 
     use super::*;
+    use crate::execution::agent_runtime::dispatch_policy_commitment::test_authenticated_fresh_spawn_reservation_proof;
     use crate::execution::agent_runtime::host_session_authority::facade::{
         AuthorityObservationV1, HostSessionAuthority, RetainedApplicationCrashPointV1,
     };
@@ -6408,7 +6502,7 @@ mod tests {
             .parse()
             .unwrap();
         let plan = admission_plan(&authority, &issuer, &prompt, cap);
-        let reservation = RetainedWorkerRuntime.reserve_admission_slot(&authority, &plan);
+        let reservation = RetainedWorkerRuntime.reserve_admission_slot(&authority, &plan, None);
         drop(plan);
         if let Some(path) = std::env::var_os(ADMISSION_RESERVATION_SUBPROCESS_DROP_PROOF) {
             fs::write(path, "creating request dropped").unwrap();
@@ -7107,7 +7201,12 @@ mod tests {
             ),
             NoStealMutationV1::TransportJoin => {
                 let joined = runtime
-                    .claim_admission_transport(authority, plan, &expected.retained_participant_id)
+                    .claim_admission_transport(
+                        authority,
+                        plan,
+                        &expected.retained_participant_id,
+                        None,
+                    )
                     .unwrap();
                 assert!(!joined.newly_claimed);
                 assert_eq!(joined.record, *expected);
@@ -7119,6 +7218,7 @@ mod tests {
                         authority,
                         plan,
                         &expected.retained_participant_id,
+                        None,
                         &frame,
                         &event,
                         registered_at,
@@ -7132,6 +7232,7 @@ mod tests {
                         authority,
                         plan,
                         &expected.retained_participant_id,
+                        None,
                         &frame,
                         &conflicting_event,
                         exact_routable_truth(plan, expected).2,
@@ -7146,6 +7247,7 @@ mod tests {
                         authority,
                         plan,
                         &expected.retained_participant_id,
+                        None,
                         &frame,
                         &event,
                         &terminal,
@@ -7162,6 +7264,7 @@ mod tests {
                         authority,
                         plan,
                         &expected.retained_participant_id,
+                        None,
                         &frame,
                         &conflicting_event,
                         &conflicting_terminal,
@@ -7183,7 +7286,12 @@ mod tests {
                 )
                 .map(drop),
             NoStealMutationV1::TransportJoin => runtime
-                .claim_admission_transport(authority, &changed, &expected.retained_participant_id)
+                .claim_admission_transport(
+                    authority,
+                    &changed,
+                    &expected.retained_participant_id,
+                    None,
+                )
                 .map(drop),
             NoStealMutationV1::RoutableJoin => {
                 let (frame, event, registered_at) = exact_routable_truth(plan, expected);
@@ -7192,6 +7300,7 @@ mod tests {
                         authority,
                         &changed,
                         &expected.retained_participant_id,
+                        None,
                         &frame,
                         &event,
                         registered_at,
@@ -7206,6 +7315,7 @@ mod tests {
                         authority,
                         &changed,
                         &expected.retained_participant_id,
+                        None,
                         &frame,
                         &event,
                         &terminal,
@@ -7335,7 +7445,7 @@ mod tests {
 
         let re_presented = admission_plan(authority, issuer_request_id, prompt, 4);
         let joined = RetainedWorkerRuntime
-            .reserve_admission_slot(authority, &re_presented)
+            .reserve_admission_slot(authority, &re_presented, None)
             .unwrap();
         assert!(joined.joined);
         (re_presented, joined)
@@ -7463,23 +7573,26 @@ mod tests {
         }
 
         use crate::execution::agent_runtime::dispatch_contract::{
-            WorkerContinuePayloadV1, WorldDispatchModeV1, WorldDispatchPayloadV1,
+            WorkerContinuePayloadV1, WorldDispatchPayloadV1,
         };
         use crate::execution::agent_runtime::state_store::AgentRuntimeStateStore;
         use crate::execution::agent_runtime::tool_invocation_contract::{
             translate_follow_up_tool_to_internal_dispatch_request_v1, HostToolFollowUpHandleV1,
             HostToolNameV1, HostToolRuntimeDispatchMetadataV1, RetainedWorkerHandleV1,
         };
-        use crate::execution::orchestrator_world_dispatch::prepare_orchestrator_world_dispatch;
-
         let (parent, authority, _) = started_authority();
         let runtime = RetainedWorkerRuntime;
         let plan = admission_plan(&authority, "translate-continue", "prompt", 1);
         let admitted = runtime
-            .register_admitted_worker(&authority, &plan)
+            .register_admitted_worker(&authority, &plan, None)
             .expect("register retained Continue target");
         let claim = runtime
-            .claim_admission_transport(&authority, &plan, &admitted.record.retained_participant_id)
+            .claim_admission_transport(
+                &authority,
+                &plan,
+                &admitted.record.retained_participant_id,
+                None,
+            )
             .expect("claim retained Continue transport");
         let (frame, event) =
             registered_runtime_truth(&plan, &claim.record, "stream-translate-continue");
@@ -7488,6 +7601,7 @@ mod tests {
                 &authority,
                 &plan,
                 &claim.record.retained_participant_id,
+                None,
                 &frame,
                 &event,
                 timestamp("2026-07-15T21:30:00.000000000Z"),
@@ -7513,7 +7627,7 @@ mod tests {
             orchestration_session_id: "r0-session".into(),
             caller_participant_id: "r0-orchestrator".into(),
         };
-        let request = translate_follow_up_tool_to_internal_dispatch_request_v1(
+        let error = translate_follow_up_tool_to_internal_dispatch_request_v1(
             &store,
             &metadata,
             HostToolNameV1::ContinueWorldWorker,
@@ -7525,17 +7639,9 @@ mod tests {
                 thread_id: Some("thread-translate-continue".into()),
             }),
         )
-        .expect("translate HSA-owned retained Continue without legacy projections");
-
-        assert_eq!(request.mode, WorldDispatchModeV1::Retained);
-        assert_eq!(
-            request.target_backend_id.as_deref(),
-            Some("cli:codex-worker")
-        );
-        assert_eq!(request.world_id.as_deref(), Some("r0-world"));
-        assert_eq!(request.world_generation, Some(7));
-        prepare_orchestrator_world_dispatch(&store, request)
-            .expect("existing B-owned preparation must exact-revalidate translated Continue");
+        .expect_err("legacy HSA retained Continue must fail before dispatch preparation");
+        assert!(error.to_string().contains("unsupported_legacy_state"));
+        assert!(error.to_string().contains("MissingCanonicalCapBytes"));
         assert!(store
             .load_session("r0-session")
             .expect("reinspect absent legacy session projection")
@@ -7573,7 +7679,7 @@ mod tests {
         let runtime = RetainedWorkerRuntime;
         let plan = admission_plan(&authority, "translate-rejections", "prompt", 1);
         let admitted = runtime
-            .register_admitted_worker(&authority, &plan)
+            .register_admitted_worker(&authority, &plan, None)
             .expect("register retained rejection target");
         let participant_id = admitted.record.retained_participant_id.clone();
 
@@ -7620,7 +7726,7 @@ mod tests {
         assert!(translate(&cross_session, &participant_id).is_err());
 
         let claim = runtime
-            .claim_admission_transport(&authority, &plan, &participant_id)
+            .claim_admission_transport(&authority, &plan, &participant_id, None)
             .expect("claim rejection target transport");
         let (registered_frame, registered_event) =
             registered_runtime_truth(&plan, &claim.record, "stream-translate-rejections");
@@ -7629,12 +7735,16 @@ mod tests {
                 &authority,
                 &plan,
                 &participant_id,
+                None,
                 &registered_frame,
                 &registered_event,
                 timestamp("2026-07-15T21:40:00.000000000Z"),
             )
             .expect("publish rejection target routable truth");
-        translate(&metadata, &participant_id).expect("exact routable truth must translate");
+        let missing_cap = translate(&metadata, &participant_id)
+            .expect_err("exact legacy routable truth must fail without immutable cap");
+        assert!(missing_cap.to_string().contains("unsupported_legacy_state"));
+        assert!(missing_cap.to_string().contains("MissingCanonicalCapBytes"));
 
         let registry_path = parent
             .path()
@@ -7686,7 +7796,10 @@ mod tests {
         .expect("write backend-mismatched admission registry");
         let backend = translate(&metadata, &participant_id)
             .expect_err("backend-substituted admission must fail closed");
-        assert!(backend.to_string().contains("backend_mismatch"));
+        assert!(
+            backend.to_string().contains("backend_mismatch"),
+            "unexpected backend-substitution error: {backend:#}"
+        );
         fs::write(&registry_path, &exact_registry_bytes).expect("restore exact admission registry");
 
         let mut world_registry = exact_registry;
@@ -7725,6 +7838,7 @@ mod tests {
                 &authority,
                 &plan,
                 &participant_id,
+                None,
                 &terminal_frame,
                 &terminal_event,
                 &terminal_identity,
@@ -7750,10 +7864,19 @@ mod tests {
         let (_parent, authority, _) = started_authority();
         let runtime = RetainedWorkerRuntime;
         let plan = admission_plan(&authority, "registered-telemetry-producer", "prompt", 2);
-        runtime.reserve_admission_slot(&authority, &plan).unwrap();
-        let admitted = runtime.register_admitted_worker(&authority, &plan).unwrap();
+        runtime
+            .reserve_admission_slot(&authority, &plan, None)
+            .unwrap();
+        let admitted = runtime
+            .register_admitted_worker(&authority, &plan, None)
+            .unwrap();
         let claim = runtime
-            .claim_admission_transport(&authority, &plan, &admitted.record.retained_participant_id)
+            .claim_admission_transport(
+                &authority,
+                &plan,
+                &admitted.record.retained_participant_id,
+                None,
+            )
             .unwrap();
         let (frame, mut registered) =
             registered_runtime_truth(&plan, &claim.record, "stream-ambient-producer");
@@ -7766,6 +7889,7 @@ mod tests {
                 &authority,
                 &plan,
                 &claim.record.retained_participant_id,
+                None,
                 &frame,
                 &inexact_lineage,
                 timestamp("2026-07-15T21:00:00.000000000Z"),
@@ -7788,6 +7912,7 @@ mod tests {
                 &authority,
                 &plan,
                 &claim.record.retained_participant_id,
+                None,
                 &frame,
                 &registered,
                 timestamp("2026-07-15T21:00:00.000000000Z"),
@@ -7802,6 +7927,7 @@ mod tests {
                 &authority,
                 &plan,
                 &claim.record.retained_participant_id,
+                None,
                 &frame,
                 &registered,
                 timestamp("2026-07-15T21:00:01.000000000Z"),
@@ -7819,6 +7945,7 @@ mod tests {
                 &authority,
                 &plan,
                 &claim.record.retained_participant_id,
+                None,
                 &frame,
                 &inexact_member,
                 timestamp("2026-07-15T21:00:00.000000000Z"),
@@ -7831,10 +7958,19 @@ mod tests {
         let (_parent, authority, _) = started_authority();
         let runtime = RetainedWorkerRuntime;
         let plan = admission_plan(&authority, "interrupted-live", "prompt", 1);
-        runtime.reserve_admission_slot(&authority, &plan).unwrap();
-        let admitted = runtime.register_admitted_worker(&authority, &plan).unwrap();
+        runtime
+            .reserve_admission_slot(&authority, &plan, None)
+            .unwrap();
+        let admitted = runtime
+            .register_admitted_worker(&authority, &plan, None)
+            .unwrap();
         let claim = runtime
-            .claim_admission_transport(&authority, &plan, &admitted.record.retained_participant_id)
+            .claim_admission_transport(
+                &authority,
+                &plan,
+                &admitted.record.retained_participant_id,
+                None,
+            )
             .unwrap();
         let (registered_frame, registered_event) =
             registered_runtime_truth(&plan, &claim.record, "stream-interrupted-live");
@@ -7843,6 +7979,7 @@ mod tests {
                 &authority,
                 &plan,
                 &claim.record.retained_participant_id,
+                None,
                 &registered_frame,
                 &registered_event,
                 timestamp("2026-07-15T21:09:00.000000000Z"),
@@ -7869,6 +8006,7 @@ mod tests {
                 &authority,
                 &plan,
                 &claim.record.retained_participant_id,
+                None,
                 &last_frame,
                 &inexact_terminal_event,
                 &inexact_terminal_identity,
@@ -7881,6 +8019,7 @@ mod tests {
                 &authority,
                 &plan,
                 &claim.record.retained_participant_id,
+                None,
                 Some(&last_frame),
                 timestamp("2026-07-15T21:10:00.000000000Z"),
             )
@@ -7898,6 +8037,7 @@ mod tests {
                 &authority,
                 &plan,
                 &claim.record.retained_participant_id,
+                None,
                 Some(&last_frame),
                 timestamp("2026-07-15T21:11:00.000000000Z"),
             )
@@ -7909,7 +8049,7 @@ mod tests {
 
         let blocked = admission_plan(&authority, "interrupted-blocked", "next", 1);
         assert!(runtime
-            .reserve_admission_slot(&authority, &blocked)
+            .reserve_admission_slot(&authority, &blocked, None)
             .is_err());
 
         let terminal_frame = RuntimeFrameIdentityV1 {
@@ -7927,6 +8067,7 @@ mod tests {
                 &authority,
                 &plan,
                 &claim.record.retained_participant_id,
+                None,
                 &terminal_frame,
                 &terminal_event,
                 &terminal_identity,
@@ -7943,6 +8084,7 @@ mod tests {
                 &authority,
                 &plan,
                 &claim.record.retained_participant_id,
+                None,
                 &terminal_frame,
                 &terminal_event,
                 &terminal_identity,
@@ -7955,7 +8097,7 @@ mod tests {
             "exact Terminal replay must preserve its first observation timestamp"
         );
         runtime
-            .reserve_admission_slot(&authority, &blocked)
+            .reserve_admission_slot(&authority, &blocked, None)
             .unwrap();
     }
 
@@ -7979,7 +8121,7 @@ mod tests {
         let runtime = RetainedWorkerRuntime;
         let head_plan = admission_plan(&slot_authority, "no-steal-slot-head", "head", 4);
         runtime
-            .reserve_admission_slot(&slot_authority, &head_plan)
+            .reserve_admission_slot(&slot_authority, &head_plan, None)
             .unwrap();
         let (slot_plan, slot) = admission_created_by_dropped_exited_caller(
             &slot_parent,
@@ -8018,7 +8160,7 @@ mod tests {
             "injected crash while admission registration head"
         );
         let head = runtime
-            .reserve_admission_slot(&head_authority, &head_plan)
+            .reserve_admission_slot(&head_authority, &head_plan, None)
             .unwrap();
         assert!(matches!(
             head.record.state,
@@ -8040,13 +8182,14 @@ mod tests {
             "claim",
         );
         let admitted = runtime
-            .register_admitted_worker(&claim_authority, &claim_plan)
+            .register_admitted_worker(&claim_authority, &claim_plan, None)
             .unwrap();
         let claim = runtime
             .claim_admission_transport(
                 &claim_authority,
                 &claim_plan,
                 &admitted.record.retained_participant_id,
+                None,
             )
             .unwrap();
         assert!(matches!(
@@ -8069,13 +8212,14 @@ mod tests {
             "routable",
         );
         let routable_admitted = runtime
-            .register_admitted_worker(&routable_authority, &routable_plan)
+            .register_admitted_worker(&routable_authority, &routable_plan, None)
             .unwrap();
         let routable_claim = runtime
             .claim_admission_transport(
                 &routable_authority,
                 &routable_plan,
                 &routable_admitted.record.retained_participant_id,
+                None,
             )
             .unwrap();
         let (routable_frame, registered_event) = registered_runtime_truth(
@@ -8088,6 +8232,7 @@ mod tests {
                 &routable_authority,
                 &routable_plan,
                 &routable_claim.record.retained_participant_id,
+                None,
                 &routable_frame,
                 &registered_event,
                 timestamp("2026-07-15T20:00:00.000000000Z"),
@@ -8109,13 +8254,14 @@ mod tests {
             "terminal",
         );
         let terminal_admitted = runtime
-            .register_admitted_worker(&terminal_authority, &terminal_plan)
+            .register_admitted_worker(&terminal_authority, &terminal_plan, None)
             .unwrap();
         let terminal_claim = runtime
             .claim_admission_transport(
                 &terminal_authority,
                 &terminal_plan,
                 &terminal_admitted.record.retained_participant_id,
+                None,
             )
             .unwrap();
         let (terminal_registered_frame, terminal_registered_event) = registered_runtime_truth(
@@ -8128,6 +8274,7 @@ mod tests {
                 &terminal_authority,
                 &terminal_plan,
                 &terminal_claim.record.retained_participant_id,
+                None,
                 &terminal_registered_frame,
                 &terminal_registered_event,
                 timestamp("2026-07-15T20:00:30.000000000Z"),
@@ -8148,6 +8295,7 @@ mod tests {
                 &terminal_authority,
                 &terminal_plan,
                 &terminal_claim.record.retained_participant_id,
+                None,
                 &terminal_frame,
                 &terminal_event,
                 &terminal_identity,
@@ -8408,7 +8556,9 @@ mod tests {
         let authority_before = authority.read_a12a_root().unwrap();
         let plan = admission_plan(&authority, "cap-zero", "prompt", 0);
 
-        assert!(runtime.reserve_admission_slot(&authority, &plan).is_err());
+        assert!(runtime
+            .reserve_admission_slot(&authority, &plan, None)
+            .is_err());
         assert_eq!(authority.read_a12a_root().unwrap(), authority_before);
         let registry = parent
             .path()
@@ -8419,18 +8569,498 @@ mod tests {
     }
 
     #[test]
+    fn authenticated_e2_reservation_preallocates_admission_identities() {
+        let (_parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "e2-preallocated", "prompt", 3);
+        let proof = test_authenticated_fresh_spawn_reservation_proof(
+            &plan,
+            "rwp_11111111111111111111111111111111",
+            "rwr_22222222222222222222222222222222",
+            false,
+        );
+
+        let slot = runtime
+            .reserve_admission_slot(&authority, &plan, Some(&proof))
+            .expect("authenticated E2 reservation must allocate its stored identities");
+
+        assert_eq!(
+            slot.record.retained_participant_id,
+            "rwp_11111111111111111111111111111111"
+        );
+        assert_eq!(
+            slot.record.bootstrap_run_id,
+            "rwr_22222222222222222222222222222222"
+        );
+    }
+
+    #[test]
+    fn authenticated_e2_proof_propagates_through_every_admission_validation_path() {
+        let (_parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let mut plan = admission_plan(&authority, "e2-proof-propagation", "prompt", 3);
+        let bootstrap_home = authority
+            .bootstrap_home()
+            .identity()
+            .unwrap()
+            .physical_path
+            .clone();
+        let policy_path = std::path::Path::new(&bootstrap_home).join("policy.yaml");
+        let policy = fs::read_to_string(&policy_path).unwrap();
+        fs::write(
+            &policy_path,
+            policy.replace(
+                "allow_capability_narrowing: false",
+                "allow_capability_narrowing: true",
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&policy_path, fs::Permissions::from_mode(0o600)).unwrap();
+        plan.policy_and_admission_cap.allow_capability_narrowing = true;
+        let proof = test_authenticated_fresh_spawn_reservation_proof(
+            &plan,
+            "rwp_33333333333333333333333333333333",
+            "rwr_44444444444444444444444444444444",
+            true,
+        );
+
+        let admitted = runtime
+            .register_admitted_worker(&authority, &plan, Some(&proof))
+            .expect("E2 proof must reach reserve, head, advance, and graph validation");
+        assert_eq!(
+            admitted.record.retained_participant_id,
+            proof.retained_participant_id()
+        );
+        assert_eq!(admitted.record.bootstrap_run_id, proof.bootstrap_run_id());
+
+        let canonical = runtime
+            .canonical_plan_for_existing_admission(
+                &authority,
+                &plan,
+                &admitted.record,
+                Some(&proof),
+            )
+            .expect("E2 proof must reach existing-admission validation");
+        assert!(canonical == plan);
+
+        let claim = runtime
+            .claim_admission_transport(
+                &authority,
+                &plan,
+                &admitted.record.retained_participant_id,
+                Some(&proof),
+            )
+            .expect("E2 proof must reach transport validation");
+        runtime
+            .launch_authority_proof_for_claim(&authority, &plan, &claim, Some(&proof))
+            .expect("E2 proof must reach launch graph validation");
+
+        let (registered_frame, registered_event) =
+            registered_runtime_truth(&plan, &claim.record, "stream-e2-proof");
+        runtime
+            .mark_admission_routable(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                Some(&proof),
+                &registered_frame,
+                &registered_event,
+                timestamp("2026-07-15T22:00:00.000000000Z"),
+            )
+            .expect("E2 proof must reach routability validation");
+
+        let last_frame = RuntimeFrameIdentityV1 {
+            schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: registered_frame.stream_id.clone(),
+            frame_sequence: 2,
+        };
+        runtime
+            .mark_admission_interrupted(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                Some(&proof),
+                Some(&last_frame),
+                timestamp("2026-07-15T22:01:00.000000000Z"),
+            )
+            .expect("E2 proof must reach interrupted validation");
+
+        let terminal_frame = RuntimeFrameIdentityV1 {
+            schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: registered_frame.stream_id,
+            frame_sequence: 3,
+        };
+        let terminal_event = RuntimeEventIdentityV1 {
+            event_id: "event-stream-e2-proof-terminal".into(),
+            event_sequence: 2,
+        };
+        let terminal_identity = RuntimeTerminalIdentityV1::from(&terminal_event);
+        runtime
+            .mark_admission_terminal(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                Some(&proof),
+                &terminal_frame,
+                &terminal_event,
+                &terminal_identity,
+                0,
+                timestamp("2026-07-15T22:02:00.000000000Z"),
+            )
+            .expect("E2 proof must reach terminal validation");
+    }
+
+    #[test]
+    fn capability_narrowing_requires_the_authenticated_e2_attestation() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let mut plan = admission_plan(&authority, "e2-narrowing-attestation", "prompt", 3);
+        let bootstrap_home = authority
+            .bootstrap_home()
+            .identity()
+            .unwrap()
+            .physical_path
+            .clone();
+        let policy_path = std::path::Path::new(&bootstrap_home).join("policy.yaml");
+        let policy = fs::read_to_string(&policy_path).unwrap();
+        fs::write(
+            &policy_path,
+            policy.replace(
+                "allow_capability_narrowing: false",
+                "allow_capability_narrowing: true",
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&policy_path, fs::Permissions::from_mode(0o600)).unwrap();
+        plan.policy_and_admission_cap.allow_capability_narrowing = true;
+
+        assert!(runtime
+            .reserve_admission_slot(&authority, &plan, None)
+            .is_err());
+        let no_attestation = test_authenticated_fresh_spawn_reservation_proof(
+            &plan,
+            "rwp_55555555555555555555555555555555",
+            "rwr_66666666666666666666666666666666",
+            false,
+        );
+        assert!(runtime
+            .reserve_admission_slot(&authority, &plan, Some(&no_attestation))
+            .is_err());
+        let registry_path = parent
+            .path()
+            .join("home/authority-v1/retained-worker-admission-v1/registry-v1.json");
+        let registry: RetainedWorkerAdmissionRegistryV1 =
+            decode_canonical(&fs::read(&registry_path).unwrap(), "decode E2 registry").unwrap();
+        assert!(registry.records_by_session.is_empty());
+
+        let attested = test_authenticated_fresh_spawn_reservation_proof(
+            &plan,
+            "rwp_55555555555555555555555555555555",
+            "rwr_66666666666666666666666666666666",
+            true,
+        );
+        runtime
+            .reserve_admission_slot(&authority, &plan, Some(&attested))
+            .expect("authenticated E2 narrowing attestation must admit the same exact plan");
+    }
+
+    #[test]
+    fn authenticated_e2_retry_rejects_changed_identity_and_non_policy_material_without_mutation() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "e2-proof-conflict", "prompt", 3);
+        let proof = test_authenticated_fresh_spawn_reservation_proof(
+            &plan,
+            "rwp_77777777777777777777777777777777",
+            "rwr_88888888888888888888888888888888",
+            false,
+        );
+        runtime
+            .reserve_admission_slot(&authority, &plan, Some(&proof))
+            .expect("publish the exact E2-bound slot");
+        let registry_path = parent
+            .path()
+            .join("home/authority-v1/retained-worker-admission-v1/registry-v1.json");
+        let exact_registry = fs::read(&registry_path).unwrap();
+
+        let changed_identity = test_authenticated_fresh_spawn_reservation_proof(
+            &plan,
+            "rwp_99999999999999999999999999999999",
+            "rwr_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            false,
+        );
+        let identity_error = runtime
+            .reserve_admission_slot(&authority, &plan, Some(&changed_identity))
+            .unwrap_err();
+        assert!(identity_error
+            .to_string()
+            .contains("reservation identities conflict"));
+        assert_eq!(fs::read(&registry_path).unwrap(), exact_registry);
+
+        let mut changed_protocol = plan.clone();
+        changed_protocol
+            .descriptor_and_runtime_plan
+            .descriptor
+            .protocol
+            .push_str("-changed");
+        let non_policy_error = runtime
+            .reserve_admission_slot(&authority, &changed_protocol, Some(&proof))
+            .unwrap_err();
+        assert!(!non_policy_error
+            .to_string()
+            .contains("reservation proof does not match"));
+        assert_eq!(fs::read(registry_path).unwrap(), exact_registry);
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn retained_target_returns_typed_missing_legacy_cap_after_all_non_policy_checks() {
+        struct SubstrateHomeGuard(Option<std::ffi::OsString>);
+
+        impl Drop for SubstrateHomeGuard {
+            fn drop(&mut self) {
+                match self.0.take() {
+                    Some(value) => std::env::set_var("SUBSTRATE_HOME", value),
+                    None => std::env::remove_var("SUBSTRATE_HOME"),
+                }
+            }
+        }
+
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "e2-missing-legacy-cap", "prompt", 3);
+        let admitted = runtime
+            .register_admitted_worker(&authority, &plan, None)
+            .unwrap();
+        let claim = runtime
+            .claim_admission_transport(
+                &authority,
+                &plan,
+                &admitted.record.retained_participant_id,
+                None,
+            )
+            .unwrap();
+        let (frame, event) =
+            registered_runtime_truth(&plan, &claim.record, "stream-e2-missing-cap");
+        let routable = runtime
+            .mark_admission_routable(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                None,
+                &frame,
+                &event,
+                timestamp("2026-07-15T22:10:00.000000000Z"),
+            )
+            .unwrap();
+        let previous_home = std::env::var_os("SUBSTRATE_HOME");
+        let _home_guard = SubstrateHomeGuard(previous_home);
+        std::env::set_var("SUBSTRATE_HOME", parent.path().join("home"));
+        let store =
+            crate::execution::agent_runtime::state_store::AgentRuntimeStateStore::new().unwrap();
+
+        let backend_error = store
+            .resolve_world_work_registry_authority(
+                &routable.orchestration_session_id,
+                &plan.spawn_request.caller_participant_id,
+                &routable.world_binding.world_id,
+                routable.world_binding.world_generation,
+                Some((&routable.retained_participant_id, "cli:substituted-worker")),
+            )
+            .unwrap_err();
+        assert!(backend_error.to_string().contains("backend_mismatch"));
+
+        let resolved = store
+            .resolve_world_work_registry_authority(
+                &routable.orchestration_session_id,
+                &plan.spawn_request.caller_participant_id,
+                &routable.world_binding.world_id,
+                routable.world_binding.world_generation,
+                Some((&routable.retained_participant_id, &routable.backend_id)),
+            )
+            .expect("read-only retained target must expose mixed-version policy compatibility");
+        let retained_target = resolved.retained_target.as_ref().unwrap();
+        assert_eq!(
+            retained_target.participant_id,
+            routable.retained_participant_id
+        );
+        assert_eq!(retained_target.backend_id, routable.backend_id);
+        assert!(matches!(
+            &retained_target.policy_cap_compatibility,
+            crate::execution::agent_runtime::dispatch_policy_commitment::ResolvedPolicyCommitmentCompatibilityV1::UnsupportedLegacyState {
+                retained_participant_id,
+                reason: crate::execution::agent_runtime::dispatch_policy_commitment::PolicyCommitmentCompatibilityReasonV1::MissingCanonicalCapBytes,
+            } if retained_participant_id.as_str() == routable.retained_participant_id.as_str()
+        ));
+        let typed_error = store
+            .resolve_hsa_retained_continue_translation_authority(
+                &routable.orchestration_session_id,
+                &plan.spawn_request.caller_participant_id,
+                &routable.retained_participant_id,
+            )
+            .expect_err("submission-facing legacy resolution must fail before B1 binding");
+        assert!(typed_error.to_string().contains("unsupported_legacy_state"));
+        assert!(typed_error.to_string().contains("MissingCanonicalCapBytes"));
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn retained_target_returns_compatible_cap_then_typed_hash_invalid_legacy_cap() {
+        struct SubstrateHomeGuard(Option<std::ffi::OsString>);
+
+        impl Drop for SubstrateHomeGuard {
+            fn drop(&mut self) {
+                match self.0.take() {
+                    Some(value) => std::env::set_var("SUBSTRATE_HOME", value),
+                    None => std::env::remove_var("SUBSTRATE_HOME"),
+                }
+            }
+        }
+
+        use crate::execution::agent_runtime::dispatch_policy_commitment::{
+            publish_fresh_spawn_commitment, reserve_fresh_spawn,
+            test_corrupt_retained_worker_cap_hash, validate_policy_snapshot_material,
+            AppliedDispatchPolicyPatchIdentityV1, FreshSpawnReservationInputV1,
+            PolicyCommitmentCompatibilityReasonV1, ResolvedPolicyCommitmentCompatibilityV1,
+        };
+        use transport_api_types::{
+            PolicySnapshotV3, PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3,
+            PolicySnapshotWorldFsWriteV3,
+        };
+
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let mut plan = admission_plan(&authority, "request-e2-compatible-cap", "prompt", 3);
+        plan.issuer_request_id = plan.spawn_request.request_id.clone();
+        let snapshot = PolicySnapshotV3 {
+            schema_version: 3,
+            net_allowed: Vec::new(),
+            world_fs: PolicySnapshotWorldFsV3 {
+                host_visible: true,
+                fail_closed: PolicySnapshotWorldFsFailClosedV3::default(),
+                deny_enforcement: None,
+                caged_required: false,
+                discover: None,
+                read: None,
+                write: PolicySnapshotWorldFsWriteV3::default(),
+            },
+        }
+        .canonicalize()
+        .unwrap();
+        let snapshot_bytes = serde_json::to_vec(&snapshot).unwrap();
+        let snapshot_hash = format!("{:x}", Sha256::digest(&snapshot_bytes));
+        let snapshot_material = validate_policy_snapshot_material(
+            &snapshot,
+            &snapshot_bytes,
+            &plan.policy_and_admission_cap.current_policy_ref,
+            &snapshot_hash,
+            &plan.policy_and_admission_cap.current_policy.policy_revision,
+        )
+        .unwrap();
+        let reservation = reserve_fresh_spawn(
+            &authority,
+            FreshSpawnReservationInputV1 {
+                spawn_request: plan.spawn_request.clone(),
+                caller_backend_id: plan.exact_authority.caller_descriptor.backend_id.clone(),
+                parent_policy_ref: plan.policy_and_admission_cap.current_policy_ref.clone(),
+                parent_policy_revision: plan
+                    .policy_and_admission_cap
+                    .current_policy
+                    .policy_revision
+                    .clone(),
+                applied_patch: AppliedDispatchPolicyPatchIdentityV1::UnchangedParent,
+                policy_snapshot: snapshot_material,
+                reason: None,
+            },
+        )
+        .unwrap();
+        let admitted = runtime
+            .register_admitted_worker(&authority, &plan, Some(&reservation.proof))
+            .unwrap();
+        publish_fresh_spawn_commitment(&authority, &reservation.proof, &admitted.record).unwrap();
+        let claim = runtime
+            .claim_admission_transport(
+                &authority,
+                &plan,
+                &admitted.record.retained_participant_id,
+                Some(&reservation.proof),
+            )
+            .unwrap();
+        let (frame, event) =
+            registered_runtime_truth(&plan, &claim.record, "stream-e2-compatible-cap");
+        let routable = runtime
+            .mark_admission_routable(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                Some(&reservation.proof),
+                &frame,
+                &event,
+                timestamp("2026-07-15T22:20:00.000000000Z"),
+            )
+            .unwrap();
+
+        let previous_home = std::env::var_os("SUBSTRATE_HOME");
+        let _home_guard = SubstrateHomeGuard(previous_home);
+        std::env::set_var("SUBSTRATE_HOME", parent.path().join("home"));
+        let store =
+            crate::execution::agent_runtime::state_store::AgentRuntimeStateStore::new().unwrap();
+        let resolve = || {
+            store
+                .resolve_world_work_registry_authority(
+                    &routable.orchestration_session_id,
+                    &plan.spawn_request.caller_participant_id,
+                    &routable.world_binding.world_id,
+                    routable.world_binding.world_generation,
+                    Some((&routable.retained_participant_id, &routable.backend_id)),
+                )
+                .unwrap()
+        };
+        let compatible = resolve();
+        let compatible_target = compatible.retained_target.as_ref().unwrap();
+        assert!(matches!(
+            &compatible_target.policy_cap_compatibility,
+            ResolvedPolicyCommitmentCompatibilityV1::Compatible { cap }
+                if cap.retained_participant_id() == routable.retained_participant_id
+                    && cap.launch_parent_policy_ref()
+                        == &plan.policy_and_admission_cap.current_policy_ref
+        ));
+        test_corrupt_retained_worker_cap_hash(&authority, &routable.retained_participant_id)
+            .unwrap();
+
+        let incompatible = resolve();
+        let incompatible_target = incompatible.retained_target.as_ref().unwrap();
+        assert!(matches!(
+            &incompatible_target.policy_cap_compatibility,
+            ResolvedPolicyCommitmentCompatibilityV1::UnsupportedLegacyState {
+                retained_participant_id,
+                reason: PolicyCommitmentCompatibilityReasonV1::CapHashMismatch,
+            } if retained_participant_id.as_str() == routable.retained_participant_id.as_str()
+        ));
+        let typed_error = store
+            .resolve_hsa_retained_continue_translation_authority(
+                &routable.orchestration_session_id,
+                &plan.spawn_request.caller_participant_id,
+                &routable.retained_participant_id,
+            )
+            .expect_err("submission-facing hash-invalid cap must fail closed");
+        assert!(typed_error.to_string().contains("unsupported_legacy_state"));
+        assert!(typed_error.to_string().contains("CapHashMismatch"));
+    }
+
+    #[test]
     fn admission_cap_boundary_counts_slot_reserved_and_rejects_second_request() {
         let (_parent, authority, _) = started_authority();
         let runtime = RetainedWorkerRuntime;
         let first_plan = admission_plan(&authority, "cap-one-first", "first", 1);
         let first = runtime
-            .reserve_admission_slot(&authority, &first_plan)
+            .reserve_admission_slot(&authority, &first_plan, None)
             .unwrap();
         let root_after_first = authority.read_a12a_root().unwrap();
 
         let second_plan = admission_plan(&authority, "cap-one-second", "second", 1);
         assert!(runtime
-            .reserve_admission_slot(&authority, &second_plan)
+            .reserve_admission_slot(&authority, &second_plan, None)
             .is_err());
         assert_eq!(authority.read_a12a_root().unwrap(), root_after_first);
         assert!(matches!(
@@ -8447,15 +9077,19 @@ mod tests {
         let (_parent, authority, _) = started_authority();
         let runtime = RetainedWorkerRuntime;
         let plan = admission_plan(&authority, "exact-retry", "original prompt", 1);
-        let first = runtime.reserve_admission_slot(&authority, &plan).unwrap();
-        let joined = runtime.reserve_admission_slot(&authority, &plan).unwrap();
+        let first = runtime
+            .reserve_admission_slot(&authority, &plan, None)
+            .unwrap();
+        let joined = runtime
+            .reserve_admission_slot(&authority, &plan, None)
+            .unwrap();
         assert!(!first.joined);
         assert!(joined.joined);
         assert_eq!(joined.record, first.record);
 
         let changed = admission_plan(&authority, "exact-retry", "changed prompt", 1);
         assert!(runtime
-            .reserve_admission_slot(&authority, &changed)
+            .reserve_admission_slot(&authority, &changed, None)
             .is_err());
         let inspection = runtime
             .read_admission_record(
@@ -8479,7 +9113,7 @@ mod tests {
             4,
         );
         let admitted = runtime
-            .register_admitted_worker(&authority, &original)
+            .register_admitted_worker(&authority, &original, None)
             .unwrap();
         let presented = admission_plan(
             &authority,
@@ -8492,7 +9126,7 @@ mod tests {
                 > original.exact_authority.authority_revision
         );
         let joined = runtime
-            .reserve_admission_slot(&authority, &presented)
+            .reserve_admission_slot(&authority, &presented, None)
             .unwrap();
         assert!(joined.joined);
         assert_eq!(joined.record, admitted.record);
@@ -8524,7 +9158,7 @@ mod tests {
         };
         let bytes_before = snapshot_authority_files();
         let reconstructed = runtime
-            .canonical_plan_for_existing_admission(&authority, &presented, &joined.record)
+            .canonical_plan_for_existing_admission(&authority, &presented, &joined.record, None)
             .unwrap();
         assert!(reconstructed == original);
         assert_eq!(snapshot_authority_files(), bytes_before);
@@ -8553,6 +9187,7 @@ mod tests {
                 &authority,
                 &substituted_transient_authority,
                 &joined.record,
+                None,
             )
             .unwrap();
         assert!(reconstructed_from_substituted == original);
@@ -8572,7 +9207,12 @@ mod tests {
 
         for (changed_plan, changed_record) in variants {
             let error = runtime
-                .canonical_plan_for_existing_admission(&authority, &changed_plan, &changed_record)
+                .canonical_plan_for_existing_admission(
+                    &authority,
+                    &changed_plan,
+                    &changed_record,
+                    None,
+                )
                 .err()
                 .expect("changed existing-admission identity must fail closed");
             assert!(!error.to_string().contains("original retry prompt"));
@@ -8584,6 +9224,7 @@ mod tests {
                 &authority,
                 &reconstructed,
                 &joined.record.retained_participant_id,
+                None,
             )
             .unwrap();
         assert!(first_claim.newly_claimed);
@@ -8593,6 +9234,7 @@ mod tests {
                 &authority,
                 &reconstructed,
                 &joined.record.retained_participant_id,
+                None,
             )
             .unwrap();
         assert!(!joined_claim.newly_claimed);
@@ -8606,7 +9248,7 @@ mod tests {
             4,
         );
         let new_slot = runtime
-            .reserve_admission_slot(&authority, &new_plan)
+            .reserve_admission_slot(&authority, &new_plan, None)
             .unwrap();
         assert!(!new_slot.joined);
         assert_eq!(
@@ -8624,7 +9266,9 @@ mod tests {
         let (parent, authority, _) = started_authority();
         let runtime = RetainedWorkerRuntime;
         let plan = admission_plan(&authority, "changed-input", "original prompt", 3);
-        let first = runtime.reserve_admission_slot(&authority, &plan).unwrap();
+        let first = runtime
+            .reserve_admission_slot(&authority, &plan, None)
+            .unwrap();
         let registry_path = parent
             .path()
             .join("home/authority-v1/retained-worker-admission-v1/registry-v1.json");
@@ -8692,7 +9336,7 @@ mod tests {
 
         for changed in variants {
             assert!(runtime
-                .reserve_admission_slot(&authority, &changed)
+                .reserve_admission_slot(&authority, &changed, None)
                 .is_err());
             assert_eq!(fs::read(&registry_path).unwrap(), registry_before);
             assert_eq!(authority.read_a12a_root().unwrap(), authority_before);
@@ -8703,7 +9347,7 @@ mod tests {
             substituted_workspace,
         ] {
             let joined = runtime
-                .reserve_admission_slot(&authority, &substituted_authority)
+                .reserve_admission_slot(&authority, &substituted_authority, None)
                 .unwrap();
             assert!(joined.joined);
             assert_eq!(joined.record, first.record);
@@ -8727,7 +9371,9 @@ mod tests {
         let (parent, authority, _) = started_authority();
         let runtime = RetainedWorkerRuntime;
         let plan = admission_plan(&authority, "identity-corruption", "prompt", 2);
-        let slot = runtime.reserve_admission_slot(&authority, &plan).unwrap();
+        let slot = runtime
+            .reserve_admission_slot(&authority, &plan, None)
+            .unwrap();
         let registry_path = parent
             .path()
             .join("home/authority-v1/retained-worker-admission-v1/registry-v1.json");
@@ -8768,7 +9414,9 @@ mod tests {
         let (parent, authority, _) = started_authority();
         let runtime = RetainedWorkerRuntime;
         let plan = admission_plan(&authority, "registry-corruption", "prompt", 2);
-        let slot = runtime.reserve_admission_slot(&authority, &plan).unwrap();
+        let slot = runtime
+            .reserve_admission_slot(&authority, &plan, None)
+            .unwrap();
         let registry_path = parent
             .path()
             .join("home/authority-v1/retained-worker-admission-v1/registry-v1.json");
@@ -8824,7 +9472,9 @@ mod tests {
         let (parent, authority, _) = started_authority();
         let runtime = RetainedWorkerRuntime;
         let plan = admission_plan(&authority, "identity-binding", "private prompt", 2);
-        let slot = runtime.reserve_admission_slot(&authority, &plan).unwrap();
+        let slot = runtime
+            .reserve_admission_slot(&authority, &plan, None)
+            .unwrap();
         let identity = runtime.initialize_admission_registry(&authority).unwrap();
         let (_, key_path) = initialized_admission_paths(&parent, &identity);
         let envelope: RetainedWorkerAdmissionKeyEnvelopeV1 =
@@ -8964,7 +9614,9 @@ mod tests {
         let runtime = RetainedWorkerRuntime;
         let prompt = "private prompt marker B3.2a";
         let plan = admission_plan(&authority, "secret-exclusion", prompt, 2);
-        runtime.reserve_admission_slot(&authority, &plan).unwrap();
+        runtime
+            .reserve_admission_slot(&authority, &plan, None)
+            .unwrap();
         let identity = runtime.initialize_admission_registry(&authority).unwrap();
         let (admission_root, key_path) = initialized_admission_paths(&parent, &identity);
         let envelope: RetainedWorkerAdmissionKeyEnvelopeV1 =
@@ -8985,19 +9637,20 @@ mod tests {
         let marker = "B3.2a-QP-private-prompt-payload-marker-7f3ac491";
         let queued_plan = admission_plan(&authority, "preimage-queued", marker, 4);
         runtime
-            .reserve_admission_slot(&authority, &first_plan)
+            .reserve_admission_slot(&authority, &first_plan, None)
             .unwrap();
         let queued = runtime
-            .reserve_admission_slot(&authority, &queued_plan)
+            .reserve_admission_slot(&authority, &queued_plan, None)
             .unwrap();
         runtime
-            .register_admitted_worker(&authority, &first_plan)
+            .register_admitted_worker(&authority, &first_plan, None)
             .unwrap();
         let promoted = runtime
             .prepare_admission_registration_head(
                 &authority,
                 &queued_plan,
                 &queued.record.retained_participant_id,
+                None,
                 timestamp("2026-07-15T14:30:00.000000000Z"),
                 [131_u8; 16],
             )
@@ -9015,6 +9668,7 @@ mod tests {
                 &authority,
                 &changed,
                 &queued.record.retained_participant_id,
+                None,
                 timestamp("2026-07-15T14:31:00.000000000Z"),
                 [132_u8; 16],
             )
@@ -9105,7 +9759,9 @@ mod tests {
             "injected crash after admission slot reservation"
         );
 
-        let joined = runtime.reserve_admission_slot(&authority, &plan).unwrap();
+        let joined = runtime
+            .reserve_admission_slot(&authority, &plan, None)
+            .unwrap();
         assert!(joined.joined);
         assert_eq!(
             joined.record.retained_participant_id,
@@ -9194,7 +9850,9 @@ mod tests {
                 b"conflicting slot orphan",
             );
             let reopened = HostSessionAuthority::open(&parent.path().join("home")).unwrap();
-            let retried = runtime.reserve_admission_slot(&reopened, &plan).unwrap();
+            let retried = runtime
+                .reserve_admission_slot(&reopened, &plan, None)
+                .unwrap();
             assert_eq!(
                 retried.joined,
                 crash_point == AdmissionReservationCrashPointV1::AfterSlotReserved
@@ -9214,7 +9872,9 @@ mod tests {
                 );
             }
             assert_eq!(fs::read_dir(&tmp_root).unwrap().count(), 0);
-            let joined = runtime.reserve_admission_slot(&reopened, &plan).unwrap();
+            let joined = runtime
+                .reserve_admission_slot(&reopened, &plan, None)
+                .unwrap();
             assert!(joined.joined);
             assert_eq!(joined.record, retried.record);
         }
@@ -9253,7 +9913,9 @@ mod tests {
             b"conflicting slot orphan after rename",
         );
         let reopened = HostSessionAuthority::open(&parent.path().join("home")).unwrap();
-        let retried = runtime.reserve_admission_slot(&reopened, &plan).unwrap();
+        let retried = runtime
+            .reserve_admission_slot(&reopened, &plan, None)
+            .unwrap();
         assert!(retried.joined);
         assert_eq!(
             retried.record.retained_participant_id,
@@ -9358,17 +10020,17 @@ mod tests {
         let second_plan = admission_plan(&authority, "head-second", "second prompt", 4);
         let third_plan = admission_plan(&authority, "head-third", "third prompt", 4);
         let first_slot = runtime
-            .reserve_admission_slot(&authority, &first_plan)
+            .reserve_admission_slot(&authority, &first_plan, None)
             .unwrap();
         let second_slot = runtime
-            .reserve_admission_slot(&authority, &second_plan)
+            .reserve_admission_slot(&authority, &second_plan, None)
             .unwrap();
         let third_slot = runtime
-            .reserve_admission_slot(&authority, &third_plan)
+            .reserve_admission_slot(&authority, &third_plan, None)
             .unwrap();
 
         let queued = runtime
-            .register_admitted_worker(&authority, &second_plan)
+            .register_admitted_worker(&authority, &second_plan, None)
             .unwrap_err();
         assert_eq!(
             queued.to_string(),
@@ -9411,7 +10073,7 @@ mod tests {
         ));
 
         let first = runtime
-            .register_admitted_worker(&authority, &first_plan)
+            .register_admitted_worker(&authority, &first_plan, None)
             .unwrap();
         assert!(matches!(
             first.record.state,
@@ -9452,6 +10114,7 @@ mod tests {
                 &authority,
                 &second_plan,
                 &second_slot.record.retained_participant_id,
+                None,
                 timestamp("2026-07-15T14:00:00.000000000Z"),
                 [41_u8; 16],
             )
@@ -9469,7 +10132,7 @@ mod tests {
         assert_eq!(second_head.admission_authority_revision, 1);
 
         let second = runtime
-            .register_admitted_worker(&authority, &second_plan)
+            .register_admitted_worker(&authority, &second_plan, None)
             .unwrap();
         assert!(matches!(
             second.record.state,
@@ -9491,7 +10154,7 @@ mod tests {
             }
         ));
         let third = runtime
-            .register_admitted_worker(&authority, &third_plan)
+            .register_admitted_worker(&authority, &third_plan, None)
             .unwrap();
         assert!(matches!(
             third.record.state,
@@ -9506,7 +10169,7 @@ mod tests {
             4
         );
         let exact_retry = runtime
-            .register_admitted_worker(&authority, &first_plan)
+            .register_admitted_worker(&authority, &first_plan, None)
             .unwrap();
         assert!(exact_retry.joined);
         assert_eq!(exact_retry.record, first.record);
@@ -9525,16 +10188,16 @@ mod tests {
         );
         let later_plan = admission_plan(&authority, "queued-exact-later", "later prompt", 4);
         runtime
-            .reserve_admission_slot(&authority, &first_plan)
+            .reserve_admission_slot(&authority, &first_plan, None)
             .unwrap();
         let earliest = runtime
-            .reserve_admission_slot(&authority, &earliest_plan)
+            .reserve_admission_slot(&authority, &earliest_plan, None)
             .unwrap();
         let later = runtime
-            .reserve_admission_slot(&authority, &later_plan)
+            .reserve_admission_slot(&authority, &later_plan, None)
             .unwrap();
         runtime
-            .register_admitted_worker(&authority, &first_plan)
+            .register_admitted_worker(&authority, &first_plan, None)
             .unwrap();
 
         let identity = runtime.initialize_admission_registry(&authority).unwrap();
@@ -9581,6 +10244,7 @@ mod tests {
                 &authority,
                 &current_observation_substitution,
                 &earliest.record.retained_participant_id,
+                None,
                 timestamp("2026-07-15T14:09:00.000000000Z"),
                 [80_u8; 16],
             )
@@ -9592,6 +10256,7 @@ mod tests {
                 &authority,
                 &later_plan,
                 &later.record.retained_participant_id,
+                None,
                 timestamp("2026-07-15T14:10:00.000000000Z"),
                 [81_u8; 16],
             )
@@ -9625,6 +10290,7 @@ mod tests {
                     &authority,
                     &changed,
                     &earliest.record.retained_participant_id,
+                    None,
                     timestamp("2026-07-15T14:11:00.000000000Z"),
                     [90_u8.wrapping_add(index as u8); 16],
                 )
@@ -9638,6 +10304,7 @@ mod tests {
                 &authority,
                 &earliest_plan,
                 &later.record.retained_participant_id,
+                None,
                 timestamp("2026-07-15T14:12:00.000000000Z"),
                 [101_u8; 16],
             )
@@ -9668,6 +10335,7 @@ mod tests {
             &current_plan,
             &earliest_plan,
             &earliest.record.retained_participant_id,
+            None,
             &envelope.secret_key,
             timestamp("2026-07-15T14:13:00.000000000Z"),
             None,
@@ -9680,6 +10348,7 @@ mod tests {
                 &authority,
                 &earliest_plan,
                 &earliest.record.retained_participant_id,
+                None,
                 timestamp("2026-07-15T14:14:00.000000000Z"),
                 [111_u8; 16],
             )
@@ -9701,6 +10370,7 @@ mod tests {
                 &authority,
                 &earliest_plan,
                 &earliest.record.retained_participant_id,
+                None,
                 timestamp("2026-07-15T14:15:00.000000000Z"),
                 [112_u8; 16],
             )
@@ -9716,6 +10386,7 @@ mod tests {
                 &authority,
                 &later_plan,
                 &later.record.retained_participant_id,
+                None,
                 timestamp("2026-07-15T14:16:00.000000000Z"),
                 [113_u8; 16],
             )
@@ -9731,13 +10402,13 @@ mod tests {
         let first_plan = admission_plan(&authority, "reopen-no-head-first", "first", 3);
         let queued_plan = admission_plan(&authority, "reopen-no-head-queued", "queued", 3);
         runtime
-            .reserve_admission_slot(&authority, &first_plan)
+            .reserve_admission_slot(&authority, &first_plan, None)
             .unwrap();
         let queued = runtime
-            .reserve_admission_slot(&authority, &queued_plan)
+            .reserve_admission_slot(&authority, &queued_plan, None)
             .unwrap();
         runtime
-            .register_admitted_worker(&authority, &first_plan)
+            .register_admitted_worker(&authority, &first_plan, None)
             .unwrap();
         drop(authority);
 
@@ -9762,6 +10433,7 @@ mod tests {
                 &reopened,
                 &queued_plan,
                 &queued.record.retained_participant_id,
+                None,
                 timestamp("2026-07-15T14:20:00.000000000Z"),
                 [121_u8; 16],
             )
@@ -9781,13 +10453,13 @@ mod tests {
             4,
         );
         runtime
-            .reserve_admission_slot(&authority, &first_plan)
+            .reserve_admission_slot(&authority, &first_plan, None)
             .unwrap();
         let queued = runtime
-            .reserve_admission_slot(&authority, &queued_plan)
+            .reserve_admission_slot(&authority, &queued_plan, None)
             .unwrap();
         runtime
-            .register_admitted_worker(&authority, &first_plan)
+            .register_admitted_worker(&authority, &first_plan, None)
             .unwrap();
         let exact_authority = String::from_utf8(
             encode_canonical(
@@ -9849,13 +10521,13 @@ mod tests {
             4,
         );
         runtime
-            .reserve_admission_slot(&authority, &first_plan)
+            .reserve_admission_slot(&authority, &first_plan, None)
             .unwrap();
         let queued = runtime
-            .reserve_admission_slot(&authority, &queued_plan)
+            .reserve_admission_slot(&authority, &queued_plan, None)
             .unwrap();
         runtime
-            .register_admitted_worker(&authority, &first_plan)
+            .register_admitted_worker(&authority, &first_plan, None)
             .unwrap();
         let exact_authority = String::from_utf8(
             encode_canonical(
@@ -9940,10 +10612,10 @@ mod tests {
         );
 
         let first_slot = runtime
-            .reserve_admission_slot(&first_authority, &first_plan)
+            .reserve_admission_slot(&first_authority, &first_plan, None)
             .unwrap();
         let second_slot = runtime
-            .reserve_admission_slot(&second_authority, &second_plan)
+            .reserve_admission_slot(&second_authority, &second_plan, None)
             .unwrap();
         assert!(matches!(
             first_slot.record.state,
@@ -10030,13 +10702,13 @@ mod tests {
         let first_plan = admission_plan(&authority, "ancestry-first", "first prompt", 3);
         let queued_plan = admission_plan(&authority, "ancestry-queued", "queued prompt", 3);
         runtime
-            .reserve_admission_slot(&authority, &first_plan)
+            .reserve_admission_slot(&authority, &first_plan, None)
             .unwrap();
         let queued = runtime
-            .reserve_admission_slot(&authority, &queued_plan)
+            .reserve_admission_slot(&authority, &queued_plan, None)
             .unwrap();
         runtime
-            .register_admitted_worker(&authority, &first_plan)
+            .register_admitted_worker(&authority, &first_plan, None)
             .unwrap();
         let root = authority.read_a12a_root().unwrap();
         let resolved = authority.resolve_current_exact("r0-session", None).unwrap();
@@ -10205,6 +10877,7 @@ mod tests {
         assert!(validate_admission_plan(
             &VersionedStateRoot::V2(root),
             &changed_wrapper_caller_plan,
+            None,
         )
         .is_err());
     }
@@ -10216,13 +10889,13 @@ mod tests {
         let first_plan = admission_plan(&authority, "rewind-first", "first prompt", 3);
         let queued_plan = admission_plan(&authority, "rewind-queued", "queued prompt", 3);
         runtime
-            .reserve_admission_slot(&authority, &first_plan)
+            .reserve_admission_slot(&authority, &first_plan, None)
             .unwrap();
         let queued = runtime
-            .reserve_admission_slot(&authority, &queued_plan)
+            .reserve_admission_slot(&authority, &queued_plan, None)
             .unwrap();
         runtime
-            .register_admitted_worker(&authority, &first_plan)
+            .register_admitted_worker(&authority, &first_plan, None)
             .unwrap();
         let root = authority.read_a12a_root().unwrap();
         let resolved = authority.resolve_current_exact("r0-session", None).unwrap();
@@ -10284,7 +10957,9 @@ mod tests {
             .unwrap()
             .clone();
 
-        let reconciled = runtime.register_admitted_worker(&authority, &plan).unwrap();
+        let reconciled = runtime
+            .register_admitted_worker(&authority, &plan, None)
+            .unwrap();
         assert!(reconciled.joined);
         let RetainedWorkerAdmissionStateV1::PreTransportNonterminal { registration } =
             &reconciled.record.state
@@ -10305,7 +10980,9 @@ mod tests {
         let (_parent, authority, _) = started_authority();
         let runtime = RetainedWorkerRuntime;
         let plan = admission_plan(&authority, "r0-complete-graph", "prompt", 3);
-        let admitted = runtime.register_admitted_worker(&authority, &plan).unwrap();
+        let admitted = runtime
+            .register_admitted_worker(&authority, &plan, None)
+            .unwrap();
         let RetainedWorkerAdmissionStateV1::PreTransportNonterminal {
             registration: admission_registration,
         } = &admitted.record.state
@@ -10551,7 +11228,9 @@ mod tests {
         let (parent, authority, _) = started_authority();
         let runtime = RetainedWorkerRuntime;
         let plan = admission_plan(&authority, "r0-idempotent-advance", "prompt", 3);
-        let admitted = runtime.register_admitted_worker(&authority, &plan).unwrap();
+        let admitted = runtime
+            .register_admitted_worker(&authority, &plan, None)
+            .unwrap();
         let post_r0_graph = runtime
             .resolve_admitted_record_graph(&authority, &admitted.record)
             .unwrap();
@@ -10584,6 +11263,7 @@ mod tests {
                 secret_key: &envelope.secret_key,
                 post_r0_graph: &post_r0_graph,
             },
+            None,
             None,
         )
         .is_err());
@@ -10639,11 +11319,13 @@ mod tests {
             let issuer = format!("registration-publication-queued-{index}");
             let plan = admission_plan(&authority, &issuer, "exact queued retry prompt", 3);
             let first_slot = runtime
-                .reserve_admission_slot(&authority, &first_plan)
+                .reserve_admission_slot(&authority, &first_plan, None)
                 .unwrap();
-            let queued = runtime.reserve_admission_slot(&authority, &plan).unwrap();
+            let queued = runtime
+                .reserve_admission_slot(&authority, &plan, None)
+                .unwrap();
             runtime
-                .register_admitted_worker(&authority, &first_plan)
+                .register_admitted_worker(&authority, &first_plan, None)
                 .unwrap();
             assert!(matches!(
                 queued.record.state,
@@ -10665,6 +11347,7 @@ mod tests {
                         &authority,
                         &plan,
                         &queued.record.retained_participant_id,
+                        None,
                         timestamp("2026-07-15T20:00:00.000000000Z"),
                         [140_u8.wrapping_add(index as u8); 16],
                         Some(crash_point),
@@ -10749,13 +11432,17 @@ mod tests {
             }
 
             let reopened = HostSessionAuthority::open(&parent.path().join("home")).unwrap();
-            let retried = runtime.register_admitted_worker(&reopened, &plan).unwrap();
+            let retried = runtime
+                .register_admitted_worker(&reopened, &plan, None)
+                .unwrap();
             assert!(matches!(
                 retried.record.state,
                 RetainedWorkerAdmissionStateV1::PreTransportNonterminal { .. }
             ));
             assert_eq!(fs::read_dir(&tmp_root).unwrap().count(), 0);
-            let joined = runtime.register_admitted_worker(&reopened, &plan).unwrap();
+            let joined = runtime
+                .register_admitted_worker(&reopened, &plan, None)
+                .unwrap();
             assert!(joined.joined);
             assert_eq!(joined.record, retried.record);
             let first = runtime
@@ -10787,7 +11474,9 @@ mod tests {
             let (parent, authority, _) = started_authority();
             let runtime = RetainedWorkerRuntime;
             let plan = admission_plan(&authority, &format!("claim-crash-{index}"), "prompt", 3);
-            let admitted = runtime.register_admitted_worker(&authority, &plan).unwrap();
+            let admitted = runtime
+                .register_admitted_worker(&authority, &plan, None)
+                .unwrap();
             let participant_id = admitted.record.retained_participant_id.clone();
             let identity = runtime.initialize_admission_registry(&authority).unwrap();
             let (admission_root, _) = initialized_admission_paths(&parent, &identity);
@@ -10902,7 +11591,9 @@ mod tests {
         let (parent, authority, _) = started_authority();
         let runtime = RetainedWorkerRuntime;
         let plan = admission_plan(&authority, "claim-rename-before-dirsync", "prompt", 3);
-        let admitted = runtime.register_admitted_worker(&authority, &plan).unwrap();
+        let admitted = runtime
+            .register_admitted_worker(&authority, &plan, None)
+            .unwrap();
         let participant_id = admitted.record.retained_participant_id.clone();
         let identity = runtime.initialize_admission_registry(&authority).unwrap();
         let (admission_root, _) = initialized_admission_paths(&parent, &identity);
@@ -10989,7 +11680,7 @@ mod tests {
 
         let identical_plan = admission_plan(&authority, "process-identical", "prompt", 4);
         let identical = runtime
-            .register_admitted_worker(&authority, &identical_plan)
+            .register_admitted_worker(&authority, &identical_plan, None)
             .unwrap();
         let participant_id = identical.record.retained_participant_id.clone();
         let first_result = parent.path().join("claim-first-result");
@@ -11023,7 +11714,7 @@ mod tests {
 
         let death_plan = admission_plan(&authority, "process-death", "prompt", 4);
         let death_admitted = runtime
-            .register_admitted_worker(&authority, &death_plan)
+            .register_admitted_worker(&authority, &death_plan, None)
             .unwrap();
         let death_participant_id = death_admitted.record.retained_participant_id.clone();
         let mut crashed = spawn(
@@ -11062,7 +11753,7 @@ mod tests {
 
         let conflict_plan = admission_plan(&authority, "process-conflict", "prompt", 4);
         let conflict_admitted = runtime
-            .register_admitted_worker(&authority, &conflict_plan)
+            .register_admitted_worker(&authority, &conflict_plan, None)
             .unwrap();
         let conflict_participant_id = conflict_admitted.record.retained_participant_id.clone();
         let correct_result = parent.path().join("claim-correct-result");
@@ -11112,7 +11803,9 @@ mod tests {
         let (parent, authority, _) = started_authority();
         let runtime = RetainedWorkerRuntime;
         let plan = admission_plan(&authority, "claim-race", "prompt", 3);
-        let admitted = runtime.register_admitted_worker(&authority, &plan).unwrap();
+        let admitted = runtime
+            .register_admitted_worker(&authority, &plan, None)
+            .unwrap();
         let participant_id = admitted.record.retained_participant_id.clone();
         let home = parent.path().join("home");
         let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
@@ -11130,6 +11823,7 @@ mod tests {
                         &authority,
                         &plan,
                         &participant_id,
+                        None,
                         &AdmissionTransportPublicationInputV1 {
                             claimed_at: timestamp("2026-07-15T14:01:00.000000000Z"),
                             claim_entropy: [entropy; 16],
@@ -11153,7 +11847,7 @@ mod tests {
             panic!("claim race must persist one transport claim")
         };
         let later = runtime
-            .claim_admission_transport(&authority, &plan, &participant_id)
+            .claim_admission_transport(&authority, &plan, &participant_id, None)
             .unwrap();
         assert!(!later.newly_claimed);
         assert_eq!(later.record, claims[0].record);
@@ -11162,7 +11856,7 @@ mod tests {
         let mut conflicting_plan = plan.clone();
         conflicting_plan.spawn_request.payload.prompt = "conflicting prompt".into();
         assert!(runtime
-            .claim_admission_transport(&authority, &conflicting_plan, &participant_id)
+            .claim_admission_transport(&authority, &conflicting_plan, &participant_id, None)
             .is_err());
         let durable = runtime
             .read_admission_record(&authority, "r0-session", &participant_id)
@@ -11176,7 +11870,9 @@ mod tests {
         let (parent, authority, _) = started_authority();
         let runtime = RetainedWorkerRuntime;
         let plan = admission_plan(&authority, "claim-complete-join", "prompt", 3);
-        let admitted = runtime.register_admitted_worker(&authority, &plan).unwrap();
+        let admitted = runtime
+            .register_admitted_worker(&authority, &plan, None)
+            .unwrap();
         let registry_path = parent
             .path()
             .join("home/authority-v1/retained-worker-admission-v1/registry-v1.json");
@@ -11196,7 +11892,12 @@ mod tests {
         fs::write(&registry_path, &forged).unwrap();
 
         assert!(runtime
-            .claim_admission_transport(&authority, &plan, &admitted.record.retained_participant_id,)
+            .claim_admission_transport(
+                &authority,
+                &plan,
+                &admitted.record.retained_participant_id,
+                None,
+            )
             .is_err());
         assert_eq!(fs::read(registry_path).unwrap(), forged);
     }
@@ -11206,7 +11907,9 @@ mod tests {
         let (parent, authority, _) = started_authority();
         let runtime = RetainedWorkerRuntime;
         let plan = admission_plan(&authority, "slot-complete-join", "prompt", 3);
-        let admitted = runtime.register_admitted_worker(&authority, &plan).unwrap();
+        let admitted = runtime
+            .register_admitted_worker(&authority, &plan, None)
+            .unwrap();
         let identity = runtime.initialize_admission_registry(&authority).unwrap();
         let (admission_root, key_path) = initialized_admission_paths(&parent, &identity);
         let registry_path = admission_root.join("registry-v1.json");
@@ -11236,7 +11939,9 @@ mod tests {
         let forged = encode_canonical(&registry, "encode fixture registry").unwrap();
         fs::write(&registry_path, &forged).unwrap();
 
-        assert!(runtime.reserve_admission_slot(&authority, &plan).is_err());
+        assert!(runtime
+            .reserve_admission_slot(&authority, &plan, None)
+            .is_err());
         assert_eq!(fs::read(registry_path).unwrap(), forged);
     }
 
@@ -11246,7 +11951,7 @@ mod tests {
         let runtime = RetainedWorkerRuntime;
         let existing_plan = admission_plan(&authority, "existing-complete-join", "prompt", 3);
         let admitted = runtime
-            .register_admitted_worker(&authority, &existing_plan)
+            .register_admitted_worker(&authority, &existing_plan, None)
             .unwrap();
         let (registry_path, forged) = forge_admission_bootstrap_identity(
             &parent,
@@ -11258,7 +11963,7 @@ mod tests {
         let new_plan = admission_plan(&authority, "new-slot-complete-join", "prompt", 3);
 
         assert!(runtime
-            .reserve_admission_slot(&authority, &new_plan)
+            .reserve_admission_slot(&authority, &new_plan, None)
             .is_err());
         assert_eq!(fs::read(registry_path).unwrap(), forged);
     }
@@ -11269,7 +11974,7 @@ mod tests {
         let runtime = RetainedWorkerRuntime;
         let existing_plan = admission_plan(&authority, "applied-head-complete-join", "prompt", 3);
         let slot = runtime
-            .reserve_admission_slot(&authority, &existing_plan)
+            .reserve_admission_slot(&authority, &existing_plan, None)
             .unwrap();
         runtime
             .register_admitted_worker_at(
@@ -11300,7 +12005,7 @@ mod tests {
         let new_plan = admission_plan(&authority, "after-applied-head", "prompt", 3);
 
         assert!(runtime
-            .reserve_admission_slot(&authority, &new_plan)
+            .reserve_admission_slot(&authority, &new_plan, None)
             .is_err());
         assert_eq!(fs::read(registry_path).unwrap(), forged);
     }

@@ -51,6 +51,21 @@ use crate::execution::agent_runtime::dispatch_contract::{
     InspectWorldWorkerOutcomeV1, RetainedWorkerCancelCloseoutV1, RetainedWorkerStopCloseoutV1,
     StopWorldWorkerOutcomeV1, WorkerCancelPayloadV1, WorkerForkPayloadV1,
 };
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::dispatch_policy_commitment::{
+    applied_dispatch_policy_patch_identity, authenticate_dispatch_policy_commitment,
+    authenticate_fresh_spawn_reservation, dispatch_policy_narrowing_reason,
+    initialize_dispatch_policy_commitment_registry, publish_accepted_work_commitment,
+    publish_fork_commitment, publish_fresh_spawn_commitment, reserve_fresh_spawn,
+    resolve_fork_policy_material, resolve_retained_turn_policy_material,
+    resolve_retained_worker_cap, validate_policy_snapshot_material,
+    AcceptedWorkPolicyCommitmentInputV1, AppliedDispatchPolicyPatchIdentityV1,
+    AuthenticatedFreshSpawnReservationProofV1, DispatchPolicyCommitmentSubjectV1,
+    ForkPolicyCommitmentInputV1, ForkPolicyResolutionInputV1, FreshSpawnReservationInputV1,
+    ResolvedPolicyCommitmentCompatibilityV1, RetainedTurnPolicyResolutionInputV1,
+    ValidatedPolicySnapshotMaterialV1,
+};
+#[cfg(target_os = "linux")]
 #[cfg(all(target_os = "linux", test))]
 use crate::execution::agent_runtime::host_session_authority::schema::HostSessionPostureV1;
 #[cfg(target_os = "linux")]
@@ -90,12 +105,11 @@ use crate::execution::agent_runtime::retained_worker_runtime::{
 };
 #[cfg(test)]
 use crate::execution::agent_runtime::state_store::ActiveEphemeralWorldTaskRecord;
-#[cfg(all(target_os = "linux", test))]
-use crate::execution::agent_runtime::state_store::ResolvedWorldWorkRegistryAuthorityV1;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::state_store::{
     AcceptedWorldWorkIdentityV1, PreparedInternalApprovalResponseObligationCloseout,
     PreparedInternalClarificationResponseObligationCloseout, ProposedWorldWorkIdentityV1,
+    ResolvedCanonicalRetainedWorldDispatchTargetV1, ResolvedWorldWorkRegistryAuthorityV1,
     RuntimeAcceptanceAcknowledgementKindV1, RuntimeAcceptanceEvidenceV1,
     WorldWorkAcceptanceProposalV1, WorldWorkAcceptanceRecordV1, WorldWorkProposalAllocationV1,
     WorldWorkProposalFamilyV1, WorldWorkProposalReservationOutcomeV1, WorldWorkReceiptRegistry,
@@ -139,7 +153,8 @@ use crate::execution::config_model::{
 #[cfg(target_os = "linux")]
 use crate::execution::routing::{
     build_agent_client_and_member_dispatch_request_for_cwd,
-    build_agent_client_and_pending_diff_request, MemberDispatchTransportRequest,
+    build_agent_client_and_pending_diff_request, ExactDispatchPolicySnapshotMaterialV1,
+    MemberDispatchTransportRequest,
 };
 #[cfg(target_os = "linux")]
 use transport_api_types::{
@@ -360,6 +375,115 @@ fn connect_world_agent_client() -> Result<transport_api_client::AgentClient> {
     })
 }
 
+#[cfg(target_os = "linux")]
+fn resolve_e2_retained_target_authority(
+    store: &AgentRuntimeStateStore,
+    request: &ValidatedWorldDispatchRequestV1,
+    retained_participant_id: &str,
+) -> Result<Option<ResolvedWorldWorkRegistryAuthorityV1>> {
+    use crate::execution::agent_runtime::host_session_authority::store::BootstrapClassificationV1;
+
+    let trusted_root = TrustedAuthorityRoot::open(store.substrate_home())
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let authority = HostSessionAuthority::from_trusted_root(trusted_root)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    if let Err(resolve_error) =
+        authority.resolve_current_exact(&request.orchestration_session_id, None)
+    {
+        return match authority.classify() {
+            BootstrapClassificationV1::FreshAbsent
+            | BootstrapClassificationV1::UnsupportedLegacyState => Ok(None),
+            BootstrapClassificationV1::InitializationPending => {
+                anyhow::bail!("retained E2 authority initialization is incomplete")
+            }
+            BootstrapClassificationV1::CorruptOrUnsupported
+            | BootstrapClassificationV1::ValidExisting => {
+                Err(anyhow::anyhow!(resolve_error.to_string()))
+                    .context("resolve exact current retained E2 authority")
+            }
+        };
+    }
+
+    let mut registry_authority = store
+        .resolve_world_work_registry_authority(
+            &request.orchestration_session_id,
+            &request.caller_participant_id,
+            &request.world_id,
+            request.world_generation,
+            None,
+        )
+        .map_err(map_world_dispatch_resolution_error)?;
+    let policy_cap_compatibility = resolve_retained_worker_cap(
+        &authority,
+        &request.orchestration_session_id,
+        retained_participant_id,
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let cap = match &policy_cap_compatibility {
+        ResolvedPolicyCommitmentCompatibilityV1::Compatible { cap } => cap,
+        ResolvedPolicyCommitmentCompatibilityV1::UnsupportedLegacyState { reason, .. } => {
+            anyhow::bail!(
+                "unsupported_legacy_state: retained worker {} has no authentic immutable policy cap ({reason:?})",
+                retained_participant_id
+            )
+        }
+    };
+    let authenticated = authenticate_dispatch_policy_commitment(&authority, cap.commitment_ref())
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    if authenticated.commitment_ref() != *cap.commitment_ref()
+        || authenticated.authority_store_id() != registry_authority.authority_store_id
+        || authenticated.orchestration_session_id() != request.orchestration_session_id
+        || authenticated.retained_participant_id() != Some(retained_participant_id)
+        || authenticated.retained_worker_cap_link()
+            != Some(
+                &crate::execution::agent_runtime::dispatch_policy_commitment::RetainedWorkerCapLinkV1::ThisCommitment,
+            )
+        || authenticated.target_backend_id() != request.target_backend_id
+        || authenticated.world_id() != request.world_id
+        || authenticated.world_generation() != request.world_generation
+    {
+        anyhow::bail!(
+            "stale_linkage: retained worker {} immutable E2 cap conflicts with the current dispatch binding",
+            retained_participant_id
+        );
+    }
+
+    match authenticated.subject() {
+        DispatchPolicyCommitmentSubjectV1::RetainedWorkerLaunch {
+            retained_participant_id: committed_participant_id,
+            ..
+        } if committed_participant_id == retained_participant_id => store
+            .resolve_hsa_retained_continue_translation_authority(
+                &request.orchestration_session_id,
+                &request.caller_participant_id,
+                retained_participant_id,
+            )?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "stale_linkage: retained worker {} launch cap lost its exact B3.2a authority",
+                    retained_participant_id
+                )
+            })
+            .map(Some),
+        DispatchPolicyCommitmentSubjectV1::RetainedWorkerFork {
+            child_participant_id,
+            ..
+        } if child_participant_id == retained_participant_id => {
+            registry_authority.retained_target =
+                Some(ResolvedCanonicalRetainedWorldDispatchTargetV1 {
+                    participant_id: retained_participant_id.to_string(),
+                    backend_id: request.target_backend_id.clone(),
+                    policy_cap_compatibility,
+                });
+            Ok(Some(registry_authority))
+        }
+        _ => anyhow::bail!(
+            "stale_linkage: retained worker {} immutable E2 cap has the wrong launch subject",
+            retained_participant_id
+        ),
+    }
+}
+
 #[allow(dead_code)]
 pub(crate) fn prepare_orchestrator_world_dispatch(
     store: &AgentRuntimeStateStore,
@@ -368,11 +492,6 @@ pub(crate) fn prepare_orchestrator_world_dispatch(
     let request = request.validate()?;
     #[cfg(any(target_os = "linux", target_os = "macos", test))]
     if request.action == WorldDispatchActionV1::RunWorldTask
-        || (request.action == WorldDispatchActionV1::ContinueWorldWorker
-            && !matches!(
-                request.payload,
-                WorldDispatchPayloadV1::WorkerContinueForkCommand(_)
-            ))
         || ((request.action == WorldDispatchActionV1::InspectWorldWorker
             || request.action == WorldDispatchActionV1::CancelWorldWork)
             && request.mode == WorldDispatchModeV1::Ephemeral)
@@ -403,6 +522,40 @@ pub(crate) fn prepare_orchestrator_world_dispatch(
             b_owned_authority: Some(authority),
             compatibility: None,
         });
+    }
+    if request.action == WorldDispatchActionV1::ContinueWorldWorker
+        || request.action == WorldDispatchActionV1::ForkWorldWorker
+    {
+        let retained_participant_id = request
+            .target_participant_id
+            .as_deref()
+            .expect("validated retained request includes target participant");
+        if let Some(authority) =
+            resolve_e2_retained_target_authority(store, &request, retained_participant_id)?
+        {
+            if authority.world_id != request.world_id
+                || authority.world_generation != request.world_generation
+                || authority
+                    .retained_target
+                    .as_ref()
+                    .is_none_or(|target| target.backend_id != request.target_backend_id)
+            {
+                anyhow::bail!("stale_linkage: activated E2 retained authority changed");
+            }
+            return Ok(PreparedOrchestratorWorldDispatch {
+                store: store.clone(),
+                request,
+                b_owned_authority: Some(authority),
+                compatibility: None,
+            });
+        }
+        if request.action == WorldDispatchActionV1::ContinueWorldWorker
+            && request.dispatch_policy_narrowing.is_some()
+        {
+            anyhow::bail!(
+                "unsupported_legacy_state: retained Continue policy narrowing requires exact HSA and immutable-cap authority"
+            );
+        }
     }
     let authority = store
         .resolve_internal_world_dispatch_caller(
@@ -582,7 +735,10 @@ async fn fork_world_worker(
     #[cfg(target_os = "linux")] intended_host_principal: Option<&PlatformPrincipalV1>,
 ) -> Result<WorldDispatchOutcomeV1> {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
-    let workspace_root = PathBuf::from(&prepared.session.workspace_root);
+    let workspace_root = match prepared.b_owned_authority.as_ref() {
+        Some(authority) => PathBuf::from(&authority.workspace_root),
+        None => PathBuf::from(&prepared.session.workspace_root),
+    };
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     let context = resolve_internal_dispatch_context(&workspace_root)?;
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -596,19 +752,24 @@ async fn fork_world_worker(
 
     #[cfg(target_os = "linux")]
     {
-        let resolved = prepared
-            .store
-            .resolve_internal_fork_world_dispatch_target(
-                &prepared.request.orchestration_session_id,
-                &prepared.request.caller_participant_id,
-                prepared
-                    .request
-                    .target_participant_id
-                    .as_deref()
-                    .expect("validated fork request must include target_participant_id"),
-                &prepared.request.target_backend_id,
-            )
-            .map_err(map_fork_world_dispatch_resolution_error)?;
+        let legacy_resolved =
+            if prepared.b_owned_authority.is_none() {
+                Some(
+                    prepared
+                        .store
+                        .resolve_internal_fork_world_dispatch_target(
+                            &prepared.request.orchestration_session_id,
+                            &prepared.request.caller_participant_id,
+                            prepared.request.target_participant_id.as_deref().expect(
+                                "validated fork request must include target_participant_id",
+                            ),
+                            &prepared.request.target_backend_id,
+                        )
+                        .map_err(map_fork_world_dispatch_resolution_error)?,
+                )
+            } else {
+                None
+            };
         let contract = resolve_world_dispatch_contract(
             &workspace_root,
             &context,
@@ -624,10 +785,66 @@ async fn fork_world_worker(
         })?;
         let _concurrency_guard =
             acquire_world_dispatch_concurrency_guard(&prepared, &context.base_policy)?;
+        if let Some(registry_authority) = prepared.b_owned_authority.as_ref() {
+            let source_participant_id = registry_authority
+                .retained_target
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("E2 Fork authority omitted retained source target"))?
+                .participant_id
+                .clone();
+            let policy_commitment = prepare_fork_policy_commitment(
+                &prepared.store,
+                &prepared.request,
+                &workspace_root,
+                registry_authority,
+                prepared.request.dispatch_policy_narrowing.clone(),
+            )?;
+            let transport_request = build_fork_world_worker_transport_request(
+                &prepared.request,
+                &source_participant_id,
+                None,
+                &descriptor,
+                Some(&policy_commitment),
+            )?;
+            let receipt = execute_spawn_world_worker_stream(
+                &workspace_root,
+                &transport_request,
+                &prepared.request,
+                None,
+                intended_host_principal,
+            )
+            .await?;
+            let summary = summarize_fork_world_worker_result(&receipt, &source_participant_id);
+
+            return Ok(WorldDispatchOutcomeV1::ForkWorldWorker(
+                ForkWorldWorkerOutcomeV1 {
+                    request_id: prepared.request.request_id,
+                    orchestration_session_id: registry_authority.orchestration_session_id.clone(),
+                    action: WorldDispatchActionV1::ForkWorldWorker,
+                    mode: prepared.request.mode,
+                    orchestrator_participant_id: receipt.orchestrator_participant_id,
+                    source_participant_id,
+                    child_participant_id: receipt.participant_id,
+                    target_backend_id: receipt.backend_id,
+                    world_id: receipt.world_id,
+                    world_generation: receipt.world_generation,
+                    summary,
+                },
+            ));
+        }
+
+        let resolved = legacy_resolved
+            .expect("legacy Fork target resolves before compatibility transport construction");
         let transport_request = build_fork_world_worker_transport_request(
             &prepared.request,
-            &resolved.source_participant,
+            resolved.source_participant.participant_id(),
+            resolved
+                .source_participant
+                .handle
+                .orchestrator_participant_id
+                .as_deref(),
             &descriptor,
+            None,
         )?;
         let receipt = execute_spawn_world_worker_stream(
             &workspace_root,
@@ -644,76 +861,48 @@ async fn fork_world_worker(
         )
         .await
         {
-            Ok(()) => {
-                match persist_fork_child_lineage(
-                    &prepared.store,
-                    &resolved,
-                    &receipt.participant_id,
-                )
-                .await
-                {
-                    Ok(lineage) => lineage,
-                    Err(lineage_err) => {
-                        match rollback_failed_fork_child_launch(
-                            &prepared.store,
-                            &resolved,
+            Ok(()) => match persist_fork_child_lineage(
+                &prepared.store,
+                &resolved,
+                &receipt.participant_id,
+            )
+            .await
+            {
+                Ok(lineage) => lineage,
+                Err(lineage_err) => {
+                    let rollback_err = rollback_failed_fork_child_launch(
+                        &prepared.store,
+                        &resolved,
+                        &receipt.participant_id,
+                    )
+                    .await
+                    .err();
+                    anyhow::bail!(
+                        "{}",
+                        format_fork_lineage_persist_failure(
                             &receipt.participant_id,
+                            &lineage_err,
+                            rollback_err.as_ref(),
                         )
-                        .await
-                        {
-                            Ok(()) => {
-                                anyhow::bail!(
-                                    "{}",
-                                    format_fork_lineage_persist_failure(
-                                        &receipt.participant_id,
-                                        &lineage_err,
-                                        None,
-                                    )
-                                );
-                            }
-                            Err(rollback_err) => {
-                                anyhow::bail!(
-                                    "{}",
-                                    format_fork_lineage_persist_failure(
-                                        &receipt.participant_id,
-                                        &lineage_err,
-                                        Some(&rollback_err),
-                                    )
-                                );
-                            }
-                        }
-                    }
+                    );
                 }
-            }
+            },
             Err(lineage_err) => {
-                match rollback_failed_fork_child_launch(
+                let rollback_err = rollback_failed_fork_child_launch(
                     &prepared.store,
                     &resolved,
                     &receipt.participant_id,
                 )
                 .await
-                {
-                    Ok(()) => {
-                        anyhow::bail!(
-                            "{}",
-                            format_fork_lineage_persist_failure(
-                                &receipt.participant_id,
-                                &lineage_err,
-                                None,
-                            )
-                        );
-                    }
-                    Err(rollback_err) => {
-                        anyhow::bail!(
-                            "{}",
-                            format_fork_lineage_persist_failure(
-                                &receipt.participant_id,
-                                &lineage_err,
-                                Some(&rollback_err),
-                            )
-                        );
-                    }
-                }
+                .err();
+                anyhow::bail!(
+                    "{}",
+                    format_fork_lineage_persist_failure(
+                        &receipt.participant_id,
+                        &lineage_err,
+                        rollback_err.as_ref(),
+                    )
+                );
             }
         };
         let summary = summarize_fork_world_worker_result(&receipt, &lineage.source_participant_id);
@@ -1174,7 +1363,13 @@ pub(crate) struct PreparedSpawnWorldWorkerBootstrap {
     #[cfg(target_os = "linux")]
     pub(crate) admission_plan: RetainedWorkerAdmissionPlanV1,
     #[cfg(target_os = "linux")]
+    pub(crate) dispatch_policy_reservation_proof: AuthenticatedFreshSpawnReservationProofV1,
+    #[cfg(target_os = "linux")]
+    pub(crate) exact_policy_snapshot: ExactDispatchPolicySnapshotMaterialV1,
+    #[cfg(target_os = "linux")]
     pub(crate) launch_authority_proof: RetainedWorkerLaunchAuthorityProofV1,
+    #[cfg(target_os = "linux")]
+    pub(crate) e2_launch_activation: transport_api_types::E2MemberLaunchActivationCarrierV1,
     _concurrency_guard: Option<WorldDispatchConcurrencyGuard>,
 }
 
@@ -1182,9 +1377,23 @@ pub(crate) struct PreparedSpawnWorldWorkerBootstrap {
 pub(crate) struct PreparedForkWorldWorkerBootstrap {
     pub request: ValidatedWorldDispatchRequestV1,
     pub descriptor: crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
-    pub resolved:
+    pub source_participant_id: String,
+    pub orchestrator_participant_id: String,
+    pub(crate) legacy_resolved: Option<
         crate::execution::agent_runtime::state_store::ResolvedInternalForkWorldDispatchTarget,
+    >,
+    pub(crate) policy_commitment: Option<PreparedForkPolicyCommitmentV1>,
     _concurrency_guard: Option<WorldDispatchConcurrencyGuard>,
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) struct PreparedForkPolicyCommitmentV1 {
+    pub(crate) commitment_ref:
+        crate::execution::agent_runtime::dispatch_policy_commitment::DispatchPolicyCommitmentRefV1,
+    pub(crate) child_participant_id: String,
+    pub(crate) bootstrap_run_id: String,
+    pub(crate) exact_policy_snapshot: ExactDispatchPolicySnapshotMaterialV1,
+    pub(crate) e2_launch_activation: transport_api_types::E2MemberLaunchActivationCarrierV1,
 }
 
 #[cfg(target_os = "linux")]
@@ -1194,6 +1403,10 @@ struct PreparedTaskAcceptanceSubmission {
     proposal: WorldWorkAcceptanceProposalV1,
     client: transport_api_client::AgentClient,
     execute_request: transport_api_types::ExecuteRequest,
+    dispatch_policy_authority: HostSessionAuthority,
+    applied_dispatch_policy_patch: AppliedDispatchPolicyPatchIdentityV1,
+    policy_snapshot: ValidatedPolicySnapshotMaterialV1,
+    policy_snapshot_reason: Option<String>,
 }
 
 #[cfg(target_os = "linux")]
@@ -1202,6 +1415,270 @@ struct PreparedRetainedAcceptanceSubmission {
     execution_supervisor: WorldWorkExecutionSupervisor,
     proposal: WorldWorkAcceptanceProposalV1,
     submit_request: transport_api_types::MemberTurnSubmitRequestV1,
+    dispatch_policy_authority: HostSessionAuthority,
+    applied_dispatch_policy_patch: AppliedDispatchPolicyPatchIdentityV1,
+    policy_snapshot: ValidatedPolicySnapshotMaterialV1,
+    policy_snapshot_reason: Option<String>,
+    retained_worker_cap_ref:
+        crate::execution::agent_runtime::dispatch_policy_commitment::DispatchPolicyCommitmentRefV1,
+}
+
+#[cfg(target_os = "linux")]
+struct ResolvedE2DispatchPolicyV1 {
+    authority: HostSessionAuthority,
+    exact_policy_snapshot: ExactDispatchPolicySnapshotMaterialV1,
+    validated_policy_snapshot: ValidatedPolicySnapshotMaterialV1,
+    applied_patch: AppliedDispatchPolicyPatchIdentityV1,
+    reason: Option<String>,
+}
+
+#[cfg(target_os = "linux")]
+struct E2AcceptedWorkPublicationContextV1 {
+    authority: HostSessionAuthority,
+    idempotency_key: String,
+    applied_patch: AppliedDispatchPolicyPatchIdentityV1,
+    policy_snapshot: ValidatedPolicySnapshotMaterialV1,
+    reason: Option<String>,
+    retained_worker_cap_ref: Option<
+        crate::execution::agent_runtime::dispatch_policy_commitment::DispatchPolicyCommitmentRefV1,
+    >,
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_e2_dispatch_policy(
+    store: &AgentRuntimeStateStore,
+    request: &ValidatedWorldDispatchRequestV1,
+    workspace_root: &Path,
+    applies_to: transport_api_types::DispatchCapabilitySubjectV1,
+) -> Result<ResolvedE2DispatchPolicyV1> {
+    let trusted_root = TrustedAuthorityRoot::open(store.substrate_home())
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let authority = HostSessionAuthority::from_trusted_root(trusted_root)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let exact = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let world = exact
+        .authority
+        .world_binding
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("E2 dispatch authority omits world binding"))?;
+    if exact.caller.participant_id != request.caller_participant_id
+        || world.world_id != request.world_id
+        || world.world_generation != request.world_generation
+    {
+        anyhow::bail!("stale_linkage: E2 dispatch request changed session, caller, or world");
+    }
+    let parent_policy_ref =
+        exact.authority.current_policy_ref.clone().ok_or_else(|| {
+            anyhow::anyhow!("E2 dispatch authority omits current policy reference")
+        })?;
+    let context = resolve_internal_dispatch_context(workspace_root)?;
+    let (snapshot, snapshot_hash) = match request.dispatch_policy_narrowing.as_ref() {
+        Some(patch) => {
+            let transport_parent_ref: transport_api_types::PolicyRefV1 = serde_json::from_value(
+                serde_json::to_value(&parent_policy_ref)
+                    .context("serialize authenticated E2 parent policy reference")?,
+            )
+            .context("translate authenticated E2 parent policy reference")?;
+            let authenticated = crate::execution::policy_snapshot::AuthenticatedDispatchPolicyNarrowingContextV1::from_resolved_authority(
+                crate::execution::policy_snapshot::ResolvedDispatchPolicyNarrowingAuthorityV1 {
+                    request_id: request.request_id.clone(),
+                    orchestration_session_id: request.orchestration_session_id.clone(),
+                    caller_participant_id: request.caller_participant_id.clone(),
+                    target_backend_id: request.target_backend_id.clone(),
+                    target_world: transport_api_types::WorldBindingRefV1 {
+                        world_id: request.world_id.clone(),
+                        world_generation: request.world_generation,
+                    },
+                    applies_to,
+                    parent_policy_ref: transport_parent_ref,
+                    parent_policy: exact.current_policy.clone(),
+                    parent_allows_capability_narrowing: context
+                        .base_policy
+                        .agents_world_dispatch_allow_capability_narrowing,
+                },
+            )?;
+            let resolved =
+                crate::execution::policy_snapshot::resolve_dispatch_narrowed_policy_snapshot(
+                    &context.base_policy,
+                    patch,
+                    &authenticated,
+                    workspace_root,
+                )?;
+            (resolved.snapshot, resolved.snapshot_hash)
+        }
+        None => {
+            let resolved =
+                crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(workspace_root)?;
+            if resolved.snapshot_hash != exact.current_policy.canonical_policy_snapshot_sha256 {
+                anyhow::bail!("stale_linkage: E2 current parent policy snapshot changed");
+            }
+            (resolved.snapshot, resolved.snapshot_hash)
+        }
+    };
+    let bytes = serde_json::to_vec(&snapshot).context("serialize exact E1 PolicySnapshotV3")?;
+    let validated_policy_snapshot = validate_policy_snapshot_material(
+        &snapshot,
+        &bytes,
+        &parent_policy_ref,
+        &snapshot_hash,
+        &exact.current_policy.policy_revision,
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let exact_policy_snapshot = ExactDispatchPolicySnapshotMaterialV1::from_exact_e1_material(
+        snapshot,
+        bytes,
+        snapshot_hash,
+    )?;
+    let applied_patch =
+        applied_dispatch_policy_patch_identity(request.dispatch_policy_narrowing.as_ref())
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    initialize_dispatch_policy_commitment_registry(&authority)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    Ok(ResolvedE2DispatchPolicyV1 {
+        authority,
+        exact_policy_snapshot,
+        validated_policy_snapshot,
+        applied_patch,
+        reason: dispatch_policy_narrowing_reason(request.dispatch_policy_narrowing.as_ref()),
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn prepare_fork_policy_commitment(
+    store: &AgentRuntimeStateStore,
+    request: &ValidatedWorldDispatchRequestV1,
+    workspace_root: &Path,
+    registry_authority: &ResolvedWorldWorkRegistryAuthorityV1,
+    fork_patch: Option<transport_api_types::DispatchPolicyNarrowingPatchV1>,
+) -> Result<PreparedForkPolicyCommitmentV1> {
+    if registry_authority.world_id != request.world_id
+        || registry_authority.world_generation != request.world_generation
+    {
+        anyhow::bail!("stale_linkage: E2 Fork world authority changed");
+    }
+    let retained_target = registry_authority.retained_target.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("E2 Fork authority omitted the exact retained source target")
+    })?;
+    let source_participant_id = retained_target.participant_id.as_str();
+    if retained_target.participant_id != source_participant_id
+        || retained_target.backend_id != request.target_backend_id
+    {
+        anyhow::bail!("stale_linkage: E2 Fork retained-source identity changed");
+    }
+    let source_cap = match &retained_target.policy_cap_compatibility {
+        ResolvedPolicyCommitmentCompatibilityV1::Compatible { cap } => cap.clone(),
+        ResolvedPolicyCommitmentCompatibilityV1::UnsupportedLegacyState {
+            retained_participant_id,
+            reason,
+        } => {
+            anyhow::bail!(
+                "unsupported_legacy_state: retained worker {} has no authentic immutable policy cap ({reason:?})",
+                retained_participant_id
+            )
+        }
+    };
+
+    let mut policy_request = request.clone();
+    policy_request.dispatch_policy_narrowing = fork_patch.clone();
+    let e2_policy = resolve_e2_dispatch_policy(
+        store,
+        &policy_request,
+        workspace_root,
+        transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerFork {
+            source_participant_id: source_participant_id.to_string(),
+        },
+    )?;
+    if e2_policy.validated_policy_snapshot.snapshot_ref()
+        != &registry_authority.current_policy_snapshot_ref
+        || e2_policy.validated_policy_snapshot.revision()
+            != registry_authority.current_policy_revision
+    {
+        anyhow::bail!("stale_linkage: E2 Fork current-parent authority changed");
+    }
+    let authenticated_policy = resolve_fork_policy_material(
+        &e2_policy.authority,
+        ForkPolicyResolutionInputV1 {
+            source_cap,
+            current_parent_and_fork_patch: e2_policy.validated_policy_snapshot.clone(),
+            request_id: request.request_id.clone(),
+            orchestration_session_id: request.orchestration_session_id.clone(),
+            caller_participant_id: request.caller_participant_id.clone(),
+            caller_backend_id: registry_authority.caller_backend_id.clone(),
+            target_backend_id: request.target_backend_id.clone(),
+            world_id: request.world_id.clone(),
+            world_generation: request.world_generation,
+            source_participant_id: source_participant_id.to_string(),
+            fork_patch,
+        },
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let canonical_validated_dispatch_request =
+        crate::execution::agent_runtime::dispatch_policy_commitment::canonical_validated_fork_request_bytes(
+            request,
+        )
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let persisted = publish_fork_commitment(
+        &e2_policy.authority,
+        ForkPolicyCommitmentInputV1 {
+            request_id: request.request_id.clone(),
+            idempotency_key: request.idempotency_key.clone(),
+            orchestration_session_id: request.orchestration_session_id.clone(),
+            caller_participant_id: request.caller_participant_id.clone(),
+            caller_backend_id: registry_authority.caller_backend_id.clone(),
+            target_backend_id: request.target_backend_id.clone(),
+            world_id: request.world_id.clone(),
+            world_generation: request.world_generation,
+            source_participant_id: source_participant_id.to_string(),
+            canonical_validated_dispatch_request,
+            parent_policy_ref: e2_policy.validated_policy_snapshot.snapshot_ref().clone(),
+            parent_policy_revision: e2_policy.validated_policy_snapshot.revision().to_string(),
+            applied_patch: e2_policy.applied_patch,
+            authenticated_policy,
+            reason: e2_policy.reason,
+        },
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let child_participant_id = persisted
+        .fork_child_participant_id()
+        .ok_or_else(|| anyhow::anyhow!("E2 Fork commitment omitted child identity"))?
+        .to_string();
+    let bootstrap_run_id = persisted
+        .fork_bootstrap_run_id()
+        .ok_or_else(|| anyhow::anyhow!("E2 Fork commitment omitted bootstrap identity"))?
+        .to_string();
+    let commitment_ref = persisted.commitment_ref();
+    let authenticated =
+        authenticate_dispatch_policy_commitment(&e2_policy.authority, &commitment_ref)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    if !matches!(
+        authenticated.subject(),
+        DispatchPolicyCommitmentSubjectV1::RetainedWorkerFork {
+            source_participant_id: stored_source,
+            child_participant_id: stored_child,
+            bootstrap_run_id: stored_bootstrap,
+        } if stored_source == source_participant_id
+            && stored_child == &child_participant_id
+            && stored_bootstrap == &bootstrap_run_id
+    ) {
+        anyhow::bail!("E2 Fork committed subject changed after durable publication");
+    }
+    let exact_policy_snapshot = ExactDispatchPolicySnapshotMaterialV1::from_exact_e1_material(
+        authenticated.policy_snapshot().clone(),
+        authenticated.policy_snapshot_bytes().to_vec(),
+        authenticated.policy_snapshot_hash().to_string(),
+    )?;
+    let e2_launch_activation = authenticated
+        .member_launch_activation_carrier()
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    Ok(PreparedForkPolicyCommitmentV1 {
+        commitment_ref,
+        child_participant_id,
+        bootstrap_run_id,
+        exact_policy_snapshot,
+        e2_launch_activation,
+    })
 }
 
 #[cfg(target_os = "linux")]
@@ -1211,12 +1688,23 @@ fn prepare_task_acceptance_submission(
     descriptor: &crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
     intended_host_principal: Option<&PlatformPrincipalV1>,
 ) -> Result<PreparedTaskAcceptanceSubmission> {
-    let resolved_policy =
-        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(workspace_root)
-            .context("resolve B1 task submission policy snapshot")?;
+    let e2_policy = resolve_e2_dispatch_policy(
+        &prepared.store,
+        &prepared.request,
+        workspace_root,
+        transport_api_types::DispatchCapabilitySubjectV1::EphemeralTask,
+    )?;
+    let resolved_policy = crate::execution::policy_snapshot::ResolvedPolicySnapshot {
+        snapshot: e2_policy.validated_policy_snapshot.snapshot().clone(),
+        snapshot_hash: e2_policy.validated_policy_snapshot.hash().to_string(),
+    };
     let registry_authority = prepared.b_owned_authority()?;
-    if resolved_policy.snapshot_hash != registry_authority.current_policy_snapshot_hash {
-        anyhow::bail!("B-owned task policy snapshot changed after authority preparation");
+    if e2_policy.validated_policy_snapshot.snapshot_ref()
+        != &registry_authority.current_policy_snapshot_ref
+        || e2_policy.validated_policy_snapshot.revision()
+            != registry_authority.current_policy_revision
+    {
+        anyhow::bail!("B-owned task policy authority changed after E2 authentication");
     }
     let caller_backend_id = registry_authority.caller_backend_id.clone();
     let request_id = prepared.request.request_id.clone();
@@ -1232,6 +1720,9 @@ fn prepare_task_acceptance_submission(
                     &prepared.request,
                     descriptor,
                 )?;
+                let mut transport_request = transport_request;
+                transport_request.exact_policy_snapshot =
+                    Some(e2_policy.exact_policy_snapshot.clone());
                 let acceptance_context =
                     world_work_acceptance_context(&allocation, &request_id, &caller_backend_id);
                 let (_, execute_request, _) =
@@ -1291,7 +1782,9 @@ fn prepare_task_acceptance_submission(
     else {
         anyhow::bail!("B1 task proposal changed submission family");
     };
-    let transport_request = member_dispatch_transport_request_from_typed(member_dispatch_request);
+    let mut transport_request =
+        member_dispatch_transport_request_from_typed(member_dispatch_request);
+    transport_request.exact_policy_snapshot = Some(e2_policy.exact_policy_snapshot.clone());
     let (client, execute_request, _) = build_agent_client_and_member_dispatch_request_for_cwd(
         &transport_request,
         workspace_root,
@@ -1311,26 +1804,69 @@ fn prepare_task_acceptance_submission(
         proposal,
         client,
         execute_request,
+        dispatch_policy_authority: e2_policy.authority,
+        applied_dispatch_policy_patch: e2_policy.applied_patch,
+        policy_snapshot: e2_policy.validated_policy_snapshot,
+        policy_snapshot_reason: e2_policy.reason,
     })
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_retained_acceptance_proposal(
+    receipt_registry: &WorldWorkReceiptRegistry,
+    request_id: &str,
+    outcome: WorldWorkProposalReservationOutcomeV1,
+) -> Result<WorldWorkAcceptanceProposalV1> {
+    let proposal = match outcome {
+        WorldWorkProposalReservationOutcomeV1::Proposed(proposal) => proposal,
+        WorldWorkProposalReservationOutcomeV1::Accepted(record) => receipt_registry
+            .inspect_world_work_proposal_for_accepted_record(&record)?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "accepted retained work omitted exact durable proposal {}",
+                    record.acceptance_record_id
+                )
+            })?,
+    };
+    if !matches!(
+        proposal.proposed_work,
+        ProposedWorldWorkIdentityV1::RetainedTurn { .. }
+    ) || proposal.request_id() != request_id
+    {
+        anyhow::bail!("accepted retained work exact proposal changed family or request identity");
+    }
+    Ok(proposal)
 }
 
 #[cfg(target_os = "linux")]
 fn prepare_retained_acceptance_submission(
     prepared: &PreparedOrchestratorWorldDispatch,
-    workspace_root: &Path,
+    _workspace_root: &Path,
 ) -> Result<PreparedRetainedAcceptanceSubmission> {
-    let resolved_policy =
-        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(workspace_root)
-            .context("resolve B1 retained submission policy snapshot")?;
+    let (initial_carrier, initial_e2_policy, initial_cap_ref) =
+        resolve_continue_e2_policy_carrier(prepared, None)?;
+    let resolved_policy = crate::execution::policy_snapshot::ResolvedPolicySnapshot {
+        snapshot: initial_e2_policy
+            .validated_policy_snapshot
+            .snapshot()
+            .clone(),
+        snapshot_hash: initial_e2_policy
+            .validated_policy_snapshot
+            .hash()
+            .to_string(),
+    };
     let registry_authority = prepared.b_owned_authority()?;
-    if resolved_policy.snapshot_hash != registry_authority.current_policy_snapshot_hash {
-        anyhow::bail!("B-owned retained policy snapshot changed after authority preparation");
+    if initial_e2_policy.validated_policy_snapshot.snapshot_ref()
+        != &registry_authority.current_policy_snapshot_ref
+        || initial_e2_policy.validated_policy_snapshot.revision()
+            != registry_authority.current_policy_revision
+    {
+        anyhow::bail!("B-owned retained policy authority changed after E2 authentication");
     }
     let caller_backend_id = registry_authority.caller_backend_id.clone();
     let request_id = prepared.request.request_id.clone();
     let mut host_transition_correlation = None;
-    let substrate_home = substrate_common::paths::substrate_home()?;
-    let trusted_root = TrustedAuthorityRoot::open(&substrate_home)
+    let trusted_root = TrustedAuthorityRoot::open(prepared.store.substrate_home())
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     let authority_layout = match trusted_root
         .directory()
@@ -1483,10 +2019,13 @@ fn prepare_retained_acceptance_submission(
                     world_work_acceptance_context(&allocation, &request_id, &caller_backend_id);
                 acceptance_context.host_transition_correlation =
                     host_transition_correlation.clone();
+                let mut allocated_carrier = initial_carrier.clone();
+                allocated_carrier.subject.message_id = acceptance_context.message_id.clone();
                 let submit_request =
-                    build_continue_world_worker_submit_request_with_acceptance_context(
+                    build_continue_world_worker_submit_request_with_authenticated_carrier(
                         prepared,
                         acceptance_context.clone(),
+                        allocated_carrier,
                     )?;
                 let message_id = acceptance_context
                     .message_id
@@ -1523,15 +2062,11 @@ fn prepare_retained_acceptance_submission(
                 })
             },
         )?;
-    let proposal = match proposal_outcome {
-        WorldWorkProposalReservationOutcomeV1::Proposed(proposal) => proposal,
-        WorldWorkProposalReservationOutcomeV1::Accepted(record) => {
-            anyhow::bail!(
-                "world work request already joined acceptance record {}; foreground observation remains owned by the original blocking call",
-                record.acceptance_record_id
-            )
-        }
-    };
+    let proposal = resolve_retained_acceptance_proposal(
+        &registry_authority.receipt_registry,
+        &request_id,
+        proposal_outcome,
+    )?;
     let WorldWorkSubmissionIdentityV1::RetainedTurn {
         canonical_member_turn_submit_request_sha256,
         ..
@@ -1547,11 +2082,29 @@ fn prepare_retained_acceptance_submission(
     if &digest != canonical_member_turn_submit_request_sha256 {
         anyhow::bail!("B1 retained proposal reconstruction conflict before transport");
     }
+    let (carrier, final_e2_policy, final_cap_ref) = resolve_continue_e2_policy_carrier(
+        prepared,
+        proposal.acceptance_context.message_id.as_deref(),
+    )?;
+    if submit_request.policy_snapshot_carrier.as_ref() != Some(&carrier)
+        || final_cap_ref != initial_cap_ref
+        || final_e2_policy.validated_policy_snapshot.bytes()
+            != initial_e2_policy.validated_policy_snapshot.bytes()
+        || final_e2_policy.validated_policy_snapshot.hash()
+            != initial_e2_policy.validated_policy_snapshot.hash()
+    {
+        anyhow::bail!("E2 retained carrier changed during B1 proposal publication");
+    }
     Ok(PreparedRetainedAcceptanceSubmission {
         receipt_registry: registry_authority.receipt_registry.clone(),
         execution_supervisor: registry_authority.execution_supervisor.clone(),
         proposal,
         submit_request,
+        dispatch_policy_authority: final_e2_policy.authority,
+        applied_dispatch_policy_patch: final_e2_policy.applied_patch,
+        policy_snapshot: final_e2_policy.validated_policy_snapshot,
+        policy_snapshot_reason: final_e2_policy.reason,
+        retained_worker_cap_ref: final_cap_ref,
     })
 }
 
@@ -1593,7 +2146,15 @@ async fn run_world_task_with_started_task_run_id_tx(
         &descriptor,
         intended_host_principal,
     )?;
-    let stream_result = execute_run_world_task_stream(
+    let e2_publication = E2AcceptedWorkPublicationContextV1 {
+        authority: acceptance_submission.dispatch_policy_authority,
+        idempotency_key: prepared.request.idempotency_key.clone(),
+        applied_patch: acceptance_submission.applied_dispatch_policy_patch,
+        policy_snapshot: acceptance_submission.policy_snapshot,
+        reason: acceptance_submission.policy_snapshot_reason,
+        retained_worker_cap_ref: None,
+    };
+    let stream_result = execute_run_world_task_stream_with_policy(
         &acceptance_submission.receipt_registry,
         &acceptance_submission.execution_supervisor,
         acceptance_submission.client,
@@ -1601,6 +2162,7 @@ async fn run_world_task_with_started_task_run_id_tx(
         &acceptance_submission.proposal,
         &prepared.request.orchestration_session_id,
         started_task_run_id_tx,
+        Some(e2_publication),
     )
     .await?;
     let state = world_task_terminal_state_from_exit_code(stream_result.exit_code);
@@ -1780,25 +2342,106 @@ pub(crate) fn prepare_authority_bound_spawn_world_worker(
     let current_policy_ref = exact.authority.current_policy_ref.clone().ok_or_else(|| {
         anyhow::anyhow!("retained admission authority omits current policy reference")
     })?;
+    let canonical_spawn_request = CanonicalValidatedSpawnRequestV1 {
+        schema_version: 1,
+        request_id: request.request_id.clone(),
+        idempotency_key: request.idempotency_key.clone(),
+        orchestration_session_id: request.orchestration_session_id.clone(),
+        caller_participant_id: request.caller_participant_id.clone(),
+        action: request.action.as_str().to_string(),
+        mode: request.mode.as_str().to_string(),
+        target_backend_id: request.target_backend_id.clone(),
+        task_run_id: request.task_run_id.clone(),
+        target_participant_id: request.target_participant_id.clone(),
+        world_id: request.world_id.clone(),
+        world_generation: request.world_generation,
+        payload: CanonicalWorkerSpawnPayloadV1 {
+            prompt: prompt.clone(),
+        },
+    };
+    let (effective_policy_snapshot, effective_policy_snapshot_hash) = match request
+        .dispatch_policy_narrowing
+        .as_ref()
+    {
+        Some(patch) => {
+            let parent_policy_ref: transport_api_types::PolicyRefV1 = serde_json::from_value(
+                serde_json::to_value(&current_policy_ref)
+                    .context("serialize authenticated Spawn parent policy reference")?,
+            )
+            .context("translate authenticated Spawn parent policy reference")?;
+            let authenticated = crate::execution::policy_snapshot::AuthenticatedDispatchPolicyNarrowingContextV1::from_resolved_authority(
+                    crate::execution::policy_snapshot::ResolvedDispatchPolicyNarrowingAuthorityV1 {
+                        request_id: request.request_id.clone(),
+                        orchestration_session_id: request.orchestration_session_id.clone(),
+                        caller_participant_id: request.caller_participant_id.clone(),
+                        target_backend_id: request.target_backend_id.clone(),
+                        target_world: transport_api_types::WorldBindingRefV1 {
+                            world_id: request.world_id.clone(),
+                            world_generation: request.world_generation,
+                        },
+                        applies_to:
+                            transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerSpawn,
+                        parent_policy_ref,
+                        parent_policy: exact.current_policy.clone(),
+                        parent_allows_capability_narrowing: context
+                            .base_policy
+                            .agents_world_dispatch_allow_capability_narrowing,
+                    },
+                )
+                .context("authenticate Spawn policy-narrowing authority")?;
+            let resolved =
+                crate::execution::policy_snapshot::resolve_dispatch_narrowed_policy_snapshot(
+                    &context.base_policy,
+                    patch,
+                    &authenticated,
+                    &workspace_root,
+                )
+                .context("resolve exact E1 Spawn policy snapshot")?;
+            (resolved.snapshot, resolved.snapshot_hash)
+        }
+        None => {
+            let resolved =
+                crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&workspace_root)
+                    .context("resolve exact E1 Spawn parent policy snapshot")?;
+            if resolved.snapshot_hash != exact.current_policy.canonical_policy_snapshot_sha256 {
+                anyhow::bail!(
+                        "stale_linkage: Spawn parent policy snapshot does not match current host authority"
+                    );
+            }
+            (resolved.snapshot, resolved.snapshot_hash)
+        }
+    };
+    let effective_policy_snapshot_bytes = serde_json::to_vec(&effective_policy_snapshot)
+        .context("serialize exact E1 Spawn PolicySnapshotV3")?;
+    let validated_policy_snapshot = validate_policy_snapshot_material(
+        &effective_policy_snapshot,
+        &effective_policy_snapshot_bytes,
+        &current_policy_ref,
+        &effective_policy_snapshot_hash,
+        &exact.current_policy.policy_revision,
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let applied_patch =
+        applied_dispatch_policy_patch_identity(request.dispatch_policy_narrowing.as_ref())
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    initialize_dispatch_policy_commitment_registry(&authority)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let reservation = reserve_fresh_spawn(
+        &authority,
+        FreshSpawnReservationInputV1 {
+            spawn_request: canonical_spawn_request.clone(),
+            caller_backend_id: exact.caller.descriptor.backend_id.clone(),
+            parent_policy_ref: current_policy_ref.clone(),
+            parent_policy_revision: exact.current_policy.policy_revision.clone(),
+            applied_patch,
+            policy_snapshot: validated_policy_snapshot.clone(),
+            reason: dispatch_policy_narrowing_reason(request.dispatch_policy_narrowing.as_ref()),
+        },
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     let mut admission_plan = RetainedWorkerAdmissionPlanV1 {
         issuer_request_id: request.request_id.clone(),
-        spawn_request: CanonicalValidatedSpawnRequestV1 {
-            schema_version: 1,
-            request_id: request.request_id.clone(),
-            idempotency_key: request.idempotency_key.clone(),
-            orchestration_session_id: request.orchestration_session_id.clone(),
-            caller_participant_id: request.caller_participant_id.clone(),
-            action: request.action.as_str().to_string(),
-            mode: request.mode.as_str().to_string(),
-            target_backend_id: request.target_backend_id.clone(),
-            task_run_id: request.task_run_id.clone(),
-            target_participant_id: request.target_participant_id.clone(),
-            world_id: request.world_id.clone(),
-            world_generation: request.world_generation,
-            payload: CanonicalWorkerSpawnPayloadV1 {
-                prompt: prompt.clone(),
-            },
-        },
+        spawn_request: canonical_spawn_request.clone(),
         exact_authority: CanonicalExactCurrentAuthorityV1::from_resolved(&exact),
         descriptor_and_runtime_plan: CanonicalDescriptorAndRuntimePlanV1 {
             schema_version: 1,
@@ -1841,23 +2484,68 @@ pub(crate) fn prepare_authority_bound_spawn_world_worker(
                 .into(),
         },
     };
+    let dispatch_policy_reservation_proof = authenticate_fresh_spawn_reservation(
+        &authority,
+        &reservation.reservation_ref,
+        &canonical_spawn_request,
+        &admission_plan,
+        &validated_policy_snapshot,
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     let runtime = RetainedWorkerRuntime;
     let reserved = runtime
-        .reserve_admission_slot(&authority, &admission_plan)
+        .reserve_admission_slot(
+            &authority,
+            &admission_plan,
+            Some(&dispatch_policy_reservation_proof),
+        )
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     if reserved.joined {
         admission_plan = runtime
-            .canonical_plan_for_existing_admission(&authority, &admission_plan, &reserved.record)
+            .canonical_plan_for_existing_admission(
+                &authority,
+                &admission_plan,
+                &reserved.record,
+                Some(&dispatch_policy_reservation_proof),
+            )
             .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     }
     let registered = runtime
-        .register_admitted_worker(&authority, &admission_plan)
+        .register_admitted_worker(
+            &authority,
+            &admission_plan,
+            Some(&dispatch_policy_reservation_proof),
+        )
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let dispatch_policy_commitment = publish_fresh_spawn_commitment(
+        &authority,
+        &dispatch_policy_reservation_proof,
+        &registered.record,
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let authenticated_dispatch_policy = authenticate_dispatch_policy_commitment(
+        &authority,
+        &dispatch_policy_commitment.commitment_ref(),
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let exact_policy_snapshot = ExactDispatchPolicySnapshotMaterialV1::from_exact_e1_material(
+        authenticated_dispatch_policy.policy_snapshot().clone(),
+        authenticated_dispatch_policy
+            .policy_snapshot_bytes()
+            .to_vec(),
+        authenticated_dispatch_policy
+            .policy_snapshot_hash()
+            .to_string(),
+    )?;
+    let e2_launch_activation = authenticated_dispatch_policy
+        .member_launch_activation_carrier()
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     let claim = runtime
         .claim_admission_transport(
             &authority,
             &admission_plan,
             &registered.record.retained_participant_id,
+            Some(&dispatch_policy_reservation_proof),
         )
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     if !claim.newly_claimed {
@@ -1884,7 +2572,12 @@ pub(crate) fn prepare_authority_bound_spawn_world_worker(
         anyhow::bail!(message);
     }
     let launch_authority_proof = runtime
-        .launch_authority_proof_for_claim(&authority, &admission_plan, &claim)
+        .launch_authority_proof_for_claim(
+            &authority,
+            &admission_plan,
+            &claim,
+            Some(&dispatch_policy_reservation_proof),
+        )
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
 
     Ok(PreparedSpawnWorldWorkerBootstrap {
@@ -1893,7 +2586,10 @@ pub(crate) fn prepare_authority_bound_spawn_world_worker(
         workspace_root,
         authority,
         admission_plan,
+        dispatch_policy_reservation_proof,
+        exact_policy_snapshot,
         launch_authority_proof,
+        e2_launch_activation,
         _concurrency_guard: None,
     })
 }
@@ -1902,22 +2598,31 @@ pub(crate) fn prepare_authority_bound_spawn_world_worker(
 pub(crate) fn prepare_fork_world_worker_bootstrap(
     prepared: PreparedOrchestratorWorldDispatch,
 ) -> Result<PreparedForkWorldWorkerBootstrap> {
-    let workspace_root = PathBuf::from(&prepared.session.workspace_root);
+    let workspace_root = match prepared.b_owned_authority.as_ref() {
+        Some(authority) => PathBuf::from(&authority.workspace_root),
+        None => PathBuf::from(&prepared.session.workspace_root),
+    };
     let context = resolve_internal_dispatch_context(&workspace_root)?;
     enforce_world_dispatch_steering_policy(&prepared, &context.base_policy)?;
-    let resolved = prepared
-        .store
-        .resolve_internal_fork_world_dispatch_target(
-            &prepared.request.orchestration_session_id,
-            &prepared.request.caller_participant_id,
+    let legacy_resolved = if prepared.b_owned_authority.is_none() {
+        Some(
             prepared
-                .request
-                .target_participant_id
-                .as_deref()
-                .expect("validated fork request must include target_participant_id"),
-            &prepared.request.target_backend_id,
+                .store
+                .resolve_internal_fork_world_dispatch_target(
+                    &prepared.request.orchestration_session_id,
+                    &prepared.request.caller_participant_id,
+                    prepared
+                        .request
+                        .target_participant_id
+                        .as_deref()
+                        .expect("validated fork request must include target_participant_id"),
+                    &prepared.request.target_backend_id,
+                )
+                .map_err(map_fork_world_dispatch_resolution_error)?,
         )
-        .map_err(map_fork_world_dispatch_resolution_error)?;
+    } else {
+        None
+    };
     let contract = resolve_world_dispatch_contract(
         &workspace_root,
         &context,
@@ -1933,11 +2638,64 @@ pub(crate) fn prepare_fork_world_worker_bootstrap(
     })?;
     let concurrency_guard =
         acquire_world_dispatch_concurrency_guard(&prepared, &context.base_policy)?;
+    let (source_participant_id, orchestrator_participant_id, legacy_resolved, policy_commitment) =
+        match prepared.b_owned_authority.as_ref() {
+            Some(registry_authority) => {
+                let source_participant_id = registry_authority
+                    .retained_target
+                    .as_ref()
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("E2 Fork authority omitted retained source target")
+                    })?
+                    .participant_id
+                    .clone();
+                let orchestrator_participant_id = registry_authority.caller_participant_id.clone();
+                let policy_commitment = prepare_fork_policy_commitment(
+                    &prepared.store,
+                    &prepared.request,
+                    &workspace_root,
+                    registry_authority,
+                    prepared.request.dispatch_policy_narrowing.clone(),
+                )?;
+                (
+                    source_participant_id,
+                    orchestrator_participant_id,
+                    None,
+                    Some(policy_commitment),
+                )
+            }
+            None => {
+                let resolved = legacy_resolved
+                    .expect("legacy Fork target resolves before compatibility runtime preparation");
+                let source_participant_id =
+                    resolved.source_participant.participant_id().to_string();
+                let orchestrator_participant_id = resolved
+                    .source_participant
+                    .handle
+                    .orchestrator_participant_id
+                    .clone()
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "fork child launch requires source participant {} to retain orchestrator_participant_id",
+                            source_participant_id
+                        )
+                    })?;
+                (
+                    source_participant_id,
+                    orchestrator_participant_id,
+                    Some(resolved),
+                    None,
+                )
+            }
+        };
 
     Ok(PreparedForkWorldWorkerBootstrap {
         request: prepared.request,
         descriptor,
-        resolved,
+        source_participant_id,
+        orchestrator_participant_id,
+        legacy_resolved,
+        policy_commitment,
         _concurrency_guard: concurrency_guard,
     })
 }
@@ -1965,16 +2723,24 @@ pub(crate) async fn spawn_prepared_world_worker(
         workspace_root,
         authority,
         admission_plan,
+        dispatch_policy_reservation_proof,
+        exact_policy_snapshot,
         launch_authority_proof,
+        e2_launch_activation,
         _concurrency_guard,
     } = prepared;
-    let transport_request =
-        build_spawn_world_worker_transport_request(&request, &descriptor, &launch_authority_proof)?;
+    let transport_request = build_spawn_world_worker_transport_request(
+        &request,
+        &descriptor,
+        &launch_authority_proof,
+        e2_launch_activation,
+        exact_policy_snapshot,
+    )?;
     let receipt = execute_spawn_world_worker_stream(
         &workspace_root,
         &transport_request,
         &request,
-        Some((authority, admission_plan)),
+        Some((authority, admission_plan, dispatch_policy_reservation_proof)),
         intended_host_principal,
     )
     .await?;
@@ -2018,10 +2784,7 @@ async fn continue_world_worker(
     let _fork_command_bootstrap_guard =
         acquire_continue_world_worker_fork_command_bootstrap_guard(&prepared, &base_policy)?;
 
-    let (submit_request, stream_result) = if matches!(
-        prepared.request.payload,
-        WorldDispatchPayloadV1::WorkerContinueForkCommand(_)
-    ) {
+    let (submit_request, stream_result) = if retained_turn_uses_compatibility_transport(&prepared) {
         let submit_request = build_continue_world_worker_submit_request(&prepared)?;
         let stream_result = execute_continue_world_worker_stream_for_turn_kind(
             &submit_request,
@@ -2033,16 +2796,26 @@ async fn continue_world_worker(
     } else {
         let acceptance_submission =
             prepare_retained_acceptance_submission(&prepared, &workspace_root)?;
-        let stream_result = execute_accepted_continue_world_worker_stream_for_turn_kind(
-            &prepared.store,
-            &acceptance_submission.submit_request,
-            &base_policy,
-            turn_kind,
-            &acceptance_submission.receipt_registry,
-            &acceptance_submission.execution_supervisor,
-            &acceptance_submission.proposal,
-        )
-        .await?;
+        let e2_publication = E2AcceptedWorkPublicationContextV1 {
+            authority: acceptance_submission.dispatch_policy_authority,
+            idempotency_key: prepared.request.idempotency_key.clone(),
+            applied_patch: acceptance_submission.applied_dispatch_policy_patch,
+            policy_snapshot: acceptance_submission.policy_snapshot,
+            reason: acceptance_submission.policy_snapshot_reason,
+            retained_worker_cap_ref: Some(acceptance_submission.retained_worker_cap_ref),
+        };
+        let stream_result =
+            execute_accepted_continue_world_worker_stream_for_turn_kind_with_policy(
+                &prepared.store,
+                &acceptance_submission.submit_request,
+                &base_policy,
+                turn_kind,
+                &acceptance_submission.receipt_registry,
+                &acceptance_submission.execution_supervisor,
+                &acceptance_submission.proposal,
+                Some(e2_publication),
+            )
+            .await?;
         (acceptance_submission.submit_request, stream_result)
     };
     close_continue_world_worker_approval_after_delivery(&prepared, approval_closeout.as_ref())?;
@@ -2123,6 +2896,13 @@ async fn continue_world_worker(
 }
 
 #[cfg(target_os = "linux")]
+fn retained_turn_uses_compatibility_transport(
+    prepared: &PreparedOrchestratorWorldDispatch,
+) -> bool {
+    prepared.b_owned_authority.is_none()
+}
+
+#[cfg(target_os = "linux")]
 async fn continue_world_worker_fork_command_bootstrap_after_delivery(
     prepared: &PreparedOrchestratorWorldDispatch,
     intended_host_principal: Option<&PlatformPrincipalV1>,
@@ -2135,6 +2915,67 @@ async fn continue_world_worker_fork_command_bootstrap_after_delivery(
         .target_participant_id
         .as_deref()
         .expect("validated continue request must include target_participant_id");
+    let workspace_root = match prepared.b_owned_authority.as_ref() {
+        Some(authority) => PathBuf::from(&authority.workspace_root),
+        None => PathBuf::from(&prepared.session.workspace_root),
+    };
+    if let Some(registry_authority) = prepared.b_owned_authority.as_ref() {
+        let context = resolve_internal_dispatch_context(&workspace_root)?;
+        let contract = resolve_world_dispatch_contract(
+            &workspace_root,
+            &context,
+            &prepared.request,
+            "continue_world_worker fork_command bootstrap",
+        )?;
+        let descriptor = materialize_runtime_descriptor(&contract).map_err(|err| {
+            anyhow::anyhow!(
+                "runtime_start_failed: selected runtime '{}' is not runtime-realizable: {}",
+                contract.agent_id,
+                err.reason
+            )
+        })?;
+        let source_participant_id = registry_authority
+            .retained_target
+            .as_ref()
+            .ok_or_else(|| {
+                anyhow::anyhow!("E2 continue-fork authority omitted retained source target")
+            })?
+            .participant_id
+            .clone();
+        let policy_commitment = prepare_fork_policy_commitment(
+            &prepared.store,
+            &prepared.request,
+            &workspace_root,
+            registry_authority,
+            None,
+        )?;
+        let transport_request = build_continue_world_worker_fork_command_transport_request(
+            &prepared.request,
+            &source_participant_id,
+            None,
+            &descriptor,
+            Some(&policy_commitment),
+        )?;
+        let receipt = execute_spawn_world_worker_stream(
+            &workspace_root,
+            &transport_request,
+            &prepared.request,
+            None,
+            intended_host_principal,
+        )
+        .await
+        .with_context(|| {
+            format_continue_world_worker_fork_command_bootstrap_failure(
+                &source_participant_id,
+                "retained E2 child bootstrap failed before authoritative registration",
+            )
+        })?;
+        return Ok(Some(ContinueWorldWorkerForkBootstrapOutcome {
+            source_participant_id,
+            child_participant_id: receipt.participant_id,
+        }));
+    }
+
     let resolved = prepared
         .store
         .resolve_internal_fork_world_dispatch_target(
@@ -2152,7 +2993,6 @@ async fn continue_world_worker_fork_command_bootstrap_after_delivery(
                 )
             )
         })?;
-    let workspace_root = PathBuf::from(&prepared.session.workspace_root);
     let context = resolve_internal_dispatch_context(&workspace_root)?;
     let contract = resolve_world_dispatch_contract(
         &workspace_root,
@@ -2169,8 +3009,14 @@ async fn continue_world_worker_fork_command_bootstrap_after_delivery(
     })?;
     let transport_request = build_continue_world_worker_fork_command_transport_request(
         &prepared.request,
-        &resolved.source_participant,
+        resolved.source_participant.participant_id(),
+        resolved
+            .source_participant
+            .handle
+            .orchestrator_participant_id
+            .as_deref(),
         &descriptor,
+        None,
     )?;
     let receipt = execute_spawn_world_worker_stream(
         &workspace_root,
@@ -2326,10 +3172,6 @@ fn acquire_continue_world_worker_fork_command_bootstrap_guard(
         return Ok(None);
     }
 
-    let live_retained_worker_count = prepared.store.count_authoritative_live_retained_workers(
-        &prepared.request.orchestration_session_id,
-        prepared.caller_participant.participant_id(),
-    )?;
     let mut fork_request = prepared.request.clone();
     fork_request.action = WorldDispatchActionV1::ForkWorldWorker;
 
@@ -2337,13 +3179,8 @@ fn acquire_continue_world_worker_fork_command_bootstrap_guard(
         &PreparedOrchestratorWorldDispatch {
             store: prepared.store.clone(),
             request: fork_request,
-            b_owned_authority: None,
-            compatibility: Some(CompatibilityPreparedOrchestratorWorldDispatch {
-                session: prepared.session.clone(),
-                caller_participant: prepared.caller_participant.clone(),
-                target_participant: prepared.target_participant.clone(),
-                live_retained_worker_count,
-            }),
+            b_owned_authority: prepared.b_owned_authority.clone(),
+            compatibility: prepared.compatibility.clone(),
         },
         base_policy,
     )
@@ -3490,17 +4327,48 @@ fn map_fork_world_dispatch_resolution_error(err: anyhow::Error) -> anyhow::Error
 fn resolve_continue_world_dispatch_target_for_routing(
     prepared: PreparedOrchestratorWorldDispatch,
 ) -> Result<PreparedOrchestratorWorldDispatch> {
+    if let Some(authority) = prepared.b_owned_authority.as_ref() {
+        if authority.retained_target.is_none() {
+            anyhow::bail!(
+                "dispatch_authority_incomplete: activated E2 Continue omitted exact retained target"
+            );
+        }
+        return Ok(prepared);
+    }
     if !matches!(
         prepared.request.payload,
         WorldDispatchPayloadV1::WorkerContinueForkCommand(_)
     ) {
-        let authority = prepared.b_owned_authority()?;
-        if authority.retained_target.is_none() {
-            anyhow::bail!(
-                "dispatch_authority_incomplete: ordinary continue omitted exact retained target"
-            );
-        }
-        return Ok(prepared);
+        let target_participant_id = prepared
+            .request
+            .target_participant_id
+            .as_deref()
+            .expect("validated continue request must include target_participant_id");
+        let resolved = prepared
+            .store
+            .resolve_internal_continue_world_dispatch_target(
+                &prepared.request.orchestration_session_id,
+                &prepared.request.caller_participant_id,
+                target_participant_id,
+                &prepared.request.target_backend_id,
+            )
+            .map_err(map_continue_world_dispatch_resolution_error)?;
+        let compatibility = prepared.compatibility.ok_or_else(|| {
+            anyhow::anyhow!(
+                "dispatch_authority_incomplete: ordinary Continue compatibility preparation is absent"
+            )
+        })?;
+        return Ok(PreparedOrchestratorWorldDispatch {
+            store: prepared.store,
+            request: prepared.request,
+            b_owned_authority: None,
+            compatibility: Some(CompatibilityPreparedOrchestratorWorldDispatch {
+                session: resolved.session,
+                caller_participant: resolved.caller_participant,
+                target_participant: Some(resolved.target_participant),
+                live_retained_worker_count: compatibility.live_retained_worker_count,
+            }),
+        });
     }
     if prepared.target_participant.is_some() {
         return Ok(prepared);
@@ -3520,6 +4388,69 @@ fn resolve_continue_world_dispatch_target_for_routing(
             &prepared.request.target_backend_id,
         )
         .map_err(map_fork_world_dispatch_resolution_error)?;
+    let trusted_root = TrustedAuthorityRoot::open(prepared.store.substrate_home())
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let e2_authority_state_present = match trusted_root
+        .directory()
+        .entry_kind("authority-v1")
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?
+    {
+        None => false,
+        Some(EntryKind::Directory) => trusted_root
+            .directory()
+            .open_directory("authority-v1")
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?
+            .entry_kind("state-root-v1.json")
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?
+            .is_some(),
+        Some(_) => true,
+    };
+    let b_owned_authority = if !e2_authority_state_present
+        && prepared.request.dispatch_policy_narrowing.is_none()
+    {
+        None
+    } else {
+        let commitment_authority = HostSessionAuthority::from_trusted_root(trusted_root)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        match commitment_authority
+            .resolve_current_exact(&prepared.request.orchestration_session_id, None)
+        {
+            Ok(_) => Some(
+                prepared
+                    .store
+                    .resolve_hsa_retained_continue_translation_authority(
+                        &prepared.request.orchestration_session_id,
+                        &prepared.request.caller_participant_id,
+                        target_participant_id,
+                    )?
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "stale_linkage: activated E2 Continue authority disappeared during fork-command target resolution"
+                        )
+                    })?,
+            ),
+            Err(resolve_error) => {
+                use crate::execution::agent_runtime::host_session_authority::store::BootstrapClassificationV1;
+
+                match commitment_authority.classify() {
+                    BootstrapClassificationV1::FreshAbsent
+                    | BootstrapClassificationV1::UnsupportedLegacyState => {
+                        anyhow::bail!(
+                            "unsupported_legacy_state: retained Continue has no exact HSA and immutable-cap authority"
+                        )
+                    }
+                    BootstrapClassificationV1::InitializationPending => {
+                        anyhow::bail!("retained Continue authority initialization is incomplete")
+                    }
+                    BootstrapClassificationV1::CorruptOrUnsupported
+                    | BootstrapClassificationV1::ValidExisting => {
+                        return Err(anyhow::anyhow!(resolve_error.to_string()))
+                            .context("resolve activated E2 Continue fork-command authority")
+                    }
+                }
+            }
+        }
+    };
     let compatibility = prepared.compatibility.ok_or_else(|| {
         anyhow::anyhow!(
             "dispatch_authority_incomplete: continue-fork compatibility preparation is absent"
@@ -3529,7 +4460,7 @@ fn resolve_continue_world_dispatch_target_for_routing(
     Ok(PreparedOrchestratorWorldDispatch {
         store: prepared.store,
         request: prepared.request,
-        b_owned_authority: None,
+        b_owned_authority,
         compatibility: Some(CompatibilityPreparedOrchestratorWorldDispatch {
             session: resolved.session,
             caller_participant: resolved.caller_participant,
@@ -3578,18 +4509,30 @@ fn acquire_world_dispatch_concurrency_guard(
         }
         WorldDispatchActionV1::SpawnWorldWorker | WorldDispatchActionV1::ForkWorldWorker => {
             let cap = steering_policy.max_live_retained_workers as usize;
+            let live_retained_worker_count = prepared
+                .compatibility
+                .as_ref()
+                .map(|compatibility| compatibility.live_retained_worker_count)
+                .unwrap_or_else(|| {
+                    usize::from(
+                        prepared
+                            .b_owned_authority
+                            .as_ref()
+                            .is_some_and(|authority| authority.retained_target.is_some()),
+                    )
+                });
             let reserved = tracker
                 .retained_bootstrap_by_session
                 .get(&session_id)
                 .copied()
                 .unwrap_or(0);
-            if prepared.live_retained_worker_count.saturating_add(reserved) >= cap {
+            if live_retained_worker_count.saturating_add(reserved) >= cap {
                 return Err(steering_policy_denial(
                     WorldDispatchSteeringDenialV1::WorkerConcurrencyCapExceeded,
                     format!(
                         "effective policy allows at most {cap} live retained workers for orchestration session {}; authoritative live count is {}",
                         prepared.request.orchestration_session_id,
-                        prepared.live_retained_worker_count
+                        live_retained_worker_count
                     ),
                 ));
             }
@@ -3858,7 +4801,9 @@ fn member_dispatch_transport_request_from_typed(
         initial_prompt: request.initial_prompt.clone(),
         backend_kind: request.resolved_runtime.backend_kind,
         binary_path: request.resolved_runtime.binary_path.clone(),
-        retained_worker_launch_authority: None,
+        retained_worker_launch_authority: request.retained_worker_launch_authority.clone(),
+        e2_launch_activation: request.e2_launch_activation.clone(),
+        exact_policy_snapshot: None,
     }
 }
 
@@ -4160,6 +5105,8 @@ fn build_run_world_task_transport_request(
         backend_kind: member_runtime_backend_kind(descriptor.backend_kind),
         binary_path: descriptor.binary_path.display().to_string(),
         retained_worker_launch_authority: None,
+        e2_launch_activation: None,
+        exact_policy_snapshot: None,
     })
 }
 
@@ -4168,6 +5115,8 @@ fn build_spawn_world_worker_transport_request(
     request: &ValidatedWorldDispatchRequestV1,
     descriptor: &crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
     launch_authority_proof: &RetainedWorkerLaunchAuthorityProofV1,
+    e2_launch_activation: transport_api_types::E2MemberLaunchActivationCarrierV1,
+    exact_policy_snapshot: ExactDispatchPolicySnapshotMaterialV1,
 ) -> Result<MemberDispatchTransportRequest> {
     let WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 { prompt }) = &request.payload
     else {
@@ -4207,14 +5156,18 @@ fn build_spawn_world_worker_transport_request(
         backend_kind: member_runtime_backend_kind(descriptor.backend_kind),
         binary_path: descriptor.binary_path.display().to_string(),
         retained_worker_launch_authority: Some(launch_authority_proof.clone()),
+        e2_launch_activation: Some(e2_launch_activation),
+        exact_policy_snapshot: Some(exact_policy_snapshot),
     })
 }
 
 #[cfg(target_os = "linux")]
 fn build_fork_world_worker_transport_request(
     request: &ValidatedWorldDispatchRequestV1,
-    source_participant: &AgentRuntimeParticipantRecord,
+    source_participant_id: &str,
+    legacy_orchestrator_participant_id: Option<&str>,
     descriptor: &crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
+    policy_commitment: Option<&PreparedForkPolicyCommitmentV1>,
 ) -> Result<MemberDispatchTransportRequest> {
     let WorldDispatchPayloadV1::WorkerFork(WorkerForkPayloadV1 { prompt, .. }) = &request.payload
     else {
@@ -4222,40 +5175,60 @@ fn build_fork_world_worker_transport_request(
             "invalid_dispatch_payload: action fork_world_worker requires matching typed payload"
         );
     };
-    let orchestrator_participant_id = source_participant
-        .handle
-        .orchestrator_participant_id
-        .clone()
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "invalid_dispatch_target: retained worker {} omitted orchestrator_participant_id",
-                source_participant.participant_id()
-            )
-        })?;
+    let orchestrator_participant_id = match policy_commitment {
+        Some(_) => request.caller_participant_id.clone(),
+        None => legacy_orchestrator_participant_id
+            .map(str::to_owned)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "invalid_dispatch_target: retained worker {} omitted orchestrator_participant_id",
+                    source_participant_id
+                )
+            })?,
+    };
+    let (participant_id, run_id, exact_policy_snapshot, e2_launch_activation) =
+        match policy_commitment {
+            Some(policy_commitment) => (
+                policy_commitment.child_participant_id.clone(),
+                policy_commitment.bootstrap_run_id.clone(),
+                Some(policy_commitment.exact_policy_snapshot.clone()),
+                Some(policy_commitment.e2_launch_activation.clone()),
+            ),
+            None => (
+                format!("ash_{}", Uuid::now_v7()),
+                request.request_id.clone(),
+                None,
+                None,
+            ),
+        };
 
     Ok(MemberDispatchTransportRequest {
         orchestration_session_id: request.orchestration_session_id.clone(),
-        participant_id: format!("ash_{}", Uuid::now_v7()),
+        participant_id,
         orchestrator_participant_id,
-        parent_participant_id: Some(source_participant.participant_id().to_string()),
+        parent_participant_id: Some(source_participant_id.to_string()),
         resumed_from_participant_id: None,
         backend_id: descriptor.backend_id.clone(),
         protocol: descriptor.protocol.clone(),
-        run_id: request.request_id.clone(),
+        run_id,
         world_id: request.world_id.clone(),
         world_generation: request.world_generation,
         initial_prompt: Some(prompt.clone()),
         backend_kind: member_runtime_backend_kind(descriptor.backend_kind),
         binary_path: descriptor.binary_path.display().to_string(),
         retained_worker_launch_authority: None,
+        e2_launch_activation,
+        exact_policy_snapshot,
     })
 }
 
 #[cfg(target_os = "linux")]
 fn build_continue_world_worker_fork_command_transport_request(
     request: &ValidatedWorldDispatchRequestV1,
-    source_participant: &AgentRuntimeParticipantRecord,
+    source_participant_id: &str,
+    legacy_orchestrator_participant_id: Option<&str>,
     descriptor: &crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
+    policy_commitment: Option<&PreparedForkPolicyCommitmentV1>,
 ) -> Result<MemberDispatchTransportRequest> {
     let WorldDispatchPayloadV1::WorkerContinueForkCommand(payload) = &request.payload else {
         anyhow::bail!(
@@ -4269,33 +5242,148 @@ fn build_continue_world_worker_fork_command_transport_request(
         fork_reason: payload.fork_reason.clone(),
         fork_strategy: payload.fork_strategy.clone(),
     });
+    fork_request.dispatch_policy_narrowing = None;
 
-    build_fork_world_worker_transport_request(&fork_request, source_participant, descriptor)
+    build_fork_world_worker_transport_request(
+        &fork_request,
+        source_participant_id,
+        legacy_orchestrator_participant_id,
+        descriptor,
+        policy_commitment,
+    )
 }
 
 #[cfg(target_os = "linux")]
-fn build_continue_world_worker_submit_request(
+fn resolve_continue_e2_policy_carrier(
     prepared: &PreparedOrchestratorWorldDispatch,
-) -> Result<transport_api_types::MemberTurnSubmitRequestV1> {
-    if let Some(authority) = prepared.b_owned_authority.as_ref() {
-        let target = authority.retained_target.as_ref().ok_or_else(|| {
-            anyhow::anyhow!(
-                "invalid_dispatch_target: ordinary continue_world_worker requires exact canonical retained target"
-            )
-        })?;
-        let prompt = render_continue_world_worker_transport_prompt(&prepared.request.payload)?;
-        return Ok(transport_api_types::MemberTurnSubmitRequestV1 {
-            schema_version: 1,
+    message_id: Option<&str>,
+) -> Result<(
+    transport_api_types::DispatchPolicySnapshotCarrierV1,
+    ResolvedE2DispatchPolicyV1,
+    crate::execution::agent_runtime::dispatch_policy_commitment::DispatchPolicyCommitmentRefV1,
+)> {
+    let authority = prepared.b_owned_authority.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("E2 Continue requires canonical retained-target authority")
+    })?;
+    let target = authority
+        .retained_target
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("E2 Continue requires exact canonical retained target"))?;
+    let cap = match &target.policy_cap_compatibility {
+        ResolvedPolicyCommitmentCompatibilityV1::Compatible { cap } => cap.clone(),
+        ResolvedPolicyCommitmentCompatibilityV1::UnsupportedLegacyState { reason, .. } => {
+            anyhow::bail!("unsupported_legacy_state: {reason:?}")
+        }
+    };
+    let workspace_root = PathBuf::from(&authority.workspace_root);
+    let e2_policy = resolve_e2_dispatch_policy(
+        &prepared.store,
+        &prepared.request,
+        &workspace_root,
+        transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerTurn {
+            retained_participant_id: target.participant_id.clone(),
+        },
+    )?;
+    if e2_policy.validated_policy_snapshot.snapshot_ref() != &authority.current_policy_snapshot_ref
+        || e2_policy.validated_policy_snapshot.revision() != authority.current_policy_revision
+    {
+        anyhow::bail!(
+            "stale_linkage: retained-turn policy authority changed during carrier construction"
+        );
+    }
+    let cap_ref = cap.commitment_ref().clone();
+    let authenticated = resolve_retained_turn_policy_material(
+        &e2_policy.authority,
+        RetainedTurnPolicyResolutionInputV1 {
+            cap,
+            current_parent_and_turn_patch: e2_policy.validated_policy_snapshot.clone(),
             orchestration_session_id: authority.orchestration_session_id.clone(),
-            participant_id: target.participant_id.clone(),
-            orchestrator_participant_id: authority.caller_participant_id.clone(),
-            backend_id: target.backend_id.clone(),
-            run_id: prepared.request.request_id.clone(),
+            caller_participant_id: authority.caller_participant_id.clone(),
+            caller_backend_id: authority.caller_backend_id.clone(),
+            target_backend_id: target.backend_id.clone(),
             world_id: authority.world_id.clone(),
             world_generation: authority.world_generation,
-            prompt,
-            acceptance_context: None,
-        });
+            retained_participant_id: target.participant_id.clone(),
+            active_run_id: prepared.request.request_id.clone(),
+            message_id: message_id.map(str::to_owned),
+            turn_patch: prepared.request.dispatch_policy_narrowing.clone(),
+        },
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    Ok((authenticated.into_carrier(), e2_policy, cap_ref))
+}
+
+#[cfg(target_os = "linux")]
+fn build_continue_world_worker_submit_request_from_authenticated_carrier(
+    prepared: &PreparedOrchestratorWorldDispatch,
+    carrier: transport_api_types::DispatchPolicySnapshotCarrierV1,
+) -> Result<transport_api_types::MemberTurnSubmitRequestV1> {
+    carrier.validate().map_err(anyhow::Error::msg)?;
+    let authority = prepared.b_owned_authority.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("authenticated E2 retained carrier requires B-owned authority")
+    })?;
+    let target = authority.retained_target.as_ref().ok_or_else(|| {
+        anyhow::anyhow!(
+            "invalid_dispatch_target: ordinary continue_world_worker requires exact canonical retained target"
+        )
+    })?;
+    let request = transport_api_types::MemberTurnSubmitRequestV1 {
+        schema_version: 1,
+        orchestration_session_id: authority.orchestration_session_id.clone(),
+        participant_id: target.participant_id.clone(),
+        orchestrator_participant_id: authority.caller_participant_id.clone(),
+        backend_id: target.backend_id.clone(),
+        run_id: prepared.request.request_id.clone(),
+        world_id: authority.world_id.clone(),
+        world_generation: authority.world_generation,
+        prompt: render_continue_world_worker_transport_prompt(&prepared.request.payload)?,
+        acceptance_context: None,
+        policy_snapshot_carrier: Some(carrier.clone()),
+    };
+    Ok(request)
+}
+
+#[cfg(target_os = "linux")]
+fn build_continue_world_worker_submit_request_with_authenticated_carrier(
+    prepared: &PreparedOrchestratorWorldDispatch,
+    acceptance_context: transport_api_types::WorldWorkAcceptanceContextV1,
+    carrier: transport_api_types::DispatchPolicySnapshotCarrierV1,
+) -> Result<transport_api_types::MemberTurnSubmitRequestV1> {
+    if carrier.subject.message_id != acceptance_context.message_id {
+        anyhow::bail!("authenticated E2 retained carrier changed B1 message identity");
+    }
+    let mut request = build_continue_world_worker_submit_request_from_authenticated_carrier(
+        prepared,
+        carrier.clone(),
+    )?;
+    request.acceptance_context = Some(acceptance_context);
+    request.validate().map_err(anyhow::Error::msg)?;
+    request
+        .validate_against_authenticated_policy_carrier(&carrier)
+        .map_err(anyhow::Error::msg)?;
+    Ok(request)
+}
+
+#[cfg(target_os = "linux")]
+fn build_continue_world_worker_submit_request_with_message(
+    prepared: &PreparedOrchestratorWorldDispatch,
+    message_id: Option<&str>,
+) -> Result<transport_api_types::MemberTurnSubmitRequestV1> {
+    if prepared.b_owned_authority.is_some() {
+        let (carrier, _, _) = resolve_continue_e2_policy_carrier(prepared, message_id)?;
+        let request = build_continue_world_worker_submit_request_from_authenticated_carrier(
+            prepared, carrier,
+        )?;
+        if message_id.is_none() {
+            let carrier = request
+                .policy_snapshot_carrier
+                .as_ref()
+                .expect("E2 request builder always installs its authenticated carrier");
+            request
+                .validate_against_authenticated_policy_carrier(carrier)
+                .map_err(anyhow::Error::msg)?;
+        }
+        return Ok(request);
     }
     let target = prepared.target_participant.as_ref().ok_or_else(|| {
         anyhow::anyhow!(
@@ -4337,7 +5425,15 @@ fn build_continue_world_worker_submit_request(
         world_generation,
         prompt,
         acceptance_context: None,
+        policy_snapshot_carrier: None,
     })
+}
+
+#[cfg(target_os = "linux")]
+fn build_continue_world_worker_submit_request(
+    prepared: &PreparedOrchestratorWorldDispatch,
+) -> Result<transport_api_types::MemberTurnSubmitRequestV1> {
+    build_continue_world_worker_submit_request_with_message(prepared, None)
 }
 
 #[cfg(target_os = "linux")]
@@ -4345,7 +5441,10 @@ fn build_continue_world_worker_submit_request_with_acceptance_context(
     prepared: &PreparedOrchestratorWorldDispatch,
     acceptance_context: transport_api_types::WorldWorkAcceptanceContextV1,
 ) -> Result<transport_api_types::MemberTurnSubmitRequestV1> {
-    let mut request = build_continue_world_worker_submit_request(prepared)?;
+    let mut request = build_continue_world_worker_submit_request_with_message(
+        prepared,
+        acceptance_context.message_id.as_deref(),
+    )?;
     request.acceptance_context = Some(acceptance_context);
     request.validate().map_err(anyhow::Error::msg)?;
     Ok(request)
@@ -4486,6 +5585,7 @@ async fn reconcile_recovered_world_work_stream(
 }
 
 #[cfg(target_os = "linux")]
+#[allow(dead_code, reason = "retained as the legacy no-policy test seam")]
 async fn execute_run_world_task_stream(
     receipt_registry: &WorldWorkReceiptRegistry,
     execution_supervisor: &WorldWorkExecutionSupervisor,
@@ -4494,6 +5594,31 @@ async fn execute_run_world_task_stream(
     acceptance_proposal: &WorldWorkAcceptanceProposalV1,
     _orchestration_session_id: &str,
     started_task_run_id_tx: Option<UnboundedSender<String>>,
+) -> Result<RunWorldTaskStreamResult> {
+    execute_run_world_task_stream_with_policy(
+        receipt_registry,
+        execution_supervisor,
+        client,
+        execute_request,
+        acceptance_proposal,
+        _orchestration_session_id,
+        started_task_run_id_tx,
+        None,
+    )
+    .await
+}
+
+#[cfg(target_os = "linux")]
+#[allow(clippy::too_many_arguments)]
+async fn execute_run_world_task_stream_with_policy(
+    receipt_registry: &WorldWorkReceiptRegistry,
+    execution_supervisor: &WorldWorkExecutionSupervisor,
+    client: transport_api_client::AgentClient,
+    execute_request: transport_api_types::ExecuteRequest,
+    acceptance_proposal: &WorldWorkAcceptanceProposalV1,
+    _orchestration_session_id: &str,
+    started_task_run_id_tx: Option<UnboundedSender<String>>,
+    e2_publication: Option<E2AcceptedWorkPublicationContextV1>,
 ) -> Result<RunWorldTaskStreamResult> {
     let receipt_registry = receipt_registry.clone();
     let execution_supervisor = execution_supervisor.clone();
@@ -4506,6 +5631,7 @@ async fn execute_run_world_task_stream(
             execute_request,
             &acceptance_proposal,
             started_task_run_id_tx,
+            e2_publication,
         )
         .await;
         if outcome.is_err() {
@@ -4529,6 +5655,28 @@ async fn execute_run_world_task_stream(
 }
 
 #[cfg(target_os = "linux")]
+fn publish_e2_accepted_work(
+    context: &E2AcceptedWorkPublicationContextV1,
+    acceptance: &WorldWorkAcceptanceRecordV1,
+    claim: &crate::execution::agent_runtime::world_work_execution_supervisor::WorldWorkExecutionClaimV1,
+) -> Result<()> {
+    publish_accepted_work_commitment(
+        &context.authority,
+        AcceptedWorkPolicyCommitmentInputV1 {
+            idempotency_key: context.idempotency_key.clone(),
+            acceptance: acceptance.clone(),
+            execution_claim: claim.clone(),
+            applied_patch: context.applied_patch.clone(),
+            policy_snapshot: context.policy_snapshot.clone(),
+            reason: context.reason.clone(),
+            retained_worker_cap_ref: context.retained_worker_cap_ref.clone(),
+        },
+    )
+    .map(|_| ())
+    .map_err(|error| anyhow::anyhow!(error.to_string()))
+}
+
+#[cfg(target_os = "linux")]
 async fn observe_run_world_task_stream(
     receipt_registry: &WorldWorkReceiptRegistry,
     execution_supervisor: &WorldWorkExecutionSupervisor,
@@ -4536,6 +5684,7 @@ async fn observe_run_world_task_stream(
     execute_request: transport_api_types::ExecuteRequest,
     acceptance_proposal: &WorldWorkAcceptanceProposalV1,
     started_task_run_id_tx: Option<UnboundedSender<String>>,
+    e2_publication: Option<E2AcceptedWorkPublicationContextV1>,
 ) -> Result<RunWorldTaskStreamResult> {
     use http_body_util::BodyExt as _;
     use substrate_common::agent_events::AgentEventKind;
@@ -4626,6 +5775,19 @@ async fn observe_run_world_task_stream(
                         let claim = observation.claim;
                         let append_outcome =
                             execution_supervisor.journal_frame(&claim, &start_frame, &line)?;
+                        if let Some(context) = e2_publication.as_ref() {
+                            let acceptance = receipt_registry
+                                .inspect_world_work_acceptance_by_id(
+                                    acceptance_proposal.authority_store_id.as_str(),
+                                    &claim.acceptance_record_id,
+                                )?
+                                .ok_or_else(|| {
+                                    anyhow::anyhow!(
+                                        "durable B1 task acceptance disappeared before E2 retry publication"
+                                    )
+                                })?;
+                            publish_e2_accepted_work(context, &acceptance, &claim)?;
+                        }
                         active_claim = Some(claim);
                         active_span_id = Some(span_id.clone());
                         if append_outcome == WorldWorkJournalAppendOutcomeV1::ExactReplay {
@@ -4643,18 +5805,31 @@ async fn observe_run_world_task_stream(
                         Some(&start_frame),
                         active_span_id.is_some(),
                         |record| {
-                            let accepted = receipt_registry
+                            let persisted_acceptance = receipt_registry
                                 .persist_world_work_acceptance_for_supervision(record)?;
-                            claimed =
-                                Some(execution_supervisor.claim_persisted_world_work(&accepted)?);
+                            claimed = Some(
+                                execution_supervisor
+                                    .claim_persisted_world_work(&persisted_acceptance)?,
+                            );
                             Ok(())
                         },
                     )?;
                     let claim = claimed.ok_or_else(|| {
                         anyhow::anyhow!("B2.1 task acceptance omitted durable supervisor claim")
                     })?;
+                    let accepted = receipt_registry
+                        .inspect_world_work_acceptance_by_id(
+                            acceptance_proposal.authority_store_id.as_str(),
+                            &claim.acceptance_record_id,
+                        )?
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("B1 task acceptance disappeared before E2 publication")
+                        })?;
                     let append_outcome =
                         execution_supervisor.journal_frame(&claim, &start_frame, &line)?;
+                    if let Some(context) = e2_publication.as_ref() {
+                        publish_e2_accepted_work(context, &accepted, &claim)?;
+                    }
                     active_claim = Some(claim);
                     if append_outcome == WorldWorkJournalAppendOutcomeV1::ExactReplay {
                         active_span_id = Some(span_id);
@@ -4743,7 +5918,11 @@ async fn execute_spawn_world_worker_stream(
     workspace_root: &Path,
     request: &MemberDispatchTransportRequest,
     dispatch_request: &ValidatedWorldDispatchRequestV1,
-    mut admission_runtime: Option<(HostSessionAuthority, RetainedWorkerAdmissionPlanV1)>,
+    mut admission_runtime: Option<(
+        HostSessionAuthority,
+        RetainedWorkerAdmissionPlanV1,
+        AuthenticatedFreshSpawnReservationProofV1,
+    )>,
     intended_host_principal: Option<&PlatformPrincipalV1>,
 ) -> Result<SpawnWorldWorkerReceipt> {
     use http_body_util::BodyExt as _;
@@ -4759,7 +5938,7 @@ async fn execute_spawn_world_worker_stream(
         ) {
             Ok(built) => built,
             Err(error) => {
-                if let Some((authority, plan)) = admission_runtime.as_ref() {
+                if let Some((authority, plan, reservation_proof)) = admission_runtime.as_ref() {
                     let interrupted_at = TimestampV1::parse(
                         chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
                     )
@@ -4769,6 +5948,7 @@ async fn execute_spawn_world_worker_stream(
                             authority,
                             plan,
                             &request.participant_id,
+                            Some(reservation_proof),
                             None,
                             interrupted_at,
                         )
@@ -4785,7 +5965,7 @@ async fn execute_spawn_world_worker_stream(
     let response = match client.execute_stream(execute_request).await {
         Ok(response) => response,
         Err(err) => {
-            if let Some((authority, plan)) = admission_runtime.as_ref() {
+            if let Some((authority, plan, reservation_proof)) = admission_runtime.as_ref() {
                 let interrupted_at = TimestampV1::parse(
                     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
                 )
@@ -4795,6 +5975,7 @@ async fn execute_spawn_world_worker_stream(
                         authority,
                         plan,
                         &request.participant_id,
+                        Some(reservation_proof),
                         None,
                         interrupted_at,
                     )
@@ -4828,7 +6009,7 @@ async fn execute_spawn_world_worker_stream(
         let frame = match frame {
             Ok(frame) => frame,
             Err(err) => {
-                if let Some((authority, plan)) = admission_runtime.as_ref() {
+                if let Some((authority, plan, reservation_proof)) = admission_runtime.as_ref() {
                     let interrupted_at = TimestampV1::parse(
                         chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
                     )
@@ -4838,6 +6019,7 @@ async fn execute_spawn_world_worker_stream(
                             authority,
                             plan,
                             &request.participant_id,
+                            Some(reservation_proof),
                             last_frame_identity.as_ref(),
                             interrupted_at,
                         )
@@ -4866,7 +6048,7 @@ async fn execute_spawn_world_worker_stream(
             let frame: ExecuteStreamFrame = match serde_json::from_slice(payload) {
                 Ok(frame) => frame,
                 Err(error) => {
-                    if let Some((authority, plan)) = admission_runtime.as_ref() {
+                    if let Some((authority, plan, reservation_proof)) = admission_runtime.as_ref() {
                         let interrupted_at = TimestampV1::parse(
                             chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
                         )
@@ -4876,6 +6058,7 @@ async fn execute_spawn_world_worker_stream(
                                 authority,
                                 plan,
                                 &request.participant_id,
+                                Some(reservation_proof),
                                 last_frame_identity.as_ref(),
                                 interrupted_at,
                             )
@@ -4904,7 +6087,9 @@ async fn execute_spawn_world_worker_stream(
                     let launch_span_id = match launch_span_id.clone() {
                         Some(launch_span_id) => launch_span_id,
                         None => {
-                            if let Some((authority, plan)) = admission_runtime.as_ref() {
+                            if let Some((authority, plan, reservation_proof)) =
+                                admission_runtime.as_ref()
+                            {
                                 let interrupted_at = TimestampV1::parse(
                                     chrono::Utc::now()
                                         .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
@@ -4915,6 +6100,7 @@ async fn execute_spawn_world_worker_stream(
                                         authority,
                                         plan,
                                         &request.participant_id,
+                                        Some(reservation_proof),
                                         last_frame_identity.as_ref(),
                                         interrupted_at,
                                     )
@@ -4933,7 +6119,9 @@ async fn execute_spawn_world_worker_stream(
                     ) {
                         Ok(receipt) => receipt,
                         Err(error) => {
-                            if let Some((authority, plan)) = admission_runtime.as_ref() {
+                            if let Some((authority, plan, reservation_proof)) =
+                                admission_runtime.as_ref()
+                            {
                                 let interrupted_at = TimestampV1::parse(
                                     chrono::Utc::now()
                                         .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
@@ -4944,6 +6132,7 @@ async fn execute_spawn_world_worker_stream(
                                         authority,
                                         plan,
                                         &request.participant_id,
+                                        Some(reservation_proof),
                                         last_frame_identity.as_ref(),
                                         interrupted_at,
                                     )
@@ -4952,7 +6141,7 @@ async fn execute_spawn_world_worker_stream(
                             return Err(error);
                         }
                     };
-                    if let Some((authority, plan)) = admission_runtime.as_ref() {
+                    if let Some((authority, plan, reservation_proof)) = admission_runtime.as_ref() {
                         let registered_at = TimestampV1::parse(
                             chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
                         )
@@ -4961,6 +6150,7 @@ async fn execute_spawn_world_worker_stream(
                             authority,
                             plan,
                             &request.participant_id,
+                            Some(reservation_proof),
                             &frame_identity,
                             &event,
                             registered_at,
@@ -4975,6 +6165,7 @@ async fn execute_spawn_world_worker_stream(
                                     authority,
                                     plan,
                                     &request.participant_id,
+                                    Some(reservation_proof),
                                     last_frame_identity.as_ref(),
                                     interrupted_at,
                                 )
@@ -4982,7 +6173,7 @@ async fn execute_spawn_world_worker_stream(
                             return Err(anyhow::anyhow!(error.to_string()));
                         }
                     }
-                    if let Some((authority, plan)) = admission_runtime.take() {
+                    if let Some((authority, plan, reservation_proof)) = admission_runtime.take() {
                         let retained_participant_id = request.participant_id.clone();
                         tokio::spawn(async move {
                             'observe: loop {
@@ -5023,6 +6214,7 @@ async fn execute_spawn_world_worker_stream(
                                                         &authority,
                                                         &plan,
                                                         &retained_participant_id,
+                                                        Some(&reservation_proof),
                                                         &frame_identity,
                                                         &event_identity,
                                                         &terminal_identity,
@@ -5070,6 +6262,7 @@ async fn execute_spawn_world_worker_stream(
                                             &authority,
                                             &plan,
                                             &retained_participant_id,
+                                            Some(&reservation_proof),
                                             last_frame_identity.as_ref(),
                                             interrupted_at,
                                         )
@@ -5105,7 +6298,7 @@ async fn execute_spawn_world_worker_stream(
                     exit,
                     ..
                 } => {
-                    if let Some((authority, plan)) = admission_runtime.as_ref() {
+                    if let Some((authority, plan, reservation_proof)) = admission_runtime.as_ref() {
                         let terminal_at = TimestampV1::parse(
                             chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
                         )
@@ -5115,6 +6308,7 @@ async fn execute_spawn_world_worker_stream(
                                 authority,
                                 plan,
                                 &request.participant_id,
+                                Some(reservation_proof),
                                 &frame_identity,
                                 &event_identity,
                                 &terminal_identity,
@@ -5133,7 +6327,7 @@ async fn execute_spawn_world_worker_stream(
                     message,
                 } => {
                     last_frame_identity = Some(frame_identity);
-                    if let Some((authority, plan)) = admission_runtime.as_ref() {
+                    if let Some((authority, plan, reservation_proof)) = admission_runtime.as_ref() {
                         let interrupted_at = TimestampV1::parse(
                             chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
                         )
@@ -5143,6 +6337,7 @@ async fn execute_spawn_world_worker_stream(
                                 authority,
                                 plan,
                                 &request.participant_id,
+                                Some(reservation_proof),
                                 last_frame_identity.as_ref(),
                                 interrupted_at,
                             )
@@ -5159,7 +6354,7 @@ async fn execute_spawn_world_worker_stream(
         }
     }
 
-    if let Some((authority, plan)) = admission_runtime.as_ref() {
+    if let Some((authority, plan, reservation_proof)) = admission_runtime.as_ref() {
         let interrupted_at = TimestampV1::parse(
             chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
         )
@@ -5169,6 +6364,7 @@ async fn execute_spawn_world_worker_stream(
                 authority,
                 plan,
                 &request.participant_id,
+                Some(reservation_proof),
                 last_frame_identity.as_ref(),
                 interrupted_at,
             )
@@ -5200,11 +6396,14 @@ async fn execute_continue_world_worker_stream_for_turn_kind(
     policy: &Policy,
     turn_kind: ContinueWorldWorkerTurnKind,
 ) -> Result<ContinueWorldWorkerStreamResult> {
-    execute_continue_world_worker_stream_for_turn_kind_impl(request, policy, turn_kind, None, None)
-        .await
+    execute_continue_world_worker_stream_for_turn_kind_impl(
+        request, policy, turn_kind, None, None, None,
+    )
+    .await
 }
 
 #[cfg(target_os = "linux")]
+#[allow(dead_code, reason = "retained as the legacy no-policy test seam")]
 async fn execute_accepted_continue_world_worker_stream_for_turn_kind(
     store: &AgentRuntimeStateStore,
     request: &transport_api_types::MemberTurnSubmitRequestV1,
@@ -5213,6 +6412,31 @@ async fn execute_accepted_continue_world_worker_stream_for_turn_kind(
     receipt_registry: &WorldWorkReceiptRegistry,
     execution_supervisor: &WorldWorkExecutionSupervisor,
     acceptance_proposal: &WorldWorkAcceptanceProposalV1,
+) -> Result<ContinueWorldWorkerStreamResult> {
+    execute_accepted_continue_world_worker_stream_for_turn_kind_with_policy(
+        store,
+        request,
+        policy,
+        turn_kind,
+        receipt_registry,
+        execution_supervisor,
+        acceptance_proposal,
+        None,
+    )
+    .await
+}
+
+#[cfg(target_os = "linux")]
+#[allow(clippy::too_many_arguments)]
+async fn execute_accepted_continue_world_worker_stream_for_turn_kind_with_policy(
+    store: &AgentRuntimeStateStore,
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
+    policy: &Policy,
+    turn_kind: ContinueWorldWorkerTurnKind,
+    receipt_registry: &WorldWorkReceiptRegistry,
+    execution_supervisor: &WorldWorkExecutionSupervisor,
+    acceptance_proposal: &WorldWorkAcceptanceProposalV1,
+    e2_publication: Option<E2AcceptedWorkPublicationContextV1>,
 ) -> Result<ContinueWorldWorkerStreamResult> {
     validate_retained_submission_against_proposal(request, acceptance_proposal)?;
     let request = request.clone();
@@ -5232,6 +6456,7 @@ async fn execute_accepted_continue_world_worker_stream_for_turn_kind(
                 &acceptance_proposal,
             )),
             Some(&store),
+            e2_publication,
         )
         .await;
         if outcome.is_err() {
@@ -5265,6 +6490,7 @@ async fn execute_continue_world_worker_stream_for_turn_kind_impl(
         &WorldWorkAcceptanceProposalV1,
     )>,
     store: Option<&AgentRuntimeStateStore>,
+    e2_publication: Option<E2AcceptedWorkPublicationContextV1>,
 ) -> Result<ContinueWorldWorkerStreamResult> {
     use http_body_util::BodyExt as _;
     use transport_api_types::ExecuteStreamFrame;
@@ -5406,9 +6632,26 @@ async fn execute_continue_world_worker_stream_for_turn_kind_impl(
                                 );
                             }
                             let claim = observation.claim;
-                            execution_supervisor.journal_frame(&claim, &start_frame, &line)?;
+                            let append_outcome =
+                                execution_supervisor.journal_frame(&claim, &start_frame, &line)?;
+                            if let Some(context) = e2_publication.as_ref() {
+                                let acceptance = receipt_registry
+                                    .inspect_world_work_acceptance_by_id(
+                                        acceptance_proposal.authority_store_id.as_str(),
+                                        &claim.acceptance_record_id,
+                                    )?
+                                    .ok_or_else(|| {
+                                        anyhow::anyhow!(
+                                            "durable B1 retained acceptance disappeared before E2 retry publication"
+                                        )
+                                    })?;
+                                publish_e2_accepted_work(context, &acceptance, &claim)?;
+                            }
                             active_claim = Some(claim);
                             active_span_id = Some(span_id.clone());
+                            if append_outcome == WorldWorkJournalAppendOutcomeV1::ExactReplay {
+                                continue;
+                            }
                             continue;
                         }
                         let mut claimed = None;
@@ -5431,8 +6674,21 @@ async fn execute_continue_world_worker_stream_for_turn_kind_impl(
                                 "B2.1 retained acceptance omitted durable supervisor claim"
                             )
                         })?;
+                        let accepted = receipt_registry
+                            .inspect_world_work_acceptance_by_id(
+                                acceptance_proposal.authority_store_id.as_str(),
+                                &claim.acceptance_record_id,
+                            )?
+                            .ok_or_else(|| {
+                                anyhow::anyhow!(
+                                    "B1 retained acceptance disappeared before E2 publication"
+                                )
+                            })?;
                         let append_outcome =
                             execution_supervisor.journal_frame(&claim, &start_frame, &line)?;
+                        if let Some(context) = e2_publication.as_ref() {
+                            publish_e2_accepted_work(context, &accepted, &claim)?;
+                        }
                         active_claim = Some(claim);
                         active_span_id = Some(span_id);
                         if append_outcome == WorldWorkJournalAppendOutcomeV1::ExactReplay {
@@ -7754,6 +9010,7 @@ mod tests {
             target_participant_id: None,
             world_id: Some("world-17".to_string()),
             world_generation: Some(2),
+            dispatch_policy_narrowing: None,
             payload: WorldDispatchPayloadV1::Task(TaskPayloadV1 {
                 prompt: "hello world".to_string(),
             }),
@@ -7925,8 +9182,11 @@ mod tests {
             .bootstrap()
             .expect("bootstrap B-owned dispatch authority fixture");
         let policy_snapshot =
-            crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(workspace_root)
-                .expect("resolve B-owned fixture policy snapshot");
+            crate::execution::policy_snapshot::resolve_policy_snapshot_for_bootstrap_home(
+                workspace_root,
+                &authority.bootstrap_home(),
+            )
+            .expect("resolve B-owned fixture policy snapshot from accepted home");
         let binding = WorkspaceBindingV1 {
             workspace_root: canonical_directory(workspace_root),
             authority_store_root: root.bootstrap_home,
@@ -8036,13 +9296,80 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn seed_routable_e2_spawn_source(
+        request_id: &str,
+        caller_participant_id: &str,
+        world_id: &str,
+        world_generation: u64,
+    ) -> (String, HostSessionAuthority) {
+        let mut request = sample_spawn_request();
+        request.request_id = request_id.to_string();
+        request.idempotency_key = format!("idem-{request_id}");
+        request.caller_participant_id = caller_participant_id.to_string();
+        request.world_id = world_id.to_string();
+        request.world_generation = world_generation;
+        let prepared = prepare_authority_bound_spawn_world_worker(request)
+            .expect("prepare E2 Spawn source fixture");
+        let retained_participant_id = prepared
+            .launch_authority_proof
+            .retained_participant_id
+            .clone();
+        let mut event = substrate_common::agent_events::AgentEvent {
+            ts: chrono::Utc::now(),
+            kind: AgentEventKind::Registered,
+            data: json!({}),
+            agent_id: prepared.descriptor.agent_id.clone(),
+            orchestration_session_id: prepared.request.orchestration_session_id.clone(),
+            run_id: prepared.launch_authority_proof.bootstrap_run_id.clone(),
+            parent_run_id: None,
+            participant_id: Some(retained_participant_id.clone()),
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+            backend_id: Some(prepared.request.target_backend_id.clone()),
+            thread_id: None,
+            role: Some("member".to_string()),
+            world_id: Some(world_id.to_string()),
+            world_generation: Some(world_generation),
+            cmd_id: None,
+            span_id: Some(format!("spn-{request_id}")),
+            event_identity: Some(test_runtime_event_identity(1)),
+            worker_event: None,
+            channel: None,
+            identity_tuple: None,
+            placement_posture: None,
+            project: None,
+        };
+        event.set_pure_agent_telemetry_identity(prepared.descriptor.agent_id.clone());
+        let registered_at = TimestampV1::parse(
+            chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+        )
+        .expect("E2 Spawn source registration timestamp");
+        RetainedWorkerRuntime
+            .mark_admission_routable(
+                &prepared.authority,
+                &prepared.admission_plan,
+                &retained_participant_id,
+                Some(&prepared.dispatch_policy_reservation_proof),
+                &test_runtime_frame_identity(1),
+                &event,
+                registered_at,
+            )
+            .expect("publish routable E2 Spawn source fixture");
+        (retained_participant_id, prepared.authority)
+    }
+
+    #[cfg(target_os = "linux")]
     fn write_runtime_inventory_entry(
         substrate_home: &Path,
         agent_id: &str,
         scope: AgentExecutionScope,
     ) {
+        use std::os::unix::fs::PermissionsExt as _;
+
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("create agents dir");
+        fs::set_permissions(&agents_dir, fs::Permissions::from_mode(0o700))
+            .expect("secure agents dir");
         let (scope, binary) = match scope {
             AgentExecutionScope::Host => ("host", "/bin/sh"),
             AgentExecutionScope::World => (
@@ -8053,7 +9380,10 @@ mod tests {
         let raw = format!(
             "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: {scope}\n  cli:\n    runtime_family: codex\n    binary: {binary}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: true\n"
         );
-        fs::write(agents_dir.join(format!("{agent_id}.yaml")), raw).expect("write agent file");
+        let agent_path = agents_dir.join(format!("{agent_id}.yaml"));
+        fs::write(&agent_path, raw).expect("write agent file");
+        fs::set_permissions(agent_path, fs::Permissions::from_mode(0o600))
+            .expect("secure agent file");
     }
 
     #[cfg(target_os = "linux")]
@@ -8064,6 +9394,8 @@ mod tests {
         allowed_actions: &[&str],
         allowed_modes: &[&str],
     ) {
+        use std::os::unix::fs::PermissionsExt as _;
+
         let enabled = if enabled { "true" } else { "false" };
         let backends = allowed_backends
             .iter()
@@ -8088,7 +9420,9 @@ mod tests {
         let policy = format!(
             "id: test-global-policy\nname: Test Global Policy\nagents:\n  allowed_backends:\n{agent_backends}\n  world_dispatch:\n    enabled: {enabled}\n    allowed_backends:\n{backends}\n    allowed_actions:\n{actions}\n    allowed_modes:\n{modes}\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 4\n    max_concurrent_ephemeral: 4\n"
         );
-        fs::write(substrate_home.join("policy.yaml"), policy).expect("write policy");
+        let policy_path = substrate_home.join("policy.yaml");
+        fs::write(&policy_path, policy).expect("write policy");
+        fs::set_permissions(policy_path, fs::Permissions::from_mode(0o600)).expect("secure policy");
     }
 
     #[cfg(target_os = "linux")]
@@ -8280,6 +9614,7 @@ mod tests {
             target_participant_id: Some("ash_member".to_string()),
             world_id: Some("world-17".to_string()),
             world_generation: Some(2),
+            dispatch_policy_narrowing: None,
             payload: WorldDispatchPayloadV1::WorkerContinue(WorkerContinuePayloadV1 {
                 prompt: "follow up".to_string(),
                 thread_id: Some("thread-root".to_string()),
@@ -8308,6 +9643,7 @@ mod tests {
             target_participant_id: Some("ash_member".to_string()),
             world_id: Some("world-17".to_string()),
             world_generation: Some(2),
+            dispatch_policy_narrowing: None,
             payload: WorldDispatchPayloadV1::WorkerContinueApprovalResponse(
                 WorkerContinueApprovalResponsePayloadV1 {
                     approval_obligation_id: "obl-approval-40".to_string(),
@@ -8332,6 +9668,7 @@ mod tests {
             target_participant_id: Some("ash_member".to_string()),
             world_id: Some("world-17".to_string()),
             world_generation: Some(2),
+            dispatch_policy_narrowing: None,
             payload: WorldDispatchPayloadV1::WorkerContinueClarificationResponse(
                 WorkerContinueClarificationResponsePayloadV1 {
                     follow_up_obligation_id: "obl-follow-up-42".to_string(),
@@ -8357,6 +9694,7 @@ mod tests {
             target_participant_id: Some("ash_member".to_string()),
             world_id: Some("world-17".to_string()),
             world_generation: Some(2),
+            dispatch_policy_narrowing: None,
             payload: WorldDispatchPayloadV1::WorkerContinueControlDirective(
                 WorkerContinueControlDirectivePayloadV1 {
                     directive_kind: ControlDirectiveKindV1::PrepareHandoff,
@@ -8381,6 +9719,7 @@ mod tests {
             target_participant_id: Some("ash_member".to_string()),
             world_id: Some("world-17".to_string()),
             world_generation: Some(2),
+            dispatch_policy_narrowing: None,
             payload: WorldDispatchPayloadV1::WorkerContinueProgressAck(
                 WorkerContinueProgressAckPayloadV1 {
                     thread_id: Some("thread-progress-46".to_string()),
@@ -8403,6 +9742,7 @@ mod tests {
             target_participant_id: Some("ash_member".to_string()),
             world_id: Some("world-17".to_string()),
             world_generation: Some(2),
+            dispatch_policy_narrowing: None,
             payload: WorldDispatchPayloadV1::WorkerContinueForkCommand(
                 WorkerContinueForkCommandPayloadV1 {
                     child_prompt: "Investigate the flaky Linux replay trace.".to_string(),
@@ -8428,6 +9768,7 @@ mod tests {
             target_participant_id: Some("ash_member".to_string()),
             world_id: Some("world-17".to_string()),
             world_generation: Some(2),
+            dispatch_policy_narrowing: None,
             payload: WorldDispatchPayloadV1::WorkerFork(WorkerForkPayloadV1 {
                 prompt: "split off a child worker".to_string(),
                 fork_reason: Some("parallelize investigation".to_string()),
@@ -8457,6 +9798,7 @@ mod tests {
             target_participant_id: Some("ash_member".to_string()),
             world_id: Some("world-17".to_string()),
             world_generation: Some(2),
+            dispatch_policy_narrowing: None,
             payload: WorldDispatchPayloadV1::WorkerInspect(WorkerInspectPayloadV1::default()),
         }
     }
@@ -8477,6 +9819,7 @@ mod tests {
             target_participant_id: None,
             world_id: Some("world-17".to_string()),
             world_generation: Some(2),
+            dispatch_policy_narrowing: None,
             payload: WorldDispatchPayloadV1::WorkerInspect(WorkerInspectPayloadV1::default()),
         }
     }
@@ -8495,6 +9838,7 @@ mod tests {
             target_participant_id: Some("ash_member".to_string()),
             world_id: Some("world-17".to_string()),
             world_generation: Some(2),
+            dispatch_policy_narrowing: None,
             payload: WorldDispatchPayloadV1::WorkerStop(
                 crate::execution::agent_runtime::dispatch_contract::WorkerStopPayloadV1::default(),
             ),
@@ -8563,6 +9907,7 @@ mod tests {
             target_participant_id: Some("ash_member".to_string()),
             world_id: Some("world-17".to_string()),
             world_generation: Some(2),
+            dispatch_policy_narrowing: None,
             payload: WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1 {
                 reason: Some("operator requested cancel".to_string()),
                 graceful: Some(true),
@@ -8584,6 +9929,7 @@ mod tests {
             target_participant_id: None,
             world_id: Some("world-17".to_string()),
             world_generation: Some(2),
+            dispatch_policy_narrowing: None,
             payload: WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1 {
                 reason: Some("operator requested cancel".to_string()),
                 graceful: Some(false),
@@ -8686,6 +10032,7 @@ mod tests {
             target_participant_id: None,
             world_id: Some("world-17".to_string()),
             world_generation: Some(2),
+            dispatch_policy_narrowing: None,
             payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
                 prompt: "open a retained worker".to_string(),
             }),
@@ -8743,6 +10090,99 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn sample_e2_launch_activation(
+        launch_kind: transport_api_types::E2MemberLaunchKindV1,
+        request: &ValidatedWorldDispatchRequestV1,
+        retained_participant_id: &str,
+        bootstrap_run_id: &str,
+        source_participant_id: Option<&str>,
+        snapshot_bytes: &[u8],
+        snapshot_hash: &str,
+    ) -> transport_api_types::E2MemberLaunchActivationCarrierV1 {
+        use base64::Engine as _;
+        use transport_api_types::{
+            AuthorityObjectKindV1, DispatchPolicyCommitmentRefCarrierV1,
+            E2DispatchPolicyReservationRefCarrierV1, E2LaunchRequestCommitmentV1,
+            E2MemberLaunchActivationCarrierV1, OpaqueAuthorityCommitmentV1, PolicyRefV1,
+            WorldBindingRefV1,
+        };
+
+        let linkage_hash = "a".repeat(64);
+        let commitment_ref = DispatchPolicyCommitmentRefCarrierV1 {
+            authority_store_id: "authority-store-e2-fixture".to_string(),
+            commitment_id: "dpc_018f0f3a-9b2c-7def-8abc-0123456789ad".to_string(),
+            exact_linkage_hash: linkage_hash.clone(),
+        };
+        let policy_ref = |suffix: char, digest: char| PolicyRefV1 {
+            ref_id: format!("ao_{}", suffix.to_string().repeat(32)),
+            object_kind: AuthorityObjectKindV1::Policy,
+            schema_version: 1,
+            commitment: OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                digest_hex: digest.to_string().repeat(64),
+            },
+        };
+        let (reservation_ref, request_commitment) = match launch_kind {
+            transport_api_types::E2MemberLaunchKindV1::FreshSpawn => (
+                Some(E2DispatchPolicyReservationRefCarrierV1 {
+                    authority_store_id: commitment_ref.authority_store_id.clone(),
+                    reservation_id: "dpr_fixture_spawn".to_string(),
+                    reservation_hash: "b".repeat(64),
+                }),
+                E2LaunchRequestCommitmentV1::HmacSha256 {
+                    key_id: "dpk_fixture".to_string(),
+                    domain: "substrate.dispatch_policy_commitment.spawn_request.v1".to_string(),
+                    digest_hex: "c".repeat(64),
+                },
+            ),
+            transport_api_types::E2MemberLaunchKindV1::Fork => (
+                None,
+                E2LaunchRequestCommitmentV1::CanonicalSha256 {
+                    domain: "substrate.dispatch_policy_commitment.fork_request.v1".to_string(),
+                    digest_hex: "c".repeat(64),
+                },
+            ),
+        };
+        let carrier = E2MemberLaunchActivationCarrierV1 {
+            schema_version: 1,
+            activation_id: format!("e2a_{}", &linkage_hash[..32]),
+            launch_kind,
+            reservation_ref,
+            commitment_ref: commitment_ref.clone(),
+            immutable_worker_cap_ref: commitment_ref,
+            immutable_worker_cap_created_revision: 4,
+            immutable_worker_cap_application_revision: 5,
+            policy_snapshot_bytes_base64: base64::engine::general_purpose::STANDARD
+                .encode(snapshot_bytes),
+            policy_snapshot_byte_length: snapshot_bytes.len() as u64,
+            policy_snapshot_ref: policy_ref('d', 'e'),
+            policy_snapshot_hash: snapshot_hash.to_string(),
+            policy_snapshot_revision: "policy-fixture".to_string(),
+            reason: None,
+            request_id: request.request_id.clone(),
+            idempotency_key: request.idempotency_key.clone(),
+            orchestration_session_id: request.orchestration_session_id.clone(),
+            caller_participant_id: request.caller_participant_id.clone(),
+            caller_backend_id: "cli:codex-world".to_string(),
+            target_backend_id: request.target_backend_id.clone(),
+            retained_participant_id: retained_participant_id.to_string(),
+            bootstrap_run_id: bootstrap_run_id.to_string(),
+            source_participant_id: source_participant_id.map(str::to_string),
+            target_world: WorldBindingRefV1 {
+                world_id: request.world_id.clone(),
+                world_generation: request.world_generation,
+            },
+            parent_policy_ref: policy_ref('f', '1'),
+            parent_policy_revision: "parent-fixture".to_string(),
+            request_commitment,
+            registry_publication_revision: 5,
+        };
+        carrier
+            .validate()
+            .expect("valid E2 launch activation fixture");
+        carrier
+    }
+
+    #[cfg(target_os = "linux")]
     fn sample_continue_submit_request() -> transport_api_types::MemberTurnSubmitRequestV1 {
         transport_api_types::MemberTurnSubmitRequestV1 {
             schema_version: 1,
@@ -8754,6 +10194,7 @@ mod tests {
             world_id: "world-17".to_string(),
             world_generation: 2,
             prompt: "follow up".to_string(),
+            policy_snapshot_carrier: None,
             acceptance_context: None,
         }
     }
@@ -9041,6 +10482,7 @@ mod tests {
                 binary_path: "/usr/bin/codex".to_string(),
             },
             retained_worker_launch_authority: None,
+            e2_launch_activation: None,
         };
         let execute_request = ExecuteRequest {
             profile: None,
@@ -11540,6 +12982,64 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn accepted_retained_retry_reconstructs_the_exact_stored_proposal_and_request_digest() {
+        let (_root, receipt_registry, _execution_supervisor, authority_store_id) =
+            b21_test_acceptance_stores();
+        let (proposal, request) =
+            reserve_b21_retained_acceptance(&receipt_registry, &authority_store_id);
+        let start = transport_api_types::ExecuteStreamFrame::Start {
+            frame_identity: test_runtime_frame_identity(1),
+            span_id: "spn_accepted_retained_retry".to_string(),
+        };
+        consume_retained_acceptance_acknowledgement(
+            &request,
+            &proposal,
+            Some(&start),
+            false,
+            |record| {
+                receipt_registry.persist_world_work_acceptance(record)?;
+                Ok(())
+            },
+        )
+        .expect("persist exact accepted retained proposal");
+
+        let expected = proposal.clone();
+        let outcome = receipt_registry
+            .prepare_world_work_acceptance_proposal(
+                proposal.orchestration_session_id.as_str(),
+                proposal.request_id(),
+                WorldWorkProposalFamilyV1::RetainedTurn,
+                |allocation| {
+                    assert_eq!(allocation.existing_proposal.as_ref(), Some(&expected));
+                    Ok(expected.clone())
+                },
+            )
+            .expect("accepted retained retry exact-joins");
+        assert!(matches!(
+            outcome,
+            WorldWorkProposalReservationOutcomeV1::Accepted(_)
+        ));
+        let reconstructed =
+            resolve_retained_acceptance_proposal(&receipt_registry, proposal.request_id(), outcome)
+                .expect("reconstruct accepted retained proposal");
+        assert_eq!(reconstructed, proposal);
+        let WorldWorkSubmissionIdentityV1::RetainedTurn {
+            validated_dispatch_request,
+            canonical_member_turn_submit_request_sha256,
+        } = &reconstructed.submission_identity
+        else {
+            panic!("accepted retained retry changed submission family")
+        };
+        assert_eq!(
+            canonical_world_work_submission_sha256(validated_dispatch_request, &request)
+                .expect("hash reconstructed retained request"),
+            *canonical_member_turn_submit_request_sha256
+        );
+    }
+
+    #[cfg(target_os = "linux")]
     const SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV: &str =
         "SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME";
 
@@ -11614,6 +13114,7 @@ mod tests {
                     binary_path: binary_path.display().to_string(),
                 },
                 retained_worker_launch_authority: None,
+                e2_launch_activation: None,
             }),
         }
     }
@@ -19748,6 +21249,7 @@ agents:
                 target_participant_id: None,
                 world_id: Some("world-17".to_string()),
                 world_generation: Some(2),
+                dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
                     prompt: "create exact retained target".to_string(),
                 }),
@@ -19799,6 +21301,7 @@ agents:
                 target_participant_id: Some(spawn.participant_id.clone()),
                 world_id: Some("world-17".to_string()),
                 world_generation: Some(2),
+                dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerContinue(WorkerContinuePayloadV1 {
                     prompt: "continue exact retained target".to_string(),
                     thread_id: None,
@@ -20713,6 +22216,7 @@ agents:
                             target_participant_id: None,
                             world_id: Some("world-17".to_string()),
                             world_generation: Some(2),
+                            dispatch_policy_narrowing: None,
                             payload: WorldDispatchPayloadV1::Task(TaskPayloadV1 {
                                 prompt: "hold after exact Start".to_string(),
                             }),
@@ -24908,8 +26412,34 @@ agents:
 
         let request = sample_spawn_request();
         let proof = sample_retained_launch_authority_proof();
-        let transport = build_spawn_world_worker_transport_request(&request, &descriptor, &proof)
-            .expect("transport");
+        let snapshot = minimal_policy_snapshot()
+            .canonicalize()
+            .expect("canonical Spawn snapshot");
+        let snapshot_bytes = serde_json::to_vec(&snapshot).expect("serialize exact E1 snapshot");
+        let snapshot_hash = format!("{:x}", Sha256::digest(&snapshot_bytes));
+        let exact_policy_snapshot = ExactDispatchPolicySnapshotMaterialV1::from_exact_e1_material(
+            snapshot,
+            snapshot_bytes.clone(),
+            snapshot_hash.clone(),
+        )
+        .expect("exact E1 policy material");
+        let activation = sample_e2_launch_activation(
+            transport_api_types::E2MemberLaunchKindV1::FreshSpawn,
+            &request,
+            &proof.retained_participant_id,
+            &proof.bootstrap_run_id,
+            None,
+            &snapshot_bytes,
+            &snapshot_hash,
+        );
+        let transport = build_spawn_world_worker_transport_request(
+            &request,
+            &descriptor,
+            &proof,
+            activation.clone(),
+            exact_policy_snapshot,
+        )
+        .expect("transport");
 
         assert_eq!(transport.orchestration_session_id, "sess_dispatch");
         assert_eq!(transport.orchestrator_participant_id, "orch_dispatch");
@@ -24923,6 +26453,119 @@ agents:
         assert_eq!(transport.participant_id, "rwp_fixture");
         assert_eq!(transport.run_id, "rwr_bootstrap_fixture");
         assert_eq!(transport.retained_worker_launch_authority, Some(proof));
+        assert_eq!(transport.e2_launch_activation, Some(activation));
+        assert!(transport.exact_policy_snapshot.is_some());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn e2_fork_paths_resolve_cap_authority_without_legacy_participants_or_child_b3() {
+        let _env_guard = world_env_guard();
+        let _world_codex_guard = EnvVarGuard::set_path(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            test_world_codex_runtime_bin().as_path(),
+        );
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex-world",
+            &[
+                "spawn_world_worker",
+                "fork_world_worker",
+                "continue_world_worker",
+            ],
+            &["retained"],
+        );
+        write_runtime_inventory_entry(
+            substrate_home.path(),
+            "codex-world",
+            AgentExecutionScope::World,
+        );
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        activate_b_owned_dispatch_authority(
+            substrate_home.path(),
+            workspace_root.path(),
+            "sess_dispatch",
+            "orch_successor",
+            "cli:codex",
+            "world-17",
+            2,
+        );
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        let (source_participant_id, authority) =
+            seed_routable_e2_spawn_source("req-e2-source", "orch_successor", "world-17", 2);
+        assert_eq!(
+            store
+                .load_participant(&source_participant_id)
+                .expect("inspect legacy participant store"),
+            None,
+            "E2 Fork source resolution must not require a legacy participant artifact"
+        );
+
+        let mut continue_fork_request = sample_continue_fork_command_world_dispatch_request();
+        continue_fork_request.request_id = Some("req-e2-continue-fork".to_string());
+        continue_fork_request.idempotency_key = Some("idem-e2-continue-fork".to_string());
+        continue_fork_request.caller_participant_id = Some("orch_successor".to_string());
+        continue_fork_request.target_participant_id = Some(source_participant_id.clone());
+        let prepared_continue_fork =
+            prepare_orchestrator_world_dispatch(&store, continue_fork_request)
+                .expect("prepare activated E2 continue-fork");
+        assert!(prepared_continue_fork.b_owned_authority.is_some());
+        assert!(
+            !retained_turn_uses_compatibility_transport(&prepared_continue_fork),
+            "activated continue-fork must use the durable B1/B2.1/E2 submission path"
+        );
+
+        let mut fork_request = sample_fork_world_dispatch_request();
+        fork_request.request_id = Some("req-e2-fork-child".to_string());
+        fork_request.idempotency_key = Some("idem-e2-fork-child".to_string());
+        fork_request.caller_participant_id = Some("orch_successor".to_string());
+        fork_request.target_participant_id = Some(source_participant_id.clone());
+        let prepared = prepare_orchestrator_world_dispatch(&store, fork_request)
+            .expect("prepare E2 Fork without legacy source state");
+        let fork = prepare_fork_world_worker_bootstrap(prepared)
+            .expect("publish E2 Fork child commitment without B3 admission");
+        assert_eq!(fork.source_participant_id, source_participant_id);
+        assert_eq!(fork.orchestrator_participant_id, "orch_successor");
+        let policy_commitment = fork
+            .policy_commitment
+            .as_ref()
+            .expect("activated E2 Fork retains its durable commitment");
+        assert!(
+            RetainedWorkerRuntime
+                .read_admission_record(
+                    &authority,
+                    "sess_dispatch",
+                    &policy_commitment.child_participant_id,
+                )
+                .expect("inspect child B3 admission")
+                .is_none(),
+            "Fork child must not acquire B3.2a admission authority"
+        );
+
+        let mut child_continue = sample_continue_world_dispatch_request();
+        child_continue.request_id = Some("req-e2-fork-child-continue".to_string());
+        child_continue.idempotency_key = Some("idem-e2-fork-child-continue".to_string());
+        child_continue.caller_participant_id = Some("orch_successor".to_string());
+        child_continue.target_participant_id = Some(policy_commitment.child_participant_id.clone());
+        let prepared_child_continue = prepare_orchestrator_world_dispatch(&store, child_continue)
+            .expect("resolve E2 Fork child from its immutable cap without B3");
+        let child_target = prepared_child_continue
+            .b_owned_authority()
+            .expect("Fork child Continue is E2 activated")
+            .retained_target
+            .as_ref()
+            .expect("Fork child target");
+        assert_eq!(
+            child_target.participant_id,
+            policy_commitment.child_participant_id
+        );
+        assert!(matches!(
+            child_target.policy_cap_compatibility,
+            ResolvedPolicyCommitmentCompatibilityV1::Compatible { .. }
+        ));
     }
 
     #[cfg(target_os = "linux")]
@@ -24939,8 +26582,14 @@ agents:
 
         let request = sample_fork_request();
         let source = sample_member_participant();
-        let transport = build_fork_world_worker_transport_request(&request, &source, &descriptor)
-            .expect("transport");
+        let transport = build_fork_world_worker_transport_request(
+            &request,
+            source.participant_id(),
+            source.handle.orchestrator_participant_id.as_deref(),
+            &descriptor,
+            None,
+        )
+        .expect("transport");
 
         assert_eq!(transport.orchestration_session_id, "sess_dispatch");
         assert_eq!(transport.orchestrator_participant_id, "orch_dispatch");
@@ -24966,6 +26615,80 @@ agents:
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn build_e2_fork_transport_preserves_committed_child_and_exact_policy_without_b3() {
+        let descriptor = crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor {
+            agent_id: "codex-world".to_string(),
+            backend_id: "cli:codex-world".to_string(),
+            protocol: "substrate.agent.session".to_string(),
+            backend_kind: AgentRuntimeBackendKind::Codex,
+            execution_scope: crate::execution::config_model::AgentExecutionScope::World,
+            binary_path: PathBuf::from("/bin/true"),
+        };
+        let snapshot = minimal_policy_snapshot()
+            .canonicalize()
+            .expect("canonical fork snapshot");
+        let snapshot_bytes = serde_json::to_vec(&snapshot).expect("exact E1 fork bytes");
+        let snapshot_hash = format!("{:x}", Sha256::digest(&snapshot_bytes));
+        let exact_policy_snapshot = ExactDispatchPolicySnapshotMaterialV1::from_exact_e1_material(
+            snapshot,
+            snapshot_bytes.clone(),
+            snapshot_hash.clone(),
+        )
+        .expect("exact E1 fork policy material");
+        let mut request = sample_fork_request();
+        request.caller_participant_id = "orch_successor".to_string();
+        let child_participant_id = "ash_018f0f3a-9b2c-7def-8abc-0123456789ae";
+        let bootstrap_run_id = "018f0f3a-9b2c-7def-8abc-0123456789af";
+        let activation = sample_e2_launch_activation(
+            transport_api_types::E2MemberLaunchKindV1::Fork,
+            &request,
+            child_participant_id,
+            bootstrap_run_id,
+            Some("ash_member"),
+            &snapshot_bytes,
+            &snapshot_hash,
+        );
+        let policy_commitment = PreparedForkPolicyCommitmentV1 {
+            commitment_ref: crate::execution::agent_runtime::dispatch_policy_commitment::DispatchPolicyCommitmentRefV1 {
+                authority_store_id: "authority-store-e2-fork".to_string(),
+                commitment_id: "dpc_018f0f3a-9b2c-7def-8abc-0123456789ad".to_string(),
+                exact_linkage_hash: "a".repeat(64),
+            },
+            child_participant_id: child_participant_id.to_string(),
+            bootstrap_run_id: bootstrap_run_id.to_string(),
+            e2_launch_activation: activation.clone(),
+            exact_policy_snapshot,
+        };
+
+        let transport = build_fork_world_worker_transport_request(
+            &request,
+            "ash_member",
+            Some("orch_launch"),
+            &descriptor,
+            Some(&policy_commitment),
+        )
+        .expect("E2 fork transport");
+
+        assert_eq!(
+            transport.participant_id,
+            policy_commitment.child_participant_id
+        );
+        assert_eq!(transport.run_id, policy_commitment.bootstrap_run_id);
+        assert_eq!(
+            transport.orchestrator_participant_id, "orch_successor",
+            "E2 Fork launch authority must bind the independently authenticated current caller, not the source worker's historical orchestrator"
+        );
+        assert_eq!(transport.retained_worker_launch_authority, None);
+        assert_eq!(transport.e2_launch_activation, Some(activation));
+        let carried = transport
+            .exact_policy_snapshot
+            .expect("E2 fork carries exact policy snapshot");
+        assert_eq!(carried.policy_snapshot_bytes, snapshot_bytes);
+        assert_eq!(carried.policy_snapshot_hash, snapshot_hash);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn build_fork_world_worker_transport_request_preserves_retained_source_orchestrator_identity() {
         let descriptor = crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor {
             agent_id: "codex-world".to_string(),
@@ -24982,8 +26705,14 @@ agents:
         let mut source = sample_member_participant();
         source.handle.orchestrator_participant_id = Some("orch_launch".to_string());
 
-        let transport = build_fork_world_worker_transport_request(&request, &source, &descriptor)
-            .expect("transport");
+        let transport = build_fork_world_worker_transport_request(
+            &request,
+            source.participant_id(),
+            source.handle.orchestrator_participant_id.as_deref(),
+            &descriptor,
+            None,
+        )
+        .expect("transport");
 
         assert_eq!(transport.orchestrator_participant_id, "orch_launch");
         assert_eq!(
@@ -25092,6 +26821,8 @@ agents:
             backend_kind: transport_api_types::MemberRuntimeBackendKindV1::Codex,
             binary_path: "/bin/true".to_string(),
             retained_worker_launch_authority: None,
+            e2_launch_activation: None,
+            exact_policy_snapshot: None,
         };
 
         let mut event = substrate_common::agent_events::AgentEvent {
@@ -25217,6 +26948,7 @@ agents:
                 target_participant_id: None,
                 world_id: Some("world-17".to_string()),
                 world_generation: Some(2),
+                dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
                     prompt: "open a retained worker".to_string(),
                 }),
@@ -25381,6 +27113,7 @@ agents:
                 target_participant_id: None,
                 world_id: Some("world-17".to_string()),
                 world_generation: Some(2),
+                dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
                     prompt: "open a compatibility retained worker".to_string(),
                 }),
@@ -25448,6 +27181,7 @@ agents:
                 target_participant_id: None,
                 world_id: Some("world-17".to_string()),
                 world_generation: Some(2),
+                dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
                     prompt: "reject credential projection without principal".to_string(),
                 }),
@@ -25593,6 +27327,7 @@ agents:
                 target_participant_id: None,
                 world_id: Some("world-17".to_string()),
                 world_generation: Some(2),
+                dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
                     prompt: "open a retained worker".to_string(),
                 }),

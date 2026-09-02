@@ -9,6 +9,8 @@ pub mod internal_exec;
 #[cfg(target_os = "linux")]
 mod member_runtime;
 #[cfg(target_os = "linux")]
+mod member_turn_join;
+#[cfg(target_os = "linux")]
 mod prompt_fulfillment;
 pub mod pty;
 mod request_routing;

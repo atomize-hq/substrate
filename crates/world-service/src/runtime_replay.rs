@@ -11,6 +11,8 @@ use transport_api_types::{
     ExecuteStreamFrame, ExecuteStreamReplayRequestV1, WorldWorkAcceptanceContextV1,
 };
 
+use crate::member_turn_join::{MemberTurnAcceptanceNamespace, MemberTurnJoinRegistry};
+
 const MAX_REPLAY_STREAMS: usize = 1_024;
 const MAX_REPLAY_FRAMES_PER_STREAM: usize = 65_536;
 const MAX_REPLAY_BYTES_PER_STREAM: usize = 64 * 1024 * 1024;
@@ -19,6 +21,8 @@ const MAX_REPLAY_SUBSCRIPTIONS_PER_STREAM: usize = 8;
 #[derive(Clone, Default)]
 pub(crate) struct RuntimeReplayRegistry {
     streams: Arc<Mutex<BTreeMap<String, Arc<Mutex<RuntimeReplayStreamState>>>>>,
+    durable_e2: Option<MemberTurnJoinRegistry>,
+    acceptance_namespace: MemberTurnAcceptanceNamespace,
 }
 
 struct RuntimeReplayStreamState {
@@ -42,6 +46,18 @@ pub(crate) struct RuntimeReplaySubscription {
 }
 
 impl RuntimeReplayRegistry {
+    pub(crate) fn with_durable_e2(durable_e2: Option<MemberTurnJoinRegistry>) -> Self {
+        let acceptance_namespace = durable_e2
+            .as_ref()
+            .map(MemberTurnJoinRegistry::acceptance_namespace)
+            .unwrap_or_default();
+        Self {
+            durable_e2,
+            acceptance_namespace,
+            streams: Arc::default(),
+        }
+    }
+
     pub(crate) fn begin_for_acceptance(
         &self,
         acceptance_context: Option<&WorldWorkAcceptanceContextV1>,
@@ -68,6 +84,23 @@ impl RuntimeReplayRegistry {
             .canonical_ndjson_bytes()
             .map_err(anyhow::Error::msg)
             .context("canonicalize runtime replay Start")?;
+        let mut acceptance_namespace = self
+            .acceptance_namespace
+            .lock()
+            .map_err(anyhow::Error::new)?;
+        if acceptance_namespace.contains(acceptance_record_id) {
+            anyhow::bail!("runtime replay acceptance identity is already registered");
+        }
+        if let Some(registry) = self.durable_e2.as_ref() {
+            if registry
+                .claims_acceptance_record_id(acceptance_record_id)
+                .map_err(anyhow::Error::new)?
+            {
+                anyhow::bail!(
+                    "runtime replay acceptance identity is owned by durable E2 authority"
+                );
+            }
+        }
         let mut streams = self
             .streams
             .lock()
@@ -85,6 +118,7 @@ impl RuntimeReplayRegistry {
             match evictable {
                 Some(record_id) => {
                     streams.remove(&record_id);
+                    acceptance_namespace.remove(&record_id);
                 }
                 None => anyhow::bail!("runtime replay registry capacity is exhausted"),
             }
@@ -99,6 +133,7 @@ impl RuntimeReplayRegistry {
             subscribers: Vec::new(),
         }));
         streams.insert(acceptance_record_id.to_string(), stream.clone());
+        acceptance_namespace.insert(acceptance_record_id.to_string());
         Ok(RuntimeReplayPublisher { stream })
     }
 

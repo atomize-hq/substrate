@@ -23,7 +23,23 @@ pub(super) fn classify_opened(root: &TrustedAuthorityRoot) -> BootstrapClassific
     platform::classify_opened(root)
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) use platform::DispatchPolicyCommitmentStorageV1;
 pub(crate) use platform::RetainedWorkerAdmissionStorageV1;
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) fn dispatch_policy_commitment_storage_for_authority(
+    authority: &super::facade::HostSessionAuthority,
+) -> Result<DispatchPolicyCommitmentStorageV1, BootstrapError> {
+    platform::dispatch_policy_commitment_storage_opened(authority.trusted_root())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) fn dispatch_policy_commitment_registry_exists_for_authority(
+    authority: &super::facade::HostSessionAuthority,
+) -> Result<bool, BootstrapError> {
+    platform::dispatch_policy_commitment_registry_exists_opened(authority.trusted_root())
+}
 
 pub(crate) fn retained_worker_admission_storage_for_authority(
     authority: &super::facade::HostSessionAuthority,
@@ -541,6 +557,15 @@ impl BootstrapError {
     pub(crate) fn retained_admission_crash() -> Self {
         Self("injected retained admission initialization crash")
     }
+
+    pub(crate) fn dispatch_policy_commitment_semantic() -> Self {
+        Self("dispatch policy commitment semantic validation failed")
+    }
+
+    #[cfg(test)]
+    pub(crate) fn dispatch_policy_commitment_crash() -> Self {
+        Self("injected dispatch policy commitment crash")
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -718,8 +743,15 @@ mod platform {
     #[path = "reachability.rs"]
     mod reachability;
     use reachability::{add_expected_ref, collect_reachable_objects, collect_reachable_objects_v2};
+    #[path = "dispatch_policy_commitment.rs"]
+    mod dispatch_policy_commitment;
     #[path = "transaction.rs"]
     mod transaction;
+    pub(crate) use dispatch_policy_commitment::DispatchPolicyCommitmentStorageV1;
+    pub(super) use dispatch_policy_commitment::{
+        dispatch_policy_commitment_registry_exists_opened,
+        dispatch_policy_commitment_storage_opened,
+    };
     #[cfg(test)]
     use transaction::retain_classified_legacy_directories_test;
     #[cfg(test)]

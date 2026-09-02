@@ -3,6 +3,14 @@ use anyhow::{Context, Result};
 #[cfg(target_os = "linux")]
 use serde_json::json;
 #[cfg(target_os = "linux")]
+use std::collections::HashSet;
+#[cfg(target_os = "linux")]
+use std::ffi::CString;
+#[cfg(target_os = "linux")]
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStrExt;
+#[cfg(target_os = "linux")]
 use std::os::unix::fs::PermissionsExt;
 #[cfg(target_os = "linux")]
 use std::path::{Path, PathBuf};
@@ -22,6 +30,402 @@ const WORLD_FS_ISOLATION_ENV: &str = "SUBSTRATE_WORLD_FS_ISOLATION";
 const LANDLOCK_READ_ENV: &str = "SUBSTRATE_WORLD_FS_LANDLOCK_READ_ALLOWLIST";
 const LANDLOCK_WRITE_ENV: &str = "SUBSTRATE_WORLD_FS_LANDLOCK_WRITE_ALLOWLIST";
 const LANDLOCK_DISCOVER_ENV: &str = "SUBSTRATE_WORLD_FS_LANDLOCK_DISCOVER_ALLOWLIST";
+
+#[cfg(target_os = "linux")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum TrustedSystemRootAlias {
+    Bin,
+    Lib,
+    Lib64,
+}
+
+#[cfg(target_os = "linux")]
+const TRUSTED_SYSTEM_ROOT_ALIASES: [TrustedSystemRootAlias; 3] = [
+    TrustedSystemRootAlias::Bin,
+    TrustedSystemRootAlias::Lib,
+    TrustedSystemRootAlias::Lib64,
+];
+
+#[cfg(target_os = "linux")]
+impl TrustedSystemRootAlias {
+    fn alias_component(self) -> &'static str {
+        match self {
+            Self::Bin => "bin",
+            Self::Lib => "lib",
+            Self::Lib64 => "lib64",
+        }
+    }
+
+    fn approved_usr_targets(self) -> &'static [&'static str] {
+        match self {
+            Self::Bin => &["usr/bin"],
+            Self::Lib => &["usr/lib"],
+            // Debian-family merged-/usr layouts commonly map /lib64 to /usr/lib while other
+            // layouts use /usr/lib64. Both are closed, built-in system targets.
+            Self::Lib64 => &["usr/lib64", "usr/lib"],
+        }
+    }
+
+    fn display_path(self) -> &'static str {
+        match self {
+            Self::Bin => "/bin",
+            Self::Lib => "/lib",
+            Self::Lib64 => "/lib64",
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct TrustedDirectoryIdentity {
+    device: u64,
+    inode: u64,
+    file_type: libc::mode_t,
+}
+
+#[cfg(target_os = "linux")]
+impl TrustedDirectoryIdentity {
+    fn from_stat(stat: &libc::stat) -> Self {
+        Self {
+            device: stat.st_dev,
+            inode: stat.st_ino,
+            file_type: stat.st_mode & libc::S_IFMT,
+        }
+    }
+
+    fn from_fd(fd: RawFd) -> Result<Self> {
+        let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+        let rc = unsafe { libc::fstat(fd, stat.as_mut_ptr()) };
+        if rc != 0 {
+            return Err(std::io::Error::last_os_error()).context("fstat trusted system root");
+        }
+        let stat = unsafe { stat.assume_init() };
+        Ok(Self::from_stat(&stat))
+    }
+
+    fn is_directory(self) -> bool {
+        self.file_type == libc::S_IFDIR
+    }
+
+    fn is_symlink(self) -> bool {
+        self.file_type == libc::S_IFLNK
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug)]
+struct VerifiedTrustedSystemRoot {
+    alias: TrustedSystemRootAlias,
+    alias_identity: TrustedDirectoryIdentity,
+    alias_link_target: Option<Vec<u8>>,
+    physical_relative_path: &'static str,
+    physical_path: PathBuf,
+    physical_identity: TrustedDirectoryIdentity,
+    _physical_descriptor: OwnedFd,
+}
+
+#[cfg(target_os = "linux")]
+impl VerifiedTrustedSystemRoot {
+    fn inspect(
+        root_descriptor: RawFd,
+        root_path: &Path,
+        alias: TrustedSystemRootAlias,
+    ) -> Result<Option<Self>> {
+        fn component_cstring(component: &str) -> Result<CString> {
+            CString::new(component)
+                .with_context(|| format!("trusted system component contained NUL: {component:?}"))
+        }
+
+        fn stat_alias(
+            root_descriptor: RawFd,
+            alias: TrustedSystemRootAlias,
+        ) -> Result<Option<TrustedDirectoryIdentity>> {
+            let component = component_cstring(alias.alias_component())?;
+            let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+            let rc = unsafe {
+                libc::fstatat(
+                    root_descriptor,
+                    component.as_ptr(),
+                    stat.as_mut_ptr(),
+                    libc::AT_SYMLINK_NOFOLLOW,
+                )
+            };
+            if rc != 0 {
+                let err = std::io::Error::last_os_error();
+                if err.kind() == std::io::ErrorKind::NotFound {
+                    return Ok(None);
+                }
+                return Err(err).with_context(|| {
+                    format!("inspect trusted system alias {}", alias.display_path())
+                });
+            }
+            let stat = unsafe { stat.assume_init() };
+            Ok(Some(TrustedDirectoryIdentity::from_stat(&stat)))
+        }
+
+        fn read_alias_target(
+            root_descriptor: RawFd,
+            alias: TrustedSystemRootAlias,
+        ) -> Result<Vec<u8>> {
+            let component = component_cstring(alias.alias_component())?;
+            let mut target = vec![0_u8; 4096];
+            let len = unsafe {
+                libc::readlinkat(
+                    root_descriptor,
+                    component.as_ptr(),
+                    target.as_mut_ptr().cast(),
+                    target.len(),
+                )
+            };
+            if len < 0 {
+                return Err(std::io::Error::last_os_error()).with_context(|| {
+                    format!("read trusted system alias {}", alias.display_path())
+                });
+            }
+            let len = len as usize;
+            if len == target.len() {
+                anyhow::bail!(
+                    "trusted system alias {} target exceeded validation limit",
+                    alias.display_path()
+                );
+            }
+            target.truncate(len);
+            Ok(target)
+        }
+
+        fn open_relative_directory_no_follow(
+            root_descriptor: RawFd,
+            relative_path: &str,
+        ) -> Result<OwnedFd> {
+            let mut parent = root_descriptor;
+            let mut owned_parent: Option<OwnedFd> = None;
+
+            for component in relative_path.split('/') {
+                if component.is_empty() || component == "." || component == ".." {
+                    anyhow::bail!("invalid trusted system component in {relative_path:?}");
+                }
+                let component = component_cstring(component)?;
+                let fd = unsafe {
+                    libc::openat(
+                        parent,
+                        component.as_ptr(),
+                        libc::O_PATH | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                    )
+                };
+                if fd < 0 {
+                    return Err(std::io::Error::last_os_error()).with_context(|| {
+                        format!("open trusted physical target {relative_path:?} without symlinks")
+                    });
+                }
+                let opened = unsafe { OwnedFd::from_raw_fd(fd) };
+                parent = opened.as_raw_fd();
+                owned_parent = Some(opened);
+            }
+
+            owned_parent.with_context(|| {
+                format!("trusted physical target {relative_path:?} had no components")
+            })
+        }
+
+        let Some(alias_identity) = stat_alias(root_descriptor, alias)? else {
+            // Preserve the Landlock layer's existing ENOENT behavior for optional system roots.
+            return Ok(None);
+        };
+
+        let (physical_relative_path, alias_link_target) = if alias_identity.is_directory() {
+            (alias.alias_component(), None)
+        } else if alias_identity.is_symlink() {
+            let target = read_alias_target(root_descriptor, alias)?;
+            let approved_target = alias
+                .approved_usr_targets()
+                .iter()
+                .copied()
+                .find(|candidate| {
+                    target.as_slice() == candidate.as_bytes()
+                        || target.as_slice() == format!("/{candidate}").as_bytes()
+                });
+            let Some(approved_target) = approved_target else {
+                anyhow::bail!(
+                    "trusted system alias {} had unexpected usr-merge target {:?}",
+                    alias.display_path(),
+                    String::from_utf8_lossy(&target)
+                );
+            };
+            (approved_target, Some(target))
+        } else {
+            anyhow::bail!(
+                "trusted system alias {} was neither a directory nor a symlink",
+                alias.display_path()
+            );
+        };
+
+        let physical_descriptor =
+            open_relative_directory_no_follow(root_descriptor, physical_relative_path)
+                .with_context(|| {
+                    format!(
+                        "trusted system alias {} physical target {} failed validation",
+                        alias.display_path(),
+                        physical_relative_path
+                    )
+                })?;
+        let physical_identity = TrustedDirectoryIdentity::from_fd(physical_descriptor.as_raw_fd())?;
+        if !physical_identity.is_directory() {
+            anyhow::bail!(
+                "trusted system alias {} physical target {} was not a directory",
+                alias.display_path(),
+                physical_relative_path
+            );
+        }
+
+        let current_alias_identity = stat_alias(root_descriptor, alias)?.with_context(|| {
+            format!(
+                "trusted system alias {} changed during validation",
+                alias.display_path()
+            )
+        })?;
+        if current_alias_identity != alias_identity {
+            anyhow::bail!(
+                "trusted system alias {} changed during validation",
+                alias.display_path()
+            );
+        }
+        if let Some(expected_target) = alias_link_target.as_ref() {
+            if read_alias_target(root_descriptor, alias)? != *expected_target {
+                anyhow::bail!(
+                    "trusted system alias {} changed during validation",
+                    alias.display_path()
+                );
+            }
+        }
+
+        Ok(Some(Self {
+            alias,
+            alias_identity,
+            alias_link_target,
+            physical_relative_path,
+            physical_path: root_path.join(physical_relative_path),
+            physical_identity,
+            _physical_descriptor: physical_descriptor,
+        }))
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug)]
+struct VerifiedTrustedSystemRoots {
+    root_path: PathBuf,
+    root_identity: TrustedDirectoryIdentity,
+    _root_descriptor: OwnedFd,
+    roots: Vec<VerifiedTrustedSystemRoot>,
+}
+
+#[cfg(target_os = "linux")]
+impl VerifiedTrustedSystemRoots {
+    fn open_root(root: &Path) -> Result<OwnedFd> {
+        let root_bytes = root.as_os_str().as_bytes();
+        let root_c = CString::new(root_bytes)
+            .with_context(|| format!("trusted system root contained NUL: {}", root.display()))?;
+        let fd = unsafe {
+            libc::open(
+                root_c.as_ptr(),
+                libc::O_PATH | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+            )
+        };
+        if fd < 0 {
+            return Err(std::io::Error::last_os_error())
+                .context("open trusted system root without following symlinks");
+        }
+        Ok(unsafe { OwnedFd::from_raw_fd(fd) })
+    }
+
+    fn landlock_read_paths(&self) -> Vec<String> {
+        let mut seen_physical_targets = HashSet::new();
+        self.roots
+            .iter()
+            .filter(|root| seen_physical_targets.insert(root.physical_identity))
+            .map(|root| root.physical_path.display().to_string())
+            .collect()
+    }
+
+    fn revalidate(&self) -> Result<()> {
+        let root_descriptor = Self::open_root(&self.root_path)?;
+        let current_root_identity = TrustedDirectoryIdentity::from_fd(root_descriptor.as_raw_fd())?;
+        if current_root_identity != self.root_identity {
+            anyhow::bail!("trusted system root changed after validation");
+        }
+
+        for root in &self.roots {
+            let current = VerifiedTrustedSystemRoot::inspect(
+                root_descriptor.as_raw_fd(),
+                &self.root_path,
+                root.alias,
+            )
+            .with_context(|| {
+                format!(
+                    "trusted system alias {} changed after validation",
+                    root.alias.display_path()
+                )
+            })?
+            .with_context(|| {
+                format!(
+                    "trusted system alias {} changed after validation",
+                    root.alias.display_path()
+                )
+            })?;
+
+            if current.alias_identity != root.alias_identity
+                || current.alias_link_target != root.alias_link_target
+                || current.physical_relative_path != root.physical_relative_path
+                || current.physical_identity != root.physical_identity
+            {
+                anyhow::bail!(
+                    "trusted system alias {} changed after validation",
+                    root.alias.display_path()
+                );
+            }
+
+            let pinned_identity =
+                TrustedDirectoryIdentity::from_fd(root._physical_descriptor.as_raw_fd())?;
+            if pinned_identity != root.physical_identity {
+                anyhow::bail!(
+                    "trusted system alias {} pinned target changed after validation",
+                    root.alias.display_path()
+                );
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn normalize_trusted_system_roots_for_landlock(
+    filesystem_root: &Path,
+    aliases: &[TrustedSystemRootAlias],
+) -> Result<VerifiedTrustedSystemRoots> {
+    let root_descriptor = VerifiedTrustedSystemRoots::open_root(filesystem_root)?;
+    let root_identity = TrustedDirectoryIdentity::from_fd(root_descriptor.as_raw_fd())?;
+    let mut roots = Vec::new();
+
+    for alias in aliases {
+        let Some(root) = VerifiedTrustedSystemRoot::inspect(
+            root_descriptor.as_raw_fd(),
+            filesystem_root,
+            *alias,
+        )?
+        else {
+            continue;
+        };
+        roots.push(root);
+    }
+
+    Ok(VerifiedTrustedSystemRoots {
+        root_path: filesystem_root.to_path_buf(),
+        root_identity,
+        _root_descriptor: root_descriptor,
+        roots,
+    })
+}
 
 pub fn run_landlock_exec() -> Result<()> {
     let enforcement_plan = match enforcement_plan::read_from_env_and_validate() {
@@ -158,14 +562,16 @@ pub fn run_landlock_exec() -> Result<()> {
                 let landlock_supported = landlock_support.supported;
 
                 if landlock_intended && landlock_supported {
+                    let trusted_system_roots = normalize_trusted_system_roots_for_landlock(
+                        Path::new("/"),
+                        &TRUSTED_SYSTEM_ROOT_ALIASES,
+                    )
+                    .context("validate fixed trusted system roots for landlock")?;
                     let mut policy = world::landlock::LandlockFilesystemPolicy {
                         exec_paths: vec!["/".to_string(), "/project".to_string()],
                         discover_paths: Vec::new(),
                         read_paths: vec![
                             "/usr".to_string(),
-                            "/bin".to_string(),
-                            "/lib".to_string(),
-                            "/lib64".to_string(),
                             "/etc".to_string(),
                             "/proc".to_string(),
                         ],
@@ -175,6 +581,9 @@ pub fn run_landlock_exec() -> Result<()> {
                             "/var/lib/substrate/world-deps".to_string(),
                         ],
                     };
+                    policy
+                        .read_paths
+                        .extend(trusted_system_roots.landlock_read_paths());
 
                     if let Ok(project_dir) = std::env::var(MOUNT_PROJECT_DIR_ENV) {
                         if !project_dir.trim().is_empty() {
@@ -239,6 +648,9 @@ pub fn run_landlock_exec() -> Result<()> {
                     policy.write_paths.sort();
                     policy.write_paths.dedup();
 
+                    trusted_system_roots
+                        .revalidate()
+                        .context("revalidate fixed trusted system roots before landlock")?;
                     let report = world::landlock::apply_filesystem_policy(&policy);
                     if report.attempted && !report.applied {
                         eprintln!(
@@ -1290,4 +1702,191 @@ fn mount_syscall(
         });
     }
     Ok(())
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use tempfile::TempDir;
+
+    fn create_usr_directory(root: &Path, name: &str) {
+        fs::create_dir_all(root.join("usr").join(name)).expect("create physical usr directory");
+    }
+
+    fn normalized(
+        root: &Path,
+        aliases: &[TrustedSystemRootAlias],
+    ) -> Result<VerifiedTrustedSystemRoots> {
+        normalize_trusted_system_roots_for_landlock(root, aliases)
+    }
+
+    #[test]
+    fn trusted_system_root_traditional_directory_is_preserved() {
+        let temp = TempDir::new().expect("tempdir");
+        fs::create_dir(temp.path().join("bin")).expect("create bin");
+        let roots = normalized(temp.path(), &[TrustedSystemRootAlias::Bin]).expect("normalize");
+        assert_eq!(
+            roots.landlock_read_paths(),
+            vec![temp.path().join("bin").display().to_string()]
+        );
+        roots.revalidate().expect("revalidate");
+    }
+
+    #[test]
+    fn trusted_system_root_accepts_relative_usr_merged_bin() {
+        let temp = TempDir::new().expect("tempdir");
+        create_usr_directory(temp.path(), "bin");
+        symlink("usr/bin", temp.path().join("bin")).expect("symlink bin");
+        let roots = normalized(temp.path(), &[TrustedSystemRootAlias::Bin]).expect("normalize");
+        assert_eq!(
+            roots.landlock_read_paths(),
+            vec![temp.path().join("usr/bin").display().to_string()]
+        );
+        roots.revalidate().expect("revalidate");
+    }
+
+    #[test]
+    fn trusted_system_root_accepts_relative_usr_merged_lib() {
+        let temp = TempDir::new().expect("tempdir");
+        create_usr_directory(temp.path(), "lib");
+        symlink("usr/lib", temp.path().join("lib")).expect("symlink lib");
+        let roots = normalized(temp.path(), &[TrustedSystemRootAlias::Lib]).expect("normalize");
+        assert_eq!(
+            roots.landlock_read_paths(),
+            vec![temp.path().join("usr/lib").display().to_string()]
+        );
+    }
+
+    #[test]
+    fn trusted_system_root_accepts_relative_usr_merged_lib64() {
+        let temp = TempDir::new().expect("tempdir");
+        create_usr_directory(temp.path(), "lib64");
+        symlink("usr/lib64", temp.path().join("lib64")).expect("symlink lib64");
+        let roots = normalized(temp.path(), &[TrustedSystemRootAlias::Lib64]).expect("normalize");
+        assert_eq!(
+            roots.landlock_read_paths(),
+            vec![temp.path().join("usr/lib64").display().to_string()]
+        );
+    }
+
+    #[test]
+    fn trusted_system_root_accepts_expected_absolute_usr_merge_target() {
+        let temp = TempDir::new().expect("tempdir");
+        create_usr_directory(temp.path(), "bin");
+        symlink("/usr/bin", temp.path().join("bin")).expect("symlink bin");
+        let roots = normalized(temp.path(), &[TrustedSystemRootAlias::Bin]).expect("normalize");
+        assert_eq!(
+            roots.landlock_read_paths(),
+            vec![temp.path().join("usr/bin").display().to_string()]
+        );
+    }
+
+    #[test]
+    fn trusted_system_roots_deduplicate_the_same_physical_target() {
+        let temp = TempDir::new().expect("tempdir");
+        create_usr_directory(temp.path(), "lib");
+        symlink("usr/lib", temp.path().join("lib")).expect("symlink lib");
+        symlink("usr/lib", temp.path().join("lib64")).expect("symlink lib64");
+        let roots = normalized(
+            temp.path(),
+            &[TrustedSystemRootAlias::Lib, TrustedSystemRootAlias::Lib64],
+        )
+        .expect("normalize");
+        assert_eq!(roots.landlock_read_paths().len(), 1);
+    }
+
+    #[test]
+    fn trusted_system_root_rejects_dangling_usr_merge_alias() {
+        let temp = TempDir::new().expect("tempdir");
+        symlink("usr/bin", temp.path().join("bin")).expect("symlink bin");
+        let err = normalized(temp.path(), &[TrustedSystemRootAlias::Bin])
+            .expect_err("dangling alias must fail");
+        assert!(err.to_string().contains("physical target"));
+    }
+
+    #[test]
+    fn trusted_system_root_rejects_regular_file_alias() {
+        let temp = TempDir::new().expect("tempdir");
+        fs::write(temp.path().join("bin"), b"not a directory").expect("write bin");
+        let err = normalized(temp.path(), &[TrustedSystemRootAlias::Bin])
+            .expect_err("regular file alias must fail");
+        assert!(err
+            .to_string()
+            .contains("neither a directory nor a symlink"));
+    }
+
+    #[test]
+    fn trusted_system_root_rejects_unexpected_absolute_target() {
+        let temp = TempDir::new().expect("tempdir");
+        symlink("/tmp/bin", temp.path().join("bin")).expect("symlink bin");
+        let err = normalized(temp.path(), &[TrustedSystemRootAlias::Bin])
+            .expect_err("unexpected absolute target must fail");
+        assert!(err.to_string().contains("unexpected usr-merge target"));
+    }
+
+    #[test]
+    fn trusted_system_root_rejects_relative_traversal() {
+        let temp = TempDir::new().expect("tempdir");
+        symlink("../usr/bin", temp.path().join("bin")).expect("symlink bin");
+        let err = normalized(temp.path(), &[TrustedSystemRootAlias::Bin])
+            .expect_err("relative traversal must fail");
+        assert!(err.to_string().contains("unexpected usr-merge target"));
+    }
+
+    #[test]
+    fn trusted_system_root_rejects_symlink_at_physical_target() {
+        let temp = TempDir::new().expect("tempdir");
+        fs::create_dir(temp.path().join("usr")).expect("create usr");
+        fs::create_dir(temp.path().join("actual-bin")).expect("create actual bin");
+        symlink("../actual-bin", temp.path().join("usr/bin")).expect("symlink physical target");
+        symlink("usr/bin", temp.path().join("bin")).expect("symlink bin");
+        let err = normalized(temp.path(), &[TrustedSystemRootAlias::Bin])
+            .expect_err("physical symlink must fail");
+        assert!(err.to_string().contains("physical target"));
+    }
+
+    #[test]
+    fn trusted_system_root_rejects_symlink_ancestor_of_physical_target() {
+        let temp = TempDir::new().expect("tempdir");
+        fs::create_dir_all(temp.path().join("actual-usr/bin")).expect("create actual usr");
+        symlink("actual-usr", temp.path().join("usr")).expect("symlink usr");
+        symlink("usr/bin", temp.path().join("bin")).expect("symlink bin");
+        let err = normalized(temp.path(), &[TrustedSystemRootAlias::Bin])
+            .expect_err("physical ancestor symlink must fail");
+        assert!(err.to_string().contains("physical target"));
+    }
+
+    #[test]
+    fn trusted_system_root_revalidation_rejects_target_replacement() {
+        let temp = TempDir::new().expect("tempdir");
+        create_usr_directory(temp.path(), "bin");
+        symlink("usr/bin", temp.path().join("bin")).expect("symlink bin");
+        let roots = normalized(temp.path(), &[TrustedSystemRootAlias::Bin]).expect("normalize");
+        fs::rename(temp.path().join("usr/bin"), temp.path().join("usr/old-bin"))
+            .expect("move physical target");
+        fs::create_dir(temp.path().join("usr/bin")).expect("replace physical target");
+        let err = roots
+            .revalidate()
+            .expect_err("replacement must fail revalidation");
+        assert!(err.to_string().contains("changed after validation"));
+    }
+
+    #[test]
+    fn trusted_system_root_preserves_missing_optional_alias_behavior() {
+        let temp = TempDir::new().expect("tempdir");
+        let roots = normalized(temp.path(), &TRUSTED_SYSTEM_ROOT_ALIASES).expect("normalize");
+        assert!(roots.landlock_read_paths().is_empty());
+        roots.revalidate().expect("revalidate empty roots");
+    }
+
+    #[test]
+    fn trusted_system_root_ignores_non_builtin_aliases() {
+        let temp = TempDir::new().expect("tempdir");
+        fs::create_dir_all(temp.path().join("usr/sbin")).expect("create usr sbin");
+        symlink("usr/sbin", temp.path().join("sbin")).expect("symlink sbin");
+        let roots = normalized(temp.path(), &TRUSTED_SYSTEM_ROOT_ALIASES).expect("normalize");
+        assert!(roots.landlock_read_paths().is_empty());
+    }
 }

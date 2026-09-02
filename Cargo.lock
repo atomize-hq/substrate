@@ -7641,6 +7641,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "futures-util",
+ "hmac",
  "hyper 0.14.32",
  "libc",
  "once_cell",

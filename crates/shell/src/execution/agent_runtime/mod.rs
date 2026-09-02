@@ -2,6 +2,8 @@ pub(crate) mod auto_attach;
 mod compatibility;
 pub(crate) mod control;
 pub(crate) mod dispatch_contract;
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+pub(crate) mod dispatch_policy_commitment;
 pub(crate) mod host_inbox;
 pub(crate) mod host_session_authority;
 pub(crate) mod mapping;

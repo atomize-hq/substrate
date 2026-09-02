@@ -1753,6 +1753,315 @@ impl PolicySnapshotV3 {
     }
 }
 
+/// Exact durable E2 commitment reference for the retained worker's immutable cap.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct DispatchPolicyCommitmentRefCarrierV1 {
+    pub authority_store_id: String,
+    pub commitment_id: String,
+    pub exact_linkage_hash: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DispatchPolicyCommitmentRefCarrierV1Def {
+    authority_store_id: String,
+    commitment_id: String,
+    exact_linkage_hash: String,
+}
+
+impl DispatchPolicyCommitmentRefCarrierV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        validate_narrowing_identity(
+            "policy_snapshot_carrier.immutable_worker_cap_ref.authority_store_id",
+            &self.authority_store_id,
+        )?;
+        validate_prefixed_uuid_v7(
+            "policy_snapshot_carrier.immutable_worker_cap_ref.commitment_id",
+            &self.commitment_id,
+            "dpc_",
+        )?;
+        validate_lowercase_sha256_digest(
+            "policy_snapshot_carrier.immutable_worker_cap_ref.exact_linkage_hash",
+            &self.exact_linkage_hash,
+        )
+    }
+}
+
+impl<'de> Deserialize<'de> for DispatchPolicyCommitmentRefCarrierV1 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = DispatchPolicyCommitmentRefCarrierV1Def::deserialize(deserializer)?;
+        let reference = Self {
+            authority_store_id: value.authority_store_id,
+            commitment_id: value.commitment_id,
+            exact_linkage_hash: value.exact_linkage_hash,
+        };
+        reference.validate().map_err(serde::de::Error::custom)?;
+        Ok(reference)
+    }
+}
+
+/// Pre-transport identity of the retained turn that will later be exact-linked
+/// to its durable B1/B2.1 evidence by E2.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct RetainedTurnPolicyCommitmentSubjectV1 {
+    pub retained_participant_id: String,
+    pub active_run_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RetainedTurnPolicyCommitmentSubjectV1Def {
+    retained_participant_id: String,
+    active_run_id: String,
+    #[serde(default)]
+    message_id: Option<String>,
+}
+
+impl RetainedTurnPolicyCommitmentSubjectV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        validate_narrowing_identity(
+            "policy_snapshot_carrier.subject.retained_participant_id",
+            &self.retained_participant_id,
+        )?;
+        validate_narrowing_identity(
+            "policy_snapshot_carrier.subject.active_run_id",
+            &self.active_run_id,
+        )?;
+        if let Some(message_id) = self.message_id.as_deref() {
+            validate_prefixed_uuid_v7(
+                "policy_snapshot_carrier.subject.message_id",
+                message_id,
+                "wwm_",
+            )?;
+        }
+        Ok(())
+    }
+}
+
+impl<'de> Deserialize<'de> for RetainedTurnPolicyCommitmentSubjectV1 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = RetainedTurnPolicyCommitmentSubjectV1Def::deserialize(deserializer)?;
+        let subject = Self {
+            retained_participant_id: value.retained_participant_id,
+            active_run_id: value.active_run_id,
+            message_id: value.message_id,
+        };
+        subject.validate().map_err(serde::de::Error::custom)?;
+        Ok(subject)
+    }
+}
+
+/// Strict pre-transport carrier for the policy material of one retained turn.
+///
+/// The immutable worker-cap reference is the carrier's durable E2 identity. The
+/// current turn's final E2 reference cannot exist until its B1 acceptance and
+/// B2.1 execution claim are durable, so the turn subject is carried separately
+/// and exact-joined during final E2 publication.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct DispatchPolicySnapshotCarrierV1 {
+    pub schema_version: u32,
+    pub immutable_worker_cap_ref: DispatchPolicyCommitmentRefCarrierV1,
+    pub immutable_worker_cap_created_revision: u64,
+    pub immutable_worker_cap_application_revision: u64,
+    pub subject: RetainedTurnPolicyCommitmentSubjectV1,
+    pub orchestration_session_id: String,
+    pub caller_participant_id: String,
+    pub caller_backend_id: String,
+    pub target_backend_id: String,
+    pub target_world: WorldBindingRefV1,
+    pub policy_snapshot_bytes_base64: String,
+    pub policy_snapshot_byte_length: u64,
+    pub policy_snapshot_ref: PolicyRefV1,
+    pub policy_snapshot_hash: String,
+    pub policy_snapshot_revision: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DispatchPolicySnapshotCarrierV1Def {
+    schema_version: u32,
+    immutable_worker_cap_ref: DispatchPolicyCommitmentRefCarrierV1,
+    immutable_worker_cap_created_revision: u64,
+    immutable_worker_cap_application_revision: u64,
+    subject: RetainedTurnPolicyCommitmentSubjectV1,
+    orchestration_session_id: String,
+    caller_participant_id: String,
+    caller_backend_id: String,
+    target_backend_id: String,
+    target_world: WorldBindingRefV1,
+    policy_snapshot_bytes_base64: String,
+    policy_snapshot_byte_length: u64,
+    policy_snapshot_ref: PolicyRefV1,
+    policy_snapshot_hash: String,
+    policy_snapshot_revision: String,
+    #[serde(default)]
+    reason: Option<String>,
+}
+
+impl DispatchPolicySnapshotCarrierV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 1 {
+            return Err(format!(
+                "unsupported policy_snapshot_carrier.schema_version: {} (expected 1)",
+                self.schema_version
+            ));
+        }
+        self.immutable_worker_cap_ref.validate()?;
+        if self.immutable_worker_cap_created_revision == 0
+            || self.immutable_worker_cap_application_revision == 0
+        {
+            return Err(
+                "policy_snapshot_carrier immutable worker-cap revisions must be positive equality-only facts"
+                    .to_string(),
+            );
+        }
+        self.subject.validate()?;
+        for (field, value) in [
+            (
+                "orchestration_session_id",
+                self.orchestration_session_id.as_str(),
+            ),
+            ("caller_participant_id", self.caller_participant_id.as_str()),
+            ("caller_backend_id", self.caller_backend_id.as_str()),
+            ("target_backend_id", self.target_backend_id.as_str()),
+            ("target_world.world_id", self.target_world.world_id.as_str()),
+            (
+                "policy_snapshot_revision",
+                self.policy_snapshot_revision.as_str(),
+            ),
+        ] {
+            validate_narrowing_identity(&format!("policy_snapshot_carrier.{field}"), value)?;
+        }
+        validate_gateway_backend_id_selector(&self.caller_backend_id).map_err(|_| {
+            "policy_snapshot_carrier.caller_backend_id must be an exact <kind>:<name> selector"
+                .to_string()
+        })?;
+        validate_gateway_backend_id_selector(&self.target_backend_id).map_err(|_| {
+            "policy_snapshot_carrier.target_backend_id must be an exact <kind>:<name> selector"
+                .to_string()
+        })?;
+        if self.target_world.world_generation == 0 {
+            return Err(
+                "policy_snapshot_carrier.target_world.world_generation must be positive"
+                    .to_string(),
+            );
+        }
+        self.policy_snapshot_ref.validate()?;
+        if let Some(reason) = self.reason.as_deref() {
+            validate_narrowing_identity("policy_snapshot_carrier.reason", reason)?;
+        }
+        let _ = self.policy_snapshot()?;
+        Ok(())
+    }
+
+    pub fn policy_snapshot_bytes(&self) -> Result<Vec<u8>, String> {
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(&self.policy_snapshot_bytes_base64)
+            .map_err(|_| {
+                "policy_snapshot_carrier.policy_snapshot_bytes_base64 must be canonical padded RFC 4648 base64"
+                    .to_string()
+            })?;
+        if bytes.len() as u64 != self.policy_snapshot_byte_length
+            || base64::engine::general_purpose::STANDARD.encode(&bytes)
+                != self.policy_snapshot_bytes_base64
+        {
+            return Err(
+                "policy_snapshot_carrier policy snapshot byte length or canonical base64 changed"
+                    .to_string(),
+            );
+        }
+        Ok(bytes)
+    }
+
+    pub fn policy_snapshot(&self) -> Result<PolicySnapshotV3, String> {
+        let bytes = self.policy_snapshot_bytes()?;
+        let snapshot: PolicySnapshotV3 = serde_json::from_slice(&bytes)
+            .map_err(|error| format!("decode exact carried PolicySnapshotV3 bytes: {error}"))?;
+        let reserialized = serde_json::to_vec(&snapshot)
+            .map_err(|error| format!("reserialize exact carried PolicySnapshotV3: {error}"))?;
+        if reserialized != bytes {
+            return Err(
+                "policy_snapshot_carrier bytes must equal serde_json::to_vec(decoded PolicySnapshotV3)"
+                    .to_string(),
+            );
+        }
+        let canonical = snapshot.canonicalize()?;
+        let canonical_bytes = serde_json::to_vec(&canonical)
+            .map_err(|error| format!("serialize canonical carried PolicySnapshotV3: {error}"))?;
+        if canonical_bytes != bytes {
+            return Err(
+                "policy_snapshot_carrier bytes must already contain the canonical E1 PolicySnapshotV3"
+                    .to_string(),
+            );
+        }
+        validate_lowercase_sha256_digest(
+            "policy_snapshot_carrier.policy_snapshot_hash",
+            &self.policy_snapshot_hash,
+        )?;
+        let expected_hash = format!("{:x}", Sha256::digest(&bytes));
+        if self.policy_snapshot_hash != expected_hash {
+            return Err(
+                "policy_snapshot_carrier.policy_snapshot_hash must equal E1 SHA-256 over the exact carried bytes"
+                    .to_string(),
+            );
+        }
+        Ok(snapshot)
+    }
+
+    /// Rejects a serialized/untrusted copy unless every field exactly matches
+    /// a carrier constructed from independently authenticated E2 authority.
+    pub fn validate_exact_authenticated_copy(&self, authenticated: &Self) -> Result<(), String> {
+        self.validate()?;
+        authenticated.validate()?;
+        if self != authenticated {
+            return Err(
+                "policy_snapshot_carrier changed from its authenticated E2 source".to_string(),
+            );
+        }
+        Ok(())
+    }
+}
+
+impl<'de> Deserialize<'de> for DispatchPolicySnapshotCarrierV1 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = DispatchPolicySnapshotCarrierV1Def::deserialize(deserializer)?;
+        let carrier = Self {
+            schema_version: value.schema_version,
+            immutable_worker_cap_ref: value.immutable_worker_cap_ref,
+            immutable_worker_cap_created_revision: value.immutable_worker_cap_created_revision,
+            immutable_worker_cap_application_revision: value
+                .immutable_worker_cap_application_revision,
+            subject: value.subject,
+            orchestration_session_id: value.orchestration_session_id,
+            caller_participant_id: value.caller_participant_id,
+            caller_backend_id: value.caller_backend_id,
+            target_backend_id: value.target_backend_id,
+            target_world: value.target_world,
+            policy_snapshot_bytes_base64: value.policy_snapshot_bytes_base64,
+            policy_snapshot_byte_length: value.policy_snapshot_byte_length,
+            policy_snapshot_ref: value.policy_snapshot_ref,
+            policy_snapshot_hash: value.policy_snapshot_hash,
+            policy_snapshot_revision: value.policy_snapshot_revision,
+            reason: value.reason,
+        };
+        carrier.validate().map_err(serde::de::Error::custom)?;
+        Ok(carrier)
+    }
+}
+
 pub fn canonicalize_net_allowed(entries: &[String]) -> Vec<String> {
     let mut canonical = Vec::with_capacity(entries.len());
 
@@ -2462,6 +2771,327 @@ impl TryFrom<RetainedWorkerLaunchAuthorityProofDef> for RetainedWorkerLaunchAuth
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum E2MemberLaunchKindV1 {
+    FreshSpawn,
+    Fork,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct E2DispatchPolicyReservationRefCarrierV1 {
+    pub authority_store_id: String,
+    pub reservation_id: String,
+    pub reservation_hash: String,
+}
+
+impl E2DispatchPolicyReservationRefCarrierV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        for (field, value) in [
+            ("authority_store_id", self.authority_store_id.as_str()),
+            ("reservation_id", self.reservation_id.as_str()),
+        ] {
+            validate_narrowing_identity(
+                &format!("e2_launch_activation.reservation_ref.{field}"),
+                value,
+            )?;
+        }
+        validate_lowercase_sha256_digest(
+            "e2_launch_activation.reservation_ref.reservation_hash",
+            &self.reservation_hash,
+        )
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub enum E2LaunchRequestCommitmentV1 {
+    HmacSha256 {
+        key_id: String,
+        domain: String,
+        digest_hex: String,
+    },
+    CanonicalSha256 {
+        domain: String,
+        digest_hex: String,
+    },
+}
+
+impl E2LaunchRequestCommitmentV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        let (key_id, domain, digest_hex) = match self {
+            Self::HmacSha256 {
+                key_id,
+                domain,
+                digest_hex,
+            } => (Some(key_id.as_str()), domain.as_str(), digest_hex.as_str()),
+            Self::CanonicalSha256 { domain, digest_hex } => {
+                (None, domain.as_str(), digest_hex.as_str())
+            }
+        };
+        if let Some(key_id) = key_id {
+            validate_narrowing_identity("e2_launch_activation.request_commitment.key_id", key_id)?;
+        }
+        validate_narrowing_identity("e2_launch_activation.request_commitment.domain", domain)?;
+        validate_lowercase_sha256_digest(
+            "e2_launch_activation.request_commitment.digest_hex",
+            digest_hex,
+        )
+    }
+}
+
+/// Strict shell-authenticated E2 authority pinned before retained-member launch.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "E2MemberLaunchActivationCarrierDef")]
+pub struct E2MemberLaunchActivationCarrierV1 {
+    pub schema_version: u32,
+    pub activation_id: String,
+    pub launch_kind: E2MemberLaunchKindV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reservation_ref: Option<E2DispatchPolicyReservationRefCarrierV1>,
+    pub commitment_ref: DispatchPolicyCommitmentRefCarrierV1,
+    pub immutable_worker_cap_ref: DispatchPolicyCommitmentRefCarrierV1,
+    pub immutable_worker_cap_created_revision: u64,
+    pub immutable_worker_cap_application_revision: u64,
+    pub policy_snapshot_bytes_base64: String,
+    pub policy_snapshot_byte_length: u64,
+    pub policy_snapshot_ref: PolicyRefV1,
+    pub policy_snapshot_hash: String,
+    pub policy_snapshot_revision: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    pub request_id: String,
+    pub idempotency_key: String,
+    pub orchestration_session_id: String,
+    pub caller_participant_id: String,
+    pub caller_backend_id: String,
+    pub target_backend_id: String,
+    pub retained_participant_id: String,
+    pub bootstrap_run_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_participant_id: Option<String>,
+    pub target_world: WorldBindingRefV1,
+    pub parent_policy_ref: PolicyRefV1,
+    pub parent_policy_revision: String,
+    pub request_commitment: E2LaunchRequestCommitmentV1,
+    pub registry_publication_revision: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct E2MemberLaunchActivationCarrierDef {
+    schema_version: u32,
+    activation_id: String,
+    launch_kind: E2MemberLaunchKindV1,
+    #[serde(default)]
+    reservation_ref: Option<E2DispatchPolicyReservationRefCarrierV1>,
+    commitment_ref: DispatchPolicyCommitmentRefCarrierV1,
+    immutable_worker_cap_ref: DispatchPolicyCommitmentRefCarrierV1,
+    immutable_worker_cap_created_revision: u64,
+    immutable_worker_cap_application_revision: u64,
+    policy_snapshot_bytes_base64: String,
+    policy_snapshot_byte_length: u64,
+    policy_snapshot_ref: PolicyRefV1,
+    policy_snapshot_hash: String,
+    policy_snapshot_revision: String,
+    #[serde(default)]
+    reason: Option<String>,
+    request_id: String,
+    idempotency_key: String,
+    orchestration_session_id: String,
+    caller_participant_id: String,
+    caller_backend_id: String,
+    target_backend_id: String,
+    retained_participant_id: String,
+    bootstrap_run_id: String,
+    #[serde(default)]
+    source_participant_id: Option<String>,
+    target_world: WorldBindingRefV1,
+    parent_policy_ref: PolicyRefV1,
+    parent_policy_revision: String,
+    request_commitment: E2LaunchRequestCommitmentV1,
+    registry_publication_revision: u64,
+}
+
+impl E2MemberLaunchActivationCarrierV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 1 {
+            return Err(format!(
+                "unsupported e2_launch_activation.schema_version: {} (expected 1)",
+                self.schema_version
+            ));
+        }
+        let activation_suffix = self.activation_id.strip_prefix("e2a_").ok_or_else(|| {
+            "e2_launch_activation.activation_id must be e2a_ plus 32 lowercase hexadecimal characters"
+                .to_string()
+        })?;
+        if activation_suffix.len() != 32
+            || !activation_suffix
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(
+                "e2_launch_activation.activation_id must be e2a_ plus 32 lowercase hexadecimal characters"
+                    .to_string(),
+            );
+        }
+        self.commitment_ref.validate()?;
+        self.immutable_worker_cap_ref.validate()?;
+        if self.immutable_worker_cap_created_revision == 0
+            || self.immutable_worker_cap_application_revision == 0
+            || self.registry_publication_revision == 0
+            || self.registry_publication_revision != self.immutable_worker_cap_application_revision
+        {
+            return Err(
+                "e2_launch_activation revisions must be positive exact publication facts"
+                    .to_string(),
+            );
+        }
+        match self.launch_kind {
+            E2MemberLaunchKindV1::FreshSpawn => {
+                if self.reservation_ref.is_none()
+                    || self.source_participant_id.is_some()
+                    || !matches!(
+                        self.request_commitment,
+                        E2LaunchRequestCommitmentV1::HmacSha256 { .. }
+                    )
+                {
+                    return Err("fresh_spawn E2 activation requires reservation/HMAC and forbids a source participant".to_string());
+                }
+            }
+            E2MemberLaunchKindV1::Fork => {
+                if self.reservation_ref.is_some()
+                    || self.source_participant_id.is_none()
+                    || !matches!(
+                        self.request_commitment,
+                        E2LaunchRequestCommitmentV1::CanonicalSha256 { .. }
+                    )
+                {
+                    return Err("fork E2 activation requires source/SHA-256 and forbids a Fresh Spawn reservation".to_string());
+                }
+            }
+        }
+        if let Some(reservation_ref) = self.reservation_ref.as_ref() {
+            reservation_ref.validate()?;
+            if reservation_ref.authority_store_id != self.commitment_ref.authority_store_id {
+                return Err("e2_launch_activation reservation/commitment stores differ".to_string());
+            }
+        }
+        self.request_commitment.validate()?;
+        self.policy_snapshot_ref.validate()?;
+        self.parent_policy_ref.validate()?;
+        for (field, value) in [
+            ("request_id", self.request_id.as_str()),
+            ("idempotency_key", self.idempotency_key.as_str()),
+            (
+                "orchestration_session_id",
+                self.orchestration_session_id.as_str(),
+            ),
+            ("caller_participant_id", self.caller_participant_id.as_str()),
+            ("caller_backend_id", self.caller_backend_id.as_str()),
+            ("target_backend_id", self.target_backend_id.as_str()),
+            (
+                "retained_participant_id",
+                self.retained_participant_id.as_str(),
+            ),
+            ("bootstrap_run_id", self.bootstrap_run_id.as_str()),
+            ("target_world.world_id", self.target_world.world_id.as_str()),
+            (
+                "policy_snapshot_revision",
+                self.policy_snapshot_revision.as_str(),
+            ),
+            (
+                "parent_policy_revision",
+                self.parent_policy_revision.as_str(),
+            ),
+        ] {
+            validate_narrowing_identity(&format!("e2_launch_activation.{field}"), value)?;
+        }
+        if let Some(source) = self.source_participant_id.as_deref() {
+            validate_narrowing_identity("e2_launch_activation.source_participant_id", source)?;
+        }
+        if let Some(reason) = self.reason.as_deref() {
+            validate_narrowing_identity("e2_launch_activation.reason", reason)?;
+        }
+        validate_gateway_backend_id_selector(&self.caller_backend_id).map_err(|_| {
+            "e2_launch_activation.caller_backend_id must be an exact selector".to_string()
+        })?;
+        validate_gateway_backend_id_selector(&self.target_backend_id).map_err(|_| {
+            "e2_launch_activation.target_backend_id must be an exact selector".to_string()
+        })?;
+        let _ = self.policy_snapshot()?;
+        Ok(())
+    }
+
+    pub fn policy_snapshot(&self) -> Result<PolicySnapshotV3, String> {
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(&self.policy_snapshot_bytes_base64)
+            .map_err(|_| "e2_launch_activation snapshot is not canonical base64".to_string())?;
+        if bytes.len() as u64 != self.policy_snapshot_byte_length
+            || base64::engine::general_purpose::STANDARD.encode(&bytes)
+                != self.policy_snapshot_bytes_base64
+        {
+            return Err("e2_launch_activation snapshot byte identity changed".to_string());
+        }
+        let snapshot: PolicySnapshotV3 = serde_json::from_slice(&bytes)
+            .map_err(|error| format!("decode E2 launch PolicySnapshotV3: {error}"))?;
+        if serde_json::to_vec(&snapshot).map_err(|error| error.to_string())? != bytes
+            || serde_json::to_vec(&snapshot.clone().canonicalize()?)
+                .map_err(|error| error.to_string())?
+                != bytes
+            || format!("{:x}", Sha256::digest(&bytes)) != self.policy_snapshot_hash
+        {
+            return Err("e2_launch_activation exact E1 snapshot bytes/hash changed".to_string());
+        }
+        validate_lowercase_sha256_digest(
+            "e2_launch_activation.policy_snapshot_hash",
+            &self.policy_snapshot_hash,
+        )?;
+        Ok(snapshot)
+    }
+}
+
+impl TryFrom<E2MemberLaunchActivationCarrierDef> for E2MemberLaunchActivationCarrierV1 {
+    type Error = String;
+
+    fn try_from(value: E2MemberLaunchActivationCarrierDef) -> Result<Self, Self::Error> {
+        let carrier = Self {
+            schema_version: value.schema_version,
+            activation_id: value.activation_id,
+            launch_kind: value.launch_kind,
+            reservation_ref: value.reservation_ref,
+            commitment_ref: value.commitment_ref,
+            immutable_worker_cap_ref: value.immutable_worker_cap_ref,
+            immutable_worker_cap_created_revision: value.immutable_worker_cap_created_revision,
+            immutable_worker_cap_application_revision: value
+                .immutable_worker_cap_application_revision,
+            policy_snapshot_bytes_base64: value.policy_snapshot_bytes_base64,
+            policy_snapshot_byte_length: value.policy_snapshot_byte_length,
+            policy_snapshot_ref: value.policy_snapshot_ref,
+            policy_snapshot_hash: value.policy_snapshot_hash,
+            policy_snapshot_revision: value.policy_snapshot_revision,
+            reason: value.reason,
+            request_id: value.request_id,
+            idempotency_key: value.idempotency_key,
+            orchestration_session_id: value.orchestration_session_id,
+            caller_participant_id: value.caller_participant_id,
+            caller_backend_id: value.caller_backend_id,
+            target_backend_id: value.target_backend_id,
+            retained_participant_id: value.retained_participant_id,
+            bootstrap_run_id: value.bootstrap_run_id,
+            source_participant_id: value.source_participant_id,
+            target_world: value.target_world,
+            parent_policy_ref: value.parent_policy_ref,
+            parent_policy_revision: value.parent_policy_revision,
+            request_commitment: value.request_commitment,
+            registry_publication_revision: value.registry_publication_revision,
+        };
+        carrier.validate()?;
+        Ok(carrier)
+    }
+}
+
 fn validate_lowercase_sha256_digest(field: &str, digest_hex: &str) -> Result<(), String> {
     if digest_hex.len() != 64
         || !digest_hex
@@ -2497,6 +3127,8 @@ pub struct MemberDispatchRequestV1 {
     pub resolved_runtime: ResolvedMemberRuntimeDescriptorV1,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retained_worker_launch_authority: Option<RetainedWorkerLaunchAuthorityProofV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub e2_launch_activation: Option<E2MemberLaunchActivationCarrierV1>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -2521,6 +3153,8 @@ struct MemberDispatchRequestDef {
     resolved_runtime: ResolvedMemberRuntimeDescriptorV1,
     #[serde(default)]
     retained_worker_launch_authority: Option<RetainedWorkerLaunchAuthorityProofV1>,
+    #[serde(default)]
+    e2_launch_activation: Option<E2MemberLaunchActivationCarrierV1>,
 }
 
 fn member_dispatch_request_v1_default_schema_version() -> u32 {
@@ -2564,6 +3198,9 @@ impl MemberDispatchRequestV1 {
         self.resolved_runtime.validate()?;
         if let Some(proof) = self.retained_worker_launch_authority.as_ref() {
             proof.validate()?;
+        }
+        if let Some(activation) = self.e2_launch_activation.as_ref() {
+            activation.validate()?;
         }
 
         if self.orchestrator_participant_id == self.participant_id {
@@ -2610,6 +3247,7 @@ impl TryFrom<MemberDispatchRequestDef> for MemberDispatchRequestV1 {
             initial_prompt: value.initial_prompt,
             resolved_runtime: value.resolved_runtime,
             retained_worker_launch_authority: value.retained_worker_launch_authority,
+            e2_launch_activation: value.e2_launch_activation,
         };
         request.validate()?;
         Ok(request)
@@ -2730,6 +3368,8 @@ pub struct MemberTurnSubmitRequestV1 {
     pub world_generation: u64,
     pub prompt: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_snapshot_carrier: Option<DispatchPolicySnapshotCarrierV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub acceptance_context: Option<WorldWorkAcceptanceContextV1>,
 }
 
@@ -2746,6 +3386,8 @@ struct MemberTurnSubmitRequestDef {
     world_id: String,
     world_generation: u64,
     prompt: String,
+    #[serde(default)]
+    policy_snapshot_carrier: Option<DispatchPolicySnapshotCarrierV1>,
     #[serde(default)]
     acceptance_context: Option<WorldWorkAcceptanceContextV1>,
 }
@@ -2786,6 +3428,41 @@ impl MemberTurnSubmitRequestV1 {
         validate_non_empty_request_field("member_turn_submit.world_id", &self.world_id)?;
         validate_non_empty_request_field("member_turn_submit.prompt", &self.prompt)?;
 
+        if let Some(carrier) = self.policy_snapshot_carrier.as_ref() {
+            carrier.validate()?;
+            if carrier.orchestration_session_id != self.orchestration_session_id
+                || carrier.subject.retained_participant_id != self.participant_id
+                || carrier.subject.active_run_id != self.run_id
+                || carrier.caller_participant_id != self.orchestrator_participant_id
+                || carrier.target_backend_id != self.backend_id
+                || carrier.target_world.world_id != self.world_id
+                || carrier.target_world.world_generation != self.world_generation
+            {
+                return Err(
+                    "member_turn_submit policy_snapshot_carrier identity or world binding changed"
+                        .to_string(),
+                );
+            }
+            let acceptance_message_id = self
+                .acceptance_context
+                .as_ref()
+                .and_then(|context| context.message_id.as_ref());
+            if carrier.subject.message_id.as_ref() != acceptance_message_id {
+                return Err(
+                    "member_turn_submit policy_snapshot_carrier subject.message_id must exactly match acceptance_context.message_id"
+                        .to_string(),
+                );
+            }
+            if let Some(context) = self.acceptance_context.as_ref() {
+                if carrier.caller_backend_id != context.caller_backend_id {
+                    return Err(
+                        "member_turn_submit policy_snapshot_carrier.caller_backend_id must exactly match acceptance_context.caller_backend_id"
+                            .to_string(),
+                    );
+                }
+            }
+        }
+
         if let Some(context) = self.acceptance_context.as_ref() {
             context.validate()?;
             if context.request_id != self.run_id {
@@ -2810,6 +3487,20 @@ impl MemberTurnSubmitRequestV1 {
 
         Ok(())
     }
+
+    /// Validates both request bindings and byte-for-byte equality with a
+    /// carrier obtained from independently authenticated host E2 authority.
+    pub fn validate_against_authenticated_policy_carrier(
+        &self,
+        authenticated: &DispatchPolicySnapshotCarrierV1,
+    ) -> Result<(), String> {
+        self.validate()?;
+        let carried = self.policy_snapshot_carrier.as_ref().ok_or_else(|| {
+            "member_turn_submit requires policy_snapshot_carrier for authenticated E2 dispatch"
+                .to_string()
+        })?;
+        carried.validate_exact_authenticated_copy(authenticated)
+    }
 }
 
 impl TryFrom<MemberTurnSubmitRequestDef> for MemberTurnSubmitRequestV1 {
@@ -2826,6 +3517,7 @@ impl TryFrom<MemberTurnSubmitRequestDef> for MemberTurnSubmitRequestV1 {
             world_id: value.world_id,
             world_generation: value.world_generation,
             prompt: value.prompt,
+            policy_snapshot_carrier: value.policy_snapshot_carrier,
             acceptance_context: value.acceptance_context,
         };
         request.validate()?;
@@ -5441,6 +6133,7 @@ pipe_path=XFwuXHBpcGVcc3Vic3RyYXRlLWFnZW50\n";
                     binary_path: binary_path.clone(),
                 },
                 retained_worker_launch_authority: None,
+                e2_launch_activation: None,
             }),
             acceptance_context: None,
         };
@@ -5494,6 +6187,7 @@ pipe_path=XFwuXHBpcGVcc3Vic3RyYXRlLWFnZW50\n";
                     binary_path,
                 },
                 retained_worker_launch_authority: None,
+                e2_launch_activation: None,
             })
         );
     }
@@ -5510,6 +6204,7 @@ pipe_path=XFwuXHBpcGVcc3Vic3RyYXRlLWFnZW50\n";
             world_id: "world_123".into(),
             world_generation: 7,
             prompt: "summarize the failure".into(),
+            policy_snapshot_carrier: None,
             acceptance_context: None,
         };
 
@@ -5517,6 +6212,292 @@ pipe_path=XFwuXHBpcGVcc3Vic3RyYXRlLWFnZW50\n";
         let back: MemberTurnSubmitRequestV1 =
             serde_json::from_str(&json).expect("deserialize member turn submit request");
         assert_eq!(back, req);
+    }
+
+    #[test]
+    fn dispatch_policy_snapshot_carrier_round_trips_exact_e1_bytes_and_hash() {
+        let snapshot = e2_sample_policy_snapshot();
+        let carrier = e2_sample_policy_snapshot_carrier();
+        let expected_bytes = serde_json::to_vec(&snapshot).expect("serialize exact E1 bytes");
+        let expected_hash = format!("{:x}", Sha256::digest(&expected_bytes));
+
+        assert_eq!(carrier.policy_snapshot_hash, expected_hash);
+        assert_eq!(carrier.policy_snapshot_bytes().unwrap(), expected_bytes);
+        assert_eq!(
+            serde_json::to_vec(&carrier.policy_snapshot().unwrap()).unwrap(),
+            serde_json::to_vec(&snapshot).unwrap()
+        );
+
+        let encoded = serde_json::to_value(&carrier).expect("serialize exact carrier");
+        let decoded: DispatchPolicySnapshotCarrierV1 =
+            serde_json::from_value(encoded).expect("deserialize exact carrier");
+        assert_eq!(decoded, carrier);
+    }
+
+    #[test]
+    fn dispatch_policy_snapshot_carrier_rejects_hash_mismatch_or_unknown_material() {
+        let carrier = e2_sample_policy_snapshot_carrier();
+        let mut mismatched = serde_json::to_value(&carrier).expect("serialize carrier");
+        mismatched["policy_snapshot_hash"] = serde_json::Value::String("0".repeat(64));
+        assert!(serde_json::from_value::<DispatchPolicySnapshotCarrierV1>(mismatched).is_err());
+
+        let mut uppercase = serde_json::to_value(&carrier).expect("serialize carrier");
+        uppercase["policy_snapshot_hash"] =
+            serde_json::Value::String(carrier.policy_snapshot_hash.to_uppercase());
+        assert!(serde_json::from_value::<DispatchPolicySnapshotCarrierV1>(uppercase).is_err());
+
+        let mut unknown = serde_json::to_value(&carrier).expect("serialize carrier");
+        unknown["unexpected"] = serde_json::Value::Bool(true);
+        assert!(serde_json::from_value::<DispatchPolicySnapshotCarrierV1>(unknown).is_err());
+
+        let exact_bytes = carrier
+            .policy_snapshot_bytes()
+            .expect("exact carrier bytes");
+        let mut noncanonical_bytes = Vec::with_capacity(exact_bytes.len() + 1);
+        noncanonical_bytes.push(b' ');
+        noncanonical_bytes.extend_from_slice(&exact_bytes);
+        let mut noncanonical = carrier.clone();
+        noncanonical.policy_snapshot_byte_length = noncanonical_bytes.len() as u64;
+        noncanonical.policy_snapshot_bytes_base64 =
+            base64::engine::general_purpose::STANDARD.encode(&noncanonical_bytes);
+        noncanonical.policy_snapshot_hash = format!("{:x}", Sha256::digest(&noncanonical_bytes));
+        assert!(noncanonical.validate().is_err());
+    }
+
+    #[test]
+    fn dispatch_policy_snapshot_carrier_rejects_substituted_cap_or_stale_revision_copy() {
+        let authenticated = e2_sample_policy_snapshot_carrier();
+
+        let mut substituted_cap = authenticated.clone();
+        substituted_cap.immutable_worker_cap_ref.commitment_id =
+            "dpc_018f0f3a-9b2c-7def-8abc-0123456789ae".to_string();
+        substituted_cap
+            .validate()
+            .expect("substituted ref is well-formed");
+        assert!(substituted_cap
+            .validate_exact_authenticated_copy(&authenticated)
+            .is_err());
+
+        let mut stale_revision = authenticated.clone();
+        stale_revision.immutable_worker_cap_application_revision -= 1;
+        stale_revision
+            .validate()
+            .expect("stale revision is well-formed");
+        assert!(stale_revision
+            .validate_exact_authenticated_copy(&authenticated)
+            .is_err());
+
+        let mut substituted_snapshot = authenticated.clone();
+        let mut snapshot = substituted_snapshot
+            .policy_snapshot()
+            .expect("authenticated snapshot");
+        snapshot.net_allowed = vec!["substituted.example".to_string()];
+        let substituted_bytes = serde_json::to_vec(&snapshot).expect("substituted snapshot bytes");
+        substituted_snapshot.policy_snapshot_byte_length = substituted_bytes.len() as u64;
+        substituted_snapshot.policy_snapshot_bytes_base64 =
+            base64::engine::general_purpose::STANDARD.encode(&substituted_bytes);
+        substituted_snapshot.policy_snapshot_hash =
+            format!("{:x}", Sha256::digest(&substituted_bytes));
+        substituted_snapshot
+            .validate()
+            .expect("internally valid substituted snapshot");
+        assert!(substituted_snapshot
+            .validate_exact_authenticated_copy(&authenticated)
+            .is_err());
+
+        let mut stale_snapshot_revision = authenticated.clone();
+        stale_snapshot_revision.policy_snapshot_revision = "policy-revision-stale".to_string();
+        stale_snapshot_revision
+            .validate()
+            .expect("stale snapshot revision remains structurally valid");
+        assert!(stale_snapshot_revision
+            .validate_exact_authenticated_copy(&authenticated)
+            .is_err());
+
+        let mut unauthenticated_request_copy = authenticated.clone();
+        unauthenticated_request_copy.reason = Some("untrusted-request-material".to_string());
+        unauthenticated_request_copy
+            .validate()
+            .expect("untrusted request copy remains structurally valid");
+        assert!(unauthenticated_request_copy
+            .validate_exact_authenticated_copy(&authenticated)
+            .is_err());
+    }
+
+    #[test]
+    fn member_turn_submit_carries_atomic_policy_snapshot_identity_and_omits_legacy_absence() {
+        let carrier = e2_sample_policy_snapshot_carrier();
+        let mut request_json = serde_json::json!({
+            "schema_version": 1,
+            "orchestration_session_id": "orch_123",
+            "participant_id": "ash_member_123",
+            "orchestrator_participant_id": "ash_orch_123",
+            "backend_id": "cli:codex",
+            "run_id": "run_123",
+            "world_id": "world_123",
+            "world_generation": 7,
+            "prompt": "resume"
+        });
+        let legacy: MemberTurnSubmitRequestV1 =
+            serde_json::from_value(request_json.clone()).expect("legacy request remains valid");
+        assert!(legacy.policy_snapshot_carrier.is_none());
+        assert!(legacy
+            .validate_against_authenticated_policy_carrier(&carrier)
+            .is_err());
+        assert!(serde_json::to_value(&legacy)
+            .expect("serialize legacy request")
+            .get("policy_snapshot_carrier")
+            .is_none());
+
+        let mut acceptance_context = sample_world_work_acceptance_context();
+        acceptance_context.request_id = "run_123".to_string();
+        request_json["acceptance_context"] =
+            serde_json::to_value(&acceptance_context).expect("serialize acceptance context");
+        request_json["policy_snapshot_carrier"] =
+            serde_json::to_value(&carrier).expect("serialize carrier");
+        let carried: MemberTurnSubmitRequestV1 =
+            serde_json::from_value(request_json).expect("carried request validates");
+        carried
+            .validate_against_authenticated_policy_carrier(&carrier)
+            .expect("authenticated carrier exact-joins request bindings");
+        assert_eq!(carried.policy_snapshot_carrier, Some(carrier.clone()));
+
+        for (pointer, replacement) in [
+            ("/orchestration_session_id", serde_json::json!("orch_other")),
+            ("/participant_id", serde_json::json!("ash_member_other")),
+            (
+                "/orchestrator_participant_id",
+                serde_json::json!("ash_orch_other"),
+            ),
+            ("/backend_id", serde_json::json!("cli:claude-code")),
+            ("/run_id", serde_json::json!("run_other")),
+            ("/world_id", serde_json::json!("world_other")),
+            ("/world_generation", serde_json::json!(8)),
+        ] {
+            let mut changed = serde_json::to_value(&carried).expect("serialize carried request");
+            *changed
+                .pointer_mut(pointer)
+                .expect("request mutation pointer") = replacement;
+            assert!(serde_json::from_value::<MemberTurnSubmitRequestV1>(changed).is_err());
+        }
+
+        for (pointer, replacement) in [
+            (
+                "/policy_snapshot_carrier/orchestration_session_id",
+                serde_json::json!("orch_other"),
+            ),
+            (
+                "/policy_snapshot_carrier/subject/retained_participant_id",
+                serde_json::json!("ash_member_other"),
+            ),
+            (
+                "/policy_snapshot_carrier/subject/active_run_id",
+                serde_json::json!("run_other"),
+            ),
+            (
+                "/policy_snapshot_carrier/caller_participant_id",
+                serde_json::json!("ash_orch_other"),
+            ),
+            (
+                "/policy_snapshot_carrier/target_backend_id",
+                serde_json::json!("cli:claude-code"),
+            ),
+            (
+                "/policy_snapshot_carrier/target_world/world_id",
+                serde_json::json!("world_other"),
+            ),
+            (
+                "/policy_snapshot_carrier/target_world/world_generation",
+                serde_json::json!(8),
+            ),
+        ] {
+            let mut changed = serde_json::to_value(&carried).expect("serialize carried request");
+            *changed
+                .pointer_mut(pointer)
+                .expect("carrier mutation pointer") = replacement;
+            assert!(serde_json::from_value::<MemberTurnSubmitRequestV1>(changed).is_err());
+        }
+
+        let mut changed_message = serde_json::to_value(&carried).expect("serialize request");
+        changed_message["policy_snapshot_carrier"]["subject"]["message_id"] =
+            serde_json::json!("wwm_018f0f3a-9b2c-7def-8abc-0123456789ad");
+        assert!(serde_json::from_value::<MemberTurnSubmitRequestV1>(changed_message).is_err());
+
+        let mut changed_caller_backend = serde_json::to_value(&carried).expect("serialize request");
+        changed_caller_backend["policy_snapshot_carrier"]["caller_backend_id"] =
+            serde_json::json!("cli:claude-code");
+        assert!(
+            serde_json::from_value::<MemberTurnSubmitRequestV1>(changed_caller_backend).is_err()
+        );
+    }
+
+    fn e2_sample_policy_snapshot_carrier() -> DispatchPolicySnapshotCarrierV1 {
+        let snapshot = e2_sample_policy_snapshot();
+        let bytes = serde_json::to_vec(&snapshot).expect("serialize E1 fixture snapshot");
+        let carrier = DispatchPolicySnapshotCarrierV1 {
+            schema_version: 1,
+            immutable_worker_cap_ref: DispatchPolicyCommitmentRefCarrierV1 {
+                authority_store_id: "authority-store-e2".to_string(),
+                commitment_id: "dpc_018f0f3a-9b2c-7def-8abc-0123456789ad".to_string(),
+                exact_linkage_hash: "a".repeat(64),
+            },
+            immutable_worker_cap_created_revision: 7,
+            immutable_worker_cap_application_revision: 9,
+            subject: RetainedTurnPolicyCommitmentSubjectV1 {
+                retained_participant_id: "ash_member_123".to_string(),
+                active_run_id: "run_123".to_string(),
+                message_id: Some("wwm_018f0f3a-9b2c-7def-8abc-0123456789ac".to_string()),
+            },
+            orchestration_session_id: "orch_123".to_string(),
+            caller_participant_id: "ash_orch_123".to_string(),
+            caller_backend_id: "cli:codex".to_string(),
+            target_backend_id: "cli:codex".to_string(),
+            target_world: WorldBindingRefV1 {
+                world_id: "world_123".to_string(),
+                world_generation: 7,
+            },
+            policy_snapshot_bytes_base64: base64::engine::general_purpose::STANDARD.encode(&bytes),
+            policy_snapshot_byte_length: bytes.len() as u64,
+            policy_snapshot_ref: AuthorityObjectRefV1 {
+                ref_id: "ao_0123456789abcdef0123456789abcdef".to_string(),
+                object_kind: AuthorityObjectKindV1::Policy,
+                schema_version: 1,
+                commitment: OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                    digest_hex: "b".repeat(64),
+                },
+            },
+            policy_snapshot_hash: format!("{:x}", Sha256::digest(&bytes)),
+            policy_snapshot_revision: "policy-revision-e2-7".to_string(),
+            reason: Some("narrow retained turn".to_string()),
+        };
+        carrier.validate().expect("valid E2 carrier fixture");
+        carrier
+    }
+
+    fn e2_sample_policy_snapshot() -> PolicySnapshotV3 {
+        PolicySnapshotV3 {
+            schema_version: 3,
+            net_allowed: vec!["api.example.com".to_string()],
+            world_fs: PolicySnapshotWorldFsV3 {
+                host_visible: false,
+                fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: true },
+                deny_enforcement: None,
+                caged_required: true,
+                discover: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec!["exact".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                read: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec!["exact".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                write: PolicySnapshotWorldFsWriteV3 {
+                    enabled: false,
+                    allow_list: vec!["exact".to_string()],
+                    deny_list: Vec::new(),
+                },
+            },
+        }
     }
 
     fn sample_world_work_acceptance_context() -> WorldWorkAcceptanceContextV1 {
@@ -5571,6 +6552,7 @@ pipe_path=XFwuXHBpcGVcc3Vic3RyYXRlLWFnZW50\n";
             world_id: "world_123".into(),
             world_generation: 7,
             prompt: "resume".into(),
+            policy_snapshot_carrier: None,
             acceptance_context: None,
         })
         .unwrap();

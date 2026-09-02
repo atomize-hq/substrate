@@ -1,5 +1,7 @@
 //! HTTP handlers for the world agent API.
 
+#[cfg(target_os = "linux")]
+use crate::member_turn_join::MemberTurnJoinError;
 use crate::service::WorldService;
 use axum::{
     body::Bytes,
@@ -35,6 +37,31 @@ fn doctor_world_netfilter_enable_present() -> bool {
 /// Wrapper type to implement IntoResponse for ApiError
 #[derive(Debug)]
 pub struct ApiErrorResponse(ApiError);
+
+#[derive(Debug)]
+pub struct MemberTurnSubmitErrorResponse {
+    status: StatusCode,
+    error_code: String,
+}
+
+impl MemberTurnSubmitErrorResponse {
+    fn new(status: StatusCode, error_code: impl Into<String>) -> Self {
+        Self {
+            status,
+            error_code: error_code.into(),
+        }
+    }
+}
+
+impl IntoResponse for MemberTurnSubmitErrorResponse {
+    fn into_response(self) -> Response {
+        (
+            self.status,
+            ResponseJson(json!({ "error": self.error_code })),
+        )
+            .into_response()
+    }
+}
 
 impl From<ApiError> for ApiErrorResponse {
     fn from(err: ApiError) -> Self {
@@ -374,17 +401,54 @@ pub async fn execute_stream_replay(
 pub async fn member_turn_stream(
     State(service): State<WorldService>,
     body: Bytes,
-) -> Result<Response, ApiErrorResponse> {
+) -> Result<Response, MemberTurnSubmitErrorResponse> {
     let payload: Value = serde_json::from_slice(&body)
-        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
+        .map_err(|_| MemberTurnSubmitErrorResponse::new(StatusCode::BAD_REQUEST, "invalid_json"))?;
     let req: MemberTurnSubmitRequestV1 = serde_json::from_value(payload)
-        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
+        .map_err(|_| MemberTurnSubmitErrorResponse::new(StatusCode::BAD_REQUEST, "invalid_json"))?;
     service.submit_member_turn_stream(req).await.map_err(|e| {
         if let Some(bad) = e.downcast_ref::<crate::service::BadRequestError>() {
-            ApiErrorResponse(ApiError::BadRequest(bad.message().to_string()))
-        } else {
-            ApiErrorResponse(ApiError::Internal(e.to_string()))
+            return MemberTurnSubmitErrorResponse::new(
+                StatusCode::BAD_REQUEST,
+                bad.message().to_string(),
+            );
         }
+        #[cfg(target_os = "linux")]
+        if let Some(join) = e.downcast_ref::<MemberTurnJoinError>() {
+            return match join {
+                MemberTurnJoinError::RequestConflict => MemberTurnSubmitErrorResponse::new(
+                    StatusCode::CONFLICT,
+                    "member_turn_request_conflict_v1",
+                ),
+                MemberTurnJoinError::LaunchIndeterminate => MemberTurnSubmitErrorResponse::new(
+                    StatusCode::CONFLICT,
+                    "member_turn_launch_indeterminate_v1",
+                ),
+                MemberTurnJoinError::UnsupportedLegacyState => MemberTurnSubmitErrorResponse::new(
+                    StatusCode::CONFLICT,
+                    "unsupported_legacy_state",
+                ),
+                MemberTurnJoinError::CapacityExhausted => MemberTurnSubmitErrorResponse::new(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "member_turn_join_capacity_exhausted_v1",
+                ),
+                MemberTurnJoinError::FailedBeforeLaunch {
+                    error_code,
+                    http_status,
+                } => MemberTurnSubmitErrorResponse::new(
+                    StatusCode::from_u16(*http_status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+                    error_code.clone(),
+                ),
+                MemberTurnJoinError::Unsafe(_) => MemberTurnSubmitErrorResponse::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "member_turn_join_unsafe_v1",
+                ),
+            };
+        }
+        MemberTurnSubmitErrorResponse::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "member_turn_internal_error",
+        )
     })
 }
 

@@ -111,6 +111,7 @@ fn make_member_dispatch_request_with_backend(
             binary_path: binary_path.display().to_string(),
         },
         retained_worker_launch_authority: None,
+        e2_launch_activation: None,
     });
     request
 }
@@ -134,6 +135,7 @@ fn make_member_turn_submit_request(
         world_id: world_id.to_string(),
         world_generation,
         prompt: prompt.to_string(),
+        policy_snapshot_carrier: None,
         acceptance_context: None,
     }
 }

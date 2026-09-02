@@ -7,6 +7,7 @@ use crate::execution::agent_events::ShellCommandEventContext;
 use crate::execution::policy_snapshot::world_spec_for_network_policy;
 use crate::execution::policy_snapshot::{
     request_world_network_routing, resolve_world_network_policy_for_cwd,
+    resolve_world_network_policy_for_snapshot,
 };
 #[cfg(target_os = "macos")]
 use crate::execution::pw;
@@ -36,9 +37,9 @@ use transport_api_types::ExecuteCancelRequestV1;
 #[cfg(any(target_os = "linux", all(test, unix)))]
 use transport_api_types::PlatformPrincipalV1;
 use transport_api_types::{
-    ExecuteRequest, ExecuteStreamFrame, MemberDispatchRequestV1, MemberRuntimeBackendKindV1,
-    ProcessTelemetry, ResolvedMemberRuntimeDescriptorV1, RetainedWorkerLaunchAuthorityProofV1,
-    WorldFsMode,
+    E2MemberLaunchActivationCarrierV1, ExecuteRequest, ExecuteStreamFrame, MemberDispatchRequestV1,
+    MemberRuntimeBackendKindV1, ProcessTelemetry, ResolvedMemberRuntimeDescriptorV1,
+    RetainedWorkerLaunchAuthorityProofV1, WorldFsMode,
 };
 #[cfg(target_os = "linux")]
 use world::LinuxLocalBackend;
@@ -496,6 +497,65 @@ pub(crate) struct PtyWorldOutcome {
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
+pub(crate) struct ExactDispatchPolicySnapshotMaterialV1 {
+    pub(crate) policy_snapshot: transport_api_types::PolicySnapshotV3,
+    pub(crate) policy_snapshot_bytes: Vec<u8>,
+    pub(crate) policy_snapshot_hash: String,
+}
+
+impl ExactDispatchPolicySnapshotMaterialV1 {
+    pub(crate) fn from_exact_e1_material(
+        policy_snapshot: transport_api_types::PolicySnapshotV3,
+        policy_snapshot_bytes: Vec<u8>,
+        policy_snapshot_hash: String,
+    ) -> anyhow::Result<Self> {
+        let material = Self {
+            policy_snapshot,
+            policy_snapshot_bytes,
+            policy_snapshot_hash,
+        };
+        material.validate()?;
+        Ok(material)
+    }
+
+    fn validate(&self) -> anyhow::Result<()> {
+        use sha2::Digest as _;
+
+        let decoded: transport_api_types::PolicySnapshotV3 =
+            serde_json::from_slice(&self.policy_snapshot_bytes).map_err(|error| {
+                anyhow::anyhow!("decode exact E1 PolicySnapshotV3 bytes: {error}")
+            })?;
+        let decoded_bytes = serde_json::to_vec(&decoded)
+            .map_err(|error| anyhow::anyhow!("reserialize exact E1 PolicySnapshotV3: {error}"))?;
+        let expected_bytes = serde_json::to_vec(&self.policy_snapshot)
+            .map_err(|error| anyhow::anyhow!("serialize expected E1 PolicySnapshotV3: {error}"))?;
+        let canonical = self
+            .policy_snapshot
+            .canonicalize()
+            .map_err(anyhow::Error::msg)?;
+        let canonical_bytes = serde_json::to_vec(&canonical)
+            .map_err(|error| anyhow::anyhow!("serialize canonical E1 PolicySnapshotV3: {error}"))?;
+        let hash = format!("{:x}", sha2::Sha256::digest(&self.policy_snapshot_bytes));
+        if decoded_bytes != self.policy_snapshot_bytes
+            || expected_bytes != self.policy_snapshot_bytes
+            || canonical_bytes != self.policy_snapshot_bytes
+            || self.policy_snapshot_hash.len() != 64
+            || !self
+                .policy_snapshot_hash
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            || hash != self.policy_snapshot_hash
+        {
+            anyhow::bail!(
+                "exact E1 policy snapshot bytes, hash, decoded identity, or canonical identity changed"
+            );
+        }
+        Ok(())
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
 pub(crate) struct MemberDispatchTransportRequest {
     pub orchestration_session_id: String,
     pub participant_id: String,
@@ -511,6 +571,29 @@ pub(crate) struct MemberDispatchTransportRequest {
     pub backend_kind: MemberRuntimeBackendKindV1,
     pub binary_path: String,
     pub retained_worker_launch_authority: Option<RetainedWorkerLaunchAuthorityProofV1>,
+    pub e2_launch_activation: Option<E2MemberLaunchActivationCarrierV1>,
+    pub exact_policy_snapshot: Option<ExactDispatchPolicySnapshotMaterialV1>,
+}
+
+impl MemberDispatchTransportRequest {
+    fn resolve_world_network_policy(
+        &self,
+        cwd_path: &std::path::Path,
+    ) -> anyhow::Result<crate::execution::policy_snapshot::ResolvedWorldNetworkPolicy> {
+        let Some(material) = self.exact_policy_snapshot.as_ref() else {
+            return resolve_world_network_policy_for_cwd(cwd_path);
+        };
+        material.validate()?;
+        let resolved =
+            resolve_world_network_policy_for_snapshot(material.policy_snapshot.clone(), cwd_path)?;
+        let resolved_bytes = serde_json::to_vec(&resolved.snapshot).map_err(|error| {
+            anyhow::anyhow!("serialize resolved dispatch PolicySnapshotV3: {error}")
+        })?;
+        if resolved_bytes != material.policy_snapshot_bytes {
+            anyhow::bail!("exact dispatch policy snapshot changed during world-network resolution");
+        }
+        Ok(resolved)
+    }
 }
 
 fn build_execute_request(input: ExecuteRequestInput) -> ExecuteRequest {
@@ -566,6 +649,7 @@ fn build_member_dispatch_payload(
             binary_path: request.binary_path.clone(),
         },
         retained_worker_launch_authority: request.retained_worker_launch_authority.clone(),
+        e2_launch_activation: request.e2_launch_activation.clone(),
     }
 }
 
@@ -1657,7 +1741,7 @@ fn build_agent_client_and_member_dispatch_request_impl(
     let cwd_path = cwd_path.to_path_buf();
     let cwd = cwd_path.display().to_string();
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
-    let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
+    let network_policy = dispatch.resolve_world_network_policy(&cwd_path)?;
     let world_network = request_world_network_routing(&network_policy);
     let policy_snapshot = network_policy.snapshot;
     let (mut env_map, inherit_from_host) = build_world_env_map_for_cwd(&cwd_path)?;
@@ -1914,7 +1998,7 @@ fn build_agent_client_and_member_dispatch_request_impl(
         apply_macos_staged_workspace_project_dir_override(&mut env_map);
         ensure_world_deps_bin_on_path(&mut env_map);
         let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
-        let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
+        let network_policy = dispatch.resolve_world_network_policy(&cwd_path)?;
         let world_network = request_world_network_routing(&network_policy);
         let policy_snapshot = network_policy.snapshot;
         crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
@@ -1964,7 +2048,7 @@ fn build_agent_client_and_member_dispatch_request_impl(
     apply_macos_staged_workspace_project_dir_override(&mut env_map);
     ensure_world_deps_bin_on_path(&mut env_map);
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
-    let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
+    let network_policy = dispatch.resolve_world_network_policy(&cwd_path)?;
     let world_network = request_world_network_routing(&network_policy);
     let policy_snapshot = network_policy.snapshot;
     crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
@@ -2144,7 +2228,7 @@ fn build_agent_client_and_member_dispatch_request_impl(
     let client = windows::build_agent_client()?;
     let cwd = windows::current_dir_wsl()?;
     let host_cwd = cwd_path.to_path_buf();
-    let network_policy = resolve_world_network_policy_for_cwd(&host_cwd)?;
+    let network_policy = dispatch.resolve_world_network_policy(&host_cwd)?;
     mark_windows_world_dispatch_active_without_session();
 
     let profile = current_world_request_profile();
@@ -2740,6 +2824,7 @@ mod tests {
         acquire_event_test_guard, clear_agent_event_sender, init_event_channel,
         ShellCommandEventContext, ShellEventEmissionContext,
     };
+    use crate::execution::ExactDispatchPolicySnapshotMaterialV1;
     use base64::Engine;
     use futures::stream;
     use http_body_util::StreamBody;
@@ -4020,6 +4105,8 @@ mod tests {
             backend_kind: MemberRuntimeBackendKindV1::Codex,
             binary_path: "/usr/bin/codex".to_string(),
             retained_worker_launch_authority: None,
+            e2_launch_activation: None,
+            exact_policy_snapshot: None,
         });
 
         assert_eq!(payload.schema_version, 1);
@@ -4048,6 +4135,80 @@ mod tests {
                 binary_path: "/usr/bin/codex".to_string(),
             }
         );
+    }
+
+    #[test]
+    fn member_dispatch_policy_carrier_preserves_exact_snapshot_bytes() {
+        let cwd = tempfile::tempdir().expect("create policy carrier cwd");
+        let snapshot = PolicySnapshotV3 {
+            schema_version: 3,
+            net_allowed: vec!["api.example.com".to_string()],
+            world_fs: PolicySnapshotWorldFsV3 {
+                host_visible: false,
+                fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: true },
+                deny_enforcement: None,
+                caged_required: true,
+                discover: Some(transport_api_types::PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec!["exact".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                read: Some(transport_api_types::PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec!["exact".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                write: PolicySnapshotWorldFsWriteV3 {
+                    enabled: false,
+                    allow_list: vec!["exact".to_string()],
+                    deny_list: Vec::new(),
+                },
+            },
+        };
+        let exact_bytes = serde_json::to_vec(&snapshot).expect("serialize exact snapshot");
+        let exact_hash = {
+            use sha2::Digest as _;
+            format!("{:x}", sha2::Sha256::digest(&exact_bytes))
+        };
+        let material = ExactDispatchPolicySnapshotMaterialV1::from_exact_e1_material(
+            snapshot.clone(),
+            exact_bytes,
+            exact_hash,
+        )
+        .expect("construct exact snapshot material");
+        let request = MemberDispatchTransportRequest {
+            orchestration_session_id: "orch_123".to_string(),
+            participant_id: "ash_member_123".to_string(),
+            orchestrator_participant_id: "ash_orch_123".to_string(),
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+            backend_id: "cli:codex".to_string(),
+            protocol: "substrate.agent.session".to_string(),
+            run_id: "run_123".to_string(),
+            world_id: "world_123".to_string(),
+            world_generation: 9,
+            initial_prompt: None,
+            backend_kind: MemberRuntimeBackendKindV1::Codex,
+            binary_path: "/usr/bin/codex".to_string(),
+            retained_worker_launch_authority: None,
+            e2_launch_activation: None,
+            exact_policy_snapshot: Some(material.clone()),
+        };
+
+        let resolved = request
+            .resolve_world_network_policy(cwd.path())
+            .expect("resolve carried policy");
+
+        assert_eq!(
+            serde_json::to_vec(&resolved.snapshot).expect("serialize resolved snapshot"),
+            serde_json::to_vec(&snapshot).expect("serialize exact carrier snapshot")
+        );
+
+        let mut substituted_hash = material.clone();
+        substituted_hash.policy_snapshot_hash = "0".repeat(64);
+        assert!(substituted_hash.validate().is_err());
+
+        let mut substituted_bytes = material;
+        substituted_bytes.policy_snapshot_bytes.push(b' ');
+        assert!(substituted_bytes.validate().is_err());
     }
 
     #[test]
@@ -4097,6 +4258,8 @@ mod tests {
                     backend_kind: MemberRuntimeBackendKindV1::Codex,
                     binary_path: "/usr/bin/codex".to_string(),
                     retained_worker_launch_authority: None,
+                    e2_launch_activation: None,
+                    exact_policy_snapshot: None,
                 },
             )),
         });

@@ -82,6 +82,8 @@ use crate::execution::agent_runtime::dispatch_contract::{
     ContinueWorldWorkerOutcomeV1, ForkWorldWorkerOutcomeV1, InspectWorldWorkerOutcomeV1,
     RunWorldTaskOutcomeV1,
 };
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::dispatch_policy_commitment::AuthenticatedFreshSpawnReservationProofV1;
 use crate::execution::agent_runtime::host_session_authority::canonical_json;
 use crate::execution::agent_runtime::host_session_authority::schema::{
     AgentDescriptorV1, AgentExecutionScopeV1, AuthorityObjectCommitmentV1, CanonicalDirectoryV1,
@@ -175,8 +177,6 @@ use crate::execution::get_terminal_size;
 use crate::execution::orchestrator_world_dispatch::dispatch_orchestrator_world_request;
 #[cfg(target_os = "linux")]
 use crate::execution::orchestrator_world_dispatch::prepare_authority_bound_spawn_world_worker;
-#[cfg(target_os = "linux")]
-use crate::execution::orchestrator_world_dispatch::prepare_fork_world_worker_bootstrap;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::orchestrator_world_dispatch::prepare_orchestrator_world_dispatch;
 #[cfg(target_os = "macos")]
@@ -190,6 +190,10 @@ use crate::execution::orchestrator_world_dispatch::{
     dispatch_orchestrator_world_request_for_principal,
     dispatch_run_world_task_request_with_started_task_run_id_tx_for_principal,
 };
+#[cfg(target_os = "linux")]
+use crate::execution::orchestrator_world_dispatch::{
+    prepare_fork_world_worker_bootstrap, PreparedForkPolicyCommitmentV1,
+};
 use crate::execution::prompt_fulfillment::{
     build_runtime_owned_toolbox_env, PromptFulfillmentBridge, PromptFulfillmentCancelHandle,
 };
@@ -198,7 +202,8 @@ use crate::execution::WorldRootSettings;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::{
     build_agent_client_and_member_dispatch_request_for_cwd,
-    build_agent_client_and_pending_diff_request, MemberDispatchTransportRequest,
+    build_agent_client_and_pending_diff_request, ExactDispatchPolicySnapshotMaterialV1,
+    MemberDispatchTransportRequest,
 };
 use crate::execution::{
     canonicalize_or, enforce_caged_destination, execute_command, find_workspace_root,
@@ -1912,9 +1917,15 @@ struct PreparedAgentRuntime {
     startup_context: RuntimeOrchestrationContext,
     manifest: Arc<Mutex<AgentRuntimeSessionManifest>>,
     run_id: String,
+    exact_policy_snapshot: Option<ExactDispatchPolicySnapshotMaterialV1>,
     retained_worker_launch_authority: Option<RetainedWorkerLaunchAuthorityProofV1>,
+    e2_launch_activation: Option<transport_api_types::E2MemberLaunchActivationCarrierV1>,
     #[cfg(target_os = "linux")]
-    retained_worker_admission: Option<(HostSessionAuthority, RetainedWorkerAdmissionPlanV1)>,
+    retained_worker_admission: Option<(
+        Arc<HostSessionAuthority>,
+        RetainedWorkerAdmissionPlanV1,
+        Arc<AuthenticatedFreshSpawnReservationProofV1>,
+    )>,
     startup_extensions: BTreeMap<String, serde_json::Value>,
 }
 
@@ -4137,7 +4148,9 @@ fn apply_greenfield_host_start_from_authority(
         },
         manifest: Arc::new(Mutex::new(manifest)),
         run_id,
+        exact_policy_snapshot: None,
         retained_worker_launch_authority: None,
+        e2_launch_activation: None,
         #[cfg(target_os = "linux")]
         retained_worker_admission: None,
         startup_extensions: BTreeMap::new(),
@@ -4946,7 +4959,9 @@ fn prepare_hidden_owner_helper_runtime(
         },
         manifest: Arc::new(Mutex::new(manifest)),
         run_id: plan.participant.run_id.clone(),
+        exact_policy_snapshot: None,
         retained_worker_launch_authority: None,
+        e2_launch_activation: None,
         #[cfg(target_os = "linux")]
         retained_worker_admission: None,
         startup_extensions: owner_helper_startup_extensions(plan)?,
@@ -6550,7 +6565,9 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
         startup_context,
         manifest,
         run_id,
+        exact_policy_snapshot: _exact_policy_snapshot,
         retained_worker_launch_authority: _retained_worker_launch_authority,
+        e2_launch_activation: _e2_launch_activation,
         #[cfg(target_os = "linux")]
             retained_worker_admission: _retained_worker_admission,
         startup_extensions,
@@ -10529,24 +10546,49 @@ async fn handle_internal_toolbox_world_dispatch_request(
         #[cfg(target_os = "linux")]
         WorldDispatchActionV1::ForkWorldWorker => {
             let prepared = prepare_orchestrator_world_dispatch(&startup_context.store, request)?;
-            let fork = prepare_fork_world_worker_bootstrap(prepared)?;
+            // Keep the complete authenticated Fork bootstrap off this async
+            // dispatch future's stack. The bootstrap remains live across the
+            // member-launch await so retaining it inline makes every toolbox
+            // action inherit its (large) state-machine variant, including
+            // legacy Spawn requests that never execute this branch.
+            let fork = Box::new(prepare_fork_world_worker_bootstrap(prepared)?);
             let prompt = match &fork.request.payload {
                 WorldDispatchPayloadV1::WorkerFork(payload) => payload.prompt.clone(),
                 _ => anyhow::bail!(
                     "invalid_dispatch_payload: action fork_world_worker requires matching typed payload"
                 ),
             };
-            let source_participant_id = fork.resolved.source_participant.participant_id().to_string();
+            let source_participant_id = fork.source_participant_id.clone();
+            let expected_orchestration_session_id =
+                fork.request.orchestration_session_id.clone();
+            let expected_backend_id = fork.request.target_backend_id.clone();
             let world_binding = PersistedWorldBinding {
                 world_id: fork.request.world_id.clone(),
                 world_generation: fork.request.world_generation,
             };
-            let prepared_runtime = prepare_fork_child_runtime_startup_for_descriptor(
-                startup_context,
-                fork.descriptor,
-                &world_binding,
-                &fork.resolved.source_participant,
-            )
+            let prepared_runtime = match fork.policy_commitment.as_ref() {
+                Some(policy_commitment) => prepare_fork_child_runtime_startup_for_descriptor(
+                    startup_context,
+                    fork.descriptor,
+                    &world_binding,
+                    &fork.source_participant_id,
+                    &fork.orchestrator_participant_id,
+                    policy_commitment,
+                ),
+                None => {
+                    let resolved = fork.legacy_resolved.as_ref().ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "retained_bootstrap_failed: legacy Fork preparation omitted exact source authority"
+                        )
+                    })?;
+                    prepare_legacy_fork_child_runtime_startup_for_descriptor(
+                        startup_context,
+                        fork.descriptor,
+                        &world_binding,
+                        &resolved.source_participant,
+                    )
+                }
+            }
             .map_err(|failure| anyhow::anyhow!(failure.message))?;
             let runtime = start_internal_dispatch_member_runtime(
                 prepared_runtime,
@@ -10562,6 +10604,28 @@ async fn handle_internal_toolbox_world_dispatch_request(
                 )
             })?;
             let manifest = runtime_manifest_snapshot(&runtime);
+            if let Some(policy_commitment) = fork.policy_commitment.as_ref() {
+                let exact_manifest_linkage_matches = manifest.handle.participant_id
+                    == policy_commitment.child_participant_id
+                    && manifest.handle.orchestration_session_id
+                        == expected_orchestration_session_id
+                    && manifest.handle.backend_id == expected_backend_id
+                    && manifest.handle.world_id.as_deref() == Some(world_binding.world_id.as_str())
+                    && manifest.handle.world_generation == Some(world_binding.world_generation)
+                    && manifest.handle.parent_participant_id.as_deref()
+                        == Some(source_participant_id.as_str())
+                    && manifest.handle.fork_source_participant_id.as_deref()
+                        == Some(source_participant_id.as_str())
+                    && manifest.internal.latest_run_id.as_deref()
+                        == Some(policy_commitment.bootstrap_run_id.as_str());
+                if !exact_manifest_linkage_matches {
+                    shutdown_host_orchestrator_runtime(runtime, agent_printer, telemetry).await;
+                    anyhow::bail!(
+                        "retained_bootstrap_failed: fork child runtime did not preserve exact E2 commitment {} manifest linkage",
+                        policy_commitment.commitment_ref.commitment_id
+                    );
+                }
+            }
             let target_backend_id = runtime_backend_id(&runtime);
             let child_participant_id = manifest.handle.participant_id.clone();
             let world_id = manifest.handle.world_id.clone().ok_or_else(|| {
@@ -10611,7 +10675,12 @@ async fn handle_internal_toolbox_world_dispatch_request(
         }
         #[cfg(target_os = "linux")]
         WorldDispatchActionV1::SpawnWorldWorker => {
-            let spawn = prepare_authority_bound_spawn_world_worker(request.validate()?)?;
+            let validated_request = request.validate()?;
+            let spawn = tokio::task::spawn_blocking(move || {
+                prepare_authority_bound_spawn_world_worker(validated_request)
+            })
+            .await
+            .context("retained Spawn authority preparation worker failed")??;
             let prompt = match &spawn.request.payload {
                 WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 { prompt }) => {
                     prompt.clone()
@@ -10622,11 +10691,19 @@ async fn handle_internal_toolbox_world_dispatch_request(
             };
             let request_id = spawn.request.request_id.clone();
             let mode = spawn.request.mode;
-            let prepared_runtime =
-                prepare_member_runtime_startup_from_authority_registration(startup_context, spawn)
-                    .map_err(|failure| anyhow::anyhow!(failure.message))?;
+            let startup_context_for_registration = startup_context.clone();
+            let prepared_runtime = tokio::task::spawn_blocking(move || {
+                prepare_member_runtime_startup_from_authority_registration(
+                    &startup_context_for_registration,
+                    spawn,
+                )
+                .map(Box::new)
+            })
+            .await
+            .context("retained Spawn admission registration worker failed")?
+            .map_err(|failure| anyhow::anyhow!(failure.message))?;
             let runtime = start_remote_member_runtime_with_prepared(
-                Some(prepared_runtime),
+                Some(*prepared_runtime),
                 Some(prompt),
                 agent_printer,
                 telemetry,
@@ -11074,7 +11151,7 @@ fn parked_member_runtime_matches_generation(
 }
 
 #[cfg(target_os = "linux")]
-fn prepare_fork_child_runtime_startup_for_descriptor(
+fn prepare_legacy_fork_child_runtime_startup_for_descriptor(
     startup_context: &RuntimeOrchestrationContext,
     descriptor: RuntimeSelectionDescriptor,
     world_binding: &PersistedWorldBinding,
@@ -11122,7 +11199,107 @@ fn prepare_fork_child_runtime_startup_for_descriptor(
         startup_context: startup_context.clone(),
         manifest: Arc::new(Mutex::new(manifest)),
         run_id,
+        exact_policy_snapshot: None,
         retained_worker_launch_authority: None,
+        e2_launch_activation: None,
+        #[cfg(target_os = "linux")]
+        retained_worker_admission: None,
+        startup_extensions: BTreeMap::new(),
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn prepare_fork_child_runtime_startup_for_descriptor(
+    startup_context: &RuntimeOrchestrationContext,
+    descriptor: RuntimeSelectionDescriptor,
+    world_binding: &PersistedWorldBinding,
+    source_participant_id: &str,
+    orchestrator_participant_id: &str,
+    policy_commitment: &PreparedForkPolicyCommitmentV1,
+) -> std::result::Result<PreparedAgentRuntime, RuntimeBootstrapFailure> {
+    ensure_member_backend_allowed(startup_context, &descriptor)?;
+    let authoritative_world = authoritative_member_world_binding(startup_context, world_binding)?;
+    let participant_id = policy_commitment.child_participant_id.clone();
+    let lease_token = Uuid::now_v7().to_string();
+    let run_id = policy_commitment.bootstrap_run_id.clone();
+    let manifest = AgentRuntimeSessionManifest::new_fork_child_participant(
+        &descriptor,
+        AgentRuntimeForkParticipantInit {
+            orchestration_session_id: startup_context.orchestration_session_id(),
+            participant_id,
+            orchestrator_participant_id: orchestrator_participant_id.to_string(),
+            source_participant_id: source_participant_id.to_string(),
+            world: authoritative_world,
+            lease_token,
+        },
+    )
+    .map_err(|err| RuntimeBootstrapFailure {
+        exit_code: 1,
+        message: format!("failed to construct retained fork child participant state: {err:#}"),
+    })?;
+    let mut manifest = manifest;
+    manifest.internal.latest_run_id = Some(run_id.clone());
+    let exact_policy_snapshot = ExactDispatchPolicySnapshotMaterialV1::from_exact_e1_material(
+        policy_commitment
+            .exact_policy_snapshot
+            .policy_snapshot
+            .clone(),
+        policy_commitment
+            .exact_policy_snapshot
+            .policy_snapshot_bytes
+            .clone(),
+        policy_commitment
+            .exact_policy_snapshot
+            .policy_snapshot_hash
+            .clone(),
+    )
+    .map_err(|err| RuntimeBootstrapFailure {
+        exit_code: 1,
+        message: format!(
+            "retained_bootstrap_failed: E2 fork commitment {} did not retain exact E1 PolicySnapshotV3 bytes and hash: {err}",
+            policy_commitment.commitment_ref.commitment_id
+        ),
+    })?;
+    let exact_manifest_linkage_matches = manifest.handle.participant_id
+        == policy_commitment.child_participant_id
+        && manifest.handle.orchestration_session_id == startup_context.orchestration_session_id()
+        && manifest.handle.backend_id == descriptor.backend_id
+        && manifest.handle.protocol == descriptor.protocol
+        && manifest.handle.world_id.as_deref() == Some(world_binding.world_id.as_str())
+        && manifest.handle.world_generation == Some(world_binding.world_generation)
+        && manifest.handle.parent_participant_id.as_deref() == Some(source_participant_id)
+        && manifest.handle.fork_source_participant_id.as_deref() == Some(source_participant_id)
+        && manifest.handle.orchestrator_participant_id.as_deref()
+            == Some(orchestrator_participant_id)
+        && manifest.internal.latest_run_id.as_deref()
+            == Some(policy_commitment.bootstrap_run_id.as_str());
+    let exact_policy_snapshot_matches = exact_policy_snapshot.policy_snapshot_bytes
+        == policy_commitment
+            .exact_policy_snapshot
+            .policy_snapshot_bytes
+        && exact_policy_snapshot.policy_snapshot_hash
+            == policy_commitment.exact_policy_snapshot.policy_snapshot_hash;
+    if !exact_manifest_linkage_matches || !exact_policy_snapshot_matches {
+        return Err(RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!(
+                "retained_bootstrap_failed: fork child preparation did not preserve exact E2 commitment {} identities, lineage, world binding, or PolicySnapshotV3 bytes",
+                policy_commitment.commitment_ref.commitment_id
+            ),
+        });
+    }
+    let member_dispatch_parity = MemberDispatchParitySubset::from_descriptor(&descriptor);
+
+    Ok(PreparedAgentRuntime {
+        descriptor,
+        member_dispatch_parity: Some(member_dispatch_parity),
+        prompt_fulfillment: None,
+        startup_context: startup_context.clone(),
+        manifest: Arc::new(Mutex::new(manifest)),
+        run_id,
+        exact_policy_snapshot: Some(exact_policy_snapshot),
+        retained_worker_launch_authority: None,
+        e2_launch_activation: Some(policy_commitment.e2_launch_activation.clone()),
         #[cfg(target_os = "linux")]
         retained_worker_admission: None,
         startup_extensions: BTreeMap::new(),
@@ -11199,7 +11376,9 @@ fn prepare_member_runtime_startup_for_descriptor(
         startup_context: startup_context.clone(),
         manifest: Arc::new(Mutex::new(manifest)),
         run_id,
+        exact_policy_snapshot: None,
         retained_worker_launch_authority: None,
+        e2_launch_activation: None,
         #[cfg(target_os = "linux")]
         retained_worker_admission: None,
         startup_extensions: BTreeMap::new(),
@@ -11211,6 +11390,7 @@ fn validate_remote_retained_start_authority_proof(
     authority: &HostSessionAuthority,
     admission_plan: &RetainedWorkerAdmissionPlanV1,
     proof: &RetainedWorkerLaunchAuthorityProofV1,
+    reservation_proof: &AuthenticatedFreshSpawnReservationProofV1,
 ) -> std::result::Result<(), RuntimeBootstrapFailure> {
     proof
         .validate()
@@ -11220,7 +11400,7 @@ fn validate_remote_retained_start_authority_proof(
         })?;
     let runtime = RetainedWorkerRuntime;
     let registration = runtime
-        .register_admitted_worker(authority, admission_plan)
+        .register_admitted_worker(authority, admission_plan, Some(reservation_proof))
         .map_err(|error| RuntimeBootstrapFailure {
             exit_code: 1,
             message: format!(
@@ -11232,6 +11412,7 @@ fn validate_remote_retained_start_authority_proof(
             authority,
             admission_plan,
             &registration.record.retained_participant_id,
+            Some(reservation_proof),
         )
         .map_err(|error| RuntimeBootstrapFailure {
             exit_code: 1,
@@ -11240,7 +11421,12 @@ fn validate_remote_retained_start_authority_proof(
             ),
         })?;
     let expected = runtime
-        .launch_authority_proof_for_claim(authority, admission_plan, &claim)
+        .launch_authority_proof_for_claim(
+            authority,
+            admission_plan,
+            &claim,
+            Some(reservation_proof),
+        )
         .map_err(|error| RuntimeBootstrapFailure {
             exit_code: 1,
             message: format!(
@@ -11259,6 +11445,37 @@ fn validate_remote_retained_start_authority_proof(
 }
 
 #[cfg(target_os = "linux")]
+fn validate_remote_retained_start_authority_proof_on_worker_stack(
+    authority: &HostSessionAuthority,
+    admission_plan: &RetainedWorkerAdmissionPlanV1,
+    proof: &RetainedWorkerLaunchAuthorityProofV1,
+    reservation_proof: &AuthenticatedFreshSpawnReservationProofV1,
+) -> std::result::Result<(), RuntimeBootstrapFailure> {
+    std::thread::scope(|scope| {
+        let worker = std::thread::Builder::new()
+            .name("substrate-retained-authority-check".to_string())
+            .spawn_scoped(scope, || {
+                validate_remote_retained_start_authority_proof(
+                    authority,
+                    admission_plan,
+                    proof,
+                    reservation_proof,
+                )
+            })
+            .map_err(|error| RuntimeBootstrapFailure {
+                exit_code: 1,
+                message: format!(
+                    "failed to start retained-worker launch authority verifier: {error}"
+                ),
+            })?;
+        worker.join().map_err(|_| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: "retained-worker launch authority verifier panicked".to_string(),
+        })?
+    })
+}
+
+#[cfg(target_os = "linux")]
 fn prepare_member_runtime_startup_from_authority_registration(
     startup_context: &RuntimeOrchestrationContext,
     spawn: PreparedSpawnWorldWorkerBootstrap,
@@ -11267,7 +11484,10 @@ fn prepare_member_runtime_startup_from_authority_registration(
     let descriptor = spawn.descriptor;
     let authority = spawn.authority;
     let admission_plan = spawn.admission_plan;
+    let reservation_proof = spawn.dispatch_policy_reservation_proof;
+    let exact_policy_snapshot = spawn.exact_policy_snapshot;
     let proof = spawn.launch_authority_proof;
+    let e2_launch_activation = spawn.e2_launch_activation;
     ensure_member_backend_allowed(startup_context, &descriptor)?;
 
     let RuntimeAuthorityContext::Bound(current) = &startup_context.authority else {
@@ -11307,7 +11527,12 @@ fn prepare_member_runtime_startup_from_authority_registration(
                 .to_string(),
         });
     }
-    validate_remote_retained_start_authority_proof(&authority, &admission_plan, &proof)?;
+    validate_remote_retained_start_authority_proof(
+        &authority,
+        &admission_plan,
+        &proof,
+        &reservation_proof,
+    )?;
 
     let world = AgentRuntimeParticipantWorldBinding {
         world_id: proof.world_binding.world_id.clone(),
@@ -11338,8 +11563,14 @@ fn prepare_member_runtime_startup_from_authority_registration(
         startup_context: startup_context.clone(),
         manifest: Arc::new(Mutex::new(manifest)),
         run_id: proof.bootstrap_run_id.clone(),
+        exact_policy_snapshot: Some(exact_policy_snapshot),
         retained_worker_launch_authority: Some(proof),
-        retained_worker_admission: Some((authority, admission_plan)),
+        e2_launch_activation: Some(e2_launch_activation),
+        retained_worker_admission: Some((
+            Arc::new(authority),
+            admission_plan,
+            Arc::new(reservation_proof),
+        )),
         startup_extensions: BTreeMap::new(),
     })
 }
@@ -11458,6 +11689,8 @@ fn build_member_dispatch_transport_request(
         backend_kind: member_runtime_backend_kind(parity.backend_kind),
         binary_path: parity.binary_path.display().to_string(),
         retained_worker_launch_authority: prepared.retained_worker_launch_authority.clone(),
+        e2_launch_activation: prepared.e2_launch_activation.clone(),
+        exact_policy_snapshot: prepared.exact_policy_snapshot.clone(),
     })
 }
 
@@ -11614,7 +11847,9 @@ async fn start_remote_member_runtime_with_prepared(
         startup_context,
         manifest,
         run_id,
+        exact_policy_snapshot: _exact_policy_snapshot,
         retained_worker_launch_authority,
+        e2_launch_activation: _e2_launch_activation,
         #[cfg(target_os = "linux")]
         retained_worker_admission,
         startup_extensions: _startup_extensions,
@@ -11625,8 +11860,13 @@ async fn start_remote_member_runtime_with_prepared(
         retained_worker_launch_authority.as_ref(),
         retained_worker_admission.as_ref(),
     ) {
-        (Some(proof), Some((authority, admission_plan))) => {
-            validate_remote_retained_start_authority_proof(authority, admission_plan, proof)?;
+        (Some(proof), Some((authority, admission_plan, reservation_proof))) => {
+            validate_remote_retained_start_authority_proof_on_worker_stack(
+                authority,
+                admission_plan,
+                proof,
+                reservation_proof,
+            )?;
             true
         }
         (None, None) => false,
@@ -11648,10 +11888,6 @@ async fn start_remote_member_runtime_with_prepared(
                 .to_string(),
         });
     };
-    #[cfg(target_os = "linux")]
-    let retained_worker_admission = retained_worker_admission
-        .map(|(authority, admission_plan)| (Arc::new(authority), admission_plan));
-
     let runtime_role = {
         manifest
             .lock()
@@ -11730,7 +11966,9 @@ async fn start_remote_member_runtime_with_prepared(
         Ok(built) => built,
         Err(error) => {
             #[cfg(target_os = "linux")]
-            if let Some((authority, admission_plan)) = retained_worker_admission.as_ref() {
+            if let Some((authority, admission_plan, reservation_proof)) =
+                retained_worker_admission.as_ref()
+            {
                 let retained_participant_id = retained_worker_launch_authority
                     .as_ref()
                     .map(|proof| proof.retained_participant_id.as_str())
@@ -11754,6 +11992,7 @@ async fn start_remote_member_runtime_with_prepared(
                             authority,
                             admission_plan,
                             retained_participant_id,
+                            Some(reservation_proof.as_ref()),
                             None,
                             interrupted_at,
                         )
@@ -11776,7 +12015,9 @@ async fn start_remote_member_runtime_with_prepared(
         Ok(response) => response,
         Err(error) => {
             #[cfg(target_os = "linux")]
-            if let Some((authority, admission_plan)) = retained_worker_admission.as_ref() {
+            if let Some((authority, admission_plan, reservation_proof)) =
+                retained_worker_admission.as_ref()
+            {
                 let retained_participant_id = retained_worker_launch_authority
                     .as_ref()
                     .map(|proof| proof.retained_participant_id.as_str())
@@ -11799,6 +12040,7 @@ async fn start_remote_member_runtime_with_prepared(
                         authority,
                         admission_plan,
                         retained_participant_id,
+                        Some(reservation_proof.as_ref()),
                         None,
                         interrupted_at,
                     )
@@ -11967,7 +12209,7 @@ async fn start_remote_member_runtime_with_prepared(
                             if event.kind
                                 == substrate_common::agent_events::AgentEventKind::Registered
                             {
-                                if let Some((authority, admission_plan)) =
+                                if let Some((authority, admission_plan, reservation_proof)) =
                                     retained_worker_admission_for_events.as_ref()
                                 {
                                     let registered_at = TimestampV1::parse(
@@ -11990,6 +12232,7 @@ async fn start_remote_member_runtime_with_prepared(
                                                 authority,
                                                 admission_plan,
                                                 retained_participant_id,
+                                                Some(reservation_proof.as_ref()),
                                                 &frame_identity,
                                                 &event,
                                                 registered_at,
@@ -12075,7 +12318,7 @@ async fn start_remote_member_runtime_with_prepared(
                         #[cfg(target_os = "linux")]
                         {
                             last_authoritative_frame_identity = Some(frame_identity.clone());
-                            if let Some((authority, admission_plan)) =
+                            if let Some((authority, admission_plan, reservation_proof)) =
                                 retained_worker_admission_for_events.as_ref()
                             {
                                 let terminal_at = TimestampV1::parse(
@@ -12098,6 +12341,7 @@ async fn start_remote_member_runtime_with_prepared(
                                             authority,
                                             admission_plan,
                                             retained_participant_id,
+                                            Some(reservation_proof.as_ref()),
                                             &frame_identity,
                                             &event_identity,
                                             &terminal_identity,
@@ -12252,7 +12496,10 @@ async fn start_remote_member_runtime_with_prepared(
         }
 
         #[cfg(target_os = "linux")]
-        if let (Some((authority, admission_plan)), Some(retained_participant_id)) = (
+        if let (
+            Some((authority, admission_plan, reservation_proof)),
+            Some(retained_participant_id),
+        ) = (
             retained_worker_admission_for_events.as_ref(),
             retained_worker_participant_id_for_events.as_deref(),
         ) {
@@ -12266,6 +12513,7 @@ async fn start_remote_member_runtime_with_prepared(
                         authority,
                         admission_plan,
                         retained_participant_id,
+                        Some(reservation_proof.as_ref()),
                         last_authoritative_frame_identity.as_ref(),
                         interrupted_at,
                     )
@@ -12455,14 +12703,15 @@ async fn start_remote_member_runtime_with_prepared(
                     task.abort();
                     let _ = task.await;
                 }
-                let (authority, admission_plan) = retained_worker_admission_for_startup
-                    .as_ref()
-                    .ok_or_else(|| RuntimeBootstrapFailure {
-                        exit_code: 1,
-                        message:
-                            "authority-managed retained Spawn omitted durable admission context"
-                                .to_string(),
-                    })?;
+                let (authority, admission_plan, reservation_proof) =
+                    retained_worker_admission_for_startup
+                        .as_ref()
+                        .ok_or_else(|| RuntimeBootstrapFailure {
+                            exit_code: 1,
+                            message:
+                                "authority-managed retained Spawn omitted durable admission context"
+                                    .to_string(),
+                        })?;
                 let retained_participant_id = retained_worker_launch_authority
                     .as_ref()
                     .map(|proof| proof.retained_participant_id.as_str())
@@ -12485,6 +12734,7 @@ async fn start_remote_member_runtime_with_prepared(
                         authority,
                         admission_plan,
                         retained_participant_id,
+                        Some(reservation_proof.as_ref()),
                         None,
                         interrupted_at,
                     )
@@ -13220,16 +13470,33 @@ async fn submit_world_targeted_turn(
         telemetry,
         agent_printer,
     )?;
+    let manifest = runtime
+        .manifest
+        .lock()
+        .expect("runtime manifest mutex poisoned")
+        .clone();
+    #[cfg(target_os = "linux")]
+    let authenticated_policy =
+        crate::execution::agent_runtime::control::resolve_retained_turn_policy_material_for_submit(
+            &runtime.store,
+            &runtime.descriptor,
+            &manifest,
+            &run_id,
+            None,
+            None,
+        )?;
+    #[cfg(target_os = "macos")]
+    let policy_snapshot_carrier = None;
+    #[cfg(target_os = "linux")]
+    let policy_snapshot_carrier = authenticated_policy
+        .as_ref()
+        .map(|material| material.carrier().clone());
     let request = {
-        let manifest_guard = runtime
-            .manifest
-            .lock()
-            .expect("runtime manifest mutex poisoned");
         MemberTurnSubmitRequestV1 {
             schema_version: 1,
-            orchestration_session_id: manifest_guard.handle.orchestration_session_id.clone(),
-            participant_id: manifest_guard.handle.participant_id.clone(),
-            orchestrator_participant_id: manifest_guard
+            orchestration_session_id: manifest.handle.orchestration_session_id.clone(),
+            participant_id: manifest.handle.participant_id.clone(),
+            orchestrator_participant_id: manifest
                 .handle
                 .orchestrator_participant_id
                 .clone()
@@ -13237,21 +13504,32 @@ async fn submit_world_targeted_turn(
                     anyhow!(
                         "substrate: error: retained world-scoped member is missing orchestrator_participant_id"
                     )
-                })?,
+            })?,
             backend_id: runtime.descriptor.backend_id.clone(),
             run_id: run_id.clone(),
-            world_id: manifest_guard.handle.world_id.clone().ok_or_else(|| {
+            world_id: manifest.handle.world_id.clone().ok_or_else(|| {
                 anyhow!("substrate: error: retained world-scoped member is missing world_id")
             })?,
-            world_generation: manifest_guard.handle.world_generation.ok_or_else(|| {
+            world_generation: manifest.handle.world_generation.ok_or_else(|| {
                 anyhow!(
                     "substrate: error: retained world-scoped member is missing world_generation"
                 )
             })?,
             prompt: prompt.to_string(),
             acceptance_context: None,
+            policy_snapshot_carrier,
         }
     };
+    #[cfg(target_os = "linux")]
+    if let Some(authenticated_policy) = authenticated_policy.as_ref() {
+        request
+            .validate_against_authenticated_policy_carrier(authenticated_policy.carrier())
+            .map_err(|error| {
+                anyhow!(
+                    "substrate: error: retained-turn policy carrier translation failed: {error}"
+                )
+            })?;
+    }
     let (client, _pending_diff_request, _agent_id) = build_agent_client_and_pending_diff_request()?;
     let response = client
         .submit_member_turn_stream(request)
@@ -18599,6 +18877,7 @@ mod tests {
             target_participant_id: None,
             world_id: Some(initial_world_binding.world_id.clone()),
             world_generation: Some(initial_world_binding.world_generation),
+            dispatch_policy_narrowing: None,
             payload: WorldDispatchPayloadV1::Task(TaskPayloadV1 {
                 prompt: "retry world binding".to_string(),
             }),
@@ -18711,6 +18990,7 @@ mod tests {
             target_participant_id: None,
             world_id: Some(initial_world_binding.world_id.clone()),
             world_generation: Some(initial_world_binding.world_generation),
+            dispatch_policy_narrowing: None,
             payload: WorldDispatchPayloadV1::Task(TaskPayloadV1 {
                 prompt: "retry world binding".to_string(),
             }),
@@ -20683,6 +20963,7 @@ mod tests {
                 target_participant_id: None,
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
+            dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
                     prompt: "startup toolbox retained worker".to_string(),
                 }),
@@ -20779,6 +21060,7 @@ mod tests {
                 target_participant_id: None,
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
+            dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
                     prompt: "startup toolbox retained worker".to_string(),
                 }),
@@ -20883,6 +21165,17 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn orchestrator_world_dispatch_surface_spawns_authoritative_member_runtime() {
+        std::thread::Builder::new()
+            .name("e2-authoritative-member-runtime".to_string())
+            .stack_size(8 * 1024 * 1024)
+            .spawn(orchestrator_world_dispatch_surface_spawns_authoritative_member_runtime_body)
+            .expect("spawn bounded-stack E2 member-runtime test")
+            .join()
+            .expect("bounded-stack E2 member-runtime test must not panic");
+    }
+
+    #[cfg(unix)]
+    fn orchestrator_world_dispatch_surface_spawns_authoritative_member_runtime_body() {
         let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
@@ -21319,6 +21612,7 @@ mod tests {
                     target_participant_id: None,
                     world_id: Some(world_binding.world_id.clone()),
                     world_generation: Some(world_binding.world_generation),
+            dispatch_policy_narrowing: None,
                     payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
                         prompt: "drive the direct production adapter".to_string(),
                     }),
@@ -21353,6 +21647,7 @@ mod tests {
                 target_participant_id: None,
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
+            dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
                     prompt: contention_prompt.to_string(),
                 }),
@@ -21519,6 +21814,7 @@ mod tests {
                     target_participant_id: None,
                     world_id: Some(world_binding.world_id.clone()),
                     world_generation: Some(world_binding.world_generation),
+            dispatch_policy_narrowing: None,
                     payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
                         prompt: "exercise direct terminal conflict".to_string(),
                     }),
@@ -21573,6 +21869,7 @@ mod tests {
                     target_participant_id: None,
                     world_id: Some(world_binding.world_id.clone()),
                     world_generation: Some(world_binding.world_generation),
+            dispatch_policy_narrowing: None,
                     payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
                         prompt: "exercise direct invalid registration".to_string(),
                     }),
@@ -21629,6 +21926,7 @@ mod tests {
                 target_participant_id: None,
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
+            dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
                     prompt: "own the failing integration investigation".to_string(),
                 }),
@@ -21802,6 +22100,7 @@ mod tests {
                 target_participant_id: None,
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
+            dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
                     prompt: open_failure_prompt.to_string(),
                 }),
@@ -21872,6 +22171,7 @@ mod tests {
                 target_participant_id: None,
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
+            dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
                     prompt: non_registered_prompt.to_string(),
                 }),
@@ -21945,6 +22245,7 @@ mod tests {
                 target_participant_id: None,
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
+            dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
                     prompt: inexact_registered_prompt.to_string(),
                 }),
@@ -22019,6 +22320,7 @@ mod tests {
                 target_participant_id: None,
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
+            dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
                     prompt: missing_start_prompt.to_string(),
                 }),
@@ -22150,20 +22452,6 @@ mod tests {
             runtime_agent_file_host_and_world("codex", "codex", &fake_orchestrator, &fake_member),
         )
         .expect("write placement-aware codex agent file");
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&substrate_home, fs::Permissions::from_mode(0o700))
-            .expect("set private toolbox authority home mode");
-        fs::set_permissions(&agents_dir, fs::Permissions::from_mode(0o700))
-            .expect("set private toolbox inventory mode");
-        for trusted_file in [
-            substrate_home.join("config.yaml"),
-            substrate_home.join("policy.yaml"),
-            agents_dir.join("codex-host.yaml"),
-            agents_dir.join("codex.yaml"),
-        ] {
-            fs::set_permissions(&trusted_file, fs::Permissions::from_mode(0o600))
-                .expect("set private toolbox authority file mode");
-        }
 
         let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -22240,6 +22528,7 @@ mod tests {
                 target_participant_id: Some(member_participant_id.clone()),
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
+            dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerStop(WorkerStopPayloadV1::default()),
             };
             let transport_path =
@@ -22363,6 +22652,20 @@ mod tests {
             runtime_agent_file_host_and_world("codex", "codex", &fake_orchestrator, &fake_member),
         )
         .expect("write placement-aware codex agent file");
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&substrate_home, fs::Permissions::from_mode(0o700))
+            .expect("set private toolbox authority home mode");
+        fs::set_permissions(&agents_dir, fs::Permissions::from_mode(0o700))
+            .expect("set private toolbox inventory mode");
+        for trusted_file in [
+            substrate_home.join("config.yaml"),
+            substrate_home.join("policy.yaml"),
+            agents_dir.join("codex-host.yaml"),
+            agents_dir.join("codex.yaml"),
+        ] {
+            fs::set_permissions(&trusted_file, fs::Permissions::from_mode(0o600))
+                .expect("set private toolbox authority file mode");
+        }
 
         let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -22445,6 +22748,7 @@ mod tests {
                 target_participant_id: Some(member_manifest.handle.participant_id.clone()),
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
+            dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1 {
                     reason: Some("operator requested cancel".to_string()),
                     graceful: Some(true),
@@ -22594,6 +22898,7 @@ mod tests {
                 target_participant_id: None,
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
+            dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1 {
                     reason: Some("operator requested cancel".to_string()),
                     graceful: Some(true),
@@ -22734,6 +23039,7 @@ mod tests {
                 target_participant_id: Some("ash-worker-cancel".to_string()),
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
+            dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1 {
                     reason: Some("operator requested cancel".to_string()),
                     graceful: Some(true),
@@ -22908,6 +23214,7 @@ mod tests {
                 target_participant_id: Some(member_manifest.handle.participant_id.clone()),
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
+            dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerFork(WorkerForkPayloadV1 {
                     prompt: "split off the flaky integration investigation".to_string(),
                     fork_reason: Some("parallelize root cause isolation".to_string()),
@@ -23145,6 +23452,7 @@ mod tests {
                 target_participant_id: Some(member_manifest.handle.participant_id.clone()),
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
+            dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerFork(WorkerForkPayloadV1 {
                     prompt: "split off a child for cleanup verification".to_string(),
                     fork_reason: Some("verify retained fork stop cleanup".to_string()),
@@ -23194,6 +23502,7 @@ mod tests {
                 target_participant_id: Some(fork.child_participant_id.clone()),
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
+            dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerStop(WorkerStopPayloadV1::default()),
             };
             let stop_request_task = tokio::spawn({
@@ -23339,6 +23648,7 @@ mod tests {
                 target_participant_id: None,
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
+            dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerFork(WorkerForkPayloadV1 {
                     prompt: "split off the flaky integration investigation".to_string(),
                     fork_reason: Some("parallelize root cause isolation".to_string()),
@@ -23480,6 +23790,7 @@ mod tests {
                 target_participant_id: Some("ash-worker-source-38".to_string()),
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
+            dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerFork(WorkerForkPayloadV1 {
                     prompt: "split off the flaky integration investigation".to_string(),
                     fork_reason: Some("parallelize root cause isolation".to_string()),
@@ -23618,6 +23929,7 @@ mod tests {
                 target_participant_id: None,
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
+            dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerStop(WorkerStopPayloadV1::default()),
             };
             let transport_path =
@@ -23754,6 +24066,7 @@ mod tests {
                 target_participant_id: Some("ash-worker-ignored".to_string()),
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
+            dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
                     prompt: "inspect should validate typed payloads before routing".to_string(),
                 }),
@@ -23890,6 +24203,7 @@ mod tests {
                 target_participant_id: Some("ash-worker-unknown".to_string()),
                 world_id: Some("world-unknown-shape-valid".to_string()),
                 world_generation: Some(777),
+            dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerInspect(WorkerInspectPayloadV1::default()),
             };
             let transport_path =
@@ -24058,6 +24372,7 @@ mod tests {
                 target_participant_id: Some(member_participant_id.clone()),
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
+            dispatch_policy_narrowing: None,
                 payload: WorldDispatchPayloadV1::WorkerInspect(WorkerInspectPayloadV1::default()),
             };
             let transport_path =

@@ -73,6 +73,8 @@ use crate::gateway_runtime::{
 };
 #[cfg(target_os = "linux")]
 use crate::member_runtime::{MemberRuntimeLaunchAdmissionV1, MemberRuntimeManager};
+#[cfg(target_os = "linux")]
+use crate::member_turn_join::MemberTurnJoinRegistry;
 use crate::request_routing::resolve_snapshot_routing;
 #[cfg(target_os = "linux")]
 use crate::runtime_replay::{
@@ -206,6 +208,8 @@ pub struct WorldService {
     #[cfg(target_os = "linux")]
     runtime_replay: RuntimeReplayRegistry,
     #[cfg(target_os = "linux")]
+    member_turn_join: Option<MemberTurnJoinRegistry>,
+    #[cfg(target_os = "linux")]
     pending_diff_origin: Arc<RwLock<HashMap<String, PendingDiffOriginTracker>>>,
     #[allow(dead_code)]
     worlds: Arc<RwLock<HashMap<String, WorldHandle>>>,
@@ -268,25 +272,19 @@ impl WorldService {
     pub fn new() -> Result<Self> {
         #[cfg(target_os = "linux")]
         {
-            let linux_backend = Arc::new(world::LinuxLocalBackend::new());
-            let backend: Arc<dyn WorldBackend> = linux_backend.clone();
-            let runtime_replay = RuntimeReplayRegistry::default();
-
-            Ok(Self {
-                backend,
-                linux_backend,
-                gateway_runtime: Arc::new(GatewayRuntimeManager::new()),
-                member_runtime: Arc::new(MemberRuntimeManager::with_replay_registry(
-                    runtime_replay.clone(),
-                )),
-                runtime_replay,
-                pending_diff_origin: Arc::new(RwLock::new(HashMap::new())),
-                worlds: Arc::new(RwLock::new(HashMap::new())),
-                budgets: Arc::new(RwLock::new(HashMap::new())),
-                last_policy_resolution_mode: Arc::new(AtomicU8::new(0)),
-                last_netfilter_requested: Arc::new(AtomicU8::new(0)),
-                last_netfilter_failure_reason: Arc::new(RwLock::new(None)),
-            })
+            let member_turn_join = match MemberTurnJoinRegistry::open(Path::new(
+                "/var/lib/substrate",
+            )) {
+                Ok(registry) => Some(registry),
+                Err(error) => {
+                    tracing::warn!(
+                        error = %error,
+                        "durable E2 member-turn join authority is unavailable; activated E2 retained turns will fail closed"
+                    );
+                    None
+                }
+            };
+            Self::new_linux(member_turn_join)
         }
 
         #[cfg(not(target_os = "linux"))]
@@ -302,6 +300,37 @@ impl WorldService {
                 last_netfilter_failure_reason: Arc::new(RwLock::new(None)),
             })
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[doc(hidden)]
+    pub fn new_with_member_turn_state_root_for_test(state_root: &Path) -> Result<Self> {
+        Self::new_linux(Some(MemberTurnJoinRegistry::open(state_root)?))
+    }
+
+    #[cfg(target_os = "linux")]
+    fn new_linux(member_turn_join: Option<MemberTurnJoinRegistry>) -> Result<Self> {
+        let linux_backend = Arc::new(world::LinuxLocalBackend::new());
+        let backend: Arc<dyn WorldBackend> = linux_backend.clone();
+        let runtime_replay = RuntimeReplayRegistry::with_durable_e2(member_turn_join.clone());
+
+        Ok(Self {
+            backend,
+            linux_backend,
+            gateway_runtime: Arc::new(GatewayRuntimeManager::new()),
+            member_runtime: Arc::new(MemberRuntimeManager::with_replay_registry(
+                runtime_replay.clone(),
+                member_turn_join.clone(),
+            )),
+            runtime_replay,
+            member_turn_join,
+            pending_diff_origin: Arc::new(RwLock::new(HashMap::new())),
+            worlds: Arc::new(RwLock::new(HashMap::new())),
+            budgets: Arc::new(RwLock::new(HashMap::new())),
+            last_policy_resolution_mode: Arc::new(AtomicU8::new(0)),
+            last_netfilter_requested: Arc::new(AtomicU8::new(0)),
+            last_netfilter_failure_reason: Arc::new(RwLock::new(None)),
+        })
     }
 
     /// Ensure a session world (thin wrapper over backend)
@@ -1314,6 +1343,7 @@ impl WorldService {
                     MemberRuntimeLaunchAdmissionV1 {
                         dispatch,
                         acceptance_context,
+                        policy_snapshot: req.policy_snapshot.clone(),
                     },
                     placement.binding,
                     launch_placement,
@@ -1591,6 +1621,28 @@ impl WorldService {
         &self,
         req: transport_api_types::ExecuteStreamReplayRequestV1,
     ) -> Result<Response> {
+        if let Some(member_turn_join) = self.member_turn_join.as_ref() {
+            if let Some(stream) = member_turn_join
+                .subscribe_for_replay(
+                    &req.acceptance_record_id,
+                    &req.stream_id,
+                    req.after_frame_sequence,
+                )
+                .map_err(anyhow::Error::new)?
+            {
+                let stream = stream.map(|frame| {
+                    let payload = frame
+                        .canonical_ndjson_bytes()
+                        .expect("serialize replayed durable E2 frame");
+                    Ok::<Bytes, Infallible>(Bytes::from(payload))
+                });
+                return Response::builder()
+                    .status(StatusCode::OK)
+                    .header("content-type", "application/x-ndjson")
+                    .body(boxed(StreamBody::new(stream)))
+                    .context("failed to build durable E2 runtime replay response");
+            }
+        }
         let stream = self.runtime_replay.subscribe(&req)?.map(|frame| {
             let payload = frame
                 .canonical_ndjson_bytes()
@@ -2081,6 +2133,112 @@ fn build_member_runtime_launch_env(
 }
 
 #[cfg(target_os = "linux")]
+pub(crate) fn build_member_runtime_turn_env(
+    mut env_map: HashMap<String, String>,
+    policy_snapshot: &transport_api_types::PolicySnapshotV3,
+    placement_root: &Path,
+    process_working_dir: &Path,
+) -> Result<HashMap<String, String>> {
+    const TURN_POLICY_ENV_KEYS: &[&str] = &[
+        WORLD_FS_MODE_ENV,
+        WORLD_FS_ISOLATION_ENV,
+        WORLD_FS_WRITE_ALLOWLIST_ENV,
+        WORLD_FS_LANDLOCK_DISCOVER_ALLOWLIST_ENV,
+        WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV,
+        WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV,
+        enforcement_plan::WORLD_FS_ENFORCEMENT_PLAN_B64_ENV,
+        LANDLOCK_HELPER_SRC_ENV,
+        "SUBSTRATE_LANDLOCK_HELPER_PATH",
+        "SUBSTRATE_MOUNT_MERGED_DIR",
+        "SUBSTRATE_MOUNT_PROJECT_DIR",
+        "SUBSTRATE_MOUNT_CWD",
+        "SUBSTRATE_MOUNT_FS_MODE",
+        "SUBSTRATE_INNER_CMD",
+        "SUBSTRATE_INNER_LOGIN_SHELL",
+    ];
+
+    for key in TURN_POLICY_ENV_KEYS {
+        env_map.remove(*key);
+    }
+
+    let (_, policy_inputs) =
+        resolve_policy_inputs(policy_snapshot, None, process_working_dir, placement_root)?;
+    let PolicyInputs {
+        fs_mode,
+        isolation_full,
+        isolate_network: _,
+        allowed_domains: _,
+        mut write_allowlist_prefixes,
+        landlock_discover_paths,
+        landlock_read_paths,
+        mut landlock_write_paths,
+        enforcement_plan_b64,
+    } = policy_inputs;
+
+    if matches!(fs_mode, WorldFsMode::ReadOnly) {
+        // PolicySnapshotV3 retains a canonical write allowlist even when writes are disabled.
+        // It is dormant authority in that state and must not become an active per-turn rule.
+        write_allowlist_prefixes.clear();
+        landlock_write_paths.clear();
+    }
+
+    if isolation_full
+        && landlock_discover_paths.is_empty()
+        && landlock_read_paths.is_empty()
+        && landlock_write_paths.is_empty()
+    {
+        anyhow::bail!(
+            "authenticated retained-turn full-isolation policy has no enforceable Landlock paths"
+        );
+    }
+    let landlock_support = world::landlock::detect_support();
+    if isolation_full && !landlock_support.supported {
+        anyhow::bail!(
+            "authenticated retained-turn full-isolation policy requires Landlock support: {}",
+            landlock_support
+                .reason
+                .as_deref()
+                .unwrap_or("support probe returned no reason")
+        );
+    }
+
+    env_map = build_member_runtime_launch_env(
+        env_map,
+        MemberRuntimeLaunchEnvContext {
+            placement_root,
+            isolation_full,
+            write_allowlist_prefixes: &write_allowlist_prefixes,
+            landlock_discover_paths: &landlock_discover_paths,
+            landlock_read_paths: &landlock_read_paths,
+            landlock_write_paths: &landlock_write_paths,
+            enforcement_plan_b64: enforcement_plan_b64.as_deref(),
+        },
+    );
+    let helper_src = resolve_landlock_helper_src().ok_or_else(|| {
+        anyhow!(
+            "authenticated retained-turn policy could not resolve the source-built Landlock helper"
+        )
+    })?;
+    env_map.insert(LANDLOCK_HELPER_SRC_ENV.to_string(), helper_src);
+    env_map.insert(WORLD_FS_MODE_ENV.to_string(), fs_mode.as_str().to_string());
+    env_map.insert(
+        "SUBSTRATE_MOUNT_PROJECT_DIR".to_string(),
+        placement_root.display().to_string(),
+    );
+    env_map.insert(
+        "SUBSTRATE_MOUNT_CWD".to_string(),
+        process_working_dir.display().to_string(),
+    );
+    env_map.insert(
+        "SUBSTRATE_MOUNT_FS_MODE".to_string(),
+        fs_mode.as_str().to_string(),
+    );
+    env_map.insert("SUBSTRATE_INNER_LOGIN_SHELL".to_string(), "0".to_string());
+
+    Ok(env_map)
+}
+
+#[cfg(target_os = "linux")]
 fn resolve_member_runtime_effective_cwd(
     project_dir: &Path,
     placement_root: &Path,
@@ -2536,6 +2694,19 @@ impl RuntimeEventStreamProducer {
             started: false,
             closed: false,
         }
+    }
+
+    pub(crate) fn with_stream_id(stream_id: String) -> Result<Self> {
+        if !stream_id.starts_with("rts_") || stream_id.len() <= 4 || stream_id.trim() != stream_id {
+            anyhow::bail!("reserved runtime stream identity is invalid");
+        }
+        Ok(Self {
+            stream_id,
+            next_frame_sequence: 1,
+            next_event_sequence: 1,
+            started: false,
+            closed: false,
+        })
     }
 
     pub(crate) fn start(&mut self, span_id: String) -> Result<ExecuteStreamFrame> {
@@ -3546,6 +3717,7 @@ mod tests {
                 retained_worker_ref_id: "ao_worker_exact".into(),
                 retained_worker_commitment: commitment('d'),
             }),
+            e2_launch_activation: None,
         }
     }
 

@@ -11,10 +11,13 @@ use axum::{
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use sha2::{Digest as _, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     convert::Infallible,
     fs,
+    io::Write,
+    os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt},
     path::Path,
     sync::{Arc, Mutex, RwLock},
 };
@@ -24,12 +27,17 @@ use substrate_common::agent_events::{
 };
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use transport_api_types::{
-    ExecuteStreamFrame, MemberDispatchRequestV1, MemberRuntimeBackendKindV1,
-    MemberTurnSubmitRequestV1, ProcessTelemetry,
+    E2MemberLaunchActivationCarrierV1, E2MemberLaunchKindV1, ExecuteStreamFrame,
+    MemberDispatchRequestV1, MemberRuntimeBackendKindV1, MemberTurnSubmitRequestV1,
+    ProcessTelemetry,
 };
 use world_api::SharedWorldBindingSnapshot;
 
 use crate::gateway_runtime::{prepare_linux_world_entry_launcher, LinuxWorldPlacementContext};
+use crate::member_turn_join::{
+    MemberTurnJoinError, MemberTurnJoinLeader, MemberTurnJoinRegistry, MemberTurnJoinStateV1,
+    MemberTurnJoinSubscription,
+};
 use crate::prompt_fulfillment::PromptFulfillmentBridge;
 use crate::runtime_replay::{
     publish_replayable_frame, RuntimeReplayPublisher, RuntimeReplayRegistry,
@@ -42,17 +50,35 @@ const CANCELLED_MESSAGE: &str = "cancelled";
 const ADD_DIRS_EXTENSION_V1: &str = "agent_api.exec.add_dirs.v1";
 const SESSION_RESUME_EXTENSION_V1: &str = "agent_api.session.resume.v1";
 const SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV: &str = "SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME";
+const SUBSTRATE_E2_TURN_ACTUAL_BINARY_ENV: &str = "SUBSTRATE_E2_TURN_ACTUAL_BINARY";
+const SUBSTRATE_E2_TURN_WORLD_ENTRY_ENV: &str = "SUBSTRATE_E2_TURN_WORLD_ENTRY";
+const SUBMITTED_TURN_POLICY_LAUNCHER_BYTES: &[u8] = br##"#!/bin/bash
+set -euo pipefail
+: "${SUBSTRATE_E2_TURN_ACTUAL_BINARY:?}"
+: "${SUBSTRATE_E2_TURN_WORLD_ENTRY:?}"
+: "${SUBSTRATE_LANDLOCK_HELPER_SRC:?}"
+exec 3< <(
+    printf 'unset SUBSTRATE_INNER_CMD SUBSTRATE_E2_TURN_ACTUAL_BINARY SUBSTRATE_E2_TURN_WORLD_ENTRY\nexec %q' "${SUBSTRATE_E2_TURN_ACTUAL_BINARY}"
+    printf ' %q' "$@"
+    printf '\n'
+)
+export SUBSTRATE_INNER_CMD='exec /bin/bash /proc/self/fd/3'
+export SUBSTRATE_WORLD_ENTRY_BINARY="${SUBSTRATE_LANDLOCK_HELPER_SRC}"
+exec "${SUBSTRATE_E2_TURN_WORLD_ENTRY}" "__substrate_world_landlock_exec"
+"##;
 
 #[derive(Clone, Default)]
 pub(crate) struct MemberRuntimeManager {
     active_members: Arc<RwLock<ActiveMemberRegistry>>,
     active_turns_by_span_id: Arc<RwLock<HashMap<String, Arc<ActiveSubmittedTurn>>>>,
     runtime_replay: RuntimeReplayRegistry,
+    member_turn_join: Option<MemberTurnJoinRegistry>,
 }
 
 pub(crate) struct MemberRuntimeLaunchAdmissionV1 {
     pub(crate) dispatch: MemberDispatchRequestV1,
     pub(crate) acceptance_context: Option<transport_api_types::WorldWorkAcceptanceContextV1>,
+    pub(crate) policy_snapshot: transport_api_types::PolicySnapshotV3,
 }
 
 #[derive(Default)]
@@ -80,6 +106,15 @@ struct ActiveMemberRuntime {
     bootstrap: Mutex<Option<ActiveBootstrapRuntime>>,
     active_turn_span_id: Mutex<Option<String>>,
     uaa_session_id: Mutex<Option<String>>,
+    e2_launch_activation: Option<E2MemberLaunchActivationCarrierV1>,
+    authenticated_worker_cap_identity: Mutex<Option<RetainedTurnWorkerCapIdentity>>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct RetainedTurnWorkerCapIdentity {
+    commitment_ref: transport_api_types::DispatchPolicyCommitmentRefCarrierV1,
+    created_revision: u64,
+    application_revision: u64,
 }
 
 struct ActiveBootstrapRuntime {
@@ -94,6 +129,16 @@ struct ActiveSubmittedTurn {
     last_signal: Mutex<Option<String>>,
 }
 
+struct PreparedSubmittedTurnPolicyLauncher {
+    path: std::path::PathBuf,
+}
+
+impl Drop for PreparedSubmittedTurnPolicyLauncher {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
 #[derive(Clone)]
 struct MemberStreamContext {
     orchestration_session_id: String,
@@ -105,6 +150,7 @@ struct MemberStreamContext {
     resumed_from_participant_id: Option<String>,
     backend_id: String,
     protocol: serde_json::Value,
+    authenticated_thread_id: Option<String>,
 }
 
 struct PreparedMemberRuntimeEvent {
@@ -136,9 +182,13 @@ impl MemberRuntimeManager {
         Self::default()
     }
 
-    pub(crate) fn with_replay_registry(runtime_replay: RuntimeReplayRegistry) -> Self {
+    pub(crate) fn with_replay_registry(
+        runtime_replay: RuntimeReplayRegistry,
+        member_turn_join: Option<MemberTurnJoinRegistry>,
+    ) -> Self {
         Self {
             runtime_replay,
+            member_turn_join,
             ..Self::new()
         }
     }
@@ -155,6 +205,7 @@ impl MemberRuntimeManager {
         let MemberRuntimeLaunchAdmissionV1 {
             dispatch,
             acceptance_context,
+            policy_snapshot,
         } = admission;
         if let Some(context) = acceptance_context.as_ref() {
             context
@@ -168,8 +219,14 @@ impl MemberRuntimeManager {
             }
         }
         validate_retained_worker_launch_authority_proof(&dispatch, &binding)?;
+        let pinned_e2_activation = validate_e2_member_launch_activation(
+            &dispatch,
+            &binding,
+            &policy_snapshot,
+            acceptance_context.as_ref(),
+        )?;
         let requires_exact_registered_readiness =
-            dispatch.retained_worker_launch_authority.is_some();
+            dispatch.retained_worker_launch_authority.is_some() || pinned_e2_activation.is_some();
         let actual_binary = validate_member_runtime_binary(&dispatch)?;
         let PreparedMemberRuntimeLauncher {
             launcher_path,
@@ -264,6 +321,8 @@ impl MemberRuntimeManager {
             })),
             active_turn_span_id: Mutex::new(None),
             uaa_session_id: Mutex::new(None),
+            e2_launch_activation: dispatch.e2_launch_activation.clone(),
+            authenticated_worker_cap_identity: Mutex::new(pinned_e2_activation),
         });
         if let Err(err) = self.register_member(active.clone()) {
             active.cancel_bootstrap();
@@ -282,6 +341,7 @@ impl MemberRuntimeManager {
             resumed_from_participant_id: dispatch.resumed_from_participant_id.clone(),
             backend_id: dispatch.backend_id.clone(),
             protocol: json!(dispatch.protocol),
+            authenticated_thread_id: None,
         };
         let (mut producer, start) = match start_member_runtime_stream(
             &context,
@@ -511,8 +571,14 @@ impl MemberRuntimeManager {
     pub(crate) async fn submit_turn(&self, req: MemberTurnSubmitRequestV1) -> Result<Response> {
         req.validate()
             .map_err(crate::service::BadRequestError::new)?;
+        if req.policy_snapshot_carrier.is_some() && req.acceptance_context.is_some() {
+            if let Some(response) = self.replay_existing_e2_turn(&req)? {
+                return Ok(response);
+            }
+        }
         let active = self.find_submit_target(&req)?;
         validate_submit_turn_request(&req, RetainedMemberIdentity::from_active(active.as_ref()))?;
+        let turn_policy_snapshot = resolve_submitted_turn_policy(&req, active.as_ref())?;
         self.validate_submit_target_slot(&req)?;
         let uaa_session_id = active.uaa_session_id().ok_or_else(|| {
             crate::service::BadRequestError::new(format!(
@@ -521,27 +587,59 @@ impl MemberRuntimeManager {
             ))
         })?;
 
+        if req.policy_snapshot_carrier.is_some() && req.acceptance_context.is_some() {
+            return self
+                .submit_e2_turn(req, active, turn_policy_snapshot, uaa_session_id)
+                .await;
+        }
+
         let span_id = format!("spn_{}", uuid::Uuid::now_v7());
         self.reserve_turn_slot(&active, &span_id)?;
 
+        let turn_policy_launcher = match turn_policy_snapshot.as_ref() {
+            Some(_) => match prepare_submitted_turn_policy_launcher(active.as_ref()) {
+                Ok(launcher) => Some(launcher),
+                Err(error) => {
+                    self.clear_reserved_turn_slot(&active, &span_id);
+                    return Err(error);
+                }
+            },
+            None => None,
+        };
         let prompt_fulfillment = PromptFulfillmentBridge::for_member_backend(
             &active.backend_kind,
-            active.binary_path.clone(),
-        )?;
-        let AgentWrapperRunControl { handle, cancel } = match prompt_fulfillment
-            .run_control(build_submitted_turn_run_request(
-                active.as_ref(),
-                req.prompt.clone(),
-                &uaa_session_id,
-            ))
-            .await
-        {
-            Ok(control) => control,
-            Err(err) => {
+            turn_policy_launcher.as_ref().map_or_else(
+                || active.binary_path.clone(),
+                |launcher| launcher.path.clone(),
+            ),
+        );
+        let prompt_fulfillment = match prompt_fulfillment {
+            Ok(prompt_fulfillment) => prompt_fulfillment,
+            Err(error) => {
                 self.clear_reserved_turn_slot(&active, &span_id);
-                return Err(map_wrapper_error(err));
+                return Err(error);
             }
         };
+        let run_request = match build_submitted_turn_run_request(
+            active.as_ref(),
+            req.prompt.clone(),
+            &uaa_session_id,
+            turn_policy_snapshot.as_ref(),
+        ) {
+            Ok(request) => request,
+            Err(error) => {
+                self.clear_reserved_turn_slot(&active, &span_id);
+                return Err(error);
+            }
+        };
+        let AgentWrapperRunControl { handle, cancel } =
+            match prompt_fulfillment.run_control(run_request).await {
+                Ok(control) => control,
+                Err(err) => {
+                    self.clear_reserved_turn_slot(&active, &span_id);
+                    return Err(map_wrapper_error(err));
+                }
+            };
 
         let context = active.submit_context(req.run_id.clone(), req.acceptance_context.clone());
         let (mut producer, start) = match start_member_runtime_stream(
@@ -579,6 +677,7 @@ impl MemberRuntimeManager {
         let manager = self.clone();
         let binding = active.binding.clone();
         tokio::spawn(async move {
+            let _turn_policy_launcher = turn_policy_launcher;
             let mut events = handle.events;
             let completion = handle.completion;
             let mut emitted_registered = false;
@@ -654,6 +753,292 @@ impl MemberRuntimeManager {
         });
 
         stream_response(rx)
+    }
+
+    fn replay_existing_e2_turn(
+        &self,
+        request: &MemberTurnSubmitRequestV1,
+    ) -> Result<Option<Response>> {
+        let registry = self
+            .member_turn_join
+            .as_ref()
+            .ok_or_else(|| anyhow::Error::new(MemberTurnJoinError::UnsupportedLegacyState))?;
+        let Some(reservation) = registry
+            .join_existing(request)
+            .map_err(anyhow::Error::new)?
+        else {
+            return Ok(None);
+        };
+        let state = registry
+            .recover_orphaned(&reservation)
+            .map_err(anyhow::Error::new)?;
+        match state {
+            MemberTurnJoinStateV1::Reserved => Ok(None),
+            MemberTurnJoinStateV1::FailedBeforeLaunch {
+                error_code,
+                http_status,
+            } => Err(anyhow::Error::new(
+                MemberTurnJoinError::FailedBeforeLaunch {
+                    error_code,
+                    http_status,
+                },
+            )),
+            MemberTurnJoinStateV1::LaunchingPreCall { .. }
+            | MemberTurnJoinStateV1::LaunchingCallEntered { .. }
+            | MemberTurnJoinStateV1::Started
+            | MemberTurnJoinStateV1::Completed { .. }
+            | MemberTurnJoinStateV1::LaunchIndeterminate { .. } => {
+                let subscription = registry
+                    .subscribe(&reservation, 0)
+                    .map_err(anyhow::Error::new)?;
+                durable_stream_response(subscription).map(Some)
+            }
+        }
+    }
+
+    async fn submit_e2_turn(
+        &self,
+        req: MemberTurnSubmitRequestV1,
+        active: Arc<ActiveMemberRuntime>,
+        turn_policy_snapshot: Option<transport_api_types::PolicySnapshotV3>,
+        uaa_session_id: String,
+    ) -> Result<Response> {
+        let registry = self
+            .member_turn_join
+            .as_ref()
+            .ok_or_else(|| anyhow::Error::new(MemberTurnJoinError::UnsupportedLegacyState))?;
+        let reservation = registry.reserve(&req).map_err(anyhow::Error::new)?;
+        if let MemberTurnJoinStateV1::FailedBeforeLaunch {
+            error_code,
+            http_status,
+        } = reservation.state()
+        {
+            return Err(anyhow::Error::new(
+                MemberTurnJoinError::FailedBeforeLaunch {
+                    error_code: error_code.clone(),
+                    http_status: *http_status,
+                },
+            ));
+        }
+        let subscription = registry
+            .subscribe(&reservation, 0)
+            .map_err(anyhow::Error::new)?;
+        if matches!(
+            reservation.state(),
+            MemberTurnJoinStateV1::Completed { .. }
+                | MemberTurnJoinStateV1::LaunchIndeterminate { .. }
+        ) {
+            return durable_stream_response(subscription);
+        }
+
+        self.reserve_turn_slot(&active, reservation.span_id())?;
+        let Some(mut leader) = registry
+            .try_become_leader(&reservation)
+            .map_err(anyhow::Error::new)?
+        else {
+            registry
+                .await_launch_outcome(&reservation)
+                .await
+                .map_err(anyhow::Error::new)?;
+            return durable_stream_response(subscription);
+        };
+
+        let turn_policy_launcher = match turn_policy_snapshot.as_ref() {
+            Some(_) => match prepare_submitted_turn_policy_launcher(active.as_ref()) {
+                Ok(launcher) => Some(launcher),
+                Err(error) => {
+                    let failure = persist_prelaunch_failure(
+                        &mut leader,
+                        "policy_launcher_preparation_failed_v1",
+                        500,
+                    );
+                    self.clear_reserved_turn_slot(&active, reservation.span_id());
+                    tracing::warn!(error = %error, "failed to prepare E2 turn policy launcher");
+                    return Err(failure);
+                }
+            },
+            None => None,
+        };
+        let prompt_fulfillment = match PromptFulfillmentBridge::for_member_backend(
+            &active.backend_kind,
+            turn_policy_launcher.as_ref().map_or_else(
+                || active.binary_path.clone(),
+                |launcher| launcher.path.clone(),
+            ),
+        ) {
+            Ok(prompt_fulfillment) => prompt_fulfillment,
+            Err(error) => {
+                let failure = persist_prelaunch_failure(
+                    &mut leader,
+                    "provider_bridge_preparation_failed_v1",
+                    500,
+                );
+                self.clear_reserved_turn_slot(&active, reservation.span_id());
+                tracing::warn!(error = %error, "failed to prepare E2 provider bridge");
+                return Err(failure);
+            }
+        };
+        let run_request = match build_submitted_turn_run_request(
+            active.as_ref(),
+            req.prompt.clone(),
+            &uaa_session_id,
+            turn_policy_snapshot.as_ref(),
+        ) {
+            Ok(request) => request,
+            Err(error) => {
+                let failure = persist_prelaunch_failure(
+                    &mut leader,
+                    "turn_request_preparation_failed_v1",
+                    400,
+                );
+                self.clear_reserved_turn_slot(&active, reservation.span_id());
+                tracing::warn!(error = %error, "failed to prepare E2 submitted-turn request");
+                return Err(failure);
+            }
+        };
+        let context = active.submit_context(req.run_id.clone(), req.acceptance_context.clone());
+        context.validate_acceptance_for_mode(MemberStreamMode::SubmittedTurn)?;
+        leader.mark_call_entered().map_err(anyhow::Error::new)?;
+
+        let manager = self.clone();
+        let span_id = reservation.span_id().to_string();
+        let stream_id = reservation.stream_id().to_string();
+        let binding = active.binding.clone();
+        tokio::spawn(async move {
+            let _turn_policy_launcher = turn_policy_launcher;
+            let AgentWrapperRunControl { handle, cancel } =
+                match prompt_fulfillment.run_control(run_request).await {
+                    Ok(control) => control,
+                    Err(_error) => {
+                        let _ = leader
+                            .mark_launch_indeterminate("run_control_failed_after_call_entered_v1");
+                        manager.clear_reserved_turn_slot(&active, &span_id);
+                        tracing::error!(
+                            error_code = "run_control_failed_after_call_entered_v1",
+                            "E2 member-turn launch became indeterminate"
+                        );
+                        return;
+                    }
+                };
+            let mut producer = match RuntimeEventStreamProducer::with_stream_id(stream_id) {
+                Ok(producer) => producer,
+                Err(error) => {
+                    cancel.cancel();
+                    let _ = leader.mark_launch_indeterminate("reserved_stream_identity_invalid_v1");
+                    manager.clear_reserved_turn_slot(&active, &span_id);
+                    tracing::error!(error = %error, "invalid reserved E2 member-turn stream identity");
+                    return;
+                }
+            };
+            let start = match producer.start(span_id.clone()) {
+                Ok(start) => start,
+                Err(error) => {
+                    cancel.cancel();
+                    let _ = leader.mark_launch_indeterminate("start_construction_failed_v1");
+                    manager.clear_reserved_turn_slot(&active, &span_id);
+                    tracing::error!(error = %error, "failed to construct real E2 member-turn Start");
+                    return;
+                }
+            };
+            if let Err(error) = leader.publish_frame(&start) {
+                cancel.cancel();
+                let _ = leader.mark_launch_indeterminate("start_persistence_failed_v1");
+                manager.clear_reserved_turn_slot(&active, &span_id);
+                tracing::error!(error = %error, "failed to persist real E2 member-turn Start");
+                return;
+            }
+
+            let turn = Arc::new(ActiveSubmittedTurn {
+                participant_id: active.participant_id.clone(),
+                cancel,
+                last_signal: Mutex::new(None),
+            });
+            manager.register_turn(span_id.clone(), turn.clone());
+            let mut events = handle.events;
+            let completion = handle.completion;
+            let mut emitted_registered = false;
+            let mut persistence_failed = false;
+
+            while let Some(wrapper_event) = events.next().await {
+                if let Some(session_id) =
+                    surfaced_uaa_session_id_from_data(wrapper_event.data.as_ref())
+                {
+                    manager.remember_uaa_session_id(&turn.participant_id, session_id);
+                }
+                match frame_from_wrapper_event(
+                    &context,
+                    &binding,
+                    &span_id,
+                    wrapper_event,
+                    &mut emitted_registered,
+                    MemberStreamMode::SubmittedTurn,
+                    active.agent_id.as_str(),
+                    &mut producer,
+                ) {
+                    Ok(Some(frame)) => {
+                        if let Err(error) = leader.publish_frame(&frame) {
+                            tracing::error!(error = %error, "failed to persist E2 member-turn Event");
+                            turn.cancel.cancel();
+                            persistence_failed = true;
+                            break;
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        tracing::error!(error = %error, "failed to identify E2 member-turn Event");
+                        turn.cancel.cancel();
+                        persistence_failed = true;
+                        break;
+                    }
+                }
+            }
+
+            let completion = completion.await;
+            if let Ok(ref completion) = completion {
+                if let Some(session_id) =
+                    surfaced_uaa_session_id_from_data(completion.data.as_ref())
+                {
+                    manager.remember_uaa_session_id(&turn.participant_id, session_id);
+                }
+            }
+            if !persistence_failed {
+                match frames_from_completion(
+                    &context,
+                    &binding,
+                    &span_id,
+                    completion,
+                    turn.last_signal(),
+                    &mut emitted_registered,
+                    MemberStreamMode::SubmittedTurn,
+                    active.agent_id.as_str(),
+                    &mut producer,
+                ) {
+                    Ok(frames) => {
+                        for frame in frames {
+                            if let Err(error) = leader.publish_frame(&frame) {
+                                tracing::error!(error = %error, "failed to persist E2 member-turn completion");
+                                persistence_failed = true;
+                                break;
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        tracing::error!(error = %error, "failed to identify E2 member-turn completion");
+                        persistence_failed = true;
+                    }
+                }
+            }
+            if persistence_failed {
+                let _ = leader.mark_launch_indeterminate("frame_persistence_failed_v1");
+            }
+            manager.unregister_turn(&span_id);
+        });
+
+        registry
+            .await_launch_outcome(&reservation)
+            .await
+            .map_err(anyhow::Error::new)?;
+        durable_stream_response(subscription)
     }
 
     pub(crate) fn cancel(&self, span_id: &str, sig: &str) -> Result<bool> {
@@ -792,6 +1177,9 @@ impl MemberRuntimeManager {
             .lock()
             .map_err(|_| anyhow!("member runtime turn slot lock poisoned"))?;
         if let Some(existing) = guard.as_ref() {
+            if existing == span_id {
+                return Ok(());
+            }
             return Err(crate::service::BadRequestError::new(format!(
                 "member_turn_submit.participant_id {} already has an active submitted turn ({existing})",
                 active.participant_id
@@ -877,13 +1265,14 @@ fn validate_retained_worker_launch_authority_proof(
     dispatch: &MemberDispatchRequestV1,
     binding: &SharedWorldBindingSnapshot,
 ) -> Result<()> {
-    let managed_identity =
-        dispatch.participant_id.starts_with("rwp_") || dispatch.run_id.starts_with("rwr_");
+    let requires_fresh_spawn_proof = dispatch
+        .e2_launch_activation
+        .as_ref()
+        .is_some_and(|activation| activation.launch_kind == E2MemberLaunchKindV1::FreshSpawn);
     let Some(proof) = dispatch.retained_worker_launch_authority.as_ref() else {
-        if managed_identity {
+        if requires_fresh_spawn_proof {
             return Err(crate::service::BadRequestError::new(
-                "authority-managed retained member dispatch requires retained_worker_launch_authority"
-                    .to_string(),
+                "E2 Fresh Spawn activation requires retained_worker_launch_authority".to_string(),
             )
             .into());
         }
@@ -915,6 +1304,100 @@ fn validate_retained_worker_launch_authority_proof(
         .into());
     }
     Ok(())
+}
+
+fn validate_e2_member_launch_activation(
+    dispatch: &MemberDispatchRequestV1,
+    binding: &SharedWorldBindingSnapshot,
+    enforced_policy_snapshot: &transport_api_types::PolicySnapshotV3,
+    acceptance_context: Option<&transport_api_types::WorldWorkAcceptanceContextV1>,
+) -> Result<Option<RetainedTurnWorkerCapIdentity>> {
+    let Some(activation) = dispatch.e2_launch_activation.as_ref() else {
+        if dispatch.retained_worker_launch_authority.is_some() {
+            return Err(crate::service::BadRequestError::new(
+                "unsupported_legacy_state: authority-managed retained member omitted E2 launch activation"
+                    .to_string(),
+            )
+            .into());
+        }
+        return Ok(None);
+    };
+    activation.validate().map_err(|error| {
+        crate::service::BadRequestError::new(format!("invalid e2_launch_activation: {error}"))
+    })?;
+    let activation_snapshot = activation.policy_snapshot().map_err(|error| {
+        crate::service::BadRequestError::new(format!("invalid e2_launch_activation: {error}"))
+    })?;
+    let activation_snapshot_bytes = serde_json::to_vec(&activation_snapshot).map_err(|error| {
+        crate::service::BadRequestError::new(format!(
+            "failed to serialize E2 launch activation snapshot: {error}"
+        ))
+    })?;
+    let enforced_snapshot_bytes =
+        serde_json::to_vec(enforced_policy_snapshot).map_err(|error| {
+            crate::service::BadRequestError::new(format!(
+                "failed to serialize enforced member launch policy snapshot: {error}"
+            ))
+        })?;
+    let enforced_snapshot_hash = format!("{:x}", Sha256::digest(&enforced_snapshot_bytes));
+    if activation_snapshot_bytes != enforced_snapshot_bytes
+        || activation.policy_snapshot_hash != enforced_snapshot_hash
+    {
+        return Err(crate::service::BadRequestError::new(
+            "E2 launch activation snapshot conflicts with enforced policy snapshot".to_string(),
+        )
+        .into());
+    }
+    let exact_activation_id = format!(
+        "e2a_{}",
+        activation
+            .commitment_ref
+            .exact_linkage_hash
+            .get(..32)
+            .ok_or_else(|| {
+                crate::service::BadRequestError::new(
+                    "invalid E2 launch commitment linkage hash".to_string(),
+                )
+            })?
+    );
+    let expected_lineage = match activation.launch_kind {
+        E2MemberLaunchKindV1::FreshSpawn => {
+            dispatch.parent_participant_id.is_none()
+                && dispatch.resumed_from_participant_id.is_none()
+                && dispatch.retained_worker_launch_authority.is_some()
+        }
+        E2MemberLaunchKindV1::Fork => {
+            dispatch.parent_participant_id.as_deref() == activation.source_participant_id.as_deref()
+                && dispatch.resumed_from_participant_id.is_none()
+                && dispatch.retained_worker_launch_authority.is_none()
+        }
+    };
+    if !expected_lineage
+        || activation.activation_id != exact_activation_id
+        || activation.commitment_ref != activation.immutable_worker_cap_ref
+        || activation.orchestration_session_id != dispatch.orchestration_session_id
+        || activation.caller_participant_id != dispatch.orchestrator_participant_id
+        || activation.target_backend_id != dispatch.backend_id
+        || activation.retained_participant_id != dispatch.participant_id
+        || activation.bootstrap_run_id != dispatch.run_id
+        || activation.target_world.world_id != dispatch.world_id
+        || activation.target_world.world_id != binding.world_id
+        || activation.target_world.world_generation != dispatch.world_generation
+        || activation.target_world.world_generation != binding.world_generation
+        || acceptance_context
+            .is_some_and(|context| activation.caller_backend_id != context.caller_backend_id)
+    {
+        return Err(crate::service::BadRequestError::new(
+            "E2 launch activation conflicts with member dispatch, lineage, cap, or exact world binding"
+                .to_string(),
+        )
+        .into());
+    }
+    Ok(Some(RetainedTurnWorkerCapIdentity {
+        commitment_ref: activation.immutable_worker_cap_ref.clone(),
+        created_revision: activation.immutable_worker_cap_created_revision,
+        application_revision: activation.immutable_worker_cap_application_revision,
+    }))
 }
 
 fn validate_member_runtime_binary(
@@ -1245,11 +1728,149 @@ fn cleanup_prepared_launcher_dir(launcher_dir: &mut Option<std::path::PathBuf>) 
     }
 }
 
+fn resolve_submitted_turn_policy(
+    request: &MemberTurnSubmitRequestV1,
+    active: &ActiveMemberRuntime,
+) -> Result<Option<transport_api_types::PolicySnapshotV3>> {
+    if let Some(carrier) = request.policy_snapshot_carrier.as_ref() {
+        let activation = active.e2_launch_activation.as_ref().ok_or_else(|| {
+            crate::service::BadRequestError::new(
+                "unsupported_legacy_state: retained turn cannot establish E2 launch authority"
+                    .to_string(),
+            )
+        })?;
+        let candidate = RetainedTurnWorkerCapIdentity {
+            commitment_ref: carrier.immutable_worker_cap_ref.clone(),
+            created_revision: carrier.immutable_worker_cap_created_revision,
+            application_revision: carrier.immutable_worker_cap_application_revision,
+        };
+        let authenticated = active
+            .authenticated_worker_cap_identity
+            .lock()
+            .expect("retained worker-cap identity lock poisoned");
+        match authenticated.as_ref() {
+            Some(existing) if existing != &candidate => {
+                return Err(crate::service::BadRequestError::new(
+                    "unsupported_legacy_state: retained-turn immutable worker-cap identity changed"
+                        .to_string(),
+                )
+                .into());
+            }
+            None => {
+                return Err(crate::service::BadRequestError::new(
+                    "unsupported_legacy_state: E2 member omitted its launch-pinned worker cap"
+                        .to_string(),
+                )
+                .into())
+            }
+            Some(_) => {}
+        }
+        if activation.orchestration_session_id != request.orchestration_session_id
+            || activation.retained_participant_id != request.participant_id
+            || activation.caller_backend_id != carrier.caller_backend_id
+            || activation.target_backend_id != request.backend_id
+            || activation.target_world.world_id != request.world_id
+            || activation.target_world.world_generation != request.world_generation
+        {
+            return Err(crate::service::BadRequestError::new(
+                "retained-turn carrier conflicts with launch-pinned E2 activation".to_string(),
+            )
+            .into());
+        }
+        return carrier
+            .policy_snapshot()
+            .map(Some)
+            .map_err(crate::service::BadRequestError::new)
+            .map_err(Into::into);
+    }
+    if active.e2_launch_activation.is_some() {
+        return Err(crate::service::BadRequestError::new(
+            "unsupported_legacy_state: E2-activated retained turn requires policy_snapshot_carrier"
+                .to_string(),
+        )
+        .into());
+    }
+    Ok(None)
+}
+
+fn prepare_submitted_turn_policy_launcher(
+    active: &ActiveMemberRuntime,
+) -> Result<PreparedSubmittedTurnPolicyLauncher> {
+    let launcher_dir_metadata = fs::symlink_metadata(&active.launcher_dir).with_context(|| {
+        format!(
+            "inspect retained-turn launcher directory {}",
+            active.launcher_dir.display()
+        )
+    })?;
+    if !launcher_dir_metadata.file_type().is_dir()
+        || launcher_dir_metadata.uid() != unsafe { libc::geteuid() }
+        || launcher_dir_metadata.permissions().mode() & 0o022 != 0
+    {
+        anyhow::bail!(
+            "retained-turn launcher directory is not an owned non-writable-by-others directory"
+        );
+    }
+
+    let world_entry_path = active.launcher_dir.join("world-entry.sh");
+    let world_entry_metadata = fs::symlink_metadata(&world_entry_path).with_context(|| {
+        format!(
+            "inspect retained world entry {}",
+            world_entry_path.display()
+        )
+    })?;
+    if !world_entry_metadata.file_type().is_file()
+        || world_entry_metadata.uid() != unsafe { libc::geteuid() }
+        || world_entry_metadata.permissions().mode() & 0o111 == 0
+    {
+        anyhow::bail!("retained world entry is not an owned executable regular file");
+    }
+
+    let path = active.launcher_dir.join(format!(
+        "e2-retained-turn-entry-{}.sh",
+        uuid::Uuid::now_v7()
+    ));
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o700)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(&path)
+        .with_context(|| format!("create retained-turn policy launcher {}", path.display()))?;
+    file.write_all(SUBMITTED_TURN_POLICY_LAUNCHER_BYTES)
+        .with_context(|| format!("write retained-turn policy launcher {}", path.display()))?;
+    file.sync_all()
+        .with_context(|| format!("fsync retained-turn policy launcher {}", path.display()))?;
+    drop(file);
+
+    let metadata = fs::symlink_metadata(&path)
+        .with_context(|| format!("read back retained-turn policy launcher {}", path.display()))?;
+    if !metadata.file_type().is_file()
+        || metadata.uid() != unsafe { libc::geteuid() }
+        || metadata.permissions().mode() & 0o777 != 0o700
+        || metadata.len() != SUBMITTED_TURN_POLICY_LAUNCHER_BYTES.len() as u64
+        || fs::read(&path)? != SUBMITTED_TURN_POLICY_LAUNCHER_BYTES
+    {
+        let _ = fs::remove_file(&path);
+        anyhow::bail!("retained-turn policy launcher exact readback changed");
+    }
+    fs::File::open(&active.launcher_dir)
+        .and_then(|directory| directory.sync_all())
+        .with_context(|| {
+            format!(
+                "fsync retained-turn launcher directory {}",
+                active.launcher_dir.display()
+            )
+        })?;
+
+    Ok(PreparedSubmittedTurnPolicyLauncher { path })
+}
+
 fn build_submitted_turn_run_request(
     active: &ActiveMemberRuntime,
     prompt: String,
     uaa_session_id: &str,
-) -> AgentWrapperRunRequest {
+    policy_snapshot: Option<&transport_api_types::PolicySnapshotV3>,
+) -> Result<AgentWrapperRunRequest> {
     let mut extensions =
         member_runtime_workspace_access_extensions(active.backend_kind, &active.workspace_dir);
     extensions.insert(
@@ -1260,13 +1881,90 @@ fn build_submitted_turn_run_request(
         }),
     );
 
-    AgentWrapperRunRequest {
+    let env = match policy_snapshot {
+        Some(snapshot) => {
+            let placement_root = active
+                .env
+                .get(crate::service::WORLD_PROJECT_DIR_OVERRIDE_ENV)
+                .map(std::path::PathBuf::from)
+                .ok_or_else(|| {
+                    anyhow!(
+                        "authenticated retained-turn policy requires the launch-authenticated placement root"
+                    )
+                })?;
+            if !placement_root.is_absolute() || placement_root != active.workspace_dir {
+                anyhow::bail!(
+                    "authenticated retained-turn placement root changed from retained runtime"
+                );
+            }
+            let mut baseline_env = active
+                .env
+                .iter()
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect::<HashMap<_, _>>();
+            baseline_env.remove(SUBSTRATE_E2_TURN_ACTUAL_BINARY_ENV);
+            baseline_env.remove(SUBSTRATE_E2_TURN_WORLD_ENTRY_ENV);
+            let mut turn_env = crate::service::build_member_runtime_turn_env(
+                baseline_env,
+                snapshot,
+                &placement_root,
+                &active.process_working_dir,
+            )?;
+            let retained_binary = active.binary_path.to_str().ok_or_else(|| {
+                anyhow!(
+                    "authenticated retained-turn binary path is not valid UTF-8 for strict Landlock transport"
+                )
+            })?;
+            if !active.binary_path.is_absolute() || retained_binary.contains('\n') {
+                anyhow::bail!(
+                    "authenticated retained-turn binary path is not an absolute single Landlock rule target"
+                );
+            }
+            let retained_binary_metadata =
+                fs::symlink_metadata(&active.binary_path).with_context(|| {
+                    format!(
+                        "revalidate authenticated retained-turn binary {}",
+                        active.binary_path.display()
+                    )
+                })?;
+            if !retained_binary_metadata.file_type().is_file() {
+                anyhow::bail!(
+                    "authenticated retained-turn binary is no longer a regular non-symlink file"
+                );
+            }
+            let read_paths = turn_env
+                .entry(crate::service::WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV.to_string())
+                .or_default();
+            if !read_paths.lines().any(|path| path == retained_binary) {
+                if !read_paths.is_empty() {
+                    read_paths.push('\n');
+                }
+                read_paths.push_str(retained_binary);
+            }
+            turn_env.insert(
+                SUBSTRATE_E2_TURN_ACTUAL_BINARY_ENV.to_string(),
+                active.binary_path.display().to_string(),
+            );
+            turn_env.insert(
+                SUBSTRATE_E2_TURN_WORLD_ENTRY_ENV.to_string(),
+                active
+                    .launcher_dir
+                    .join("world-entry.sh")
+                    .display()
+                    .to_string(),
+            );
+            turn_env.into_iter().collect::<BTreeMap<_, _>>()
+        }
+        None => active.env.clone(),
+    };
+
+    Ok(AgentWrapperRunRequest {
         prompt,
         working_dir: Some(active.process_working_dir.clone()),
         timeout: None,
-        env: active.env.clone(),
+        env,
         extensions,
-    }
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1280,6 +1978,9 @@ fn frame_from_wrapper_event(
     agent_id: &str,
     producer: &mut RuntimeEventStreamProducer,
 ) -> Result<Option<ExecuteStreamFrame>> {
+    if should_suppress_untyped_retained_transport_advisory(context, mode, &wrapper_event) {
+        return Ok(None);
+    }
     let prepared = agent_event_from_wrapper_event(
         context,
         binding,
@@ -1314,6 +2015,22 @@ fn frame_from_wrapper_event(
             .map_err(anyhow::Error::msg)?;
     }
     Ok(Some(frame))
+}
+
+fn should_suppress_untyped_retained_transport_advisory(
+    context: &MemberStreamContext,
+    mode: MemberStreamMode,
+    wrapper_event: &AgentWrapperEvent,
+) -> bool {
+    mode == MemberStreamMode::SubmittedTurn
+        && context.acceptance_context.is_some()
+        && (wrapper_event.kind == AgentWrapperEventKind::Status
+            || (wrapper_event.kind == AgentWrapperEventKind::TextOutput
+                && context.authenticated_thread_id.is_none()))
+        && typed_retained_thread_id_from_data(wrapper_event.data.as_ref()).is_none()
+        && normalized_world_worker_event_class_label(wrapper_event.data.as_ref()).is_none()
+        && normalized_world_worker_stream_event_type(wrapper_event.data.as_ref()).is_none()
+        && !normalized_world_worker_runtime_tools_facet(wrapper_event.data.as_ref())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1582,6 +2299,7 @@ fn normalized_world_worker_event_facet_v1(
         anyhow!("typed retained worker event requires acceptance_context.message_id")
     })?;
     let thread_id = typed_retained_thread_id_from_data(wrapper_event.data.as_ref())
+        .or_else(|| context.authenticated_thread_id.clone())
         .ok_or_else(|| anyhow!("typed retained worker event omitted thread_id"))?;
     let event_class = normalized_world_worker_event_class_v1(wrapper_event)?;
     let attention_required = event_class.attention_required_by_default()
@@ -1635,6 +2353,24 @@ fn normalized_world_worker_event_class_v1(
     }
     if let Some(event_class) = normalized_world_worker_event_class_from_runtime_shape(data) {
         return Ok(event_class);
+    }
+    if wrapper_event.kind == AgentWrapperEventKind::TextOutput
+        && wrapper_event.channel.as_deref() == Some("assistant")
+        && wrapper_event
+            .text
+            .as_deref()
+            .is_some_and(|text| !text.is_empty())
+    {
+        return Ok(WorldWorkerEventClassV1::Reply);
+    }
+    if wrapper_event.kind == AgentWrapperEventKind::Error
+        && wrapper_event.channel.as_deref() == Some("error")
+        && wrapper_event
+            .message
+            .as_deref()
+            .is_some_and(|message| !message.is_empty())
+    {
+        return Ok(WorldWorkerEventClassV1::Failure);
     }
 
     anyhow::bail!(
@@ -1760,6 +2496,32 @@ fn normalized_world_worker_event_payload(
     if !payload.contains_key("message") {
         if let Some(message) = normalized_world_worker_payload_message(data) {
             payload.insert("message".to_string(), serde_json::Value::String(message));
+        } else if wrapper_event.kind == AgentWrapperEventKind::TextOutput
+            && wrapper_event.channel.as_deref() == Some("assistant")
+        {
+            if let Some(text) = wrapper_event
+                .text
+                .as_deref()
+                .filter(|text| !text.is_empty())
+            {
+                payload.insert(
+                    "message".to_string(),
+                    serde_json::Value::String(text.to_string()),
+                );
+            }
+        } else if wrapper_event.kind == AgentWrapperEventKind::Error
+            && wrapper_event.channel.as_deref() == Some("error")
+        {
+            if let Some(message) = wrapper_event
+                .message
+                .as_deref()
+                .filter(|message| !message.is_empty())
+            {
+                payload.insert(
+                    "message".to_string(),
+                    serde_json::Value::String(message.to_string()),
+                );
+            }
         }
     }
     if !payload.contains_key("event_id") {
@@ -2067,6 +2829,21 @@ fn stream_response(
         .map_err(|err| anyhow!("failed to build member runtime stream response: {err}"))
 }
 
+fn durable_stream_response(stream: MemberTurnJoinSubscription) -> Result<Response> {
+    let stream = stream.map(|frame| {
+        let payload = frame
+            .canonical_ndjson_bytes()
+            .expect("serialize durable E2 member-turn frame");
+        Ok::<Bytes, Infallible>(Bytes::from(payload))
+    });
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "application/x-ndjson")
+        .body(boxed(StreamBody::new(stream)))
+        .map_err(|error| anyhow!("failed to build durable E2 member-turn stream: {error}"))
+}
+
 fn validate_cancel_signal(sig: &str) -> Result<()> {
     match sig.trim().to_ascii_uppercase().as_str() {
         "INT" | "SIGINT" | "TERM" | "SIGTERM" | "HUP" | "SIGHUP" | "QUIT" | "SIGQUIT" => Ok(()),
@@ -2126,6 +2903,20 @@ fn map_wrapper_error(err: AgentWrapperError) -> anyhow::Error {
         AgentWrapperError::InvalidAgentKind { message }
         | AgentWrapperError::InvalidRequest { message }
         | AgentWrapperError::Backend { message } => anyhow!(message),
+    }
+}
+
+fn persist_prelaunch_failure(
+    leader: &mut MemberTurnJoinLeader,
+    error_code: &str,
+    http_status: u16,
+) -> anyhow::Error {
+    match leader.fail_before_launch(error_code, http_status) {
+        Ok(()) => anyhow::Error::new(MemberTurnJoinError::FailedBeforeLaunch {
+            error_code: error_code.to_string(),
+            http_status,
+        }),
+        Err(error) => anyhow::Error::new(error),
     }
 }
 
@@ -2216,6 +3007,7 @@ impl ActiveMemberRuntime {
             resumed_from_participant_id: self.resumed_from_participant_id.clone(),
             backend_id: self.backend_id.clone(),
             protocol: self.protocol.clone(),
+            authenticated_thread_id: self.uaa_session_id(),
         }
     }
 }
@@ -2487,6 +3279,85 @@ mod tests {
     use super::*;
     use std::fs;
 
+    fn sample_e2_launch_activation(
+        participant_id: &str,
+        bootstrap_run_id: &str,
+    ) -> E2MemberLaunchActivationCarrierV1 {
+        use base64::Engine as _;
+        use sha2::Digest as _;
+
+        let snapshot = sample_e2_submit_turn_request()
+            .policy_snapshot_carrier
+            .expect("E2 turn carrier")
+            .policy_snapshot()
+            .expect("E2 launch snapshot");
+        let bytes = serde_json::to_vec(&snapshot).expect("exact E1 launch snapshot bytes");
+        let commitment_ref = transport_api_types::DispatchPolicyCommitmentRefCarrierV1 {
+            authority_store_id: "authority-store-e2-world-service".to_string(),
+            commitment_id: "dpc_018f0f3a-9b2c-7def-8abc-0123456789ad".to_string(),
+            exact_linkage_hash: "a".repeat(64),
+        };
+        let carrier = E2MemberLaunchActivationCarrierV1 {
+            schema_version: 1,
+            activation_id: format!("e2a_{}", "a".repeat(32)),
+            launch_kind: E2MemberLaunchKindV1::FreshSpawn,
+            reservation_ref: Some(
+                transport_api_types::E2DispatchPolicyReservationRefCarrierV1 {
+                    authority_store_id: commitment_ref.authority_store_id.clone(),
+                    reservation_id: "dpr_world_service_fixture".to_string(),
+                    reservation_hash: "c".repeat(64),
+                },
+            ),
+            commitment_ref: commitment_ref.clone(),
+            immutable_worker_cap_ref: commitment_ref,
+            immutable_worker_cap_created_revision: 7,
+            immutable_worker_cap_application_revision: 9,
+            policy_snapshot_bytes_base64: base64::engine::general_purpose::STANDARD.encode(&bytes),
+            policy_snapshot_byte_length: bytes.len() as u64,
+            policy_snapshot_ref: transport_api_types::AuthorityObjectRefV1 {
+                ref_id: "ao_0123456789abcdef0123456789abcdef".to_string(),
+                object_kind: transport_api_types::AuthorityObjectKindV1::Policy,
+                schema_version: 1,
+                commitment: transport_api_types::OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                    digest_hex: "b".repeat(64),
+                },
+            },
+            policy_snapshot_hash: format!("{:x}", sha2::Sha256::digest(&bytes)),
+            policy_snapshot_revision: "policy-revision-e2-world-service".to_string(),
+            reason: Some("authenticated retained launch cap".to_string()),
+            request_id: "req_fixture".to_string(),
+            idempotency_key: "idem_fixture".to_string(),
+            orchestration_session_id: "orch_123".to_string(),
+            caller_participant_id: "ash_orchestrator".to_string(),
+            caller_backend_id: "cli:codex".to_string(),
+            target_backend_id: "cli:codex".to_string(),
+            retained_participant_id: participant_id.to_string(),
+            bootstrap_run_id: bootstrap_run_id.to_string(),
+            source_participant_id: None,
+            target_world: transport_api_types::WorldBindingRefV1 {
+                world_id: "world_123".to_string(),
+                world_generation: 7,
+            },
+            parent_policy_ref: transport_api_types::AuthorityObjectRefV1 {
+                ref_id: "ao_fedcba9876543210fedcba9876543210".to_string(),
+                object_kind: transport_api_types::AuthorityObjectKindV1::Policy,
+                schema_version: 1,
+                commitment: transport_api_types::OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                    digest_hex: "d".repeat(64),
+                },
+            },
+            parent_policy_revision: "parent-policy-revision".to_string(),
+            request_commitment: transport_api_types::E2LaunchRequestCommitmentV1::HmacSha256 {
+                key_id: "dpk_world_service_fixture".to_string(),
+                domain: "substrate.dispatch_policy_commitment.spawn_request.v1".to_string(),
+                digest_hex: "e".repeat(64),
+            },
+            registry_publication_revision: 9,
+        };
+        carrier.validate().expect("valid E2 launch activation");
+        carrier
+    }
+
     fn sample_authority_managed_dispatch() -> MemberDispatchRequestV1 {
         use transport_api_types::{
             ResolvedMemberRuntimeDescriptorV1, RetainedWorkerAdmissionCommitmentCarrierV1,
@@ -2496,6 +3367,7 @@ mod tests {
         let commitment = |value: char| RetainedWorkerAuthorityObjectCommitmentV1::CanonicalSha256 {
             digest_hex: value.to_string().repeat(64),
         };
+        let e2_launch_activation = sample_e2_launch_activation("rwp_member", "rwr_bootstrap");
         MemberDispatchRequestV1 {
             schema_version: 1,
             orchestration_session_id: "orch_123".to_string(),
@@ -2543,6 +3415,7 @@ mod tests {
                 retained_worker_ref_id: "ao_worker".to_string(),
                 retained_worker_commitment: commitment('d'),
             }),
+            e2_launch_activation: Some(e2_launch_activation),
         }
     }
 
@@ -2564,6 +3437,7 @@ mod tests {
         legacy.participant_id = "ash_pre_activation_member".to_string();
         legacy.run_id = "run_pre_activation_bootstrap".to_string();
         legacy.retained_worker_launch_authority = None;
+        legacy.e2_launch_activation = None;
         validate_retained_worker_launch_authority_proof(&legacy, &binding)
             .expect("explicit pre-activation compatibility identity may omit proof");
 
@@ -2617,6 +3491,12 @@ mod tests {
                 HashMap::new(),
                 "spn_missing_proof".to_string(),
                 MemberRuntimeLaunchAdmissionV1 {
+                    policy_snapshot: missing
+                        .e2_launch_activation
+                        .as_ref()
+                        .expect("fixture activation")
+                        .policy_snapshot()
+                        .expect("fixture launch snapshot"),
                     dispatch: missing,
                     acceptance_context: None,
                 },
@@ -2649,6 +3529,12 @@ mod tests {
                 HashMap::new(),
                 "spn_malformed_proof".to_string(),
                 MemberRuntimeLaunchAdmissionV1 {
+                    policy_snapshot: malformed
+                        .e2_launch_activation
+                        .as_ref()
+                        .expect("fixture activation")
+                        .policy_snapshot()
+                        .expect("fixture launch snapshot"),
                     dispatch: malformed,
                     acceptance_context: None,
                 },
@@ -2681,6 +3567,12 @@ mod tests {
                 HashMap::new(),
                 "spn_mismatched_proof".to_string(),
                 MemberRuntimeLaunchAdmissionV1 {
+                    policy_snapshot: mismatched
+                        .e2_launch_activation
+                        .as_ref()
+                        .expect("fixture activation")
+                        .policy_snapshot()
+                        .expect("fixture launch snapshot"),
                     dispatch: mismatched,
                     acceptance_context: None,
                 },
@@ -2700,6 +3592,85 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn e2_launch_activation_must_exact_join_the_enforced_outer_snapshot_before_binary() {
+        let temp = tempfile::tempdir().expect("member launch placement");
+        let placement = LinuxWorldPlacementContext {
+            working_dir: temp.path().to_path_buf(),
+            cgroup_path: temp.path().join("unused-cgroup"),
+            require_cgroup_attach: false,
+        };
+        let binding = sample_world_binding();
+        let mut dispatch = sample_authority_managed_dispatch();
+        dispatch.resolved_runtime.binary_path =
+            temp.path().join("missing-runtime").display().to_string();
+        let mut substituted_snapshot = dispatch
+            .e2_launch_activation
+            .as_ref()
+            .expect("fixture activation")
+            .policy_snapshot()
+            .expect("fixture launch snapshot");
+        substituted_snapshot.world_fs.fail_closed.routing =
+            !substituted_snapshot.world_fs.fail_closed.routing;
+
+        let error = match MemberRuntimeManager::new()
+            .launch(
+                "ambient-shell".to_string(),
+                HashMap::new(),
+                "spn_substituted_launch_snapshot".to_string(),
+                MemberRuntimeLaunchAdmissionV1 {
+                    dispatch,
+                    acceptance_context: None,
+                    policy_snapshot: substituted_snapshot,
+                },
+                binding,
+                placement,
+            )
+            .await
+        {
+            Ok(_) => panic!("substituted outer snapshot must fail before launch"),
+            Err(error) => error,
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("E2 launch activation snapshot conflicts with enforced policy snapshot"),
+            "snapshot mismatch must win over missing binary: {error:#}"
+        );
+    }
+
+    #[test]
+    fn e2_launch_activation_pins_caller_backend_from_acceptance_context() {
+        let dispatch = sample_authority_managed_dispatch();
+        let snapshot = dispatch
+            .e2_launch_activation
+            .as_ref()
+            .expect("fixture activation")
+            .policy_snapshot()
+            .expect("fixture launch snapshot");
+        let acceptance = transport_api_types::WorldWorkAcceptanceContextV1 {
+            schema_version: 1,
+            proposed_acceptance_record_id: "wwa_018f0f3a-9b2c-7def-8abc-0123456789ab".to_string(),
+            request_id: dispatch.run_id.clone(),
+            message_id: None,
+            caller_backend_id: "cli:claude-code".to_string(),
+            host_transition_correlation: None,
+        };
+        acceptance.validate().expect("valid acceptance context");
+
+        let error = validate_e2_member_launch_activation(
+            &dispatch,
+            &sample_world_binding(),
+            &snapshot,
+            Some(&acceptance),
+        )
+        .expect_err("launch caller backend substitution must fail closed");
+        assert!(
+            error.to_string().contains("E2 launch activation conflicts"),
+            "unexpected error: {error:#}"
+        );
+    }
+
     fn sample_submit_turn_request() -> MemberTurnSubmitRequestV1 {
         MemberTurnSubmitRequestV1 {
             schema_version: 1,
@@ -2711,8 +3682,83 @@ mod tests {
             world_id: "world_123".to_string(),
             world_generation: 7,
             prompt: "continue".to_string(),
+            policy_snapshot_carrier: None,
             acceptance_context: None,
         }
+    }
+
+    fn sample_e2_submit_turn_request() -> MemberTurnSubmitRequestV1 {
+        use base64::Engine as _;
+        use sha2::Digest as _;
+
+        let mut request = sample_submit_turn_request();
+        let snapshot = transport_api_types::PolicySnapshotV3 {
+            schema_version: 3,
+            net_allowed: Vec::new(),
+            world_fs: transport_api_types::PolicySnapshotWorldFsV3 {
+                host_visible: false,
+                fail_closed: transport_api_types::PolicySnapshotWorldFsFailClosedV3 {
+                    routing: true,
+                },
+                deny_enforcement: Some(transport_api_types::WorldFsDenyEnforcementV3::Strict),
+                caged_required: true,
+                discover: Some(transport_api_types::PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec!["workspace/exact.txt".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                read: Some(transport_api_types::PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec!["workspace/exact.txt".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                write: transport_api_types::PolicySnapshotWorldFsWriteV3 {
+                    enabled: false,
+                    allow_list: vec!["workspace/exact.txt".to_string()],
+                    deny_list: Vec::new(),
+                },
+            },
+        }
+        .canonicalize()
+        .expect("canonical E2 WorldService fixture snapshot");
+        let bytes = serde_json::to_vec(&snapshot).expect("exact E1 snapshot bytes");
+        let carrier = transport_api_types::DispatchPolicySnapshotCarrierV1 {
+            schema_version: 1,
+            immutable_worker_cap_ref: transport_api_types::DispatchPolicyCommitmentRefCarrierV1 {
+                authority_store_id: "authority-store-e2-world-service".to_string(),
+                commitment_id: "dpc_018f0f3a-9b2c-7def-8abc-0123456789ad".to_string(),
+                exact_linkage_hash: "a".repeat(64),
+            },
+            immutable_worker_cap_created_revision: 7,
+            immutable_worker_cap_application_revision: 9,
+            subject: transport_api_types::RetainedTurnPolicyCommitmentSubjectV1 {
+                retained_participant_id: request.participant_id.clone(),
+                active_run_id: request.run_id.clone(),
+                message_id: None,
+            },
+            orchestration_session_id: request.orchestration_session_id.clone(),
+            caller_participant_id: request.orchestrator_participant_id.clone(),
+            caller_backend_id: "cli:codex".to_string(),
+            target_backend_id: request.backend_id.clone(),
+            target_world: transport_api_types::WorldBindingRefV1 {
+                world_id: request.world_id.clone(),
+                world_generation: request.world_generation,
+            },
+            policy_snapshot_bytes_base64: base64::engine::general_purpose::STANDARD.encode(&bytes),
+            policy_snapshot_byte_length: bytes.len() as u64,
+            policy_snapshot_ref: transport_api_types::AuthorityObjectRefV1 {
+                ref_id: "ao_0123456789abcdef0123456789abcdef".to_string(),
+                object_kind: transport_api_types::AuthorityObjectKindV1::Policy,
+                schema_version: 1,
+                commitment: transport_api_types::OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                    digest_hex: "b".repeat(64),
+                },
+            },
+            policy_snapshot_hash: format!("{:x}", sha2::Sha256::digest(&bytes)),
+            policy_snapshot_revision: "policy-revision-e2-world-service".to_string(),
+            reason: Some("authenticated retained-turn narrowing".to_string()),
+        };
+        carrier.validate().expect("valid E2 WorldService carrier");
+        request.policy_snapshot_carrier = Some(carrier);
+        request
     }
 
     fn sample_member_stream_context(message_id: Option<&str>) -> MemberStreamContext {
@@ -2734,6 +3780,7 @@ mod tests {
             resumed_from_participant_id: None,
             backend_id: "cli:codex".to_string(),
             protocol: json!("substrate.agent.session"),
+            authenticated_thread_id: None,
         }
     }
 
@@ -2860,7 +3907,27 @@ mod tests {
             })),
             active_turn_span_id: Mutex::new(None),
             uaa_session_id: Mutex::new(None),
+            e2_launch_activation: None,
+            authenticated_worker_cap_identity: Mutex::new(None),
         })
+    }
+
+    fn sample_e2_active_member_runtime(
+        temp_dir: &tempfile::TempDir,
+        participant_id: &str,
+        bootstrap_span_id: &str,
+    ) -> Arc<ActiveMemberRuntime> {
+        let mut active = sample_active_member_runtime(temp_dir, participant_id, bootstrap_span_id);
+        let activation = sample_e2_launch_activation(participant_id, "rwr_bootstrap");
+        let cap_identity = RetainedTurnWorkerCapIdentity {
+            commitment_ref: activation.immutable_worker_cap_ref.clone(),
+            created_revision: activation.immutable_worker_cap_created_revision,
+            application_revision: activation.immutable_worker_cap_application_revision,
+        };
+        let active_mut = Arc::get_mut(&mut active).expect("unique active E2 fixture");
+        active_mut.e2_launch_activation = Some(activation);
+        active_mut.authenticated_worker_cap_identity = Mutex::new(Some(cap_identity));
+        active
     }
 
     #[test]
@@ -3469,6 +4536,275 @@ base_url = "https://gateway.example.invalid/v1"
             .expect("matching retained member identity should validate");
     }
 
+    #[test]
+    fn e2_submit_turn_consumes_exact_carrier_before_runtime_submission() {
+        let request = sample_e2_submit_turn_request();
+        let authenticated = request
+            .policy_snapshot_carrier
+            .as_ref()
+            .expect("E2 request carries authenticated policy")
+            .clone();
+        request
+            .validate()
+            .expect("WorldService request boundary consumes exact carrier");
+        validate_submit_turn_request(&request, sample_retained_identity())
+            .expect("carrier-bound request matches retained runtime");
+        request
+            .validate_against_authenticated_policy_carrier(&authenticated)
+            .expect("request preserves exact authenticated carrier");
+        assert_eq!(
+            request
+                .policy_snapshot_carrier
+                .as_ref()
+                .expect("carried policy")
+                .policy_snapshot_bytes()
+                .expect("exact E1 bytes"),
+            serde_json::to_vec(
+                &authenticated
+                    .policy_snapshot()
+                    .expect("decode carried PolicySnapshotV3")
+            )
+            .expect("reserialize exact E1 snapshot")
+        );
+
+        let encoded = serde_json::to_value(&request).expect("serialize WorldService request");
+        let decoded: MemberTurnSubmitRequestV1 =
+            serde_json::from_value(encoded).expect("strict WorldService request decode");
+        assert_eq!(decoded.policy_snapshot_carrier, Some(authenticated.clone()));
+
+        let mut omitted = request;
+        omitted.policy_snapshot_carrier = None;
+        assert!(omitted
+            .validate_against_authenticated_policy_carrier(&authenticated)
+            .is_err());
+    }
+
+    #[test]
+    fn e2_submitted_turn_run_request_replaces_launch_policy_with_carried_snapshot() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let mut active = sample_e2_active_member_runtime(&temp_dir, "ash_member", "spn_bootstrap");
+        let active_mut = Arc::get_mut(&mut active).expect("unique active fixture");
+        active_mut.process_working_dir = active_mut.workspace_dir.clone();
+        active_mut.env.extend([
+            (
+                crate::service::WORLD_PROJECT_DIR_OVERRIDE_ENV.to_string(),
+                active_mut.workspace_dir.display().to_string(),
+            ),
+            (
+                crate::service::WORLD_FS_ISOLATION_ENV.to_string(),
+                "stale-launch-policy".to_string(),
+            ),
+            (
+                crate::service::WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV.to_string(),
+                "/stale/launch/read".to_string(),
+            ),
+            (
+                crate::enforcement_plan::WORLD_FS_ENFORCEMENT_PLAN_B64_ENV.to_string(),
+                "stale-launch-plan".to_string(),
+            ),
+        ]);
+
+        let request = sample_e2_submit_turn_request();
+        let snapshot = resolve_submitted_turn_policy(&request, active.as_ref())
+            .expect("authenticated retained-turn carrier")
+            .expect("E2 snapshot");
+        let run_request = build_submitted_turn_run_request(
+            active.as_ref(),
+            request.prompt.clone(),
+            "uaa_session",
+            Some(&snapshot),
+        )
+        .expect("carrier-derived submitted-turn request");
+
+        let expected_plan = crate::enforcement_plan::maybe_encode_from_snapshot(&snapshot)
+            .expect("encode exact E1 snapshot");
+        assert_eq!(
+            run_request
+                .env
+                .get(crate::enforcement_plan::WORLD_FS_ENFORCEMENT_PLAN_B64_ENV),
+            expected_plan.as_ref(),
+            "the actual submitted child must receive the carrier-derived plan"
+        );
+        assert_ne!(
+            run_request
+                .env
+                .get(crate::service::WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV)
+                .map(String::as_str),
+            Some("/stale/launch/read"),
+            "launch-time policy must not survive into an E2 turn"
+        );
+        assert_eq!(
+            run_request
+                .env
+                .get(crate::service::WORLD_FS_ISOLATION_ENV)
+                .map(String::as_str),
+            Some("full")
+        );
+        assert!(
+            !run_request
+                .env
+                .contains_key(crate::service::WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV),
+            "write.enabled=false must not activate its dormant canonical write allowlist"
+        );
+        let retained_binary = active.binary_path.display().to_string();
+        let retained_read_paths = run_request
+            .env
+            .get(crate::service::WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV)
+            .expect("retained-turn read allowlist");
+        assert!(
+            retained_read_paths
+                .lines()
+                .any(|path| path == retained_binary),
+            "the exact launch-authenticated retained binary must remain readable so Landlock can execute it"
+        );
+        assert!(
+            !retained_read_paths
+                .lines()
+                .any(|path| path == active.workspace_dir.display().to_string()),
+            "the retained binary prerequisite must not grant its workspace parent"
+        );
+    }
+
+    #[test]
+    fn activated_e2_retained_turn_rejects_missing_carrier_before_submission() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let active = sample_e2_active_member_runtime(&temp_dir, "rwp_member", "spn_bootstrap");
+        let mut request = sample_submit_turn_request();
+        request.participant_id = "rwp_member".to_string();
+
+        let error = resolve_submitted_turn_policy(&request, active.as_ref())
+            .expect_err("authority-managed retained turn must carry E2 policy");
+        assert!(
+            error
+                .to_string()
+                .contains("requires policy_snapshot_carrier"),
+            "unexpected error: {error:#}"
+        );
+    }
+
+    #[test]
+    fn retained_turn_rejects_worker_cap_substitution_after_authentication() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let active = sample_e2_active_member_runtime(&temp_dir, "ash_member", "spn_bootstrap");
+        let request = sample_e2_submit_turn_request();
+        resolve_submitted_turn_policy(&request, active.as_ref())
+            .expect("verify launch-pinned worker cap")
+            .expect("E2 policy snapshot");
+
+        let mut substituted = request;
+        substituted
+            .policy_snapshot_carrier
+            .as_mut()
+            .expect("carrier")
+            .immutable_worker_cap_ref
+            .commitment_id = "dpc_018f0f3a-9b2c-7def-8abc-0123456789ae".to_string();
+        substituted
+            .validate()
+            .expect("structurally valid substitution");
+        let error = resolve_submitted_turn_policy(&substituted, active.as_ref())
+            .expect_err("immutable cap substitution must fail before submission");
+        assert!(
+            error.to_string().contains("worker-cap identity changed"),
+            "unexpected error: {error:#}"
+        );
+    }
+
+    #[test]
+    fn retained_turn_rejects_caller_backend_substitution_from_launch_activation() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let active = sample_e2_active_member_runtime(&temp_dir, "ash_member", "spn_bootstrap");
+        let mut substituted = sample_e2_submit_turn_request();
+        substituted
+            .policy_snapshot_carrier
+            .as_mut()
+            .expect("carrier")
+            .caller_backend_id = "cli:claude-code".to_string();
+        substituted
+            .policy_snapshot_carrier
+            .as_mut()
+            .expect("carrier")
+            .subject
+            .message_id = Some("wwm_018f0f3a-9b2c-7def-8abc-0123456789ac".to_string());
+        substituted.acceptance_context = Some(transport_api_types::WorldWorkAcceptanceContextV1 {
+            schema_version: 1,
+            proposed_acceptance_record_id: "wwa_018f0f3a-9b2c-7def-8abc-0123456789ab".to_string(),
+            request_id: substituted.run_id.clone(),
+            message_id: Some("wwm_018f0f3a-9b2c-7def-8abc-0123456789ac".to_string()),
+            caller_backend_id: "cli:claude-code".to_string(),
+            host_transition_correlation: None,
+        });
+        substituted
+            .validate()
+            .expect("request and turn carrier agree on the substituted caller backend");
+
+        let error = resolve_submitted_turn_policy(&substituted, active.as_ref())
+            .expect_err("turn caller backend must match launch-pinned activation");
+        assert!(
+            error.to_string().contains("launch-pinned E2 activation"),
+            "unexpected error: {error:#}"
+        );
+    }
+
+    #[test]
+    fn consecutive_e2_turns_derive_independent_non_accumulating_policy_envs() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let mut active = sample_active_member_runtime(&temp_dir, "ash_member", "spn_bootstrap");
+        let active_mut = Arc::get_mut(&mut active).expect("unique active fixture");
+        active_mut.process_working_dir = active_mut.workspace_dir.clone();
+        active_mut.env.insert(
+            crate::service::WORLD_PROJECT_DIR_OVERRIDE_ENV.to_string(),
+            active_mut.workspace_dir.display().to_string(),
+        );
+
+        let snapshot_a = sample_e2_submit_turn_request()
+            .policy_snapshot_carrier
+            .expect("carrier A")
+            .policy_snapshot()
+            .expect("snapshot A");
+        let mut snapshot_b = snapshot_a.clone();
+        snapshot_b
+            .world_fs
+            .discover
+            .as_mut()
+            .expect("discover dimension")
+            .allow_list = vec!["workspace/turn-b.txt".to_string()];
+        snapshot_b
+            .world_fs
+            .read
+            .as_mut()
+            .expect("read dimension")
+            .allow_list = vec!["workspace/turn-b.txt".to_string()];
+        snapshot_b = snapshot_b.canonicalize().expect("canonical snapshot B");
+
+        let request_a = build_submitted_turn_run_request(
+            active.as_ref(),
+            "turn A".to_string(),
+            "uaa_session",
+            Some(&snapshot_a),
+        )
+        .expect("turn A request");
+        let request_b = build_submitted_turn_run_request(
+            active.as_ref(),
+            "turn B".to_string(),
+            "uaa_session",
+            Some(&snapshot_b),
+        )
+        .expect("turn B request");
+
+        let reads_a = request_a
+            .env
+            .get(crate::service::WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV)
+            .expect("turn A read allowlist");
+        let reads_b = request_b
+            .env
+            .get(crate::service::WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV)
+            .expect("turn B read allowlist");
+        assert!(reads_a.contains("workspace/exact.txt"));
+        assert!(!reads_a.contains("turn-b.txt"));
+        assert!(reads_b.contains("workspace/turn-b.txt"));
+        assert!(!reads_b.contains("exact.txt"));
+    }
+
     type SubmitTurnDriftCase = (
         &'static str,
         fn(&mut MemberTurnSubmitRequestV1),
@@ -3545,6 +4881,7 @@ base_url = "https://gateway.example.invalid/v1"
             resumed_from_participant_id: None,
             backend_id: "cli:codex".to_string(),
             protocol: json!("substrate.agent.session"),
+            authenticated_thread_id: None,
         }
     }
 
@@ -3689,6 +5026,59 @@ base_url = "https://gateway.example.invalid/v1"
             err.to_string()
                 .contains("typed retained worker event omitted thread_id"),
             "unexpected error: {err}"
+        );
+
+        let mut authenticated_context =
+            sample_member_stream_context(Some("wwm_018f0f3a-9b2c-7def-8abc-0123456789ac"));
+        authenticated_context.authenticated_thread_id = Some("thread-pinned".to_string());
+        let prepared = agent_event_from_wrapper_event(
+            &authenticated_context,
+            &sample_world_binding(),
+            "spn_submitted",
+            AgentWrapperEvent {
+                agent_kind: agent_api::AgentWrapperKind::new("codex").expect("agent kind"),
+                kind: AgentWrapperEventKind::TextOutput,
+                channel: Some("assistant".to_string()),
+                text: Some("authenticated assistant reply".to_string()),
+                message: None,
+                data: None,
+            },
+            &mut false,
+            MemberStreamMode::SubmittedTurn,
+            "codex_world",
+        )
+        .expect("authenticated retained session supplies the thread identity");
+        let facet = prepared
+            .worker_event_facet
+            .expect("submitted reply must carry a typed worker event facet");
+        assert_eq!(facet.thread_id, "thread-pinned");
+        assert_eq!(facet.event_class, WorldWorkerEventClassV1::Reply);
+
+        let prepared = agent_event_from_wrapper_event(
+            &authenticated_context,
+            &sample_world_binding(),
+            "spn_submitted",
+            AgentWrapperEvent {
+                agent_kind: agent_api::AgentWrapperKind::new("codex").expect("agent kind"),
+                kind: AgentWrapperEventKind::Error,
+                channel: Some("error".to_string()),
+                text: None,
+                message: Some("submitted child failed before agent output".to_string()),
+                data: None,
+            },
+            &mut false,
+            MemberStreamMode::SubmittedTurn,
+            "codex_world",
+        )
+        .expect("authenticated retained execution error is typed as a failure");
+        let facet = prepared
+            .worker_event_facet
+            .expect("submitted failure must carry a typed worker event facet");
+        assert_eq!(facet.thread_id, "thread-pinned");
+        assert_eq!(facet.event_class, WorldWorkerEventClassV1::Failure);
+        assert_eq!(
+            facet.payload.get("message"),
+            Some(&json!("submitted child failed before agent output"))
         );
     }
 
@@ -3877,7 +5267,7 @@ base_url = "https://gateway.example.invalid/v1"
             Some(&json!("control_ack"))
         );
 
-        let ambiguous_wrapper_fallback = AgentWrapperEvent {
+        let codex_assistant_reply = AgentWrapperEvent {
             agent_kind: agent_api::AgentWrapperKind::new("codex").expect("agent kind"),
             kind: AgentWrapperEventKind::TextOutput,
             channel: Some("assistant".to_string()),
@@ -3887,23 +5277,22 @@ base_url = "https://gateway.example.invalid/v1"
                 "thread_id": "thread-submitted"
             })),
         };
-        let err = match agent_event_from_wrapper_event(
+        let prepared = agent_event_from_wrapper_event(
             &sample_member_stream_context(Some("wwm_018f0f3a-9b2c-7def-8abc-0123456789ac")),
             &sample_world_binding(),
             "spn_submitted",
-            ambiguous_wrapper_fallback,
+            codex_assistant_reply,
             &mut false,
             MemberStreamMode::SubmittedTurn,
             "codex_world",
-        ) {
-            Ok(_) => panic!("submitted turn without explicit typed shape must fail closed"),
-            Err(err) => err,
-        };
-        assert!(
-            err.to_string().contains(
-                "unsupported_worker_event_shape: retained member emitted no supported typed worker event shape"
-            ),
-            "unexpected error: {err}"
+        )
+        .expect("Codex assistant TextOutput is a reply when its thread is authenticated");
+        assert_eq!(
+            prepared
+                .worker_event_facet
+                .expect("typed worker event facet")
+                .event_class,
+            WorldWorkerEventClassV1::Reply
         );
     }
 

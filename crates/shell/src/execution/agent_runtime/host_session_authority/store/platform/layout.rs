@@ -275,7 +275,12 @@ impl<'a> StoreLayout<'a> {
             let valid = matches!(
                 (entry.name.as_str(), entry.kind),
                 (
-                    "lock" | "tmp" | "objects" | "keys" | "retained-worker-admission-v1",
+                    "lock"
+                        | "tmp"
+                        | "objects"
+                        | "keys"
+                        | "retained-worker-admission-v1"
+                        | "dispatch-policy-commitment-v1",
                     EntryKind::Directory
                 ) | (ROOT_FILE | INIT_FILE, EntryKind::RegularFile)
             );
