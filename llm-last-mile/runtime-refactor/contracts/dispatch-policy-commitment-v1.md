@@ -1140,54 +1140,449 @@ Focused proof must cover:
 - static proof of zero production callers before B2.2.
 
 The Linux acceptance wall for that later implementation uses the exact admission baseline recorded
-as `e2_rm_base` and requires these commands and outputs, in order:
+as `e2_rm_base`. Before any implementation mutation, establish the baseline and pristine source
+state exactly:
 
 ```bash
-test -n "${E2_RM_ADMISSION_BASELINE:?set the recorded 40-hex admission baseline}"
+test -n "$E2_RM_ADMISSION_BASELINE"
+test "$E2_RM_ADMISSION_BASELINE" = "cd9008a6d59acc23163c2bc39cecb571d0283027"
 e2_rm_base=$(git rev-parse --verify "$E2_RM_ADMISSION_BASELINE^{commit}")
 test "$e2_rm_base" = "$E2_RM_ADMISSION_BASELINE"
+test "$(git rev-parse "$e2_rm_base^{tree}")" = \
+  "11c6fe06527fd0a65fb154d84f9b8fee2bf768fc"
+test "$(git rev-parse "$e2_rm_base^")" = \
+  "2020ce1a33288bc8ec0327d75e47257b8abf10d3"
 test "$(git rev-parse HEAD)" = "$e2_rm_base"
-test -z "$(git status --porcelain=v1 --untracked-files=all)"
+git diff --cached --quiet HEAD --
+git diff --quiet
+test -z "$(git ls-files --others --exclude-standard)"
 set -o pipefail
 uname -a
 rustc -vV
-cargo fmt --all -- --check
-cargo test -p shell --lib e2_rm -- --nocapture
-cargo clippy -p shell --all-targets -- -D warnings
-cargo test -p shell --lib -- --nocapture
-cargo build -p substrate --bin substrate --bin substrate-shim
-cargo build --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace -- --nocapture
-target/debug/substrate world doctor --json | tee /tmp/e2-rm-world-doctor.json
-target/debug/substrate shim doctor --json | tee /tmp/e2-rm-shim-doctor.json
-target/debug/substrate health --json | tee /tmp/e2-rm-health.json
-jq -e . /tmp/e2-rm-world-doctor.json
-jq -e . /tmp/e2-rm-shim-doctor.json
-jq -e . /tmp/e2-rm-health.json
-git diff --check "$e2_rm_base" --
-git diff --name-only "$e2_rm_base" --
-git diff --name-only --diff-filter=A "$e2_rm_base" --
-git diff --name-only "$e2_rm_base" -- '*.md'
-rg -n 'resolve_accepted_work_receipt_material\(' crates/shell/src --glob '*.rs'
-git status --short
 ```
 
-The changed-path output must contain exactly the six authorized product files above; the added-path
-and changed-Markdown outputs must both be empty, making new-file whitespace/EOF and changed-document
-link/fragment validation exact zero-input checks. The `rg` output must contain only the definition
-and colocated `#[cfg(test)]` call sites in the authorized files—zero production callers—and `git
-status --short` must name only those tracked files before commit. The recorded focused-test output
-must name every positive, no-mutation, locking, stability, schema, crash/retry, legacy, corruption,
-and substitution case above. Formatting, both
-builds, both clippy commands, the focused tests, the full shell library, and the full workspace test
-must all exit zero; this prerequisite grants no inherited-failure or baseline-differential waiver.
-Each source-built doctor must exit zero, emit parseable JSON, and have its complete captured output
-attached to the completion evidence. Any doctor failure or non-pass/needs-attention diagnostic is
-completion-blocking unless a later fresh authority record explicitly accepts an exact-baseline,
-same-host/toolchain differential; `E2-RM` itself pre-authorizes no such exception. No live smoke can
-substitute for the unit-level historical-material matrix, and no live behavior change is expected
-because the unit remains unintegrated.
+`uname -a` and `rustc -vV` are diagnostic identity evidence, not acceptance gates. All paired
+runs must use the same host, and the toolchain output must be byte-identical across them. A host or
+toolchain mismatch stops comparison. The implementation candidate must be a direct descendant of
+`e2_rm_base` and must not contain the documentation correction itself.
+
+### Candidate-absolute wall
+
+Every command below is an absolute candidate-green gate and runs through the bounded runner defined
+below. `cargo fmt` uses the exact invocation shown because it has no lockfile or network resolution
+mode; every other Cargo command is invoked with `--locked --offline`:
+
+```bash
+cargo fmt --all -- --check
+
+cargo check --locked --offline \
+  -p shell --lib --message-format=json
+
+cargo test --locked --offline \
+  -p shell --lib --message-format=json e2_rm \
+  -- --list
+
+cargo test --locked --offline \
+  -p shell --lib --message-format=json e2_rm \
+  -- --nocapture --test-threads=1
+
+for filter in \
+  e2_rm_resolver_ \
+  e2_rm_e2_snapshot_ \
+  e2_rm_transaction_ \
+  e2_rm_store_ \
+  e2_rm_trusted_fs_ \
+  e2_rm_b1_auth_ \
+  e2_rm_lock_ \
+  e2_rm_fault_ \
+  e2_rm_replay_
+do
+  cargo test --locked --offline \
+    -p shell --lib --message-format=json "$filter" \
+    -- --list
+
+  cargo test --locked --offline \
+    -p shell --lib --message-format=json "$filter" \
+    -- --nocapture --test-threads=1
+done
+
+cargo build --locked --offline \
+  -p substrate --bin substrate --bin substrate-shim \
+  --message-format=json
+
+cargo build --locked --offline \
+  -p world-service --bin world-service \
+  --message-format=json
+
+git diff --check "$e2_rm_base" --
+```
+
+The complete `e2_rm` listing must discover more than zero tests, and every discovered test must
+run and pass. Each family listing must independently discover at least one matching test, and every
+listed family test must run and pass. The complete inventory must map every prescribed focused case
+above to a discovered passing test, including all 19 distinct B1 field mutations. Missing, ignored,
+renamed, filtered-out, or non-running required tests block acceptance.
+
+The structural candidate gate requires the sorted changed-path list against `e2_rm_base` to equal
+exactly:
+
+```text
+crates/shell/src/execution/agent_runtime/dispatch_policy_commitment.rs
+crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/dispatch_policy_commitment.rs
+crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs
+crates/shell/src/execution/agent_runtime/host_session_authority/store.rs
+crates/shell/src/execution/agent_runtime/host_session_authority/trusted_fs.rs
+crates/shell/src/execution/agent_runtime/state_store.rs
+```
+
+Enforce that list and the remaining structural conditions exactly:
+
+```bash
+actual_paths=$(git diff --name-only "$e2_rm_base" -- | LC_ALL=C sort)
+expected_paths=$(printf '%s\n' \
+  'crates/shell/src/execution/agent_runtime/dispatch_policy_commitment.rs' \
+  'crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/dispatch_policy_commitment.rs' \
+  'crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs' \
+  'crates/shell/src/execution/agent_runtime/host_session_authority/store.rs' \
+  'crates/shell/src/execution/agent_runtime/host_session_authority/trusted_fs.rs' \
+  'crates/shell/src/execution/agent_runtime/state_store.rs' |
+  LC_ALL=C sort)
+test "$actual_paths" = "$expected_paths"
+test -z "$(git diff --name-only --diff-filter=A "$e2_rm_base" --)"
+test -z "$(git diff --name-only "$e2_rm_base" -- '*.md')"
+test -z "$(git diff --summary "$e2_rm_base" --)"
+test -z "$(git ls-files --others --exclude-standard)"
+git diff --check "$e2_rm_base" --
+git merge-base --is-ancestor "$e2_rm_base" HEAD
+git diff --cached --quiet HEAD --
+git diff --quiet
+```
+
+The exact path comparison plus empty `git diff --summary` prohibit product additions, deletions,
+renames, type changes, and mode changes. The remaining assertions prohibit Markdown changes,
+untracked files, and post-commit staged or unstaged changes. This is an exact structural proof, not
+a narrative `git status` review.
+
+Zero production callers of `resolve_accepted_work_receipt_material` remain mandatory until B2.2
+is separately admitted. Evidence must record every resolver occurrence with `git grep`, prove that
+every non-definition occurrence is lexically inside `#[cfg(test)]` in the authorized resolver
+file, and use an exact candidate GitNexus context plus detect-changes report to prove that no
+production upstream caller edge exists.
+
+### Provider-stub focused proof
+
+Before either broad test command may exclude anything, run this exact focused test for baseline and
+candidate:
+
+```bash
+cargo test --locked --offline \
+  -p shell --lib --message-format=json \
+  execution::managed_lifecycle::tests::provider_stub_client_reports_unavailable \
+  -- --exact --nocapture --test-threads=1
+```
+
+Each side runs inside a private mount namespace in which `/usr/libexec/substrate` is masked by an
+empty private mount. The exact test must remain present and byte-identical, and it must pass within
+300 seconds on both sides. The test inventory must prove exactly one matching test is excluded from
+each later broad run. Only the exact test name above may be skipped; no module, file, suite, or
+broader test family may be excluded. A hang, identical baseline hang, or baseline hang that
+completes differently remains `BaselineRegressionAmbiguous` and blocks acceptance.
+
+### Paired exact-baseline differential wall
+
+Only after the provider-stub focused proof passes on both sides may each of these commands run twice
+at the exact pristine baseline and twice at the candidate:
+
+```bash
+cargo clippy --locked --offline \
+  -p shell --all-targets --message-format=json \
+  -- -D warnings
+
+cargo test --locked --offline \
+  -p shell --lib --message-format=json \
+  -- --nocapture --test-threads=1 \
+     --skip execution::managed_lifecycle::tests::provider_stub_client_reports_unavailable
+
+cargo build --locked --offline \
+  --workspace --message-format=json
+
+cargo clippy --locked --offline \
+  --workspace --all-targets --message-format=json \
+  -- -D warnings
+
+cargo test --locked --offline \
+  --workspace --message-format=json \
+  -- --nocapture --test-threads=1 \
+     --skip execution::managed_lifecycle::tests::provider_stub_client_reports_unavailable
+```
+
+Use two separate full worktrees: a detached baseline at exact commit `e2_rm_base` and a candidate
+that is its direct descendant. For every command and every repeat, create fresh side-specific
+`CARGO_TARGET_DIR`, Cargo home, `TMPDIR`, runtime, and evidence roots. No incremental state may
+cross side, command, or repeat boundaries. Run baseline and candidate sequentially, never
+concurrently. Both runs on each side must first be internally deterministic; there is no majority
+vote.
+
+Each invocation records the exact argv and working directory; complete environment manifest; raw
+stdout and stderr in separate retained files and their SHA-256 values; exit code or terminating
+signal; timeout disposition; monotonic duration; complete test inventory and outcomes; Cargo
+package, compilation target, and compiler diagnostics; the last named test; and cgroup
+`memory.events` before and after. Retain and compare the normalized stdout and stderr streams as
+ordered sequences; any output-order difference blocks, and the diagnostic multiset below is
+additional semantic evidence rather than a replacement for ordered-stream comparison. Comparison
+also uses canonical records:
+
+- tests: command, target, full test name, outcome, and normalized panic/error signature;
+- diagnostics: command, package, compilation target, severity, code/class, source, symbol or
+  approved line mapping, and normalized message; and
+- process: command, exit code, signal, timeout status, and last named test.
+
+Accepted transitions are only baseline pass to candidate pass, the same baseline failure with the
+same test identity and normalized signature, or a newly added passing `e2_rm_*` test inside the
+six-file fence. No changed test outcome is accepted. The complete normalized diagnostic multiset,
+not a total count, must match. Any candidate-only compile error, warning, test failure, hang,
+timeout, signal, OOM, normalized diagnostic, exit-code regression, changed signature, increased
+failure count, missing test, or hidden test rejects the candidate.
+
+An inherited baseline failure may be recorded only when both baseline repeats reproduce it under
+the same command, environment, timeout, and resource conditions and both candidate repeats retain
+the exact test identity and narrowly normalized signature. It is not a waiver for any candidate
+failure.
+
+### Deterministic runner, resources, and normalization
+
+Every Cargo invocation—including candidate-absolute commands, both provider-focused proofs, and
+every differential repeat—uses fresh invocation-specific target, Cargo-home, temporary, run, and
+evidence roots. Every invocation also uses a sealed identical toolchain and cache snapshot, no
+ambient `RUSTFLAGS`, and the fixed environment below; every invocation other than `cargo fmt`
+additionally uses `--locked --offline`:
+
+```text
+CARGO_BUILD_JOBS=1
+CARGO_INCREMENTAL=0
+RUST_TEST_THREADS=1
+LANG=C.UTF-8
+LC_ALL=C.UTF-8
+TZ=UTC
+```
+
+One external process-group/cgroup runner enforces these wall-clock limits:
+
+| Command class | Timeout |
+|---|---:|
+| Format | 300 s |
+| `cargo check` | 1,800 s |
+| Each focused test/list command | 1,800 s |
+| Combined E2-RM tests | 2,700 s |
+| Exact binary builds | 2,700 s |
+| Shell Clippy | 2,700 s |
+| Full shell tests | 3,600 s |
+| Workspace build | 3,600 s |
+| Workspace Clippy | 5,400 s |
+| Workspace tests | 7,200 s |
+| Each provider-stub focused proof | 300 s |
+| Each doctor command | 120 s |
+| Service readiness | 30 s |
+| Service teardown | 30 s |
+
+On timeout the runner sends `TERM`, waits 30 seconds, sends `KILL` to the entire process group,
+and verifies that no descendant survives. Any timeout, hang, signal, `SIGKILL`, cgroup OOM-counter
+increment, or other OOM evidence invalidates the run and blocks acceptance even if both sides
+exhibit it. Historical `oom_kill` counters do not attribute a kill to the current run.
+
+Before a paired run, the filesystem holding all isolated roots must have at least 96 GiB free and
+1,000,000 free inodes. The runner must immediately stop and terminate the active process group if
+free space falls below 48 GiB or 500,000 inodes. A capacity-floor breach invalidates the run.
+
+Normalization may remove only:
+
+- registered worktree, target, evidence, install-prefix, socket, and temporary-root prefixes;
+- wrapper-generated wall-clock timestamps, PIDs, and durations;
+- Cargo/libtest elapsed-time phrases; and
+- the first randomized component below the registered `TMPDIR`.
+
+Normalization must never remove or alter domain timestamps such as `accepted_at` or runtime
+`observed_at`; source file, compilation target, test name, symbol, source line, diagnostic
+class/code, severity, or message; panic or error text; authority, store, session, request, work,
+record, claim, snapshot, cap, or security identity; missing symbols; exit status, signal, timeout,
+failure count, or test-emitted PID; or output order. A shifted source line may be mapped only when
+the diff proves that its diagnostic source text and enclosing symbol are unchanged and that
+preceding authorized insertions alone caused the shift; retain both original coordinates and the
+mapping evidence.
+
+### Source-built installed-product doctor proof
+
+The exact source builds above furnish the only acceptable doctor artifacts. For each side, create
+an external private prefix at mode `0700` with exactly this installed shape:
+
+```text
+<PREFIX>/
+  bin/substrate -> ../versions/<fingerprint>/bin/substrate
+  bin/substrate-shim -> ../versions/<fingerprint>/bin/substrate-shim
+  versions/<fingerprint>/bin/substrate
+  versions/<fingerprint>/bin/substrate-shim
+  versions/<fingerprint>/bin/world-service
+  manager_hooks.yaml
+  shims/
+```
+
+Copy only that side's exact source-built `substrate`, `substrate-shim`, and `world-service`
+binaries from its isolated `CARGO_TARGET_DIR`. Copy `config/manager_hooks.yaml` from that side's
+exact Git object. Record source and installed SHA-256, device, inode, owner, and mode, and require
+the copied-file hashes to equal the source-artifact hashes. Before invocation, independently derive
+`EXPECTED_CONTEXT_COMMITMENT` as the canonical SHA-256 commitment of the exact
+`InstallBootstrapContextV1` preimage for the private prefix and isolated namespace principal;
+retain the preimage and digest as evidence. Run the physical versioned `substrate` binary, never
+an ambient installed product or an unrelated binary.
+
+Run each harness in private user, mount, PID, and network namespaces with private `/run`, `/tmp`,
+home, and `/var/lib/substrate`. Define both an isolated `root` principal and a private non-root
+invocation principal with UID greater than zero. The non-root principal owns the mode-`0700`
+private prefix, belongs to the namespace `substrate` group, invokes `substrate`, and supplies the
+principal bound into `EXPECTED_CONTEXT_COMMITMENT`. Reserve namespace root for starting the exact
+copied `world-service` and owning its private `root:substrate` mode-`0660` socket. Set
+`SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE=manual` and disable periodic GC, so startup GC can observe
+only the private `/var/lib/substrate`. Readiness must complete deterministically within 30 seconds.
+
+Record the service PID, `/proc/<pid>/exe` identity, executable hash, socket identity, and complete
+readiness transcript. Record and verify the running executable identity of every source-built
+binary the harness invokes. Run each doctor through the 120-second bounded runner using the global
+install-prefix option in exactly this position:
+
+```bash
+"$SUBSTRATE_BIN" --install-prefix "$PREFIX" --world \
+  world doctor --json
+
+"$SUBSTRATE_BIN" --install-prefix "$PREFIX" --no-world \
+  shim doctor --json
+
+"$SUBSTRATE_BIN" --install-prefix "$PREFIX" --no-world \
+  health --json
+```
+
+Each command must exit zero and emit exactly one parseable JSON document tied to that side's exact
+prefix and source-built commitment. Ambient installed-product evidence, passive unavailable
+evidence, `needs_attention`, or attribution that cannot be tied to the built artifact is invalid.
+The enabled `world doctor` document must satisfy:
+
+```text
+.schema_version == 1
+.platform == "linux"
+.world_enabled == true
+.ok == true
+.host.ok == true
+.host.selected_host_prefix == <PREFIX>
+.host.host_context_commitment == <EXPECTED_CONTEXT_COMMITMENT>
+.host.world_socket.socket_path == <PRIVATE_SOCKET>
+.host.world_socket.socket_exists == true
+.host.world_socket.probe_ok == true
+.host.world_socket.socket_acl.is_socket == true
+.host.world_socket.access.contract_ok == true
+.host.world_socket.access.status starts with "ok."
+.world.schema_version == 2
+.world.status == "ok"
+.world.ok == true
+.world.selected_host_prefix == <PREFIX>
+.world.host_context_commitment == <EXPECTED_CONTEXT_COMMITMENT>
+.world.policy_snapshot_v1_supported exists
+.world.policy_snapshot_v1_supported is a JSON boolean
+.world.policy_snapshot_v1_supported ==
+  <BASELINE_POLICY_SNAPSHOT_V1_SUPPORTED>
+.world.landlock.supported == true
+.world.world_fs_strategy.probe.result == "pass"
+```
+
+`BASELINE_POLICY_SNAPSHOT_V1_SUPPORTED` is the field value captured from the exact baseline's
+doctor JSON under the same source-built private-prefix harness. The candidate field must exist,
+remain a JSON boolean, and equal that exact captured baseline value. It must not be omitted,
+coerced, normalized away, replaced with an assumed value, or changed between baseline and
+candidate. A reported `false` value is not by itself an `E2-RM` failure and must not prevent an
+otherwise healthy world-doctor result. This is a baseline-bound differential predicate, not a
+hard-coded `true` or `false` capability requirement; every independent world-doctor health,
+source-identity, socket/service, readiness, and parseability predicate above remains mandatory. No
+WorldService edit, capability enablement, product edit, or expansion of the six-file fence is
+authorized.
+
+The `shim doctor` document must bind the exact prefix and independently derived commitment, report
+the expected manifest and shim paths, and satisfy:
+
+```text
+.selected_host_prefix == <PREFIX>
+.host_context_commitment == <EXPECTED_CONTEXT_COMMITMENT>
+.install_context_source == "install_context"
+.skip_all_requested == false
+.world.status == "disabled"
+.world.ok == false
+.world.error absent
+.world.stderr absent
+.world.world_disable_reason == "world isolation disabled by CLI flag --no-world"
+.world.world_disable_source ==
+  {key:"world.enabled", layer:"cli_flag",
+   value_display:false, flag:"--no-world"}
+.world_deps.status == "skipped_disabled"
+.world_deps.error absent
+```
+
+The `health` document must bind the same prefix, commitment, and exact `--no-world` attribution
+through its root and nested shim fields, and must additionally satisfy:
+
+```text
+.world_disable_reason == "world isolation disabled by CLI flag --no-world"
+.world_disable_source ==
+  {key:"world.enabled", layer:"cli_flag",
+   value_display:false, flag:"--no-world"}
+.shim.selected_host_prefix == <PREFIX>
+.shim.host_context_commitment == <EXPECTED_CONTEXT_COMMITMENT>
+.shim.install_context_source == "install_context"
+.shim.skip_all_requested == false
+.shim.world.status == "disabled"
+.shim.world.ok == false
+.shim.world.error absent
+.shim.world.stderr absent
+.shim.world.world_disable_reason == "world isolation disabled by CLI flag --no-world"
+.shim.world.world_disable_source ==
+  {key:"world.enabled", layer:"cli_flag",
+   value_display:false, flag:"--no-world"}
+.shim.world_deps.status == "skipped_disabled"
+.shim.world_deps.error absent
+.summary.ok == true
+.summary.world_ok == null
+.summary.world_error absent
+.summary.world_deps_error absent
+.summary.world_deps_missing == []
+.summary.world_deps_blocked == []
+.summary.failures absent
+```
+
+No `needs_attention`, `unknown`, `unreachable`, `missing_prereqs`, `failed.*`, or
+`degraded.*` state is accepted. Host capabilities, manager discovery, hints, netfilter details,
+and collected timestamps are environmental fields: preserve them and compare baseline to candidate
+narrowly, rejecting every candidate-only negative transition.
+
+Teardown must complete within 30 seconds and prove that no service, descendant process, or socket
+survives. The baseline and candidate installed-product harnesses must each satisfy every predicate;
+the baseline result cannot waive or weaken a candidate or live-gate failure.
+
+A baseline failure is never a waiver. Candidate-absolute and source-installed live gates must
+satisfy their stated acceptance predicates unconditionally. Commands whose exact pristine baseline
+is non-green are accepted only through paired, same-host, independently isolated baseline/candidate
+comparison against the exact admitted product baseline. Every baseline failure must retain the same
+test identity and narrowly normalized signature; every candidate-only diagnostic, failing test,
+hang, timeout, signal, exit-code regression, or failure-count increase rejects the candidate.
+Normalization may remove only enumerated unstable harness material and may never remove semantic
+source, symbol, test, diagnostic, panic, authority, security, exit, signal, or count information.
+Nondeterministic, resource-killed, incomplete, or provenance-ambiguous runs are invalid evidence,
+not inherited failures. No baseline repair or out-of-fence change is authorized.
+
+Stop uncommitted on baseline or candidate nondeterminism; host, environment, toolchain, cache, or
+runner mismatch; a candidate-only diagnostic or failure; an increased failure count, changed
+signature, pass-to-fail transition, missing or hidden test; a timeout, hang, signal, `SIGKILL`, or
+OOM event; a doctor parse, state, or artifact-provenance failure; a surviving service, child, or
+socket; shared incremental state; a capacity-floor breach; a path, mode, addition, Markdown, or
+caller-fence violation; or baseline modification or attempted out-of-fence repair.
+
+No live smoke can substitute for the unit-level historical-material matrix, and no live behavior
+change is expected because the unit remains unintegrated.
 
 The review sequence is one fresh independent gpt-5.4 Extra High full-candidate review, remediation
 of every finding inside the unchanged fence, and a different fresh final review of the remediated
