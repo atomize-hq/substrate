@@ -1,6 +1,6 @@
 **Kind:** evidence/regression
 **Status:** canonical
-**Canonical for:** complete extracted `Canonical issue ledger` table, `A1.2a-WB gate assignment`, the terminal E2 gate overlay, the current `E2-RM`/B2.2 admission disposition, and the documentation-only E3 gate disposition
+**Canonical for:** complete extracted `Canonical issue ledger` table, `A1.2a-WB gate assignment`, the terminal E2 gate overlay, the second `E2-RM`/B2.2 admission correction, and the documentation-only E3 gate disposition
 **Source provenance:** extracted byte-for-byte from [`../05-debug-regression-ledger.md#canonical-issue-ledger`](../05-debug-regression-ledger.md#canonical-issue-ledger), baseline lines 16–97 inclusive; the exact 41492-byte source body is preserved between the boundary markers below
 **Baseline span SHA-256:** `191a62ea0c77064941947280d87c539163ab69b772a8018f6b2f4e3d3e5aae3e`
 
@@ -62,15 +62,22 @@ commitment ref and cannot recover the complete immutable accepted-work material 
 request/subject identity plus expected B1 acceptance after response loss, restart, B2.1 observer
 advancement, or parent-policy drift. The separately bounded
 [`E2-RM`](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite)
-prerequisite owns only that read-only authenticated lookup/projection. It is specified but not
-admitted, dispatched, implemented, or complete. The terminal E2 implementation and its closed gate
-clauses remain unchanged.
+prerequisite owns only that read-only authenticated lookup/projection. Its second correction
+requires one non-reconciling existing-layout HSA transaction to capture stable E2 and B1 physical
+snapshots under the same root lock, plus a B1-owned opaque witness built only from fully validated
+canonical durable bytes. Expected B1 material supplies equality expectations only; preserved B2.1
+claim and E1/cap projection fields come only from immutable E2 material. Temporaries fail closed
+without cleanup, partial state is not legacy, and no current B2.1/retained-worker/parent-policy
+state may reconstruct history. The exact future fence is six existing files with colocated tests.
+It is specified but not admitted, dispatched, implemented, or complete; none of its prescribed
+tests are passed by documentation. The terminal E2 implementation and its closed gate clauses
+remain unchanged.
 
 | Gate ID | Controlling E2 correction | Ownership disposition |
 |---|---|---|
 | `RG-POLICY-01` | E2 consumes the exact E1 patch identity and exact E1/B1 snapshot bytes/ref/hash; it does not alter E1 serialization, schema 3, or stored B1 hashes. | E2's immutable linkage is complete; E1 stays terminally closed. Receipt/manifest exposure remains later-owned, so the ledger-wide row is not globally closed. |
 | `RG-POLICY-03` | Continue = current parent now ∧ immutable worker cap ∧ turn patch; Fork = current parent now ∧ immutable source-worker cap ∧ fork patch. Fresh Spawn stores and indexes the immutable exact full-request commitment/patch/snapshot/proposed-cap/subject/bindings reservation before B3.2a, privately verifies the request commitment, injects only an opaque authenticated reservation capability/ref plus preallocated identities, permits the exact `allow_capability_narrowing` validation exception only with a distinct attestation for authenticated nonempty `RestrictedWorldFs` narrowing, leaves plan/fingerprint/schema unchanged, and commits the retained reservation ref, exact request commitment, plus stable source admission/registration link after admission. Every crash/retry boundary exact-joins; changed request/material conflicts before B3.2a; unverifiable legacy caps return typed `UnsupportedLegacyState`. | Wholly E2-owned and complete for the admitted Linux scope. No routing, lifecycle, supervisor, receipt, full-manifest, or non-Linux authority moves. |
-| `RG-RECEIPT-02` | `E2-RM` must authenticate the durable request/subject index, immutable E2 record/ref/linkage, expected B1 acceptance/runtime evidence, preserved B2.1 claim preimage/hash/key, exact E1 snapshot bytes/ref/hash/revision/reason, and retained cap bytes/ref/hash when applicable without current-state reconstruction. | The E2 immutable component remains complete, but `E2-RM` is an unadmitted prerequisite and this receipt-material lookup clause is open. B2.2 remains unadmitted and retains foreground receipt construction/return; B3.2 retains remaining receipt/manifest work. |
+| `RG-RECEIPT-02` | `E2-RM` must use a non-reconciling descriptor-relative read to capture E2+B1 under one existing HSA root lock, authenticate B1 from a private durable witness keyed by exact store/acceptance ID, and exact-join the E2 request/subject index, immutable record/ref/linkage, B1 record/runtime evidence, preserved B2.1 claim preimage/hash/key, E1 snapshot bytes/ref/hash/revision/reason, and retained cap record/ref/hash without caller- or current-state reconstruction. Clean E2 absence may be legacy; partial/corrupt/unsupported/malformed states retain their distinct fail-closed classes. | The E2 immutable component remains complete, but `E2-RM` is an unadmitted and unimplemented prerequisite and this receipt-material read clause is open. Its future no-mutation, provenance, schema, stability, concurrency, substitution, and replay tests are prescribed but not passed. B2.2 remains blocked and unadmitted and retains foreground receipt construction/return; B3.2 retains remaining receipt/manifest work. |
 | `RG-OBS-01` | E2 links exact source-owned `WorldWorkExecutionClaimV1` identity/hash/preimage and durable claim key. No invented `resumable` field, cursor ownership, observation mutation, or acceptance creation. | The E2 policy-link clause is complete; B2.1 remains observation owner and other ledger-wide owners remain open. |
 
 `RG-RECEIPT-02` remains B2.2/B3.2-owned except for E2's immutable component and the unadmitted

@@ -1,6 +1,6 @@
 **Kind:** slice row
 **Stable ID:** `b2-2-foreground-receipt-return`
-**Canonical for:** extracted B2.2 slice row and the current `E2-RM` admission correction
+**Canonical for:** extracted B2.2 slice row, its preserved blocked history, and the current second `E2-RM` admission correction
 **Status:** canonical slice row record; B2.2 blocked on specified-but-unadmitted `E2-RM`
 **Authority scope:** exact extracted source table header and row plus the documentation-only admission correction below; no schedule, dispatch, or implementation authority
 **Source span:** [`../03-phase-slice-map.md`](../03-phase-slice-map.md) line 177
@@ -40,6 +40,33 @@ commit, and exact commit/tree identity. The B2.2 re-admission must consume
 same original material is used after response loss/restart/B2.1 advancement/parent drift, and
 re-establish B2.2's own file and behavior fence against the then-live baseline. Landing `E2-RM`
 does not itself admit B2.2.
+
+### Second `E2-RM` prerequisite correction (2026-09-03; controlling)
+
+The first prerequisite record above remains the reason B2.2 is blocked, but E2-RM's authority is
+now corrected and bounded as a specification: it must capture the existing E2 commitment store
+and B1 receipt registry under one existing HSA root lock through a new non-reconciling,
+descriptor-relative no-follow read transaction. A cleanly absent E2 directory is absence; an
+existing incomplete E2 layout is an error. Validated HSA/E2/B1 temporaries fail closed and remain
+untouched. The read creates, reconciles, cleans, writes, publishes, repairs, migrates, backfills,
+rotates, renames, unlinks, and `fsync`s nothing.
+
+The B1 lookup is keyed only by `(authority_store_id, acceptance_record_id)` and yields an opaque
+witness constructed solely from a fully validated canonical durable registry snapshot. Caller-
+provided B1 material is only a lookup selector and complete equality expectation; it supplies no
+returned field. `accepted_at` and `runtime_acceptance.observed_at` remain independent persisted
+values. E2 provides the preserved historical claim, policy snapshot, and retained-cap material;
+the resolver exact-joins all store/request/subject/session/caller/backend/world/work/correlation/
+acceptance/policy bindings and never supplements history from current B2.1, retained-worker, HSA
+revision, or parent-policy state.
+
+B2.2 remains blocked and unadmitted until this corrected `E2-RM` contract receives a separate
+fresh admission and explicit dispatch, is implemented inside its exact six-file fence, passes its
+future proof wall, and lands review-clean with exact commit/tree identity. This documentation
+landing passes none of those implementation tests. A later B2.2 admission may consume only the
+opaque authenticated projection and must separately authorize receipt construction/return. E3 is
+independently specified at `81cfd33d4c5d16c31c837eeddff769995c566570` and remains unadmitted,
+undispatched, and unimplemented.
 
 ## Preserved pre-correction row (chronology only)
 

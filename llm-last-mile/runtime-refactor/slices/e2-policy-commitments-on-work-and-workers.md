@@ -1,6 +1,6 @@
 **Kind:** slice row
 **Stable ID:** `e2-policy-commitments-on-work-and-workers`
-**Canonical for:** extracted E2 slice row, the controlling E2 authority correction, the terminal implementation closure, and the post-closure `E2-RM` prerequisite disposition below
+**Canonical for:** extracted E2 slice row, the controlling E2 authority correction, the terminal implementation closure, the first post-closure `E2-RM` prerequisite history, and the second documentation-only `E2-RM` authority correction below
 **Status:** E2 terminally complete; `E2-RM` specified but not admitted, dispatched, or implemented
 **Authority scope:** exact extracted source table header and row, the controlling correction, the terminal closure, and the documentation-only `E2-RM` prerequisite disposition below; no B2.2, E3, receipt, full-manifest, cancel, observation, lifecycle, or non-Linux implementation authority
 **Source span:** [`../03-phase-slice-map.md`](../03-phase-slice-map.md) line 221
@@ -338,7 +338,7 @@ non-Linux proof remains unclaimed. B2.2 and E3 are only separate successor candi
 their own future admission and dispatch; neither is admitted or dispatched by this closure. E2 is
 terminally complete.
 
-## Post-closure `E2-RM` prerequisite disposition (2026-09-02; controlling)
+## Post-closure `E2-RM` prerequisite disposition (2026-09-02; preserved history)
 
 The E2 implementation and closure above remain terminally complete and unchanged. A later B2.2
 admission review identified one smaller missing E2-owned read boundary: after a foreground response
@@ -354,6 +354,56 @@ reconciliation, receipt construction/return, B1/B2.1 change, or caller integrati
 B2.2 each require a later fresh admission and explicit dispatch; this documentation correction
 admits neither. E3 remains a separate future candidate, and all preserved terminal E2 evidence,
 gate dispositions, and non-Linux limits remain unchanged.
+
+## Second `E2-RM` authority correction (2026-09-03; controlling)
+
+The first specified-prerequisite disposition above remains part of the chronology, but its
+single-module lookup assumption was insufficient: existing E2 and B1 read paths enter transactions
+that can create, reconcile, clean, publish, or `fsync` state, and caller-supplied B1 bytes are not
+durable authority. The corrected prerequisite is therefore an independently implementable,
+strictly read-only projection over one immutable physical snapshot of the existing E2 and B1 stores
+captured under the same existing `authority-v1/lock/root.lock`.
+
+The later implementation must add a non-reconciling existing-layout transaction; a physical E2
+read capability with clean whole-directory absence but fail-closed partial state; an aggregate
+root/store/revision/E2/B1 snapshot; a B1-owned opaque authenticated witness selected by exactly
+`(authority_store_id, acceptance_record_id)` from canonical durable registry bytes; and the final
+E2-owned semantic projection. It validates root, layout, lock, namespace, file, owner/mode,
+device/inode, link-count, size, `mtime`, and `ctime` identity with descriptor-relative no-follow
+stable reads. Recognized temporaries fail closed after validation and remain untouched. No create,
+write, reconciliation, cleanup, `fsync`, key initialization/rotation, rename, unlink, publication,
+repair, migration, or backfill is permitted.
+
+Expected B1 material is only a selector and equality expectation. The returned B1 fields,
+including independent `accepted_at` and `runtime_acceptance.observed_at` values, originate only
+from the durable witness; historical claim material originates only from E2's preserved B2.1 claim
+preimage; snapshot and retained-cap material originate only from immutable E2 records. All
+authority, request, typed-subject, session, caller, backend, world, generation, work, correlation,
+acceptance, claim, policy, index, digest, and retained-cap joins are exact. Current HSA revisions,
+current B2.1 state, current retained-worker state, and current parent policy cannot be substituted
+for historical values.
+
+No recognized historic E2 schema exists. Canonically valid non-V1 registry/object discriminators
+are unsupported versions; malformed/noncanonical/duplicate/missing/invalid discriminators are
+encoding errors; decodable invalid V1 graphs are corruption/authentication failures; only clean
+absence of exact historical E2 material is
+`UnsupportedLegacyState(MissingExactHistoricE2Commitment)`. Existing partial E2 state is never
+legacy compatibility. E2 has no global registry revision; stability instead uses exact HSA root
+and registry bytes, HSA revisions, per-record created/application revisions, exact namespace
+manifests, stable metadata, and unchanged absence. Byte SHA-256 is non-authoritative test evidence
+only, and portable `atime` stability is not required.
+
+The future product fence is exactly the six existing files named by the controlling
+[`E2-RM` contract](../contracts/dispatch-policy-commitment-v1.md#later-implementation-fence), plus
+tests colocated in them. `layout.rs`, new modules, E2/B1/B2.1 persistence or semantics, receipt
+construction/return, B2.2 product files, HSA lifecycle/current-policy resolution, migrations,
+E3/E4/D1/B3.2/B4/C2/C3, and non-Linux product work remain excluded. The prescribed proof matrix is
+still future work and is not marked passed by this documentation correction.
+
+E2 remains terminally complete. `E2-RM` remains specified, unadmitted, undispatched, and
+unimplemented. B2.2 remains blocked and unadmitted. E3 remains separately specified by the exact
+authority at `81cfd33d4c5d16c31c837eeddff769995c566570`, but unadmitted, undispatched, and
+unimplemented; neither this correction nor a later `E2-RM` implementation admits E3.
 
 ## Preserved pre-correction row (chronology only)
 

@@ -3,7 +3,8 @@
 **Status:** canonical; implemented and terminally complete under the E2 closure
 **Canonical for:** additive `DispatchPolicyCommitmentV1` persisted record, exact subject/linkage rules, immutable policy/cap semantics, the specified-but-unadmitted `E2-RM` accepted-work receipt-material projection prerequisite, downstream receipt/manifest consumption, and mixed-version fail-closed behavior
 **Authority scope:** canonical E2 contract plus terminal status projection and the documentation-only `E2-RM` prerequisite specification; this document grants no new admission, dispatch, implementation, receipt construction, retained-manifest construction, migration, or synthetic-cap authority
-**Supersedes:** only E2 statements that require E2 to construct a final receipt or complete `RetainedWorkerManifestV1`; omit the real dispatch/tool-translation carrier needed to consume E1 narrowing; require a retained worker's launch policy to equal the current parent; place fresh-Spawn E2 persistence after B3.2a admission; define a second snapshot canonicalization; or require a synthetic `SupervisorObservationClaimV1`/`resumable` field
+**Second `E2-RM` correction baseline:** branch `feat/runtime-refactor-e3-authority-correction`, commit `81cfd33d4c5d16c31c837eeddff769995c566570`, tree `d40f6663a2aa01996ce8b4957f4aae0d30830961`, parent `138864a26dbc4721366c6cc8934d464d1929a189`; the same-name live remote and clean source worktree were reverified before authoring
+**Supersedes:** only E2 statements that require E2 to construct a final receipt or complete `RetainedWorkerManifestV1`; omit the real dispatch/tool-translation carrier needed to consume E1 narrowing; require a retained worker's launch policy to equal the current parent; place fresh-Spawn E2 persistence after B3.2a admission; define a second snapshot canonicalization; or require a synthetic `SupervisorObservationClaimV1`/`resumable` field; and, for `E2-RM` only, the first specification's caller-provided B1 authority through a reconciling read path, fabricated historic-schema result, and one-file implementation fence
 **Superseded by:** none
 **Projection consumers:** [`../slices/e2-policy-commitments-on-work-and-workers.md`](../slices/e2-policy-commitments-on-work-and-workers.md), [`../slices/b2-2-foreground-receipt-return.md`](../slices/b2-2-foreground-receipt-return.md), [`active-ephemeral-task-receipt-v1.md`](active-ephemeral-task-receipt-v1.md), [`active-retained-turn-receipt-v1.md`](active-retained-turn-receipt-v1.md), [`retained-worker-manifest-v1.md`](retained-worker-manifest-v1.md), [`../gates/final-receipt-immutable-policy-snapshot-v3-acceptance.md`](../gates/final-receipt-immutable-policy-snapshot-v3-acceptance.md)
 
@@ -544,6 +545,22 @@ record omitting either must not validate or be reported as a complete manifest.
 
 **Status:** specified prerequisite; not admitted, not dispatched, and not implemented
 
+### Second authority correction (2026-09-03; controlling)
+
+The first `E2-RM` specification at parent commit
+`138864a26dbc4721366c6cc8934d464d1929a189` remains preserved as the historical point at which
+this prerequisite became specified but unadmitted. This second documentation-only correction does
+not reopen completed E2 and does not admit, dispatch, implement, or complete `E2-RM`. It
+supersedes only the first specification's assumption that an E2-only semantic helper could safely
+authenticate caller-supplied B1 material through the existing reconciling store path, its invented
+historic-schema legacy result, and its one-file future implementation fence.
+
+The corrected authority is one independently implementable, strictly read-only authenticated
+projection across the existing E2 commitment store and B1 receipt registry. It requires a new
+non-reconciling physical read transaction because every existing E2 or B1 transaction path can
+create, reconcile, clean, publish, or otherwise mutate authority state. Existing reconciling
+transaction behavior remains unchanged and unavailable to `E2-RM`.
+
 The B2.2 admission review found that the completed E2 store preserves the immutable material needed
 to reproduce the original foreground receipt, but its existing authenticated lookup accepts only an
 already-known `DispatchPolicyCommitmentRefV1`. After response loss or restart, a B2.2 caller that
@@ -553,15 +570,19 @@ invalid reconstruction because either may have advanced since E2 committed the a
 
 `E2-RM` is the smallest separately bounded prerequisite that may close that gap. It remains owned
 by the E2 commitment boundary and is not B2.2 behavior. A later fresh admission may authorize only
-the following crate-internal, read-only responsibility in
-`crates/shell/src/execution/agent_runtime/dispatch_policy_commitment.rs`:
+the following bounded crate-internal interfaces. The semantic entry point remains in
+`crates/shell/src/execution/agent_runtime/dispatch_policy_commitment.rs`; the physical read and B1
+authentication interfaces remain private to their existing owners:
 
 ```rust
 pub(crate) fn resolve_accepted_work_receipt_material(
     authority: &HostSessionAuthority,
     exact_request_subject_key: &DispatchPolicyCommitmentLookupKeyV1,
     expected_b1_acceptance: &WorldWorkAcceptanceRecordV1,
-) -> Result<AcceptedWorkReceiptMaterialResolutionV1, DispatchPolicyCommitmentError>;
+) -> Result<
+    AcceptedWorkReceiptMaterialResolutionV1,
+    AcceptedWorkReceiptMaterialErrorV1,
+>;
 
 pub(crate) enum AcceptedWorkReceiptMaterialResolutionV1 {
     Resolved(AuthenticatedAcceptedWorkReceiptMaterialV1),
@@ -573,8 +594,178 @@ pub(crate) enum AcceptedWorkReceiptMaterialResolutionV1 {
 
 pub(crate) enum AcceptedWorkReceiptMaterialLegacyReasonV1 {
     MissingExactHistoricE2Commitment,
-    UnsupportedHistoricE2CommitmentSchema,
 }
+
+pub(crate) enum E2SchemaObjectV1 {
+    Registry,
+    Commitment { commitment_id: String },
+    Reservation { reservation_id: String },
+    CommitmentKey { key_id: String },
+    ValidatedSpawnRequest { owner_id: String },
+}
+
+pub(crate) enum AcceptedWorkBindingFieldV1 {
+    AuthorityStoreId,
+    AcceptanceRecordId,
+    AcceptanceRecordRevision,
+    RequestId,
+    OrchestrationSessionId,
+    CallerParticipantId,
+    CallerBackendId,
+    TargetBackendId,
+    WorldId,
+    WorldGeneration,
+    WorkIdentity,
+    HostTransitionCorrelation,
+    RuntimeAcceptance,
+    PolicySnapshotRef,
+    PolicySnapshotHash,
+    PolicySnapshotRevision,
+}
+
+pub(crate) enum AcceptedWorkReceiptMaterialErrorV1 {
+    InvalidLookupKey,
+    PhysicalRead(ReadOnlyAuthoritySnapshotErrorV1),
+    InvalidE2RegistryEncoding,
+    UnsupportedE2SchemaVersion {
+        object: E2SchemaObjectV1,
+        observed: u64,
+    },
+    CorruptE2Registry,
+    PartialE2Footprint,
+    AmbiguousE2Footprint,
+    CrossScopeE2Material {
+        field: AcceptedWorkBindingFieldV1,
+    },
+    B1Authentication(WorldWorkAcceptanceAuthenticationErrorV1),
+    ExpectedB1AcceptanceMismatch {
+        field: AcceptedWorkBindingFieldV1,
+    },
+    E2B1LinkageMismatch {
+        field: AcceptedWorkBindingFieldV1,
+    },
+    ExecutionClaimAuthenticationFailed,
+    PolicySnapshotAuthenticationFailed,
+    RetainedCapAuthenticationFailed,
+}
+
+pub(crate) enum ReadOnlyAuthoritySnapshotErrorV1 {
+    AuthorityRootAbsentOrUnsafe,
+    AuthorityLayoutAbsentOrUnsafe,
+    AuthorityRootLockAbsentOrUnsafe,
+    AuthorityLockFailed,
+    AuthorityRootEncodingInvalid,
+    UnsupportedAuthorityRootSchema,
+    AuthorityTemporaryMaterialPresent { name: String },
+    UnsafeTemporaryMaterial { namespace: &'static str, name: String },
+    UnsafeNamespaceEntry { namespace: &'static str, name: String },
+    PartialNamespace { namespace: &'static str, component: &'static str },
+    UnsafeFileMetadata { namespace: &'static str, name: String },
+    SnapshotEntryChanged { namespace: &'static str, name: String },
+    NamespaceChanged { namespace: &'static str },
+    AuthorityRootChangedWhileLocked,
+    AuthorityRootReplaced,
+    Io { operation: &'static str },
+}
+
+pub(super) struct ReadOnlyVersionedAuthorityTransactionV1<'root> {
+    /* private trusted-root/layout/lock fields */
+}
+
+pub(super) fn with_opened_existing_versioned_read_only_snapshot<T>(
+    opened: &TrustedAuthorityRoot,
+    operation: impl FnOnce(
+        &ReadOnlyVersionedAuthorityTransactionV1<'_>,
+    ) -> Result<T, ReadOnlyAuthoritySnapshotErrorV1>,
+) -> Result<T, ReadOnlyAuthoritySnapshotErrorV1>;
+
+pub(crate) enum DispatchPolicyCommitmentPhysicalReadV1 {
+    Absent,
+    Present(DispatchPolicyCommitmentPhysicalSnapshotV1),
+}
+
+pub(crate) struct DispatchPolicyCommitmentPhysicalSnapshotV1 {
+    registry_bytes: Vec<u8>,
+    key_files: BTreeMap<String, Vec<u8>>,
+}
+
+pub(super) struct DispatchPolicyCommitmentReadCapabilityV1<'scope, 'root> {
+    transaction: &'scope ReadOnlyVersionedAuthorityTransactionV1<'root>,
+}
+
+impl<'scope, 'root> DispatchPolicyCommitmentReadCapabilityV1<'scope, 'root> {
+    pub(super) fn from_transaction(
+        transaction: &'scope ReadOnlyVersionedAuthorityTransactionV1<'root>,
+    ) -> Self;
+
+    pub(crate) fn read_existing_snapshot(
+        &self,
+    ) -> Result<
+        DispatchPolicyCommitmentPhysicalReadV1,
+        ReadOnlyAuthoritySnapshotErrorV1,
+    >;
+}
+
+pub(crate) enum WorldWorkReceiptRegistryPhysicalReadV1 {
+    Absent,
+    Present(WorldWorkReceiptRegistryPhysicalSnapshotV1),
+}
+
+pub(crate) struct WorldWorkReceiptRegistryPhysicalSnapshotV1 {
+    registry_bytes: Vec<u8>,
+}
+
+pub(crate) struct AcceptedWorkAuthorityPhysicalSnapshotV1 {
+    authority_root_identity: CanonicalDirectoryV1,
+    authority_store_id: String,
+    hsa_root_revision_at_read: u64,
+    hsa_authority_revision_at_read: u64,
+    e2: DispatchPolicyCommitmentPhysicalReadV1,
+    b1: WorldWorkReceiptRegistryPhysicalReadV1,
+}
+
+pub(crate) fn read_existing_accepted_work_authority_snapshot(
+    authority: &HostSessionAuthority,
+) -> Result<
+    AcceptedWorkAuthorityPhysicalSnapshotV1,
+    ReadOnlyAuthoritySnapshotErrorV1,
+>;
+
+pub(crate) struct WorldWorkAcceptanceLookupKeyV1 {
+    authority_store_id: String,
+    acceptance_record_id: String,
+}
+
+pub(crate) enum AuthenticatedWorldWorkAcceptanceResolutionV1 {
+    Missing,
+    Authenticated(AuthenticatedWorldWorkAcceptanceV1),
+}
+
+pub(crate) struct AuthenticatedWorldWorkAcceptanceV1 {
+    authority_root_identity: CanonicalDirectoryV1,
+    hsa_root_revision_at_read: u64,
+    hsa_authority_revision_at_read: u64,
+    record: WorldWorkAcceptanceRecordV1,
+}
+
+pub(crate) enum WorldWorkAcceptanceAuthenticationErrorV1 {
+    InvalidLookupKey,
+    RegistryAbsent,
+    InvalidRegistryEncoding,
+    UnsupportedRegistrySchemaVersion { observed: u64 },
+    CorruptRegistry,
+    AcceptanceRecordMissing,
+    AcceptanceRecordAmbiguous,
+    AuthorityStoreMismatch,
+}
+
+pub(crate) fn authenticate_persisted_world_work_acceptance(
+    snapshot: &AcceptedWorkAuthorityPhysicalSnapshotV1,
+    key: &WorldWorkAcceptanceLookupKeyV1,
+) -> Result<
+    AuthenticatedWorldWorkAcceptanceResolutionV1,
+    WorldWorkAcceptanceAuthenticationErrorV1,
+>;
 
 pub(crate) struct AuthenticatedAcceptedWorkReceiptMaterialV1 {
     commitment_ref: DispatchPolicyCommitmentRefV1,
@@ -639,99 +830,252 @@ pub(crate) struct AuthenticatedAcceptedWorkRetainedCapV1 {
 }
 ```
 
-These are responsibility-level shapes, not authorization to add serialized records. The resolver
-and result types are visible only inside the `shell` crate via `pub(crate)`; all fields remain
-private and B2.2 can later read them only through `pub(crate)` immutable accessors. The result is an
-opaque, internally constructed in-memory projection. It is never persisted, never accepted from
-transport, and has no externally public or mutable constructor. Names may change during a later
-fresh admission only if the same ownership, inputs, outputs, visibility, and validation remain
-exact.
+These are responsibility-level shapes, not authorization to add serialized records. All fields of
+the physical snapshots, B1 witness, and final projection remain private. The B1 witness and final
+projection have no public or crate-visible constructor and derive neither `Serialize`,
+`Deserialize`, nor `Default`; only immutable accessors may be crate-visible. The B1 witness is
+constructible only by canonical full-registry decoding and validation of the durable B1 bytes in
+the trusted aggregate snapshot. The final result is constructed only from that witness plus the
+authenticated E2 snapshot. Neither object is persisted, accepted from transport, or mutable.
+Names may change during a later fresh admission only if the same ownership, inputs, outputs,
+visibility, provenance, and validation remain exact.
+
+### Non-reconciling physical snapshot contract
+
+`with_opened_existing_versioned_read_only_snapshot` must be a new transaction helper in
+`host_session_authority/store/platform/transaction.rs`. It opens only the already-existing
+accepted-home authority layout and the existing `authority-v1/lock/root.lock`; it never calls a
+create-or-open helper and never reuses either existing semantic preflight, because those paths
+reconcile recognized root temporaries. Under descriptor-relative `O_NOFOLLOW` access it must:
+
+1. revalidate the supplied `TrustedAuthorityRoot`, reopen its exact physical path, and require the
+   same canonical path, device, inode, and owner identity;
+2. safely enumerate and open the existing `authority-v1`, root record, `lock`, `tmp`, and
+   `root.lock`; require expected type, effective-user ownership, owner-only mode, same device,
+   stable inode, and stable link count, including a regular single-linked `root.lock` at mode
+   `0600`;
+3. acquire the existing root lock exclusively, validate every recognized root temporary, and fail
+   closed without removing it; unsafe or unknown authority entries also fail closed;
+4. stable-read the exact HSA root bytes, canonically decode and validate `VersionedStateRoot`, bind
+   its bootstrap-home/store identity to the opened root, and capture the root revision and the
+   relevant HSA authority revision without invoking current-policy resolution;
+5. capture both E2 and B1 physical states under that same uninterrupted root-lock scope;
+6. re-enumerate every relevant namespace, require exact equality of name/type/device/inode
+   manifests, revalidate every opened directory/file/root/lock identity, and stable-read the HSA
+   root again; and
+7. require byte-identical root bytes plus unchanged HSA root and authority revisions, then
+   revalidate the canonical root path and root-lock chain before returning.
+
+The transaction may validate recognized temporary material but must never reconcile or remove it.
+It must not create a directory or file; initialize or rotate a key; write, rename, unlink, repair,
+migrate, backfill, publish, or advance authority state; or call `fsync`. Acquiring and releasing the
+existing kernel lock is its only stateful operating-system action. No existing reconciling
+transaction behavior changes.
+
+The narrowly authorized trusted-filesystem additions in
+`host_session_authority/trusted_fs.rs` are read-only equivalents of `validate_single_link` and
+`read_regular_file_entry_stable_single_link`. The stable read preserves descriptor-relative
+no-follow behavior and compares pre/post type, device, inode, effective-user owner, mode, link
+count, size, `mtime`, and `ctime` where the trusted platform primitive supports them. It also
+revalidates the named entry against the held descriptor. Every authority-bearing regular file must
+be single-linked before and after its read. Directory link counts need only remain stable; they
+cannot be required to equal one. Portable `atime` stability is explicitly not an authority or
+admission requirement because reading may update it.
+
+### Physical E2 and B1 capability rules
+
+`DispatchPolicyCommitmentReadCapabilityV1` is constructible only from the active read-only
+transaction. It must not reuse `DispatchPolicyCommitmentStorageV1::transaction`,
+`open_transaction`, key/temp reconciliation, registry initialization, or any other E2 mutation
+path. Exact absence of `authority-v1/dispatch-policy-commitment-v1` returns `Absent`. Once that
+directory exists, the final registry, `keys`, and `tmp` must all exist as safe exact components;
+any missing component is `PartialNamespace`, not absence or legacy compatibility. Every recognized
+key or registry temporary is validated, causes a fail-closed error, and remains untouched. The
+registry and every final key file are strict stable reads, and their exact namespace manifest and
+metadata identities must survive final revalidation.
+
+The B1 physical reader belongs to the same transaction and observes the existing registry below
+`run/agent-hub`. Clean absence of the pre-existing path or of every receipt-registry-prefixed entry
+returns `Absent`. If receipt-registry material exists, the exact final registry is stable-read;
+recognized temporaries are safely validated and then fail closed, while unknown
+receipt-registry-prefixed entries are unsafe. It must not reuse
+`WorldWorkReceiptRegistryStorageV1::begin_transaction`, `with_state`,
+`inspect_world_work_acceptance_by_id`, or any B1 path that creates directories, reconciles
+temporaries, publishes bytes, repairs state, or calls `fsync`.
+
+`read_existing_accepted_work_authority_snapshot` provides the minimum `store.rs` wiring. Its one
+immutable `AcceptedWorkAuthorityPhysicalSnapshotV1` binds the exact authority-root physical
+identity, authority store ID, HSA root and authority revisions observed during capture, and the E2
+and B1 snapshots or their clean absence. Both stores are captured while the same existing root
+lock is held. Once returned, no filesystem lookup may supplement, replace, or reinterpret the
+snapshot.
+
+### Authenticated B1 provenance
+
+The B1-owned lookup key is exactly `(authority_store_id, acceptance_record_id)`. The durable B1
+registry already requires store-wide acceptance-record-ID uniqueness, so session is a validated
+record field rather than a physical lookup-key component. Authentication must decode the captured
+canonical registry bytes, validate the complete registry and every proposal/record join, re-prove
+store-wide acceptance-ID uniqueness, and then select exactly one record. Missing, ambiguous,
+duplicate, corrupt, cross-store, malformed, or unsupported B1 material returns its typed
+authentication error.
+
+`AuthenticatedWorldWorkAcceptanceV1` binds the root physical identity and HSA revisions observed
+during capture plus the complete durable `WorldWorkAcceptanceRecordV1`: authority/store identity;
+record ID and revision; request and orchestration session; caller participant and caller backend;
+target backend; world ID and generation; exact accepted-work identity; host-transition
+correlation; policy snapshot ref/hash/revision; the complete `RuntimeAcceptanceEvidenceV1`; and
+`accepted_at`. B1 has no persisted per-record hash, and `E2-RM` must not invent one. Its
+authentication boundary is the trusted root, common root lock, exact canonical registry bytes,
+full-registry validation, store-wide ID uniqueness, and durable `record_revision`.
+
+Caller-provided `expected_b1_acceptance` supplies only the lookup selector and byte-for-byte
+equality expectations. No returned field may originate from it. In particular, `accepted_at` and
+`runtime_acceptance.observed_at` are independent persisted values: both must be preserved exactly,
+no equality rule may be introduced, and `accepted_at` must not be added to E2 persistence.
 
 ### Exact authentication and validation order
 
 One resolver transaction must perform all of the following before returning `Resolved`:
 
-1. authenticate `authority`, open its E2 store, and require the supplied key's
-   `authority_store_id` to equal the opened store;
-2. validate `expected_b1_acceptance` under the existing B1 schema, then require its store,
-   request, session, accepted-work subject, caller, caller backend, target backend, world, and
-   generation to equal the supplied exact request/subject key and the indexed E2 record;
+1. authenticate `authority` and obtain exactly one aggregate physical snapshot; require its root
+   identity and store to bind the authority and supplied request/subject key. Retain the captured
+   HSA revisions only as snapshot provenance, without comparing them to any persisted historical
+   revision;
+2. decode and validate the complete captured E2 registry and key graph, including every registry,
+   record, reservation, request-index, key-envelope, ref, hash, linkage, and uniqueness invariant;
 3. recompute the durable request/subject index digest, require exactly one byte-identical stored
    key, require its `Committed` variant with no Fresh-Spawn reservation fields, and require its
-   exact `DispatchPolicyCommitmentRefV1` to name the indexed immutable record;
-4. validate the complete E2 registry graph, record schema/status, record/reference identity, and
-   domain-separated `exact_linkage_hash`; an unindexed, duplicated, torn, ambiguous, or conflicting
-   record is invalid rather than legacy-compatible;
-5. require an `EphemeralWork` or `RetainedWorkerTurn` subject and an exact stored B1 authority link;
-   compare acceptance record ID/revision and the complete stored `RuntimeAcceptanceEvidenceV1` to
-   `expected_b1_acceptance`, and compare every overlapping authority, request, subject, session,
-   caller, backend, world, generation, work-identity, correlation, and snapshot field;
-6. resolve the E2-preserved `WorldWorkExecutionClaimV1` preimage, require byte-identical canonical
-   re-encoding, recompute its domain-separated linkage hash, verify its immutable identity and
-   durable `executions_by_acceptance_record_id` key, exact-join every overlapping B1 field, and
-   return the exact preserved acceptance ID/revision, claim revision, observer instance/epoch,
-   canonical preimage, durable key, and linkage hash; never consult or compare the current B2.1
-   claim revision, cursor, observer, journal, or terminal state;
-7. resolve the historic E1 `PolicySnapshotV3` bytes, require byte-identical E1 reserialization,
-   reproduce the unwrapped E1/B1 SHA-256, and require exact ref/hash/revision equality with both the
-   E2 record and expected B1 acceptance. The stored reason is authenticated by the complete E2
-   linkage hash and must equal the reason in the stored authenticated patch; `UnchangedParent`
-   requires no reason. Current-parent lookup or policy recomputation is forbidden; and
-8. for `RetainedWorkerTurn`, require the exact `Existing { cap_ref }`, resolve that ref through the
-   same store and participant/session indexes, authenticate the complete launch/fork cap record and
-   its `exact_linkage_hash`, require the cap record's authority store, retained participant,
-   orchestration session, target backend, world ID, and world generation to equal the accepted-turn
-   record/result, require its caller participant/backend to exact-join the same authority lineage,
-   validate its canonical cap snapshot bytes/ref/hash/revision, and expose those bindings plus the
-   exact ref and hash. `EphemeralWork` requires all cap fields absent.
+   exact `DispatchPolicyCommitmentRefV1` to name the indexed immutable record; unindexed,
+   duplicated, torn, ambiguous, conflicting, or orphaned V1 material is invalid rather than
+   legacy-compatible;
+4. derive the B1 lookup key from the authenticated E2 B1 authority link for a found E2 record. For
+   a clean E2-absence proof only, the expected record's acceptance ID may select B1, but the
+   resulting witness must still equal the complete expectation and join the supplied key before
+   absence can be returned;
+5. authenticate B1 only from the captured B1 registry bytes, require exactly one opaque witness,
+   then compare the complete witness record byte-for-byte with `expected_b1_acceptance`; a caller
+   mismatch is typed and supplies no result field;
+6. exact-join physical authority store/root; request and typed subject; orchestration session;
+   caller participant and caller backend; target backend; world ID and generation; B1 acceptance
+   ID, record revision, complete runtime evidence, accepted-work identity, and host-transition
+   correlation; and the E2 request/subject key, recomputed digest, occupied index, record, and B1
+   authority link. Authenticate `accepted_at` solely as a field of the complete B1 witness and
+   equality-check it against the expectation; E2 has no `accepted_at` field and gains none;
+7. require `EphemeralWork` to join the exact B1 ephemeral task-run identity, or
+   `RetainedWorkerTurn` to join the exact B1 active-run/message/target-participant identity; no
+   other E2 subject is eligible;
+8. authenticate the E2-preserved `WorldWorkExecutionClaimV1` canonical preimage byte-for-byte,
+   recompute its domain-separated linkage hash, verify its immutable identity and exact durable
+   `executions_by_acceptance_record_id` key, and join its store, request, session, caller,
+   backends, world, generation, acceptance identity/revision, runtime evidence, work identity, and
+   correlation to B1/E2. Historical claim fields in the result originate exclusively from this
+   preserved preimage; never consult or compare current B2.1 claim revision, observer epoch,
+   cursor, journal, terminal state, or retained-worker state;
+9. authenticate the historic E1 `PolicySnapshotV3` bytes/ref/hash/revision/reason from the E2
+   record, require byte-identical E1 reserialization and the existing unwrapped E1/B1 SHA-256,
+   require E2 ref/hash/revision to equal the B1 witness, and require E2's reason to match its stored
+   authenticated patch (`UnchangedParent` has no reason). Snapshot bytes and reason are not B1
+   fields. All snapshot material in the result originates exclusively from E2; current-parent
+   lookup and policy recomputation are forbidden; and
+10. for `RetainedWorkerTurn`, require the exact stored `Existing { cap_ref }`, resolve it only
+    within the captured E2 snapshot, authenticate the complete launch/fork cap record and linkage
+    hash, and exact-join ref/hash/record, participant, session, caller, backends, world, generation,
+    and cap snapshot bytes/ref/hash/revision. `EphemeralWork` requires every cap field absent. Cap
+    material in the result originates exclusively from immutable E2 records.
+
+The returned `authority_revision_observed`, acceptance record and revision, accepted-work identity,
+runtime evidence, correlation, policy identity, and `accepted_at` originate exclusively from the
+opaque B1 witness. Historical B2.1 claim material originates exclusively from E2's preserved claim
+preimage. Snapshot and retained-cap material originate exclusively from immutable E2 records.
 
 `MissingExactHistoricE2Commitment` is permitted only after one read transaction proves both that
 the exact request/subject index is absent and that an exhaustive E2 registry scan contains no V1
 index occupancy, digest collision, matching record, or orphaned record for the supplied key,
-expected B1 acceptance ID/revision, or accepted-work identity. A conclusively recognized older
-schema that cannot contain the exact record may return `UnsupportedHistoricE2CommitmentSchema`
-only under the same no-V1-footprint proof. Any partial V1 footprint—including an index without its
-record, a record without its exact index, conflicting index bytes at the digest, or a matching or
-orphaned V1 record—is corruption, not legacy absence. Missing material inside a claimed V1 record,
-malformed or unknown bytes, an index/record tear, ambiguous occupancy, or any corrupt, cross-store,
-cross-request, cross-subject, cross-session, cross-caller, cross-backend, cross-world,
-cross-generation, conflicting, or hash-invalid material is a fail-closed error and must never be
-downgraded to `UnsupportedLegacyState`.
+authenticated B1 acceptance ID/revision, or accepted-work identity. Clean absence of the complete
+E2 directory also permits this result only after B1 is authenticated and joined from the same
+snapshot. Any existing but partial E2 state—including a missing registry, `keys`, or `tmp`
+component; an index without its record; a record without its exact index; conflicting index bytes
+at the digest; or a matching or orphaned V1 record—is corruption/partial state, never legacy
+compatibility. Missing referenced B1 material is a B1 authentication error, not legacy absence.
+
+No recognized historic E2 schema exists. Schema classification is exact:
+
+- a syntactically and canonically valid non-V1 discriminator on the registry or a recognized
+  embedded E2 object returns `UnsupportedE2SchemaVersion` with the exact object and observed
+  version;
+- malformed, noncanonical, duplicate-field, missing-discriminator, non-integral-discriminator, or
+  otherwise undecodable registry/object bytes return `InvalidE2RegistryEncoding`;
+- decodable V1 material whose refs, hashes, indexes, linkage, key envelope, or complete graph is
+  invalid returns corruption or the specific authentication failure; and
+- no historic discriminator, fixture, migration, fabricated compatibility state, repair, or
+  backfill may be introduced.
 
 The projection is behavior-neutral and equality-only. It performs no persistence, mutation,
-reconciliation, cleanup, backfill, migration, current-parent inference, policy recomputation,
-receipt construction, B1/B2.1 mutation, or caller return. Identical retries after crash, response
-loss, shell restart, B2.1 observer/claim advancement, or parent-policy drift return the same
-historic projection. B2.2 may later consume that result unchanged, but cannot construct, mutate,
-repair, reinterpret, or supplement it.
+reconciliation, cleanup, `fsync`, key initialization/rotation, publication, backfill, migration,
+current-parent inference, policy recomputation, receipt construction, B1/B2.1 mutation, or caller
+return. Identical response-loss retry, restart, replay, B2.1 observer/claim advancement, retained-
+worker advancement, or parent-policy drift must return byte-identical historical projection
+material. B2.2 may later consume that result unchanged, but cannot construct, mutate, repair,
+reinterpret, or supplement it.
+
+E2 has no global registry revision, and this correction does not invent one. Read stability is
+proved by exact HSA root bytes and root/authority revisions; exact E2 and B1 registry bytes; E2
+per-record `created_revision`/`application_revision`; exact directory manifests; stable file
+metadata and physical identity; and unchanged clean namespace absence. SHA-256 of captured bytes
+is permitted only as non-authoritative test evidence. It is not a persisted authority field and
+cannot replace byte equality or metadata/namespace revalidation.
 
 ### Later implementation fence
 
-A later explicit `E2-RM` dispatch may edit only
-`crates/shell/src/execution/agent_runtime/dispatch_policy_commitment.rs`: the crate-internal
-result/error types, the resolver, strictly necessary private helpers and immutable accessors, and
-colocated focused tests. No module/export wiring change is expected or authorized because
-`agent_runtime::dispatch_policy_commitment` is already declared `pub(crate)`; a later discovered
-wiring need requires a new authority correction before editing another path. No caller integration
-is in this fence. In particular, no StateStore, supervisor, B1/B2.1,
-orchestrator, REPL, transport, receipt, manifest, policy, retained-runtime, world-service, product
-surface, or non-colocated test file may change. The prerequisite may not alter an existing record,
-registry, index, canonical byte sequence, hash domain, persistence transaction, recovery path, or
-runtime branch.
+A later fresh admission and explicit `E2-RM` dispatch may authorize only these six existing product
+files and tests colocated in them:
 
-Focused tests must prove ephemeral and retained-turn success; exact retry after reopen; byte-equal
-results after response loss, current B2.1 observer/claim advancement, and current-parent narrowing
-or broadening; and retained-cap authentication. The negative matrix must cover missing index,
-wrong index variant, duplicated/ambiguous occupancy, missing record, altered ref/linkage hash,
-changed expected B1 acceptance/runtime evidence, claim-key/preimage/hash substitution, snapshot
-bytes/ref/hash/revision/reason mismatch, missing or substituted retained cap, cap-to-turn store,
-participant, session, caller, caller-backend, target-backend, world, and generation substitution,
-and every accepted-work store, request, subject, session, caller, backend, world, and generation
-substitution. Separate
-tests must prove that complete absence of both the exact index and every related V1 footprint, and
-a recognized unsupported historic schema with no V1 footprint, return `UnsupportedLegacyState`;
-an index-only footprint, record-only footprint, digest collision, orphan V1 record, or other corrupt
-or partially present V1 material must fail closed.
+1. `crates/shell/src/execution/agent_runtime/dispatch_policy_commitment.rs` — final resolver,
+   projection/result/error types, private semantic validation helpers, immutable accessors, and
+   focused tests;
+2. `crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/dispatch_policy_commitment.rs`
+   — E2 physical read capability and snapshot only;
+3. `crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs`
+   — non-reconciling root-lock read scope and B1 physical snapshot only;
+4. `crates/shell/src/execution/agent_runtime/host_session_authority/store.rs` — minimum private
+   reexports, aggregate snapshot, and authority facade wrapper only;
+5. `crates/shell/src/execution/agent_runtime/host_session_authority/trusted_fs.rs` — stable
+   metadata/single-link read primitives and focused tests only; and
+6. `crates/shell/src/execution/agent_runtime/state_store.rs` — B1 lookup key, opaque witness,
+   authentication function, and focused tests only.
+
+No `layout.rs` edit or new module declaration is presently justified or authorized. A later
+discovered need outside these six files requires a new authority correction before editing it. No
+caller integration is in this fence. Explicitly excluded are E2/B1/B2.1 persistence, serialized
+schemas, publication, reconciliation, recovery, or semantic changes; receipt construction or
+caller return; B2.2 product files; HSA lifecycle or current-policy resolution; migrations,
+backfill, repair, or synthetic compatibility; E3, E4, D1, B3.2, B4, C2, C3; product surfaces; and
+non-Linux product work.
+
+Focused proof must cover:
+
+- ephemeral and retained-turn successful resolution, including
+  `accepted_at != runtime_acceptance.observed_at` preserved exactly;
+- forged expected B1 fields and every cross-store/request/subject/session/caller/caller-backend/
+  target-backend/world/generation/work-identity/correlation/policy substitution;
+- missing, partial, duplicate, ambiguous, index-only, record-only, digest-colliding, orphaned,
+  corrupt, cross-store, or hash-invalid E2/B1 material and missing referenced keys;
+- canonical non-V1 registry/object discriminators, including `0` and `2`, as unsupported-version
+  errors, malformed or noncanonical discriminators as encoding errors, and decodable invalid V1
+  as corruption;
+- safe and unsafe HSA/E2/B1 temporary material, proving every failed read leaves it untouched;
+- symlink, hard-link, owner, mode, device, inode, namespace, root, named-entry, and metadata
+  replacement attacks;
+- a writer-held cross-process root lock blocking the reader and concurrent publication exposing
+  exactly the complete pre-publication or post-publication snapshot, never a torn cross-store view;
+- killed-writer temporaries remaining byte-identical after failed reads;
+- exact before/after bytes, names, types, device/inode, owner/mode, link count, size, `mtime`,
+  `ctime`, HSA revisions, and clean namespace absence, with no portable `atime` assertion;
+- response loss, reopen/restart, B2.1 observer/claim advancement, retained-worker advancement,
+  parent-policy narrowing/broadening, and exact replay producing byte-identical projection
+  material; and
+- static proof of zero production callers before B2.2.
 
 The Linux acceptance wall for that later implementation uses the exact admission baseline recorded
 as `e2_rm_base` and requires these commands and outputs, in order:
@@ -741,11 +1085,12 @@ test -n "${E2_RM_ADMISSION_BASELINE:?set the recorded 40-hex admission baseline}
 e2_rm_base=$(git rev-parse --verify "$E2_RM_ADMISSION_BASELINE^{commit}")
 test "$e2_rm_base" = "$E2_RM_ADMISSION_BASELINE"
 test "$(git rev-parse HEAD)" = "$e2_rm_base"
+test -z "$(git status --porcelain=v1 --untracked-files=all)"
 set -o pipefail
 uname -a
 rustc -vV
 cargo fmt --all -- --check
-cargo test -p shell --lib dispatch_policy_commitment::tests -- --nocapture
+cargo test -p shell --lib e2_rm -- --nocapture
 cargo clippy -p shell --all-targets -- -D warnings
 cargo test -p shell --lib -- --nocapture
 cargo build -p substrate --bin substrate --bin substrate-shim
@@ -766,13 +1111,13 @@ rg -n 'resolve_accepted_work_receipt_material\(' crates/shell/src --glob '*.rs'
 git status --short
 ```
 
-The changed-path output must contain exactly
-`crates/shell/src/execution/agent_runtime/dispatch_policy_commitment.rs`; the added-path and changed-
-Markdown outputs must both be empty, making new-file whitespace/EOF and changed-document
+The changed-path output must contain exactly the six authorized product files above; the added-path
+and changed-Markdown outputs must both be empty, making new-file whitespace/EOF and changed-document
 link/fragment validation exact zero-input checks. The `rg` output must contain only the definition
-and colocated `#[cfg(test)]` call sites in that file—zero production callers—and `git status
---short` must name only that tracked file before commit. The recorded focused-test output must name
-every positive, crash/retry, legacy, corruption, and substitution case above. Formatting, both
+and colocated `#[cfg(test)]` call sites in the authorized files—zero production callers—and `git
+status --short` must name only those tracked files before commit. The recorded focused-test output
+must name every positive, no-mutation, locking, stability, schema, crash/retry, legacy, corruption,
+and substitution case above. Formatting, both
 builds, both clippy commands, the focused tests, the full shell library, and the full workspace test
 must all exit zero; this prerequisite grants no inherited-failure or baseline-differential waiver.
 Each source-built doctor must exit zero, emit parseable JSON, and have its complete captured output
@@ -794,6 +1139,7 @@ implemented, review-clean, committed, and identified by exact commit/tree in the
 record. That fresh review must re-evaluate B2.2 against the then-live E2-RM contract, consume only
 `AuthenticatedAcceptedWorkReceiptMaterialV1`, keep receipt construction/return inside B2.2, and
 retain B3.2, B4, C2, C3, D1, E3, and all unrelated authority outside its fence.
+Until those separate conditions are met, B2.2 remains blocked and unadmitted.
 
 ## Mixed-version fail-closed contract
 

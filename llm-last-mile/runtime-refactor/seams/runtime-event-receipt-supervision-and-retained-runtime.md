@@ -1,6 +1,6 @@
 **Kind:** seam family
 **Stable ID:** `runtime-event-receipt-supervision-and-retained-runtime-family`
-**Canonical for:** runtime event, receipt, supervision, and retained-worker runtime seam extraction plus the current E2 and `E2-RM` ownership corrections
+**Canonical for:** runtime event, receipt, supervision, and retained-worker runtime seam extraction plus the current E2 and second `E2-RM` ownership corrections
 **Status:** canonical current seam-family record
 **Authority scope:** exact extracted family-local source bodies plus the documentation-only E2 and `E2-RM` ownership corrections; no implementation authority
 **Source span:** D8 runtime-event, receipt, supervision, and retained-runtime family extraction from `02-seam-crosswalk.md`
@@ -66,6 +66,37 @@ truth, E2 owns commitment/cap material, and B2.2 later owns foreground receipt c
 return. B3.2, B4, C2/C3, D1, and E3 retain their existing scopes. Both `E2-RM` and B2.2 require
 later fresh admission and explicit dispatch; this seam correction admits neither and promotes no
 seam.
+
+### Second `E2-RM` seam correction (2026-09-03; controlling)
+
+The read boundary spans existing physical owners without transferring their semantics. HSA owns a
+new future non-reconciling read transaction over the already-existing accepted-home layout and
+root lock. E2 owns only its physical immutable-registry/key snapshot and final receipt-material
+projection. B1 owns only canonical full-registry validation and the opaque durable acceptance
+witness. `store.rs` may provide only the aggregate root/store/revision/E2/B1 snapshot wiring. These
+layers capture E2 and B1 under the same root lock; no later lookup may supplement the snapshot.
+
+The existing HSA, E2, and B1 transaction paths remain unchanged because they may reconcile,
+create, publish, or `fsync`. The new read path instead validates root/layout/lock identity,
+owner/mode/type/device/inode/link count, safe namespace manifests, stable file bytes and metadata,
+and clean absence. Recognized root/E2/B1 temporaries fail closed and remain byte-identical. A
+missing complete E2 directory is clean absence, while an existing partial E2 layout is an error.
+No read path may clean, repair, migrate, backfill, initialize/rotate keys, or publish authority.
+
+Caller B1 data is an equality expectation and lookup selector only; authenticated B1 fields come
+only from the witness keyed by `(authority_store_id, acceptance_record_id)`. E2's preserved B2.1
+claim and immutable snapshot/cap records remain the exclusive historical sources for their result
+fields. Current B2.1 observation, journal, terminal, retained-worker, and parent-policy state remain
+outside the projection. Captured HSA root/authority revisions are snapshot provenance only; no
+current or later HSA revision lookup may reconstruct or be compared as historical authority.
+`accepted_at` and runtime observation time remain independent. B2.2 receives no read,
+construction, return, or lifecycle authority here.
+
+The exact future fence is limited to the six existing files in the controlling E2-RM contract and
+their colocated tests. B1 persistence/schema/publication and B2.1 semantics do not change. E2 stays
+terminally complete; E2-RM remains specified but unadmitted, undispatched, and unimplemented;
+B2.2 remains blocked and unadmitted; and E3 remains separately specified but unadmitted,
+undispatched, and unimplemented.
 
 ## RuntimeEventTransport
 

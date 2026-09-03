@@ -1,6 +1,6 @@
 **Kind:** gate
 **Status:** canonical
-**Canonical for:** complete extracted B1 pre-E2 versus E2/B2.2 acceptance boundary, ordered conditions 1–11, immutable `PolicySnapshotV3` receipt exposure rule, post-acceptance immutable/future-only/revocation/fail-closed requirements, the current E2 completion-wall correction, and the `E2-RM` B2.2 admission prerequisite
+**Canonical for:** complete extracted B1 pre-E2 versus E2/B2.2 acceptance boundary, ordered conditions 1–11, immutable `PolicySnapshotV3` receipt exposure rule, post-acceptance immutable/future-only/revocation/fail-closed requirements, the current E2 completion-wall correction, and the second `E2-RM` B2.2 admission-prerequisite correction
 **Source provenance:** extracted byte-for-byte from [`../04-contracts-and-gates.md#12-final-receipt-immutable-policysnapshotv3-acceptance-rules`](../04-contracts-and-gates.md#12-final-receipt-immutable-policysnapshotv3-acceptance-rules), baseline lines 152–180; the exact 1675-byte source body is preserved between the boundary markers below
 **Baseline span SHA-256:** `672c9ba3db1e792a7afb145a4081450deafe6a1123262ae7c104c6f1b4b0b24a`
 
@@ -29,7 +29,7 @@ The snapshot bytes in conditions 6–7 are exactly E1's
 same sequence. E2 record/index/link hashes may use their own domain-separated deterministic
 preimages, but no recursively key-sorted replacement is a policy snapshot hash.
 
-## Current `E2-RM` / B2.2 admission correction
+## First `E2-RM` / B2.2 admission correction (preserved history)
 
 E2's completion satisfies persistence and immutable linkage, but does not by itself give B2.2 a
 recoverable post-response-loss read path. The existing authenticated E2 operation requires an
@@ -51,6 +51,40 @@ unchanged, B2.2 still owns foreground receipt construction/return, B3.2 still ow
 receipt/manifest/messaging/lifecycle work, B4 still owns targeted control, and D1/E3 retain their
 future envelope/projection fields. `E2-RM` and B2.2 each require later fresh admission and explicit
 dispatch; this documentation correction admits neither and changes no completed E2 gate result.
+
+## Second `E2-RM` / B2.2 admission correction (2026-09-03; controlling)
+
+Condition 11 requires more than semantic equality against caller-provided B1 material. A later
+E2-RM implementation must open only the existing accepted-home layout, acquire the existing HSA
+root lock, and capture stable E2 plus B1 physical snapshots inside one non-reconciling,
+descriptor-relative no-follow transaction. It must re-enumerate namespaces, revalidate root/lock/
+file physical identity and strict metadata, and prove exact HSA root bytes and revisions unchanged.
+Recognized temporaries are validated and cause failure without removal. No creation,
+reconciliation, cleanup, write, rename, unlink, `fsync`, key lifecycle, publication, repair,
+migration, or backfill is permitted.
+
+B1 authority comes only from an opaque witness selected by
+`(authority_store_id, acceptance_record_id)` after canonical full-registry and store-wide
+uniqueness validation of the captured durable bytes. Expected B1 material is only a selector and
+equality expectation; it contributes no returned field. Its independent `accepted_at` and
+`runtime_acceptance.observed_at` values remain exact. The final projection joins that witness to
+E2's request/subject index, immutable record, preserved B2.1 claim preimage, exact E1 snapshot, and
+retained cap where applicable. No later filesystem lookup or current HSA/B2.1/retained-worker/
+parent-policy read may supplement historical material.
+
+No historic E2 schema is recognized. Valid canonical non-V1 discriminators are unsupported
+versions; malformed/noncanonical/invalid discriminators are encoding errors; invalid V1 graphs
+are corruption/authentication failures; existing partial state is never legacy. E2 has no global
+registry revision, so stability relies on exact HSA root and E2/B1 registry bytes, HSA revisions,
+E2 per-record revisions, namespace manifests, metadata, and unchanged clean absence. Captured-byte
+hashes are test evidence only, and portable `atime` stability is not required.
+
+The future tests named by this authority—including positive ephemeral/retained projection,
+independent timestamps, substitution/corruption/schema/temp/link/metadata attacks, cross-process
+locking, pre/post-publication visibility, byte/metadata/revision/absence preservation, retry/drift/
+replay identity, and zero production callers—remain prescribed, not passed. E2 stays terminally
+complete; E2-RM stays specified, unadmitted, undispatched, and unimplemented; and B2.2 stays
+blocked and unadmitted.
 
 ## E3 projection/full-manifest clarification
 
