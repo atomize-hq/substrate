@@ -123,6 +123,17 @@ Canonical content: [`contracts/world-runtime-adapter-execution-envelope-v1.md#8-
 
 Canonical content: [`contracts/launch-time-secret-handoff-v1.md#9-launchtimesecrethandoffv1`](contracts/launch-time-secret-handoff-v1.md#9-launchtimesecrethandoffv1).
 
+## E3. `AgentConfigProjectionRecordV1`
+
+Canonical content: [`contracts/agent-config-projection-v1.md`](contracts/agent-config-projection-v1.md).
+
+### E3 managed gateway adoption V1
+
+Canonical content: [`contracts/managed-gateway-adoption-v1.md`](contracts/managed-gateway-adoption-v1.md).
+
+These are documentation-only controlling specifications. E3 is not admitted, dispatched,
+implemented, or green; strict member-dispatch V1 remains unchanged and D1 later owns V3/envelope.
+
 ## 10. Cancel outcome categories
 
 Canonical content: [`contracts/cancel-outcome-categories.md#10-cancel-outcome-categories`](contracts/cancel-outcome-categories.md#10-cancel-outcome-categories).

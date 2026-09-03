@@ -45,7 +45,7 @@ A0 -> A1.1e -> B0 -> B1-3a/B1-3b receipt core -> B2.1-1/2/3 ------------------+
 A1.1d integrated Linux/native-macOS closeout -> A1
 A1 -> A2/A3 -> E2 -> E2-RM -> B2.2 -> remaining B3.2 -> B4 -> C2 -> C3
 B1/B2.1 joint production closeout + E1 -> E2
-D1 -> D2 -> D3
+E3 -> D1 -> D2 -> D3
 E1 -> E2 -> E3 -> E4
 B4 + C1 + D2 + E2 + E3 -> D3 `RG-OBS-01` integration closure
 D2 and E1 must agree on PolicySnapshotV3, but may land in either order behind fail-closed gates.
@@ -71,6 +71,14 @@ read-only accepted-work receipt-material prerequisite. `E2-RM` must be freshly a
 implemented, independently reviewed `CLEAN`, and landed before B2.2 receives a fresh re-admission.
 `E2-RM`, B2.2, and E3 are separate future-admission candidates; none is admitted or dispatched by
 this navigation projection.
+
+E3 now has a controlling documentation-only
+[`AgentConfigProjectionRecordV1`](../contracts/agent-config-projection-v1.md) and
+[`managed-gateway-adoption-v1`](../contracts/managed-gateway-adoption-v1.md) specification. Its
+projection is independently valid before D1; D1 later consumes the opaque capability and owns V3
+plus `WorldRuntimeAdapterExecutionEnvelopeV1`. E4 becomes eligible for later admission only after an
+E3 implementation lands review-clean. The E3 specification changes no current gate, and E3 remains
+unadmitted, undispatched, and unimplemented.
 
 `E2-RM` changes only the dependency edge, not owner semantics. B1/B2.1 retain acceptance,
 observation, journal, replay, and terminal truth; E2 retains immutable policy commitments/caps;

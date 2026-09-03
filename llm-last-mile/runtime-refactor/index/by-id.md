@@ -152,6 +152,13 @@
 | `AuthenticatedAcceptedWorkReceiptMaterialV1` | [`contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite`](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite) | `specified opaque read-only historic E2 material projection for later B2.2 consumption` |
 | `AuthenticatedAcceptedWorkExecutionClaimV1` | [`contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite`](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite) | `specified preserved B2.1 claim identity, canonical preimage, durable key, and authenticated linkage hash` |
 | `AuthenticatedAcceptedWorkRetainedCapV1` | [`contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite`](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite) | `specified exact retained-worker cap ref/hash/bytes projection within E2-RM` |
+| `ConfigProjectionIdentityV1` | [`contracts/agent-config-projection-v1.md`](../contracts/agent-config-projection-v1.md) | `exact immutable E3 projection-series identity` |
+| `ConfigProjectionRefV1` | [`contracts/agent-config-projection-v1.md`](../contracts/agent-config-projection-v1.md) | `exact accepted-home E3 record reference` |
+| `AgentConfigProjectionRecordV1` | [`contracts/agent-config-projection-v1.md`](../contracts/agent-config-projection-v1.md) | `complete logical/effective/native/gateway/handoff projection record` |
+| `ManagedGatewayActivationIntentV1` | [`contracts/managed-gateway-adoption-v1.md`](../contracts/managed-gateway-adoption-v1.md) | `exact preactivation intent under the zero-live fence` |
+| `ManagedGatewayActivationAckV1` | [`contracts/managed-gateway-adoption-v1.md`](../contracts/managed-gateway-adoption-v1.md) | `non-secret exact gateway/handoff/readiness/access-boundary evidence` |
+| `InWorldGatewayRefV1` | [`contracts/managed-gateway-adoption-v1.md`](../contracts/managed-gateway-adoption-v1.md) | `preallocated immutable E3 gateway identity reference` |
+| `GatewayAccessBoundaryV1` | [`contracts/managed-gateway-adoption-v1.md`](../contracts/managed-gateway-adoption-v1.md) | `Linux exact-member cgroup/nftables access boundary` |
 | `WorldRuntimeAdapterExecutionEnvelopeV1` | [`contracts/world-runtime-adapter-execution-envelope-v1.md`](../contracts/world-runtime-adapter-execution-envelope-v1.md) | `exact extracted D10 contract owner` |
 | `LaunchTimeSecretHandoffV1` | [`contracts/launch-time-secret-handoff-v1.md`](../contracts/launch-time-secret-handoff-v1.md) | `exact extracted D10 contract owner` |
 | `GatewayAuthBundleV1` | [`contracts/launch-time-secret-handoff-v1.md`](../contracts/launch-time-secret-handoff-v1.md) | `exact extracted gateway-handoff primitive` |
@@ -166,6 +173,7 @@
 | `WorldWorkAcceptanceContextV1` | [`b1-b2-1/contracts-and-gates.md#2c-worldworkacceptancerecordv1`](../b1-b2-1/contracts-and-gates.md#2c-worldworkacceptancerecordv1) | `exact accepted-work submission-context contract` |
 | `WorldWorkAcceptanceRecordV1` | [`b1-b2-1/contracts-and-gates.md#2c-worldworkacceptancerecordv1`](../b1-b2-1/contracts-and-gates.md#2c-worldworkacceptancerecordv1) | `exact immutable acceptance-record contract` |
 | `MemberDispatchRequestV1` | [`b1-b2-1/contracts-and-gates.md#2c-worldworkacceptancerecordv1`](../b1-b2-1/contracts-and-gates.md#2c-worldworkacceptancerecordv1) | `exact member-dispatch transport request schema carrying retained launch proof when present` |
+| `MemberDispatchRequestV2` | [`contracts/agent-config-projection-v1.md#memberdispatchrequestv2-carrier-and-d1s-later-v3`](../contracts/agent-config-projection-v1.md#memberdispatchrequestv2-carrier-and-d1s-later-v3) | `strict additive E3 config-projection carrier; V1 byte/behavior unchanged` |
 | `MemberTurnSubmitRequestV1` | [`b1-b2-1/contracts-and-gates.md#2c-worldworkacceptancerecordv1`](../b1-b2-1/contracts-and-gates.md#2c-worldworkacceptancerecordv1) | `exact retained member-turn submission contract carrying acceptance context` |
 | `PolicySnapshotRefV1` | [`b1-b2-1/contracts-and-gates.md#2c-worldworkacceptancerecordv1`](../b1-b2-1/contracts-and-gates.md#2c-worldworkacceptancerecordv1) | `exact accepted policy-snapshot reference contract` |
 | `ValidatedWorldDispatchRequestV1` | [`b1-b2-1/contracts-and-gates.md#2c-worldworkacceptancerecordv1`](../b1-b2-1/contracts-and-gates.md#2c-worldworkacceptancerecordv1) | `exact validated world-dispatch request contract` |
@@ -313,7 +321,9 @@
 | `dispatch-and-episode-transport-family` | [`seams/dispatch-and-episode-transport.md`](../seams/dispatch-and-episode-transport.md) | canonical current seam-family record |
 | `e1-restricted-world-fs-narrowing` | [`slices/e1-restricted-world-fs-narrowing.md`](../slices/e1-restricted-world-fs-narrowing.md) | terminally complete slice and exact closure record |
 | `e2-policy-commitments-on-work-and-workers` | [`slices/e2-policy-commitments-on-work-and-workers.md`](../slices/e2-policy-commitments-on-work-and-workers.md) | corrected E2 authority record and terminal implementation closure |
-| `e3-agent-config-projection-and-gateway-adoption` | [`slices/e3-agent-config-projection-and-gateway-adoption.md`](../slices/e3-agent-config-projection-and-gateway-adoption.md) | canonical slice row record |
+| `e3-agent-config-projection-and-gateway-adoption` | [`slices/e3-agent-config-projection-and-gateway-adoption.md`](../slices/e3-agent-config-projection-and-gateway-adoption.md) | canonical controlling specification; not admitted, dispatched, or implemented |
+| `agent-config-projection-v1` | [`contracts/agent-config-projection-v1.md`](../contracts/agent-config-projection-v1.md) | canonical E3 contract specification; unadmitted |
+| `managed-gateway-adoption-v1` | [`contracts/managed-gateway-adoption-v1.md`](../contracts/managed-gateway-adoption-v1.md) | canonical E3 contract specification; unadmitted |
 | `e4-host-visible-write-sync-contract` | [`slices/e4-host-visible-write-sync-contract.md`](../slices/e4-host-visible-write-sync-contract.md) | canonical slice row record |
 | `host-session-authority-family` | [`seams/host-session-authority.md`](../seams/host-session-authority.md) | canonical current seam-family record |
 | `macOS-dev-parity-family` | [`macos-dev-parity/README.md`](../macos-dev-parity/README.md) | non-authoritative navigation |
@@ -389,7 +399,7 @@
 | `d3-codex-uaa-end-to-end-closure` | [`slices/d3-codex-uaa-end-to-end-closure.md`](../slices/d3-codex-uaa-end-to-end-closure.md) | canonical slice row record |
 | `e1-restricted-world-fs-narrowing` | [`slices/e1-restricted-world-fs-narrowing.md`](../slices/e1-restricted-world-fs-narrowing.md) | terminally complete slice and exact closure record |
 | `e2-policy-commitments-on-work-and-workers` | [`slices/e2-policy-commitments-on-work-and-workers.md`](../slices/e2-policy-commitments-on-work-and-workers.md) | corrected E2 authority record and terminal implementation closure |
-| `e3-agent-config-projection-and-gateway-adoption` | [`slices/e3-agent-config-projection-and-gateway-adoption.md`](../slices/e3-agent-config-projection-and-gateway-adoption.md) | canonical slice row record |
+| `e3-agent-config-projection-and-gateway-adoption` | [`slices/e3-agent-config-projection-and-gateway-adoption.md`](../slices/e3-agent-config-projection-and-gateway-adoption.md) | canonical controlling specification; not admitted, dispatched, or implemented |
 | `e4-host-visible-write-sync-contract` | [`slices/e4-host-visible-write-sync-contract.md`](../slices/e4-host-visible-write-sync-contract.md) | canonical slice row record |
 | `shared-slice-map` | [`slices/README.md`](../slices/README.md) | canonical shared slice-map record |
 | `track-a-authority-and-surface-neutrality` | [`slices/track-a-authority-and-surface-neutrality.md`](../slices/track-a-authority-and-surface-neutrality.md) | non-authoritative navigation; Track A terminally complete |

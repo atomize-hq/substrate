@@ -52,6 +52,15 @@ receipt/manifest/messaging/lifecycle work, B4 still owns targeted control, and D
 future envelope/projection fields. `E2-RM` and B2.2 each require later fresh admission and explicit
 dispatch; this documentation correction admits neither and changes no completed E2 gate result.
 
+## E3 projection/full-manifest clarification
+
+E3's independently valid `ConfigProjectionIdentityV1` and `ConfigProjectionRefV1` remain later
+full-manifest inputs, not final active task/turn receipt construction and not an E2-RM or B2.2
+prerequisite. E3 validates the immutable E2 launch/fork cap it consumes without changing E2 or
+reconstructing policy from current parent. D1 later owns the execution envelope on strict V3; B3.2
+later owns complete retained-manifest construction. The E3 documentation specification admits or
+implements none of those owners and does not change any E2 or E2-RM status.
+
 <!-- exact-extracted-body:start -->
 ## 12. Final-receipt immutable `PolicySnapshotV3` acceptance rules
 

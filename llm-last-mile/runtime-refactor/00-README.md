@@ -13,7 +13,7 @@
 **Repo-truth snapshot:** 2026-08-02 at
 `4ceecd50e20d822dda7cbd8f0e1bef4ccad65d8e` / tree
 `8ed5dc7a354b731016a103b68091864b6a09223a`; re-check live code before every slice.
-**Current scheduling projection:** [`index/current.md`](index/current.md) is the visibly non-authoritative current-state projection for terminally complete A1.3-P1, A1.4/A1, A2, A3, Track A, E1, and E2; the specified-but-unadmitted E2-owned `E2-RM` prerequisite; separate future-admission B2.2/E3 candidates, with B2.2 blocked pending `E2-RM` completion and fresh re-admission; held A1.3-P0/A1.3 records; the separate macOS lane; and deferred Windows work. Canonical decisions, packets, and gates remain at their linked path-stable owners.
+**Current scheduling projection:** [`index/current.md`](index/current.md) is the visibly non-authoritative current-state projection for terminally complete A1.3-P1, A1.4/A1, A2, A3, Track A, E1, and E2; the completed documentation-only but specified/unadmitted E2-RM authority correction; the controlling documentation-only, unadmitted E3 specification; separate future-admission B2.2/E3 implementation candidates, with B2.2 blocked pending `E2-RM` completion and fresh re-admission; held A1.3-P0/A1.3 records; the separate macOS lane; and deferred Windows work. Canonical decisions, packets, and gates remain at their linked path-stable owners.
 **Navigation indexes:** [`index/README.md`](index/README.md) by stable title/owner, [`index/by-id.md`](index/by-id.md), [`index/by-kind.md`](index/by-kind.md), and [`index/by-packet.md`](index/by-packet.md).
 **Historical scheduling state (superseded for active scheduling on 2026-08-19):**
 Canonical historical content: [`history/cross-cutting-control-pack-checkpoints.md#historical-scheduling-state-superseded-for-active-scheduling-on-2026-08-19`](history/cross-cutting-control-pack-checkpoints.md#historical-scheduling-state-superseded-for-active-scheduling-on-2026-08-19). Use [`index/current.md`](index/current.md) and its linked owners—not this historical record—for active, held, lane-local, and deferred state.
@@ -92,6 +92,13 @@ R2-2E did not change that split. The managed gateway secure-FD path is landed, r
 and unchanged by R2-2E. Direct-member Codex/UAA gateway adoption remains unresolved transitional
 compatibility, is non-promotable, and stays owned by E3/D1/D3. `RG-CONFIG-02`, `RG-CONFIG-04`,
 `RG-UAA-02`, and `RG-UAA-03` remain open.
+
+The controlling E3 documentation authority is now
+[`slices/e3-agent-config-projection-and-gateway-adoption.md`](slices/e3-agent-config-projection-and-gateway-adoption.md),
+with [`AgentConfigProjectionRecordV1`](contracts/agent-config-projection-v1.md) and
+[`Managed gateway adoption V1`](contracts/managed-gateway-adoption-v1.md). It preserves the landed
+carrier, corrects the absent local `crates/codex`, specifies strict V2 before D1's later V3, and
+marks no gate green. E3 is not admitted, dispatched, or implemented.
 
 ## Semantic status labels
 

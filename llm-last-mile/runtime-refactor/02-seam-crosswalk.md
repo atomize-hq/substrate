@@ -75,6 +75,21 @@ Recorded B3.1 result: canonical content moved to [`b3-1-c1/crosswalk.md#recorded
 
 ## D. UAA realization, projection, and side-effect mediation
 
+### E3 authority correction
+
+The table rows below are preserved chronology. The controlling E3 specification is
+[`e3-agent-config-projection-and-gateway-adoption`](slices/e3-agent-config-projection-and-gateway-adoption.md),
+with schemas in [`agent-config-projection-v1`](contracts/agent-config-projection-v1.md) and
+[`managed-gateway-adoption-v1`](contracts/managed-gateway-adoption-v1.md). It corrects the absent
+local `crates/codex` to a future new shared `crates/config-projection`, keeps the external
+`unified-agent-api-codex = 0.3.7` helper distinct from the SHA-256-pinned official OpenAI Codex
+`0.125.0` Linux archive, adds strict
+`MemberDispatchRequestV2` while preserving V1, and leaves D1's envelope for later V3.
+
+E3 owns accepted-home projection publication and managed-gateway adoption only. It does not own D1
+envelopes, receipts/manifests, E2/E2-RM state, broker policy, or E4 workspace synchronization. It is
+unadmitted and no row or gate is promoted by this correction.
+
 | Seam | Current code artifacts | Current semantic status | Authority boundary correct? | Enforcement point correct? | Proven by smoke/e2e? | Refactor action | Sibling seams that must stay in context |
 |---|---|---|---|---|---|---|---|
 | [AgentConfigProjectionService](seams/configuration-and-gateway-adoption.md#agentconfigprojectionservice) | placement-aware inventory in `execution/agent_inventory.rs`; host seed-home auth copy plus bounded `config.toml` subset in `world-service/member_runtime.rs`; Codex home helpers in `crates/codex`; separate landed managed-gateway carrier in `crates/common/src/gateway_auth_bundle.rs`, `crates/world-service/src/gateway_runtime.rs`, and `crates/gateway/src/server/mod.rs` | `DefensiveScaffoldingOnly` | no | no | no | Point direct world Codex at the already-landed in-world gateway carrier and replace copied host auth/config authority with per-worker Substrate-owned projection. Keep `CODEX_HOME`, `.codex`, `config.toml`, `.mcp.json`, provider endpoint, and runtime-native config as rebuildable non-secret projections from logical config plus accepted policy. Any copied credential path remains an explicitly named/logged compatibility mode with retirement criteria and is barred from `ContractCorrectAndProven`. | WorldRuntimeAdapterExecutionEnvelope; RuntimeFamilyRealizationAdapter; EffectivePolicyResolver; RetainedWorkerRuntime; WorldCommandExecutionBroker |

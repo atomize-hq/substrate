@@ -1,14 +1,27 @@
 **Kind:** architecture
 **Stable ID:** `shared-authority-map`
-**Canonical for:** shared authority map plus the current E2 policy-commitment ownership correction
+**Canonical for:** shared authority map plus the current E2 policy-commitment and E3 config-projection ownership corrections
 **Status:** canonical shared-architecture record
-**Authority scope:** exact extracted shared authority-map source body plus the documentation-only E2 owner row; no implementation authority
+**Authority scope:** exact extracted shared authority-map source body plus the documentation-only E2 and E3 owner corrections; no implementation authority
 **Source span:** [`../01-target-architecture.md#authority-map`](../01-target-architecture.md#authority-map) lines 62–83
 **Supersedes:** canonical ownership of the extracted source body; source heading remains a compatibility anchor
 **Superseded by:** none
 **Projection consumers:** [`README.md`](README.md), [`../01-target-architecture.md`](../01-target-architecture.md)
 
 # Authority map
+
+## Current E3 config-projection ownership correction
+
+| Boundary | Owns | Must not own |
+|---|---|---|
+| AgentConfigProjectionService | accepted-home `AgentConfigProjectionRecordV1` series/record/ref authority; immutable subject binding to workspace/session/participant/bootstrap/backend/runtime artifacts/world generation/E2 cap; monotonic projection revisions; deterministic non-secret Codex 0.125 rendering and ambient-layer closure; strict secret-bearing preparation request with nonsecret response and strict secret-free `MemberDispatchRequestV2` carrier; gateway activation intent, zero-live fence, and exact pre-release validation | caller-selected roots; host config/auth files as authority; persisted or execute-carried secrets; current-parent or E2 cap reconstruction; E2/E2-RM mutation; D1 envelope or V3; receipts/manifests; broker policy; workspace sync/reconciliation; compatibility promotion |
+| ManagedGatewayAdoption | preallocated gateway identity; deny-all dormant access boundary; exact one-time handoff join; non-secret readiness ACK/ref; exact-member activation and revocation; descriptor-pinned gateway identity | credential ownership or persistence; request-header authorization; copied-secret fallback; provider policy; Codex/UAA FD inheritance; D1/D3 evidence ownership |
+
+The controlling schemas and nonownership wall are
+[`agent-config-projection-v1.md`](../contracts/agent-config-projection-v1.md) and
+[`managed-gateway-adoption-v1.md`](../contracts/managed-gateway-adoption-v1.md). This correction leaves
+the extracted `AgentConfigProjectionService` and `WorldRuntimeAdapterExecutionEnvelope` rows below as
+historical architecture projection. D1 still owns the envelope and later strict V3; E3 is unadmitted.
 
 ## Current E2 policy-commitment ownership correction
 

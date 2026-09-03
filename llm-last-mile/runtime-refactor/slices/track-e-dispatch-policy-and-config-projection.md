@@ -12,12 +12,22 @@
 
 > **Authority boundary:** This file is a navigation index only. E1 is terminally complete at
 > `18f719898ce2a48f65e95b3b23f3b2cfd685c4af`; E2 is terminally complete over implementation
-> `96e102d9f5690e0d63957f6e9db56d632b7cdd17`. E3/E4 remain undispatched here. Schedule authority
-> remains with the controlling decision, packet, and gate owners.
+> `96e102d9f5690e0d63957f6e9db56d632b7cdd17`, and its completed E2-RM authority correction remains
+> separately specified/unadmitted. E3 now has a controlling documentation-only specification but is
+> not admitted, dispatched, implemented, or green. E4 remains undispatched. Schedule authority stays
+> with the controlling decision, packet, and gate owners.
 
 The extracted E2 row below is pre-correction navigation. Its current authority is the
 [E2 correction and closure](e2-policy-commitments-on-work-and-workers.md#terminal-closure):
 E2 owns the independent immutable policy commitment/cap, not receipt or full-manifest construction.
+
+The extracted E3 row is also historical navigation. Its current authority is the
+[E3 controlling correction](e3-agent-config-projection-and-gateway-adoption.md#controlling-authority-correction):
+one accepted-home projection registry, strict V2 carrier, descriptor-pinned Codex/wrapper/gateway,
+deterministic Codex 0.125 rendering, and exact managed-gateway adoption. The row's `crates/codex`
+path is absent; later implementation uses a new shared `crates/config-projection`. D1 owns later V3
+and its envelope. E3 and E2-RM/B2.2 may coordinate integration windows but are not prerequisites for
+one another.
 
 | Slice | Goal | Must-read docs | Sibling context | Allowed code areas | Explicit non-goals | Exit gate | Regression gates |
 |---|---|---|---|---|---|---|---|

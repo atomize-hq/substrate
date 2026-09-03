@@ -4,6 +4,22 @@
 **Source provenance:** extracted byte-for-byte from [`../04-contracts-and-gates.md#14-contract-promotion-gates`](../04-contracts-and-gates.md#14-contract-promotion-gates), baseline lines 215–231; the exact 1106-byte source body is preserved between the boundary markers below
 **Baseline span SHA-256:** `0fa77777b7f8ae85bc4e06082454b243677d89d070ff4c510bd9e148b61b2d43`
 
+## E3 specification disposition
+
+The documentation-only E3 contracts
+[`AgentConfigProjectionRecordV1`](../contracts/agent-config-projection-v1.md) and
+[`Managed gateway adoption V1`](../contracts/managed-gateway-adoption-v1.md) define the future proof
+wall but satisfy none of the extracted promotion conditions below. There is no E3 codec/persistence
+implementation, real V2 path, candidate-Substrate-source-built Linux crash/retry or sibling-isolation
+proof, secret-canary result, Codex 0.125 ambient-layer closure, or exact-baseline differential
+evidence.
+
+`RG-CONFIG-03` remains only the already-landed reusable FD-carrier baseline; it is not proof of
+direct Codex adoption. E3 remains unadmitted, undispatched, and unimplemented. After a fresh E3
+admission and independently clean implementation, E4 may seek its own admission, D1 may consume the
+opaque projection capability in strict V3, and D3 remains the final integration owner. E2-RM/B2.2
+coordination is independent and neither is an E3 prerequisite. No gate is greened here.
+
 ## E2 terminal implementation disposition
 
 E2 satisfies this promotion gate at implementation commit

@@ -1,6 +1,6 @@
 **Kind:** evidence/regression
 **Status:** canonical
-**Canonical for:** complete extracted `Canonical issue ledger` table, `A1.2a-WB gate assignment`, the terminal E2 gate overlay, and the current `E2-RM`/B2.2 admission disposition
+**Canonical for:** complete extracted `Canonical issue ledger` table, `A1.2a-WB gate assignment`, the terminal E2 gate overlay, the current `E2-RM`/B2.2 admission disposition, and the documentation-only E3 gate disposition
 **Source provenance:** extracted byte-for-byte from [`../05-debug-regression-ledger.md#canonical-issue-ledger`](../05-debug-regression-ledger.md#canonical-issue-ledger), baseline lines 16–97 inclusive; the exact 41492-byte source body is preserved between the boundary markers below
 **Baseline span SHA-256:** `191a62ea0c77064941947280d87c539163ab69b772a8018f6b2f4e3d3e5aae3e`
 
@@ -81,6 +81,28 @@ does not construct receipts or a full retained manifest.
 `E2-RM`, B2.2, and E3 are separate candidates requiring future admission and explicit dispatch;
 `E2-RM` must land review-clean before B2.2 receives a fresh re-admission. This correction admits or
 dispatches none of them.
+
+## E3 specification gate disposition (2026-09-02)
+
+The controlling E3 specification is
+[`e3-agent-config-projection-and-gateway-adoption`](../slices/e3-agent-config-projection-and-gateway-adoption.md),
+with exact schemas in [`agent-config-projection-v1`](../contracts/agent-config-projection-v1.md) and
+[`managed-gateway-adoption-v1`](../contracts/managed-gateway-adoption-v1.md). It fixes future
+acceptance criteria and ownership only. It supplies no product/test implementation or evidence and
+does not change the byte-preserved ledger body below.
+
+| Gate ID | Controlling E3 disposition | Current result |
+|---|---|---|
+| `RG-CONFIG-01` | Immutable per-worker series binds accepted root/workspace/session/participant/bootstrap/backend/artifacts/world generation/E2 cap; sibling roots and gateway grants must be physically isolated. | Open; specified only. |
+| `RG-CONFIG-02` | Logical/effective/native records and deterministic Codex 0.125 rendering make native files rebuildable output; workspace overlay is disabled; copied files are compatibility only. | Open; specified only. |
+| `RG-CONFIG-03` | Preserve the landed one-time FD carrier and add exact receiver/handoff/ACK/access-boundary joins without secret persistence or descendant inheritance. | The reusable carrier baseline stays resolved; the E3 adoption clause is open. |
+| `RG-CONFIG-04` | Strict V2 carries the accepted-home projection; direct Codex uses the exact managed gateway after zero-live fence, final revalidation, and exact-member boundary release. D1 later carries the envelope on V3. | Open; specified only. |
+| `RG-UAA-02` / `RG-OBS-01` | E3 owns only credentialed gateway adoption and non-secret handoff/ACK observability. D2 retains per-operation brokerage and D3 retains final joined proof. | E3 clauses open; ledger-wide gates remain unresolved. |
+
+No E3, E4, D1, or D3 gate is green. E3 requires later fresh admission and explicit dispatch. E4 is
+eligible only after a clean E3 implementation; D1 later consumes the opaque projection capability;
+D3 remains final integration. E2-RM/B2.2 coordination is independent and neither is an E3
+prerequisite.
 
 <!-- exact-extracted-body:start -->
 ## Canonical issue ledger

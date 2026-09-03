@@ -71,3 +71,17 @@ ProviderNativeSideEffect
 Any side-effect channel absent from the envelope is disabled in world scope.
 
 <!-- exact-extracted-body:end -->
+
+## E3-before-D1 carrier clarification (2026-09-02; outside preserved body)
+
+[`agent-config-projection-v1.md`](agent-config-projection-v1.md) makes E3 independently publish and
+validate `ConfigProjectionIdentityV1`, `ConfigProjectionRefV1`, and the opaque published projection
+capability before D1. E3 carries that authority on strict `MemberDispatchRequestV2`; the existing
+strict `MemberDispatchRequestV1` remains unchanged.
+
+D1 alone later owns construction and persistence of the byte-preserved
+`WorldRuntimeAdapterExecutionEnvelopeV1`. D1 adds strict `MemberDispatchRequestV3` containing V2's
+projection carrier plus its execution-envelope carrier. E3 does not create, partially populate, or
+claim the envelope; D1 consumes the E3 capability opaquely and exact-joins the already-published
+identity/ref. No envelope, receipt, retained manifest, or D1 gate is created by this clarification,
+and D1 remains subject to later fresh admission and explicit dispatch.
