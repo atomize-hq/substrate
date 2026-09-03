@@ -10,7 +10,7 @@
 
 # B1/B2.1 family architecture
 
-> **Historical wording note:** The phrase `C1 is next` below is preserved verbatim from the source projection as provenance. It is not current scheduling truth: B3.1, C1, A1.3-P1, A1.4, the enclosing A1 slice, A2, A3, and Track A are recorded complete elsewhere, while E2 awaits fresh admission and explicit dispatch.
+> **Historical wording note:** The phrase `C1 is next` below is preserved verbatim from the source projection as provenance. It is not current scheduling truth: B3.1, C1, A1.3-P1, A1.4, the enclosing A1 slice, A2, A3, Track A, E1, and E2 are recorded complete elsewhere; B2.2 and E3 remain separate future-admission candidates.
 
 ### Current B1/B2.1 control state
 

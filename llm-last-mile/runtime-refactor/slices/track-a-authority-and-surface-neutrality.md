@@ -20,9 +20,9 @@ A1 and A2 are terminally complete under their existing closure owners; and A3 is
 complete under its [exact closure identities](a3-persistence-and-compatibility-split.md#terminal-closure).
 Those current dependency and completion records complete Track A. E1 is terminally complete at
 `18f719898ce2a48f65e95b3b23f3b2cfd685c4af` over implementation
-`6194788d45267d91b4428a42e24c02dfcaae3c1e`, so the hard dependency spine names
-[E2](e2-policy-commitments-on-work-and-workers.md) as the canonical successor; E2 awaits fresh
-admission and explicit dispatch. This projection exercises no E1, E2, or later-track authority.
+`6194788d45267d91b4428a42e24c02dfcaae3c1e`. The E2 successor is terminally complete over
+implementation `96e102d9f5690e0d63957f6e9db56d632b7cdd17`; B2.2 and E3 remain separate
+future-admission candidates. This projection exercises no E1, E2, or later-track authority.
 
 | Slice | Goal | Must-read docs | Sibling context | Allowed code areas | Explicit non-goals | Exit gate | Regression gates |
 |---|---|---|---|---|---|---|---|

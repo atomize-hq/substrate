@@ -4,7 +4,7 @@
 **Source provenance:** extracted byte-for-byte from [`../04-contracts-and-gates.md#13-dispatch-narrowing-monotonicity-rules`](../04-contracts-and-gates.md#13-dispatch-narrowing-monotonicity-rules), baseline lines 181–214; the exact 1930-byte source body is preserved between the boundary markers below
 **Baseline span SHA-256:** `b12ef2b8c8bcffad5139e196df49ba2f59094ddf024f59d2d2a645eb9be2210a`
 
-## E1 terminal implementation disposition
+## E1 terminal implementation disposition (historical at E1 closure)
 
 E1's request-scoped `current_parent AND dispatch_patch` primitive and all V1 field/path rows below
 are terminally closed at exact closure commit
@@ -15,14 +15,15 @@ are terminally closed at exact closure commit
 `sha256:35b77c26e04b55b9f355268a5f28be1ff1d7cfeb9aef6b6751894cda95ab3dac`.
 The Linux ABI-7 real-service proof covers exact-file success, sibling/outside denial, and ancestor
 symlink-escape denial without changing the parent snapshot; focused Landlock coverage separately
-proves final-component symlink rejection. The `worker_cap`, future `turn`, and `fork_cap` formulas
-remain E2-owned and unimplemented under the independent
-[`DispatchPolicyCommitmentV1`](../contracts/dispatch-policy-commitment-v1.md). E2 owns neither
-receipt nor full-manifest construction. D2 per-operation mediation and E4 host-visibility
-synchronization remain open. This bounded disposition completes E1 and makes E2 eligible only for
-another fresh admission and explicit dispatch; it does not admit or dispatch E2.
+proves final-component symlink rejection. At that E1 closure, the `worker_cap`, future `turn`, and
+`fork_cap` formulas remained E2-owned and unimplemented under the independent
+[`DispatchPolicyCommitmentV1`](../contracts/dispatch-policy-commitment-v1.md), and this bounded E1
+disposition did not admit or dispatch E2. The later
+[E2 terminal closure](../slices/e2-policy-commitments-on-work-and-workers.md#terminal-closure)
+implements those formulas without moving receipt/full-manifest ownership. D2 per-operation
+mediation and E4 host-visibility synchronization remain open.
 
-For the future E2 formulas, current parent is resolved independently at Continue/Fork time and the
+For the now-completed E2 formulas, current parent is resolved independently at Continue/Fork time and the
 immutable worker/source-worker cap is authenticated from launch/fork truth. The retained-target
 resolver must not require launch policy/ref/revision to equal current parent. All non-policy target,
 admission, backend, world, ancestry, lifecycle, and routing checks remain. Current-parent narrowing

@@ -1,8 +1,8 @@
 **Kind:** contract
 **Stable ID:** `dispatch-policy-commitment-v1`
-**Status:** canonical E2 authority correction; implementation undispatched
+**Status:** canonical; implemented and terminally complete under the E2 closure
 **Canonical for:** additive `DispatchPolicyCommitmentV1` persisted record, exact subject/linkage rules, immutable policy/cap semantics, downstream receipt/manifest consumption, and mixed-version fail-closed behavior
-**Authority scope:** documentation-only E2 contract correction; no E2 admission, dispatch, implementation, completion, receipt construction, retained-manifest construction, migration, or synthetic-cap authority
+**Authority scope:** canonical E2 contract plus terminal status projection; this document grants no new admission, dispatch, implementation, receipt construction, retained-manifest construction, migration, or synthetic-cap authority
 **Supersedes:** only E2 statements that require E2 to construct a final receipt or complete `RetainedWorkerManifestV1`; omit the real dispatch/tool-translation carrier needed to consume E1 narrowing; require a retained worker's launch policy to equal the current parent; place fresh-Spawn E2 persistence after B3.2a admission; define a second snapshot canonicalization; or require a synthetic `SupervisorObservationClaimV1`/`resumable` field
 **Superseded by:** none
 **Projection consumers:** [`../slices/e2-policy-commitments-on-work-and-workers.md`](../slices/e2-policy-commitments-on-work-and-workers.md), [`active-ephemeral-task-receipt-v1.md`](active-ephemeral-task-receipt-v1.md), [`active-retained-turn-receipt-v1.md`](active-retained-turn-receipt-v1.md), [`retained-worker-manifest-v1.md`](retained-worker-manifest-v1.md), [`../gates/final-receipt-immutable-policy-snapshot-v3-acceptance.md`](../gates/final-receipt-immutable-policy-snapshot-v3-acceptance.md)

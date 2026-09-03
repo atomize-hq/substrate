@@ -17,14 +17,16 @@
 The extracted rows below preserve their pre-E1 chronology. E1's strict authenticated patch,
 broker composition, canonical `PolicySnapshotV3`, and containment/enforcement scope is terminally
 closed at `18f719898ce2a48f65e95b3b23f3b2cfd685c4af` over implementation
-`6194788d45267d91b4428a42e24c02dfcaae3c1e`. E2 remains undispatched and owns the separate
-immutable [`DispatchPolicyCommitmentV1`](../contracts/dispatch-policy-commitment-v1.md), not
+`6194788d45267d91b4428a42e24c02dfcaae3c1e`. E2 is terminally complete at implementation
+`96e102d9f5690e0d63957f6e9db56d632b7cdd17` and owns the separate immutable
+[`DispatchPolicyCommitmentV1`](../contracts/dispatch-policy-commitment-v1.md), not
 receipt/full-manifest construction. EffectivePolicyResolver composes; the bounded
 DispatchPolicyCommitmentRegistry persists and links; later receipt/manifest owners consume the
 exact ref. For retained Continue/Fork, the resolver consumes independently authenticated current
 parent and immutable worker/source-worker cap; launch-policy equality with current parent is not a
 prerequisite. Parent narrowing may further restrict future work and broadening cannot widen the
-cap.
+cap. B2.2 receipt/foreground-return and E3 config-projection work remain separate future candidates
+requiring their own admission and dispatch.
 
 E2 policy-snapshot bytes are exactly the landed E1
 `serde_json::to_vec(PolicySnapshotV3)` bytes, and E2 uses the exact E1/B1 SHA-256 over that sequence.

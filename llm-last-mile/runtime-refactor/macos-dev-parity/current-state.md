@@ -2,20 +2,20 @@
 **Stable ID:** `macOS-dev-parity-family`
 **Canonical for:** macOS developer-parity lane current-state projection
 **Status:** canonical current projection with preserved packet-era body
-**Authority scope:** exact extracted macOS-parity source body plus the current A1/A2/A3 closure-status overlay only; no implementation or successor authority
+**Authority scope:** exact extracted macOS-parity source body plus the current A1/A2/A3/E1/E2 closure-status overlay only; no implementation or successor authority
 **Source span:** [`00-README.md#macos-developer-parity-lane-2026-08-19-scoped`](../00-README.md#macos-developer-parity-lane-2026-08-19-scoped), D6 pre-extraction lines 1218–1244
 **Supersedes:** canonical ownership of that source body; the source heading remains a compatibility anchor
 **Superseded by:** none
 **Projection consumers:** the source compatibility anchor and [`README.md`](README.md)
 
-## A1/A2/A3 closure-status overlay (2026-09-01; current)
+## A1/A2/A3/E1/E2 closure-status overlay (current)
 
 The dated extracted projection below remains byte-stable as its packet-era snapshot. Current
 global status is projected by [`../index/current.md`](../index/current.md) and controlled by its
 linked canonical decisions and owners: A1.3-P1, A1.4, and the enclosing A1 slice are terminally
-complete. A2, A3, and Track A are terminally complete under their separate closure identities. E2
-awaits fresh admission and explicit dispatch. This overlay does not authorize, admit, dispatch,
-implement, schedule, or complete E2.
+complete. A2, A3, Track A, E1, and E2 are terminally complete under their separate closure
+identities. This macOS overlay did not authorize, admit, dispatch, implement, schedule, or complete
+E2 and grants no successor authority.
 
 ## macOS developer-parity lane (2026-08-19; scoped)
 

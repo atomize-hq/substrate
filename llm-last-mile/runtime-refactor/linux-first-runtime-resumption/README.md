@@ -11,10 +11,10 @@
 # A1.3 Linux-first packet family index
 
 > **Authority boundary:** This file only assembles links for terminally complete `A1.3-P1`,
-> terminally complete A1.4/A1, A2, A3, and Track A, and the inseparable held predecessors
-> `A1.3-P0` and `A1.3`. E2 awaits fresh admission and explicit dispatch. This index does not dispatch
-> implementation, reopen the closed reentry gate, broaden macOS or Windows scope, or replace the
-> linked canonical owners.
+> terminally complete A1.4/A1, A2, A3, Track A, E1, and E2, and the inseparable held predecessors
+> `A1.3-P0` and `A1.3`. B2.2 and E3 are separate future-admission candidates, neither admitted nor
+> dispatched. This index does not dispatch implementation, reopen the closed reentry gate, broaden
+> macOS or Windows scope, or replace the linked canonical owners.
 
 | Component | Canonical owner |
 |---|---|

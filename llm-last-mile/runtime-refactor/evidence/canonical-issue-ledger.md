@@ -1,6 +1,6 @@
 **Kind:** evidence/regression
 **Status:** canonical
-**Canonical for:** complete extracted `Canonical issue ledger` table, `A1.2a-WB gate assignment`, and the current E2 gate overlay
+**Canonical for:** complete extracted `Canonical issue ledger` table, `A1.2a-WB gate assignment`, and the terminal E2 gate overlay
 **Source provenance:** extracted byte-for-byte from [`../05-debug-regression-ledger.md#canonical-issue-ledger`](../05-debug-regression-ledger.md#canonical-issue-ledger), baseline lines 16–97 inclusive; the exact 41492-byte source body is preserved between the boundary markers below
 **Baseline span SHA-256:** `191a62ea0c77064941947280d87c539163ab69b772a8018f6b2f4e3d3e5aae3e`
 
@@ -31,8 +31,18 @@ root, exact-file Landlock, runtime symlink-recheck, and Linux enforcement clause
 `RG-POLICY-02` is green at the same commit; D2 per-operation mediation and E4 host-visible sync
 remain open, so that ledger-wide row also remains unresolved. `RG-UAA-02` and `RG-POLICY-03`
 remain open under their existing owners, `RG-BASE-03` remains open under C2, and `RG-DIFF-01` is
-preserved. This overlay marks E1 terminally complete and makes E2 eligible only for another fresh admission
-and explicit dispatch; it does not admit, dispatch, implement, or complete E2.
+preserved.
+
+Under the
+[E2 terminal closure](../slices/e2-policy-commitments-on-work-and-workers.md#terminal-closure), the
+E2 implementation is green at commit `96e102d9f5690e0d63957f6e9db56d632b7cdd17`, tree
+`ca3f351037c1067402d4c2b6f652381c406f0748`, and reviewed fingerprint
+`sha256:21325d34970e83273196b3969b09a15f80a06a1488ffb5e1a1463bc2d90329a9` with a final
+independent gpt-5.4 Extra High `CLEAN` verdict. The wholly E2-owned `RG-POLICY-03` and E2's
+immutable-linkage clauses of `RG-POLICY-01`, `RG-CANCEL-01`, and `RG-OBS-01` are terminally
+closed for the admitted Linux scope. The ledger-wide receipt/manifest, cancel, observation,
+per-operation mediation, config projection, final integration, and non-Linux clauses remain with
+their named later owners. `RG-BASE-03` remains open under C2 and `RG-DIFF-01` is preserved.
 
 The current E2 authority correction is the independent immutable
 [`DispatchPolicyCommitmentV1`](../contracts/dispatch-policy-commitment-v1.md). Accepted work links
@@ -49,13 +59,16 @@ exactly E1/B1 `serde_json::to_vec(PolicySnapshotV3)` identity, not a second key-
 
 | Gate ID | Controlling E2 correction | Ownership disposition |
 |---|---|---|
-| `RG-POLICY-01` | E2 consumes the exact E1 patch identity and exact E1/B1 snapshot bytes/ref/hash; it does not alter E1 serialization, schema 3, or stored B1 hashes. | Only E2's immutable linkage remains open; E1 stays terminally closed. |
-| `RG-POLICY-03` | Continue = current parent now ∧ immutable worker cap ∧ turn patch; Fork = current parent now ∧ immutable source-worker cap ∧ fork patch. Fresh Spawn stores and indexes the immutable exact full-request commitment/patch/snapshot/proposed-cap/subject/bindings reservation before B3.2a, privately verifies the request commitment, injects only an opaque authenticated reservation capability/ref plus preallocated identities, permits the exact `allow_capability_narrowing` validation exception only with a distinct attestation for authenticated nonempty `RestrictedWorldFs` narrowing, leaves plan/fingerprint/schema unchanged, and commits the retained reservation ref, exact request commitment, plus stable source admission/registration link after admission. Every crash/retry boundary exact-joins; changed request/material conflicts before B3.2a; unverifiable legacy caps return typed `UnsupportedLegacyState`. | Wholly E2-owned and still unresolved. No routing, lifecycle, supervisor, receipt, or full-manifest authority moves. |
-| `RG-OBS-01` | E2 links exact source-owned `WorldWorkExecutionClaimV1` identity/hash/preimage and durable claim key. No invented `resumable` field, cursor ownership, observation mutation, or acceptance creation. | Only the E2 policy-link clause is open; B2.1 remains observation owner. |
+| `RG-POLICY-01` | E2 consumes the exact E1 patch identity and exact E1/B1 snapshot bytes/ref/hash; it does not alter E1 serialization, schema 3, or stored B1 hashes. | E2's immutable linkage is complete; E1 stays terminally closed. Receipt/manifest exposure remains later-owned, so the ledger-wide row is not globally closed. |
+| `RG-POLICY-03` | Continue = current parent now ∧ immutable worker cap ∧ turn patch; Fork = current parent now ∧ immutable source-worker cap ∧ fork patch. Fresh Spawn stores and indexes the immutable exact full-request commitment/patch/snapshot/proposed-cap/subject/bindings reservation before B3.2a, privately verifies the request commitment, injects only an opaque authenticated reservation capability/ref plus preallocated identities, permits the exact `allow_capability_narrowing` validation exception only with a distinct attestation for authenticated nonempty `RestrictedWorldFs` narrowing, leaves plan/fingerprint/schema unchanged, and commits the retained reservation ref, exact request commitment, plus stable source admission/registration link after admission. Every crash/retry boundary exact-joins; changed request/material conflicts before B3.2a; unverifiable legacy caps return typed `UnsupportedLegacyState`. | Wholly E2-owned and complete for the admitted Linux scope. No routing, lifecycle, supervisor, receipt, full-manifest, or non-Linux authority moves. |
+| `RG-OBS-01` | E2 links exact source-owned `WorldWorkExecutionClaimV1` identity/hash/preimage and durable claim key. No invented `resumable` field, cursor ownership, observation mutation, or acceptance creation. | The E2 policy-link clause is complete; B2.1 remains observation owner and other ledger-wide owners remain open. |
 
 `RG-RECEIPT-02` remains B2.2/B3.2-owned except for E2's immutable component; only E2 policy clauses
-flow into `RG-CANCEL-01` and `RG-OBS-01`. E2 does not construct receipts or a full retained manifest.
+flow into `RG-CANCEL-01` and `RG-OBS-01`; those E2 clauses are complete while later cancel and
+observation owners remain open. E2 does not construct receipts or a full retained manifest.
 `RG-BASE-03` remains under C2, D1/E3 are not prerequisites, and `RG-DIFF-01` remains mandatory.
+B2.2 and E3 are separate successor candidates requiring future admission and dispatch; this
+closure admits or dispatches neither.
 
 <!-- exact-extracted-body:start -->
 ## Canonical issue ledger

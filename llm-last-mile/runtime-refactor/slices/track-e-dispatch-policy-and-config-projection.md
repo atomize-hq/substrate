@@ -11,12 +11,12 @@
 # Track E — Dispatch-scoped policy narrowing and config projection
 
 > **Authority boundary:** This file is a navigation index only. E1 is terminally complete at
-> `18f719898ce2a48f65e95b3b23f3b2cfd685c4af`; E2 is the corrected successor eligible only for
-> another fresh admission and explicit dispatch; E2/E3/E4 remain undispatched here. Schedule authority
+> `18f719898ce2a48f65e95b3b23f3b2cfd685c4af`; E2 is terminally complete over implementation
+> `96e102d9f5690e0d63957f6e9db56d632b7cdd17`. E3/E4 remain undispatched here. Schedule authority
 > remains with the controlling decision, packet, and gate owners.
 
 The extracted E2 row below is pre-correction navigation. Its current authority is the
-[E2 correction](e2-policy-commitments-on-work-and-workers.md#current-e2-authority-correction-2026-09-01-controlling):
+[E2 correction and closure](e2-policy-commitments-on-work-and-workers.md#terminal-closure):
 E2 owns the independent immutable policy commitment/cap, not receipt or full-manifest construction.
 
 | Slice | Goal | Must-read docs | Sibling context | Allowed code areas | Explicit non-goals | Exit gate | Regression gates |

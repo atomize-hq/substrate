@@ -2,7 +2,7 @@
 **Stable ID:** `macOS-dev-parity-family`
 **Canonical for:** current Linux-first scheduling reset projection
 **Status:** canonical current projection with preserved packet-era body
-**Authority scope:** exact extracted macOS-parity source body plus the current A1/A2/A3 closure-status overlay only; no implementation or successor authority
+**Authority scope:** exact extracted macOS-parity source body plus the current A1/A2/A3/E1/E2 closure-status overlay only; no implementation or successor authority
 **Source span:** [`03-phase-slice-map.md#current-linux-first-scheduling-reset-2026-08-20-controlling`](../03-phase-slice-map.md#current-linux-first-scheduling-reset-2026-08-20-controlling), D6 pre-extraction lines 3238–3284
 **Supersedes:** canonical ownership of that source body; the source heading remains a compatibility anchor
 **Superseded by:** none
@@ -12,13 +12,13 @@
 > “above,” still refer to the linked pre-extraction root document rather than standalone
 > surrounding content in this canonical file.
 
-## A1/A2/A3 closure-status overlay (2026-09-01; current)
+## A1/A2/A3/E1/E2 closure-status overlay (current)
 
 The dated extracted scheduling projection below remains byte-stable as its packet-era snapshot.
 A1.3-P1, A1.4, and the enclosing A1 slice are terminally complete under their exact closure
-identities. A2, A3, and Track A are terminally complete under their separate closure identities.
-E2 awaits fresh admission and explicit dispatch and is not authorized, admitted, dispatched,
-implemented, scheduled, or complete here.
+identities. A2, A3, Track A, E1, and E2 are terminally complete under their separate closure
+identities. This macOS projection did not authorize or dispatch E2 and does not authorize, admit,
+dispatch, implement, schedule, or complete B2.2, E3, or another successor.
 
 ## Current Linux-first scheduling reset (2026-08-20; controlling)
 

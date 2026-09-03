@@ -1,8 +1,8 @@
 **Kind:** slice row
 **Stable ID:** `e2-policy-commitments-on-work-and-workers`
-**Canonical for:** extracted E2 slice row plus the controlling E2 authority correction below
-**Status:** eligible only for another fresh admission and explicit dispatch; currently undispatched
-**Authority scope:** exact extracted source table header and row plus the documentation-only correction below; no E2 admission, dispatch, implementation, or completion authority
+**Canonical for:** extracted E2 slice row, the controlling E2 authority correction, and the terminal implementation closure below
+**Status:** terminally complete
+**Authority scope:** exact extracted source table header and row, the controlling correction, and the terminal closure below; no B2.2, E3, receipt, full-manifest, cancel, observation, lifecycle, or non-Linux implementation authority
 **Source span:** [`../03-phase-slice-map.md`](../03-phase-slice-map.md) line 221
 **Supersedes:** canonical ownership of the extracted `E2 — Policy commitments on work and workers` row and only the stale E2 clauses identified in the correction below
 **Superseded by:** none
@@ -10,9 +10,10 @@
 
 # E2 — Policy commitments on work and workers
 
-> **Authority boundary:** This file preserves the extracted E2 Track E row as chronology and owns
-> the controlling correction below. It does not reopen B1/B2.1, B3.1/C1, D1, or E3 ownership and
-> does not admit, dispatch, implement, or complete E2.
+> **Authority boundary:** This file preserves the extracted E2 Track E row as chronology, owns the
+> controlling correction below, and records the completed E2 implementation. It does not reopen
+> B1/B2.1, B3.1/C1, D1, or E3 ownership and does not admit or dispatch B2.2, E3, or another
+> successor.
 
 ## Current E2 authority correction (2026-09-01; controlling)
 
@@ -126,7 +127,7 @@ resumability, or mutate receipts/observations.
 - A record omitting either later-owned identity cannot validate or be reported as a complete
   `RetainedWorkerManifestV1`.
 
-### E2 implementation fence for a future fresh dispatch
+### Admitted and implemented E2 symbol fence
 
 This is a symbol fence, not file-wide authority:
 
@@ -182,8 +183,8 @@ This is a symbol fence, not file-wide authority:
    capability/export wiring and focused serialization, reservation/publication `fsync`, CAS,
    exact-join, conflict, retry, restart, and compatibility tests is permitted. Fresh-Spawn callers
    must reserve before `RetainedWorkerRuntime::reserve_admission_slot` and publish only after exact
-   B3.2a admission. Because the landed function generates worker/bootstrap IDs internally, future
-   E2 may change only `RetainedWorkerRuntime::reserve_admission_slot`, its private
+   B3.2a admission. Because the landed function generates worker/bootstrap IDs internally, the
+   admitted E2 implementation changed only `RetainedWorkerRuntime::reserve_admission_slot`, its private
    `reserve_admission_slot_with` helper, their direct production callers, and focused tests to accept
    an E2-registry-authenticated, privately constructed reservation proof and use its two preallocated
    identities. The E2 registry recomputes and equality-checks the complete validated-request
@@ -197,8 +198,8 @@ This is a symbol fence, not file-wide authority:
    that parent capability. The private E2 proof constructor emits a distinct, opaque narrowing
    attestation only after authenticating a nonempty `RestrictedWorldFs` patch, parent permission,
    exact E1 effective snapshot bytes/ref/hash, complete validated-request commitment, and both
-   preallocated identities; `UnchangedParent` and empty patches cannot obtain it. Future E2 may
-   change only that exact rejection, the minimum opaque-proof
+   preallocated identities; `UnchangedParent` and empty patches cannot obtain it. The admitted E2
+   implementation changed only that exact rejection, the minimum opaque-proof
    parameter threading through all seven direct B3.2a call sites
    (`canonical_plan_for_existing_admission`, `validate_admitted_record_graph`,
    `prepare_registration_head_in_registry`, `advance_registration_head_in_registry`,
@@ -262,9 +263,80 @@ E2 retains `RG-POLICY-03` and only the remaining receipt/manifest linkage clause
 `RG-POLICY-01`. `RG-RECEIPT-02` remains with B2.2/B3.2 except for E2's immutable policy component.
 Only E2-specific immutable-policy clauses flow into `RG-CANCEL-01` and `RG-OBS-01`.
 `RG-BASE-03` remains under C2 and `RG-DIFF-01` remains mandatory. E3/E4, B2.2/B3.2, broader C/D
-work, D1/E3-owned manifest material, and non-Linux platforms remain outside E2. This second
-correction makes E2 eligible only for another fresh admission; it does not admit, dispatch,
-implement, or complete it.
+work, D1/E3-owned manifest material, and non-Linux platforms remain outside E2.
+
+## Terminal closure
+
+The completed implementation is bound to:
+
+- commit `96e102d9f5690e0d63957f6e9db56d632b7cdd17`, with sole parent
+  `848fe24b4311f72ebc9d61b4c3408c96613f4334`;
+- tree `ca3f351037c1067402d4c2b6f652381c406f0748`;
+- subject `feat: commit E2 work and worker policy authority`;
+- reviewed complete-candidate fingerprint
+  `sha256:21325d34970e83273196b3969b09a15f80a06a1488ffb5e1a1463bc2d90329a9`; and
+- final independent gpt-5.4 Extra High implementation verdict `CLEAN`.
+
+E2 persists one activated-authority registry below
+`<accepted-home>/authority-v1/dispatch-policy-commitment-v1/`. Its no-replace private HMAC key
+envelope, domain-separated HMAC-SHA-256 request commitment, immutable reservation and committed
+records, unique request/subject retry index, participant/worker cap resolution, exclusive root
+lock, no-follow descriptor-relative validation, temp-write/file-and-directory `fsync`, atomic
+rename, exact readback, and recognized-temp reconciliation were proved together. Authority and join
+record metadata persist only key identity and the 64-character lowercase digest. HMAC key material
+is durably persisted solely in no-replace owner-only private key envelopes and is never placed in
+authority/join records or logs; prompt, payload, and request preimage material is not persisted.
+Identical retries exact-join, changed policy/cap/identity/binding/request material conflicts, and
+every reservation/admission/publication crash boundary converges without rewriting authority.
+
+The strict launch activation carrier is derived only from a verified E2 reservation/commitment and
+pins the worker or fork-child cap, snapshot, activation, subject, session, participant, backend,
+world, generation, parent, reservation, and retry identities before WorldService registration or
+launch. The first turn cannot establish or replace launch trust, identifier prefixes are not
+activation, Fork carries its E2 child cap without acquiring B3.2a authority, and missing or
+hash-invalid legacy cap material returns typed `UnsupportedLegacyState` without reconstructing
+authority from the current parent. Every retained turn matches the pinned cap and independently
+composes `current parent AND immutable cap AND turn patch`.
+
+Activated retained turns use the existing `POST /v1/member_turn/stream` operation and the private
+durable join registry at `/var/lib/substrate/member-turn-join-v1/` through an injected validated
+state root. Reservation precedes launch; durable `CallEntered` precedes provider invocation; the
+real post-launch Start frame precedes B1; B1 precedes the B1-derived B2.1 claim; final E2 CAS
+publication exact-links both before caller-visible success. Thirty-two concurrent identical
+requests launched one provider child and replayed the same stable stream/span/frames; changed
+requests conflicted before launch. Pre-call orphan recovery may relaunch the same reserved
+identity, post-`CallEntered` uncertainty becomes typed `LaunchIndeterminate`, Started replays its
+exact Start plus the defined recovery result, and Completed replays byte-identical terminal truth.
+Frame bytes are durable before delivery, Completed is durable before terminal delivery,
+`unregister_turn` does not erase retry authority, no PID/timeout/EOF/status substitutes for proof,
+and records are retained indefinitely because no retirement authority exists.
+
+Exact E1 `serde_json::to_vec(PolicySnapshotV3)` bytes and SHA-256 reach the real per-turn
+WorldService enforcement builder. Source-built Linux proof showed that a carrier-derived exact-file
+grant succeeds while sibling, outside, ancestor-symlink, and final-component-symlink access fails;
+trusted `/bin`, `/lib`, and `/lib64` usr-merge aliases are normalized only to verified physical
+`/usr` roots before Landlock. Consecutive turns receive independent plans without accumulating the
+prior turn's narrowing, current-parent broadening cannot exceed the immutable cap, and narrowing
+further restricts the turn. The inherited broad full-isolation gap reproduced unchanged against
+the exact baseline and is not claimed repaired.
+
+The final focused wall passed 72 transport unit tests plus 11 documentation tests, 17 focused shell
+E2 tests, 186 WorldService unit tests and every WorldService integration/documentation target,
+including 27 durable-join tests and the three concurrency/disconnect/idempotency integrations.
+Formatting, diff checks, changed-crate checks, both source binary builds, and Linux world doctor
+passed. The broad shell differential was candidate 1,407 pass/96 fail versus exact-baseline 1,347
+pass/119 fail, with no candidate-only failure; the provider-stub hang, workspace clippy
+macOS/world-dependency diagnostics, workspace-test lifecycle compile stop, and isolation result
+were inherited on the baseline. Source-built shim doctor and health returned successfully while
+honestly reporting the temporary install's pre-existing needs-attention/passive state.
+
+E2's immutable-linkage clauses of `RG-POLICY-01`, `RG-CANCEL-01`, and `RG-OBS-01`, and the wholly
+E2-owned `RG-POLICY-03`, are complete for the admitted Linux scope. Receipt/foreground-return and
+full-manifest work remain with B2.2/B3.2, cancel semantics remain with B4, observation integration
+remains with B4/D2/E3/D3, and D1/E3 identities remain later-owned. `RG-BASE-03` remains under C2;
+non-Linux proof remains unclaimed. B2.2 and E3 are only separate successor candidates requiring
+their own future admission and dispatch; neither is admitted or dispatched by this closure. E2 is
+terminally complete.
 
 ## Preserved pre-correction row (chronology only)
 

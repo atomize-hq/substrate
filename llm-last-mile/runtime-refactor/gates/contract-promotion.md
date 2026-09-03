@@ -1,35 +1,36 @@
 **Kind:** gate
 **Status:** canonical
-**Canonical for:** complete extracted tests-prove-before-landed promotion gate and ordered proof requirements 1–10 covering serialization, persistence, real-path usage, restart and replay, smoke and e2e joins, one-time gateway handoff proof, compatibility exclusion, and B1/B2.1-to-B3.1 sequencing
+**Canonical for:** complete extracted tests-prove-before-landed promotion gate and ordered proof requirements 1–10 covering serialization, persistence, real-path usage, restart and replay, smoke and e2e joins, one-time gateway handoff proof, compatibility exclusion, B1/B2.1-to-B3.1 sequencing, and the bounded E2 terminal disposition
 **Source provenance:** extracted byte-for-byte from [`../04-contracts-and-gates.md#14-contract-promotion-gates`](../04-contracts-and-gates.md#14-contract-promotion-gates), baseline lines 215–231; the exact 1106-byte source body is preserved between the boundary markers below
 **Baseline span SHA-256:** `0fa77777b7f8ae85bc4e06082454b243677d89d070ff4c510bd9e148b61b2d43`
 
-## Current E2 promotion disposition
+## E2 terminal implementation disposition
 
-This authority correction does not land or promote E2. Any later fresh E2 dispatch must prove the
-commitment's record/index/link serialization; exact E1/B1
-`serde_json::to_vec(PolicySnapshotV3)` bytes/hash without a second canonicalization; strict real
-tool-to-`WorldDispatchRequestV1` translation; real `ExecuteRequest`/retained-turn carrier use; exact
-B1 plus source-owned B2.1 `WorldWorkExecutionClaimV1` linkage; retained current-parent drift with
-immutable cap preservation; E2 fork-dispatch linkage; typed mixed-version failure; and the mandatory
-`RG-DIFF-01` differential wall.
+E2 satisfies this promotion gate at implementation commit
+`96e102d9f5690e0d63957f6e9db56d632b7cdd17`, tree
+`ca3f351037c1067402d4c2b6f652381c406f0748`, and reviewed complete-candidate fingerprint
+`sha256:21325d34970e83273196b3969b09a15f80a06a1488ffb5e1a1463bc2d90329a9`; the final
+independent gpt-5.4 Extra High implementation verdict is `CLEAN`.
 
-Fresh Spawn additionally proves first-writer immutable E2 reservation-object/ref publication with a
-keyed commitment over the complete validated request and no prompt/payload preimage, plus
-file/directory `fsync` before B3.2a; private E2 recomputation/equality of that commitment followed by
-injection of only an opaque authenticated reservation capability/ref and the reservation's
-preallocated identities through the bounded admission input; the exact
-`allow_capability_narrowing` validation exception gated by a distinct opaque attestation that only
-authenticated nonempty `RestrictedWorldFs` E1 narrowing can obtain, never `UnchangedParent` or an
-empty patch; use of the
-unchanged B3.2a plan/fingerprint/schema; a stable
-source-field/registration admission link that survives mutable B3.2a revisions; retained
-reservation ref and exact full-request commitment in the committed index and final record;
-post-admission E2 CAS publication;
-identical retry joins; changed-request/material pre-admission conflicts; and restart at every
-reservation/admission/publication boundary. An unreserved production B3.2a admission is unsupported
-after activation. D1/E3 receipt/manifest
-composition is later-owner proof, not an E2 prerequisite.
+The proof covers strict carrier serialization and real ingress translation; all four composition
+formulas; byte-identical E1 `PolicySnapshotV3` serialization/SHA-256; private HMAC request
+commitments with secret material confined to owner-only key envelopes and absent from record
+metadata/logs, with no prompt/payload preimage persistence; atomic reservation/index/final-record
+CAS; every admitted crash/restart boundary; stable exact retry and changed-material conflict; all
+seven B3.2a proof-propagation sites; exact B1/B2.1 and Fresh-Spawn B3.2a linkage; Fork linkage
+without B3.2a; typed mixed-version failure; direct/toolbox Spawn and Fork; activated retained-turn
+carrier propagation; WorldService pre-registration cap pinning; and actual per-turn Linux Landlock
+enforcement. The durable submitted-turn join proved one provider child for 32 concurrent identical
+requests, real Start-only B1 followed by B1-derived B2.1, final E2 publication before visible
+success, exact Started/Completed replay, and fail-closed `LaunchIndeterminate` recovery after
+uncertain provider entry.
+
+The source-built Linux and exact-baseline differential walls are recorded in the
+[E2 terminal closure](../slices/e2-policy-commitments-on-work-and-workers.md#terminal-closure).
+D1/E3 receipt/full-manifest composition, B2.2 foreground-return, B4 cancel semantics, later
+observation integration, `RG-BASE-03` under C2, and non-Linux proof remain outside this promotion.
+B2.2 and E3 are only separate future-admission successor candidates; neither is admitted or
+dispatched here.
 
 <!-- exact-extracted-body:start -->
 ## 14. Contract promotion gates

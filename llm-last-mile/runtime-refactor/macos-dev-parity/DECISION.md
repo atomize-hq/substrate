@@ -6,8 +6,8 @@
 - **Effective date:** 2026-08-19.
 - **macOS lane authority gate:** `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`.
 - **Active global implementation packet:** none. [`A1.3-P1`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md),
-  A1.4, the enclosing A1 slice, A2, A3, and Track A are terminally complete; E2 awaits fresh
-  admission and explicit dispatch.
+  A1.4, the enclosing A1 slice, A2, A3, Track A, E1, and E2 are terminally complete; B2.2 and E3
+  are separate future-admission candidates, neither admitted nor dispatched.
 - **Phase 0 preservation:** verified read-only at protected lifecycle checkpoint
   `ff48da180db4515147486f8b95f05626ca38e89b` on
   `refs/heads/feat/archive-r3-macos-protected-lifecycle-20260819` and its remote-tracking ref;
@@ -144,10 +144,9 @@ gate remains closed as historical selection, and the separately selected
 is terminally complete.
 The held A1.3 and A1.3-P0 records remain preserved as historical runtime fences only. Closing
 either lane does not dispatch the other's successor. A1.4 and the enclosing A1 slice are
-terminally complete; A2, A3, and Track A are terminally complete under their separate closure
-identities, and E2 awaits fresh admission and explicit dispatch. This decision does not authorize
-macOS work within A1.3-P1, dispatch E2, Windows, E03, protected-lifecycle
-revival, or any other successor.
+terminally complete; A2, A3, Track A, E1, and E2 are terminally complete under their separate
+closure identities. This decision did not authorize macOS work within A1.3-P1 or dispatch E2, and
+does not dispatch B2.2, E3, Windows, E03, protected-lifecycle revival, or any other successor.
 
 ## Rollback and revival rule
 

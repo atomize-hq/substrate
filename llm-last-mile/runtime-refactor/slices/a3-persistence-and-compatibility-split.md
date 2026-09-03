@@ -87,6 +87,6 @@ and no longer active. Because Track A contains only A0 through A3, A0's committe
 satisfies its diagnostic exit, and A1/A2 are already terminal, Track A is also terminally complete.
 E1 subsequently reached terminal closure at
 `18f719898ce2a48f65e95b3b23f3b2cfd685c4af` over implementation
-`6194788d45267d91b4428a42e24c02dfcaae3c1e`, so the dependency spine now names E2 as the canonical
-successor; E2 awaits fresh admission and explicit dispatch. The A3 closure itself did not admit,
-dispatch, implement, or complete E1, E2, or any later track.
+`6194788d45267d91b4428a42e24c02dfcaae3c1e`; E2 later reached terminal closure over implementation
+`96e102d9f5690e0d63957f6e9db56d632b7cdd17`. The A3 closure itself did not admit, dispatch,
+implement, or complete E1, E2, or any later track.

@@ -18,8 +18,8 @@ The final A1 wall makes `RG-BASE-01`, `RG-BASE-02`, the A1-scoped clauses of `RG
 closeout is landed, and native macOS is a separate non-predecessor lane under the controlling
 Linux-first decision. No other A1 condition remains, so A1 is terminally complete. The
 ledger-wide remainder of `RG-AUTH-01`/`RG-AUTH-02` and all A2/A3 work remained open and
-undispatched at A1 close. A2 and A3 later completed under their own authority and closure
-identities; Track A is now terminally complete, and E2 remains undispatched.
+undispatched at A1 close. A2, A3, Track A, E1, and E2 later completed under their own authority and
+closure identities. This A1 closure did not itself admit or dispatch any successor.
 
 | Slice | Goal | Must-read docs | Sibling context | Allowed code areas | Explicit non-goals | Exit gate | Regression gates |
 |---|---|---|---|---|---|---|---|

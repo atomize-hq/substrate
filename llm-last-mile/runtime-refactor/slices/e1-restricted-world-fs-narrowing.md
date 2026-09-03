@@ -72,5 +72,7 @@ containment/enforcement clause of `RG-POLICY-02` are complete. Their later recei
 per-operation mediation, and host-visibility/synchronization clauses remain with E2, D2, and E4;
 the ledger-wide gates are not globally closed. `RG-UAA-02` and `RG-POLICY-03` remain open under
 their existing owners, `RG-BASE-03` remains open under C2, and `RG-DIFF-01` is preserved. E1 is
-terminally complete. E2 is only eligible for another fresh admission and explicit dispatch; this closure
-does not admit, dispatch, implement, or complete it.
+terminally complete. At the time of this E1 closure, E2 was only eligible for another fresh
+admission and explicit dispatch and this closure did not admit, dispatch, implement, or complete
+it. E2 later reached its own independent terminal closure over implementation
+`96e102d9f5690e0d63957f6e9db56d632b7cdd17`.

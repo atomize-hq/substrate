@@ -6,8 +6,8 @@
 - **Effective date:** 2026-08-20.
 - **Reentry gate:** `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY` (closed by the selection below).
 - **Active global implementation packet:** none. [`A1.3-P1`](A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md),
-  A1.4, the enclosing A1 slice, A2, A3, and Track A are terminally complete; E2 awaits fresh
-  admission and explicit dispatch.
+  A1.4, the enclosing A1 slice, A2, A3, Track A, E1, and E2 are terminally complete; B2.2 and E3
+  are separate future-admission candidates, neither admitted nor dispatched.
 - **Supersedes:** the 2026-08-19 macOS developer-parity decision only where it made
   `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` the global product-work predecessor. It does not weaken,
   close, or authorize the macOS parity lane.
@@ -130,10 +130,10 @@ diagnostic exit, and A1/A2/A3 are terminally complete, so Track A is terminally 
 terminally complete at exact closure commit
 `18f719898ce2a48f65e95b3b23f3b2cfd685c4af` and tree
 `60e94c7b5c985463d3311b8f556520dea8244287`, over implementation commit
-`6194788d45267d91b4428a42e24c02dfcaae3c1e`. The hard dependency spine therefore names E2 as the
-canonical successor; E2 awaits fresh admission and explicit dispatch. The full `RG-BASE-03`
-continuity witness remains open, blocking, unwaived, and not green under C2. This closure admits or
-dispatches neither E2 nor C2 and exercises no later-track authority.
+`6194788d45267d91b4428a42e24c02dfcaae3c1e`. E2 subsequently reached terminal closure over
+implementation commit `96e102d9f5690e0d63957f6e9db56d632b7cdd17`. The full `RG-BASE-03`
+continuity witness remains open, blocking, unwaived, and not green under C2. This earlier A3/Track A
+closure did not itself admit or dispatch E2 or C2 and exercised no later-track authority.
 
 ## macOS lane
 
@@ -183,8 +183,8 @@ proof rather than a historical label. That rebind later selected A1.3.
   the later frozen amendment selected A1.3-P0 as a narrower preparatory split, and the corrective
   replan held both older fences while selecting the now-terminally-complete A1.3-P1 atomic
   public-adoption packet. The later A1.4 implementation and enclosing A1 slice are terminally
-  complete under their separate closure identities. The still-later A2 and A3 implementations and
-  Track A are also terminally complete under their separate closure identities; E2 remains
-  undispatched.
+  complete under their separate closure identities. The still-later A2, A3, Track A, E1, and E2
+  implementations are also terminally complete under their separate closure identities; this
+  scheduling decision did not itself dispatch E2.
 - This decision does not dispatch Windows, protected macOS lifecycle revival, Keychain activity,
   Attempt 4 inspection or remediation, installer execution, Lima actions, or native operations.
