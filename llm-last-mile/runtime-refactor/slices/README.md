@@ -43,7 +43,7 @@ A0 -> A1.1e -> B0 -> B1-3a/B1-3b receipt core -> B2.1-1/2/3 ------------------+
                                                                                -> B3.1 -> C1 -> A1.2b
                                                                                -> A1.3-P1 -> A1.4 -> A1
 A1.1d integrated Linux/native-macOS closeout -> A1
-A1 -> A2/A3 -> E2 -> B2.2 -> remaining B3.2 -> B4 -> C2 -> C3
+A1 -> A2/A3 -> E2 -> E2-RM -> B2.2 -> remaining B3.2 -> B4 -> C2 -> C3
 B1/B2.1 joint production closeout + E1 -> E2
 D1 -> D2 -> D3
 E1 -> E2 -> E3 -> E4
@@ -64,8 +64,20 @@ is also terminally complete at exact closure commit
 `18f719898ce2a48f65e95b3b23f3b2cfd685c4af` over implementation commit
 `6194788d45267d91b4428a42e24c02dfcaae3c1e`. [E2](e2-policy-commitments-on-work-and-workers.md#terminal-closure)
 is terminally complete over implementation commit
-`96e102d9f5690e0d63957f6e9db56d632b7cdd17`. B2.2 and E3 are separate future-admission
-candidates; neither is admitted or dispatched by this navigation projection.
+`96e102d9f5690e0d63957f6e9db56d632b7cdd17`. The later B2.2 admission review exposed the
+separately bounded E2-owned
+[`E2-RM`](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite)
+read-only accepted-work receipt-material prerequisite. `E2-RM` must be freshly admitted,
+implemented, independently reviewed `CLEAN`, and landed before B2.2 receives a fresh re-admission.
+`E2-RM`, B2.2, and E3 are separate future-admission candidates; none is admitted or dispatched by
+this navigation projection.
+
+`E2-RM` changes only the dependency edge, not owner semantics. B1/B2.1 retain acceptance,
+observation, journal, replay, and terminal truth; E2 retains immutable policy commitments/caps;
+B2.2 retains foreground receipt construction/return; B3.2 retains remaining receipt, messaging,
+manifest, and lifecycle work; B4 retains receipt-targeted cancel/inspect/stop; and D1/E3 retain
+their future envelope/projection fields. `E2-RM` supplies only an authenticated immutable
+projection to B2.2 and cannot mutate or reinterpret any owner record.
 
 This graph is acyclic. `B1-3a/B1-3b receipt core` is a review state, not a claim that B1 is
 production-complete: it supplies the exact proposal, acknowledgement, activated-store acceptance

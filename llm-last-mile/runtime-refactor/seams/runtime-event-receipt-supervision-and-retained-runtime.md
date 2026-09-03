@@ -1,8 +1,8 @@
 **Kind:** seam family
 **Stable ID:** `runtime-event-receipt-supervision-and-retained-runtime-family`
-**Canonical for:** runtime event, receipt, supervision, and retained-worker runtime seam extraction plus the current E2 ownership correction
+**Canonical for:** runtime event, receipt, supervision, and retained-worker runtime seam extraction plus the current E2 and `E2-RM` ownership corrections
 **Status:** canonical current seam-family record
-**Authority scope:** exact extracted family-local source bodies plus the documentation-only E2 ownership correction; no implementation authority
+**Authority scope:** exact extracted family-local source bodies plus the documentation-only E2 and `E2-RM` ownership corrections; no implementation authority
 **Source span:** D8 runtime-event, receipt, supervision, and retained-runtime family extraction from `02-seam-crosswalk.md`
 **Supersedes:** canonical ownership of the extracted `RuntimeEventTransport`, `WorldWorkReceiptRegistry`, `WorldWorkExecutionSupervisor`, and `RetainedWorkerRuntime` rows
 **Superseded by:** none
@@ -51,6 +51,21 @@ capped. Fork uses an E2-owned strict request-to-cap link and gains no B3.2a admi
 ReceiptRegistry and Supervisor do not become policy owners. B2.2/B3.2 later consume the exact ref;
 the full manifest also waits for D1/E3 identities. No routing, supervisor, cancellation, receipt,
 manifest, or lifecycle behavior is authorized by this correction.
+
+The later B2.2 admission finding adds no ReceiptRegistry or Supervisor authority to E2. It identifies
+only the specified-but-unadmitted
+[`E2-RM` projection](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite):
+an E2-owned read-only lookup from exact request/subject identity plus expected B1 acceptance to the
+already-stored immutable E2 record, preserved historical B2.1 claim preimage/hash, E1 snapshot
+bytes/ref/hash/revision/reason, and retained cap bytes/ref/hash when applicable. The projection
+never reads current B2.1 observer/journal/terminal state, never reconstructs from current parent
+policy, and cannot mutate, reconcile, or reinterpret any source owner.
+
+`E2-RM` preserves the seam split: B1 owns acceptance, B2.1 owns observation/journal/replay/terminal
+truth, E2 owns commitment/cap material, and B2.2 later owns foreground receipt construction and
+return. B3.2, B4, C2/C3, D1, and E3 retain their existing scopes. Both `E2-RM` and B2.2 require
+later fresh admission and explicit dispatch; this seam correction admits neither and promotes no
+seam.
 
 ## RuntimeEventTransport
 

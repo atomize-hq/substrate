@@ -1,8 +1,8 @@
 **Kind:** slice row
 **Stable ID:** `b2-2-foreground-receipt-return`
-**Canonical for:** extracted B2.2 slice row only
-**Status:** canonical slice row record
-**Authority scope:** exact extracted source table header and row only; no schedule, dispatch, or implementation authority
+**Canonical for:** extracted B2.2 slice row and the current `E2-RM` admission correction
+**Status:** canonical slice row record; B2.2 blocked on specified-but-unadmitted `E2-RM`
+**Authority scope:** exact extracted source table header and row plus the documentation-only admission correction below; no schedule, dispatch, or implementation authority
 **Source span:** [`../03-phase-slice-map.md`](../03-phase-slice-map.md) line 177
 **Supersedes:** canonical ownership of the extracted `B2.2 — Foreground receipt return` row
 **Superseded by:** none
@@ -10,7 +10,41 @@
 
 # B2.2 — Foreground receipt return
 
-> **Authority boundary:** This file owns only the extracted B2.2 Track B row. It preserves the exact row text below, does not reopen the completed B1/B2.1 family, and does not dispatch B2.2.
+> **Authority boundary:** This file owns only the extracted B2.2 Track B row and its current
+> admission correction. It preserves the exact row text below, does not reopen the completed
+> B1/B2.1 or E2 implementation, and does not admit or dispatch `E2-RM` or B2.2.
+
+## Current admission disposition
+
+B2.2 is not admissible from the completed E2 closure alone. The existing authenticated E2 lookup
+requires an already-known `DispatchPolicyCommitmentRefV1` and does not expose the complete stored
+material needed to reproduce an original foreground receipt after response loss, restart, B2.1
+observer/claim revision advancement, or parent-policy drift.
+
+The new prerequisite is [`E2-RM — authenticated accepted-work receipt-material
+projection`](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite).
+It is an E2-owned, read-only, behavior-neutral lookup/projection and is not B2.2 behavior. This
+documentation correction specifies but does not admit, dispatch, implement, or complete it.
+
+B1 continues to own acceptance and runtime-acknowledgement truth; B2.1 continues to own observation,
+journal, replay, and terminal truth; E2 continues to own immutable policy commitments and retained
+caps. B2.2 alone later owns foreground receipt construction and return from the authenticated
+`E2-RM` result. B3.2 retains all remaining receipt, messaging, manifest, and lifecycle work; B4
+retains receipt-targeted cancel/inspect/stop; and D1/E3 retain their later execution-envelope and
+config-projection fields. C2/C3 and all other authority remain outside this correction.
+
+B2.2 requires a fresh admission and explicit dispatch only after `E2-RM` has its own fresh
+admission, bounded implementation, Linux acceptance evidence, independent final `CLEAN` review,
+commit, and exact commit/tree identity. The B2.2 re-admission must consume
+`AuthenticatedAcceptedWorkReceiptMaterialV1` without mutation or reinterpretation, prove that the
+same original material is used after response loss/restart/B2.1 advancement/parent drift, and
+re-establish B2.2's own file and behavior fence against the then-live baseline. Landing `E2-RM`
+does not itself admit B2.2.
+
+## Preserved pre-correction row (chronology only)
+
+The current disposition above supersedes only this row's admission and prerequisite interpretation;
+the extracted header and row remain byte-identical chronology.
 
 | Packet | Goal | Authority owner | Must-read sections | Sibling context | Exact allowed code areas | Explicit non-goals | Exit gate | Regression gates | Prerequisites | Gates deliberately deferred |
 |---|---|---|---|---|---|---|---|---|---|---|

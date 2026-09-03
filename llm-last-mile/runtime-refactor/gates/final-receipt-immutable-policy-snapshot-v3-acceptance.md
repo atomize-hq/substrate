@@ -1,6 +1,6 @@
 **Kind:** gate
 **Status:** canonical
-**Canonical for:** complete extracted B1 pre-E2 versus E2/B2.2 acceptance boundary, ordered conditions 1–11, immutable `PolicySnapshotV3` receipt exposure rule, post-acceptance immutable/future-only/revocation/fail-closed requirements, and the current E2 completion-wall correction
+**Canonical for:** complete extracted B1 pre-E2 versus E2/B2.2 acceptance boundary, ordered conditions 1–11, immutable `PolicySnapshotV3` receipt exposure rule, post-acceptance immutable/future-only/revocation/fail-closed requirements, the current E2 completion-wall correction, and the `E2-RM` B2.2 admission prerequisite
 **Source provenance:** extracted byte-for-byte from [`../04-contracts-and-gates.md#12-final-receipt-immutable-policysnapshotv3-acceptance-rules`](../04-contracts-and-gates.md#12-final-receipt-immutable-policysnapshotv3-acceptance-rules), baseline lines 152–180; the exact 1675-byte source body is preserved between the boundary markers below
 **Baseline span SHA-256:** `672c9ba3db1e792a7afb145a4081450deafe6a1123262ae7c104c6f1b4b0b24a`
 
@@ -28,6 +28,29 @@ The snapshot bytes in conditions 6–7 are exactly E1's
 `serde_json::to_vec(PolicySnapshotV3)` bytes, and the hash is the existing E1/B1 SHA-256 over that
 same sequence. E2 record/index/link hashes may use their own domain-separated deterministic
 preimages, but no recursively key-sorted replacement is a policy snapshot hash.
+
+## Current `E2-RM` / B2.2 admission correction
+
+E2's completion satisfies persistence and immutable linkage, but does not by itself give B2.2 a
+recoverable post-response-loss read path. The existing authenticated E2 operation requires an
+already-known commitment ref. Therefore condition 11 also requires the separately bounded
+[`E2-RM` authenticated accepted-work receipt-material
+projection](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite)
+before B2.2 can be freshly admitted.
+
+`E2-RM` must resolve the exact committed request/subject index from authenticated authority plus
+expected B1 acceptance, validate the immutable E2 record/ref/linkage hash, return the preserved
+historic B2.1 claim preimage/hash and exact E1 snapshot bytes/ref/hash/revision/reason, and validate
+the retained cap bytes/ref/hash where applicable. It never reads current B2.1 observer state or
+current parent policy to reconstruct history. Missing legacy history returns typed
+`UnsupportedLegacyState`; ambiguity, corruption, substitution, conflict, or hash failure fails
+closed.
+
+This is a read-only E2 prerequisite, not receipt construction or exposure. B1/B2.1 ownership is
+unchanged, B2.2 still owns foreground receipt construction/return, B3.2 still owns remaining
+receipt/manifest/messaging/lifecycle work, B4 still owns targeted control, and D1/E3 retain their
+future envelope/projection fields. `E2-RM` and B2.2 each require later fresh admission and explicit
+dispatch; this documentation correction admits neither and changes no completed E2 gate result.
 
 <!-- exact-extracted-body:start -->
 ## 12. Final-receipt immutable `PolicySnapshotV3` acceptance rules

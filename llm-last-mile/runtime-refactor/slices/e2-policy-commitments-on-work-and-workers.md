@@ -1,8 +1,8 @@
 **Kind:** slice row
 **Stable ID:** `e2-policy-commitments-on-work-and-workers`
-**Canonical for:** extracted E2 slice row, the controlling E2 authority correction, and the terminal implementation closure below
-**Status:** terminally complete
-**Authority scope:** exact extracted source table header and row, the controlling correction, and the terminal closure below; no B2.2, E3, receipt, full-manifest, cancel, observation, lifecycle, or non-Linux implementation authority
+**Canonical for:** extracted E2 slice row, the controlling E2 authority correction, the terminal implementation closure, and the post-closure `E2-RM` prerequisite disposition below
+**Status:** E2 terminally complete; `E2-RM` specified but not admitted, dispatched, or implemented
+**Authority scope:** exact extracted source table header and row, the controlling correction, the terminal closure, and the documentation-only `E2-RM` prerequisite disposition below; no B2.2, E3, receipt, full-manifest, cancel, observation, lifecycle, or non-Linux implementation authority
 **Source span:** [`../03-phase-slice-map.md`](../03-phase-slice-map.md) line 221
 **Supersedes:** canonical ownership of the extracted `E2 — Policy commitments on work and workers` row and only the stale E2 clauses identified in the correction below
 **Superseded by:** none
@@ -337,6 +337,23 @@ remains with B4/D2/E3/D3, and D1/E3 identities remain later-owned. `RG-BASE-03` 
 non-Linux proof remains unclaimed. B2.2 and E3 are only separate successor candidates requiring
 their own future admission and dispatch; neither is admitted or dispatched by this closure. E2 is
 terminally complete.
+
+## Post-closure `E2-RM` prerequisite disposition (2026-09-02; controlling)
+
+The E2 implementation and closure above remain terminally complete and unchanged. A later B2.2
+admission review identified one smaller missing E2-owned read boundary: after a foreground response
+is lost or the shell restarts, B2.2 cannot discover the exact historic accepted-work commitment or
+recover its complete B1/B2.1/snapshot/cap material because the existing authenticated E2 lookup
+requires the caller to already know `DispatchPolicyCommitmentRefV1`.
+
+The separately bounded prerequisite is
+[`E2-RM — authenticated accepted-work receipt-material projection`](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite).
+It may be admitted later only as a read-only, behavior-neutral resolver over the existing immutable
+E2 request/subject index and records. It grants no persistence, mutation, recomputation,
+reconciliation, receipt construction/return, B1/B2.1 change, or caller integration. `E2-RM` and
+B2.2 each require a later fresh admission and explicit dispatch; this documentation correction
+admits neither. E3 remains a separate future candidate, and all preserved terminal E2 evidence,
+gate dispositions, and non-Linux limits remain unchanged.
 
 ## Preserved pre-correction row (chronology only)
 

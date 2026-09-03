@@ -1,6 +1,6 @@
 **Kind:** evidence/regression
 **Status:** canonical
-**Canonical for:** complete extracted `Canonical issue ledger` table, `A1.2a-WB gate assignment`, and the terminal E2 gate overlay
+**Canonical for:** complete extracted `Canonical issue ledger` table, `A1.2a-WB gate assignment`, the terminal E2 gate overlay, and the current `E2-RM`/B2.2 admission disposition
 **Source provenance:** extracted byte-for-byte from [`../05-debug-regression-ledger.md#canonical-issue-ledger`](../05-debug-regression-ledger.md#canonical-issue-ledger), baseline lines 16–97 inclusive; the exact 41492-byte source body is preserved between the boundary markers below
 **Baseline span SHA-256:** `191a62ea0c77064941947280d87c539163ab69b772a8018f6b2f4e3d3e5aae3e`
 
@@ -57,18 +57,30 @@ registration, and publishes the commitment before success. Retained Continue/For
 from immutable cap and never requires launch policy to equal current parent. Snapshot bytes/hash are
 exactly E1/B1 `serde_json::to_vec(PolicySnapshotV3)` identity, not a second key-sorted preimage.
 
+The later B2.2 admission review found that existing E2 authentication starts from an already-known
+commitment ref and cannot recover the complete immutable accepted-work material from exact
+request/subject identity plus expected B1 acceptance after response loss, restart, B2.1 observer
+advancement, or parent-policy drift. The separately bounded
+[`E2-RM`](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite)
+prerequisite owns only that read-only authenticated lookup/projection. It is specified but not
+admitted, dispatched, implemented, or complete. The terminal E2 implementation and its closed gate
+clauses remain unchanged.
+
 | Gate ID | Controlling E2 correction | Ownership disposition |
 |---|---|---|
 | `RG-POLICY-01` | E2 consumes the exact E1 patch identity and exact E1/B1 snapshot bytes/ref/hash; it does not alter E1 serialization, schema 3, or stored B1 hashes. | E2's immutable linkage is complete; E1 stays terminally closed. Receipt/manifest exposure remains later-owned, so the ledger-wide row is not globally closed. |
 | `RG-POLICY-03` | Continue = current parent now ∧ immutable worker cap ∧ turn patch; Fork = current parent now ∧ immutable source-worker cap ∧ fork patch. Fresh Spawn stores and indexes the immutable exact full-request commitment/patch/snapshot/proposed-cap/subject/bindings reservation before B3.2a, privately verifies the request commitment, injects only an opaque authenticated reservation capability/ref plus preallocated identities, permits the exact `allow_capability_narrowing` validation exception only with a distinct attestation for authenticated nonempty `RestrictedWorldFs` narrowing, leaves plan/fingerprint/schema unchanged, and commits the retained reservation ref, exact request commitment, plus stable source admission/registration link after admission. Every crash/retry boundary exact-joins; changed request/material conflicts before B3.2a; unverifiable legacy caps return typed `UnsupportedLegacyState`. | Wholly E2-owned and complete for the admitted Linux scope. No routing, lifecycle, supervisor, receipt, full-manifest, or non-Linux authority moves. |
+| `RG-RECEIPT-02` | `E2-RM` must authenticate the durable request/subject index, immutable E2 record/ref/linkage, expected B1 acceptance/runtime evidence, preserved B2.1 claim preimage/hash/key, exact E1 snapshot bytes/ref/hash/revision/reason, and retained cap bytes/ref/hash when applicable without current-state reconstruction. | The E2 immutable component remains complete, but `E2-RM` is an unadmitted prerequisite and this receipt-material lookup clause is open. B2.2 remains unadmitted and retains foreground receipt construction/return; B3.2 retains remaining receipt/manifest work. |
 | `RG-OBS-01` | E2 links exact source-owned `WorldWorkExecutionClaimV1` identity/hash/preimage and durable claim key. No invented `resumable` field, cursor ownership, observation mutation, or acceptance creation. | The E2 policy-link clause is complete; B2.1 remains observation owner and other ledger-wide owners remain open. |
 
-`RG-RECEIPT-02` remains B2.2/B3.2-owned except for E2's immutable component; only E2 policy clauses
-flow into `RG-CANCEL-01` and `RG-OBS-01`; those E2 clauses are complete while later cancel and
-observation owners remain open. E2 does not construct receipts or a full retained manifest.
+`RG-RECEIPT-02` remains B2.2/B3.2-owned except for E2's immutable component and the unadmitted
+E2-owned `E2-RM` read projection; only E2 policy clauses flow into `RG-CANCEL-01` and `RG-OBS-01`;
+those E2 clauses are complete while later receipt, cancel, and observation owners remain open. E2
+does not construct receipts or a full retained manifest.
 `RG-BASE-03` remains under C2, D1/E3 are not prerequisites, and `RG-DIFF-01` remains mandatory.
-B2.2 and E3 are separate successor candidates requiring future admission and dispatch; this
-closure admits or dispatches neither.
+`E2-RM`, B2.2, and E3 are separate candidates requiring future admission and explicit dispatch;
+`E2-RM` must land review-clean before B2.2 receives a fresh re-admission. This correction admits or
+dispatches none of them.
 
 <!-- exact-extracted-body:start -->
 ## Canonical issue ledger

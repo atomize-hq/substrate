@@ -1,11 +1,11 @@
 **Kind:** contract
 **Stable ID:** `dispatch-policy-commitment-v1`
 **Status:** canonical; implemented and terminally complete under the E2 closure
-**Canonical for:** additive `DispatchPolicyCommitmentV1` persisted record, exact subject/linkage rules, immutable policy/cap semantics, downstream receipt/manifest consumption, and mixed-version fail-closed behavior
-**Authority scope:** canonical E2 contract plus terminal status projection; this document grants no new admission, dispatch, implementation, receipt construction, retained-manifest construction, migration, or synthetic-cap authority
+**Canonical for:** additive `DispatchPolicyCommitmentV1` persisted record, exact subject/linkage rules, immutable policy/cap semantics, the specified-but-unadmitted `E2-RM` accepted-work receipt-material projection prerequisite, downstream receipt/manifest consumption, and mixed-version fail-closed behavior
+**Authority scope:** canonical E2 contract plus terminal status projection and the documentation-only `E2-RM` prerequisite specification; this document grants no new admission, dispatch, implementation, receipt construction, retained-manifest construction, migration, or synthetic-cap authority
 **Supersedes:** only E2 statements that require E2 to construct a final receipt or complete `RetainedWorkerManifestV1`; omit the real dispatch/tool-translation carrier needed to consume E1 narrowing; require a retained worker's launch policy to equal the current parent; place fresh-Spawn E2 persistence after B3.2a admission; define a second snapshot canonicalization; or require a synthetic `SupervisorObservationClaimV1`/`resumable` field
 **Superseded by:** none
-**Projection consumers:** [`../slices/e2-policy-commitments-on-work-and-workers.md`](../slices/e2-policy-commitments-on-work-and-workers.md), [`active-ephemeral-task-receipt-v1.md`](active-ephemeral-task-receipt-v1.md), [`active-retained-turn-receipt-v1.md`](active-retained-turn-receipt-v1.md), [`retained-worker-manifest-v1.md`](retained-worker-manifest-v1.md), [`../gates/final-receipt-immutable-policy-snapshot-v3-acceptance.md`](../gates/final-receipt-immutable-policy-snapshot-v3-acceptance.md)
+**Projection consumers:** [`../slices/e2-policy-commitments-on-work-and-workers.md`](../slices/e2-policy-commitments-on-work-and-workers.md), [`../slices/b2-2-foreground-receipt-return.md`](../slices/b2-2-foreground-receipt-return.md), [`active-ephemeral-task-receipt-v1.md`](active-ephemeral-task-receipt-v1.md), [`active-retained-turn-receipt-v1.md`](active-retained-turn-receipt-v1.md), [`retained-worker-manifest-v1.md`](retained-worker-manifest-v1.md), [`../gates/final-receipt-immutable-policy-snapshot-v3-acceptance.md`](../gates/final-receipt-immutable-policy-snapshot-v3-acceptance.md)
 
 # `DispatchPolicyCommitmentV1`
 
@@ -537,6 +537,263 @@ their worker-cap fields. The E2 record is independently complete without D1 or E
 not a partial `RetainedWorkerManifestV1`. A full retained manifest is complete only after its
 existing owners also supply the D1 execution-envelope and E3 config-projection identities; a
 record omitting either must not validate or be reported as a complete manifest.
+
+## `E2-RM` — authenticated accepted-work receipt-material projection prerequisite
+
+**Stable ID:** `E2-RM`
+
+**Status:** specified prerequisite; not admitted, not dispatched, and not implemented
+
+The B2.2 admission review found that the completed E2 store preserves the immutable material needed
+to reproduce the original foreground receipt, but its existing authenticated lookup accepts only an
+already-known `DispatchPolicyCommitmentRefV1`. After response loss or restart, a B2.2 caller that
+holds exact B1 acceptance and request/subject identity cannot recover that ref or the complete
+historic receipt material. Looking at the current B2.1 claim or current parent policy would be an
+invalid reconstruction because either may have advanced since E2 committed the accepted work.
+
+`E2-RM` is the smallest separately bounded prerequisite that may close that gap. It remains owned
+by the E2 commitment boundary and is not B2.2 behavior. A later fresh admission may authorize only
+the following crate-internal, read-only responsibility in
+`crates/shell/src/execution/agent_runtime/dispatch_policy_commitment.rs`:
+
+```rust
+pub(crate) fn resolve_accepted_work_receipt_material(
+    authority: &HostSessionAuthority,
+    exact_request_subject_key: &DispatchPolicyCommitmentLookupKeyV1,
+    expected_b1_acceptance: &WorldWorkAcceptanceRecordV1,
+) -> Result<AcceptedWorkReceiptMaterialResolutionV1, DispatchPolicyCommitmentError>;
+
+pub(crate) enum AcceptedWorkReceiptMaterialResolutionV1 {
+    Resolved(AuthenticatedAcceptedWorkReceiptMaterialV1),
+    UnsupportedLegacyState {
+        exact_request_subject_key: DispatchPolicyCommitmentLookupKeyV1,
+        reason: AcceptedWorkReceiptMaterialLegacyReasonV1,
+    },
+}
+
+pub(crate) enum AcceptedWorkReceiptMaterialLegacyReasonV1 {
+    MissingExactHistoricE2Commitment,
+    UnsupportedHistoricE2CommitmentSchema,
+}
+
+pub(crate) struct AuthenticatedAcceptedWorkReceiptMaterialV1 {
+    commitment_ref: DispatchPolicyCommitmentRefV1,
+    exact_request_subject_key: DispatchPolicyCommitmentLookupKeyV1,
+    subject: DispatchPolicyCommitmentSubjectV1,
+    idempotency_key: String,
+
+    authority_store_id: String,
+    authority_revision_observed: u64,
+    orchestration_session_id: String,
+    caller_participant_id: String,
+    caller_backend_id: String,
+    target_backend_id: String,
+    world_id: String,
+    world_generation: u64,
+
+    acceptance_record_id: String,
+    acceptance_record_revision: u64,
+    b1_authority_link: PolicyCommitmentAuthorityLinkV1,
+    accepted_work_identity: AcceptedWorldWorkIdentityV1,
+    runtime_acceptance: RuntimeAcceptanceEvidenceV1,
+    host_transition_correlation: Option<HostTransitionWorkCorrelationV1>,
+    accepted_at: DateTime<Utc>,
+
+    execution_claim: AuthenticatedAcceptedWorkExecutionClaimV1,
+
+    policy_snapshot_bytes: Vec<u8>,
+    policy_snapshot_ref: AuthorityObjectRefV1,
+    policy_snapshot_hash: String,
+    policy_snapshot_revision: String,
+    policy_reason: Option<String>,
+
+    retained_worker_cap: Option<AuthenticatedAcceptedWorkRetainedCapV1>,
+}
+
+pub(crate) struct AuthenticatedAcceptedWorkExecutionClaimV1 {
+    durable_key: WorldWorkExecutionClaimDurableKeyV1,
+    acceptance_record_id: String,
+    acceptance_record_revision: u64,
+    claim_revision: u64,
+    observer_instance_id: String,
+    observer_epoch: u64,
+    canonical_preimage: Vec<u8>,
+    linkage_hash: String,
+}
+
+pub(crate) struct AuthenticatedAcceptedWorkRetainedCapV1 {
+    retained_participant_id: String,
+    cap_ref: DispatchPolicyCommitmentRefV1,
+    cap_exact_linkage_hash: String,
+    authority_store_id: String,
+    orchestration_session_id: String,
+    caller_participant_id: String,
+    caller_backend_id: String,
+    target_backend_id: String,
+    world_id: String,
+    world_generation: u64,
+    cap_policy_snapshot_bytes: Vec<u8>,
+    cap_policy_snapshot_ref: AuthorityObjectRefV1,
+    cap_policy_snapshot_hash: String,
+    cap_policy_snapshot_revision: String,
+}
+```
+
+These are responsibility-level shapes, not authorization to add serialized records. The resolver
+and result types are visible only inside the `shell` crate via `pub(crate)`; all fields remain
+private and B2.2 can later read them only through `pub(crate)` immutable accessors. The result is an
+opaque, internally constructed in-memory projection. It is never persisted, never accepted from
+transport, and has no externally public or mutable constructor. Names may change during a later
+fresh admission only if the same ownership, inputs, outputs, visibility, and validation remain
+exact.
+
+### Exact authentication and validation order
+
+One resolver transaction must perform all of the following before returning `Resolved`:
+
+1. authenticate `authority`, open its E2 store, and require the supplied key's
+   `authority_store_id` to equal the opened store;
+2. validate `expected_b1_acceptance` under the existing B1 schema, then require its store,
+   request, session, accepted-work subject, caller, caller backend, target backend, world, and
+   generation to equal the supplied exact request/subject key and the indexed E2 record;
+3. recompute the durable request/subject index digest, require exactly one byte-identical stored
+   key, require its `Committed` variant with no Fresh-Spawn reservation fields, and require its
+   exact `DispatchPolicyCommitmentRefV1` to name the indexed immutable record;
+4. validate the complete E2 registry graph, record schema/status, record/reference identity, and
+   domain-separated `exact_linkage_hash`; an unindexed, duplicated, torn, ambiguous, or conflicting
+   record is invalid rather than legacy-compatible;
+5. require an `EphemeralWork` or `RetainedWorkerTurn` subject and an exact stored B1 authority link;
+   compare acceptance record ID/revision and the complete stored `RuntimeAcceptanceEvidenceV1` to
+   `expected_b1_acceptance`, and compare every overlapping authority, request, subject, session,
+   caller, backend, world, generation, work-identity, correlation, and snapshot field;
+6. resolve the E2-preserved `WorldWorkExecutionClaimV1` preimage, require byte-identical canonical
+   re-encoding, recompute its domain-separated linkage hash, verify its immutable identity and
+   durable `executions_by_acceptance_record_id` key, exact-join every overlapping B1 field, and
+   return the exact preserved acceptance ID/revision, claim revision, observer instance/epoch,
+   canonical preimage, durable key, and linkage hash; never consult or compare the current B2.1
+   claim revision, cursor, observer, journal, or terminal state;
+7. resolve the historic E1 `PolicySnapshotV3` bytes, require byte-identical E1 reserialization,
+   reproduce the unwrapped E1/B1 SHA-256, and require exact ref/hash/revision equality with both the
+   E2 record and expected B1 acceptance. The stored reason is authenticated by the complete E2
+   linkage hash and must equal the reason in the stored authenticated patch; `UnchangedParent`
+   requires no reason. Current-parent lookup or policy recomputation is forbidden; and
+8. for `RetainedWorkerTurn`, require the exact `Existing { cap_ref }`, resolve that ref through the
+   same store and participant/session indexes, authenticate the complete launch/fork cap record and
+   its `exact_linkage_hash`, require the cap record's authority store, retained participant,
+   orchestration session, target backend, world ID, and world generation to equal the accepted-turn
+   record/result, require its caller participant/backend to exact-join the same authority lineage,
+   validate its canonical cap snapshot bytes/ref/hash/revision, and expose those bindings plus the
+   exact ref and hash. `EphemeralWork` requires all cap fields absent.
+
+`MissingExactHistoricE2Commitment` is permitted only after one read transaction proves both that
+the exact request/subject index is absent and that an exhaustive E2 registry scan contains no V1
+index occupancy, digest collision, matching record, or orphaned record for the supplied key,
+expected B1 acceptance ID/revision, or accepted-work identity. A conclusively recognized older
+schema that cannot contain the exact record may return `UnsupportedHistoricE2CommitmentSchema`
+only under the same no-V1-footprint proof. Any partial V1 footprint—including an index without its
+record, a record without its exact index, conflicting index bytes at the digest, or a matching or
+orphaned V1 record—is corruption, not legacy absence. Missing material inside a claimed V1 record,
+malformed or unknown bytes, an index/record tear, ambiguous occupancy, or any corrupt, cross-store,
+cross-request, cross-subject, cross-session, cross-caller, cross-backend, cross-world,
+cross-generation, conflicting, or hash-invalid material is a fail-closed error and must never be
+downgraded to `UnsupportedLegacyState`.
+
+The projection is behavior-neutral and equality-only. It performs no persistence, mutation,
+reconciliation, cleanup, backfill, migration, current-parent inference, policy recomputation,
+receipt construction, B1/B2.1 mutation, or caller return. Identical retries after crash, response
+loss, shell restart, B2.1 observer/claim advancement, or parent-policy drift return the same
+historic projection. B2.2 may later consume that result unchanged, but cannot construct, mutate,
+repair, reinterpret, or supplement it.
+
+### Later implementation fence
+
+A later explicit `E2-RM` dispatch may edit only
+`crates/shell/src/execution/agent_runtime/dispatch_policy_commitment.rs`: the crate-internal
+result/error types, the resolver, strictly necessary private helpers and immutable accessors, and
+colocated focused tests. No module/export wiring change is expected or authorized because
+`agent_runtime::dispatch_policy_commitment` is already declared `pub(crate)`; a later discovered
+wiring need requires a new authority correction before editing another path. No caller integration
+is in this fence. In particular, no StateStore, supervisor, B1/B2.1,
+orchestrator, REPL, transport, receipt, manifest, policy, retained-runtime, world-service, product
+surface, or non-colocated test file may change. The prerequisite may not alter an existing record,
+registry, index, canonical byte sequence, hash domain, persistence transaction, recovery path, or
+runtime branch.
+
+Focused tests must prove ephemeral and retained-turn success; exact retry after reopen; byte-equal
+results after response loss, current B2.1 observer/claim advancement, and current-parent narrowing
+or broadening; and retained-cap authentication. The negative matrix must cover missing index,
+wrong index variant, duplicated/ambiguous occupancy, missing record, altered ref/linkage hash,
+changed expected B1 acceptance/runtime evidence, claim-key/preimage/hash substitution, snapshot
+bytes/ref/hash/revision/reason mismatch, missing or substituted retained cap, cap-to-turn store,
+participant, session, caller, caller-backend, target-backend, world, and generation substitution,
+and every accepted-work store, request, subject, session, caller, backend, world, and generation
+substitution. Separate
+tests must prove that complete absence of both the exact index and every related V1 footprint, and
+a recognized unsupported historic schema with no V1 footprint, return `UnsupportedLegacyState`;
+an index-only footprint, record-only footprint, digest collision, orphan V1 record, or other corrupt
+or partially present V1 material must fail closed.
+
+The Linux acceptance wall for that later implementation uses the exact admission baseline recorded
+as `e2_rm_base` and requires these commands and outputs, in order:
+
+```bash
+test -n "${E2_RM_ADMISSION_BASELINE:?set the recorded 40-hex admission baseline}"
+e2_rm_base=$(git rev-parse --verify "$E2_RM_ADMISSION_BASELINE^{commit}")
+test "$e2_rm_base" = "$E2_RM_ADMISSION_BASELINE"
+test "$(git rev-parse HEAD)" = "$e2_rm_base"
+set -o pipefail
+uname -a
+rustc -vV
+cargo fmt --all -- --check
+cargo test -p shell --lib dispatch_policy_commitment::tests -- --nocapture
+cargo clippy -p shell --all-targets -- -D warnings
+cargo test -p shell --lib -- --nocapture
+cargo build -p substrate --bin substrate --bin substrate-shim
+cargo build --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace -- --nocapture
+target/debug/substrate world doctor --json | tee /tmp/e2-rm-world-doctor.json
+target/debug/substrate shim doctor --json | tee /tmp/e2-rm-shim-doctor.json
+target/debug/substrate health --json | tee /tmp/e2-rm-health.json
+jq -e . /tmp/e2-rm-world-doctor.json
+jq -e . /tmp/e2-rm-shim-doctor.json
+jq -e . /tmp/e2-rm-health.json
+git diff --check "$e2_rm_base" --
+git diff --name-only "$e2_rm_base" --
+git diff --name-only --diff-filter=A "$e2_rm_base" --
+git diff --name-only "$e2_rm_base" -- '*.md'
+rg -n 'resolve_accepted_work_receipt_material\(' crates/shell/src --glob '*.rs'
+git status --short
+```
+
+The changed-path output must contain exactly
+`crates/shell/src/execution/agent_runtime/dispatch_policy_commitment.rs`; the added-path and changed-
+Markdown outputs must both be empty, making new-file whitespace/EOF and changed-document
+link/fragment validation exact zero-input checks. The `rg` output must contain only the definition
+and colocated `#[cfg(test)]` call sites in that file—zero production callers—and `git status
+--short` must name only that tracked file before commit. The recorded focused-test output must name
+every positive, crash/retry, legacy, corruption, and substitution case above. Formatting, both
+builds, both clippy commands, the focused tests, the full shell library, and the full workspace test
+must all exit zero; this prerequisite grants no inherited-failure or baseline-differential waiver.
+Each source-built doctor must exit zero, emit parseable JSON, and have its complete captured output
+attached to the completion evidence. Any doctor failure or non-pass/needs-attention diagnostic is
+completion-blocking unless a later fresh authority record explicitly accepts an exact-baseline,
+same-host/toolchain differential; `E2-RM` itself pre-authorizes no such exception. No live smoke can
+substitute for the unit-level historical-material matrix, and no live behavior change is expected
+because the unit remains unintegrated.
+
+The review sequence is one fresh independent gpt-5.4 Extra High full-candidate review, remediation
+of every finding inside the unchanged fence, and a different fresh final review of the remediated
+complete candidate. Completion evidence must record the exact baseline/commit/tree/parent,
+changed paths, patch and file SHA-256 values, command outputs, Linux identity, named test matrix,
+proof of zero production call sites, review prompts/answers or durable review records, and a final
+`CLEAN` verdict. Landing `E2-RM` does not admit B2.2.
+
+B2.2 requires a fresh admission and explicit dispatch after `E2-RM` is separately admitted,
+implemented, review-clean, committed, and identified by exact commit/tree in the B2.2 admission
+record. That fresh review must re-evaluate B2.2 against the then-live E2-RM contract, consume only
+`AuthenticatedAcceptedWorkReceiptMaterialV1`, keep receipt construction/return inside B2.2, and
+retain B3.2, B4, C2, C3, D1, E3, and all unrelated authority outside its fence.
 
 ## Mixed-version fail-closed contract
 
