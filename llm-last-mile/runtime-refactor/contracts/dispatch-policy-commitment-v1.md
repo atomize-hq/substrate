@@ -605,10 +605,12 @@ pub(crate) enum E2SchemaObjectV1 {
 }
 
 pub(crate) enum AcceptedWorkBindingFieldV1 {
+    SchemaVersion,
     AuthorityStoreId,
     AcceptanceRecordId,
     AcceptanceRecordRevision,
     RequestId,
+    AuthorityRevisionObserved,
     OrchestrationSessionId,
     CallerParticipantId,
     CallerBackendId,
@@ -618,6 +620,7 @@ pub(crate) enum AcceptedWorkBindingFieldV1 {
     WorkIdentity,
     HostTransitionCorrelation,
     RuntimeAcceptance,
+    AcceptedAt,
     PolicySnapshotRef,
     PolicySnapshotHash,
     PolicySnapshotRevision,
@@ -718,8 +721,8 @@ pub(crate) struct WorldWorkReceiptRegistryPhysicalSnapshotV1 {
 pub(crate) struct AcceptedWorkAuthorityPhysicalSnapshotV1 {
     authority_root_identity: CanonicalDirectoryV1,
     authority_store_id: String,
+    hsa_state_root_bytes: Vec<u8>,
     hsa_root_revision_at_read: u64,
-    hsa_authority_revision_at_read: u64,
     e2: DispatchPolicyCommitmentPhysicalReadV1,
     b1: WorldWorkReceiptRegistryPhysicalReadV1,
 }
@@ -736,15 +739,9 @@ pub(crate) struct WorldWorkAcceptanceLookupKeyV1 {
     acceptance_record_id: String,
 }
 
-pub(crate) enum AuthenticatedWorldWorkAcceptanceResolutionV1 {
-    Missing,
-    Authenticated(AuthenticatedWorldWorkAcceptanceV1),
-}
-
 pub(crate) struct AuthenticatedWorldWorkAcceptanceV1 {
     authority_root_identity: CanonicalDirectoryV1,
     hsa_root_revision_at_read: u64,
-    hsa_authority_revision_at_read: u64,
     record: WorldWorkAcceptanceRecordV1,
 }
 
@@ -763,7 +760,7 @@ pub(crate) fn authenticate_persisted_world_work_acceptance(
     snapshot: &AcceptedWorkAuthorityPhysicalSnapshotV1,
     key: &WorldWorkAcceptanceLookupKeyV1,
 ) -> Result<
-    AuthenticatedWorldWorkAcceptanceResolutionV1,
+    AuthenticatedWorldWorkAcceptanceV1,
     WorldWorkAcceptanceAuthenticationErrorV1,
 >;
 
@@ -856,15 +853,16 @@ reconcile recognized root temporaries. Under descriptor-relative `O_NOFOLLOW` ac
    `0600`;
 3. acquire the existing root lock exclusively, validate every recognized root temporary, and fail
    closed without removing it; unsafe or unknown authority entries also fail closed;
-4. stable-read the exact HSA root bytes, canonically decode and validate `VersionedStateRoot`, bind
-   its bootstrap-home/store identity to the opened root, and capture the root revision and the
-   relevant HSA authority revision without invoking current-policy resolution;
+4. stable-read the exact HSA state-root bytes, canonically decode and validate
+   `VersionedStateRoot`, bind its bootstrap-home/store identity to the opened root, and capture its
+   store-wide root revision. The operation has no session or request selector and must not select
+   or consult any per-session current authority revision or invoke current-policy resolution;
 5. capture both E2 and B1 physical states under that same uninterrupted root-lock scope;
 6. re-enumerate every relevant namespace, require exact equality of name/type/device/inode
    manifests, revalidate every opened directory/file/root/lock identity, and stable-read the HSA
    root again; and
-7. require byte-identical root bytes plus unchanged HSA root and authority revisions, then
-   revalidate the canonical root path and root-lock chain before returning.
+7. require byte-identical HSA state-root bytes plus an unchanged store-wide HSA root revision,
+   then revalidate the canonical root path and root-lock chain before returning.
 
 The transaction may validate recognized temporary material but must never reconcile or remove it.
 It must not create a directory or file; initialize or rotate a key; write, rename, unlink, repair,
@@ -905,10 +903,12 @@ temporaries, publishes bytes, repairs state, or calls `fsync`.
 
 `read_existing_accepted_work_authority_snapshot` provides the minimum `store.rs` wiring. Its one
 immutable `AcceptedWorkAuthorityPhysicalSnapshotV1` binds the exact authority-root physical
-identity, authority store ID, HSA root and authority revisions observed during capture, and the E2
-and B1 snapshots or their clean absence. Both stores are captured while the same existing root
-lock is held. Once returned, no filesystem lookup may supplement, replace, or reinterpret the
-snapshot.
+identity, authority store ID, exact HSA state-root bytes, store-wide HSA root revision observed
+during capture, and the E2 and B1 snapshots or their clean absence. The HSA root revision is only
+transaction-stability evidence and is not receipt material. Both stores are captured while the
+same existing root lock is held. No per-session current authority revision is selected or
+consulted, and once the snapshot is returned no filesystem lookup may supplement, replace, or
+reinterpret it.
 
 ### Authenticated B1 provenance
 
@@ -920,19 +920,64 @@ store-wide acceptance-ID uniqueness, and then select exactly one record. Missing
 duplicate, corrupt, cross-store, malformed, or unsupported B1 material returns its typed
 authentication error.
 
-`AuthenticatedWorldWorkAcceptanceV1` binds the root physical identity and HSA revisions observed
-during capture plus the complete durable `WorldWorkAcceptanceRecordV1`: authority/store identity;
-record ID and revision; request and orchestration session; caller participant and caller backend;
-target backend; world ID and generation; exact accepted-work identity; host-transition
-correlation; policy snapshot ref/hash/revision; the complete `RuntimeAcceptanceEvidenceV1`; and
-`accepted_at`. B1 has no persisted per-record hash, and `E2-RM` must not invent one. Its
-authentication boundary is the trusted root, common root lock, exact canonical registry bytes,
-full-registry validation, store-wide ID uniqueness, and durable `record_revision`.
+The authentication function has exactly one successful return shape: the opaque
+`AuthenticatedWorldWorkAcceptanceV1` witness. Absence and ambiguity never produce a successful
+resolution:
+
+- an absent B1 registry returns `RegistryAbsent`;
+- a valid registry with no matching record returns `AcceptanceRecordMissing`;
+- more than one matching record or any violated acceptance-record-ID uniqueness returns
+  `AcceptanceRecordAmbiguous`;
+- partial, corrupt, malformed, unsupported, or physically unsafe material returns the applicable
+  physical-read or B1 authentication error; and
+- a store mismatch returns `AuthorityStoreMismatch`.
+
+`AuthenticatedWorldWorkAcceptanceV1` binds the root physical identity and store-wide HSA root
+revision observed during capture plus the complete durable `WorldWorkAcceptanceRecordV1`:
+authority/store identity; record ID and revision; request and orchestration session; caller
+participant and caller backend; target backend; world ID and generation; exact accepted-work
+identity; host-transition correlation; policy snapshot ref/hash/revision; the complete
+`RuntimeAcceptanceEvidenceV1`; and `accepted_at`. The HSA root revision remains private
+transaction-stability provenance, not receipt material. No per-session current authority revision
+is selected, returned, or consulted. The record's `authority_revision_observed` is immutable
+historical B1 evidence and is never compared to current HSA authority. B1 has no persisted
+per-record hash, and `E2-RM` must not invent one. Its authentication boundary is the trusted root,
+common root lock, exact canonical registry bytes, full-registry validation, store-wide ID
+uniqueness, and durable `record_revision`.
 
 Caller-provided `expected_b1_acceptance` supplies only the lookup selector and byte-for-byte
 equality expectations. No returned field may originate from it. In particular, `accepted_at` and
 `runtime_acceptance.observed_at` are independent persisted values: both must be preserved exactly,
 no equality rule may be introduced, and `accepted_at` must not be added to E2 persistence.
+
+Complete expected-record comparison uses a distinct typed classification for every independently
+persisted top-level `WorldWorkAcceptanceRecordV1` field:
+
+| Durable B1 record field | `AcceptedWorkBindingFieldV1` classification |
+|---|---|
+| `schema_version` | `SchemaVersion` |
+| `acceptance_record_id` | `AcceptanceRecordId` |
+| `request_id` | `RequestId` |
+| `authority_store_id` | `AuthorityStoreId` |
+| `authority_revision_observed` | `AuthorityRevisionObserved` |
+| `orchestration_session_id` | `OrchestrationSessionId` |
+| `caller_participant_id` | `CallerParticipantId` |
+| `caller_backend_id` | `CallerBackendId` |
+| `target_backend_id` | `TargetBackendId` |
+| `world_id` | `WorldId` |
+| `world_generation` | `WorldGeneration` |
+| `work_identity` | `WorkIdentity` |
+| `host_transition_correlation` | `HostTransitionCorrelation` |
+| `current_policy_snapshot_ref` | `PolicySnapshotRef` |
+| `current_policy_snapshot_hash` | `PolicySnapshotHash` |
+| `current_policy_revision` | `PolicySnapshotRevision` |
+| `runtime_acceptance` | `RuntimeAcceptance` |
+| `accepted_at` | `AcceptedAt` |
+| `record_revision` | `AcceptanceRecordRevision` |
+
+`RuntimeAcceptance` classifies equality of the complete nested durable evidence, including its own
+`observed_at`; `AcceptedAt` independently classifies `accepted_at`. Neither timestamp is derived
+from or collapsed into the other. No generic expected-record mismatch bucket is permitted.
 
 ### Exact authentication and validation order
 
@@ -940,8 +985,9 @@ One resolver transaction must perform all of the following before returning `Res
 
 1. authenticate `authority` and obtain exactly one aggregate physical snapshot; require its root
    identity and store to bind the authority and supplied request/subject key. Retain the captured
-   HSA revisions only as snapshot provenance, without comparing them to any persisted historical
-   revision;
+   exact HSA state-root bytes and store-wide root revision only as transaction-stability
+   provenance, not receipt material. Do not select or consult a per-session current authority
+   revision and do not compare current HSA state to any persisted historical revision;
 2. decode and validate the complete captured E2 registry and key graph, including every registry,
    record, reservation, request-index, key-envelope, ref, hash, linkage, and uniqueness invariant;
 3. recompute the durable request/subject index digest, require exactly one byte-identical stored
@@ -954,14 +1000,18 @@ One resolver transaction must perform all of the following before returning `Res
    resulting witness must still equal the complete expectation and join the supplied key before
    absence can be returned;
 5. authenticate B1 only from the captured B1 registry bytes, require exactly one opaque witness,
-   then compare the complete witness record byte-for-byte with `expected_b1_acceptance`; a caller
-   mismatch is typed and supplies no result field;
+   and return a typed error for every absent, missing, ambiguous, corrupt, unsafe, unsupported, or
+   cross-store case. Then compare the complete witness record byte-for-byte with
+   `expected_b1_acceptance`, classifying each mismatch by the table above; a caller mismatch
+   supplies no result field;
 6. exact-join physical authority store/root; request and typed subject; orchestration session;
    caller participant and caller backend; target backend; world ID and generation; B1 acceptance
    ID, record revision, complete runtime evidence, accepted-work identity, and host-transition
    correlation; and the E2 request/subject key, recomputed digest, occupied index, record, and B1
-   authority link. Authenticate `accepted_at` solely as a field of the complete B1 witness and
-   equality-check it against the expectation; E2 has no `accepted_at` field and gains none;
+   authority link. Authenticate historical `authority_revision_observed` and `accepted_at` solely
+   as fields of the complete B1 witness and independently equality-check each against its expected
+   field. Never compare `authority_revision_observed` to current HSA authority; E2 has no
+   `accepted_at` field and gains none;
 7. require `EphemeralWork` to join the exact B1 ephemeral task-run identity, or
    `RetainedWorkerTurn` to join the exact B1 active-run/message/target-participant identity; no
    other E2 subject is eligible;
@@ -988,6 +1038,8 @@ The returned `authority_revision_observed`, acceptance record and revision, acce
 runtime evidence, correlation, policy identity, and `accepted_at` originate exclusively from the
 opaque B1 witness. Historical B2.1 claim material originates exclusively from E2's preserved claim
 preimage. Snapshot and retained-cap material originate exclusively from immutable E2 records.
+`authority_revision_observed` remains historical B1 evidence and is never replaced by or compared
+to a current HSA authority revision.
 
 `MissingExactHistoricE2Commitment` is permitted only after one read transaction proves both that
 the exact request/subject index is absent and that an exhaustive E2 registry scan contains no V1
@@ -998,6 +1050,10 @@ snapshot. Any existing but partial E2 state—including a missing registry, `key
 component; an index without its record; a record without its exact index; conflicting index bytes
 at the digest; or a matching or orphaned V1 record—is corruption/partial state, never legacy
 compatibility. Missing referenced B1 material is a B1 authentication error, not legacy absence.
+An absent B1 registry, no matching record, or ambiguous record therefore has exactly one
+fail-closed path through `RegistryAbsent`, `AcceptanceRecordMissing`, or
+`AcceptanceRecordAmbiguous`, respectively; none can become an unauthenticated success, synthesized
+acceptance evidence, E2 legacy compatibility, or a reason to consult current B1/B2.1 state.
 
 No recognized historic E2 schema exists. Schema classification is exact:
 
@@ -1020,11 +1076,12 @@ material. B2.2 may later consume that result unchanged, but cannot construct, mu
 reinterpret, or supplement it.
 
 E2 has no global registry revision, and this correction does not invent one. Read stability is
-proved by exact HSA root bytes and root/authority revisions; exact E2 and B1 registry bytes; E2
-per-record `created_revision`/`application_revision`; exact directory manifests; stable file
-metadata and physical identity; and unchanged clean namespace absence. SHA-256 of captured bytes
-is permitted only as non-authoritative test evidence. It is not a persisted authority field and
-cannot replace byte equality or metadata/namespace revalidation.
+proved by exact HSA state-root bytes and the store-wide HSA root revision; exact E2 and B1 registry
+bytes; E2 per-record `created_revision`/`application_revision`; exact directory manifests; stable
+file metadata and physical identity; and unchanged clean namespace absence. No per-session current
+authority revision participates. SHA-256 of captured bytes is permitted only as non-authoritative
+test evidence. It is not a persisted authority field and cannot replace byte equality or
+metadata/namespace revalidation.
 
 ### Later implementation fence
 
@@ -1056,11 +1113,15 @@ non-Linux product work.
 Focused proof must cover:
 
 - ephemeral and retained-turn successful resolution, including
-  `accepted_at != runtime_acceptance.observed_at` preserved exactly;
-- forged expected B1 fields and every cross-store/request/subject/session/caller/caller-backend/
-  target-backend/world/generation/work-identity/correlation/policy substitution;
+  `accepted_at != runtime_acceptance.observed_at` preserved exactly and historical
+  `authority_revision_observed` preserved without a current-HSA comparison;
+- forged values for every expected B1 field in the complete classification table, including
+  distinct `AuthorityRevisionObserved`, `AcceptedAt`, and complete `RuntimeAcceptance` mismatch
+  results, plus every cross-store/request/subject/session/caller/caller-backend/target-backend/
+  world/generation/work-identity/correlation/policy substitution;
 - missing, partial, duplicate, ambiguous, index-only, record-only, digest-colliding, orphaned,
-  corrupt, cross-store, or hash-invalid E2/B1 material and missing referenced keys;
+  corrupt, cross-store, or hash-invalid E2/B1 material and missing referenced keys, including
+  exact `RegistryAbsent`, `AcceptanceRecordMissing`, and `AcceptanceRecordAmbiguous` B1 outcomes;
 - canonical non-V1 registry/object discriminators, including `0` and `2`, as unsupported-version
   errors, malformed or noncanonical discriminators as encoding errors, and decodable invalid V1
   as corruption;
@@ -1071,7 +1132,8 @@ Focused proof must cover:
   exactly the complete pre-publication or post-publication snapshot, never a torn cross-store view;
 - killed-writer temporaries remaining byte-identical after failed reads;
 - exact before/after bytes, names, types, device/inode, owner/mode, link count, size, `mtime`,
-  `ctime`, HSA revisions, and clean namespace absence, with no portable `atime` assertion;
+  `ctime`, HSA state-root bytes, store-wide HSA root revision, and clean namespace absence, with no
+  per-session current authority revision or portable `atime` assertion;
 - response loss, reopen/restart, B2.1 observer/claim advancement, retained-worker advancement,
   parent-policy narrowing/broadening, and exact replay producing byte-identical projection
   material; and

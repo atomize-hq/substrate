@@ -46,19 +46,28 @@ does not itself admit B2.2.
 The first prerequisite record above remains the reason B2.2 is blocked, but E2-RM's authority is
 now corrected and bounded as a specification: it must capture the existing E2 commitment store
 and B1 receipt registry under one existing HSA root lock through a new non-reconciling,
-descriptor-relative no-follow read transaction. A cleanly absent E2 directory is absence; an
-existing incomplete E2 layout is an error. Validated HSA/E2/B1 temporaries fail closed and remain
-untouched. The read creates, reconciles, cleans, writes, publishes, repairs, migrates, backfills,
-rotates, renames, unlinks, and `fsync`s nothing.
+descriptor-relative no-follow read transaction. The aggregate snapshot retains exact HSA
+state-root bytes and the store-wide root revision as transaction-stability evidence, not receipt
+material; it selects or consults no per-session current authority revision. A cleanly absent E2
+directory is absence; an existing incomplete E2 layout is an error. Validated HSA/E2/B1
+temporaries fail closed and remain untouched. The read creates, reconciles, cleans, writes,
+publishes, repairs, migrates, backfills, rotates, renames, unlinks, and `fsync`s nothing.
 
 The B1 lookup is keyed only by `(authority_store_id, acceptance_record_id)` and yields an opaque
-witness constructed solely from a fully validated canonical durable registry snapshot. Caller-
-provided B1 material is only a lookup selector and complete equality expectation; it supplies no
-returned field. `accepted_at` and `runtime_acceptance.observed_at` remain independent persisted
-values. E2 provides the preserved historical claim, policy snapshot, and retained-cap material;
+witness directly on success, constructed solely from a fully validated canonical durable registry
+snapshot. An absent registry, no matching record, violated uniqueness, or a store mismatch returns
+`RegistryAbsent`, `AcceptanceRecordMissing`, `AcceptanceRecordAmbiguous`, or
+`AuthorityStoreMismatch`; unsafe, partial, corrupt, malformed, or unsupported material returns its
+typed physical/authentication error. Caller-provided B1 material is only a lookup selector and
+complete equality expectation; it supplies no returned field. Every independently persisted B1
+field has a typed mismatch classification, including distinct `AuthorityRevisionObserved` and
+`AcceptedAt` results. `accepted_at` and `runtime_acceptance.observed_at` remain independent
+persisted values. Historical B1 `authority_revision_observed` is never compared to current HSA
+authority. E2 provides the preserved historical claim, policy snapshot, and retained-cap material;
 the resolver exact-joins all store/request/subject/session/caller/backend/world/work/correlation/
-acceptance/policy bindings and never supplements history from current B2.1, retained-worker, HSA
-revision, or parent-policy state.
+acceptance/policy bindings and never supplements history from current B2.1, retained-worker,
+current HSA authority, or parent-policy state. Missing B1 is never a successful result, E2 legacy
+compatibility, synthesized evidence, or a reason to consult current B1/B2.1 state.
 
 B2.2 remains blocked and unadmitted until this corrected `E2-RM` contract receives a separate
 fresh admission and explicit dispatch, is implemented inside its exact six-file fence, passes its

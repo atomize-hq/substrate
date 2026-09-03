@@ -366,32 +366,44 @@ captured under the same existing `authority-v1/lock/root.lock`.
 
 The later implementation must add a non-reconciling existing-layout transaction; a physical E2
 read capability with clean whole-directory absence but fail-closed partial state; an aggregate
-root/store/revision/E2/B1 snapshot; a B1-owned opaque authenticated witness selected by exactly
-`(authority_store_id, acceptance_record_id)` from canonical durable registry bytes; and the final
-E2-owned semantic projection. It validates root, layout, lock, namespace, file, owner/mode,
-device/inode, link-count, size, `mtime`, and `ctime` identity with descriptor-relative no-follow
-stable reads. Recognized temporaries fail closed after validation and remain untouched. No create,
-write, reconciliation, cleanup, `fsync`, key initialization/rotation, rename, unlink, publication,
-repair, migration, or backfill is permitted.
+root/store/state-root-bytes/root-revision/E2/B1 snapshot; a B1-owned opaque authenticated witness
+selected by exactly `(authority_store_id, acceptance_record_id)` from canonical durable registry
+bytes; and the final E2-owned semantic projection. It validates root, layout, lock, namespace,
+file, owner/mode, device/inode, link-count, size, `mtime`, and `ctime` identity with
+descriptor-relative no-follow stable reads. Recognized temporaries fail closed after validation
+and remain untouched. No create, write, reconciliation, cleanup, `fsync`, key
+initialization/rotation, rename, unlink, publication, repair, migration, or backfill is permitted.
 
 Expected B1 material is only a selector and equality expectation. The returned B1 fields,
 including independent `accepted_at` and `runtime_acceptance.observed_at` values, originate only
 from the durable witness; historical claim material originates only from E2's preserved B2.1 claim
 preimage; snapshot and retained-cap material originate only from immutable E2 records. All
 authority, request, typed-subject, session, caller, backend, world, generation, work, correlation,
-acceptance, claim, policy, index, digest, and retained-cap joins are exact. Current HSA revisions,
-current B2.1 state, current retained-worker state, and current parent policy cannot be substituted
-for historical values.
+acceptance, claim, policy, index, digest, and retained-cap joins are exact. Complete expected-record
+comparison has a typed classification for every independently persisted B1 field, including
+distinct `AuthorityRevisionObserved` and `AcceptedAt` results; `RuntimeAcceptance` independently
+covers the complete runtime evidence. No per-session current HSA authority revision is selected or
+consulted, and historical B1 `authority_revision_observed` is never compared to current HSA
+authority. Current B2.1 state, current retained-worker state, and current parent policy cannot be
+substituted for historical values.
+
+B1 authentication has one success shape: the opaque witness. An absent registry, no matching
+record, or violated uniqueness returns `RegistryAbsent`, `AcceptanceRecordMissing`, or
+`AcceptanceRecordAmbiguous`; partial, corrupt, unsafe, unsupported, or cross-store material returns
+its typed physical/authentication error. Missing B1 never becomes a successful `Missing` result,
+E2 legacy compatibility, synthesized evidence, or a reason to consult current B1/B2.1 state.
 
 No recognized historic E2 schema exists. Canonically valid non-V1 registry/object discriminators
 are unsupported versions; malformed/noncanonical/duplicate/missing/invalid discriminators are
 encoding errors; decodable invalid V1 graphs are corruption/authentication failures; only clean
 absence of exact historical E2 material is
 `UnsupportedLegacyState(MissingExactHistoricE2Commitment)`. Existing partial E2 state is never
-legacy compatibility. E2 has no global registry revision; stability instead uses exact HSA root
-and registry bytes, HSA revisions, per-record created/application revisions, exact namespace
-manifests, stable metadata, and unchanged absence. Byte SHA-256 is non-authoritative test evidence
-only, and portable `atime` stability is not required.
+legacy compatibility. E2 has no global registry revision; stability instead uses exact HSA
+state-root and registry bytes, the store-wide HSA root revision, per-record created/application
+revisions, exact namespace manifests, stable metadata, and unchanged absence. The root revision is
+transaction-stability evidence, not receipt material, and no per-session current authority
+revision participates. Byte SHA-256 is non-authoritative test evidence only, and portable `atime`
+stability is not required.
 
 The future product fence is exactly the six existing files named by the controlling
 [`E2-RM` contract](../contracts/dispatch-policy-commitment-v1.md#later-implementation-fence), plus

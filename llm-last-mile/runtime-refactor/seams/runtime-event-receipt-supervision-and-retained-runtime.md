@@ -73,8 +73,9 @@ The read boundary spans existing physical owners without transferring their sema
 new future non-reconciling read transaction over the already-existing accepted-home layout and
 root lock. E2 owns only its physical immutable-registry/key snapshot and final receipt-material
 projection. B1 owns only canonical full-registry validation and the opaque durable acceptance
-witness. `store.rs` may provide only the aggregate root/store/revision/E2/B1 snapshot wiring. These
-layers capture E2 and B1 under the same root lock; no later lookup may supplement the snapshot.
+witness. `store.rs` may provide only the aggregate
+root/store/state-root-bytes/root-revision/E2/B1 snapshot wiring. These layers capture E2 and B1
+under the same root lock; no later lookup may supplement the snapshot.
 
 The existing HSA, E2, and B1 transaction paths remain unchanged because they may reconcile,
 create, publish, or `fsync`. The new read path instead validates root/layout/lock identity,
@@ -84,13 +85,19 @@ missing complete E2 directory is clean absence, while an existing partial E2 lay
 No read path may clean, repair, migrate, backfill, initialize/rotate keys, or publish authority.
 
 Caller B1 data is an equality expectation and lookup selector only; authenticated B1 fields come
-only from the witness keyed by `(authority_store_id, acceptance_record_id)`. E2's preserved B2.1
-claim and immutable snapshot/cap records remain the exclusive historical sources for their result
-fields. Current B2.1 observation, journal, terminal, retained-worker, and parent-policy state remain
-outside the projection. Captured HSA root/authority revisions are snapshot provenance only; no
-current or later HSA revision lookup may reconstruct or be compared as historical authority.
-`accepted_at` and runtime observation time remain independent. B2.2 receives no read,
-construction, return, or lifecycle authority here.
+only from the witness keyed by `(authority_store_id, acceptance_record_id)`, returned directly as
+the sole success shape. Registry absence, no matching record, violated uniqueness, store mismatch,
+and unsafe/partial/corrupt material have only typed fail-closed error paths. Every independently
+persisted B1 field has a typed expected-value mismatch classification, including distinct
+`AuthorityRevisionObserved` and `AcceptedAt` results. E2's preserved B2.1 claim and immutable
+snapshot/cap records remain the exclusive historical sources for their result fields. Current B2.1
+observation, journal, terminal, retained-worker, and parent-policy state remain outside the
+projection. Exact HSA state-root bytes and the store-wide HSA root revision are private
+transaction-stability provenance only, not receipt material. No per-session current authority
+revision is selected or consulted, and historic B1 `authority_revision_observed` is never compared
+to current HSA authority. `accepted_at` and runtime observation time remain independent. Missing B1
+cannot become a success, E2 legacy compatibility, synthesized evidence, or a reason for current
+B1/B2.1 lookup. B2.2 receives no read, construction, return, or lifecycle authority here.
 
 The exact future fence is limited to the six existing files in the controlling E2-RM contract and
 their colocated tests. B1 persistence/schema/publication and B2.1 semantics do not change. E2 stays

@@ -58,30 +58,39 @@ Condition 11 requires more than semantic equality against caller-provided B1 mat
 E2-RM implementation must open only the existing accepted-home layout, acquire the existing HSA
 root lock, and capture stable E2 plus B1 physical snapshots inside one non-reconciling,
 descriptor-relative no-follow transaction. It must re-enumerate namespaces, revalidate root/lock/
-file physical identity and strict metadata, and prove exact HSA root bytes and revisions unchanged.
-Recognized temporaries are validated and cause failure without removal. No creation,
-reconciliation, cleanup, write, rename, unlink, `fsync`, key lifecycle, publication, repair,
-migration, or backfill is permitted.
+file physical identity and strict metadata, and prove exact HSA state-root bytes plus the store-wide
+root revision unchanged. That revision is transaction-stability evidence, not receipt material; no
+per-session current authority revision is selected or consulted. Recognized temporaries are
+validated and cause failure without removal. No creation, reconciliation, cleanup, write, rename,
+unlink, `fsync`, key lifecycle, publication, repair, migration, or backfill is permitted.
 
 B1 authority comes only from an opaque witness selected by
 `(authority_store_id, acceptance_record_id)` after canonical full-registry and store-wide
-uniqueness validation of the captured durable bytes. Expected B1 material is only a selector and
-equality expectation; it contributes no returned field. Its independent `accepted_at` and
-`runtime_acceptance.observed_at` values remain exact. The final projection joins that witness to
-E2's request/subject index, immutable record, preserved B2.1 claim preimage, exact E1 snapshot, and
-retained cap where applicable. No later filesystem lookup or current HSA/B2.1/retained-worker/
-parent-policy read may supplement historical material.
+uniqueness validation of the captured durable bytes. The lookup returns that witness directly on
+success; registry absence, no match, ambiguity/violated uniqueness, store mismatch, and
+unsafe/partial/corrupt material each take only their typed fail-closed error path. Expected B1
+material is only a selector and equality expectation; it contributes no returned field. Complete
+comparison classifies every independently persisted B1 field, including distinct
+`AuthorityRevisionObserved` and `AcceptedAt` mismatches. Its independent `accepted_at` and
+`runtime_acceptance.observed_at` values remain exact, and historical
+`authority_revision_observed` is never compared to current HSA authority. The final projection
+joins that witness to E2's request/subject index, immutable record, preserved B2.1 claim preimage,
+exact E1 snapshot, and retained cap where applicable. Missing B1 never becomes a success, E2 legacy
+compatibility, synthesized evidence, or a current B1/B2.1 lookup. No later filesystem lookup or
+current HSA/B2.1/retained-worker/parent-policy read may supplement historical material.
 
 No historic E2 schema is recognized. Valid canonical non-V1 discriminators are unsupported
 versions; malformed/noncanonical/invalid discriminators are encoding errors; invalid V1 graphs
 are corruption/authentication failures; existing partial state is never legacy. E2 has no global
-registry revision, so stability relies on exact HSA root and E2/B1 registry bytes, HSA revisions,
-E2 per-record revisions, namespace manifests, metadata, and unchanged clean absence. Captured-byte
-hashes are test evidence only, and portable `atime` stability is not required.
+registry revision, so stability relies on exact HSA state-root and E2/B1 registry bytes, the
+store-wide HSA root revision, E2 per-record revisions, namespace manifests, metadata, and unchanged
+clean absence. No per-session current authority revision participates. Captured-byte hashes are
+test evidence only, and portable `atime` stability is not required.
 
 The future tests named by this authority—including positive ephemeral/retained projection,
-independent timestamps, substitution/corruption/schema/temp/link/metadata attacks, cross-process
-locking, pre/post-publication visibility, byte/metadata/revision/absence preservation, retry/drift/
+independent timestamps, complete typed B1-field mismatches, exact missing-B1 errors,
+substitution/corruption/schema/temp/link/metadata attacks, cross-process locking,
+pre/post-publication visibility, byte/metadata/root-revision/absence preservation, retry/drift/
 replay identity, and zero production callers—remain prescribed, not passed. E2 stays terminally
 complete; E2-RM stays specified, unadmitted, undispatched, and unimplemented; and B2.2 stays
 blocked and unadmitted.
