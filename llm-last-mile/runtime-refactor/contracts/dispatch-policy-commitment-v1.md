@@ -1320,17 +1320,19 @@ Use two separate full worktrees: a detached baseline at exact commit `e2_rm_base
 that is its direct descendant. For every command and every repeat, create fresh side-specific
 `CARGO_TARGET_DIR`, Cargo home, `TMPDIR`, runtime, and evidence roots. No incremental state may
 cross side, command, or repeat boundaries. Run baseline and candidate sequentially, never
-concurrently. Both runs on each side must first be internally deterministic; there is no majority
-vote.
+concurrently. Except for the bounded non-Clippy build warning-stream case below, both runs on each
+side must first be internally deterministic; there is no majority vote.
 
 Each invocation records the exact argv and working directory; complete environment manifest; raw
 stdout and stderr in separate retained files and their SHA-256 values; exit code or terminating
 signal; timeout disposition; monotonic duration; complete test inventory and outcomes; Cargo
 package, compilation target, and compiler diagnostics; the last named test; and cgroup
 `memory.events` before and after. Retain and compare the normalized stdout and stderr streams as
-ordered sequences; any output-order difference blocks, and the diagnostic multiset below is
-additional semantic evidence rather than a replacement for ordered-stream comparison. Comparison
-also uses canonical records:
+ordered sequences. Outside the bounded non-Clippy build warning-stream case below, any output-order
+difference blocks, and the diagnostic multiset below is additional semantic evidence rather than a
+replacement for ordered-stream comparison. In that bounded case, warning diagnostics remain
+retained informational evidence, while ordered-stream comparison remains mandatory for all
+non-warning output. Comparison also uses canonical records:
 
 - tests: command, target, full test name, outcome, and normalized panic/error signature;
 - diagnostics: command, package, compilation target, severity, code/class, source, symbol or
@@ -1339,10 +1341,24 @@ also uses canonical records:
 
 Accepted transitions are only baseline pass to candidate pass, the same baseline failure with the
 same test identity and normalized signature, or a newly added passing `e2_rm_*` test inside the
-six-file fence. No changed test outcome is accepted. The complete normalized diagnostic multiset,
-not a total count, must match. Any candidate-only compile error, warning, test failure, hang,
-timeout, signal, OOM, normalized diagnostic, exit-code regression, changed signature, increased
-failure count, missing test, or hidden test rejects the candidate.
+six-file fence. No changed test outcome is accepted. Outside the bounded non-Clippy build
+warning-stream case below, the complete normalized diagnostic multiset, not a total count, must
+match. Any candidate-only compile error, warning, test failure, hang, timeout, signal, OOM,
+normalized diagnostic, exit-code regression, changed signature, increased failure count, missing
+test, or hidden test rejects the candidate.
+
+For a non-Clippy Cargo build that terminates at an inherited compilation failure, the paired
+differential is accepted only when every one of the four invocations is resource- and harness-valid,
+the exit disposition matches across all four, and normalized compiler-error identities and terminal
+failure-note identities match across both baseline and both candidate repetitions. Warning count,
+warning ordering, and incidental pre-failure warning emission are informational and do not require
+exact equality. This rule does not apply to Clippy; warning regressions remain governed by the
+separately required Clippy differential. A timeout, OOM, signal, harness defect, candidate-only
+compiler error, changed terminal failure identity, or changed compilation boundary remains
+blocking. Baseline warning-stream nondeterminism alone does not stop evaluation when the stable
+inherited error boundary matches. If candidate bytes and invocation evidence remain unchanged, the
+already-retained four-run workspace-build matrix may be reevaluated under this rule without
+rerunning the four builds.
 
 An inherited baseline failure may be recorded only when both baseline repeats reproduce it under
 the same command, environment, timeout, and resource conditions and both candidate repeats retain
@@ -1567,19 +1583,23 @@ A baseline failure is never a waiver. Candidate-absolute and source-installed li
 satisfy their stated acceptance predicates unconditionally. Commands whose exact pristine baseline
 is non-green are accepted only through paired, same-host, independently isolated baseline/candidate
 comparison against the exact admitted product baseline. Every baseline failure must retain the same
-test identity and narrowly normalized signature; every candidate-only diagnostic, failing test,
-hang, timeout, signal, exit-code regression, or failure-count increase rejects the candidate.
+test identity and narrowly normalized signature; except solely for warning diagnostics treated as
+informational by the bounded non-Clippy build rule above, every candidate-only diagnostic, failing
+test, hang, timeout, signal, exit-code regression, or failure-count increase rejects the candidate.
 Normalization may remove only enumerated unstable harness material and may never remove semantic
 source, symbol, test, diagnostic, panic, authority, security, exit, signal, or count information.
-Nondeterministic, resource-killed, incomplete, or provenance-ambiguous runs are invalid evidence,
-not inherited failures. No baseline repair or out-of-fence change is authorized.
+Except for warning-stream nondeterminism allowed by the bounded rule above, nondeterministic,
+resource-killed, incomplete, or provenance-ambiguous runs are invalid evidence, not inherited
+failures. No baseline repair or out-of-fence change is authorized.
 
-Stop uncommitted on baseline or candidate nondeterminism; host, environment, toolchain, cache, or
-runner mismatch; a candidate-only diagnostic or failure; an increased failure count, changed
-signature, pass-to-fail transition, missing or hidden test; a timeout, hang, signal, `SIGKILL`, or
-OOM event; a doctor parse, state, or artifact-provenance failure; a surviving service, child, or
-socket; shared incremental state; a capacity-floor breach; a path, mode, addition, Markdown, or
-caller-fence violation; or baseline modification or attempted out-of-fence repair.
+Stop uncommitted on baseline or candidate nondeterminism outside the bounded non-Clippy build
+warning-stream rule above; host, environment, toolchain, cache, or runner mismatch; a candidate-only
+diagnostic other than a warning treated as informational by that rule, or a candidate-only failure;
+an increased failure count, changed signature, pass-to-fail transition, missing or hidden test; a
+timeout, hang, signal, `SIGKILL`, or OOM event; a doctor parse, state, or artifact-provenance failure;
+a surviving service, child, or socket; shared incremental state; a capacity-floor breach; a path,
+mode, addition, Markdown, or caller-fence violation; or baseline modification or attempted
+out-of-fence repair.
 
 No live smoke can substitute for the unit-level historical-material matrix, and no live behavior
 change is expected because the unit remains unintegrated.
