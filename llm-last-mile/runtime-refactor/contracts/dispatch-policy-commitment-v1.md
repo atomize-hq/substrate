@@ -1320,19 +1320,21 @@ Use two separate full worktrees: a detached baseline at exact commit `e2_rm_base
 that is its direct descendant. For every command and every repeat, create fresh side-specific
 `CARGO_TARGET_DIR`, Cargo home, `TMPDIR`, runtime, and evidence roots. No incremental state may
 cross side, command, or repeat boundaries. Run baseline and candidate sequentially, never
-concurrently. Except for the bounded non-Clippy build warning-stream case below, both runs on each
-side must first be internally deterministic; there is no majority vote.
+concurrently. Except for the bounded non-Clippy build warning-stream case and the Clippy
+diagnostic-ordering case below, both runs on each side must first be internally deterministic; there
+is no majority vote.
 
 Each invocation records the exact argv and working directory; complete environment manifest; raw
 stdout and stderr in separate retained files and their SHA-256 values; exit code or terminating
 signal; timeout disposition; monotonic duration; complete test inventory and outcomes; Cargo
 package, compilation target, and compiler diagnostics; the last named test; and cgroup
 `memory.events` before and after. Retain and compare the normalized stdout and stderr streams as
-ordered sequences. Outside the bounded non-Clippy build warning-stream case below, any output-order
-difference blocks, and the diagnostic multiset below is additional semantic evidence rather than a
-replacement for ordered-stream comparison. In that bounded case, warning diagnostics remain
-retained informational evidence, while ordered-stream comparison remains mandatory for all
-non-warning output. Comparison also uses canonical records:
+ordered sequences. Outside the bounded non-Clippy build warning-stream case and the Clippy
+diagnostic-ordering case below, any output-order difference blocks, and the diagnostic multiset
+below is additional semantic evidence rather than a replacement for ordered-stream comparison. In
+the bounded non-Clippy case, warning diagnostics remain retained informational evidence, while
+ordered-stream comparison remains mandatory for all non-warning output. Comparison also uses
+canonical records:
 
 - tests: command, target, full test name, outcome, and normalized panic/error signature;
 - diagnostics: command, package, compilation target, severity, code/class, source, symbol or
@@ -1359,6 +1361,18 @@ blocking. Baseline warning-stream nondeterminism alone does not stop evaluation 
 inherited error boundary matches. If candidate bytes and invocation evidence remain unchanged, the
 already-retained four-run workspace-build matrix may be reevaluated under this rule without
 rerunning the four builds.
+
+For Clippy, comparison remains exact over the normalized semantic diagnostic multiset, including
+diagnostic identity, severity, and multiplicity, and over the terminal failure identity or failure
+notes where applicable. Candidate-only warnings, errors, or other Clippy diagnostics; missing
+baseline diagnostics; and changed multiplicities remain failures. Clippy remains the warning-owning
+gate, and warning correctness is not weakened. Ordering and interleaving of normalized diagnostics,
+Cargo artifact or progress messages, and stdout or stderr emission are informational when the
+semantic diagnostic multiset and terminal outcome are equal; same-side ordering differences do not
+invalidate otherwise resource- and harness-valid repetitions. Existing timeout, signal, OOM,
+resource-floor, toolchain, harness, and candidate-only failure rules remain unchanged. If candidate
+bytes and invocation evidence remain unchanged, the already-retained four-run Clippy matrix may be
+reevaluated under this rule without rerunning the commands or candidate bytes.
 
 An inherited baseline failure may be recorded only when both baseline repeats reproduce it under
 the same command, environment, timeout, and resource conditions and both candidate repeats retain
