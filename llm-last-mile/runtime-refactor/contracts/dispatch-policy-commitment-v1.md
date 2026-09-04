@@ -1290,8 +1290,14 @@ completes differently remains `BaselineRegressionAmbiguous` and blocks acceptanc
 
 ### Paired exact-baseline differential wall
 
-Only after the provider-stub focused proof passes on both sides may each of these commands run twice
-at the exact pristine baseline and twice at the candidate:
+Only after the provider-stub focused proof passes on both sides may the broad commands below be
+required. Before requiring any command or repetition, determine whether it can reach or exercise the
+changed code. Begin with the minimum matched baseline-and-candidate pair. If both invocations are
+resource- and harness-valid and stop at the same inherited out-of-scope compile boundary before
+candidate behavior or tests can execute, that pair is sufficient unless a literal concrete
+product-risk rationale requires repetition. Same-side repetition is required only by such a
+rationale or by observed instability in semantic outcomes, never to observe concurrent output
+ordering.
 
 ```bash
 cargo clippy --locked --offline \
@@ -1317,67 +1323,51 @@ cargo test --locked --offline \
 ```
 
 Use two separate full worktrees: a detached baseline at exact commit `e2_rm_base` and a candidate
-that is its direct descendant. For every command and every repeat, create fresh side-specific
+that is its direct descendant. For every command and required repeat, create fresh side-specific
 `CARGO_TARGET_DIR`, Cargo home, `TMPDIR`, runtime, and evidence roots. No incremental state may
 cross side, command, or repeat boundaries. Run baseline and candidate sequentially, never
-concurrently. Except for the bounded non-Clippy build warning-stream case and the Clippy
-diagnostic-ordering case below, both runs on each side must first be internally deterministic; there
-is no majority vote.
+concurrently. There is no majority vote.
 
 Each invocation records the exact argv and working directory; complete environment manifest; raw
 stdout and stderr in separate retained files and their SHA-256 values; exit code or terminating
 signal; timeout disposition; monotonic duration; complete test inventory and outcomes; Cargo
 package, compilation target, and compiler diagnostics; the last named test; and cgroup
-`memory.events` before and after. Retain and compare the normalized stdout and stderr streams as
-ordered sequences. Outside the bounded non-Clippy build warning-stream case and the Clippy
-diagnostic-ordering case below, any output-order difference blocks, and the diagnostic multiset
-below is additional semantic evidence rather than a replacement for ordered-stream comparison. In
-the bounded non-Clippy case, warning diagnostics remain retained informational evidence, while
-ordered-stream comparison remains mandatory for all non-warning output. Comparison also uses
-canonical records:
+`memory.events` before and after. Retain the normalized stdout and stderr streams for audit, but
+compare build, Clippy, and test JSON/output streams as canonical unordered semantic multisets or
+keyed records. Cargo artifact and progress messages, stdout/stderr interleaving, and emission order
+are never product semantics and do not block acceptance. The semantic comparisons are:
 
-- tests: command, target, full test name, outcome, and normalized panic/error signature;
-- diagnostics: command, package, compilation target, severity, code/class, source, symbol or
-  approved line mapping, and normalized message; and
-- process: command, exit code, signal, timeout status, and last named test.
+- builds: normalized compiler-error identities, failure-note identities, and terminal failure
+  identity;
+- Clippy: exact diagnostic identity, severity, multiplicity, terminal outcome, and candidate-only
+  diagnostics, with records keyed by command, package, compilation target, code/class, source,
+  symbol or approved line mapping, and normalized message; and
+- tests: the build comparison above before any test is reached; once tests are reached, exact
+  command, target, full test identity, outcome, normalized failure signature, terminal outcome, and
+  candidate-only behavior.
 
 Accepted transitions are only baseline pass to candidate pass, the same baseline failure with the
-same test identity and normalized signature, or a newly added passing `e2_rm_*` test inside the
-six-file fence. No changed test outcome is accepted. Outside the bounded non-Clippy build
-warning-stream case below, the complete normalized diagnostic multiset, not a total count, must
-match. Any candidate-only compile error, warning, test failure, hang, timeout, signal, OOM,
-normalized diagnostic, exit-code regression, changed signature, increased failure count, missing
-test, or hidden test rejects the candidate.
+same semantic identity and normalized signature, or a newly added passing `e2_rm_*` test inside the
+six-file fence. No changed test outcome is accepted. A candidate-only compiler error, warning under
+Clippy ownership, test failure, reachable behavior difference, missing baseline diagnostic, changed
+semantic multiplicity, exit-code regression, changed failure signature, increased failure count,
+missing test, or hidden test rejects the candidate. Clippy remains the warning-owning gate, so
+warning correctness is not weakened; non-Clippy warning count, ordering, and incidental pre-failure
+emission remain retained informational evidence at an inherited pre-execution boundary.
 
-For a non-Clippy Cargo build that terminates at an inherited compilation failure, the paired
-differential is accepted only when every one of the four invocations is resource- and harness-valid,
-the exit disposition matches across all four, and normalized compiler-error identities and terminal
-failure-note identities match across both baseline and both candidate repetitions. Warning count,
-warning ordering, and incidental pre-failure warning emission are informational and do not require
-exact equality. This rule does not apply to Clippy; warning regressions remain governed by the
-separately required Clippy differential. A timeout, OOM, signal, harness defect, candidate-only
-compiler error, changed terminal failure identity, or changed compilation boundary remains
-blocking. Baseline warning-stream nondeterminism alone does not stop evaluation when the stable
-inherited error boundary matches. If candidate bytes and invocation evidence remain unchanged, the
-already-retained four-run workspace-build matrix may be reevaluated under this rule without
-rerunning the four builds.
+When a matched valid pair proves that both sides stop before changed code or tests can execute at
+the same inherited semantic boundary, extra scheduling-dependent compile variants are
+informational unless they reveal a stable candidate-only semantic outcome. A valid nonzero baseline
+must still be followed by its candidate pair; nonzero is not invalid evidence. Timeout, signal, OOM,
+resource-floor, filesystem, toolchain, harness, and process-survivor rules remain unchanged, and any
+such invalid invocation still stops acceptance.
 
-For Clippy, comparison remains exact over the normalized semantic diagnostic multiset, including
-diagnostic identity, severity, and multiplicity, and over the terminal failure identity or failure
-notes where applicable. Candidate-only warnings, errors, or other Clippy diagnostics; missing
-baseline diagnostics; and changed multiplicities remain failures. Clippy remains the warning-owning
-gate, and warning correctness is not weakened. Ordering and interleaving of normalized diagnostics,
-Cargo artifact or progress messages, and stdout or stderr emission are informational when the
-semantic diagnostic multiset and terminal outcome are equal; same-side ordering differences do not
-invalidate otherwise resource- and harness-valid repetitions. Existing timeout, signal, OOM,
-resource-floor, toolchain, harness, and candidate-only failure rules remain unchanged. If candidate
-bytes and invocation evidence remain unchanged, the already-retained four-run Clippy matrix may be
-reevaluated under this rule without rerunning the commands or candidate bytes.
-
-An inherited baseline failure may be recorded only when both baseline repeats reproduce it under
-the same command, environment, timeout, and resource conditions and both candidate repeats retain
-the exact test identity and narrowly normalized signature. It is not a waiver for any candidate
-failure.
+If candidate bytes, commands, and retained invocation evidence remain unchanged, the already
+recorded workspace-build, workspace-Clippy, and workspace-test evidence may be reclassified under
+this shared rule without rerunning commands or candidate bytes. The matching workspace-test r1 pair
+establishes the shared pre-test boundary; the unnecessary r2 scheduling variants remain recorded as
+informational rather than forcing more executions. This evidence reuse is not a waiver for any
+candidate-only failure.
 
 ### Deterministic runner, resources, and normalization
 
@@ -1596,23 +1586,27 @@ the baseline result cannot waive or weaken a candidate or live-gate failure.
 A baseline failure is never a waiver. Candidate-absolute and source-installed live gates must
 satisfy their stated acceptance predicates unconditionally. Commands whose exact pristine baseline
 is non-green are accepted only through paired, same-host, independently isolated baseline/candidate
-comparison against the exact admitted product baseline. Every baseline failure must retain the same
-test identity and narrowly normalized signature; except solely for warning diagnostics treated as
-informational by the bounded non-Clippy build rule above, every candidate-only diagnostic, failing
-test, hang, timeout, signal, exit-code regression, or failure-count increase rejects the candidate.
-Normalization may remove only enumerated unstable harness material and may never remove semantic
-source, symbol, test, diagnostic, panic, authority, security, exit, signal, or count information.
-Except for warning-stream nondeterminism allowed by the bounded rule above, nondeterministic,
-resource-killed, incomplete, or provenance-ambiguous runs are invalid evidence, not inherited
+comparison against the exact admitted product baseline. Every baseline failure must retain the
+applicable canonical build, Clippy, or test semantic identity and narrowly normalized signature.
+Every candidate-only compiler error, warning under Clippy ownership, test failure, reachable
+behavior difference, missing baseline diagnostic, changed semantic multiplicity, hang, timeout,
+signal, exit-code regression, or failure-count increase rejects the candidate. Normalization may
+remove only enumerated unstable harness material and may never remove semantic source, symbol, test,
+diagnostic, panic, authority, security, exit, signal, or count information. Observed instability in
+semantic outcomes or a stable candidate-only semantic outcome blocks acceptance; Cargo artifact or
+progress messages, stream interleaving or emission order, and scheduling-dependent pre-execution
+compile variants treated as informational by the shared differential wall above do not.
+Resource-killed, incomplete, or provenance-ambiguous runs are invalid evidence, not inherited
 failures. No baseline repair or out-of-fence change is authorized.
 
-Stop uncommitted on baseline or candidate nondeterminism outside the bounded non-Clippy build
-warning-stream rule above; host, environment, toolchain, cache, or runner mismatch; a candidate-only
-diagnostic other than a warning treated as informational by that rule, or a candidate-only failure;
-an increased failure count, changed signature, pass-to-fail transition, missing or hidden test; a
-timeout, hang, signal, `SIGKILL`, or OOM event; a doctor parse, state, or artifact-provenance failure;
-a surviving service, child, or socket; shared incremental state; a capacity-floor breach; a path,
-mode, addition, Markdown, or caller-fence violation; or baseline modification or attempted
+Stop uncommitted on observed baseline or candidate semantic instability under the shared canonical
+comparisons or a stable candidate-only semantic outcome; host, environment, filesystem, toolchain,
+cache, or runner mismatch; a candidate-only compiler error, warning under Clippy ownership, test
+failure, or reachable behavior difference; a missing baseline diagnostic, changed semantic
+multiplicity, increased failure count, changed signature, pass-to-fail transition, missing or hidden
+test; a timeout, hang, signal, `SIGKILL`, or OOM event; a doctor parse, state, or artifact-provenance
+failure; a surviving service, child, or socket; shared incremental state; a capacity-floor breach; a
+path, mode, addition, Markdown, or caller-fence violation; or baseline modification or attempted
 out-of-fence repair.
 
 No live smoke can substitute for the unit-level historical-material matrix, and no live behavior
