@@ -7,6 +7,8 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use base64::Engine as _;
+#[cfg(target_os = "linux")]
+use chrono::DateTime;
 use chrono::{SecondsFormat, Utc};
 use rand::RngCore;
 use serde::de::DeserializeOwned;
@@ -30,11 +32,20 @@ use super::host_session_authority::schema::{
 use super::host_session_authority::store::{
     dispatch_policy_commitment_storage_for_authority, BootstrapError,
 };
+#[cfg(target_os = "linux")]
+use super::host_session_authority::store::{
+    read_existing_accepted_work_authority_snapshot, DispatchPolicyCommitmentPhysicalReadV1,
+};
 use super::host_session_authority::HostSessionAuthority;
 use super::retained_worker_runtime::{
     CanonicalValidatedSpawnRequestV1, RetainedWorkerAdmissionCommitmentV1,
     RetainedWorkerAdmissionPlanV1, RetainedWorkerAdmissionRecordV1,
     RetainedWorkerAdmissionRegistrationV1, RetainedWorkerAdmissionStateV1,
+};
+#[cfg(target_os = "linux")]
+use super::state_store::{
+    authenticate_persisted_world_work_acceptance, AuthenticatedWorldWorkAcceptanceV1,
+    WorldWorkAcceptanceAuthenticationErrorV1, WorldWorkAcceptanceLookupKeyV1,
 };
 use super::state_store::{
     AcceptedWorldWorkIdentityV1, RuntimeAcceptanceEvidenceV1, WorldWorkAcceptanceRecordV1,
@@ -65,6 +76,408 @@ impl fmt::Display for DispatchPolicyCommitmentError {
 }
 
 impl std::error::Error for DispatchPolicyCommitmentError {}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum ReadOnlyAuthoritySnapshotErrorV1 {
+    AuthorityRootAbsentOrUnsafe,
+    AuthorityLayoutAbsentOrUnsafe,
+    AuthorityRootLockAbsentOrUnsafe,
+    AuthorityLockFailed,
+    AuthorityRootEncodingInvalid,
+    UnsupportedAuthorityRootSchema,
+    AuthorityTemporaryMaterialPresent {
+        name: String,
+    },
+    UnsafeTemporaryMaterial {
+        namespace: &'static str,
+        name: String,
+    },
+    UnsafeNamespaceEntry {
+        namespace: &'static str,
+        name: String,
+    },
+    PartialNamespace {
+        namespace: &'static str,
+        component: &'static str,
+    },
+    UnsafeFileMetadata {
+        namespace: &'static str,
+        name: String,
+    },
+    SnapshotEntryChanged {
+        namespace: &'static str,
+        name: String,
+    },
+    NamespaceChanged {
+        namespace: &'static str,
+    },
+    AuthorityRootChangedWhileLocked,
+    AuthorityRootReplaced,
+    Io {
+        operation: &'static str,
+    },
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum E2SchemaObjectV1 {
+    Registry,
+    Commitment { commitment_id: String },
+    Reservation { reservation_id: String },
+    CommitmentKey { key_id: String },
+    ValidatedSpawnRequest { owner_id: String },
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum AcceptedWorkBindingFieldV1 {
+    SchemaVersion,
+    AuthorityStoreId,
+    AcceptanceRecordId,
+    AcceptanceRecordRevision,
+    RequestId,
+    AuthorityRevisionObserved,
+    OrchestrationSessionId,
+    CallerParticipantId,
+    CallerBackendId,
+    TargetBackendId,
+    WorldId,
+    WorldGeneration,
+    WorkIdentity,
+    HostTransitionCorrelation,
+    RuntimeAcceptance,
+    AcceptedAt,
+    PolicySnapshotRef,
+    PolicySnapshotHash,
+    PolicySnapshotRevision,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum AcceptedWorkReceiptMaterialLegacyReasonV1 {
+    MissingExactHistoricE2Commitment,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "the contract requires the resolved material as the direct typed outcome"
+)]
+pub(crate) enum AcceptedWorkReceiptMaterialResolutionV1 {
+    Resolved(AuthenticatedAcceptedWorkReceiptMaterialV1),
+    UnsupportedLegacyState {
+        exact_request_subject_key: DispatchPolicyCommitmentLookupKeyV1,
+        reason: AcceptedWorkReceiptMaterialLegacyReasonV1,
+    },
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum AcceptedWorkReceiptMaterialErrorV1 {
+    InvalidLookupKey,
+    PhysicalRead(ReadOnlyAuthoritySnapshotErrorV1),
+    InvalidE2RegistryEncoding,
+    UnsupportedE2SchemaVersion {
+        object: E2SchemaObjectV1,
+        observed: u64,
+    },
+    CorruptE2Registry,
+    PartialE2Footprint,
+    AmbiguousE2Footprint,
+    CrossScopeE2Material {
+        field: AcceptedWorkBindingFieldV1,
+    },
+    B1Authentication(WorldWorkAcceptanceAuthenticationErrorV1),
+    ExpectedB1AcceptanceMismatch {
+        field: AcceptedWorkBindingFieldV1,
+    },
+    E2B1LinkageMismatch {
+        field: AcceptedWorkBindingFieldV1,
+    },
+    ExecutionClaimAuthenticationFailed,
+    PolicySnapshotAuthenticationFailed,
+    RetainedCapAuthenticationFailed,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct AuthenticatedAcceptedWorkExecutionClaimV1 {
+    durable_key: WorldWorkExecutionClaimDurableKeyV1,
+    acceptance_record_id: String,
+    acceptance_record_revision: u64,
+    claim_revision: u64,
+    observer_instance_id: String,
+    observer_epoch: u64,
+    canonical_preimage: Vec<u8>,
+    linkage_hash: String,
+}
+
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "E2-RM projection accessors remain unintegrated until B2.2"
+)]
+impl AuthenticatedAcceptedWorkExecutionClaimV1 {
+    pub(crate) fn durable_key(&self) -> &WorldWorkExecutionClaimDurableKeyV1 {
+        &self.durable_key
+    }
+
+    pub(crate) fn acceptance_record_id(&self) -> &str {
+        &self.acceptance_record_id
+    }
+
+    pub(crate) fn acceptance_record_revision(&self) -> u64 {
+        self.acceptance_record_revision
+    }
+
+    pub(crate) fn claim_revision(&self) -> u64 {
+        self.claim_revision
+    }
+
+    pub(crate) fn observer_instance_id(&self) -> &str {
+        &self.observer_instance_id
+    }
+
+    pub(crate) fn observer_epoch(&self) -> u64 {
+        self.observer_epoch
+    }
+
+    pub(crate) fn canonical_preimage(&self) -> &[u8] {
+        &self.canonical_preimage
+    }
+
+    pub(crate) fn linkage_hash(&self) -> &str {
+        &self.linkage_hash
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct AuthenticatedAcceptedWorkRetainedCapV1 {
+    retained_participant_id: String,
+    cap_ref: DispatchPolicyCommitmentRefV1,
+    cap_exact_linkage_hash: String,
+    authority_store_id: String,
+    orchestration_session_id: String,
+    caller_participant_id: String,
+    caller_backend_id: String,
+    target_backend_id: String,
+    world_id: String,
+    world_generation: u64,
+    cap_policy_snapshot_bytes: Vec<u8>,
+    cap_policy_snapshot_ref: AuthorityObjectRefV1,
+    cap_policy_snapshot_hash: String,
+    cap_policy_snapshot_revision: String,
+}
+
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "E2-RM projection accessors remain unintegrated until B2.2"
+)]
+impl AuthenticatedAcceptedWorkRetainedCapV1 {
+    pub(crate) fn retained_participant_id(&self) -> &str {
+        &self.retained_participant_id
+    }
+
+    pub(crate) fn cap_ref(&self) -> &DispatchPolicyCommitmentRefV1 {
+        &self.cap_ref
+    }
+
+    pub(crate) fn cap_exact_linkage_hash(&self) -> &str {
+        &self.cap_exact_linkage_hash
+    }
+
+    pub(crate) fn authority_store_id(&self) -> &str {
+        &self.authority_store_id
+    }
+
+    pub(crate) fn orchestration_session_id(&self) -> &str {
+        &self.orchestration_session_id
+    }
+
+    pub(crate) fn caller_participant_id(&self) -> &str {
+        &self.caller_participant_id
+    }
+
+    pub(crate) fn caller_backend_id(&self) -> &str {
+        &self.caller_backend_id
+    }
+
+    pub(crate) fn target_backend_id(&self) -> &str {
+        &self.target_backend_id
+    }
+
+    pub(crate) fn world_id(&self) -> &str {
+        &self.world_id
+    }
+
+    pub(crate) fn world_generation(&self) -> u64 {
+        self.world_generation
+    }
+
+    pub(crate) fn cap_policy_snapshot_bytes(&self) -> &[u8] {
+        &self.cap_policy_snapshot_bytes
+    }
+
+    pub(crate) fn cap_policy_snapshot_ref(&self) -> &AuthorityObjectRefV1 {
+        &self.cap_policy_snapshot_ref
+    }
+
+    pub(crate) fn cap_policy_snapshot_hash(&self) -> &str {
+        &self.cap_policy_snapshot_hash
+    }
+
+    pub(crate) fn cap_policy_snapshot_revision(&self) -> &str {
+        &self.cap_policy_snapshot_revision
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct AuthenticatedAcceptedWorkReceiptMaterialV1 {
+    commitment_ref: DispatchPolicyCommitmentRefV1,
+    exact_request_subject_key: DispatchPolicyCommitmentLookupKeyV1,
+    subject: DispatchPolicyCommitmentSubjectV1,
+    idempotency_key: String,
+    authority_store_id: String,
+    authority_revision_observed: u64,
+    orchestration_session_id: String,
+    caller_participant_id: String,
+    caller_backend_id: String,
+    target_backend_id: String,
+    world_id: String,
+    world_generation: u64,
+    acceptance_record_id: String,
+    acceptance_record_revision: u64,
+    b1_authority_link: PolicyCommitmentAuthorityLinkV1,
+    accepted_work_identity: AcceptedWorldWorkIdentityV1,
+    runtime_acceptance: RuntimeAcceptanceEvidenceV1,
+    host_transition_correlation: Option<substrate_common::HostTransitionWorkCorrelationV1>,
+    accepted_at: DateTime<Utc>,
+    execution_claim: AuthenticatedAcceptedWorkExecutionClaimV1,
+    policy_snapshot_bytes: Vec<u8>,
+    policy_snapshot_ref: AuthorityObjectRefV1,
+    policy_snapshot_hash: String,
+    policy_snapshot_revision: String,
+    policy_reason: Option<String>,
+    retained_worker_cap: Option<AuthenticatedAcceptedWorkRetainedCapV1>,
+}
+
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "E2-RM projection accessors remain unintegrated until B2.2"
+)]
+impl AuthenticatedAcceptedWorkReceiptMaterialV1 {
+    pub(crate) fn commitment_ref(&self) -> &DispatchPolicyCommitmentRefV1 {
+        &self.commitment_ref
+    }
+
+    pub(crate) fn exact_request_subject_key(&self) -> &DispatchPolicyCommitmentLookupKeyV1 {
+        &self.exact_request_subject_key
+    }
+
+    pub(crate) fn subject(&self) -> &DispatchPolicyCommitmentSubjectV1 {
+        &self.subject
+    }
+
+    pub(crate) fn idempotency_key(&self) -> &str {
+        &self.idempotency_key
+    }
+
+    pub(crate) fn authority_store_id(&self) -> &str {
+        &self.authority_store_id
+    }
+
+    pub(crate) fn authority_revision_observed(&self) -> u64 {
+        self.authority_revision_observed
+    }
+
+    pub(crate) fn orchestration_session_id(&self) -> &str {
+        &self.orchestration_session_id
+    }
+
+    pub(crate) fn caller_participant_id(&self) -> &str {
+        &self.caller_participant_id
+    }
+
+    pub(crate) fn caller_backend_id(&self) -> &str {
+        &self.caller_backend_id
+    }
+
+    pub(crate) fn target_backend_id(&self) -> &str {
+        &self.target_backend_id
+    }
+
+    pub(crate) fn world_id(&self) -> &str {
+        &self.world_id
+    }
+
+    pub(crate) fn world_generation(&self) -> u64 {
+        self.world_generation
+    }
+
+    pub(crate) fn acceptance_record_id(&self) -> &str {
+        &self.acceptance_record_id
+    }
+
+    pub(crate) fn acceptance_record_revision(&self) -> u64 {
+        self.acceptance_record_revision
+    }
+
+    pub(crate) fn b1_authority_link(&self) -> &PolicyCommitmentAuthorityLinkV1 {
+        &self.b1_authority_link
+    }
+
+    pub(crate) fn accepted_work_identity(&self) -> &AcceptedWorldWorkIdentityV1 {
+        &self.accepted_work_identity
+    }
+
+    pub(crate) fn accepted_at(&self) -> DateTime<Utc> {
+        self.accepted_at
+    }
+
+    pub(crate) fn runtime_acceptance(&self) -> &RuntimeAcceptanceEvidenceV1 {
+        &self.runtime_acceptance
+    }
+
+    pub(crate) fn host_transition_correlation(
+        &self,
+    ) -> Option<&substrate_common::HostTransitionWorkCorrelationV1> {
+        self.host_transition_correlation.as_ref()
+    }
+
+    pub(crate) fn execution_claim(&self) -> &AuthenticatedAcceptedWorkExecutionClaimV1 {
+        &self.execution_claim
+    }
+
+    pub(crate) fn policy_snapshot_bytes(&self) -> &[u8] {
+        &self.policy_snapshot_bytes
+    }
+
+    pub(crate) fn policy_snapshot_ref(&self) -> &AuthorityObjectRefV1 {
+        &self.policy_snapshot_ref
+    }
+
+    pub(crate) fn policy_snapshot_hash(&self) -> &str {
+        &self.policy_snapshot_hash
+    }
+
+    pub(crate) fn policy_snapshot_revision(&self) -> &str {
+        &self.policy_snapshot_revision
+    }
+
+    pub(crate) fn policy_reason(&self) -> Option<&str> {
+        self.policy_reason.as_deref()
+    }
+
+    pub(crate) fn retained_worker_cap(&self) -> Option<&AuthenticatedAcceptedWorkRetainedCapV1> {
+        self.retained_worker_cap.as_ref()
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -1602,6 +2015,1015 @@ pub(crate) fn publish_fresh_spawn_commitment(
     result
         .map(PersistedDispatchPolicyCommitmentV1)
         .map_err(storage_error)
+}
+
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "E2-RM intentionally has no production caller before the separate B2.2 admission"
+)]
+pub(crate) fn resolve_accepted_work_receipt_material(
+    authority: &HostSessionAuthority,
+    exact_request_subject_key: &DispatchPolicyCommitmentLookupKeyV1,
+    expected_b1_acceptance: &WorldWorkAcceptanceRecordV1,
+) -> Result<AcceptedWorkReceiptMaterialResolutionV1, AcceptedWorkReceiptMaterialErrorV1> {
+    validate_e2_rm_lookup_key(exact_request_subject_key)?;
+    let snapshot = read_existing_accepted_work_authority_snapshot(authority)
+        .map_err(AcceptedWorkReceiptMaterialErrorV1::PhysicalRead)?;
+    if snapshot.authority_store_id() != exact_request_subject_key.authority_store_id {
+        return Err(AcceptedWorkReceiptMaterialErrorV1::CrossScopeE2Material {
+            field: AcceptedWorkBindingFieldV1::AuthorityStoreId,
+        });
+    }
+
+    let registry = match snapshot.e2() {
+        DispatchPolicyCommitmentPhysicalReadV1::Absent => {
+            let witness = authenticate_expected_b1(&snapshot, expected_b1_acceptance)?;
+            validate_lookup_key_matches_b1(exact_request_subject_key, witness.record()).map_err(
+                |field| AcceptedWorkReceiptMaterialErrorV1::E2B1LinkageMismatch { field },
+            )?;
+            return Ok(
+                AcceptedWorkReceiptMaterialResolutionV1::UnsupportedLegacyState {
+                    exact_request_subject_key: exact_request_subject_key.clone(),
+                    reason:
+                        AcceptedWorkReceiptMaterialLegacyReasonV1::MissingExactHistoricE2Commitment,
+                },
+            );
+        }
+        DispatchPolicyCommitmentPhysicalReadV1::Present(physical) => {
+            decode_and_authenticate_e2_registry(
+                physical,
+                snapshot.authority_store_id(),
+                exact_request_subject_key,
+            )?
+        }
+    };
+
+    let digest = lookup_index_key(exact_request_subject_key)
+        .map_err(|_| AcceptedWorkReceiptMaterialErrorV1::InvalidLookupKey)?;
+    let Some(index) = registry.request_subject_index.get(&digest) else {
+        let witness = authenticate_expected_b1(&snapshot, expected_b1_acceptance)?;
+        validate_lookup_key_matches_b1(exact_request_subject_key, witness.record())
+            .map_err(|field| AcceptedWorkReceiptMaterialErrorV1::E2B1LinkageMismatch { field })?;
+        let matching_material = registry.commitments_by_id.values().any(|record| {
+            commitment_lookup_key(record) == *exact_request_subject_key
+                || b1_acceptance_id(record)
+                    == Some(expected_b1_acceptance.acceptance_record_id.as_str())
+                || record_subject_matches_work_identity(
+                    record,
+                    &expected_b1_acceptance.work_identity,
+                )
+        }) || registry
+            .request_subject_index
+            .values()
+            .any(|candidate| candidate.lookup_key == *exact_request_subject_key);
+        if matching_material {
+            return Err(AcceptedWorkReceiptMaterialErrorV1::PartialE2Footprint);
+        }
+        return Ok(
+            AcceptedWorkReceiptMaterialResolutionV1::UnsupportedLegacyState {
+                exact_request_subject_key: exact_request_subject_key.clone(),
+                reason: AcceptedWorkReceiptMaterialLegacyReasonV1::MissingExactHistoricE2Commitment,
+            },
+        );
+    };
+    if index.lookup_key != *exact_request_subject_key {
+        return Err(AcceptedWorkReceiptMaterialErrorV1::AmbiguousE2Footprint);
+    }
+    let DispatchPolicyCommitmentIndexEntryV1::Committed {
+        reservation_ref: None,
+        fresh_spawn_validated_request_commitment: None,
+        commitment_ref,
+    } = &index.entry
+    else {
+        return Err(AcceptedWorkReceiptMaterialErrorV1::PartialE2Footprint);
+    };
+    let record = registry
+        .commitments_by_id
+        .get(&commitment_ref.commitment_id)
+        .ok_or(AcceptedWorkReceiptMaterialErrorV1::PartialE2Footprint)?;
+    validate_commitment(record, Some(commitment_ref))
+        .and_then(|()| validate_non_spawn_subject_rules(record))
+        .map_err(|_| AcceptedWorkReceiptMaterialErrorV1::CorruptE2Registry)?;
+
+    let PolicyCommitmentAuthorityLinkV1::B1 {
+        acceptance_record_id,
+        acceptance_record_revision: _,
+        runtime_acceptance: _,
+    } = &record.authority_link
+    else {
+        return Err(AcceptedWorkReceiptMaterialErrorV1::CorruptE2Registry);
+    };
+    let witness = authenticate_b1(&snapshot, &record.authority_store_id, acceptance_record_id)?;
+    compare_expected_b1(witness.record(), expected_b1_acceptance)?;
+    validate_lookup_key_matches_b1(exact_request_subject_key, witness.record())
+        .map_err(|field| AcceptedWorkReceiptMaterialErrorV1::E2B1LinkageMismatch { field })?;
+    validate_record_matches_b1(record, witness.record())
+        .map_err(|field| AcceptedWorkReceiptMaterialErrorV1::E2B1LinkageMismatch { field })?;
+
+    let execution_claim = authenticate_execution_claim(record, witness.record())?;
+    let (policy_snapshot_bytes, policy_reason) = authenticate_record_policy(record)
+        .map_err(|_| AcceptedWorkReceiptMaterialErrorV1::PolicySnapshotAuthenticationFailed)?;
+    let retained_worker_cap = authenticate_retained_cap(&registry, record)?;
+    let b1_authority_link = record.authority_link.clone();
+    let accepted = witness.record();
+    Ok(AcceptedWorkReceiptMaterialResolutionV1::Resolved(
+        AuthenticatedAcceptedWorkReceiptMaterialV1 {
+            commitment_ref: commitment_ref.clone(),
+            exact_request_subject_key: exact_request_subject_key.clone(),
+            subject: record.subject.clone(),
+            idempotency_key: record.idempotency_key.clone(),
+            authority_store_id: accepted.authority_store_id.clone(),
+            authority_revision_observed: accepted.authority_revision_observed,
+            orchestration_session_id: accepted.orchestration_session_id.clone(),
+            caller_participant_id: accepted.caller_participant_id.clone(),
+            caller_backend_id: accepted.caller_backend_id.clone(),
+            target_backend_id: accepted.target_backend_id.clone(),
+            world_id: accepted.world_id.clone(),
+            world_generation: accepted.world_generation,
+            acceptance_record_id: accepted.acceptance_record_id.clone(),
+            acceptance_record_revision: accepted.record_revision,
+            b1_authority_link,
+            accepted_work_identity: accepted.work_identity.clone(),
+            runtime_acceptance: accepted.runtime_acceptance.clone(),
+            host_transition_correlation: accepted.host_transition_correlation.clone(),
+            accepted_at: accepted.accepted_at,
+            execution_claim,
+            policy_snapshot_bytes,
+            policy_snapshot_ref: accepted.current_policy_snapshot_ref.clone(),
+            policy_snapshot_hash: accepted.current_policy_snapshot_hash.clone(),
+            policy_snapshot_revision: accepted.current_policy_revision.clone(),
+            policy_reason,
+            retained_worker_cap,
+        },
+    ))
+}
+
+#[cfg(target_os = "linux")]
+fn validate_e2_rm_lookup_key(
+    key: &DispatchPolicyCommitmentLookupKeyV1,
+) -> Result<(), AcceptedWorkReceiptMaterialErrorV1> {
+    for value in [
+        key.authority_store_id.as_str(),
+        key.orchestration_session_id.as_str(),
+        key.request_id.as_str(),
+    ] {
+        validate_component("receipt-material lookup key", value)
+            .map_err(|_| AcceptedWorkReceiptMaterialErrorV1::InvalidLookupKey)?;
+    }
+    match &key.subject {
+        DispatchPolicyCommitmentSubjectKeyV1::EphemeralWork { task_run_id } => {
+            validate_component("receipt-material task run", task_run_id)
+                .map_err(|_| AcceptedWorkReceiptMaterialErrorV1::InvalidLookupKey)
+        }
+        DispatchPolicyCommitmentSubjectKeyV1::RetainedWorkerTurn {
+            active_run_id,
+            message_id,
+        } => validate_component("receipt-material active run", active_run_id)
+            .and_then(|()| validate_component("receipt-material message", message_id))
+            .map_err(|_| AcceptedWorkReceiptMaterialErrorV1::InvalidLookupKey),
+        DispatchPolicyCommitmentSubjectKeyV1::RetainedWorkerLaunch
+        | DispatchPolicyCommitmentSubjectKeyV1::RetainedWorkerFork { .. } => {
+            Err(AcceptedWorkReceiptMaterialErrorV1::InvalidLookupKey)
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn authenticate_expected_b1(
+    snapshot: &super::host_session_authority::store::AcceptedWorkAuthorityPhysicalSnapshotV1,
+    expected: &WorldWorkAcceptanceRecordV1,
+) -> Result<AuthenticatedWorldWorkAcceptanceV1, AcceptedWorkReceiptMaterialErrorV1> {
+    let witness = authenticate_b1(
+        snapshot,
+        snapshot.authority_store_id(),
+        &expected.acceptance_record_id,
+    )?;
+    compare_expected_b1(witness.record(), expected)?;
+    Ok(witness)
+}
+
+#[cfg(target_os = "linux")]
+fn authenticate_b1(
+    snapshot: &super::host_session_authority::store::AcceptedWorkAuthorityPhysicalSnapshotV1,
+    authority_store_id: &str,
+    acceptance_record_id: &str,
+) -> Result<AuthenticatedWorldWorkAcceptanceV1, AcceptedWorkReceiptMaterialErrorV1> {
+    authenticate_persisted_world_work_acceptance(
+        snapshot,
+        &WorldWorkAcceptanceLookupKeyV1::new(authority_store_id, acceptance_record_id),
+    )
+    .map_err(AcceptedWorkReceiptMaterialErrorV1::B1Authentication)
+}
+
+#[cfg(target_os = "linux")]
+fn compare_expected_b1(
+    authenticated: &WorldWorkAcceptanceRecordV1,
+    expected: &WorldWorkAcceptanceRecordV1,
+) -> Result<(), AcceptedWorkReceiptMaterialErrorV1> {
+    let field = if authenticated.schema_version != expected.schema_version {
+        Some(AcceptedWorkBindingFieldV1::SchemaVersion)
+    } else if authenticated.acceptance_record_id != expected.acceptance_record_id {
+        Some(AcceptedWorkBindingFieldV1::AcceptanceRecordId)
+    } else if authenticated.request_id != expected.request_id {
+        Some(AcceptedWorkBindingFieldV1::RequestId)
+    } else if authenticated.authority_store_id != expected.authority_store_id {
+        Some(AcceptedWorkBindingFieldV1::AuthorityStoreId)
+    } else if authenticated.authority_revision_observed != expected.authority_revision_observed {
+        Some(AcceptedWorkBindingFieldV1::AuthorityRevisionObserved)
+    } else if authenticated.orchestration_session_id != expected.orchestration_session_id {
+        Some(AcceptedWorkBindingFieldV1::OrchestrationSessionId)
+    } else if authenticated.caller_participant_id != expected.caller_participant_id {
+        Some(AcceptedWorkBindingFieldV1::CallerParticipantId)
+    } else if authenticated.caller_backend_id != expected.caller_backend_id {
+        Some(AcceptedWorkBindingFieldV1::CallerBackendId)
+    } else if authenticated.target_backend_id != expected.target_backend_id {
+        Some(AcceptedWorkBindingFieldV1::TargetBackendId)
+    } else if authenticated.world_id != expected.world_id {
+        Some(AcceptedWorkBindingFieldV1::WorldId)
+    } else if authenticated.world_generation != expected.world_generation {
+        Some(AcceptedWorkBindingFieldV1::WorldGeneration)
+    } else if authenticated.work_identity != expected.work_identity {
+        Some(AcceptedWorkBindingFieldV1::WorkIdentity)
+    } else if authenticated.host_transition_correlation != expected.host_transition_correlation {
+        Some(AcceptedWorkBindingFieldV1::HostTransitionCorrelation)
+    } else if authenticated.current_policy_snapshot_ref != expected.current_policy_snapshot_ref {
+        Some(AcceptedWorkBindingFieldV1::PolicySnapshotRef)
+    } else if authenticated.current_policy_snapshot_hash != expected.current_policy_snapshot_hash {
+        Some(AcceptedWorkBindingFieldV1::PolicySnapshotHash)
+    } else if authenticated.current_policy_revision != expected.current_policy_revision {
+        Some(AcceptedWorkBindingFieldV1::PolicySnapshotRevision)
+    } else if authenticated.runtime_acceptance != expected.runtime_acceptance {
+        Some(AcceptedWorkBindingFieldV1::RuntimeAcceptance)
+    } else if authenticated.accepted_at != expected.accepted_at {
+        Some(AcceptedWorkBindingFieldV1::AcceptedAt)
+    } else if authenticated.record_revision != expected.record_revision {
+        Some(AcceptedWorkBindingFieldV1::AcceptanceRecordRevision)
+    } else {
+        None
+    };
+    if let Some(field) = field {
+        Err(AcceptedWorkReceiptMaterialErrorV1::ExpectedB1AcceptanceMismatch { field })
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn validate_lookup_key_matches_b1(
+    key: &DispatchPolicyCommitmentLookupKeyV1,
+    record: &WorldWorkAcceptanceRecordV1,
+) -> Result<(), AcceptedWorkBindingFieldV1> {
+    if key.authority_store_id != record.authority_store_id {
+        return Err(AcceptedWorkBindingFieldV1::AuthorityStoreId);
+    }
+    if key.orchestration_session_id != record.orchestration_session_id {
+        return Err(AcceptedWorkBindingFieldV1::OrchestrationSessionId);
+    }
+    if key.request_id != record.request_id {
+        return Err(AcceptedWorkBindingFieldV1::RequestId);
+    }
+    match (&key.subject, &record.work_identity) {
+        (
+            DispatchPolicyCommitmentSubjectKeyV1::EphemeralWork { task_run_id },
+            AcceptedWorldWorkIdentityV1::EphemeralTask {
+                task_run_id: accepted_task_run_id,
+            },
+        ) if task_run_id == accepted_task_run_id => Ok(()),
+        (
+            DispatchPolicyCommitmentSubjectKeyV1::RetainedWorkerTurn {
+                active_run_id,
+                message_id,
+            },
+            AcceptedWorldWorkIdentityV1::RetainedTurn {
+                active_run_id: accepted_active_run_id,
+                message_id: accepted_message_id,
+                ..
+            },
+        ) if active_run_id == accepted_active_run_id && message_id == accepted_message_id => Ok(()),
+        _ => Err(AcceptedWorkBindingFieldV1::WorkIdentity),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn validate_record_matches_b1(
+    record: &DispatchPolicyCommitmentV1,
+    accepted: &WorldWorkAcceptanceRecordV1,
+) -> Result<(), AcceptedWorkBindingFieldV1> {
+    if record.authority_store_id != accepted.authority_store_id {
+        return Err(AcceptedWorkBindingFieldV1::AuthorityStoreId);
+    }
+    if record.request_id != accepted.request_id {
+        return Err(AcceptedWorkBindingFieldV1::RequestId);
+    }
+    if record.orchestration_session_id != accepted.orchestration_session_id {
+        return Err(AcceptedWorkBindingFieldV1::OrchestrationSessionId);
+    }
+    if record.caller_participant_id != accepted.caller_participant_id {
+        return Err(AcceptedWorkBindingFieldV1::CallerParticipantId);
+    }
+    if record.caller_backend_id != accepted.caller_backend_id {
+        return Err(AcceptedWorkBindingFieldV1::CallerBackendId);
+    }
+    if record.target_backend_id != accepted.target_backend_id {
+        return Err(AcceptedWorkBindingFieldV1::TargetBackendId);
+    }
+    if record.world_id != accepted.world_id {
+        return Err(AcceptedWorkBindingFieldV1::WorldId);
+    }
+    if record.world_generation != accepted.world_generation {
+        return Err(AcceptedWorkBindingFieldV1::WorldGeneration);
+    }
+    if !record_subject_matches_work_identity(record, &accepted.work_identity) {
+        return Err(AcceptedWorkBindingFieldV1::WorkIdentity);
+    }
+    let PolicyCommitmentAuthorityLinkV1::B1 {
+        acceptance_record_id,
+        acceptance_record_revision,
+        runtime_acceptance,
+    } = &record.authority_link
+    else {
+        return Err(AcceptedWorkBindingFieldV1::AcceptanceRecordId);
+    };
+    if acceptance_record_id != &accepted.acceptance_record_id {
+        return Err(AcceptedWorkBindingFieldV1::AcceptanceRecordId);
+    }
+    if *acceptance_record_revision != accepted.record_revision {
+        return Err(AcceptedWorkBindingFieldV1::AcceptanceRecordRevision);
+    }
+    if runtime_acceptance != &accepted.runtime_acceptance {
+        return Err(AcceptedWorkBindingFieldV1::RuntimeAcceptance);
+    }
+    if record.policy_snapshot_ref != accepted.current_policy_snapshot_ref
+        || record.parent_policy_ref != accepted.current_policy_snapshot_ref
+    {
+        return Err(AcceptedWorkBindingFieldV1::PolicySnapshotRef);
+    }
+    if record.policy_snapshot_hash != accepted.current_policy_snapshot_hash {
+        return Err(AcceptedWorkBindingFieldV1::PolicySnapshotHash);
+    }
+    if record.policy_snapshot_revision != accepted.current_policy_revision
+        || record.parent_policy_revision != accepted.current_policy_revision
+    {
+        return Err(AcceptedWorkBindingFieldV1::PolicySnapshotRevision);
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn record_subject_matches_work_identity(
+    record: &DispatchPolicyCommitmentV1,
+    work_identity: &AcceptedWorldWorkIdentityV1,
+) -> bool {
+    matches!(
+        (&record.subject, work_identity),
+        (
+            DispatchPolicyCommitmentSubjectV1::EphemeralWork { task_run_id },
+            AcceptedWorldWorkIdentityV1::EphemeralTask {
+                task_run_id: accepted_task_run_id,
+            },
+        ) if task_run_id == accepted_task_run_id
+    ) || matches!(
+        (&record.subject, work_identity),
+        (
+            DispatchPolicyCommitmentSubjectV1::RetainedWorkerTurn {
+                retained_participant_id,
+                active_run_id,
+                message_id,
+            },
+            AcceptedWorldWorkIdentityV1::RetainedTurn {
+                active_run_id: accepted_active_run_id,
+                message_id: accepted_message_id,
+                target_participant_id,
+            },
+        ) if retained_participant_id == target_participant_id
+            && active_run_id == accepted_active_run_id
+            && message_id == accepted_message_id
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn b1_acceptance_id(record: &DispatchPolicyCommitmentV1) -> Option<&str> {
+    match &record.authority_link {
+        PolicyCommitmentAuthorityLinkV1::B1 {
+            acceptance_record_id,
+            ..
+        } => Some(acceptance_record_id),
+        PolicyCommitmentAuthorityLinkV1::RetainedAdmission { .. }
+        | PolicyCommitmentAuthorityLinkV1::ForkDispatch { .. } => None,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn authenticate_execution_claim(
+    record: &DispatchPolicyCommitmentV1,
+    accepted: &WorldWorkAcceptanceRecordV1,
+) -> Result<AuthenticatedAcceptedWorkExecutionClaimV1, AcceptedWorkReceiptMaterialErrorV1> {
+    let link = record
+        .execution_claim_link
+        .as_ref()
+        .ok_or(AcceptedWorkReceiptMaterialErrorV1::ExecutionClaimAuthenticationFailed)?;
+    let canonical_preimage = link
+        .claim_preimage
+        .resolve_inline()
+        .map_err(|_| AcceptedWorkReceiptMaterialErrorV1::ExecutionClaimAuthenticationFailed)?;
+    let claim = validate_execution_claim_link(link, &record.authority_store_id)
+        .and_then(|claim| validate_claim_matches_acceptance(&claim, accepted).map(|()| claim))
+        .map_err(|_| AcceptedWorkReceiptMaterialErrorV1::ExecutionClaimAuthenticationFailed)?;
+    if claim.authority_revision_observed != accepted.authority_revision_observed
+        || claim.host_transition_correlation != accepted.host_transition_correlation
+        || claim.work_identity != accepted.work_identity
+    {
+        return Err(AcceptedWorkReceiptMaterialErrorV1::ExecutionClaimAuthenticationFailed);
+    }
+    Ok(AuthenticatedAcceptedWorkExecutionClaimV1 {
+        durable_key: link.durable_claim_key.clone(),
+        acceptance_record_id: claim.acceptance_record_id,
+        acceptance_record_revision: claim.acceptance_record_revision,
+        claim_revision: claim.claim_revision,
+        observer_instance_id: claim.observer_instance_id,
+        observer_epoch: claim.observer_epoch,
+        canonical_preimage,
+        linkage_hash: link.claim_linkage_hash.clone(),
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn authenticate_record_policy(
+    record: &DispatchPolicyCommitmentV1,
+) -> Result<(Vec<u8>, Option<String>), DispatchPolicyCommitmentError> {
+    let expected_subject = match &record.subject {
+        DispatchPolicyCommitmentSubjectV1::EphemeralWork { .. } => {
+            transport_api_types::DispatchCapabilitySubjectV1::EphemeralTask
+        }
+        DispatchPolicyCommitmentSubjectV1::RetainedWorkerLaunch { .. } => {
+            transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerSpawn
+        }
+        DispatchPolicyCommitmentSubjectV1::RetainedWorkerTurn {
+            retained_participant_id,
+            ..
+        } => transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerTurn {
+            retained_participant_id: retained_participant_id.clone(),
+        },
+        DispatchPolicyCommitmentSubjectV1::RetainedWorkerFork {
+            source_participant_id,
+            ..
+        } => transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerFork {
+            source_participant_id: source_participant_id.clone(),
+        },
+    };
+    authenticate_e2_rm_policy_material(
+        &record.applied_patch,
+        &record.policy_snapshot_bytes,
+        &record.policy_snapshot_ref,
+        &record.policy_snapshot_hash,
+        &record.policy_snapshot_revision,
+        &record.parent_policy_ref,
+        &record.parent_policy_revision,
+        record.reason.as_ref(),
+        &record.request_id,
+        &record.orchestration_session_id,
+        &record.caller_participant_id,
+        &record.target_backend_id,
+        &record.world_id,
+        record.world_generation,
+        &expected_subject,
+    )
+}
+
+#[cfg(target_os = "linux")]
+#[allow(clippy::too_many_arguments)]
+fn authenticate_e2_rm_policy_material(
+    applied_patch: &AppliedDispatchPolicyPatchIdentityV1,
+    policy_snapshot_bytes: &ImmutableBytesMaterialV1,
+    policy_snapshot_ref: &AuthorityObjectRefV1,
+    policy_snapshot_hash: &str,
+    policy_snapshot_revision: &str,
+    parent_policy_ref: &AuthorityObjectRefV1,
+    parent_policy_revision: &str,
+    reason: Option<&String>,
+    request_id: &str,
+    orchestration_session_id: &str,
+    caller_participant_id: &str,
+    target_backend_id: &str,
+    world_id: &str,
+    world_generation: u64,
+    expected_subject: &transport_api_types::DispatchCapabilitySubjectV1,
+) -> Result<(Vec<u8>, Option<String>), DispatchPolicyCommitmentError> {
+    let bytes = policy_snapshot_bytes.resolve_inline()?;
+    let snapshot: PolicySnapshotV3 = serde_json::from_slice(&bytes)
+        .map_err(|_| DispatchPolicyCommitmentError::new("decode E2-RM policy snapshot"))?;
+    snapshot
+        .validate()
+        .map_err(|_| DispatchPolicyCommitmentError::new("validate E2-RM policy snapshot"))?;
+    if serde_json::to_vec(&snapshot).ok().as_deref() != Some(bytes.as_slice())
+        || sha256_hex(&bytes) != policy_snapshot_hash
+        || policy_snapshot_revision.is_empty()
+        || parent_policy_revision.is_empty()
+        || transport_policy_ref(policy_snapshot_ref)
+            .validate()
+            .is_err()
+        || transport_policy_ref(parent_policy_ref).validate().is_err()
+    {
+        return Err(DispatchPolicyCommitmentError::new(
+            "E2-RM policy snapshot identity mismatch",
+        ));
+    }
+    let authenticated_reason = match applied_patch {
+        AppliedDispatchPolicyPatchIdentityV1::UnchangedParent => {
+            if reason.is_some() {
+                return Err(DispatchPolicyCommitmentError::new(
+                    "unchanged E2-RM policy unexpectedly has a reason",
+                ));
+            }
+            None
+        }
+        AppliedDispatchPolicyPatchIdentityV1::RestrictedWorldFs {
+            canonical_patch, ..
+        } => {
+            validate_applied_patch(applied_patch)?;
+            let patch: DispatchPolicyNarrowingPatchV1 =
+                decode_canonical(&canonical_patch.resolve_inline()?)?;
+            patch
+                .validate()
+                .map_err(|_| DispatchPolicyCommitmentError::new("invalid E2-RM policy patch"))?;
+            if patch.request_id != request_id
+                || patch.orchestration_session_id != orchestration_session_id
+                || patch.caller_participant_id != caller_participant_id
+                || patch.target_backend_id != target_backend_id
+                || patch.target_world.world_id != world_id
+                || patch.target_world.world_generation != world_generation
+                || patch.parent_policy_ref != transport_policy_ref(parent_policy_ref)
+                || patch.parent_policy_revision != parent_policy_revision
+                || &patch.applies_to != expected_subject
+                || patch
+                    .restricted_policy_patch
+                    .world_fs
+                    .as_ref()
+                    .is_none_or(|world_fs| world_fs.is_empty())
+                || patch.reason.as_ref() != reason
+            {
+                return Err(DispatchPolicyCommitmentError::new(
+                    "E2-RM policy patch binding is not authenticated",
+                ));
+            }
+            patch.reason
+        }
+    };
+    Ok((bytes, authenticated_reason))
+}
+
+#[cfg(target_os = "linux")]
+fn authenticate_retained_cap(
+    registry: &DispatchPolicyCommitmentRegistryV1,
+    record: &DispatchPolicyCommitmentV1,
+) -> Result<Option<AuthenticatedAcceptedWorkRetainedCapV1>, AcceptedWorkReceiptMaterialErrorV1> {
+    let (retained_participant_id, cap_ref) =
+        match (&record.subject, &record.retained_worker_cap_link) {
+            (DispatchPolicyCommitmentSubjectV1::EphemeralWork { .. }, None) => return Ok(None),
+            (
+                DispatchPolicyCommitmentSubjectV1::RetainedWorkerTurn {
+                    retained_participant_id,
+                    ..
+                },
+                Some(RetainedWorkerCapLinkV1::Existing { cap_ref }),
+            ) => (retained_participant_id, cap_ref),
+            _ => return Err(AcceptedWorkReceiptMaterialErrorV1::RetainedCapAuthenticationFailed),
+        };
+    validate_record_cap_sources(registry, record)
+        .map_err(|_| AcceptedWorkReceiptMaterialErrorV1::RetainedCapAuthenticationFailed)?;
+    let cap = registry
+        .commitments_by_id
+        .get(&cap_ref.commitment_id)
+        .ok_or(AcceptedWorkReceiptMaterialErrorV1::RetainedCapAuthenticationFailed)?;
+    validate_commitment(cap, Some(cap_ref))
+        .map_err(|_| AcceptedWorkReceiptMaterialErrorV1::RetainedCapAuthenticationFailed)?;
+    if cap.authority_store_id != record.authority_store_id
+        || cap.orchestration_session_id != record.orchestration_session_id
+        || cap.caller_participant_id != record.caller_participant_id
+        || cap.caller_backend_id != record.caller_backend_id
+        || cap.target_backend_id != record.target_backend_id
+        || cap.world_id != record.world_id
+        || cap.world_generation != record.world_generation
+        || cap_ref.exact_linkage_hash != cap.exact_linkage_hash
+    {
+        return Err(AcceptedWorkReceiptMaterialErrorV1::RetainedCapAuthenticationFailed);
+    }
+    let participant = match &cap.subject {
+        DispatchPolicyCommitmentSubjectV1::RetainedWorkerLaunch {
+            retained_participant_id,
+            ..
+        } => retained_participant_id,
+        DispatchPolicyCommitmentSubjectV1::RetainedWorkerFork {
+            child_participant_id,
+            ..
+        } => child_participant_id,
+        _ => return Err(AcceptedWorkReceiptMaterialErrorV1::RetainedCapAuthenticationFailed),
+    };
+    if participant != retained_participant_id {
+        return Err(AcceptedWorkReceiptMaterialErrorV1::RetainedCapAuthenticationFailed);
+    }
+    let (cap_policy_snapshot_bytes, _) = authenticate_record_policy(cap)
+        .map_err(|_| AcceptedWorkReceiptMaterialErrorV1::RetainedCapAuthenticationFailed)?;
+    Ok(Some(AuthenticatedAcceptedWorkRetainedCapV1 {
+        retained_participant_id: retained_participant_id.clone(),
+        cap_ref: cap_ref.clone(),
+        cap_exact_linkage_hash: cap.exact_linkage_hash.clone(),
+        authority_store_id: cap.authority_store_id.clone(),
+        orchestration_session_id: cap.orchestration_session_id.clone(),
+        caller_participant_id: cap.caller_participant_id.clone(),
+        caller_backend_id: cap.caller_backend_id.clone(),
+        target_backend_id: cap.target_backend_id.clone(),
+        world_id: cap.world_id.clone(),
+        world_generation: cap.world_generation,
+        cap_policy_snapshot_bytes,
+        cap_policy_snapshot_ref: cap.policy_snapshot_ref.clone(),
+        cap_policy_snapshot_hash: cap.policy_snapshot_hash.clone(),
+        cap_policy_snapshot_revision: cap.policy_snapshot_revision.clone(),
+    }))
+}
+
+#[cfg(target_os = "linux")]
+fn decode_and_authenticate_e2_registry(
+    physical: &super::host_session_authority::store::DispatchPolicyCommitmentPhysicalSnapshotV1,
+    authority_store_id: &str,
+    exact_request_subject_key: &DispatchPolicyCommitmentLookupKeyV1,
+) -> Result<DispatchPolicyCommitmentRegistryV1, AcceptedWorkReceiptMaterialErrorV1> {
+    let syntax: Value = decode_canonical(physical.registry_bytes())
+        .map_err(|_| AcceptedWorkReceiptMaterialErrorV1::InvalidE2RegistryEncoding)?;
+    classify_e2_schema_versions(&syntax, physical.key_files())?;
+    let registry: DispatchPolicyCommitmentRegistryV1 = decode_canonical(physical.registry_bytes())
+        .map_err(|_| AcceptedWorkReceiptMaterialErrorV1::InvalidE2RegistryEncoding)?;
+    if registry.authority_store_id != authority_store_id
+        || registry.request_commitment_key.authority_store_id != authority_store_id
+    {
+        return Err(AcceptedWorkReceiptMaterialErrorV1::CrossScopeE2Material {
+            field: AcceptedWorkBindingFieldV1::AuthorityStoreId,
+        });
+    }
+    let keys = physical
+        .key_files()
+        .iter()
+        .map(|(name, bytes)| (name.clone(), bytes.clone()))
+        .collect::<Vec<_>>();
+    validate_registry_and_key(&registry, authority_store_id, &keys)
+        .map_err(|_| AcceptedWorkReceiptMaterialErrorV1::CorruptE2Registry)?;
+    let selected_commitment_id = lookup_index_key(exact_request_subject_key)
+        .ok()
+        .and_then(|digest| registry.request_subject_index.get(&digest))
+        .and_then(|index| match &index.entry {
+            DispatchPolicyCommitmentIndexEntryV1::Committed { commitment_ref, .. }
+                if index.lookup_key == *exact_request_subject_key =>
+            {
+                Some(commitment_ref.commitment_id.as_str())
+            }
+            DispatchPolicyCommitmentIndexEntryV1::FreshSpawnReserved { .. }
+            | DispatchPolicyCommitmentIndexEntryV1::Committed { .. } => None,
+        });
+    validate_e2_rm_complete_registry_semantics(&registry, selected_commitment_id)
+        .map_err(|_| AcceptedWorkReceiptMaterialErrorV1::CorruptE2Registry)?;
+    Ok(registry)
+}
+
+#[cfg(target_os = "linux")]
+fn validate_e2_rm_complete_registry_semantics(
+    registry: &DispatchPolicyCommitmentRegistryV1,
+    selected_commitment_id: Option<&str>,
+) -> Result<(), DispatchPolicyCommitmentError> {
+    for reservation in registry.reservations_by_id.values() {
+        validate_e2_rm_reservation_semantics(reservation)?;
+    }
+
+    let mut expected_caps = BTreeMap::new();
+    for record in registry.commitments_by_id.values() {
+        let selected = selected_commitment_id == Some(record.commitment_id.as_str());
+        if !selected {
+            authenticate_record_policy(record)?;
+        }
+        match &record.subject {
+            DispatchPolicyCommitmentSubjectV1::RetainedWorkerLaunch {
+                retained_participant_id,
+                ..
+            } => {
+                validate_e2_rm_launch_record(registry, record)?;
+                if expected_caps
+                    .insert(retained_participant_id.clone(), commitment_ref(record))
+                    .is_some()
+                {
+                    return Err(DispatchPolicyCommitmentError::new(
+                        "E2-RM duplicate launch cap participant",
+                    ));
+                }
+            }
+            DispatchPolicyCommitmentSubjectV1::RetainedWorkerFork {
+                child_participant_id,
+                ..
+            } => {
+                validate_non_spawn_subject_rules(record)?;
+                validate_record_cap_sources(registry, record)?;
+                if expected_caps
+                    .insert(child_participant_id.clone(), commitment_ref(record))
+                    .is_some()
+                {
+                    return Err(DispatchPolicyCommitmentError::new(
+                        "E2-RM duplicate fork cap participant",
+                    ));
+                }
+            }
+            DispatchPolicyCommitmentSubjectV1::EphemeralWork { .. }
+            | DispatchPolicyCommitmentSubjectV1::RetainedWorkerTurn { .. } => {
+                if !selected {
+                    validate_non_spawn_subject_rules(record)?;
+                    validate_record_cap_sources(registry, record)?;
+                }
+            }
+        }
+    }
+    if registry.retained_worker_caps_by_participant_id != expected_caps {
+        return Err(DispatchPolicyCommitmentError::new(
+            "E2-RM worker-cap index is not exact and complete",
+        ));
+    }
+
+    let mut verified = std::collections::BTreeSet::new();
+    for reference in registry.retained_worker_caps_by_participant_id.values() {
+        let mut visiting = std::collections::BTreeSet::new();
+        validate_e2_rm_cap_chain(registry, reference, &mut visiting, &mut verified)?;
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn validate_e2_rm_reservation_semantics(
+    reservation: &DispatchPolicyCommitmentReservationV1,
+) -> Result<(), DispatchPolicyCommitmentError> {
+    let DispatchPolicyCommitmentSubjectV1::RetainedWorkerLaunch {
+        retained_participant_id,
+        bootstrap_run_id,
+    } = &reservation.subject
+    else {
+        return Err(DispatchPolicyCommitmentError::new(
+            "E2-RM reservation does not describe a retained launch",
+        ));
+    };
+    if !matches!(
+        reservation.lookup_key.subject,
+        DispatchPolicyCommitmentSubjectKeyV1::RetainedWorkerLaunch
+    ) || retained_participant_id != &reservation.retained_participant_id
+        || bootstrap_run_id != &reservation.bootstrap_run_id
+        || reservation.proposed_worker_cap.commitment_id != reservation.proposed_commitment_id
+        || reservation.proposed_worker_cap.retained_worker_cap_link
+            != RetainedWorkerCapLinkV1::ThisCommitment
+    {
+        return Err(DispatchPolicyCommitmentError::new(
+            "E2-RM launch reservation subject or proposed cap mismatch",
+        ));
+    }
+    authenticate_e2_rm_policy_material(
+        &reservation.applied_patch,
+        &reservation.policy_snapshot_bytes,
+        &reservation.policy_snapshot_ref,
+        &reservation.policy_snapshot_hash,
+        &reservation.policy_snapshot_revision,
+        &reservation.parent_policy_ref,
+        &reservation.parent_policy_revision,
+        reservation.reason.as_ref(),
+        &reservation.request_id,
+        &reservation.orchestration_session_id,
+        &reservation.caller_participant_id,
+        &reservation.target_backend_id,
+        &reservation.world_id,
+        reservation.world_generation,
+        &transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerSpawn,
+    )?;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn validate_e2_rm_launch_record(
+    registry: &DispatchPolicyCommitmentRegistryV1,
+    record: &DispatchPolicyCommitmentV1,
+) -> Result<(), DispatchPolicyCommitmentError> {
+    let reservation_reference = record.fresh_spawn_reservation_ref.as_ref().ok_or_else(|| {
+        DispatchPolicyCommitmentError::new("E2-RM launch reservation reference is absent")
+    })?;
+    let reservation = registry
+        .reservations_by_id
+        .get(&reservation_reference.reservation_id)
+        .ok_or_else(|| DispatchPolicyCommitmentError::new("E2-RM launch reservation is absent"))?;
+    validate_reservation(reservation, reservation_reference)?;
+    validate_e2_rm_reservation_semantics(reservation)?;
+    let PolicyCommitmentAuthorityLinkV1::RetainedAdmission {
+        stable_admission_identity,
+    } = &record.authority_link
+    else {
+        return Err(DispatchPolicyCommitmentError::new(
+            "E2-RM launch authority is not retained admission",
+        ));
+    };
+    validate_e2_rm_stable_admission(stable_admission_identity, reservation)?;
+    validate_fresh_spawn_record_matches(record, reservation, stable_admission_identity)?;
+    if record.request_id != reservation.request_id
+        || record.idempotency_key != reservation.idempotency_key
+        || record.orchestration_session_id != reservation.orchestration_session_id
+        || record.caller_participant_id != reservation.caller_participant_id
+        || record.caller_backend_id != reservation.caller_backend_id
+        || record.target_backend_id != reservation.target_backend_id
+        || record.world_id != reservation.world_id
+        || record.world_generation != reservation.world_generation
+        || record.applied_patch != reservation.applied_patch
+        || record.policy_snapshot_ref != reservation.policy_snapshot_ref
+        || record.policy_snapshot_revision != reservation.policy_snapshot_revision
+        || record.reason != reservation.reason
+    {
+        return Err(DispatchPolicyCommitmentError::new(
+            "E2-RM launch record does not exactly preserve its reservation",
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn validate_e2_rm_stable_admission(
+    link: &RetainedWorkerAdmissionStableIdentityLinkV1,
+    reservation: &DispatchPolicyCommitmentReservationV1,
+) -> Result<(), DispatchPolicyCommitmentError> {
+    validate_stable_admission_matches_reservation(link, reservation)?;
+    let mut hash_input = serde_json::Map::new();
+    hash_input.insert(
+        "domain".into(),
+        Value::String(STABLE_ADMISSION_HASH_DOMAIN.into()),
+    );
+    hash_input.insert(
+        "stable_source_fields".into(),
+        serde_json::to_value(&link.stable_source_fields)
+            .map_err(|_| DispatchPolicyCommitmentError::new("encode E2-RM stable admission"))?,
+    );
+    hash_input.insert(
+        "registration".into(),
+        serde_json::to_value(&link.registration)
+            .map_err(|_| DispatchPolicyCommitmentError::new("encode E2-RM registration"))?,
+    );
+    let stable = &link.stable_source_fields;
+    if link.stable_identity_hash != sha256_hex(&encode_canonical(&Value::Object(hash_input))?)
+        || stable.schema_version != 1
+        || stable.admission_authority_revision == 0
+        || stable.max_live_retained_workers == 0
+        || stable.canonical_spawn_fingerprint.schema_version != 1
+        || stable.canonical_spawn_fingerprint.key_id.is_empty()
+        || validate_digest(
+            "stable admission spawn fingerprint",
+            &stable.canonical_spawn_fingerprint.digest_hex,
+        )
+        .is_err()
+        || validate_component("stable admission protocol", &stable.protocol).is_err()
+        || validate_component(
+            "stable admission registration",
+            &link.registration.registration_id,
+        )
+        .is_err()
+        || link.registration.retained_worker_ref.object_kind
+            != super::host_session_authority::schema::AuthorityObjectKindV1::RetainedWorker
+        || link.registration.retained_worker_ref.schema_version == 0
+    {
+        return Err(DispatchPolicyCommitmentError::new(
+            "E2-RM stable admission preimage is invalid",
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn validate_e2_rm_cap_chain(
+    registry: &DispatchPolicyCommitmentRegistryV1,
+    reference: &DispatchPolicyCommitmentRefV1,
+    visiting: &mut std::collections::BTreeSet<String>,
+    verified: &mut std::collections::BTreeSet<String>,
+) -> Result<(), DispatchPolicyCommitmentError> {
+    if verified.contains(&reference.commitment_id) {
+        return Ok(());
+    }
+    if !visiting.insert(reference.commitment_id.clone()) {
+        return Err(DispatchPolicyCommitmentError::new(
+            "E2-RM retained-cap ancestry cycle",
+        ));
+    }
+    let record = registry
+        .commitments_by_id
+        .get(&reference.commitment_id)
+        .ok_or_else(|| DispatchPolicyCommitmentError::new("E2-RM retained cap is absent"))?;
+    validate_commitment(record, Some(reference))?;
+    match &record.subject {
+        DispatchPolicyCommitmentSubjectV1::RetainedWorkerLaunch { .. } => {
+            validate_e2_rm_launch_record(registry, record)?;
+        }
+        DispatchPolicyCommitmentSubjectV1::RetainedWorkerFork { .. } => {
+            validate_non_spawn_subject_rules(record)?;
+            validate_record_cap_sources(registry, record)?;
+            let source = record.source_worker_cap_ref.as_ref().ok_or_else(|| {
+                DispatchPolicyCommitmentError::new("E2-RM fork source cap is absent")
+            })?;
+            validate_e2_rm_cap_chain(registry, source, visiting, verified)?;
+        }
+        DispatchPolicyCommitmentSubjectV1::EphemeralWork { .. }
+        | DispatchPolicyCommitmentSubjectV1::RetainedWorkerTurn { .. } => {
+            return Err(DispatchPolicyCommitmentError::new(
+                "E2-RM retained-cap ancestry contains a non-cap record",
+            ));
+        }
+    }
+    visiting.remove(&reference.commitment_id);
+    verified.insert(reference.commitment_id.clone());
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn classify_e2_schema_versions(
+    registry: &Value,
+    key_files: &BTreeMap<String, Vec<u8>>,
+) -> Result<(), AcceptedWorkReceiptMaterialErrorV1> {
+    let object = registry
+        .as_object()
+        .ok_or(AcceptedWorkReceiptMaterialErrorV1::InvalidE2RegistryEncoding)?;
+    classify_e2_schema_object(registry, E2SchemaObjectV1::Registry)?;
+    if let Some(header) = object.get("request_commitment_key") {
+        let key_id = header
+            .as_object()
+            .and_then(|value| value.get("key_id"))
+            .and_then(Value::as_str)
+            .unwrap_or("unknown")
+            .to_owned();
+        classify_e2_schema_object(header, E2SchemaObjectV1::CommitmentKey { key_id })?;
+    }
+    classify_e2_schema_map(
+        object.get("reservations_by_id"),
+        |reservation_id| E2SchemaObjectV1::Reservation { reservation_id },
+        |owner_id| E2SchemaObjectV1::ValidatedSpawnRequest { owner_id },
+        "validated_request_commitment",
+    )?;
+    classify_e2_schema_map(
+        object.get("commitments_by_id"),
+        |commitment_id| E2SchemaObjectV1::Commitment { commitment_id },
+        |owner_id| E2SchemaObjectV1::ValidatedSpawnRequest { owner_id },
+        "fresh_spawn_validated_request_commitment",
+    )?;
+    for (name, bytes) in key_files {
+        let key: Value = decode_canonical(bytes)
+            .map_err(|_| AcceptedWorkReceiptMaterialErrorV1::InvalidE2RegistryEncoding)?;
+        let key_id = key
+            .as_object()
+            .and_then(|object| object.get("key_id"))
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .unwrap_or_else(|| name.clone());
+        classify_e2_schema_object(&key, E2SchemaObjectV1::CommitmentKey { key_id })?;
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn classify_e2_schema_map<Primary, Nested>(
+    value: Option<&Value>,
+    primary: Primary,
+    nested: Nested,
+    nested_field: &str,
+) -> Result<(), AcceptedWorkReceiptMaterialErrorV1>
+where
+    Primary: Fn(String) -> E2SchemaObjectV1,
+    Nested: Fn(String) -> E2SchemaObjectV1,
+{
+    let map = value
+        .and_then(Value::as_object)
+        .ok_or(AcceptedWorkReceiptMaterialErrorV1::InvalidE2RegistryEncoding)?;
+    for (id, entry) in map {
+        classify_e2_schema_object(entry, primary(id.clone()))?;
+        if let Some(nested_value) = entry
+            .as_object()
+            .and_then(|object| object.get(nested_field))
+            .filter(|value| !value.is_null())
+        {
+            classify_e2_schema_object(nested_value, nested(id.clone()))?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn classify_e2_schema_object(
+    value: &Value,
+    object: E2SchemaObjectV1,
+) -> Result<(), AcceptedWorkReceiptMaterialErrorV1> {
+    let observed = value
+        .as_object()
+        .and_then(|value| value.get("schema_version"))
+        .and_then(Value::as_u64)
+        .ok_or(AcceptedWorkReceiptMaterialErrorV1::InvalidE2RegistryEncoding)?;
+    if observed != 1 {
+        return Err(
+            AcceptedWorkReceiptMaterialErrorV1::UnsupportedE2SchemaVersion { object, observed },
+        );
+    }
+    Ok(())
 }
 
 pub(crate) fn publish_accepted_work_commitment(
@@ -4534,6 +5956,7 @@ mod tests {
                 Some(target_participant_id.clone()),
             ),
         };
+        let observed_at = Utc::now();
         let runtime_acceptance = RuntimeAcceptanceEvidenceV1 {
             acknowledgement_kind:
                 super::super::state_store::RuntimeAcceptanceAcknowledgementKindV1::StartFrame,
@@ -4545,7 +5968,7 @@ mod tests {
             active_run_id,
             message_id,
             retained_participant_id,
-            observed_at: Utc::now(),
+            observed_at,
         };
         let acceptance = WorldWorkAcceptanceRecordV1 {
             schema_version: 1,
@@ -4565,7 +5988,7 @@ mod tests {
             current_policy_snapshot_hash: policy_snapshot.hash().into(),
             current_policy_revision: policy_snapshot.revision().into(),
             runtime_acceptance: runtime_acceptance.clone(),
-            accepted_at: Utc::now(),
+            accepted_at: observed_at + chrono::Duration::seconds(1),
             record_revision: 1,
         };
         let execution_claim = WorldWorkExecutionClaimV1 {
@@ -4599,6 +6022,1493 @@ mod tests {
             reason: None,
             retained_worker_cap_ref,
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn persist_e2_rm_case(
+        authority: &HostSessionAuthority,
+        input: &AcceptedWorkPolicyCommitmentInputV1,
+    ) -> (
+        DispatchPolicyCommitmentLookupKeyV1,
+        PersistedDispatchPolicyCommitmentV1,
+    ) {
+        super::super::state_store::persist_e2_rm_world_work_acceptance_for_test(
+            authority,
+            &input.acceptance,
+        )
+        .expect("persist exact B1 acceptance");
+        let persisted = publish_accepted_work_commitment(authority, input.clone())
+            .expect("publish exact immutable E2 commitment");
+        let key = commitment_lookup_key(persisted.record());
+        (key, persisted)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn resolved_e2_rm(
+        authority: &HostSessionAuthority,
+        key: &DispatchPolicyCommitmentLookupKeyV1,
+        expected: &WorldWorkAcceptanceRecordV1,
+    ) -> AuthenticatedAcceptedWorkReceiptMaterialV1 {
+        match resolve_accepted_work_receipt_material(authority, key, expected)
+            .expect("resolve E2-RM material")
+        {
+            AcceptedWorkReceiptMaterialResolutionV1::Resolved(material) => material,
+            AcceptedWorkReceiptMaterialResolutionV1::UnsupportedLegacyState { .. } => {
+                panic!("complete E2/B1 material must resolve")
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn e2_rm_rehash_commitment_and_index(
+        registry: &mut DispatchPolicyCommitmentRegistryV1,
+        commitment_id: &str,
+    ) {
+        let reference = {
+            let record = registry
+                .commitments_by_id
+                .get_mut(commitment_id)
+                .expect("E2-RM commitment to rehash");
+            record.exact_linkage_hash = commitment_hash(record).expect("rehash E2-RM commitment");
+            commitment_ref(record)
+        };
+        let mut updated = 0;
+        for index in registry.request_subject_index.values_mut() {
+            if let DispatchPolicyCommitmentIndexEntryV1::Committed { commitment_ref, .. } =
+                &mut index.entry
+            {
+                if commitment_ref.commitment_id == commitment_id {
+                    *commitment_ref = reference.clone();
+                    updated += 1;
+                }
+            }
+        }
+        assert_eq!(updated, 1, "one exact E2-RM commitment index");
+        for cap_ref in registry.retained_worker_caps_by_participant_id.values_mut() {
+            if cap_ref.commitment_id == commitment_id {
+                *cap_ref = reference.clone();
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn e2_rm_rehash_stable_admission(link: &mut RetainedWorkerAdmissionStableIdentityLinkV1) {
+        let mut hash_input = serde_json::Map::new();
+        hash_input.insert(
+            "domain".into(),
+            Value::String(STABLE_ADMISSION_HASH_DOMAIN.into()),
+        );
+        hash_input.insert(
+            "stable_source_fields".into(),
+            serde_json::to_value(&link.stable_source_fields).expect("stable source fields"),
+        );
+        hash_input.insert(
+            "registration".into(),
+            serde_json::to_value(&link.registration).expect("stable registration"),
+        );
+        link.stable_identity_hash =
+            sha256_hex(&encode_canonical(&Value::Object(hash_input)).expect("stable admission"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn e2_rm_resolver_authenticates_ephemeral_and_retained_historical_material() {
+        let (_parent, authority) = started_authority();
+        let authority_store_id = authority
+            .read_preserved_start_root_v2()
+            .expect("read authority root")
+            .authority_store_id;
+        let snapshot = validated_material(policy_snapshot(
+            &["src/lib.rs"],
+            &["src/lib.rs"],
+            &["api.example"],
+        ));
+        let ephemeral = accepted_work_input(
+            &authority_store_id,
+            "wwa_018f0f2e-7b4c-7aa1-8c22-123456789ac1",
+            "request-e2-rm-ephemeral",
+            AcceptedWorldWorkIdentityV1::EphemeralTask {
+                task_run_id: "task-run-e2-rm-ephemeral".into(),
+            },
+            snapshot.clone(),
+            None,
+        );
+        let (ephemeral_key, ephemeral_commitment) = persist_e2_rm_case(&authority, &ephemeral);
+        let material = resolved_e2_rm(&authority, &ephemeral_key, &ephemeral.acceptance);
+        assert_eq!(
+            material.commitment_ref(),
+            &ephemeral_commitment.commitment_ref()
+        );
+        assert_eq!(material.exact_request_subject_key(), &ephemeral_key);
+        assert_eq!(material.authority_store_id(), authority_store_id);
+        assert_eq!(
+            material.authority_revision_observed(),
+            ephemeral.acceptance.authority_revision_observed
+        );
+        assert_eq!(material.accepted_at(), ephemeral.acceptance.accepted_at);
+        assert_ne!(
+            material.accepted_at(),
+            material.runtime_acceptance().observed_at
+        );
+        assert_eq!(
+            material.accepted_work_identity(),
+            &ephemeral.acceptance.work_identity
+        );
+        assert_eq!(material.policy_snapshot_bytes(), snapshot.bytes());
+        assert_eq!(material.policy_snapshot_ref(), snapshot.snapshot_ref());
+        assert_eq!(material.policy_snapshot_hash(), snapshot.hash());
+        assert_eq!(material.policy_snapshot_revision(), snapshot.revision());
+        assert!(material.policy_reason().is_none());
+        assert!(material.retained_worker_cap().is_none());
+        assert_eq!(
+            material.execution_claim().canonical_preimage(),
+            encode_canonical(&ephemeral.execution_claim)
+                .expect("canonical claim")
+                .as_slice()
+        );
+
+        let (retained_participant_id, source_cap) = publish_test_source_worker_cap(&authority);
+        let request_id = "request-e2-rm-retained";
+        let retained = accepted_work_input(
+            &authority_store_id,
+            "wwa_018f0f2e-7b4c-7aa1-8c22-123456789ac2",
+            request_id,
+            AcceptedWorldWorkIdentityV1::RetainedTurn {
+                active_run_id: request_id.into(),
+                message_id: "wwm_018f0f2e-7b4c-7aa1-8c22-123456789ac3".into(),
+                target_participant_id: retained_participant_id.clone(),
+            },
+            snapshot,
+            Some(source_cap.commitment_ref()),
+        );
+        let (retained_key, retained_commitment) = persist_e2_rm_case(&authority, &retained);
+        let material = resolved_e2_rm(&authority, &retained_key, &retained.acceptance);
+        assert_eq!(
+            material.commitment_ref(),
+            &retained_commitment.commitment_ref()
+        );
+        let cap = material
+            .retained_worker_cap()
+            .expect("retained turn carries authenticated immutable cap");
+        assert_eq!(cap.retained_participant_id(), retained_participant_id);
+        assert_eq!(cap.cap_ref(), &source_cap.commitment_ref());
+        assert_eq!(
+            cap.cap_exact_linkage_hash(),
+            cap.cap_ref().exact_linkage_hash.as_str()
+        );
+        assert_eq!(cap.authority_store_id(), authority_store_id);
+        assert_eq!(cap.orchestration_session_id(), "e2-session");
+        assert_eq!(cap.caller_participant_id(), "e2-orchestrator");
+        assert_eq!(cap.caller_backend_id(), "cli:codex");
+        assert_eq!(cap.target_backend_id(), "cli:codex");
+        assert_eq!(cap.world_id(), "e2-world");
+        assert_eq!(cap.world_generation(), 7);
+        assert_eq!(
+            cap.cap_policy_snapshot_hash(),
+            source_cap.record().policy_snapshot_hash
+        );
+        assert_eq!(
+            cap.cap_policy_snapshot_revision(),
+            source_cap.record().policy_snapshot_revision
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn e2_rm_resolver_reports_all_nineteen_expected_b1_field_mismatches() {
+        let (_parent, authority) = started_authority();
+        let authority_store_id = authority
+            .read_preserved_start_root_v2()
+            .expect("read authority root")
+            .authority_store_id;
+        let input = accepted_work_input(
+            &authority_store_id,
+            "wwa_018f0f2e-7b4c-7aa1-8c22-123456789ac4",
+            "request-e2-rm-mismatch",
+            AcceptedWorldWorkIdentityV1::EphemeralTask {
+                task_run_id: "task-run-e2-rm-mismatch".into(),
+            },
+            validated_material(policy_snapshot(&["src"], &["src"], &["api.example"])),
+            None,
+        );
+        let (key, _) = persist_e2_rm_case(&authority, &input);
+
+        macro_rules! assert_mismatch {
+            ($field:ident, $mutation:expr) => {{
+                let mut forged = input.acceptance.clone();
+                ($mutation)(&mut forged);
+                assert_eq!(
+                    resolve_accepted_work_receipt_material(&authority, &key, &forged),
+                    Err(
+                        AcceptedWorkReceiptMaterialErrorV1::ExpectedB1AcceptanceMismatch {
+                            field: AcceptedWorkBindingFieldV1::$field,
+                        }
+                    ),
+                    stringify!($field)
+                );
+            }};
+        }
+
+        assert_mismatch!(SchemaVersion, |value: &mut WorldWorkAcceptanceRecordV1| {
+            value.schema_version = 2
+        });
+        assert_mismatch!(
+            AcceptanceRecordId,
+            |value: &mut WorldWorkAcceptanceRecordV1| value.acceptance_record_id =
+                "wwa_018f0f2e-7b4c-7aa1-8c22-123456789aff".into()
+        );
+        assert_mismatch!(RequestId, |value: &mut WorldWorkAcceptanceRecordV1| value
+            .request_id =
+            "forged-request".into());
+        assert_mismatch!(
+            AuthorityStoreId,
+            |value: &mut WorldWorkAcceptanceRecordV1| value.authority_store_id =
+                "forged-store".into()
+        );
+        assert_mismatch!(
+            AuthorityRevisionObserved,
+            |value: &mut WorldWorkAcceptanceRecordV1| value.authority_revision_observed += 1
+        );
+        assert_mismatch!(
+            OrchestrationSessionId,
+            |value: &mut WorldWorkAcceptanceRecordV1| value.orchestration_session_id =
+                "forged-session".into()
+        );
+        assert_mismatch!(
+            CallerParticipantId,
+            |value: &mut WorldWorkAcceptanceRecordV1| value.caller_participant_id =
+                "forged-caller".into()
+        );
+        assert_mismatch!(
+            CallerBackendId,
+            |value: &mut WorldWorkAcceptanceRecordV1| value.caller_backend_id =
+                "forged:caller".into()
+        );
+        assert_mismatch!(
+            TargetBackendId,
+            |value: &mut WorldWorkAcceptanceRecordV1| value.target_backend_id =
+                "forged:target".into()
+        );
+        assert_mismatch!(WorldId, |value: &mut WorldWorkAcceptanceRecordV1| value
+            .world_id =
+            "forged-world".into());
+        assert_mismatch!(
+            WorldGeneration,
+            |value: &mut WorldWorkAcceptanceRecordV1| value.world_generation += 1
+        );
+        assert_mismatch!(WorkIdentity, |value: &mut WorldWorkAcceptanceRecordV1| {
+            value.work_identity = AcceptedWorldWorkIdentityV1::EphemeralTask {
+                task_run_id: "forged-task".into(),
+            }
+        });
+        assert_mismatch!(
+            HostTransitionCorrelation,
+            |value: &mut WorldWorkAcceptanceRecordV1| value.host_transition_correlation =
+                Some(substrate_common::HostTransitionWorkCorrelationV1 {
+                    schema_version: 1,
+                    authority_store_id: value.authority_store_id.clone(),
+                    orchestration_session_id: value.orchestration_session_id.clone(),
+                    authoritative_participant_id: value.caller_participant_id.clone(),
+                    transition_intent_id: "forged-intent".into(),
+                    transition_intent_revision_observed: 1,
+                    transition_run_id: "forged-run".into(),
+                    transition_payload_commitment:
+                        substrate_common::OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                            digest_hex: "aa".repeat(32)
+                        },
+                    authority_revision_observed: value.authority_revision_observed,
+                })
+        );
+        assert_mismatch!(
+            PolicySnapshotRef,
+            |value: &mut WorldWorkAcceptanceRecordV1| value.current_policy_snapshot_ref.ref_id =
+                "forged-policy-ref".into()
+        );
+        assert_mismatch!(
+            PolicySnapshotHash,
+            |value: &mut WorldWorkAcceptanceRecordV1| value.current_policy_snapshot_hash =
+                "ff".repeat(32)
+        );
+        assert_mismatch!(
+            PolicySnapshotRevision,
+            |value: &mut WorldWorkAcceptanceRecordV1| value.current_policy_revision =
+                "forged-policy-revision".into()
+        );
+        assert_mismatch!(
+            RuntimeAcceptance,
+            |value: &mut WorldWorkAcceptanceRecordV1| value.runtime_acceptance.frame_sequence += 1
+        );
+        assert_mismatch!(AcceptedAt, |value: &mut WorldWorkAcceptanceRecordV1| {
+            value.accepted_at += chrono::Duration::seconds(1)
+        });
+        assert_mismatch!(
+            AcceptanceRecordRevision,
+            |value: &mut WorldWorkAcceptanceRecordV1| value.record_revision += 1
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn e2_rm_resolver_rejects_forged_claim_policy_and_retained_cap_material() {
+        let (parent, authority) = started_authority();
+        let authority_store_id = authority
+            .read_preserved_start_root_v2()
+            .expect("read authority root")
+            .authority_store_id;
+        let input = accepted_work_input(
+            &authority_store_id,
+            "wwa_018f0f2e-7b4c-7aa1-8c22-123456789acd",
+            "request-e2-rm-auth-fault",
+            AcceptedWorldWorkIdentityV1::EphemeralTask {
+                task_run_id: "task-run-e2-rm-auth-fault".into(),
+            },
+            validated_material(policy_snapshot(&["src"], &["src"], &["api.example"])),
+            None,
+        );
+        let (key, persisted) = persist_e2_rm_case(&authority, &input);
+        let registry_path = parent
+            .path()
+            .join("home/authority-v1/dispatch-policy-commitment-v1/registry-v1.json");
+        let original = fs::read(&registry_path).expect("read original E2-RM registry");
+
+        let mut forged_claim: DispatchPolicyCommitmentRegistryV1 =
+            decode_canonical(&original).expect("decode claim-fault registry");
+        let record = forged_claim
+            .commitments_by_id
+            .get_mut(&persisted.record().commitment_id)
+            .expect("claim-fault commitment");
+        let link = record
+            .execution_claim_link
+            .as_ref()
+            .expect("historic execution claim");
+        let mut claim: WorldWorkExecutionClaimV1 =
+            decode_canonical(&link.claim_preimage.resolve_inline().expect("claim bytes"))
+                .expect("decode historic execution claim");
+        claim.authority_revision_observed += 1;
+        record.execution_claim_link =
+            Some(execution_claim_link(&claim).expect("relink forged execution claim"));
+        e2_rm_rehash_commitment_and_index(&mut forged_claim, &persisted.record().commitment_id);
+        fs::write(
+            &registry_path,
+            encode_canonical(&forged_claim).expect("encode claim-fault registry"),
+        )
+        .expect("write claim-fault registry");
+        assert_eq!(
+            resolve_accepted_work_receipt_material(&authority, &key, &input.acceptance),
+            Err(AcceptedWorkReceiptMaterialErrorV1::ExecutionClaimAuthenticationFailed)
+        );
+
+        let mut forged_policy: DispatchPolicyCommitmentRegistryV1 =
+            decode_canonical(&original).expect("decode policy-fault registry");
+        forged_policy
+            .commitments_by_id
+            .get_mut(&persisted.record().commitment_id)
+            .expect("policy-fault commitment")
+            .reason = Some("forged current-policy reason".into());
+        e2_rm_rehash_commitment_and_index(&mut forged_policy, &persisted.record().commitment_id);
+        fs::write(
+            &registry_path,
+            encode_canonical(&forged_policy).expect("encode policy-fault registry"),
+        )
+        .expect("write policy-fault registry");
+        assert_eq!(
+            resolve_accepted_work_receipt_material(&authority, &key, &input.acceptance),
+            Err(AcceptedWorkReceiptMaterialErrorV1::PolicySnapshotAuthenticationFailed)
+        );
+
+        let (retained_parent, retained_authority) = started_authority();
+        let retained_store_id = retained_authority
+            .read_preserved_start_root_v2()
+            .expect("read retained authority root")
+            .authority_store_id;
+        let (retained_participant_id, source_cap) =
+            publish_test_source_worker_cap(&retained_authority);
+        let retained_input = accepted_work_input(
+            &retained_store_id,
+            "wwa_018f0f2e-7b4c-7aa1-8c22-123456789ace",
+            "request-e2-rm-cap-fault",
+            AcceptedWorldWorkIdentityV1::RetainedTurn {
+                active_run_id: "request-e2-rm-cap-fault".into(),
+                message_id: "wwm_018f0f2e-7b4c-7aa1-8c22-123456789acf".into(),
+                target_participant_id: retained_participant_id,
+            },
+            validated_material(policy_snapshot(&["src"], &["src"], &["api.example"])),
+            Some(source_cap.commitment_ref()),
+        );
+        let (retained_key, retained_commitment) =
+            persist_e2_rm_case(&retained_authority, &retained_input);
+        let retained_registry_path = retained_parent
+            .path()
+            .join("home/authority-v1/dispatch-policy-commitment-v1/registry-v1.json");
+        let mut forged_cap: DispatchPolicyCommitmentRegistryV1 = decode_canonical(
+            &fs::read(&retained_registry_path).expect("read retained E2-RM registry"),
+        )
+        .expect("decode cap-fault registry");
+        let stale_self_ref = commitment_ref(retained_commitment.record());
+        forged_cap
+            .commitments_by_id
+            .get_mut(&retained_commitment.record().commitment_id)
+            .expect("cap-fault commitment")
+            .retained_worker_cap_link = Some(RetainedWorkerCapLinkV1::Existing {
+            cap_ref: stale_self_ref,
+        });
+        e2_rm_rehash_commitment_and_index(
+            &mut forged_cap,
+            &retained_commitment.record().commitment_id,
+        );
+        fs::write(
+            &retained_registry_path,
+            encode_canonical(&forged_cap).expect("encode cap-fault registry"),
+        )
+        .expect("write cap-fault registry");
+        assert_eq!(
+            resolve_accepted_work_receipt_material(
+                &retained_authority,
+                &retained_key,
+                &retained_input.acceptance,
+            ),
+            Err(AcceptedWorkReceiptMaterialErrorV1::RetainedCapAuthenticationFailed)
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn e2_rm_resolver_rejects_rehashed_cap_chains_unselected_records_and_empty_patches() {
+        let (parent, authority) = started_authority();
+        let authority_store_id = authority
+            .read_preserved_start_root_v2()
+            .expect("read authority root")
+            .authority_store_id;
+        let (source_participant_id, source_cap) = publish_test_source_worker_cap(&authority);
+        let fork = publish_fork_commitment(
+            &authority,
+            fork_commitment_input(&authority, &source_participant_id, "E2-RM chain"),
+        )
+        .expect("publish fork cap");
+        let child_participant_id = fork
+            .fork_child_participant_id()
+            .expect("fork child")
+            .to_string();
+        let selected = accepted_work_input(
+            &authority_store_id,
+            "wwa_018f0f2e-7b4c-7aa1-8c22-123456789ad0",
+            "request-e2-rm-complete-graph",
+            AcceptedWorldWorkIdentityV1::RetainedTurn {
+                active_run_id: "request-e2-rm-complete-graph".into(),
+                message_id: "wwm_018f0f2e-7b4c-7aa1-8c22-123456789ad1".into(),
+                target_participant_id: child_participant_id,
+            },
+            validated_material(policy_snapshot(&["src"], &["src"], &["api.example"])),
+            Some(fork.commitment_ref()),
+        );
+        let (selected_key, selected_commitment) = persist_e2_rm_case(&authority, &selected);
+        let unselected = accepted_work_input(
+            &authority_store_id,
+            "wwa_018f0f2e-7b4c-7aa1-8c22-123456789ad2",
+            "request-e2-rm-unselected",
+            AcceptedWorldWorkIdentityV1::EphemeralTask {
+                task_run_id: "task-run-e2-rm-unselected".into(),
+            },
+            validated_material(policy_snapshot(&["src"], &["src"], &["api.example"])),
+            None,
+        );
+        let (_, unselected_commitment) = persist_e2_rm_case(&authority, &unselected);
+        assert!(matches!(
+            resolve_accepted_work_receipt_material(&authority, &selected_key, &selected.acceptance),
+            Ok(AcceptedWorkReceiptMaterialResolutionV1::Resolved(_))
+        ));
+
+        let registry_path = parent
+            .path()
+            .join("home/authority-v1/dispatch-policy-commitment-v1/registry-v1.json");
+        let original = fs::read(&registry_path).expect("read complete E2 graph");
+        let original_registry: DispatchPolicyCommitmentRegistryV1 =
+            decode_canonical(&original).expect("decode complete E2 graph");
+
+        let mut missing_fork_source = original_registry.clone();
+        missing_fork_source
+            .commitments_by_id
+            .get_mut(&fork.record().commitment_id)
+            .expect("fork cap record")
+            .source_worker_cap_ref = None;
+        e2_rm_rehash_commitment_and_index(&mut missing_fork_source, &fork.record().commitment_id);
+        fs::write(
+            &registry_path,
+            encode_canonical(&missing_fork_source).expect("encode source-less fork"),
+        )
+        .expect("write source-less fork");
+        assert_eq!(
+            resolve_accepted_work_receipt_material(&authority, &selected_key, &selected.acceptance,),
+            Err(AcceptedWorkReceiptMaterialErrorV1::CorruptE2Registry)
+        );
+
+        let mut rehashed_launch = original_registry.clone();
+        let launch = rehashed_launch
+            .commitments_by_id
+            .get_mut(&source_cap.record().commitment_id)
+            .expect("launch cap record");
+        let PolicyCommitmentAuthorityLinkV1::RetainedAdmission {
+            stable_admission_identity,
+        } = &mut launch.authority_link
+        else {
+            panic!("source cap must be a retained launch")
+        };
+        stable_admission_identity.stable_source_fields.backend_id = "forged:backend".into();
+        e2_rm_rehash_stable_admission(stable_admission_identity);
+        e2_rm_rehash_commitment_and_index(&mut rehashed_launch, &source_cap.record().commitment_id);
+        fs::write(
+            &registry_path,
+            encode_canonical(&rehashed_launch).expect("encode rehashed launch"),
+        )
+        .expect("write rehashed launch");
+        assert_eq!(
+            resolve_accepted_work_receipt_material(&authority, &selected_key, &selected.acceptance,),
+            Err(AcceptedWorkReceiptMaterialErrorV1::CorruptE2Registry)
+        );
+
+        let mut corrupt_unselected = original_registry.clone();
+        let unselected_record = corrupt_unselected
+            .commitments_by_id
+            .get_mut(&unselected_commitment.record().commitment_id)
+            .expect("unselected commitment");
+        let PolicyCommitmentAuthorityLinkV1::B1 {
+            runtime_acceptance, ..
+        } = &mut unselected_record.authority_link
+        else {
+            panic!("unselected work must use B1 authority")
+        };
+        runtime_acceptance.task_run_id = Some("forged-unselected-task".into());
+        e2_rm_rehash_commitment_and_index(
+            &mut corrupt_unselected,
+            &unselected_commitment.record().commitment_id,
+        );
+        fs::write(
+            &registry_path,
+            encode_canonical(&corrupt_unselected).expect("encode corrupt unselected record"),
+        )
+        .expect("write corrupt unselected record");
+        assert_eq!(
+            resolve_accepted_work_receipt_material(&authority, &selected_key, &selected.acceptance,),
+            Err(AcceptedWorkReceiptMaterialErrorV1::CorruptE2Registry)
+        );
+
+        let empty_patch = DispatchPolicyNarrowingPatchV1 {
+            schema_version: 1,
+            request_id: selected.acceptance.request_id.clone(),
+            orchestration_session_id: selected.acceptance.orchestration_session_id.clone(),
+            caller_participant_id: selected.acceptance.caller_participant_id.clone(),
+            target_backend_id: selected.acceptance.target_backend_id.clone(),
+            target_world: WorldBindingRefV1 {
+                world_id: selected.acceptance.world_id.clone(),
+                world_generation: selected.acceptance.world_generation,
+            },
+            applies_to: transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerTurn {
+                retained_participant_id: match &selected.acceptance.work_identity {
+                    AcceptedWorldWorkIdentityV1::RetainedTurn {
+                        target_participant_id,
+                        ..
+                    } => target_participant_id.clone(),
+                    AcceptedWorldWorkIdentityV1::EphemeralTask { .. } => {
+                        panic!("selected work must be retained")
+                    }
+                },
+            },
+            parent_policy_ref: transport_policy_ref(
+                &selected.acceptance.current_policy_snapshot_ref,
+            ),
+            parent_policy_revision: selected.acceptance.current_policy_revision.clone(),
+            restricted_policy_patch: transport_api_types::RestrictedPolicyPatchV1 {
+                world_fs: Some(transport_api_types::RestrictedWorldFsPatchV1::default()),
+            },
+            reason: Some("empty restricted patch".into()),
+        };
+        empty_patch
+            .validate()
+            .expect("structurally valid empty patch");
+        let empty_patch_bytes = encode_canonical(&empty_patch).expect("encode empty patch");
+        let mut empty_selected_patch = original_registry;
+        let selected_record = empty_selected_patch
+            .commitments_by_id
+            .get_mut(&selected_commitment.record().commitment_id)
+            .expect("selected commitment");
+        selected_record.applied_patch = AppliedDispatchPolicyPatchIdentityV1::RestrictedWorldFs {
+            patch_schema_version: 1,
+            patch_hash: patch_identity_hash(&empty_patch_bytes).expect("hash empty patch"),
+            canonical_patch: ImmutableBytesMaterialV1::inline(&empty_patch_bytes),
+        };
+        selected_record.reason = empty_patch.reason;
+        e2_rm_rehash_commitment_and_index(
+            &mut empty_selected_patch,
+            &selected_commitment.record().commitment_id,
+        );
+        fs::write(
+            &registry_path,
+            encode_canonical(&empty_selected_patch).expect("encode empty selected patch"),
+        )
+        .expect("write empty selected patch");
+        assert_eq!(
+            resolve_accepted_work_receipt_material(&authority, &selected_key, &selected.acceptance,),
+            Err(AcceptedWorkReceiptMaterialErrorV1::PolicySnapshotAuthenticationFailed)
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    type E2RmEntryState = (
+        u32,
+        u64,
+        u64,
+        u32,
+        u64,
+        u64,
+        i64,
+        i64,
+        Vec<u8>,
+        Option<String>,
+    );
+
+    #[cfg(target_os = "linux")]
+    type E2RmTreeState = BTreeMap<String, E2RmEntryState>;
+
+    #[cfg(target_os = "linux")]
+    fn e2_rm_tree_state(root: &std::path::Path) -> E2RmTreeState {
+        fn visit(root: &std::path::Path, path: &std::path::Path, state: &mut E2RmTreeState) {
+            let mut entries = fs::read_dir(path)
+                .expect("read E2-RM test tree")
+                .collect::<Result<Vec<_>, _>>()
+                .expect("collect E2-RM test tree");
+            entries.sort_by_key(|entry| entry.file_name());
+            for entry in entries {
+                let path = entry.path();
+                let relative = path
+                    .strip_prefix(root)
+                    .expect("relative E2-RM test path")
+                    .to_string_lossy()
+                    .into_owned();
+                let metadata = fs::symlink_metadata(&path).expect("E2-RM test metadata");
+                let bytes = if metadata.file_type().is_file() {
+                    fs::read(&path).expect("read E2-RM test file")
+                } else {
+                    Vec::new()
+                };
+                let link = metadata.file_type().is_symlink().then(|| {
+                    fs::read_link(&path)
+                        .expect("read E2-RM test symlink")
+                        .to_string_lossy()
+                        .into_owned()
+                });
+                state.insert(
+                    relative,
+                    (
+                        metadata.mode() & libc::S_IFMT,
+                        metadata.dev(),
+                        metadata.ino(),
+                        metadata.uid(),
+                        metadata.nlink(),
+                        metadata.len(),
+                        metadata.mtime(),
+                        metadata.ctime(),
+                        bytes,
+                        link,
+                    ),
+                );
+                if metadata.file_type().is_dir() {
+                    visit(root, &path, state);
+                }
+            }
+        }
+
+        let mut state = BTreeMap::new();
+        visit(root, root, &mut state);
+        state
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn e2_rm_e2_snapshot_clean_absence_is_typed_legacy_and_read_only() {
+        let (parent, authority) = started_authority();
+        let authority_store_id = authority
+            .read_preserved_start_root_v2()
+            .expect("read authority root")
+            .authority_store_id;
+        let input = accepted_work_input(
+            &authority_store_id,
+            "wwa_018f0f2e-7b4c-7aa1-8c22-123456789ac5",
+            "request-e2-rm-legacy",
+            AcceptedWorldWorkIdentityV1::EphemeralTask {
+                task_run_id: "task-run-e2-rm-legacy".into(),
+            },
+            validated_material(policy_snapshot(&["src"], &["src"], &["api.example"])),
+            None,
+        );
+        super::super::state_store::persist_e2_rm_world_work_acceptance_for_test(
+            &authority,
+            &input.acceptance,
+        )
+        .expect("persist legacy B1 acceptance");
+        let key = DispatchPolicyCommitmentLookupKeyV1 {
+            authority_store_id,
+            orchestration_session_id: input.acceptance.orchestration_session_id.clone(),
+            request_id: input.acceptance.request_id.clone(),
+            subject: DispatchPolicyCommitmentSubjectKeyV1::EphemeralWork {
+                task_run_id: "task-run-e2-rm-legacy".into(),
+            },
+        };
+        let home = parent.path().join("home");
+        let before = e2_rm_tree_state(&home);
+        assert_eq!(
+            resolve_accepted_work_receipt_material(&authority, &key, &input.acceptance),
+            Ok(
+                AcceptedWorkReceiptMaterialResolutionV1::UnsupportedLegacyState {
+                    exact_request_subject_key: key,
+                    reason:
+                        AcceptedWorkReceiptMaterialLegacyReasonV1::MissingExactHistoricE2Commitment,
+                }
+            )
+        );
+        assert_eq!(e2_rm_tree_state(&home), before);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn e2_rm_e2_snapshot_rejects_partial_unsupported_and_invalid_material() {
+        let (parent, authority) = started_authority();
+        let authority_store_id = authority
+            .read_preserved_start_root_v2()
+            .expect("read authority root")
+            .authority_store_id;
+        let input = accepted_work_input(
+            &authority_store_id,
+            "wwa_018f0f2e-7b4c-7aa1-8c22-123456789ac6",
+            "request-e2-rm-e2-errors",
+            AcceptedWorldWorkIdentityV1::EphemeralTask {
+                task_run_id: "task-run-e2-rm-e2-errors".into(),
+            },
+            validated_material(policy_snapshot(&["src"], &["src"], &["api.example"])),
+            None,
+        );
+        let (key, _) = persist_e2_rm_case(&authority, &input);
+        let e2_root = parent
+            .path()
+            .join("home/authority-v1/dispatch-policy-commitment-v1");
+        let registry_path = e2_root.join("registry-v1.json");
+        let registry_bytes = fs::read(&registry_path).expect("read E2 registry");
+        let mut registry_value: Value =
+            decode_canonical(&registry_bytes).expect("decode E2 registry value");
+        for version in [0_u64, 2] {
+            registry_value["schema_version"] = Value::from(version);
+            fs::write(
+                &registry_path,
+                encode_canonical(&registry_value).expect("encode unsupported registry"),
+            )
+            .expect("write unsupported registry");
+            assert_eq!(
+                resolve_accepted_work_receipt_material(&authority, &key, &input.acceptance),
+                Err(
+                    AcceptedWorkReceiptMaterialErrorV1::UnsupportedE2SchemaVersion {
+                        object: E2SchemaObjectV1::Registry,
+                        observed: version,
+                    }
+                )
+            );
+        }
+        fs::write(&registry_path, br#"{"schema_version":"one"}"#)
+            .expect("write invalid discriminator");
+        assert_eq!(
+            resolve_accepted_work_receipt_material(&authority, &key, &input.acceptance),
+            Err(AcceptedWorkReceiptMaterialErrorV1::InvalidE2RegistryEncoding)
+        );
+        fs::write(&registry_path, &registry_bytes).expect("restore E2 registry");
+
+        let key_path = fs::read_dir(e2_root.join("keys"))
+            .expect("list E2 keys")
+            .next()
+            .expect("one E2 key")
+            .expect("E2 key entry")
+            .path();
+        let key_bytes = fs::read(&key_path).expect("read E2 key");
+        fs::remove_file(&key_path).expect("remove isolated E2 key");
+        assert_eq!(
+            resolve_accepted_work_receipt_material(&authority, &key, &input.acceptance),
+            Err(AcceptedWorkReceiptMaterialErrorV1::CorruptE2Registry)
+        );
+        fs::write(&key_path, key_bytes).expect("restore isolated E2 key");
+        fs::set_permissions(&key_path, fs::Permissions::from_mode(0o600))
+            .expect("restore E2 key mode");
+
+        fs::remove_file(&registry_path).expect("remove isolated E2 registry");
+        assert!(matches!(
+            resolve_accepted_work_receipt_material(&authority, &key, &input.acceptance),
+            Err(AcceptedWorkReceiptMaterialErrorV1::PhysicalRead(
+                ReadOnlyAuthoritySnapshotErrorV1::PartialNamespace { .. }
+            ))
+        ));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn e2_rm_e2_snapshot_rejects_index_only_record_only_colliding_or_hash_invalid_graphs() {
+        let (parent, authority) = started_authority();
+        let authority_store_id = authority
+            .read_preserved_start_root_v2()
+            .expect("read authority root")
+            .authority_store_id;
+        let input = accepted_work_input(
+            &authority_store_id,
+            "wwa_018f0f2e-7b4c-7aa1-8c22-123456789acc",
+            "request-e2-rm-graph",
+            AcceptedWorldWorkIdentityV1::EphemeralTask {
+                task_run_id: "task-run-e2-rm-graph".into(),
+            },
+            validated_material(policy_snapshot(&["src"], &["src"], &["api.example"])),
+            None,
+        );
+        let (key, persisted) = persist_e2_rm_case(&authority, &input);
+        let registry_path = parent
+            .path()
+            .join("home/authority-v1/dispatch-policy-commitment-v1/registry-v1.json");
+        let original = fs::read(&registry_path).expect("read E2 graph");
+        let registry: DispatchPolicyCommitmentRegistryV1 =
+            decode_canonical(&original).expect("decode E2 graph");
+        let commitment_id = persisted.record().commitment_id.clone();
+        let digest = lookup_index_key(&key).expect("derive exact E2 index digest");
+
+        for version in [0_u32, 2] {
+            let mut unsupported = registry.clone();
+            unsupported
+                .commitments_by_id
+                .get_mut(&commitment_id)
+                .expect("indexed E2 commitment")
+                .schema_version = version;
+            fs::write(
+                &registry_path,
+                encode_canonical(&unsupported).expect("encode unsupported E2 object"),
+            )
+            .expect("write unsupported E2 object");
+            assert_eq!(
+                resolve_accepted_work_receipt_material(&authority, &key, &input.acceptance),
+                Err(
+                    AcceptedWorkReceiptMaterialErrorV1::UnsupportedE2SchemaVersion {
+                        object: E2SchemaObjectV1::Commitment {
+                            commitment_id: commitment_id.clone(),
+                        },
+                        observed: u64::from(version),
+                    }
+                )
+            );
+        }
+
+        let mut invalid_graphs = Vec::new();
+        let mut index_only = registry.clone();
+        index_only.commitments_by_id.remove(&commitment_id);
+        invalid_graphs.push(index_only);
+
+        let mut record_only = registry.clone();
+        record_only.request_subject_index.remove(&digest);
+        invalid_graphs.push(record_only);
+
+        let mut colliding = registry.clone();
+        colliding
+            .request_subject_index
+            .get_mut(&digest)
+            .expect("exact E2 index")
+            .lookup_key
+            .request_id = "digest-collision-conflict".into();
+        invalid_graphs.push(colliding);
+
+        let mut wrong_digest = registry.clone();
+        let index = wrong_digest
+            .request_subject_index
+            .remove(&digest)
+            .expect("exact E2 index");
+        wrong_digest
+            .request_subject_index
+            .insert("00".repeat(32), index);
+        invalid_graphs.push(wrong_digest);
+
+        let mut duplicate_index = registry.clone();
+        duplicate_index.request_subject_index.insert(
+            "11".repeat(32),
+            duplicate_index
+                .request_subject_index
+                .get(&digest)
+                .expect("exact E2 index")
+                .clone(),
+        );
+        invalid_graphs.push(duplicate_index);
+
+        let mut hash_invalid = registry.clone();
+        hash_invalid
+            .commitments_by_id
+            .get_mut(&commitment_id)
+            .expect("indexed E2 commitment")
+            .exact_linkage_hash = "ff".repeat(32);
+        invalid_graphs.push(hash_invalid);
+
+        for invalid in invalid_graphs {
+            fs::write(
+                &registry_path,
+                encode_canonical(&invalid).expect("encode invalid E2 graph"),
+            )
+            .expect("write invalid E2 graph");
+            assert_eq!(
+                resolve_accepted_work_receipt_material(&authority, &key, &input.acceptance),
+                Err(AcceptedWorkReceiptMaterialErrorV1::CorruptE2Registry)
+            );
+        }
+        fs::write(&registry_path, original).expect("restore isolated E2 graph");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn e2_rm_transaction_and_store_capture_one_stable_nonmutating_snapshot() {
+        let (parent, authority) = started_authority();
+        let root = authority
+            .read_preserved_start_root_v2()
+            .expect("read authority root");
+        let input = accepted_work_input(
+            &root.authority_store_id,
+            "wwa_018f0f2e-7b4c-7aa1-8c22-123456789ac7",
+            "request-e2-rm-transaction",
+            AcceptedWorldWorkIdentityV1::EphemeralTask {
+                task_run_id: "task-run-e2-rm-transaction".into(),
+            },
+            validated_material(policy_snapshot(&["src"], &["src"], &["api.example"])),
+            None,
+        );
+        persist_e2_rm_case(&authority, &input);
+        let home = parent.path().join("home");
+        let before = e2_rm_tree_state(&home);
+        let snapshot = read_existing_accepted_work_authority_snapshot(&authority)
+            .expect("read aggregate E2/B1 snapshot");
+        assert_eq!(snapshot.authority_store_id(), root.authority_store_id);
+        assert_eq!(snapshot.authority_root_identity(), &root.bootstrap_home);
+        assert_eq!(snapshot.hsa_root_revision_at_read(), root.root_revision);
+        assert_eq!(
+            snapshot.hsa_state_root_bytes(),
+            fs::read(home.join("authority-v1/state-root-v1.json")).expect("read state root")
+        );
+        assert!(matches!(
+            snapshot.e2(),
+            DispatchPolicyCommitmentPhysicalReadV1::Present(_)
+        ));
+        assert!(matches!(
+            snapshot.b1(),
+            super::super::host_session_authority::store::WorldWorkReceiptRegistryPhysicalReadV1::Present(_)
+        ));
+        assert_eq!(e2_rm_tree_state(&home), before);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn e2_rm_store_snapshot_rejects_symlink_hardlink_mode_and_temporary_faults_without_repair() {
+        let (parent, authority) = started_authority();
+        let root = authority
+            .read_preserved_start_root_v2()
+            .expect("read authority root");
+        let input = accepted_work_input(
+            &root.authority_store_id,
+            "wwa_018f0f2e-7b4c-7aa1-8c22-123456789ac8",
+            "request-e2-rm-fault",
+            AcceptedWorldWorkIdentityV1::EphemeralTask {
+                task_run_id: "task-run-e2-rm-fault".into(),
+            },
+            validated_material(policy_snapshot(&["src"], &["src"], &["api.example"])),
+            None,
+        );
+        let (key, _) = persist_e2_rm_case(&authority, &input);
+        let e2_root = parent
+            .path()
+            .join("home/authority-v1/dispatch-policy-commitment-v1");
+        let registry_path = e2_root.join("registry-v1.json");
+
+        let temporary =
+            e2_root.join("tmp/dispatch-policy-registry--11111111111111111111111111111111.tmp");
+        fs::write(&temporary, b"killed writer bytes").expect("write E2 temp");
+        fs::set_permissions(&temporary, fs::Permissions::from_mode(0o600)).expect("secure E2 temp");
+        let before = e2_rm_tree_state(&parent.path().join("home"));
+        assert!(matches!(
+            resolve_accepted_work_receipt_material(&authority, &key, &input.acceptance),
+            Err(AcceptedWorkReceiptMaterialErrorV1::PhysicalRead(
+                ReadOnlyAuthoritySnapshotErrorV1::UnsafeTemporaryMaterial { .. }
+            ))
+        ));
+        assert_eq!(e2_rm_tree_state(&parent.path().join("home")), before);
+        fs::remove_file(&temporary).expect("remove isolated E2 temp");
+
+        let key_temporary_a =
+            e2_root.join("keys/dispatch-policy-key--11111111111111111111111111111111.tmp");
+        let key_temporary_b =
+            e2_root.join("keys/dispatch-policy-key--22222222222222222222222222222222.tmp");
+        for path in [&key_temporary_a, &key_temporary_b] {
+            fs::write(path, b"interrupted key publication").expect("write E2 key temp");
+            fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+                .expect("secure E2 key temp");
+        }
+        let changed_key_temporary = key_temporary_b.clone();
+        super::super::host_session_authority::store::set_e2_rm_before_final_verify_hook(
+            move || {
+                fs::write(&changed_key_temporary, b"replaced key temp bytes")
+                    .expect("replace later E2 key temp bytes");
+            },
+        );
+        assert!(matches!(
+            resolve_accepted_work_receipt_material(&authority, &key, &input.acceptance),
+            Err(AcceptedWorkReceiptMaterialErrorV1::PhysicalRead(
+                ReadOnlyAuthoritySnapshotErrorV1::SnapshotEntryChanged { .. }
+            ))
+        ));
+        assert_eq!(
+            fs::read(&key_temporary_a).expect("read first retained key temp"),
+            b"interrupted key publication"
+        );
+        assert_eq!(
+            fs::read(&key_temporary_b).expect("read replaced key temp"),
+            b"replaced key temp bytes"
+        );
+        fs::remove_file(&key_temporary_a).expect("remove first E2 key temp");
+        fs::remove_file(&key_temporary_b).expect("remove second E2 key temp");
+
+        let authority_temporary = parent
+            .path()
+            .join("home/authority-v1/tmp/root--r1--22222222222222222222222222222222.tmp");
+        fs::write(
+            &authority_temporary,
+            b"interrupted authority root publication",
+        )
+        .expect("write authority temp");
+        fs::set_permissions(&authority_temporary, fs::Permissions::from_mode(0o600))
+            .expect("secure authority temp");
+        let before = e2_rm_tree_state(&parent.path().join("home"));
+        assert!(matches!(
+            resolve_accepted_work_receipt_material(&authority, &key, &input.acceptance),
+            Err(AcceptedWorkReceiptMaterialErrorV1::PhysicalRead(
+                ReadOnlyAuthoritySnapshotErrorV1::AuthorityTemporaryMaterialPresent { .. }
+            ))
+        ));
+        assert_eq!(e2_rm_tree_state(&parent.path().join("home")), before);
+        fs::remove_file(&authority_temporary).expect("remove isolated authority temp");
+
+        let authority_temporary_a = parent
+            .path()
+            .join("home/authority-v1/tmp/root--r1--44444444444444444444444444444444.tmp");
+        let authority_temporary_b = parent
+            .path()
+            .join("home/authority-v1/tmp/root--r1--55555555555555555555555555555555.tmp");
+        for path in [&authority_temporary_a, &authority_temporary_b] {
+            fs::write(path, b"interrupted authority publication").expect("write authority temp");
+            fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+                .expect("secure authority temp");
+        }
+        let changed_authority_temporary = authority_temporary_b.clone();
+        super::super::host_session_authority::store::set_e2_rm_before_final_verify_hook(
+            move || {
+                fs::write(
+                    &changed_authority_temporary,
+                    b"replaced authority temp bytes",
+                )
+                .expect("replace later authority temp bytes");
+            },
+        );
+        assert!(matches!(
+            resolve_accepted_work_receipt_material(&authority, &key, &input.acceptance),
+            Err(AcceptedWorkReceiptMaterialErrorV1::PhysicalRead(
+                ReadOnlyAuthoritySnapshotErrorV1::SnapshotEntryChanged { .. }
+            ))
+        ));
+        assert_eq!(
+            fs::read(&authority_temporary_a).expect("read first authority temp"),
+            b"interrupted authority publication"
+        );
+        assert_eq!(
+            fs::read(&authority_temporary_b).expect("read replaced authority temp"),
+            b"replaced authority temp bytes"
+        );
+        fs::remove_file(&authority_temporary_a).expect("remove first authority temp");
+        fs::remove_file(&authority_temporary_b).expect("remove second authority temp");
+
+        let unsafe_authority_temporary = parent
+            .path()
+            .join("home/authority-v1/tmp/not-a-canonical-root-publication.tmp");
+        fs::write(
+            &unsafe_authority_temporary,
+            b"unrecognized authority publication",
+        )
+        .expect("write unsafe authority temp");
+        fs::set_permissions(
+            &unsafe_authority_temporary,
+            fs::Permissions::from_mode(0o600),
+        )
+        .expect("secure unsafe authority temp");
+        let before = e2_rm_tree_state(&parent.path().join("home"));
+        assert!(matches!(
+            resolve_accepted_work_receipt_material(&authority, &key, &input.acceptance),
+            Err(AcceptedWorkReceiptMaterialErrorV1::PhysicalRead(
+                ReadOnlyAuthoritySnapshotErrorV1::UnsafeTemporaryMaterial { .. }
+            ))
+        ));
+        assert_eq!(e2_rm_tree_state(&parent.path().join("home")), before);
+        fs::remove_file(&unsafe_authority_temporary)
+            .expect("remove isolated unsafe authority temp");
+
+        let b1_temporary = parent.path().join(
+            "home/run/agent-hub/world-work-receipt-registry-v1--33333333333333333333333333333333.tmp",
+        );
+        fs::write(&b1_temporary, b"interrupted B1 registry publication").expect("write B1 temp");
+        fs::set_permissions(&b1_temporary, fs::Permissions::from_mode(0o600))
+            .expect("secure B1 temp");
+        let before = e2_rm_tree_state(&parent.path().join("home"));
+        assert!(matches!(
+            resolve_accepted_work_receipt_material(&authority, &key, &input.acceptance),
+            Err(AcceptedWorkReceiptMaterialErrorV1::PhysicalRead(
+                ReadOnlyAuthoritySnapshotErrorV1::UnsafeTemporaryMaterial { .. }
+            ))
+        ));
+        assert_eq!(e2_rm_tree_state(&parent.path().join("home")), before);
+        fs::remove_file(&b1_temporary).expect("remove isolated B1 temp");
+
+        let b1_temporary_a = parent.path().join(
+            "home/run/agent-hub/world-work-receipt-registry-v1--66666666666666666666666666666666.tmp",
+        );
+        let b1_temporary_b = parent.path().join(
+            "home/run/agent-hub/world-work-receipt-registry-v1--77777777777777777777777777777777.tmp",
+        );
+        for path in [&b1_temporary_a, &b1_temporary_b] {
+            fs::write(path, b"interrupted B1 publication").expect("write B1 temp");
+            fs::set_permissions(path, fs::Permissions::from_mode(0o600)).expect("secure B1 temp");
+        }
+        let changed_b1_temporary = b1_temporary_b.clone();
+        super::super::host_session_authority::store::set_e2_rm_before_final_verify_hook(
+            move || {
+                fs::write(&changed_b1_temporary, b"replaced B1 temp bytes")
+                    .expect("replace later B1 temp bytes");
+            },
+        );
+        assert!(matches!(
+            resolve_accepted_work_receipt_material(&authority, &key, &input.acceptance),
+            Err(AcceptedWorkReceiptMaterialErrorV1::PhysicalRead(
+                ReadOnlyAuthoritySnapshotErrorV1::SnapshotEntryChanged { .. }
+            ))
+        ));
+        assert_eq!(
+            fs::read(&b1_temporary_a).expect("read first B1 temp"),
+            b"interrupted B1 publication"
+        );
+        assert_eq!(
+            fs::read(&b1_temporary_b).expect("read replaced B1 temp"),
+            b"replaced B1 temp bytes"
+        );
+        fs::remove_file(&b1_temporary_a).expect("remove first B1 temp");
+        fs::remove_file(&b1_temporary_b).expect("remove second B1 temp");
+
+        let unsafe_b1_temporary = parent
+            .path()
+            .join("home/run/agent-hub/world-work-receipt-registry-v1--not-hex.tmp");
+        fs::write(
+            &unsafe_b1_temporary,
+            b"unrecognized B1 registry publication",
+        )
+        .expect("write unsafe B1 temp");
+        fs::set_permissions(&unsafe_b1_temporary, fs::Permissions::from_mode(0o600))
+            .expect("secure unsafe B1 temp");
+        let before = e2_rm_tree_state(&parent.path().join("home"));
+        assert!(matches!(
+            resolve_accepted_work_receipt_material(&authority, &key, &input.acceptance),
+            Err(AcceptedWorkReceiptMaterialErrorV1::PhysicalRead(
+                ReadOnlyAuthoritySnapshotErrorV1::UnsafeNamespaceEntry { .. }
+            ))
+        ));
+        assert_eq!(e2_rm_tree_state(&parent.path().join("home")), before);
+        fs::remove_file(&unsafe_b1_temporary).expect("remove isolated unsafe B1 temp");
+
+        let unsafe_temporary = e2_root.join("tmp/not-a-canonical-publication.tmp");
+        fs::write(&unsafe_temporary, b"unrecognized interrupted publication")
+            .expect("write unsafe temp");
+        fs::set_permissions(&unsafe_temporary, fs::Permissions::from_mode(0o600))
+            .expect("secure unsafe temp");
+        let before = e2_rm_tree_state(&parent.path().join("home"));
+        assert!(matches!(
+            resolve_accepted_work_receipt_material(&authority, &key, &input.acceptance),
+            Err(AcceptedWorkReceiptMaterialErrorV1::PhysicalRead(
+                ReadOnlyAuthoritySnapshotErrorV1::UnsafeTemporaryMaterial { .. }
+            ))
+        ));
+        assert_eq!(e2_rm_tree_state(&parent.path().join("home")), before);
+        fs::remove_file(&unsafe_temporary).expect("remove isolated unsafe temp");
+
+        let outside_alias = parent.path().join("registry-hardlink-alias");
+        fs::hard_link(&registry_path, &outside_alias).expect("link E2 registry outside authority");
+        assert!(matches!(
+            resolve_accepted_work_receipt_material(&authority, &key, &input.acceptance),
+            Err(AcceptedWorkReceiptMaterialErrorV1::PhysicalRead(
+                ReadOnlyAuthoritySnapshotErrorV1::UnsafeFileMetadata { .. }
+            ))
+        ));
+        assert!(outside_alias.exists());
+        fs::remove_file(&outside_alias).expect("remove isolated hard link");
+
+        fs::set_permissions(&registry_path, fs::Permissions::from_mode(0o640))
+            .expect("weaken isolated registry mode");
+        assert!(matches!(
+            resolve_accepted_work_receipt_material(&authority, &key, &input.acceptance),
+            Err(AcceptedWorkReceiptMaterialErrorV1::PhysicalRead(
+                ReadOnlyAuthoritySnapshotErrorV1::UnsafeFileMetadata { .. }
+            ))
+        ));
+        fs::set_permissions(&registry_path, fs::Permissions::from_mode(0o600))
+            .expect("restore registry mode");
+
+        let cross_device = tempfile::tempdir_in("/dev/shm").expect("cross-device attack root");
+        let cross_device_target = cross_device.path().join("registry-symlink-target");
+        fs::write(
+            &cross_device_target,
+            fs::read(&registry_path).expect("read isolated E2 registry"),
+        )
+        .expect("write cross-device symlink target");
+        fs::set_permissions(&cross_device_target, fs::Permissions::from_mode(0o600))
+            .expect("secure cross-device symlink target");
+        assert_ne!(
+            fs::metadata(&cross_device_target)
+                .expect("stat cross-device target")
+                .dev(),
+            fs::metadata(&registry_path)
+                .expect("stat authority registry")
+                .dev()
+        );
+        fs::remove_file(&registry_path).expect("remove isolated E2 registry");
+        std::os::unix::fs::symlink(&cross_device_target, &registry_path)
+            .expect("replace registry by cross-device symlink");
+        let attacked = e2_rm_tree_state(&parent.path().join("home"));
+        assert!(
+            resolve_accepted_work_receipt_material(&authority, &key, &input.acceptance).is_err()
+        );
+        assert_eq!(e2_rm_tree_state(&parent.path().join("home")), attacked);
+        assert!(cross_device_target.exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn e2_rm_lock_reader_waits_for_cross_process_root_writer() {
+        const CHILD_HOME: &str = "SUBSTRATE_E2_RM_LOCK_CHILD_HOME";
+        const CHILD_TEST: &str = "execution::agent_runtime::dispatch_policy_commitment::tests::e2_rm_lock_reader_waits_for_cross_process_root_writer";
+        if let Some(home) = std::env::var_os(CHILD_HOME) {
+            let authority = HostSessionAuthority::open(std::path::Path::new(&home))
+                .expect("child opens authority");
+            read_existing_accepted_work_authority_snapshot(&authority)
+                .expect("child reads after writer releases root lock");
+            eprintln!("E2_RM_CHILD_READ_COMPLETE");
+            return;
+        }
+
+        let (parent, authority) = started_authority();
+        let root = authority
+            .read_preserved_start_root_v2()
+            .expect("read authority root");
+        let input = accepted_work_input(
+            &root.authority_store_id,
+            "wwa_018f0f2e-7b4c-7aa1-8c22-123456789ac9",
+            "request-e2-rm-lock",
+            AcceptedWorldWorkIdentityV1::EphemeralTask {
+                task_run_id: "task-run-e2-rm-lock".into(),
+            },
+            validated_material(policy_snapshot(&["src"], &["src"], &["api.example"])),
+            None,
+        );
+        persist_e2_rm_case(&authority, &input);
+        let lock_file = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(parent.path().join("home/authority-v1/lock/root.lock"))
+            .expect("open root lock");
+        fs2::FileExt::lock_exclusive(&lock_file).expect("hold writer root lock");
+        let registry_path = parent
+            .path()
+            .join("home/authority-v1/dispatch-policy-commitment-v1/registry-v1.json");
+        let registry_before = fs::metadata(&registry_path)
+            .expect("stat pre-publication registry")
+            .ino();
+        let mut child = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .arg(CHILD_TEST)
+            .arg("--exact")
+            .arg("--nocapture")
+            .arg("--test-threads=1")
+            .env(CHILD_HOME, parent.path().join("home"))
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("spawn E2-RM lock reader");
+        std::thread::sleep(std::time::Duration::from_millis(250));
+        assert!(child.try_wait().expect("probe child").is_none());
+        let replacement = parent.path().join(
+            "home/authority-v1/dispatch-policy-commitment-v1/tmp/dispatch-policy-registry--44444444444444444444444444444444.tmp",
+        );
+        fs::write(
+            &replacement,
+            fs::read(&registry_path).expect("read pre-publication registry"),
+        )
+        .expect("write complete replacement registry");
+        fs::set_permissions(&replacement, fs::Permissions::from_mode(0o600))
+            .expect("secure replacement registry");
+        fs::rename(&replacement, &registry_path).expect("atomically publish replacement registry");
+        assert_ne!(
+            fs::metadata(&registry_path)
+                .expect("stat post-publication registry")
+                .ino(),
+            registry_before
+        );
+        fs2::FileExt::unlock(&lock_file).expect("release writer root lock");
+        let output = child.wait_with_output().expect("join E2-RM lock reader");
+        assert!(output.status.success(), "{output:?}");
+        assert!(String::from_utf8_lossy(&output.stderr).contains("E2_RM_CHILD_READ_COMPLETE"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn e2_rm_fault_root_replacement_fails_closed_without_touching_either_root() {
+        let (parent, authority) = started_authority();
+        let authority_store_id = authority
+            .read_preserved_start_root_v2()
+            .expect("read original authority root")
+            .authority_store_id;
+        let home = parent.path().join("home");
+        let moved = parent.path().join("original-home");
+        fs::rename(&home, &moved).expect("move original authority root");
+        fs::create_dir(&home).expect("create replacement root");
+        fs::set_permissions(&home, fs::Permissions::from_mode(0o700))
+            .expect("secure replacement root");
+        let original_before = e2_rm_tree_state(&moved);
+        let replacement_before = e2_rm_tree_state(&home);
+        let key = DispatchPolicyCommitmentLookupKeyV1 {
+            authority_store_id,
+            orchestration_session_id: "e2-session".into(),
+            request_id: "request-e2-rm-replaced".into(),
+            subject: DispatchPolicyCommitmentSubjectKeyV1::EphemeralWork {
+                task_run_id: "task-e2-rm-replaced".into(),
+            },
+        };
+        let expected = accepted_work_input(
+            &key.authority_store_id,
+            "wwa_018f0f2e-7b4c-7aa1-8c22-123456789aca",
+            &key.request_id,
+            AcceptedWorldWorkIdentityV1::EphemeralTask {
+                task_run_id: "task-e2-rm-replaced".into(),
+            },
+            validated_material(policy_snapshot(&["src"], &["src"], &["api.example"])),
+            None,
+        )
+        .acceptance;
+        assert!(matches!(
+            resolve_accepted_work_receipt_material(&authority, &key, &expected),
+            Err(AcceptedWorkReceiptMaterialErrorV1::PhysicalRead(
+                ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootAbsentOrUnsafe
+                    | ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootReplaced
+            ))
+        ));
+        assert_eq!(e2_rm_tree_state(&moved), original_before);
+        assert_eq!(e2_rm_tree_state(&home), replacement_before);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn e2_rm_replay_retry_restart_and_ambient_revision_drift_are_byte_identical() {
+        let (parent, authority) = started_authority();
+        let root = authority
+            .read_preserved_start_root_v2()
+            .expect("read authority root");
+        let input = accepted_work_input(
+            &root.authority_store_id,
+            "wwa_018f0f2e-7b4c-7aa1-8c22-123456789acb",
+            "request-e2-rm-replay",
+            AcceptedWorldWorkIdentityV1::EphemeralTask {
+                task_run_id: "task-run-e2-rm-replay".into(),
+            },
+            validated_material(policy_snapshot(&["src"], &["src"], &["api.example"])),
+            None,
+        );
+        let (key, _) = persist_e2_rm_case(&authority, &input);
+        let first = resolved_e2_rm(&authority, &key, &input.acceptance);
+        let retry = resolved_e2_rm(&authority, &key, &input.acceptance);
+        assert_eq!(retry, first);
+
+        let state_root_path = parent.path().join("home/authority-v1/state-root-v1.json");
+        let mut current_root: Value =
+            decode_canonical(&fs::read(&state_root_path).expect("read current HSA root"))
+                .expect("decode current HSA root");
+        let current_root_revision = current_root["root_revision"]
+            .as_u64()
+            .expect("current HSA root revision");
+        current_root["root_revision"] = Value::from(current_root_revision + 1);
+        let advanced_root =
+            super::super::host_session_authority::canonical_json::to_vec(&current_root)
+                .expect("encode advanced HSA root");
+        let lock_file = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(parent.path().join("home/authority-v1/lock/root.lock"))
+            .expect("open HSA root lock for revision advance");
+        fs2::FileExt::lock_exclusive(&lock_file).expect("lock HSA root for revision advance");
+        let advanced_root_temp = parent.path().join(format!(
+            "home/authority-v1/tmp/root--r{}--55555555555555555555555555555555.tmp",
+            current_root_revision + 1
+        ));
+        fs::write(&advanced_root_temp, advanced_root).expect("write advanced HSA root");
+        fs::set_permissions(&advanced_root_temp, fs::Permissions::from_mode(0o600))
+            .expect("secure advanced HSA root");
+        fs::rename(&advanced_root_temp, &state_root_path).expect("publish advanced HSA root");
+        fs2::FileExt::unlock(&lock_file).expect("release HSA root revision writer");
+        let after_hsa_revision_advance = resolved_e2_rm(&authority, &key, &input.acceptance);
+        assert_eq!(after_hsa_revision_advance, first);
+        assert_eq!(
+            after_hsa_revision_advance.authority_revision_observed(),
+            input.acceptance.authority_revision_observed
+        );
+
+        let agent_hub = parent.path().join("home/run/agent-hub");
+        let current_b2_1 = agent_hub.join("world-work-execution-supervisor-v1.json");
+        fs::write(&current_b2_1, b"ambient observer revision 1").expect("write ambient B2.1 state");
+        fs::set_permissions(&current_b2_1, fs::Permissions::from_mode(0o600))
+            .expect("secure ambient B2.1 state");
+        let after_observer_advance = resolved_e2_rm(&authority, &key, &input.acceptance);
+        assert_eq!(after_observer_advance, first);
+        fs::write(
+            &current_b2_1,
+            b"ambient observer revision 2 and parent policy drift",
+        )
+        .expect("advance ambient B2.1 state");
+
+        let retained_worker_namespace = parent
+            .path()
+            .join("home/authority-v1/retained-worker-admission-v1");
+        fs::create_dir(&retained_worker_namespace)
+            .expect("create simulated retained-worker lifecycle namespace");
+        fs::set_permissions(
+            &retained_worker_namespace,
+            fs::Permissions::from_mode(0o700),
+        )
+        .expect("secure simulated retained-worker lifecycle namespace");
+        let retained_worker_current = retained_worker_namespace.join("ambient-current-worker");
+        fs::write(&retained_worker_current, b"retained worker revision 1")
+            .expect("write ambient retained-worker state");
+        fs::set_permissions(&retained_worker_current, fs::Permissions::from_mode(0o600))
+            .expect("secure ambient retained-worker state");
+        assert_eq!(resolved_e2_rm(&authority, &key, &input.acceptance), first);
+        fs::write(&retained_worker_current, b"retained worker revision 2")
+            .expect("advance ambient retained-worker state");
+
+        let current_parent_policy = parent
+            .path()
+            .join("home/authority-v1/objects/ambient-current-parent-policy");
+        fs::write(&current_parent_policy, b"narrowed current parent policy")
+            .expect("write narrowed ambient parent policy");
+        fs::set_permissions(&current_parent_policy, fs::Permissions::from_mode(0o600))
+            .expect("secure ambient parent policy");
+        assert_eq!(resolved_e2_rm(&authority, &key, &input.acceptance), first);
+        fs::write(&current_parent_policy, b"broadened current parent policy")
+            .expect("broaden ambient parent policy");
+
+        let reopened = HostSessionAuthority::open(&parent.path().join("home"))
+            .expect("reopen authority after restart");
+        let replayed = resolved_e2_rm(&reopened, &key, &input.acceptance);
+        assert_eq!(replayed, first);
     }
 
     #[test]

@@ -1,7 +1,13 @@
 use super::super::LegacyStateStoreDirectoryEntryV1;
 use super::legacy::ObservedLegacyDirectory;
 use super::*;
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::dispatch_policy_commitment::ReadOnlyAuthoritySnapshotErrorV1;
+#[cfg(target_os = "linux")]
+use std::cell::RefCell;
 use std::collections::BTreeMap;
+#[cfg(target_os = "linux")]
+use std::path::Path;
 use std::sync::Arc;
 
 const WORLD_WORK_RECEIPT_REGISTRY_FILE: &str = "world-work-receipt-registry-v1.json";
@@ -15,6 +21,800 @@ const WORLD_WORK_EXECUTION_SUPERVISOR_TEMP_SUFFIX: &str = ".tmp";
 const POST_HSA_OBLIGATION_LEDGER_DIRECTORY: &str = "obligation-ledger";
 const POST_HSA_OBLIGATION_LEDGER_TEMP_PREFIX: &str = ".auto-attach-ledger--";
 const POST_HSA_OBLIGATION_LEDGER_TEMP_SUFFIX: &str = ".tmp";
+
+#[cfg(all(test, target_os = "linux"))]
+std::thread_local! {
+    static E2_RM_BEFORE_FINAL_VERIFY_HOOK: RefCell<Option<Box<dyn FnOnce()>>> =
+        RefCell::new(None);
+}
+
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) fn set_e2_rm_before_final_verify_hook(hook: impl FnOnce() + 'static) {
+    E2_RM_BEFORE_FINAL_VERIFY_HOOK.with(|slot| {
+        assert!(slot.borrow_mut().replace(Box::new(hook)).is_none());
+    });
+}
+
+#[cfg(all(test, target_os = "linux"))]
+fn run_e2_rm_before_final_verify_hook() {
+    E2_RM_BEFORE_FINAL_VERIFY_HOOK.with(|slot| {
+        if let Some(hook) = slot.borrow_mut().take() {
+            hook();
+        }
+    });
+}
+
+#[cfg(target_os = "linux")]
+const E2_RM_AUTHORITY_NAMESPACE: &str = "authority-v1";
+#[cfg(target_os = "linux")]
+const E2_RM_AUTHORITY_LOCK_NAMESPACE: &str = "authority-v1/lock";
+#[cfg(target_os = "linux")]
+const E2_RM_AUTHORITY_TEMP_NAMESPACE: &str = "authority-v1/tmp";
+#[cfg(target_os = "linux")]
+const E2_RM_B1_NAMESPACE: &str = "run/agent-hub/world-work-receipt-registry-v1";
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum WorldWorkReceiptRegistryPhysicalReadV1 {
+    Absent,
+    Present(WorldWorkReceiptRegistryPhysicalSnapshotV1),
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct WorldWorkReceiptRegistryPhysicalSnapshotV1 {
+    registry_bytes: Vec<u8>,
+}
+
+#[cfg(target_os = "linux")]
+impl WorldWorkReceiptRegistryPhysicalSnapshotV1 {
+    pub(crate) fn registry_bytes(&self) -> &[u8] {
+        &self.registry_bytes
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(super) struct ReadOnlyFileGuardV1 {
+    pub(super) entry: DirectoryEntry,
+    pub(super) metadata: TrustedEntryMetadataV1,
+    pub(super) bytes: Vec<u8>,
+    pub(super) namespace: &'static str,
+}
+
+#[cfg(target_os = "linux")]
+impl ReadOnlyFileGuardV1 {
+    pub(super) fn capture(
+        parent: &TrustedDirectory,
+        entry: &DirectoryEntry,
+        namespace: &'static str,
+    ) -> Result<Self, ReadOnlyAuthoritySnapshotErrorV1> {
+        if entry.kind != EntryKind::RegularFile {
+            return Err(ReadOnlyAuthoritySnapshotErrorV1::UnsafeNamespaceEntry {
+                namespace,
+                name: entry.name.clone(),
+            });
+        }
+        let (bytes, metadata) = parent
+            .read_regular_file_entry_stable_single_link(entry)
+            .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::UnsafeFileMetadata {
+                namespace,
+                name: entry.name.clone(),
+            })?;
+        Ok(Self {
+            entry: entry.clone(),
+            metadata,
+            bytes,
+            namespace,
+        })
+    }
+
+    fn verify(&self, parent: &TrustedDirectory) -> Result<(), ReadOnlyAuthoritySnapshotErrorV1> {
+        let (bytes, metadata) = parent
+            .read_regular_file_entry_stable_single_link(&self.entry)
+            .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::SnapshotEntryChanged {
+                namespace: self.namespace,
+                name: self.entry.name.clone(),
+            })?;
+        if bytes != self.bytes || metadata != self.metadata {
+            return Err(ReadOnlyAuthoritySnapshotErrorV1::SnapshotEntryChanged {
+                namespace: self.namespace,
+                name: self.entry.name.clone(),
+            });
+        }
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(super) struct ReadOnlyDirectoryGuardV1 {
+    pub(super) entry: DirectoryEntry,
+    pub(super) directory: TrustedDirectory,
+    pub(super) metadata: TrustedEntryMetadataV1,
+    pub(super) manifest: Vec<DirectoryEntry>,
+    pub(super) namespace: &'static str,
+}
+
+#[cfg(target_os = "linux")]
+impl ReadOnlyDirectoryGuardV1 {
+    pub(super) fn capture(
+        parent: &TrustedDirectory,
+        entry: &DirectoryEntry,
+        namespace: &'static str,
+    ) -> Result<Self, ReadOnlyAuthoritySnapshotErrorV1> {
+        if entry.kind != EntryKind::Directory {
+            return Err(ReadOnlyAuthoritySnapshotErrorV1::UnsafeNamespaceEntry {
+                namespace,
+                name: entry.name.clone(),
+            });
+        }
+        parent.revalidate_entry(entry).map_err(|_| {
+            ReadOnlyAuthoritySnapshotErrorV1::SnapshotEntryChanged {
+                namespace,
+                name: entry.name.clone(),
+            }
+        })?;
+        let directory = parent.open_directory(&entry.name).map_err(|_| {
+            ReadOnlyAuthoritySnapshotErrorV1::UnsafeNamespaceEntry {
+                namespace,
+                name: entry.name.clone(),
+            }
+        })?;
+        let metadata = directory.metadata().map_err(|_| {
+            ReadOnlyAuthoritySnapshotErrorV1::UnsafeNamespaceEntry {
+                namespace,
+                name: entry.name.clone(),
+            }
+        })?;
+        let manifest = directory
+            .entries()
+            .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::Io {
+                operation: "enumerate read-only authority namespace",
+            })?;
+        parent.revalidate_entry(entry).map_err(|_| {
+            ReadOnlyAuthoritySnapshotErrorV1::SnapshotEntryChanged {
+                namespace,
+                name: entry.name.clone(),
+            }
+        })?;
+        if parent.entry_metadata(entry).map_err(|_| {
+            ReadOnlyAuthoritySnapshotErrorV1::SnapshotEntryChanged {
+                namespace,
+                name: entry.name.clone(),
+            }
+        })? != metadata
+        {
+            return Err(ReadOnlyAuthoritySnapshotErrorV1::SnapshotEntryChanged {
+                namespace,
+                name: entry.name.clone(),
+            });
+        }
+        Ok(Self {
+            entry: entry.clone(),
+            directory,
+            metadata,
+            manifest,
+            namespace,
+        })
+    }
+
+    fn verify(&self, parent: &TrustedDirectory) -> Result<(), ReadOnlyAuthoritySnapshotErrorV1> {
+        parent.revalidate_entry(&self.entry).map_err(|_| {
+            ReadOnlyAuthoritySnapshotErrorV1::SnapshotEntryChanged {
+                namespace: self.namespace,
+                name: self.entry.name.clone(),
+            }
+        })?;
+        if parent.entry_metadata(&self.entry).map_err(|_| {
+            ReadOnlyAuthoritySnapshotErrorV1::SnapshotEntryChanged {
+                namespace: self.namespace,
+                name: self.entry.name.clone(),
+            }
+        })? != self.metadata
+            || self.directory.metadata().map_err(|_| {
+                ReadOnlyAuthoritySnapshotErrorV1::NamespaceChanged {
+                    namespace: self.namespace,
+                }
+            })? != self.metadata
+            || self.directory.entries().map_err(|_| {
+                ReadOnlyAuthoritySnapshotErrorV1::NamespaceChanged {
+                    namespace: self.namespace,
+                }
+            })? != self.manifest
+        {
+            return Err(ReadOnlyAuthoritySnapshotErrorV1::NamespaceChanged {
+                namespace: self.namespace,
+            });
+        }
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(super) struct ReadOnlyE2NamespaceGuardV1 {
+    pub(super) root: ReadOnlyDirectoryGuardV1,
+    pub(super) keys: Option<ReadOnlyDirectoryGuardV1>,
+    pub(super) temporary: Option<ReadOnlyDirectoryGuardV1>,
+    pub(super) registry: Option<ReadOnlyFileGuardV1>,
+    pub(super) key_files: Vec<ReadOnlyFileGuardV1>,
+    pub(super) key_temporary_files: Vec<ReadOnlyFileGuardV1>,
+    pub(super) registry_temporary_files: Vec<ReadOnlyFileGuardV1>,
+}
+
+#[cfg(target_os = "linux")]
+impl ReadOnlyE2NamespaceGuardV1 {
+    fn verify(&self, authority: &TrustedDirectory) -> Result<(), ReadOnlyAuthoritySnapshotErrorV1> {
+        self.root.verify(authority)?;
+        if let Some(keys) = &self.keys {
+            keys.verify(&self.root.directory)?;
+            for key in self.key_files.iter().chain(&self.key_temporary_files) {
+                key.verify(&keys.directory)?;
+            }
+        }
+        if let Some(temporary) = &self.temporary {
+            temporary.verify(&self.root.directory)?;
+            for file in &self.registry_temporary_files {
+                file.verify(&temporary.directory)?;
+            }
+        }
+        if let Some(registry) = &self.registry {
+            registry.verify(&self.root.directory)?;
+        }
+        self.root.verify(authority)
+    }
+}
+
+#[cfg(target_os = "linux")]
+struct ReadOnlyB1NamespaceGuardV1 {
+    run: ReadOnlyDirectoryGuardV1,
+    agent_hub: Option<ReadOnlyDirectoryGuardV1>,
+    registry: Option<ReadOnlyFileGuardV1>,
+    temporary_files: Vec<ReadOnlyFileGuardV1>,
+}
+
+#[cfg(target_os = "linux")]
+impl ReadOnlyB1NamespaceGuardV1 {
+    fn verify(&self, bootstrap: &TrustedDirectory) -> Result<(), ReadOnlyAuthoritySnapshotErrorV1> {
+        self.run.verify(bootstrap)?;
+        if let Some(agent_hub) = &self.agent_hub {
+            agent_hub.verify(&self.run.directory)?;
+            if let Some(registry) = &self.registry {
+                registry.verify(&agent_hub.directory)?;
+            }
+            for temporary in &self.temporary_files {
+                temporary.verify(&agent_hub.directory)?;
+            }
+            agent_hub.verify(&self.run.directory)?;
+        }
+        self.run.verify(bootstrap)
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(super) struct ReadOnlyVersionedAuthorityTransactionV1<'root> {
+    supplied_root: &'root TrustedAuthorityRoot,
+    reopened_root: TrustedAuthorityRoot,
+    bootstrap_metadata: TrustedEntryMetadataV1,
+    bootstrap_manifest: Vec<DirectoryEntry>,
+    authority: ReadOnlyDirectoryGuardV1,
+    authority_children_metadata: BTreeMap<String, TrustedEntryMetadataV1>,
+    root_file: ReadOnlyFileGuardV1,
+    init_file: Option<ReadOnlyFileGuardV1>,
+    lock_directory: ReadOnlyDirectoryGuardV1,
+    temporary_directory: ReadOnlyDirectoryGuardV1,
+    authority_temporary_files: Vec<ReadOnlyFileGuardV1>,
+    root_lock: ReadOnlyFileGuardV1,
+    decoded_root: VersionedStateRoot,
+    e2_guard: RefCell<Option<ReadOnlyE2NamespaceGuardV1>>,
+    b1_guard: RefCell<Option<ReadOnlyB1NamespaceGuardV1>>,
+    _root_lock_file: TrustedFile,
+    _lock: TrustedOwnedFileLock,
+}
+
+#[cfg(target_os = "linux")]
+impl ReadOnlyVersionedAuthorityTransactionV1<'_> {
+    pub(super) fn authority_directory(&self) -> &TrustedDirectory {
+        &self.authority.directory
+    }
+
+    pub(super) fn authority_manifest(&self) -> &[DirectoryEntry] {
+        &self.authority.manifest
+    }
+
+    pub(super) fn retain_e2_guard(
+        &self,
+        guard: ReadOnlyE2NamespaceGuardV1,
+    ) -> Result<(), ReadOnlyAuthoritySnapshotErrorV1> {
+        let mut retained = self.e2_guard.borrow_mut();
+        if retained.is_some() {
+            return Err(ReadOnlyAuthoritySnapshotErrorV1::Io {
+                operation: "capture E2 namespace more than once",
+            });
+        }
+        *retained = Some(guard);
+        Ok(())
+    }
+
+    pub(super) fn authority_root_identity(&self) -> &CanonicalDirectoryV1 {
+        self.decoded_root.bootstrap_home()
+    }
+
+    pub(super) fn authority_store_id(&self) -> &str {
+        self.decoded_root.authority_store_id()
+    }
+
+    pub(super) fn root_bytes(&self) -> &[u8] {
+        &self.root_file.bytes
+    }
+
+    pub(super) fn root_revision(&self) -> u64 {
+        self.decoded_root.root_revision()
+    }
+
+    pub(super) fn read_world_work_receipt_registry_snapshot(
+        &self,
+    ) -> Result<WorldWorkReceiptRegistryPhysicalReadV1, ReadOnlyAuthoritySnapshotErrorV1> {
+        if self.b1_guard.borrow().is_some() {
+            return Err(ReadOnlyAuthoritySnapshotErrorV1::Io {
+                operation: "capture B1 namespace more than once",
+            });
+        }
+        let Some(run_entry) = self
+            .bootstrap_manifest
+            .iter()
+            .find(|entry| entry.name == "run")
+        else {
+            return Ok(WorldWorkReceiptRegistryPhysicalReadV1::Absent);
+        };
+        let run =
+            ReadOnlyDirectoryGuardV1::capture(self.reopened_root.directory(), run_entry, "run")?;
+        let mut guard = ReadOnlyB1NamespaceGuardV1 {
+            run,
+            agent_hub: None,
+            registry: None,
+            temporary_files: Vec::new(),
+        };
+        let result = (|| {
+            let Some(agent_hub_entry) = guard
+                .run
+                .manifest
+                .iter()
+                .find(|entry| entry.name == "agent-hub")
+            else {
+                return Ok(WorldWorkReceiptRegistryPhysicalReadV1::Absent);
+            };
+            guard.agent_hub = Some(ReadOnlyDirectoryGuardV1::capture(
+                &guard.run.directory,
+                agent_hub_entry,
+                "run/agent-hub",
+            )?);
+            let agent_hub =
+                guard
+                    .agent_hub
+                    .as_ref()
+                    .ok_or(ReadOnlyAuthoritySnapshotErrorV1::Io {
+                        operation: "retain B1 agent-hub guard",
+                    })?;
+            let receipt_entries = agent_hub
+                .manifest
+                .iter()
+                .filter(|entry| entry.name.starts_with(WORLD_WORK_RECEIPT_REGISTRY_PREFIX))
+                .collect::<Vec<_>>();
+            if receipt_entries.is_empty() {
+                return Ok(WorldWorkReceiptRegistryPhysicalReadV1::Absent);
+            }
+
+            let mut registry_entry = None;
+            let mut failure = None;
+            for entry in receipt_entries {
+                if entry.name == WORLD_WORK_RECEIPT_REGISTRY_FILE {
+                    if registry_entry.replace(entry).is_some() {
+                        failure.get_or_insert(
+                            ReadOnlyAuthoritySnapshotErrorV1::UnsafeNamespaceEntry {
+                                namespace: E2_RM_B1_NAMESPACE,
+                                name: entry.name.clone(),
+                            },
+                        );
+                    }
+                } else if entry.kind == EntryKind::RegularFile
+                    && is_world_work_receipt_registry_temp_name(&entry.name)
+                {
+                    match ReadOnlyFileGuardV1::capture(
+                        &agent_hub.directory,
+                        entry,
+                        E2_RM_B1_NAMESPACE,
+                    ) {
+                        Ok(temporary) => {
+                            failure.get_or_insert(
+                                ReadOnlyAuthoritySnapshotErrorV1::UnsafeTemporaryMaterial {
+                                    namespace: E2_RM_B1_NAMESPACE,
+                                    name: temporary.entry.name.clone(),
+                                },
+                            );
+                            guard.temporary_files.push(temporary);
+                        }
+                        Err(error) => {
+                            failure.get_or_insert(error);
+                        }
+                    }
+                } else {
+                    failure.get_or_insert(ReadOnlyAuthoritySnapshotErrorV1::UnsafeNamespaceEntry {
+                        namespace: E2_RM_B1_NAMESPACE,
+                        name: entry.name.clone(),
+                    });
+                }
+            }
+            if let Some(error) = failure {
+                return Err(error);
+            }
+            let registry_entry =
+                registry_entry.ok_or(ReadOnlyAuthoritySnapshotErrorV1::PartialNamespace {
+                    namespace: E2_RM_B1_NAMESPACE,
+                    component: WORLD_WORK_RECEIPT_REGISTRY_FILE,
+                })?;
+            guard.registry = Some(ReadOnlyFileGuardV1::capture(
+                &agent_hub.directory,
+                registry_entry,
+                E2_RM_B1_NAMESPACE,
+            )?);
+            let registry = guard
+                .registry
+                .as_ref()
+                .ok_or(ReadOnlyAuthoritySnapshotErrorV1::Io {
+                    operation: "retain B1 registry guard",
+                })?;
+            Ok(WorldWorkReceiptRegistryPhysicalReadV1::Present(
+                WorldWorkReceiptRegistryPhysicalSnapshotV1 {
+                    registry_bytes: registry.bytes.clone(),
+                },
+            ))
+        })();
+        *self.b1_guard.borrow_mut() = Some(guard);
+        result
+    }
+
+    fn verify_scope(&self) -> Result<(), ReadOnlyAuthoritySnapshotErrorV1> {
+        self.supplied_root
+            .revalidate()
+            .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootReplaced)?;
+        self.reopened_root
+            .revalidate()
+            .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootReplaced)?;
+        if self.supplied_root.identity() != self.reopened_root.identity()
+            || self
+                .reopened_root
+                .directory()
+                .metadata()
+                .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootReplaced)?
+                != self.bootstrap_metadata
+            || self
+                .reopened_root
+                .directory()
+                .entries()
+                .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootReplaced)?
+                != self.bootstrap_manifest
+        {
+            return Err(ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootReplaced);
+        }
+        self.authority.verify(self.reopened_root.directory())?;
+        for entry in &self.authority.manifest {
+            let current = self
+                .authority
+                .directory
+                .entry_metadata(entry)
+                .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::SnapshotEntryChanged {
+                    namespace: E2_RM_AUTHORITY_NAMESPACE,
+                    name: entry.name.clone(),
+                })?;
+            if self.authority_children_metadata.get(&entry.name) != Some(&current) {
+                return Err(ReadOnlyAuthoritySnapshotErrorV1::SnapshotEntryChanged {
+                    namespace: E2_RM_AUTHORITY_NAMESPACE,
+                    name: entry.name.clone(),
+                });
+            }
+        }
+        self.lock_directory.verify(&self.authority.directory)?;
+        self.temporary_directory.verify(&self.authority.directory)?;
+        for temporary in &self.authority_temporary_files {
+            temporary.verify(&self.temporary_directory.directory)?;
+        }
+        self.root_lock.verify(&self.lock_directory.directory)?;
+        if let Some(init_file) = &self.init_file {
+            init_file.verify(&self.authority.directory)?;
+        }
+        self.root_file.verify(&self.authority.directory)?;
+        let root = decode_read_only_versioned_root(&self.root_file.bytes)?;
+        if root.root_revision() != self.decoded_root.root_revision() || root != self.decoded_root {
+            return Err(ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootChangedWhileLocked);
+        }
+        if let Some(guard) = self.e2_guard.borrow().as_ref() {
+            guard.verify(&self.authority.directory)?;
+        }
+        if let Some(guard) = self.b1_guard.borrow().as_ref() {
+            guard.verify(self.reopened_root.directory())?;
+        }
+        self.root_file.verify(&self.authority.directory)?;
+        self.authority.verify(self.reopened_root.directory())?;
+        self.supplied_root
+            .revalidate()
+            .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootReplaced)?;
+        self.reopened_root
+            .revalidate()
+            .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootReplaced)
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(super) fn with_opened_existing_versioned_read_only_snapshot<T>(
+    opened: &TrustedAuthorityRoot,
+    operation: impl FnOnce(
+        &ReadOnlyVersionedAuthorityTransactionV1<'_>,
+    ) -> Result<T, ReadOnlyAuthoritySnapshotErrorV1>,
+) -> Result<T, ReadOnlyAuthoritySnapshotErrorV1> {
+    opened
+        .revalidate()
+        .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootAbsentOrUnsafe)?;
+    let reopened = TrustedAuthorityRoot::open(Path::new(&opened.identity().physical_path))
+        .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootAbsentOrUnsafe)?;
+    if reopened.identity() != opened.identity() {
+        return Err(ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootReplaced);
+    }
+    let initial_bootstrap_manifest = reopened
+        .directory()
+        .entries()
+        .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootAbsentOrUnsafe)?;
+    let initial_authority_entry = initial_bootstrap_manifest
+        .iter()
+        .find(|entry| entry.name == AUTHORITY_DIRECTORY)
+        .cloned()
+        .ok_or(ReadOnlyAuthoritySnapshotErrorV1::AuthorityLayoutAbsentOrUnsafe)?;
+    let initial_authority = reopened
+        .directory()
+        .open_directory(&initial_authority_entry.name)
+        .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityLayoutAbsentOrUnsafe)?;
+    let initial_authority_manifest = initial_authority
+        .entries()
+        .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityLayoutAbsentOrUnsafe)?;
+    let initial_lock_entry = initial_authority_manifest
+        .iter()
+        .find(|entry| entry.name == "lock")
+        .cloned()
+        .ok_or(ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootLockAbsentOrUnsafe)?;
+    let initial_lock_directory = initial_authority
+        .open_directory(&initial_lock_entry.name)
+        .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootLockAbsentOrUnsafe)?;
+    let initial_lock_manifest = initial_lock_directory
+        .entries()
+        .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootLockAbsentOrUnsafe)?;
+    if initial_lock_manifest.len() != 1
+        || initial_lock_manifest[0].name != ROOT_LOCK_FILE
+        || initial_lock_manifest[0].kind != EntryKind::RegularFile
+    {
+        return Err(ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootLockAbsentOrUnsafe);
+    }
+    let initial_root_lock_entry = initial_lock_manifest[0].clone();
+    let root_lock_file = initial_lock_directory
+        .open_file_entry(&initial_root_lock_entry)
+        .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootLockAbsentOrUnsafe)?;
+    let lock = root_lock_file
+        .lock_exclusive_owned()
+        .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityLockFailed)?;
+
+    opened
+        .revalidate()
+        .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootReplaced)?;
+    reopened
+        .revalidate()
+        .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootReplaced)?;
+    let bootstrap_metadata = reopened
+        .directory()
+        .metadata()
+        .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootAbsentOrUnsafe)?;
+    let bootstrap_manifest = reopened
+        .directory()
+        .entries()
+        .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootAbsentOrUnsafe)?;
+    let authority_entry = bootstrap_manifest
+        .iter()
+        .find(|entry| entry.name == AUTHORITY_DIRECTORY)
+        .ok_or(ReadOnlyAuthoritySnapshotErrorV1::AuthorityLayoutAbsentOrUnsafe)?;
+    if authority_entry != &initial_authority_entry {
+        return Err(ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootReplaced);
+    }
+    let authority = ReadOnlyDirectoryGuardV1::capture(
+        reopened.directory(),
+        authority_entry,
+        E2_RM_AUTHORITY_NAMESPACE,
+    )
+    .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityLayoutAbsentOrUnsafe)?;
+    validate_e2_rm_authority_manifest(&authority.manifest)?;
+
+    let lock_entry = authority
+        .manifest
+        .iter()
+        .find(|entry| entry.name == "lock")
+        .ok_or(ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootLockAbsentOrUnsafe)?;
+    if lock_entry != &initial_lock_entry {
+        return Err(ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootReplaced);
+    }
+    let lock_directory = ReadOnlyDirectoryGuardV1::capture(
+        &authority.directory,
+        lock_entry,
+        E2_RM_AUTHORITY_LOCK_NAMESPACE,
+    )
+    .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootLockAbsentOrUnsafe)?;
+    if lock_directory.manifest.len() != 1 || lock_directory.manifest[0] != initial_root_lock_entry {
+        return Err(ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootLockAbsentOrUnsafe);
+    }
+    let root_lock = ReadOnlyFileGuardV1::capture(
+        &lock_directory.directory,
+        &lock_directory.manifest[0],
+        E2_RM_AUTHORITY_LOCK_NAMESPACE,
+    )
+    .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootLockAbsentOrUnsafe)?;
+
+    let mut authority_children_metadata = BTreeMap::new();
+    for entry in &authority.manifest {
+        let metadata = authority.directory.entry_metadata(entry).map_err(|_| {
+            ReadOnlyAuthoritySnapshotErrorV1::UnsafeNamespaceEntry {
+                namespace: E2_RM_AUTHORITY_NAMESPACE,
+                name: entry.name.clone(),
+            }
+        })?;
+        authority_children_metadata.insert(entry.name.clone(), metadata);
+    }
+    let root_entry = authority
+        .manifest
+        .iter()
+        .find(|entry| entry.name == ROOT_FILE)
+        .ok_or(ReadOnlyAuthoritySnapshotErrorV1::AuthorityLayoutAbsentOrUnsafe)?;
+    let root_file =
+        ReadOnlyFileGuardV1::capture(&authority.directory, root_entry, E2_RM_AUTHORITY_NAMESPACE)?;
+    let init_file = authority
+        .manifest
+        .iter()
+        .find(|entry| entry.name == INIT_FILE)
+        .map(|entry| {
+            ReadOnlyFileGuardV1::capture(&authority.directory, entry, E2_RM_AUTHORITY_NAMESPACE)
+        })
+        .transpose()?;
+
+    let temporary_entry = authority
+        .manifest
+        .iter()
+        .find(|entry| entry.name == "tmp")
+        .ok_or(ReadOnlyAuthoritySnapshotErrorV1::AuthorityLayoutAbsentOrUnsafe)?;
+    let temporary_directory = ReadOnlyDirectoryGuardV1::capture(
+        &authority.directory,
+        temporary_entry,
+        E2_RM_AUTHORITY_TEMP_NAMESPACE,
+    )?;
+    let mut authority_temporary_files = Vec::new();
+    let mut authority_temporary_failure = None;
+    for entry in &temporary_directory.manifest {
+        if entry.kind != EntryKind::RegularFile || TempNameV1::parse(&entry.name).is_err() {
+            authority_temporary_failure.get_or_insert(
+                ReadOnlyAuthoritySnapshotErrorV1::UnsafeTemporaryMaterial {
+                    namespace: E2_RM_AUTHORITY_TEMP_NAMESPACE,
+                    name: entry.name.clone(),
+                },
+            );
+        }
+        if entry.kind != EntryKind::RegularFile {
+            continue;
+        }
+        match ReadOnlyFileGuardV1::capture(
+            &temporary_directory.directory,
+            entry,
+            E2_RM_AUTHORITY_TEMP_NAMESPACE,
+        ) {
+            Ok(temporary) => {
+                authority_temporary_failure.get_or_insert(
+                    ReadOnlyAuthoritySnapshotErrorV1::AuthorityTemporaryMaterialPresent {
+                        name: temporary.entry.name.clone(),
+                    },
+                );
+                authority_temporary_files.push(temporary);
+            }
+            Err(error) => {
+                authority_temporary_failure.get_or_insert(error);
+            }
+        }
+    }
+    let decoded_root = decode_read_only_versioned_root(&root_file.bytes)?;
+    if decoded_root.bootstrap_home() != opened.identity() {
+        return Err(ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootReplaced);
+    }
+    if decoded_root
+        .to_canonical_bytes()
+        .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootEncodingInvalid)?
+        != root_file.bytes
+    {
+        return Err(ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootEncodingInvalid);
+    }
+
+    let transaction = ReadOnlyVersionedAuthorityTransactionV1 {
+        supplied_root: opened,
+        reopened_root: reopened,
+        bootstrap_metadata,
+        bootstrap_manifest,
+        authority,
+        authority_children_metadata,
+        root_file,
+        init_file,
+        lock_directory,
+        temporary_directory,
+        authority_temporary_files,
+        root_lock,
+        decoded_root,
+        e2_guard: RefCell::new(None),
+        b1_guard: RefCell::new(None),
+        _root_lock_file: root_lock_file,
+        _lock: lock,
+    };
+    let result = match authority_temporary_failure {
+        Some(error) => Err(error),
+        None => operation(&transaction),
+    };
+    #[cfg(test)]
+    run_e2_rm_before_final_verify_hook();
+    let verification = transaction.verify_scope();
+    match result {
+        Ok(value) => verification.map(|()| value),
+        Err(error) => {
+            verification?;
+            Err(error)
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn decode_read_only_versioned_root(
+    bytes: &[u8],
+) -> Result<VersionedStateRoot, ReadOnlyAuthoritySnapshotErrorV1> {
+    let syntax: serde_json::Value =
+        crate::execution::agent_runtime::host_session_authority::canonical_json::from_slice(bytes)
+            .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootEncodingInvalid)?;
+    let version = syntax
+        .as_object()
+        .and_then(|object| object.get("schema_version"))
+        .and_then(serde_json::Value::as_u64)
+        .ok_or(ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootEncodingInvalid)?;
+    if !matches!(version, 1..=3) {
+        return Err(ReadOnlyAuthoritySnapshotErrorV1::UnsupportedAuthorityRootSchema);
+    }
+    let root = VersionedStateRoot::decode(bytes)
+        .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootEncodingInvalid)?;
+    root.validate()
+        .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootEncodingInvalid)?;
+    Ok(root)
+}
+
+#[cfg(target_os = "linux")]
+fn validate_e2_rm_authority_manifest(
+    manifest: &[DirectoryEntry],
+) -> Result<(), ReadOnlyAuthoritySnapshotErrorV1> {
+    for entry in manifest {
+        let valid = matches!(
+            (entry.name.as_str(), entry.kind),
+            (
+                "lock"
+                    | "tmp"
+                    | "objects"
+                    | "keys"
+                    | "retained-worker-admission-v1"
+                    | "dispatch-policy-commitment-v1",
+                EntryKind::Directory
+            ) | (ROOT_FILE | INIT_FILE, EntryKind::RegularFile)
+        );
+        if !valid {
+            return Err(ReadOnlyAuthoritySnapshotErrorV1::UnsafeNamespaceEntry {
+                namespace: E2_RM_AUTHORITY_NAMESPACE,
+                name: entry.name.clone(),
+            });
+        }
+    }
+    Ok(())
+}
 
 struct WorldWorkReceiptRegistryStorageInnerV1 {
     root: TrustedAuthorityRoot,

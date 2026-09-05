@@ -1,9 +1,261 @@
 use super::*;
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::dispatch_policy_commitment::ReadOnlyAuthoritySnapshotErrorV1;
+#[cfg(target_os = "linux")]
+use std::collections::BTreeMap;
+
+#[cfg(target_os = "linux")]
+use super::transaction::{
+    ReadOnlyDirectoryGuardV1, ReadOnlyE2NamespaceGuardV1, ReadOnlyFileGuardV1,
+    ReadOnlyVersionedAuthorityTransactionV1,
+};
 
 const DIRECTORY: &str = "dispatch-policy-commitment-v1";
 const REGISTRY_FILE: &str = "registry-v1.json";
 const KEYS_DIRECTORY: &str = "keys";
 const TEMP_DIRECTORY: &str = "tmp";
+#[cfg(target_os = "linux")]
+const E2_RM_NAMESPACE: &str = "authority-v1/dispatch-policy-commitment-v1";
+#[cfg(target_os = "linux")]
+const E2_RM_KEYS_NAMESPACE: &str = "authority-v1/dispatch-policy-commitment-v1/keys";
+#[cfg(target_os = "linux")]
+const E2_RM_TEMP_NAMESPACE: &str = "authority-v1/dispatch-policy-commitment-v1/tmp";
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum DispatchPolicyCommitmentPhysicalReadV1 {
+    Absent,
+    Present(DispatchPolicyCommitmentPhysicalSnapshotV1),
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct DispatchPolicyCommitmentPhysicalSnapshotV1 {
+    registry_bytes: Vec<u8>,
+    key_files: BTreeMap<String, Vec<u8>>,
+}
+
+#[cfg(target_os = "linux")]
+impl DispatchPolicyCommitmentPhysicalSnapshotV1 {
+    pub(crate) fn registry_bytes(&self) -> &[u8] {
+        &self.registry_bytes
+    }
+
+    pub(crate) fn key_files(&self) -> &BTreeMap<String, Vec<u8>> {
+        &self.key_files
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(super) struct DispatchPolicyCommitmentReadCapabilityV1<'scope, 'root> {
+    transaction: &'scope ReadOnlyVersionedAuthorityTransactionV1<'root>,
+}
+
+#[cfg(target_os = "linux")]
+impl<'scope, 'root> DispatchPolicyCommitmentReadCapabilityV1<'scope, 'root> {
+    pub(super) fn from_transaction(
+        transaction: &'scope ReadOnlyVersionedAuthorityTransactionV1<'root>,
+    ) -> Self {
+        Self { transaction }
+    }
+
+    pub(crate) fn read_existing_snapshot(
+        &self,
+    ) -> Result<DispatchPolicyCommitmentPhysicalReadV1, ReadOnlyAuthoritySnapshotErrorV1> {
+        let Some(root_entry) = self
+            .transaction
+            .authority_manifest()
+            .iter()
+            .find(|entry| entry.name == DIRECTORY)
+        else {
+            return Ok(DispatchPolicyCommitmentPhysicalReadV1::Absent);
+        };
+        let root = ReadOnlyDirectoryGuardV1::capture(
+            self.transaction.authority_directory(),
+            root_entry,
+            E2_RM_NAMESPACE,
+        )?;
+        let mut guard = ReadOnlyE2NamespaceGuardV1 {
+            root,
+            keys: None,
+            temporary: None,
+            registry: None,
+            key_files: Vec::new(),
+            key_temporary_files: Vec::new(),
+            registry_temporary_files: Vec::new(),
+        };
+        let result = (|| {
+            for entry in &guard.root.manifest {
+                if !matches!(
+                    (entry.name.as_str(), entry.kind),
+                    (KEYS_DIRECTORY | TEMP_DIRECTORY, EntryKind::Directory)
+                        | (REGISTRY_FILE, EntryKind::RegularFile)
+                ) {
+                    return Err(ReadOnlyAuthoritySnapshotErrorV1::UnsafeNamespaceEntry {
+                        namespace: E2_RM_NAMESPACE,
+                        name: entry.name.clone(),
+                    });
+                }
+            }
+            let registry_entry = required_entry(
+                &guard.root.manifest,
+                REGISTRY_FILE,
+                EntryKind::RegularFile,
+                E2_RM_NAMESPACE,
+            )?;
+            let keys_entry = required_entry(
+                &guard.root.manifest,
+                KEYS_DIRECTORY,
+                EntryKind::Directory,
+                E2_RM_NAMESPACE,
+            )?;
+            let temporary_entry = required_entry(
+                &guard.root.manifest,
+                TEMP_DIRECTORY,
+                EntryKind::Directory,
+                E2_RM_NAMESPACE,
+            )?;
+            guard.registry = Some(ReadOnlyFileGuardV1::capture(
+                &guard.root.directory,
+                registry_entry,
+                E2_RM_NAMESPACE,
+            )?);
+            guard.keys = Some(ReadOnlyDirectoryGuardV1::capture(
+                &guard.root.directory,
+                keys_entry,
+                E2_RM_KEYS_NAMESPACE,
+            )?);
+            guard.temporary = Some(ReadOnlyDirectoryGuardV1::capture(
+                &guard.root.directory,
+                temporary_entry,
+                E2_RM_TEMP_NAMESPACE,
+            )?);
+
+            let keys = guard
+                .keys
+                .as_ref()
+                .ok_or(ReadOnlyAuthoritySnapshotErrorV1::Io {
+                    operation: "retain E2-RM keys guard",
+                })?;
+            let mut key_files = BTreeMap::new();
+            let mut failure = None;
+            for entry in &keys.manifest {
+                if entry.kind == EntryKind::RegularFile && key_temp_name(&entry.name) {
+                    match ReadOnlyFileGuardV1::capture(&keys.directory, entry, E2_RM_KEYS_NAMESPACE)
+                    {
+                        Ok(temporary_key) => {
+                            failure.get_or_insert(
+                                ReadOnlyAuthoritySnapshotErrorV1::UnsafeTemporaryMaterial {
+                                    namespace: E2_RM_KEYS_NAMESPACE,
+                                    name: temporary_key.entry.name.clone(),
+                                },
+                            );
+                            guard.key_temporary_files.push(temporary_key);
+                        }
+                        Err(error) => {
+                            failure.get_or_insert(error);
+                        }
+                    }
+                    continue;
+                }
+                if entry.kind != EntryKind::RegularFile || !key_file_name(&entry.name) {
+                    failure.get_or_insert(ReadOnlyAuthoritySnapshotErrorV1::UnsafeNamespaceEntry {
+                        namespace: E2_RM_KEYS_NAMESPACE,
+                        name: entry.name.clone(),
+                    });
+                    continue;
+                }
+                match ReadOnlyFileGuardV1::capture(&keys.directory, entry, E2_RM_KEYS_NAMESPACE) {
+                    Ok(key) => {
+                        key_files.insert(entry.name.clone(), key.bytes.clone());
+                        guard.key_files.push(key);
+                    }
+                    Err(error) => {
+                        failure.get_or_insert(error);
+                    }
+                }
+            }
+
+            let temporary =
+                guard
+                    .temporary
+                    .as_ref()
+                    .ok_or(ReadOnlyAuthoritySnapshotErrorV1::Io {
+                        operation: "retain E2-RM temporary guard",
+                    })?;
+            for entry in &temporary.manifest {
+                if entry.kind != EntryKind::RegularFile || !registry_temp_name(&entry.name) {
+                    failure.get_or_insert(
+                        ReadOnlyAuthoritySnapshotErrorV1::UnsafeTemporaryMaterial {
+                            namespace: E2_RM_TEMP_NAMESPACE,
+                            name: entry.name.clone(),
+                        },
+                    );
+                    continue;
+                }
+                match ReadOnlyFileGuardV1::capture(
+                    &temporary.directory,
+                    entry,
+                    E2_RM_TEMP_NAMESPACE,
+                ) {
+                    Ok(temporary_registry) => {
+                        failure.get_or_insert(
+                            ReadOnlyAuthoritySnapshotErrorV1::UnsafeTemporaryMaterial {
+                                namespace: E2_RM_TEMP_NAMESPACE,
+                                name: temporary_registry.entry.name.clone(),
+                            },
+                        );
+                        guard.registry_temporary_files.push(temporary_registry);
+                    }
+                    Err(error) => {
+                        failure.get_or_insert(error);
+                    }
+                }
+            }
+            if let Some(error) = failure {
+                return Err(error);
+            }
+
+            Ok(DispatchPolicyCommitmentPhysicalReadV1::Present(
+                DispatchPolicyCommitmentPhysicalSnapshotV1 {
+                    registry_bytes: guard
+                        .registry
+                        .as_ref()
+                        .ok_or(ReadOnlyAuthoritySnapshotErrorV1::Io {
+                            operation: "retain E2-RM registry guard",
+                        })?
+                        .bytes
+                        .clone(),
+                    key_files,
+                },
+            ))
+        })();
+        self.transaction.retain_e2_guard(guard)?;
+        result
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn required_entry<'a>(
+    manifest: &'a [DirectoryEntry],
+    name: &'static str,
+    kind: EntryKind,
+    namespace: &'static str,
+) -> Result<&'a DirectoryEntry, ReadOnlyAuthoritySnapshotErrorV1> {
+    let entry = manifest.iter().find(|entry| entry.name == name).ok_or(
+        ReadOnlyAuthoritySnapshotErrorV1::PartialNamespace {
+            namespace,
+            component: name,
+        },
+    )?;
+    if entry.kind != kind {
+        return Err(ReadOnlyAuthoritySnapshotErrorV1::UnsafeNamespaceEntry {
+            namespace,
+            name: entry.name.clone(),
+        });
+    }
+    Ok(entry)
+}
 
 pub(crate) struct DispatchPolicyCommitmentStorageV1 {
     root: TrustedAuthorityRoot,

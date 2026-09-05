@@ -4,6 +4,8 @@ use std::path::Path;
 use super::schema::{CanonicalDirectoryV1, TimestampV1};
 use super::store_schema::{StateRootV1, StateRootV2, StateRootV3, VersionedStateRoot};
 use super::trusted_fs::TrustedAuthorityRoot;
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::dispatch_policy_commitment::ReadOnlyAuthoritySnapshotErrorV1;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum BootstrapClassificationV1 {
@@ -26,6 +28,63 @@ pub(super) fn classify_opened(root: &TrustedAuthorityRoot) -> BootstrapClassific
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(crate) use platform::DispatchPolicyCommitmentStorageV1;
 pub(crate) use platform::RetainedWorkerAdmissionStorageV1;
+
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) use platform::set_e2_rm_before_final_verify_hook;
+#[cfg(target_os = "linux")]
+pub(crate) use platform::{
+    DispatchPolicyCommitmentPhysicalReadV1, DispatchPolicyCommitmentPhysicalSnapshotV1,
+    WorldWorkReceiptRegistryPhysicalReadV1,
+};
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct AcceptedWorkAuthorityPhysicalSnapshotV1 {
+    authority_root_identity: CanonicalDirectoryV1,
+    authority_store_id: String,
+    hsa_state_root_bytes: Vec<u8>,
+    hsa_root_revision_at_read: u64,
+    e2: DispatchPolicyCommitmentPhysicalReadV1,
+    b1: WorldWorkReceiptRegistryPhysicalReadV1,
+}
+
+#[cfg(target_os = "linux")]
+impl AcceptedWorkAuthorityPhysicalSnapshotV1 {
+    pub(crate) fn authority_root_identity(&self) -> &CanonicalDirectoryV1 {
+        &self.authority_root_identity
+    }
+
+    pub(crate) fn authority_store_id(&self) -> &str {
+        &self.authority_store_id
+    }
+
+    pub(crate) fn hsa_state_root_bytes(&self) -> &[u8] {
+        &self.hsa_state_root_bytes
+    }
+
+    pub(crate) fn hsa_root_revision_at_read(&self) -> u64 {
+        self.hsa_root_revision_at_read
+    }
+
+    pub(crate) fn e2(&self) -> &DispatchPolicyCommitmentPhysicalReadV1 {
+        &self.e2
+    }
+
+    pub(crate) fn b1(&self) -> &WorldWorkReceiptRegistryPhysicalReadV1 {
+        &self.b1
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "E2-RM is intentionally unintegrated until the separate B2.2 admission"
+)]
+pub(crate) fn read_existing_accepted_work_authority_snapshot(
+    authority: &super::facade::HostSessionAuthority,
+) -> Result<AcceptedWorkAuthorityPhysicalSnapshotV1, ReadOnlyAuthoritySnapshotErrorV1> {
+    platform::read_existing_accepted_work_authority_snapshot_opened(authority.trusted_root())
+}
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(crate) fn dispatch_policy_commitment_storage_for_authority(
@@ -663,6 +722,8 @@ mod platform {
 
     #[cfg(test)]
     use super::LegacyMutationV1;
+    #[cfg(target_os = "linux")]
+    use super::{AcceptedWorkAuthorityPhysicalSnapshotV1, ReadOnlyAuthoritySnapshotErrorV1};
     use super::{
         BootstrapClassificationV1, BootstrapError, ExpectedRevisionsV1, GeneratedObjectV1,
         GreenfieldUpgradeCrashPointV1, InitializationCrashPointV1, InitializationMaterialV1,
@@ -702,6 +763,8 @@ mod platform {
         RetainedWorkerAuthorityRegistrationRequestV1, RetainedWorkerAuthorityRegistrationV1,
         SessionNamespaceRecordV1, StateRootV1, StateRootV2, StateRootV3, VersionedStateRoot,
     };
+    #[cfg(target_os = "linux")]
+    use crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedEntryMetadataV1;
     use crate::execution::agent_runtime::host_session_authority::trusted_fs::{
         DirectoryEntry, EntryKind, TrustedAuthorityRoot, TrustedDirectory, TrustedFile,
         TrustedOwnedFileLock,
@@ -747,15 +810,27 @@ mod platform {
     mod dispatch_policy_commitment;
     #[path = "transaction.rs"]
     mod transaction;
+    #[cfg(target_os = "linux")]
+    use dispatch_policy_commitment::DispatchPolicyCommitmentReadCapabilityV1;
     pub(crate) use dispatch_policy_commitment::DispatchPolicyCommitmentStorageV1;
     pub(super) use dispatch_policy_commitment::{
         dispatch_policy_commitment_registry_exists_opened,
         dispatch_policy_commitment_storage_opened,
     };
+    #[cfg(target_os = "linux")]
+    pub(crate) use dispatch_policy_commitment::{
+        DispatchPolicyCommitmentPhysicalReadV1, DispatchPolicyCommitmentPhysicalSnapshotV1,
+    };
     #[cfg(test)]
     use transaction::retain_classified_legacy_directories_test;
+    #[cfg(all(test, target_os = "linux"))]
+    pub(crate) use transaction::set_e2_rm_before_final_verify_hook;
+    #[cfg(target_os = "linux")]
+    use transaction::with_opened_existing_versioned_read_only_snapshot;
     #[cfg(test)]
     use transaction::with_semantic_preflight;
+    #[cfg(target_os = "linux")]
+    pub(crate) use transaction::WorldWorkReceiptRegistryPhysicalReadV1;
     use transaction::{
         begin_legacy_state_store_transaction as begin_legacy_transaction,
         begin_legacy_state_store_transaction_for_identity as begin_legacy_transaction_for_identity,
@@ -769,6 +844,25 @@ mod platform {
         LegacyStateStoreTransactionV1, WorldWorkExecutionSupervisorStorageV1,
         WorldWorkReceiptRegistryStorageV1,
     };
+
+    #[cfg(target_os = "linux")]
+    pub(super) fn read_existing_accepted_work_authority_snapshot_opened(
+        opened: &TrustedAuthorityRoot,
+    ) -> Result<AcceptedWorkAuthorityPhysicalSnapshotV1, ReadOnlyAuthoritySnapshotErrorV1> {
+        with_opened_existing_versioned_read_only_snapshot(opened, |transaction| {
+            let e2 = DispatchPolicyCommitmentReadCapabilityV1::from_transaction(transaction)
+                .read_existing_snapshot()?;
+            let b1 = transaction.read_world_work_receipt_registry_snapshot()?;
+            Ok(AcceptedWorkAuthorityPhysicalSnapshotV1 {
+                authority_root_identity: transaction.authority_root_identity().clone(),
+                authority_store_id: transaction.authority_store_id().to_owned(),
+                hsa_state_root_bytes: transaction.root_bytes().to_vec(),
+                hsa_root_revision_at_read: transaction.root_revision(),
+                e2,
+                b1,
+            })
+        })
+    }
 
     pub(crate) struct RetainedWorkerAdmissionStorageV1 {
         root: TrustedAuthorityRoot,

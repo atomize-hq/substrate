@@ -1370,6 +1370,307 @@ impl WorldWorkAcceptanceRecordV1 {
     }
 }
 
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct WorldWorkAcceptanceLookupKeyV1 {
+    authority_store_id: String,
+    acceptance_record_id: String,
+}
+
+#[cfg(target_os = "linux")]
+impl WorldWorkAcceptanceLookupKeyV1 {
+    pub(crate) fn new(
+        authority_store_id: impl Into<String>,
+        acceptance_record_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            authority_store_id: authority_store_id.into(),
+            acceptance_record_id: acceptance_record_id.into(),
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "E2-RM witness fields remain private until the separate B2.2 admission"
+)]
+pub(crate) struct AuthenticatedWorldWorkAcceptanceV1 {
+    authority_root_identity: super::host_session_authority::schema::CanonicalDirectoryV1,
+    hsa_root_revision_at_read: u64,
+    record: WorldWorkAcceptanceRecordV1,
+}
+
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "E2-RM witness accessors remain unintegrated until B2.2"
+)]
+impl AuthenticatedWorldWorkAcceptanceV1 {
+    pub(crate) fn authority_root_identity(
+        &self,
+    ) -> &super::host_session_authority::schema::CanonicalDirectoryV1 {
+        &self.authority_root_identity
+    }
+
+    pub(crate) fn hsa_root_revision_at_read(&self) -> u64 {
+        self.hsa_root_revision_at_read
+    }
+
+    pub(crate) fn record(&self) -> &WorldWorkAcceptanceRecordV1 {
+        &self.record
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum WorldWorkAcceptanceAuthenticationErrorV1 {
+    InvalidLookupKey,
+    RegistryAbsent,
+    InvalidRegistryEncoding,
+    UnsupportedRegistrySchemaVersion { observed: u64 },
+    CorruptRegistry,
+    AcceptanceRecordMissing,
+    AcceptanceRecordAmbiguous,
+    AuthorityStoreMismatch,
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn authenticate_persisted_world_work_acceptance(
+    snapshot: &super::host_session_authority::store::AcceptedWorkAuthorityPhysicalSnapshotV1,
+    key: &WorldWorkAcceptanceLookupKeyV1,
+) -> Result<AuthenticatedWorldWorkAcceptanceV1, WorldWorkAcceptanceAuthenticationErrorV1> {
+    use super::host_session_authority::store::WorldWorkReceiptRegistryPhysicalReadV1;
+
+    if key.authority_store_id.trim().is_empty()
+        || !valid_world_work_uuid_v7(&key.acceptance_record_id, "wwa_")
+    {
+        return Err(WorldWorkAcceptanceAuthenticationErrorV1::InvalidLookupKey);
+    }
+    if key.authority_store_id != snapshot.authority_store_id() {
+        return Err(WorldWorkAcceptanceAuthenticationErrorV1::AuthorityStoreMismatch);
+    }
+    let WorldWorkReceiptRegistryPhysicalReadV1::Present(registry) = snapshot.b1() else {
+        return Err(WorldWorkAcceptanceAuthenticationErrorV1::RegistryAbsent);
+    };
+    let syntax: serde_json::Value =
+        super::host_session_authority::canonical_json::from_slice(registry.registry_bytes())
+            .map_err(|_| WorldWorkAcceptanceAuthenticationErrorV1::InvalidRegistryEncoding)?;
+    let version = syntax
+        .as_object()
+        .and_then(|object| object.get("schema_version"))
+        .and_then(serde_json::Value::as_u64)
+        .ok_or(WorldWorkAcceptanceAuthenticationErrorV1::InvalidRegistryEncoding)?;
+    if version != 1 {
+        return Err(
+            WorldWorkAcceptanceAuthenticationErrorV1::UnsupportedRegistrySchemaVersion {
+                observed: version,
+            },
+        );
+    }
+    let canonical: CanonicalWorldWorkReceiptRegistryStateV1 =
+        super::host_session_authority::canonical_json::from_slice(registry.registry_bytes())
+            .map_err(|_| WorldWorkAcceptanceAuthenticationErrorV1::InvalidRegistryEncoding)?;
+    let state: WorldWorkReceiptRegistryStateV1 = canonical
+        .try_into()
+        .map_err(|_| WorldWorkAcceptanceAuthenticationErrorV1::CorruptRegistry)?;
+
+    let mut acceptance_owners = BTreeMap::<&str, usize>::new();
+    for session in state.sessions_by_id.values() {
+        for record in session.records_by_acceptance_record_id.values() {
+            *acceptance_owners
+                .entry(record.acceptance_record_id.as_str())
+                .or_default() += 1;
+        }
+    }
+    if acceptance_owners.values().any(|count| *count > 1) {
+        return Err(WorldWorkAcceptanceAuthenticationErrorV1::AcceptanceRecordAmbiguous);
+    }
+    state
+        .validate(snapshot.authority_store_id())
+        .map_err(|_| WorldWorkAcceptanceAuthenticationErrorV1::CorruptRegistry)?;
+    let records = state
+        .sessions_by_id
+        .values()
+        .flat_map(|session| session.records_by_acceptance_record_id.values())
+        .filter(|record| record.acceptance_record_id == key.acceptance_record_id)
+        .collect::<Vec<_>>();
+    let [record] = records.as_slice() else {
+        return if records.is_empty() {
+            Err(WorldWorkAcceptanceAuthenticationErrorV1::AcceptanceRecordMissing)
+        } else {
+            Err(WorldWorkAcceptanceAuthenticationErrorV1::AcceptanceRecordAmbiguous)
+        };
+    };
+    Ok(AuthenticatedWorldWorkAcceptanceV1 {
+        authority_root_identity: snapshot.authority_root_identity().clone(),
+        hsa_root_revision_at_read: snapshot.hsa_root_revision_at_read(),
+        record: (*record).clone(),
+    })
+}
+
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) fn persist_e2_rm_world_work_acceptance_for_test(
+    authority: &super::host_session_authority::HostSessionAuthority,
+    record: &WorldWorkAcceptanceRecordV1,
+) -> Result<()> {
+    let (bootstrap_home, authority_store_id) = match authority.read_root() {
+        Ok(root) => (root.bootstrap_home, root.authority_store_id),
+        Err(_) => {
+            let root = authority.read_preserved_start_root_v2()?;
+            (root.bootstrap_home, root.authority_store_id)
+        }
+    };
+    let registry = WorldWorkReceiptRegistry::bind(
+        Path::new(&bootstrap_home.physical_path),
+        &bootstrap_home,
+        &authority_store_id,
+    )?;
+    let (family, message_id) = match &record.work_identity {
+        AcceptedWorldWorkIdentityV1::EphemeralTask { .. } => {
+            (WorldWorkProposalFamilyV1::EphemeralTask, None)
+        }
+        AcceptedWorldWorkIdentityV1::RetainedTurn { message_id, .. } => (
+            WorldWorkProposalFamilyV1::RetainedTurn,
+            Some(message_id.clone()),
+        ),
+    };
+    registry.prepare_world_work_acceptance_proposal_with_identity_allocator(
+        &record.orchestration_session_id,
+        &record.request_id,
+        family,
+        || {
+            (
+                record.acceptance_record_id.clone(),
+                message_id,
+                record.accepted_at,
+            )
+        },
+        |allocation| e2_rm_world_work_proposal_for_test(record, allocation),
+    )?;
+    registry.persist_world_work_acceptance(record.clone())?;
+    Ok(())
+}
+
+#[cfg(all(test, target_os = "linux"))]
+fn e2_rm_world_work_proposal_for_test(
+    record: &WorldWorkAcceptanceRecordV1,
+    allocation: WorldWorkProposalAllocationV1,
+) -> Result<WorldWorkAcceptanceProposalV1> {
+    let acceptance_context = transport_api_types::WorldWorkAcceptanceContextV1 {
+        schema_version: 1,
+        proposed_acceptance_record_id: allocation.acceptance_record_id,
+        request_id: record.request_id.clone(),
+        message_id: allocation.message_id,
+        caller_backend_id: record.caller_backend_id.clone(),
+        host_transition_correlation: record.host_transition_correlation.clone(),
+    };
+    let (proposed_work, submission_identity) = match &record.work_identity {
+        AcceptedWorldWorkIdentityV1::EphemeralTask { .. } => {
+            let validated_dispatch_request = super::dispatch_contract::WorldDispatchRequestV1 {
+                request_id: Some(record.request_id.clone()),
+                idempotency_key: Some(format!("e2-rm-{}", record.request_id)),
+                orchestration_session_id: Some(record.orchestration_session_id.clone()),
+                caller_participant_id: Some(record.caller_participant_id.clone()),
+                action: WorldDispatchActionV1::RunWorldTask,
+                mode: WorldDispatchModeV1::Ephemeral,
+                target_backend_id: Some(record.target_backend_id.clone()),
+                task_run_id: None,
+                target_participant_id: None,
+                world_id: Some(record.world_id.clone()),
+                world_generation: Some(record.world_generation),
+                payload: WorldDispatchPayloadV1::Task(TaskPayloadV1 {
+                    prompt: "E2-RM accepted work".to_string(),
+                }),
+                dispatch_policy_narrowing: None,
+            }
+            .validate()?;
+            let member_dispatch_request = transport_api_types::MemberDispatchRequestV1 {
+                schema_version: 1,
+                orchestration_session_id: record.orchestration_session_id.clone(),
+                participant_id: "awm_018f0f2e-7b4c-7aa1-8c22-123456789abc".to_string(),
+                orchestrator_participant_id: record.caller_participant_id.clone(),
+                parent_participant_id: None,
+                resumed_from_participant_id: None,
+                backend_id: record.target_backend_id.clone(),
+                protocol: "substrate.agent.session".to_string(),
+                run_id: record.request_id.clone(),
+                world_id: record.world_id.clone(),
+                world_generation: record.world_generation,
+                initial_prompt: Some("E2-RM accepted work".to_string()),
+                resolved_runtime: transport_api_types::ResolvedMemberRuntimeDescriptorV1 {
+                    backend_kind: transport_api_types::MemberRuntimeBackendKindV1::Codex,
+                    binary_path: "/usr/bin/codex".to_string(),
+                },
+                retained_worker_launch_authority: None,
+                e2_launch_activation: None,
+            };
+            (
+                ProposedWorldWorkIdentityV1::EphemeralTask,
+                WorldWorkSubmissionIdentityV1::EphemeralTask {
+                    validated_dispatch_request,
+                    member_dispatch_request,
+                    canonical_execute_request_sha256: "ee".repeat(32),
+                },
+            )
+        }
+        AcceptedWorldWorkIdentityV1::RetainedTurn {
+            active_run_id,
+            message_id,
+            target_participant_id,
+        } => {
+            let validated_dispatch_request = super::dispatch_contract::WorldDispatchRequestV1 {
+                request_id: Some(record.request_id.clone()),
+                idempotency_key: Some(format!("e2-rm-{}", record.request_id)),
+                orchestration_session_id: Some(record.orchestration_session_id.clone()),
+                caller_participant_id: Some(record.caller_participant_id.clone()),
+                action: WorldDispatchActionV1::ContinueWorldWorker,
+                mode: WorldDispatchModeV1::Retained,
+                target_backend_id: Some(record.target_backend_id.clone()),
+                task_run_id: None,
+                target_participant_id: Some(target_participant_id.clone()),
+                world_id: Some(record.world_id.clone()),
+                world_generation: Some(record.world_generation),
+                payload: WorldDispatchPayloadV1::WorkerContinue(WorkerContinuePayloadV1 {
+                    prompt: "E2-RM accepted turn".to_string(),
+                    thread_id: Some("e2-rm-thread".to_string()),
+                }),
+                dispatch_policy_narrowing: None,
+            }
+            .validate()?;
+            (
+                ProposedWorldWorkIdentityV1::RetainedTurn {
+                    active_run_id: active_run_id.clone(),
+                    message_id: message_id.clone(),
+                    target_participant_id: target_participant_id.clone(),
+                },
+                WorldWorkSubmissionIdentityV1::RetainedTurn {
+                    validated_dispatch_request,
+                    canonical_member_turn_submit_request_sha256: "ef".repeat(32),
+                },
+            )
+        }
+    };
+    Ok(WorldWorkAcceptanceProposalV1 {
+        schema_version: 1,
+        acceptance_context,
+        authority_store_id: record.authority_store_id.clone(),
+        authority_revision_observed: record.authority_revision_observed,
+        orchestration_session_id: record.orchestration_session_id.clone(),
+        caller_participant_id: record.caller_participant_id.clone(),
+        caller_backend_id: record.caller_backend_id.clone(),
+        target_backend_id: record.target_backend_id.clone(),
+        world_id: record.world_id.clone(),
+        world_generation: record.world_generation,
+        proposed_work,
+        submission_identity,
+        current_policy_snapshot_ref: record.current_policy_snapshot_ref.clone(),
+        current_policy_snapshot_hash: record.current_policy_snapshot_hash.clone(),
+        current_policy_revision: record.current_policy_revision.clone(),
+        created_at: allocation.created_at,
+    })
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -11799,6 +12100,201 @@ mod tests {
             accepted_at,
             record_revision: 1,
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn e2_rm_b1_auth_is_opaque_exact_and_fail_closed_for_absence_ambiguity_and_versions() {
+        fn replace_registry(store: &WorldWorkReceiptRegistry, bytes: &[u8]) {
+            let mut transaction = store
+                .storage
+                .begin_transaction()
+                .expect("begin isolated B1 replacement");
+            transaction
+                .replace_registry(bytes)
+                .expect("replace isolated B1 registry");
+            transaction
+                .finish()
+                .expect("finish isolated B1 replacement");
+        }
+
+        with_bound_world_work_store(|store, root_path| {
+            let authority = crate::execution::agent_runtime::host_session_authority::HostSessionAuthority::open(root_path)
+                .expect("open E2-RM B1 authority");
+            let absent_snapshot = crate::execution::agent_runtime::host_session_authority::store::read_existing_accepted_work_authority_snapshot(&authority)
+                .expect("capture absent B1 snapshot");
+            let absent_key = WorldWorkAcceptanceLookupKeyV1::new(
+                &store.authority_store_id,
+                "wwa_018f0f2e-7b4c-7aa1-8c22-123456789ad1",
+            );
+            assert!(matches!(
+                authenticate_persisted_world_work_acceptance(&absent_snapshot, &absent_key),
+                Err(WorldWorkAcceptanceAuthenticationErrorV1::RegistryAbsent)
+            ));
+
+            let outcome = store
+                .prepare_world_work_acceptance_proposal(
+                    "sess-b1",
+                    "request-e2-rm-b1-auth",
+                    WorldWorkProposalFamilyV1::EphemeralTask,
+                    |allocation| {
+                        test_ephemeral_proposal(
+                            allocation,
+                            "request-e2-rm-b1-auth",
+                            &store.authority_store_id,
+                        )
+                    },
+                )
+                .expect("persist E2-RM B1 proposal");
+            let WorldWorkProposalReservationOutcomeV1::Proposed(proposal) = outcome else {
+                panic!("fresh E2-RM B1 proposal must be proposed")
+            };
+            let record = test_acceptance_record(&proposal, "stream-e2-rm-b1-auth");
+            store
+                .persist_world_work_acceptance(record.clone())
+                .expect("persist E2-RM B1 acceptance");
+
+            let snapshot = crate::execution::agent_runtime::host_session_authority::store::read_existing_accepted_work_authority_snapshot(&authority)
+                .expect("capture complete B1 snapshot");
+            let key = WorldWorkAcceptanceLookupKeyV1::new(
+                &store.authority_store_id,
+                &record.acceptance_record_id,
+            );
+            let witness = authenticate_persisted_world_work_acceptance(&snapshot, &key)
+                .expect("authenticate exact B1 acceptance");
+            assert_eq!(witness.record(), &record);
+            assert_eq!(
+                witness.authority_root_identity(),
+                snapshot.authority_root_identity()
+            );
+            assert_eq!(
+                witness.hsa_root_revision_at_read(),
+                snapshot.hsa_root_revision_at_read()
+            );
+            assert!(matches!(
+                authenticate_persisted_world_work_acceptance(
+                    &snapshot,
+                    &WorldWorkAcceptanceLookupKeyV1::new(
+                        &store.authority_store_id,
+                        "wwa_018f0f2e-7b4c-7aa1-8c22-123456789ad2",
+                    ),
+                ),
+                Err(WorldWorkAcceptanceAuthenticationErrorV1::AcceptanceRecordMissing)
+            ));
+            assert!(matches!(
+                authenticate_persisted_world_work_acceptance(
+                    &snapshot,
+                    &WorldWorkAcceptanceLookupKeyV1::new("", &record.acceptance_record_id),
+                ),
+                Err(WorldWorkAcceptanceAuthenticationErrorV1::InvalidLookupKey)
+            ));
+            assert!(matches!(
+                authenticate_persisted_world_work_acceptance(
+                    &snapshot,
+                    &WorldWorkAcceptanceLookupKeyV1::new(
+                        "foreign-authority-store",
+                        &record.acceptance_record_id,
+                    ),
+                ),
+                Err(WorldWorkAcceptanceAuthenticationErrorV1::AuthorityStoreMismatch)
+            ));
+
+            let mut transaction = store
+                .storage
+                .begin_transaction()
+                .expect("begin B1 registry read");
+            let original = transaction
+                .read_registry()
+                .expect("read B1 registry")
+                .expect("B1 registry exists");
+            transaction.finish().expect("finish B1 registry read");
+
+            let mut value: serde_json::Value =
+                crate::execution::agent_runtime::host_session_authority::canonical_json::from_slice(
+                    &original,
+                )
+                .expect("decode B1 registry value");
+            for version in [0_u64, 2] {
+                value["schema_version"] = serde_json::Value::from(version);
+                replace_registry(
+                    &store,
+                    &crate::execution::agent_runtime::host_session_authority::canonical_json::to_vec(
+                        &value,
+                    )
+                    .expect("encode unsupported B1 registry"),
+                );
+                let unsupported = crate::execution::agent_runtime::host_session_authority::store::read_existing_accepted_work_authority_snapshot(&authority)
+                    .expect("capture unsupported B1 registry");
+                assert!(matches!(
+                    authenticate_persisted_world_work_acceptance(&unsupported, &key),
+                    Err(WorldWorkAcceptanceAuthenticationErrorV1::UnsupportedRegistrySchemaVersion {
+                        observed,
+                    }) if observed == version
+                ));
+            }
+
+            replace_registry(&store, br#"{"schema_version":"one","sessions_by_id":{}}"#);
+            let malformed = crate::execution::agent_runtime::host_session_authority::store::read_existing_accepted_work_authority_snapshot(&authority)
+                .expect("capture malformed B1 registry");
+            assert!(matches!(
+                authenticate_persisted_world_work_acceptance(&malformed, &key),
+                Err(WorldWorkAcceptanceAuthenticationErrorV1::InvalidRegistryEncoding)
+            ));
+
+            let mut noncanonical = original.clone();
+            noncanonical.push(b'\n');
+            replace_registry(&store, &noncanonical);
+            let noncanonical = crate::execution::agent_runtime::host_session_authority::store::read_existing_accepted_work_authority_snapshot(&authority)
+                .expect("capture noncanonical B1 registry");
+            assert!(matches!(
+                authenticate_persisted_world_work_acceptance(&noncanonical, &key),
+                Err(WorldWorkAcceptanceAuthenticationErrorV1::InvalidRegistryEncoding)
+            ));
+
+            let mut corrupt: serde_json::Value =
+                crate::execution::agent_runtime::host_session_authority::canonical_json::from_slice(
+                    &original,
+                )
+                .expect("decode corrupt-source B1 registry");
+            corrupt["sessions_by_id"]["sess-b1"]["schema_version"] = serde_json::Value::from(2);
+            replace_registry(
+                &store,
+                &crate::execution::agent_runtime::host_session_authority::canonical_json::to_vec(
+                    &corrupt,
+                )
+                .expect("encode corrupt B1 registry"),
+            );
+            let corrupt = crate::execution::agent_runtime::host_session_authority::store::read_existing_accepted_work_authority_snapshot(&authority)
+                .expect("capture corrupt B1 registry");
+            assert!(matches!(
+                authenticate_persisted_world_work_acceptance(&corrupt, &key),
+                Err(WorldWorkAcceptanceAuthenticationErrorV1::CorruptRegistry)
+            ));
+
+            let mut duplicate: serde_json::Value =
+                crate::execution::agent_runtime::host_session_authority::canonical_json::from_slice(
+                    &original,
+                )
+                .expect("decode duplicate source registry");
+            let sessions = duplicate["sessions_by_id"]
+                .as_object_mut()
+                .expect("B1 session map");
+            let duplicate_session = sessions.values().next().expect("one B1 session").clone();
+            sessions.insert("zz-ambiguous-session".into(), duplicate_session);
+            replace_registry(
+                &store,
+                &crate::execution::agent_runtime::host_session_authority::canonical_json::to_vec(
+                    &duplicate,
+                )
+                .expect("encode ambiguous B1 registry"),
+            );
+            let ambiguous = crate::execution::agent_runtime::host_session_authority::store::read_existing_accepted_work_authority_snapshot(&authority)
+                .expect("capture ambiguous B1 registry");
+            assert!(matches!(
+                authenticate_persisted_world_work_acceptance(&ambiguous, &key),
+                Err(WorldWorkAcceptanceAuthenticationErrorV1::AcceptanceRecordAmbiguous)
+            ));
+        });
     }
 
     fn assert_world_work_acceptance_mismatch_rejected(

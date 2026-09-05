@@ -681,6 +681,28 @@ mod platform {
         inode: u64,
     }
 
+    #[cfg(target_os = "linux")]
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub(crate) struct TrustedEntryMetadataV1 {
+        device_id: u64,
+        inode: u64,
+        owner_uid: u32,
+        mode: u32,
+        link_count: u64,
+        size: u64,
+        modified_seconds: i64,
+        modified_nanoseconds: i64,
+        changed_seconds: i64,
+        changed_nanoseconds: i64,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl TrustedEntryMetadataV1 {
+        pub(crate) fn link_count(self) -> u64 {
+            self.link_count
+        }
+    }
+
     impl TrustedAuthorityRoot {
         pub(crate) fn open(raw_path: &Path) -> Result<Self, TrustedFsError> {
             Self::open_for_owner(raw_path, effective_uid())
@@ -1895,6 +1917,64 @@ mod platform {
             Ok(opened)
         }
 
+        #[cfg(target_os = "linux")]
+        pub(crate) fn metadata(&self) -> Result<TrustedEntryMetadataV1, TrustedFsError> {
+            let stat = validate_open_directory(&self.file, self.device_id, false)?;
+            trusted_entry_metadata(&stat)
+        }
+
+        #[cfg(target_os = "linux")]
+        pub(crate) fn entry_metadata(
+            &self,
+            expected: &DirectoryEntry,
+        ) -> Result<TrustedEntryMetadataV1, TrustedFsError> {
+            self.revalidate_entry(expected)?;
+            let stat = match expected.kind {
+                EntryKind::Directory => {
+                    let opened = self.open_directory(&expected.name)?;
+                    fstat(opened.file.as_raw_fd())?
+                }
+                EntryKind::RegularFile => {
+                    let opened = self.open_file_entry(expected)?;
+                    fstat(opened.file.as_raw_fd())?
+                }
+                EntryKind::Symlink | EntryKind::Other => {
+                    return Err(TrustedFsError::new(
+                        "unsafe authority entry has no trusted metadata",
+                    ));
+                }
+            };
+            trusted_entry_metadata(&stat)
+        }
+
+        #[cfg(target_os = "linux")]
+        pub(crate) fn read_regular_file_entry_stable_single_link(
+            &self,
+            expected: &DirectoryEntry,
+        ) -> Result<(Vec<u8>, TrustedEntryMetadataV1), TrustedFsError> {
+            let opened = self.open_file_entry(expected)?;
+            let before = trusted_entry_metadata(&fstat(opened.file.as_raw_fd())?)?;
+            if before.link_count != 1 {
+                return Err(TrustedFsError::new(
+                    "trusted authority file is not single-linked before read",
+                ));
+            }
+            let bytes = opened.read_all()?;
+            let after = trusted_entry_metadata(&fstat(opened.file.as_raw_fd())?)?;
+            if after.link_count != 1 || before != after {
+                return Err(TrustedFsError::new(
+                    "trusted authority file metadata changed during read",
+                ));
+            }
+            self.revalidate_entry(expected)?;
+            if self.entry_metadata(expected)? != before {
+                return Err(TrustedFsError::new(
+                    "trusted authority named entry changed during read",
+                ));
+            }
+            Ok((bytes, before))
+        }
+
         pub(crate) fn entry_kind(&self, name: &str) -> Result<Option<EntryKind>, TrustedFsError> {
             Ok(self
                 .stat_entry(name)?
@@ -3024,6 +3104,34 @@ mod platform {
             ));
         }
         validate_acl(file.as_raw_fd())
+    }
+
+    #[cfg(target_os = "linux")]
+    #[allow(
+        clippy::unnecessary_cast,
+        reason = "libc stat aliases vary across supported Linux targets"
+    )]
+    fn trusted_entry_metadata(stat: &libc::stat) -> Result<TrustedEntryMetadataV1, TrustedFsError> {
+        let size = u64::try_from(stat.st_size)
+            .map_err(|_| TrustedFsError::new("trusted authority entry has negative size"))?;
+        let (modified_seconds, modified_nanoseconds, changed_seconds, changed_nanoseconds) = (
+            stat.st_mtime as i64,
+            stat.st_mtime_nsec as i64,
+            stat.st_ctime as i64,
+            stat.st_ctime_nsec as i64,
+        );
+        Ok(TrustedEntryMetadataV1 {
+            device_id: stat.st_dev as u64,
+            inode: stat.st_ino as u64,
+            owner_uid: stat.st_uid as u32,
+            mode: stat.st_mode as u32,
+            link_count: stat.st_nlink as u64,
+            size,
+            modified_seconds,
+            modified_nanoseconds,
+            changed_seconds,
+            changed_nanoseconds,
+        })
     }
 
     #[cfg(target_os = "linux")]
@@ -5531,6 +5639,68 @@ mod platform {
             harmless.extend_from_slice(&7_u16.to_le_bytes());
             harmless.extend_from_slice(&u32::MAX.to_le_bytes());
             assert!(!acl_grants_named_principal(&harmless));
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn e2_rm_trusted_fs_stable_single_link_read_rejects_hard_links() {
+            let (temp, root) = root();
+            assert!(
+                TrustedAuthorityRoot::open_for_owner(temp.path(), effective_uid() + 1).is_err()
+            );
+            let authority = root.directory().create_directory("authority-v1").unwrap();
+            let mut file = authority.create_file("receipt.json").unwrap();
+            file.write_all(b"immutable receipt material").unwrap();
+            drop(file);
+
+            let entry = authority
+                .entries()
+                .unwrap()
+                .into_iter()
+                .find(|entry| entry.name == "receipt.json")
+                .unwrap();
+            let (bytes, metadata) = authority
+                .read_regular_file_entry_stable_single_link(&entry)
+                .unwrap();
+            assert_eq!(bytes, b"immutable receipt material");
+            assert_eq!(metadata.link_count(), 1);
+
+            fs::hard_link(
+                temp.path().join("authority-v1/receipt.json"),
+                temp.path().join("authority-v1/receipt-alias.json"),
+            )
+            .unwrap();
+            assert!(authority
+                .read_regular_file_entry_stable_single_link(&entry)
+                .is_err());
+            assert_eq!(
+                fs::read(temp.path().join("authority-v1/receipt.json")).unwrap(),
+                b"immutable receipt material"
+            );
+            fs::remove_file(temp.path().join("authority-v1/receipt-alias.json")).unwrap();
+
+            fs::rename(
+                temp.path().join("authority-v1/receipt.json"),
+                temp.path().join("authority-v1/replaced-receipt.json"),
+            )
+            .unwrap();
+            fs::write(
+                temp.path().join("authority-v1/receipt.json"),
+                b"replacement material",
+            )
+            .unwrap();
+            fs::set_permissions(
+                temp.path().join("authority-v1/receipt.json"),
+                fs::Permissions::from_mode(FILE_MODE),
+            )
+            .unwrap();
+            assert!(authority
+                .read_regular_file_entry_stable_single_link(&entry)
+                .is_err());
+            assert_eq!(
+                fs::read(temp.path().join("authority-v1/receipt.json")).unwrap(),
+                b"replacement material"
+            );
         }
 
         #[cfg(target_os = "macos")]
