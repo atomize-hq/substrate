@@ -20,6 +20,15 @@ use super::mapping::{
     PURE_AGENT_PROTOCOL,
 };
 use super::session::AgentRuntimeSessionState;
+#[cfg(any(target_os = "linux", test))]
+use super::{
+    dispatch_policy_commitment::{
+        DispatchPolicyCommitmentRefV1, ImmutableBytesMaterialV1,
+        WorldWorkExecutionClaimDurableKeyV1,
+    },
+    host_session_authority::schema::AuthorityObjectRefV1,
+    state_store::RuntimeAcceptanceEvidenceV1,
+};
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1108,6 +1117,136 @@ pub(crate) enum WorldTaskTerminalStateV1 {
     NeedsRetainedFollowup,
 }
 
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ActiveTaskStateV1 {
+    Accepted,
+    Running,
+    AttentionPending,
+    Terminal,
+    Failed,
+    Cancelled,
+    Invalidated,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ActiveRetainedTurnStateV1 {
+    Accepted,
+    Running,
+    AttentionPending,
+    Parked,
+    Terminal,
+    Failed,
+    Cancelled,
+    Stopped,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum WorldWorkResultClassificationV1 {
+    Completed,
+    Failed,
+    Cancelled,
+    NeedsRetainedFollowup,
+    Invalidated,
+    Parked,
+    Stopped,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WorldWorkTerminalV1 {
+    pub result_class: WorldWorkResultClassificationV1,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SupervisorObservationClaimV1 {
+    pub authority_store_id: String,
+    pub durable_claim_key: WorldWorkExecutionClaimDurableKeyV1,
+    pub acceptance_record_id: String,
+    pub acceptance_record_revision: u64,
+    pub claim_revision: u64,
+    pub observer_instance_id: String,
+    pub observer_epoch: u64,
+    pub claim_preimage: ImmutableBytesMaterialV1,
+    pub claim_linkage_hash: String,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ActiveEphemeralTaskReceiptV1 {
+    pub schema_version: u32,
+    pub dispatch_policy_commitment_ref: DispatchPolicyCommitmentRefV1,
+    pub acceptance_record_id: String,
+    pub task_run_id: String,
+    pub request_id: String,
+    pub orchestration_session_id: String,
+    pub caller_participant_id: String,
+    pub target_backend_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub policy_snapshot_ref: AuthorityObjectRefV1,
+    pub policy_snapshot_hash: String,
+    pub policy_revision: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub narrowing_reason: Option<String>,
+    pub runtime_acceptance: RuntimeAcceptanceEvidenceV1,
+    pub observation_claim: SupervisorObservationClaimV1,
+    pub accepted_at: chrono::DateTime<chrono::Utc>,
+    pub state_revision: u64,
+    pub state: ActiveTaskStateV1,
+    pub cancel_supported: bool,
+    pub terminal: Option<WorldWorkTerminalV1>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ActiveRetainedTurnReceiptV1 {
+    pub schema_version: u32,
+    pub dispatch_policy_commitment_ref: DispatchPolicyCommitmentRefV1,
+    pub acceptance_record_id: String,
+    pub active_run_id: String,
+    pub request_id: String,
+    pub orchestration_session_id: String,
+    pub orchestrator_participant_id: String,
+    pub target_participant_id: String,
+    pub target_backend_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub message_id: String,
+    pub thread_id: Option<String>,
+    pub worker_policy_cap_hash: String,
+    pub turn_policy_snapshot_ref: AuthorityObjectRefV1,
+    pub turn_policy_snapshot_hash: String,
+    pub turn_policy_revision: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub narrowing_reason: Option<String>,
+    pub runtime_acceptance: RuntimeAcceptanceEvidenceV1,
+    pub observation_claim: SupervisorObservationClaimV1,
+    pub accepted_at: chrono::DateTime<chrono::Utc>,
+    pub state_revision: u64,
+    pub state: ActiveRetainedTurnStateV1,
+    pub cancel_supported: bool,
+    pub terminal: Option<WorldWorkTerminalV1>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(tag = "receipt_kind", rename_all = "snake_case")]
+pub(crate) enum AcceptedForegroundReceiptV1 {
+    Ephemeral(ActiveEphemeralTaskReceiptV1),
+    Retained(ActiveRetainedTurnReceiptV1),
+}
+
 #[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct RunWorldTaskOutcomeV1 {
@@ -1338,6 +1477,8 @@ pub(crate) struct ContinueWorldWorkerEventV1 {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "outcome_kind", rename_all = "snake_case")]
 pub(crate) enum WorldDispatchOutcomeV1 {
+    #[cfg(any(target_os = "linux", test))]
+    AcceptedForeground(Box<AcceptedForegroundReceiptV1>),
     RunWorldTask(RunWorldTaskOutcomeV1),
     SpawnWorldWorker(SpawnWorldWorkerOutcomeV1),
     ForkWorldWorker(ForkWorldWorkerOutcomeV1),
@@ -2431,18 +2572,20 @@ mod tests {
     use super::{
         render_continue_world_worker_transport_prompt,
         resolve_inventory_contract_for_exact_backend, resolve_persisted_host_attach_contract,
-        AgentRuntimeBackendKind, ApprovalResponseDecisionV1, AttachLaunchKnobs,
-        AttachModePreference, CancelWorldWorkOutcomeV1, CancelWorldWorkTerminalStateV1,
-        ContinueWorldWorkerEventClassV1, ContinueWorldWorkerOutcomeV1, ControlDirectiveKindV1,
-        DispatchBaselineKind, DispatchCallerKind, DispatchCapabilityOverrideSet,
-        DispatchRejectingLayer, DispatchRequestEnvelope, DispatchResolutionErrorKind,
-        FieldBaselineOrigin, FieldValueOrigin, ForkWorldWorkerOutcomeV1, HiddenFallbackState,
-        HostExecutionClientStart, InspectWorldWorkerOutcomeV1, LiveToolSupportPosture,
-        LiveToolSupportState, LiveToolValidationState, RetainedWorkerCancelCloseoutV1,
-        RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1, RunWorldTaskOutcomeV1,
-        SelectedClaudeCodePathState, SelectedClaudeCodeUpliftContext, SelectedClaudeCodeUpliftGate,
-        Slice52SemanticsState, StopWorldWorkerOutcomeV1, TargetedValidationState, TaskPayloadV1,
-        WorkerCancelPayloadV1, WorkerContinueApprovalResponsePayloadV1,
+        AcceptedForegroundReceiptV1, ActiveEphemeralTaskReceiptV1, ActiveRetainedTurnReceiptV1,
+        ActiveRetainedTurnStateV1, ActiveTaskStateV1, AgentRuntimeBackendKind,
+        ApprovalResponseDecisionV1, AttachLaunchKnobs, AttachModePreference,
+        CancelWorldWorkOutcomeV1, CancelWorldWorkTerminalStateV1, ContinueWorldWorkerEventClassV1,
+        ContinueWorldWorkerOutcomeV1, ControlDirectiveKindV1, DispatchBaselineKind,
+        DispatchCallerKind, DispatchCapabilityOverrideSet, DispatchRejectingLayer,
+        DispatchRequestEnvelope, DispatchResolutionErrorKind, FieldBaselineOrigin,
+        FieldValueOrigin, ForkWorldWorkerOutcomeV1, HiddenFallbackState, HostExecutionClientStart,
+        InspectWorldWorkerOutcomeV1, LiveToolSupportPosture, LiveToolSupportState,
+        LiveToolValidationState, RetainedWorkerCancelCloseoutV1, RetainedWorkerInspectSnapshotV1,
+        RetainedWorkerStopCloseoutV1, RunWorldTaskOutcomeV1, SelectedClaudeCodePathState,
+        SelectedClaudeCodeUpliftContext, SelectedClaudeCodeUpliftGate, Slice52SemanticsState,
+        StopWorldWorkerOutcomeV1, SupervisorObservationClaimV1, TargetedValidationState,
+        TaskPayloadV1, WorkerCancelPayloadV1, WorkerContinueApprovalResponsePayloadV1,
         WorkerContinueClarificationResponsePayloadV1, WorkerContinueControlDirectivePayloadV1,
         WorkerContinueForkCommandPayloadV1, WorkerContinuePayloadV1,
         WorkerContinueProgressAckPayloadV1, WorkerForkPayloadV1, WorkerInspectPayloadV1,
@@ -4301,6 +4444,240 @@ mod tests {
                 .and_then(|value| value.as_str()),
             Some("ash-worker-child-38")
         );
+    }
+
+    fn b2_2_observation_claim_fixture() -> SupervisorObservationClaimV1 {
+        SupervisorObservationClaimV1 {
+            authority_store_id: "authority-b2-2".to_string(),
+            durable_claim_key: super::WorldWorkExecutionClaimDurableKeyV1 {
+                supervisor_schema_version: 1,
+                executions_by_acceptance_record_id_key: "wwa-b2-2".to_string(),
+            },
+            acceptance_record_id: "wwa-b2-2".to_string(),
+            acceptance_record_revision: 1,
+            claim_revision: 1,
+            observer_instance_id: "observer-b2-2".to_string(),
+            observer_epoch: 1,
+            claim_preimage: super::ImmutableBytesMaterialV1::Inline {
+                bytes_base64: "Y2xhaW0=".to_string(),
+                byte_length: 5,
+            },
+            claim_linkage_hash: "c".repeat(64),
+        }
+    }
+
+    fn b2_2_policy_ref_fixture(
+    ) -> crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1 {
+        use crate::execution::agent_runtime::host_session_authority::schema::{
+            AuthorityObjectCommitmentV1, AuthorityObjectKindV1, AuthorityObjectRefV1,
+        };
+        AuthorityObjectRefV1 {
+            ref_id: "policy-b2-2".to_string(),
+            object_kind: AuthorityObjectKindV1::Policy,
+            schema_version: 1,
+            commitment: AuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: "d".repeat(64),
+            },
+        }
+    }
+
+    fn b2_2_runtime_acceptance_fixture(
+    ) -> crate::execution::agent_runtime::state_store::RuntimeAcceptanceEvidenceV1 {
+        use crate::execution::agent_runtime::state_store::{
+            RuntimeAcceptanceAcknowledgementKindV1, RuntimeAcceptanceEvidenceV1,
+        };
+        RuntimeAcceptanceEvidenceV1 {
+            acknowledgement_kind: RuntimeAcceptanceAcknowledgementKindV1::StartFrame,
+            acceptance_record_id: "wwa-b2-2".to_string(),
+            stream_id: "stream-b2-2".to_string(),
+            frame_sequence: 1,
+            runtime_submission_id: Some("runtime-b2-2".to_string()),
+            task_run_id: Some("task-b2-2".to_string()),
+            active_run_id: None,
+            message_id: None,
+            retained_participant_id: None,
+            observed_at: chrono::DateTime::parse_from_rfc3339("2026-09-05T12:00:00Z")
+                .expect("fixture timestamp")
+                .with_timezone(&chrono::Utc),
+        }
+    }
+
+    fn b2_2_commitment_ref_fixture(
+    ) -> crate::execution::agent_runtime::dispatch_policy_commitment::DispatchPolicyCommitmentRefV1
+    {
+        crate::execution::agent_runtime::dispatch_policy_commitment::DispatchPolicyCommitmentRefV1 {
+            authority_store_id: "authority-b2-2".to_string(),
+            commitment_id: "commitment-b2-2".to_string(),
+            exact_linkage_hash: "e".repeat(64),
+        }
+    }
+
+    #[test]
+    fn b2_2_active_ephemeral_receipt_has_exact_canonical_serialization() {
+        let receipt = ActiveEphemeralTaskReceiptV1 {
+            schema_version: 1,
+            dispatch_policy_commitment_ref: b2_2_commitment_ref_fixture(),
+            acceptance_record_id: "wwa-b2-2".to_string(),
+            task_run_id: "task-b2-2".to_string(),
+            request_id: "request-b2-2".to_string(),
+            orchestration_session_id: "session-b2-2".to_string(),
+            caller_participant_id: "orchestrator-b2-2".to_string(),
+            target_backend_id: "cli:codex-world".to_string(),
+            world_id: "world-b2-2".to_string(),
+            world_generation: 7,
+            policy_snapshot_ref: b2_2_policy_ref_fixture(),
+            policy_snapshot_hash: "f".repeat(64),
+            policy_revision: "policy-revision-b2-2".to_string(),
+            narrowing_reason: None,
+            runtime_acceptance: b2_2_runtime_acceptance_fixture(),
+            observation_claim: b2_2_observation_claim_fixture(),
+            accepted_at: chrono::DateTime::parse_from_rfc3339("2026-09-05T12:00:00Z")
+                .expect("fixture timestamp")
+                .with_timezone(&chrono::Utc),
+            state_revision: 1,
+            state: ActiveTaskStateV1::Accepted,
+            cancel_supported: true,
+            terminal: None,
+        };
+        let value = serde_json::to_value(&receipt).expect("serialize ephemeral receipt");
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "schema_version": 1,
+                "dispatch_policy_commitment_ref": serde_json::to_value(&receipt.dispatch_policy_commitment_ref).unwrap(),
+                "acceptance_record_id": "wwa-b2-2",
+                "task_run_id": "task-b2-2",
+                "request_id": "request-b2-2",
+                "orchestration_session_id": "session-b2-2",
+                "caller_participant_id": "orchestrator-b2-2",
+                "target_backend_id": "cli:codex-world",
+                "world_id": "world-b2-2",
+                "world_generation": 7,
+                "policy_snapshot_ref": serde_json::to_value(&receipt.policy_snapshot_ref).unwrap(),
+                "policy_snapshot_hash": "f".repeat(64),
+                "policy_revision": "policy-revision-b2-2",
+                "runtime_acceptance": serde_json::to_value(&receipt.runtime_acceptance).unwrap(),
+                "observation_claim": serde_json::to_value(&receipt.observation_claim).unwrap(),
+                "accepted_at": "2026-09-05T12:00:00Z",
+                "state_revision": 1,
+                "state": "accepted",
+                "cancel_supported": true,
+                "terminal": null
+            })
+        );
+        assert_eq!(
+            serde_json::from_value::<ActiveEphemeralTaskReceiptV1>(value)
+                .expect("decode exact ephemeral receipt"),
+            receipt
+        );
+    }
+
+    #[test]
+    fn b2_2_active_retained_receipt_has_exact_canonical_serialization() {
+        let mut runtime_acceptance = b2_2_runtime_acceptance_fixture();
+        runtime_acceptance.task_run_id = None;
+        runtime_acceptance.active_run_id = Some("run-b2-2".to_string());
+        runtime_acceptance.message_id = Some("message-b2-2".to_string());
+        runtime_acceptance.retained_participant_id = Some("worker-b2-2".to_string());
+        let receipt = ActiveRetainedTurnReceiptV1 {
+            schema_version: 1,
+            dispatch_policy_commitment_ref: b2_2_commitment_ref_fixture(),
+            acceptance_record_id: "wwa-b2-2".to_string(),
+            active_run_id: "run-b2-2".to_string(),
+            request_id: "request-b2-2".to_string(),
+            orchestration_session_id: "session-b2-2".to_string(),
+            orchestrator_participant_id: "orchestrator-b2-2".to_string(),
+            target_participant_id: "worker-b2-2".to_string(),
+            target_backend_id: "cli:codex-world".to_string(),
+            world_id: "world-b2-2".to_string(),
+            world_generation: 7,
+            message_id: "message-b2-2".to_string(),
+            thread_id: None,
+            worker_policy_cap_hash: "a".repeat(64),
+            turn_policy_snapshot_ref: b2_2_policy_ref_fixture(),
+            turn_policy_snapshot_hash: "f".repeat(64),
+            turn_policy_revision: "policy-revision-b2-2".to_string(),
+            narrowing_reason: Some("least privilege".to_string()),
+            runtime_acceptance,
+            observation_claim: b2_2_observation_claim_fixture(),
+            accepted_at: chrono::DateTime::parse_from_rfc3339("2026-09-05T12:00:00Z")
+                .expect("fixture timestamp")
+                .with_timezone(&chrono::Utc),
+            state_revision: 1,
+            state: ActiveRetainedTurnStateV1::Accepted,
+            cancel_supported: true,
+            terminal: None,
+        };
+        let value = serde_json::to_value(&receipt).expect("serialize retained receipt");
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "schema_version": 1,
+                "dispatch_policy_commitment_ref": serde_json::to_value(&receipt.dispatch_policy_commitment_ref).unwrap(),
+                "acceptance_record_id": "wwa-b2-2",
+                "active_run_id": "run-b2-2",
+                "request_id": "request-b2-2",
+                "orchestration_session_id": "session-b2-2",
+                "orchestrator_participant_id": "orchestrator-b2-2",
+                "target_participant_id": "worker-b2-2",
+                "target_backend_id": "cli:codex-world",
+                "world_id": "world-b2-2",
+                "world_generation": 7,
+                "message_id": "message-b2-2",
+                "thread_id": null,
+                "worker_policy_cap_hash": "a".repeat(64),
+                "turn_policy_snapshot_ref": serde_json::to_value(&receipt.turn_policy_snapshot_ref).unwrap(),
+                "turn_policy_snapshot_hash": "f".repeat(64),
+                "turn_policy_revision": "policy-revision-b2-2",
+                "narrowing_reason": "least privilege",
+                "runtime_acceptance": serde_json::to_value(&receipt.runtime_acceptance).unwrap(),
+                "observation_claim": serde_json::to_value(&receipt.observation_claim).unwrap(),
+                "accepted_at": "2026-09-05T12:00:00Z",
+                "state_revision": 1,
+                "state": "accepted",
+                "cancel_supported": true,
+                "terminal": null
+            })
+        );
+        assert_eq!(
+            serde_json::from_value::<ActiveRetainedTurnReceiptV1>(value)
+                .expect("decode exact retained receipt"),
+            receipt
+        );
+    }
+
+    #[test]
+    fn b2_2_internal_foreground_receipt_enum_preserves_receipt_family() {
+        let json = serde_json::json!({
+            "outcome_kind": "accepted_foreground",
+            "receipt_kind": "ephemeral",
+            "schema_version": 1,
+            "dispatch_policy_commitment_ref": serde_json::to_value(b2_2_commitment_ref_fixture()).unwrap(),
+            "acceptance_record_id": "wwa-b2-2",
+            "task_run_id": "task-b2-2",
+            "request_id": "request-b2-2",
+            "orchestration_session_id": "session-b2-2",
+            "caller_participant_id": "orchestrator-b2-2",
+            "target_backend_id": "cli:codex-world",
+            "world_id": "world-b2-2",
+            "world_generation": 7,
+            "policy_snapshot_ref": serde_json::to_value(b2_2_policy_ref_fixture()).unwrap(),
+            "policy_snapshot_hash": "f".repeat(64),
+            "policy_revision": "policy-revision-b2-2",
+            "runtime_acceptance": serde_json::to_value(b2_2_runtime_acceptance_fixture()).unwrap(),
+            "observation_claim": serde_json::to_value(b2_2_observation_claim_fixture()).unwrap(),
+            "accepted_at": "2026-09-05T12:00:00Z",
+            "state_revision": 1,
+            "state": "accepted",
+            "cancel_supported": true,
+            "terminal": null
+        });
+        assert!(matches!(
+            serde_json::from_value::<WorldDispatchOutcomeV1>(json)
+                .expect("decode accepted foreground envelope"),
+            WorldDispatchOutcomeV1::AcceptedForeground(receipt)
+                if matches!(receipt.as_ref(), AcceptedForegroundReceiptV1::Ephemeral(_))
+        ));
     }
 
     #[test]

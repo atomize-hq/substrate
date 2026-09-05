@@ -8,6 +8,9 @@ use substrate_common::paths as substrate_paths;
 
 use crate::execution::config_model::AgentExecutionScope;
 
+#[cfg(any(target_os = "linux", test))]
+use super::dispatch_contract::AcceptedForegroundReceiptV1;
+
 use super::{
     dispatch_contract::{
         CancelWorldWorkOutcomeV1, CancelWorldWorkTerminalStateV1, ContinueWorldWorkerEventV1,
@@ -1425,6 +1428,29 @@ pub(crate) fn normalize_host_tool_invocation_outcome_v1(
     outcome: &WorldDispatchOutcomeV1,
 ) -> anyhow::Result<Value> {
     match (tool_name, outcome) {
+        #[cfg(any(target_os = "linux", test))]
+        (HostToolNameV1::RunWorldTask, WorldDispatchOutcomeV1::AcceptedForeground(receipt)) => {
+            match receipt.as_ref() {
+                AcceptedForegroundReceiptV1::Ephemeral(receipt) => serde_json::to_value(receipt)
+                    .context("serialize authenticated run_world_task accepted receipt"),
+                AcceptedForegroundReceiptV1::Retained(_) => bail!(
+                    "host_tool_outcome_mismatch: tool {} received incompatible internal outcome",
+                    tool_name.as_str()
+                ),
+            }
+        }
+        #[cfg(any(target_os = "linux", test))]
+        (
+            HostToolNameV1::ContinueWorldWorker,
+            WorldDispatchOutcomeV1::AcceptedForeground(receipt),
+        ) => match receipt.as_ref() {
+            AcceptedForegroundReceiptV1::Retained(receipt) => serde_json::to_value(receipt)
+                .context("serialize authenticated continue_world_worker accepted receipt"),
+            AcceptedForegroundReceiptV1::Ephemeral(_) => bail!(
+                "host_tool_outcome_mismatch: tool {} received incompatible internal outcome",
+                tool_name.as_str()
+            ),
+        },
         (HostToolNameV1::RunWorldTask, WorldDispatchOutcomeV1::RunWorldTask(run)) => {
             serde_json::to_value(normalize_run_world_task_receipt_v1(run)?)
                 .context("serialize normalized run_world_task receipt")
@@ -1592,9 +1618,10 @@ mod tests {
 
     use super::{
         host_tool_contract, host_tool_contracts_v1, normalize_cancel_world_work_outcome_v1,
-        normalize_continue_world_worker_outcome_v1, normalize_inspect_world_worker_outcome_v1,
-        normalize_run_world_task_receipt_v1, normalize_spawn_world_worker_receipt_v1,
-        normalize_stop_world_worker_outcome_v1, resolve_follow_up_dispatch_authority_v1,
+        normalize_continue_world_worker_outcome_v1, normalize_host_tool_invocation_outcome_v1,
+        normalize_inspect_world_worker_outcome_v1, normalize_run_world_task_receipt_v1,
+        normalize_spawn_world_worker_receipt_v1, normalize_stop_world_worker_outcome_v1,
+        resolve_follow_up_dispatch_authority_v1,
         translate_follow_up_tool_to_internal_dispatch_request_v1,
         translate_host_tool_invocation_request_to_internal_dispatch_request_v1,
         translate_run_world_task_to_internal_dispatch_request_v1,
@@ -1605,6 +1632,7 @@ mod tests {
         SpawnWorldWorkerToolCallV1,
     };
     use crate::execution::agent_runtime::dispatch_contract::{
+        AcceptedForegroundReceiptV1, ActiveEphemeralTaskReceiptV1, ActiveRetainedTurnReceiptV1,
         CancelWorldWorkOutcomeV1, ContinueWorldWorkerEventClassV1, ContinueWorldWorkerEventV1,
         ContinueWorldWorkerOutcomeV1, InspectWorldWorkerOutcomeV1, RetainedWorkerCancelCloseoutV1,
         RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1, RunWorldTaskOutcomeV1,
@@ -2113,6 +2141,134 @@ mod tests {
         assert_eq!(
             receipt.state,
             WorldTaskTerminalStateV1::NeedsRetainedFollowup
+        );
+    }
+
+    #[test]
+    fn b2_2_host_tool_normalization_does_not_reinterpret_authenticated_receipts() {
+        let common = serde_json::json!({
+            "schema_version": 1,
+            "dispatch_policy_commitment_ref": {
+                "authority_store_id": "authority-b2-2",
+                "commitment_id": "commitment-b2-2",
+                "exact_linkage_hash": "e".repeat(64)
+            },
+            "acceptance_record_id": "wwa-b2-2",
+            "request_id": "request-b2-2",
+            "orchestration_session_id": "session-b2-2",
+            "target_backend_id": "cli:codex-world",
+            "world_id": "world-b2-2",
+            "world_generation": 7,
+            "runtime_acceptance": {
+                "acknowledgement_kind": "start_frame",
+                "acceptance_record_id": "wwa-b2-2",
+                "stream_id": "stream-b2-2",
+                "frame_sequence": 1,
+                "runtime_submission_id": "runtime-b2-2",
+                "observed_at": "2026-09-05T12:00:00Z"
+            },
+            "observation_claim": {
+                "authority_store_id": "authority-b2-2",
+                "durable_claim_key": {
+                    "supervisor_schema_version": 1,
+                    "executions_by_acceptance_record_id_key": "wwa-b2-2"
+                },
+                "acceptance_record_id": "wwa-b2-2",
+                "acceptance_record_revision": 1,
+                "claim_revision": 1,
+                "observer_instance_id": "observer-b2-2",
+                "observer_epoch": 1,
+                "claim_preimage": { "Inline": { "bytes_base64": "Y2xhaW0=", "byte_length": 5 } },
+                "claim_linkage_hash": "c".repeat(64)
+            },
+            "accepted_at": "2026-09-05T12:00:00Z",
+            "state_revision": 1,
+            "state": "accepted",
+            "cancel_supported": true,
+            "terminal": null
+        });
+        let mut ephemeral_json = common.clone();
+        let ephemeral = ephemeral_json.as_object_mut().expect("ephemeral object");
+        ephemeral.insert("task_run_id".to_string(), serde_json::json!("task-b2-2"));
+        ephemeral.insert(
+            "caller_participant_id".to_string(),
+            serde_json::json!("orch-b2-2"),
+        );
+        ephemeral.insert("policy_snapshot_ref".to_string(), serde_json::json!({
+            "ref_id": "policy-b2-2",
+            "object_kind": { "kind": "Policy" },
+            "schema_version": 1,
+            "commitment": { "kind": "CanonicalSha256", "value": { "digest_hex": "d".repeat(64) } }
+        }));
+        ephemeral.insert(
+            "policy_snapshot_hash".to_string(),
+            serde_json::json!("f".repeat(64)),
+        );
+        ephemeral.insert(
+            "policy_revision".to_string(),
+            serde_json::json!("policy-revision-b2-2"),
+        );
+        let ephemeral_receipt =
+            serde_json::from_value::<ActiveEphemeralTaskReceiptV1>(ephemeral_json.clone())
+                .expect("decode ephemeral receipt fixture");
+        let expected_ephemeral =
+            serde_json::to_value(&ephemeral_receipt).expect("serialize direct ephemeral receipt");
+        assert_eq!(
+            normalize_host_tool_invocation_outcome_v1(
+                HostToolNameV1::RunWorldTask,
+                &WorldDispatchOutcomeV1::AcceptedForeground(Box::new(
+                    AcceptedForegroundReceiptV1::Ephemeral(ephemeral_receipt),
+                )),
+            )
+            .expect("normalize ephemeral receipt"),
+            expected_ephemeral
+        );
+
+        let mut retained_json = common;
+        let retained = retained_json.as_object_mut().expect("retained object");
+        retained.insert("active_run_id".to_string(), serde_json::json!("run-b2-2"));
+        retained.insert(
+            "orchestrator_participant_id".to_string(),
+            serde_json::json!("orch-b2-2"),
+        );
+        retained.insert(
+            "target_participant_id".to_string(),
+            serde_json::json!("worker-b2-2"),
+        );
+        retained.insert("message_id".to_string(), serde_json::json!("message-b2-2"));
+        retained.insert("thread_id".to_string(), serde_json::Value::Null);
+        retained.insert(
+            "worker_policy_cap_hash".to_string(),
+            serde_json::json!("a".repeat(64)),
+        );
+        retained.insert("turn_policy_snapshot_ref".to_string(), serde_json::json!({
+            "ref_id": "policy-b2-2",
+            "object_kind": { "kind": "Policy" },
+            "schema_version": 1,
+            "commitment": { "kind": "CanonicalSha256", "value": { "digest_hex": "d".repeat(64) } }
+        }));
+        retained.insert(
+            "turn_policy_snapshot_hash".to_string(),
+            serde_json::json!("f".repeat(64)),
+        );
+        retained.insert(
+            "turn_policy_revision".to_string(),
+            serde_json::json!("policy-revision-b2-2"),
+        );
+        let retained_receipt =
+            serde_json::from_value::<ActiveRetainedTurnReceiptV1>(retained_json.clone())
+                .expect("decode retained receipt fixture");
+        let expected_retained =
+            serde_json::to_value(&retained_receipt).expect("serialize direct retained receipt");
+        assert_eq!(
+            normalize_host_tool_invocation_outcome_v1(
+                HostToolNameV1::ContinueWorldWorker,
+                &WorldDispatchOutcomeV1::AcceptedForeground(Box::new(
+                    AcceptedForegroundReceiptV1::Retained(retained_receipt),
+                )),
+            )
+            .expect("normalize retained receipt"),
+            expected_retained
         );
     }
 

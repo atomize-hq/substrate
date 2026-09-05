@@ -74,6 +74,10 @@ use crate::execution::agent_runtime::control::{
     HostExecutionEpisodeObserverV1, HostExecutionEpisodeV1, PrivateTransportAvailabilityV1,
     ProcessRefV1,
 };
+#[cfg(all(test, unix))]
+use crate::execution::agent_runtime::dispatch_contract::{
+    AcceptedForegroundReceiptV1, ActiveEphemeralTaskReceiptV1, ActiveRetainedTurnReceiptV1,
+};
 use crate::execution::agent_runtime::dispatch_contract::{
     CancelWorldWorkOutcomeV1, StopWorldWorkerOutcomeV1, WorkerCancelPayloadV1,
 };
@@ -9814,10 +9818,19 @@ fn decode_internal_toolbox_legacy_world_dispatch_outcome(
     outcome: serde_json::Value,
 ) -> Result<WorldDispatchOutcomeV1> {
     match request.action {
-        WorldDispatchActionV1::RunWorldTask => Ok(WorldDispatchOutcomeV1::RunWorldTask(
-            serde_json::from_value::<RunWorldTaskOutcomeV1>(outcome)
-                .context("failed to decode normalized run_world_task receipt")?,
-        )),
+        WorldDispatchActionV1::RunWorldTask => {
+            if let Ok(receipt) =
+                serde_json::from_value::<ActiveEphemeralTaskReceiptV1>(outcome.clone())
+            {
+                return Ok(WorldDispatchOutcomeV1::AcceptedForeground(Box::new(
+                    AcceptedForegroundReceiptV1::Ephemeral(receipt),
+                )));
+            }
+            Ok(WorldDispatchOutcomeV1::RunWorldTask(
+                serde_json::from_value::<RunWorldTaskOutcomeV1>(outcome)
+                    .context("failed to decode normalized run_world_task receipt")?,
+            ))
+        }
         WorldDispatchActionV1::SpawnWorldWorker => Ok(WorldDispatchOutcomeV1::SpawnWorldWorker(
             serde_json::from_value::<HostToolSpawnWorldWorkerReceiptV1>(outcome)
                 .map(|spawn| SpawnWorldWorkerOutcomeV1 {
@@ -9855,6 +9868,13 @@ fn decode_internal_toolbox_legacy_world_dispatch_outcome(
                 .context("failed to decode normalized fork_world_worker receipt")?,
         )),
         WorldDispatchActionV1::ContinueWorldWorker => {
+            if let Ok(receipt) =
+                serde_json::from_value::<ActiveRetainedTurnReceiptV1>(outcome.clone())
+            {
+                return Ok(WorldDispatchOutcomeV1::AcceptedForeground(Box::new(
+                    AcceptedForegroundReceiptV1::Retained(receipt),
+                )));
+            }
             Ok(WorldDispatchOutcomeV1::ContinueWorldWorker(
                 serde_json::from_value::<HostToolContinueWorldWorkerOutcomeV1>(outcome)
                     .map(|continue_outcome| ContinueWorldWorkerOutcomeV1 {
@@ -18901,6 +18921,150 @@ mod tests {
         );
 
         std::env::remove_var("SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial_test::serial]
+    fn b2_2_internal_toolbox_returns_normalized_receipt_before_close_with_exact_follow_up_ids() {
+        let runtime = TokioRuntimeBuilder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("B2.2 toolbox runtime");
+        runtime.block_on(async {
+            use tokio::io::{AsyncBufReadExt as _, AsyncWriteExt as _, BufReader};
+
+            let temp = tempfile::tempdir().expect("B2.2 toolbox socket directory");
+            let path = temp.path().join("b2-2-toolbox.sock");
+            let listener = tokio::net::UnixListener::bind(&path)
+                .expect("bind B2.2 internal toolbox transport");
+            let (close_tx, close_rx) = tokio::sync::oneshot::channel();
+            let server = tokio::spawn(async move {
+                let (stream, _) = listener
+                    .accept()
+                    .await
+                    .expect("accept B2.2 toolbox request");
+                let mut reader = BufReader::new(stream);
+                let mut request_line = String::new();
+                reader
+                    .read_line(&mut request_line)
+                    .await
+                    .expect("read B2.2 toolbox request");
+                let envelope: serde_json::Value =
+                    serde_json::from_str(request_line.trim()).expect("decode toolbox envelope");
+                assert_eq!(envelope["tool_call_id"], "follow-up-call-b2-2");
+                let mut stream = reader.into_inner();
+                let started = internal_toolbox_run_world_task_started_frame("task-b2-2-follow-up");
+                stream
+                    .write_all(format!("{}\n", serde_json::to_string(&started).unwrap()).as_bytes())
+                    .await
+                    .expect("write B2.2 toolbox started frame");
+                let receipt = serde_json::json!({
+                    "schema_version": 1,
+                    "dispatch_policy_commitment_ref": {
+                        "authority_store_id": "authority-b2-2",
+                        "commitment_id": "commitment-b2-2",
+                        "exact_linkage_hash": "e".repeat(64)
+                    },
+                    "acceptance_record_id": "wwa-b2-2",
+                    "task_run_id": "task-b2-2-follow-up",
+                    "request_id": "toolbox-follow-up-call-b2-2",
+                    "orchestration_session_id": "session-b2-2",
+                    "caller_participant_id": "orchestrator-b2-2",
+                    "target_backend_id": "cli:codex-world",
+                    "world_id": "world-b2-2",
+                    "world_generation": 7,
+                    "policy_snapshot_ref": {
+                        "ref_id": "policy-b2-2",
+                        "object_kind": { "kind": "Policy" },
+                        "schema_version": 1,
+                        "commitment": {
+                            "kind": "CanonicalSha256",
+                            "value": { "digest_hex": "d".repeat(64) }
+                        }
+                    },
+                    "policy_snapshot_hash": "f".repeat(64),
+                    "policy_revision": "policy-revision-b2-2",
+                    "runtime_acceptance": {
+                        "acknowledgement_kind": "start_frame",
+                        "acceptance_record_id": "wwa-b2-2",
+                        "stream_id": "stream-b2-2",
+                        "frame_sequence": 1,
+                        "runtime_submission_id": "task-b2-2-follow-up",
+                        "task_run_id": "task-b2-2-follow-up",
+                        "active_run_id": null,
+                        "message_id": null,
+                        "retained_participant_id": null,
+                        "observed_at": "2026-09-05T12:00:00Z"
+                    },
+                    "observation_claim": {
+                        "authority_store_id": "authority-b2-2",
+                        "durable_claim_key": {
+                            "supervisor_schema_version": 1,
+                            "executions_by_acceptance_record_id_key": "wwa-b2-2"
+                        },
+                        "acceptance_record_id": "wwa-b2-2",
+                        "acceptance_record_revision": 1,
+                        "claim_revision": 1,
+                        "observer_instance_id": "observer-b2-2",
+                        "observer_epoch": 1,
+                        "claim_preimage": {
+                            "Inline": { "bytes_base64": "Y2xhaW0=", "byte_length": 5 }
+                        },
+                        "claim_linkage_hash": "c".repeat(64)
+                    },
+                    "accepted_at": "2026-09-05T12:00:00Z",
+                    "state_revision": 1,
+                    "state": "accepted",
+                    "cancel_supported": true,
+                    "terminal": null
+                });
+                let result = internal_toolbox_success_result_frame_value(receipt);
+                stream
+                    .write_all(format!("{}\n", serde_json::to_string(&result).unwrap()).as_bytes())
+                    .await
+                    .expect("write B2.2 toolbox result frame");
+                stream.flush().await.expect("flush B2.2 toolbox receipt");
+                close_rx
+                    .await
+                    .expect("release B2.2 toolbox transport close");
+            });
+
+            let request = WorldDispatchRequestV1 {
+                request_id: Some("follow-up-call-b2-2".to_string()),
+                idempotency_key: Some("follow-up-call-b2-2".to_string()),
+                orchestration_session_id: Some("session-b2-2".to_string()),
+                caller_participant_id: Some("orchestrator-b2-2".to_string()),
+                action: WorldDispatchActionV1::RunWorldTask,
+                mode: crate::execution::agent_runtime::WorldDispatchModeV1::Ephemeral,
+                target_backend_id: Some("cli:codex-world".to_string()),
+                task_run_id: None,
+                target_participant_id: None,
+                world_id: Some("world-b2-2".to_string()),
+                world_generation: Some(7),
+                dispatch_policy_narrowing: None,
+                payload: WorldDispatchPayloadV1::Task(TaskPayloadV1 {
+                    prompt: "B2.2 toolbox foreground".to_string(),
+                }),
+            };
+            let outcome = tokio::time::timeout(
+                Duration::from_secs(2),
+                request_internal_toolbox_world_dispatch(&path, &request),
+            )
+            .await
+            .expect("toolbox receipt must precede transport close")
+            .expect("decode B2.2 toolbox receipt");
+            let WorldDispatchOutcomeV1::AcceptedForeground(receipt) = outcome else {
+                panic!("toolbox must preserve the authenticated active receipt")
+            };
+            let AcceptedForegroundReceiptV1::Ephemeral(receipt) = *receipt else {
+                panic!("toolbox must preserve the authenticated active receipt")
+            };
+            assert_eq!(receipt.request_id, "toolbox-follow-up-call-b2-2");
+            assert_eq!(receipt.task_run_id, "task-b2-2-follow-up");
+            close_tx.send(()).expect("close B2.2 toolbox transport");
+            server.await.expect("join B2.2 toolbox server");
+        });
     }
 
     #[cfg(target_os = "linux")]
