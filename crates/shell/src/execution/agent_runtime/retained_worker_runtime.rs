@@ -358,6 +358,12 @@ pub(crate) struct RetainedWorkerTransportClaimV1 {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct AdmissionRejectedBeforeRegistrationInputV1 {
+    pub(crate) reason: String,
+    pub(crate) rejected_at: TimestampV1,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 enum AdmissionHeadPreparationV1 {
     Ready(RetainedWorkerAdmissionRecordV1),
     Complete(RetainedWorkerAdmissionRecordV1),
@@ -1250,6 +1256,192 @@ impl RetainedWorkerRuntime {
                 .get(orchestration_session_id)
                 .and_then(|records| records.get(retained_participant_id))
                 .cloned())
+        });
+        if let Some(error) = semantic_failure {
+            return Err(error);
+        }
+        result.map_err(|error| RetainedWorkerRuntimeError(error.to_string()))
+    }
+
+    pub(crate) fn reconcile_existing_admission(
+        &self,
+        authority: &HostSessionAuthority,
+        presented_plan: &RetainedWorkerAdmissionPlanV1,
+        expected_record: &RetainedWorkerAdmissionRecordV1,
+        reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
+        rejection: Option<&AdmissionRejectedBeforeRegistrationInputV1>,
+    ) -> Result<RetainedWorkerAdmissionRecordV1, RetainedWorkerRuntimeError> {
+        let resolved = authority
+            .resolve_current_exact(&presented_plan.spawn_request.orchestration_session_id, None)
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        let mut current_plan = presented_plan.clone();
+        current_plan.exact_authority = CanonicalExactCurrentAuthorityV1::from_resolved(&resolved);
+        let canonical_plan = self.canonical_plan_for_existing_admission(
+            authority,
+            presented_plan,
+            expected_record,
+            reservation_proof,
+        )?;
+        let durable = self
+            .read_admission_record(
+                authority,
+                &expected_record.orchestration_session_id,
+                &expected_record.retained_participant_id,
+            )?
+            .ok_or_else(|| {
+                RetainedWorkerRuntimeError("exact existing admission is absent".into())
+            })?;
+        if durable != *expected_record {
+            return Err(RetainedWorkerRuntimeError(
+                "exact existing admission record changed after its locked join".into(),
+            ));
+        }
+        match &durable.state {
+            RetainedWorkerAdmissionStateV1::RejectedBeforeRegistration { .. } => Ok(durable),
+            RetainedWorkerAdmissionStateV1::SlotReserved { .. } => {
+                let rejection = rejection.ok_or_else(|| {
+                    RetainedWorkerRuntimeError(
+                        "pre-registration admission resolution requires an explicit terminal rejection"
+                            .into(),
+                    )
+                })?;
+                self.reject_existing_admission_before_registration(
+                    authority,
+                    &current_plan,
+                    &canonical_plan,
+                    &durable,
+                    reservation_proof,
+                    rejection,
+                )
+            }
+            RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. } => {
+                let authority_root = VersionedStateRoot::V2(
+                    authority
+                        .read_preserved_start_root_v2()
+                        .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?,
+                );
+                if let Some(registration) =
+                    admission_registration_from_hsa(&authority_root, &durable)?
+                {
+                    let post_r0_graph =
+                        self.resolve_admission_registration_graph(authority, &registration)?;
+                    let mut publication_nonce = [0_u8; 16];
+                    rand::rngs::OsRng.fill_bytes(&mut publication_nonce);
+                    self.advance_registration_head_after_r0(
+                        authority,
+                        &canonical_plan,
+                        &durable.retained_participant_id,
+                        &post_r0_graph,
+                        reservation_proof,
+                        publication_nonce,
+                    )
+                } else {
+                    let rejection = rejection.ok_or_else(|| {
+                        RetainedWorkerRuntimeError(
+                            "pre-registration admission resolution requires an explicit terminal rejection"
+                                .into(),
+                        )
+                    })?;
+                    self.reject_existing_admission_before_registration(
+                        authority,
+                        &current_plan,
+                        &canonical_plan,
+                        &durable,
+                        reservation_proof,
+                        rejection,
+                    )
+                }
+            }
+            RetainedWorkerAdmissionStateV1::PreTransportNonterminal { .. }
+            | RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal { .. }
+            | RetainedWorkerAdmissionStateV1::Routable { .. }
+            | RetainedWorkerAdmissionStateV1::InterruptedNonterminal { .. }
+            | RetainedWorkerAdmissionStateV1::Terminal { .. } => {
+                self.validate_admitted_record_graph(
+                    authority,
+                    &canonical_plan,
+                    &durable,
+                    reservation_proof,
+                )?;
+                Ok(durable)
+            }
+        }
+    }
+
+    fn reject_existing_admission_before_registration(
+        &self,
+        authority: &HostSessionAuthority,
+        current_plan: &RetainedWorkerAdmissionPlanV1,
+        canonical_plan: &RetainedWorkerAdmissionPlanV1,
+        expected_record: &RetainedWorkerAdmissionRecordV1,
+        reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
+        rejection: &AdmissionRejectedBeforeRegistrationInputV1,
+    ) -> Result<RetainedWorkerAdmissionRecordV1, RetainedWorkerRuntimeError> {
+        let typed_history = authority
+            .resolve_exact_typed_history(&current_plan.spawn_request.orchestration_session_id)
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        let post_r0_graphs = self.resolve_all_post_r0_registry_graphs(authority)?;
+        let storage =
+            super::host_session_authority::store::retained_worker_admission_storage_for_authority(
+                authority,
+            )
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        let authority_store_id = storage.authority_store_id().to_owned();
+        let mut publication_nonce = [0_u8; 16];
+        rand::rngs::OsRng.fill_bytes(&mut publication_nonce);
+        let mut semantic_failure = None;
+        let result = storage.transaction(|transaction| {
+            let registry_bytes = transaction.read_registry()?.ok_or_else(
+                super::host_session_authority::store::BootstrapError::retained_admission_semantic,
+            )?;
+            let mut registry: RetainedWorkerAdmissionRegistryV1 = retain_semantic_error(
+                decode_canonical(&registry_bytes, "decode canonical admission registry"),
+                &mut semantic_failure,
+            )?;
+            let (_, envelope) = retain_semantic_error(
+                load_committed_admission_key(
+                    &authority_store_id,
+                    &registry,
+                    &transaction.read_keys()?,
+                ),
+                &mut semantic_failure,
+            )?;
+            retain_semantic_error(
+                validate_admission_registry(&registry, transaction.authority_root()),
+                &mut semantic_failure,
+            )?;
+            retain_semantic_error(
+                validate_complete_post_r0_registry_graphs(
+                    &registry,
+                    transaction.authority_root(),
+                    &post_r0_graphs,
+                ),
+                &mut semantic_failure,
+            )?;
+            let (record, changed) = retain_semantic_error(
+                reject_before_registration_in_registry(
+                    &mut registry,
+                    transaction.authority_root(),
+                    current_plan,
+                    canonical_plan,
+                    expected_record,
+                    &envelope.secret_key,
+                    rejection,
+                    reservation_proof,
+                    typed_history.as_ref(),
+                ),
+                &mut semantic_failure,
+            )?;
+            if changed {
+                let bytes = retain_semantic_error(
+                    encode_canonical(&registry, "encode admission registry"),
+                    &mut semantic_failure,
+                )?;
+                let temp_name =
+                    format!("admission-registry--{}.tmp", lower_hex(&publication_nonce));
+                transaction.replace_registry(&temp_name, &bytes)?;
+            }
+            Ok(record)
         });
         if let Some(error) = semantic_failure {
             return Err(error);
@@ -3064,6 +3256,73 @@ fn prepare_registration_head_in_registry(
         .insert(record.retained_participant_id.clone(), record.clone());
     validate_admission_registry(registry, authority_root)?;
     Ok((AdmissionHeadPreparationV1::Ready(record), true))
+}
+
+fn reject_before_registration_in_registry(
+    registry: &mut RetainedWorkerAdmissionRegistryV1,
+    authority_root: &VersionedStateRoot,
+    current_plan: &RetainedWorkerAdmissionPlanV1,
+    supplied_plan: &RetainedWorkerAdmissionPlanV1,
+    expected_record: &RetainedWorkerAdmissionRecordV1,
+    secret_key: &[u8; 32],
+    rejection: &AdmissionRejectedBeforeRegistrationInputV1,
+    reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
+    typed_history: Option<&BTreeMap<u64, ResolvedSessionAuthorityV1>>,
+) -> Result<(RetainedWorkerAdmissionRecordV1, bool), RetainedWorkerRuntimeError> {
+    validate_admission_plan(authority_root, current_plan, reservation_proof)?;
+    let root = preserved_start_root_view(authority_root)?;
+    let mut record = registry
+        .records_by_session
+        .get(&expected_record.orchestration_session_id)
+        .and_then(|records| records.get(&expected_record.retained_participant_id))
+        .cloned()
+        .ok_or_else(|| RetainedWorkerRuntimeError("exact existing admission is absent".into()))?;
+    if &record != expected_record {
+        return Err(RetainedWorkerRuntimeError(
+            "exact existing admission record changed after its locked join".into(),
+        ));
+    }
+    validate_reservation_proof_identities(reservation_proof, &record)?;
+    validate_supplied_admission_authority(
+        root.as_ref(),
+        &current_plan.exact_authority,
+        &supplied_plan.exact_authority,
+        &record,
+        typed_history,
+    )?;
+    verify_admission_record_fingerprint(supplied_plan, &record, secret_key)?;
+    match &record.state {
+        RetainedWorkerAdmissionStateV1::RejectedBeforeRegistration { .. } => {
+            validate_admission_registry(registry, authority_root)?;
+            return Ok((record, false));
+        }
+        RetainedWorkerAdmissionStateV1::SlotReserved { .. }
+        | RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. } => {}
+        RetainedWorkerAdmissionStateV1::PreTransportNonterminal { .. }
+        | RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal { .. }
+        | RetainedWorkerAdmissionStateV1::Routable { .. }
+        | RetainedWorkerAdmissionStateV1::InterruptedNonterminal { .. }
+        | RetainedWorkerAdmissionStateV1::Terminal { .. } => {
+            return Err(RetainedWorkerRuntimeError(
+                "only pre-registration admissions may be rejected before registration".into(),
+            ));
+        }
+    }
+    record.state = RetainedWorkerAdmissionStateV1::RejectedBeforeRegistration {
+        reason: rejection.reason.clone(),
+        rejected_at: rejection.rejected_at.clone(),
+    };
+    record.record_revision = record
+        .record_revision
+        .checked_add(1)
+        .ok_or_else(|| RetainedWorkerRuntimeError("admission record revision overflow".into()))?;
+    registry
+        .records_by_session
+        .get_mut(&record.orchestration_session_id)
+        .ok_or_else(|| RetainedWorkerRuntimeError("admission session bucket is absent".into()))?
+        .insert(record.retained_participant_id.clone(), record.clone());
+    validate_admission_registry(registry, authority_root)?;
+    Ok((record, true))
 }
 
 fn verify_admission_record_fingerprint(
@@ -9073,6 +9332,62 @@ mod tests {
     }
 
     #[test]
+    fn slot_reserved_resolution_rejects_before_registration_and_frees_capacity_idempotently() {
+        let (_parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "slot-resolution", "prompt", 1);
+        let reserved = runtime
+            .reserve_admission_slot(&authority, &plan, None)
+            .unwrap();
+        let rejection = AdmissionRejectedBeforeRegistrationInputV1 {
+            reason: "cancelled before registration".to_string(),
+            rejected_at: timestamp("2026-07-16T10:00:00.000000000Z"),
+        };
+
+        let rejected = runtime
+            .reconcile_existing_admission(
+                &authority,
+                &plan,
+                &reserved.record,
+                None,
+                Some(&rejection),
+            )
+            .unwrap();
+        assert!(matches!(
+            rejected.state,
+            RetainedWorkerAdmissionStateV1::RejectedBeforeRegistration {
+                ref reason,
+                ref rejected_at,
+            } if reason == "cancelled before registration"
+                && rejected_at == &timestamp("2026-07-16T10:00:00.000000000Z")
+        ));
+
+        let rejoined = runtime
+            .reconcile_existing_admission(&authority, &plan, &rejected, None, Some(&rejection))
+            .unwrap();
+        assert_eq!(rejoined, rejected);
+
+        let next_plan = admission_plan(&authority, "slot-resolution-next", "prompt", 1);
+        let next = runtime
+            .reserve_admission_slot(&authority, &next_plan, None)
+            .unwrap();
+        assert!(!next.joined);
+        assert!(matches!(
+            next.record.state,
+            RetainedWorkerAdmissionStateV1::SlotReserved {
+                slot_sequence: 2,
+                ..
+            }
+        ));
+
+        let retry = runtime
+            .reserve_admission_slot(&authority, &plan, None)
+            .unwrap();
+        assert!(retry.joined);
+        assert_eq!(retry.record, rejected);
+    }
+
+    #[test]
     fn admission_exact_retry_joins_stable_identity_and_changed_prompt_conflicts() {
         let (_parent, authority, _) = started_authority();
         let runtime = RetainedWorkerRuntime;
@@ -9364,6 +9679,87 @@ mod tests {
                 .unwrap(),
             Some(first.record)
         );
+    }
+
+    #[test]
+    fn authority_registration_head_resolution_reconciles_applied_r0_idempotently() {
+        let (_parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "head-resolution", "prompt", 3);
+        let reserved = runtime
+            .reserve_admission_slot(&authority, &plan, None)
+            .unwrap();
+        let participant_id = reserved.record.retained_participant_id.clone();
+        runtime
+            .register_admitted_worker_at(
+                &authority,
+                &plan,
+                Some(AdmissionRegistrationCrashPointV1::AfterR0BeforeAdmissionAdvance),
+            )
+            .unwrap_err();
+        let root_after_r0 = authority.read_a12a_root().unwrap();
+        let head = runtime
+            .read_admission_record(&authority, "r0-session", &participant_id)
+            .unwrap()
+            .unwrap();
+        assert!(matches!(
+            head.state,
+            RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
+        ));
+
+        let reconciled = runtime
+            .reconcile_existing_admission(&authority, &plan, &head, None, None)
+            .unwrap();
+        assert!(matches!(
+            reconciled.state,
+            RetainedWorkerAdmissionStateV1::PreTransportNonterminal { .. }
+        ));
+        assert_eq!(authority.read_a12a_root().unwrap(), root_after_r0);
+
+        let joined = runtime
+            .reconcile_existing_admission(&authority, &plan, &reconciled, None, None)
+            .unwrap();
+        assert_eq!(joined, reconciled);
+    }
+
+    #[test]
+    fn transport_claim_resolution_joins_ambiguous_nonterminal_without_freeing_capacity() {
+        let (_parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "transport-resolution", "prompt", 1);
+        let admitted = runtime
+            .register_admitted_worker(&authority, &plan, None)
+            .unwrap();
+        let participant_id = admitted.record.retained_participant_id.clone();
+        runtime
+            .claim_admission_transport_at(
+                &authority,
+                &plan,
+                &participant_id,
+                timestamp("2026-07-16T12:00:00.000000000Z"),
+                [61_u8; 16],
+                [71_u8; 16],
+                Some(AdmissionTransportClaimCrashPointV1::AfterPublicationBeforeResponse),
+            )
+            .unwrap_err();
+        let claimed = runtime
+            .read_admission_record(&authority, "r0-session", &participant_id)
+            .unwrap()
+            .unwrap();
+        assert!(matches!(
+            claimed.state,
+            RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal { .. }
+        ));
+
+        let resolved = runtime
+            .reconcile_existing_admission(&authority, &plan, &claimed, None, None)
+            .unwrap();
+        assert_eq!(resolved, claimed);
+
+        let blocked_plan = admission_plan(&authority, "transport-resolution-blocked", "prompt", 1);
+        assert!(runtime
+            .reserve_admission_slot(&authority, &blocked_plan, None)
+            .is_err());
     }
 
     #[test]

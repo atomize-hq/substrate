@@ -7786,15 +7786,6 @@ impl AgentRuntimeStateStore {
                 orchestration_session_id
             );
         }
-        if !target_participant.is_authoritative_live()
-            || !owner_process_is_alive(&target_participant)
-        {
-            anyhow::bail!(
-                "stale_linkage: orchestration session {} retained worker {} is no longer authoritative-live",
-                orchestration_session_id,
-                target_participant_id
-            );
-        }
         if !target_participant.internal.cancel_supported {
             anyhow::bail!(
                 "target_not_cancelable: orchestration session {} retained worker {} does not advertise cancel support",
@@ -22953,6 +22944,81 @@ mod tests {
             assert_eq!(resolved.caller_participant.participant_id(), "orch_cancel");
             assert_eq!(resolved.target_participant.participant_id(), "ash_cancel");
             assert_eq!(resolved.active_run_id, "run-cancel");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_cancel_world_dispatch_target_accepts_running_retained_worker_after_runtime_detach(
+    ) {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_cancel", "orch_cancel");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let mut member = live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
+            member.transition_state(AgentRuntimeSessionState::Running);
+            member.internal.latest_run_id = Some("run-cancel".to_string());
+            member.release_runtime_ownership();
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let resolved = store
+                .resolve_internal_cancel_world_dispatch_target(
+                    "sess_cancel",
+                    "orch_cancel",
+                    "ash_cancel",
+                    "cli:codex_world",
+                )
+                .expect("detached running retained worker should remain cancel-routable");
+
+            assert_eq!(resolved.caller_participant.participant_id(), "orch_cancel");
+            assert_eq!(resolved.target_participant.participant_id(), "ash_cancel");
+            assert_eq!(resolved.active_run_id, "run-cancel");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_cancel_world_dispatch_target_returns_not_cancelable_for_parked_retained_worker(
+    ) {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_cancel", "orch_cancel");
+            let mut parent = parked_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let mut member = live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
+            member.transition_state(AgentRuntimeSessionState::Ready);
+            member.internal.latest_run_id = Some("run-cancel".to_string());
+            member.release_runtime_ownership();
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parked session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_internal_cancel_world_dispatch_target(
+                    "sess_cancel",
+                    "orch_cancel",
+                    "ash_cancel",
+                    "cli:codex_world",
+                )
+                .expect_err("parked retained workers must not fail as stale linkage");
+
+            assert_eq!(
+                err.to_string(),
+                "target_not_cancelable: orchestration session sess_cancel retained worker ash_cancel has no active cancelable work in flight"
+            );
         });
     }
 

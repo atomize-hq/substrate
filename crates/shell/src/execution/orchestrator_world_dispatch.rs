@@ -54,6 +54,7 @@ use crate::execution::agent_runtime::dispatch_contract::{
     ContinueWorldWorkerOutcomeV1, ForkWorldWorkerOutcomeV1, InspectWorldWorkerOutcomeV1,
     RetainedWorkerCancelCloseoutV1, RetainedWorkerStopCloseoutV1, StopWorldWorkerOutcomeV1,
     SupervisorObservationClaimV1, WorkerCancelPayloadV1, WorkerForkPayloadV1,
+    WorldWorkResultClassificationV1, WorldWorkTerminalV1,
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::dispatch_policy_commitment::{
@@ -118,8 +119,9 @@ use crate::execution::agent_runtime::retained_worker_runtime::{
 use crate::execution::agent_runtime::state_store::ActiveEphemeralWorldTaskRecord;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::state_store::{
-    authenticate_persisted_world_work_acceptance_by_dispatch_request, AcceptedWorldWorkIdentityV1,
-    PreparedInternalApprovalResponseObligationCloseout,
+    authenticate_persisted_world_work_acceptance_by_dispatch_request,
+    validate_retained_worker_authoritative_lineage, AcceptedWorldWorkIdentityV1,
+    AgentRuntimeSessionRecord, PreparedInternalApprovalResponseObligationCloseout,
     PreparedInternalClarificationResponseObligationCloseout, ProposedWorldWorkIdentityV1,
     ResolvedCanonicalRetainedWorldDispatchTargetV1, ResolvedWorldWorkRegistryAuthorityV1,
     RuntimeAcceptanceAcknowledgementKindV1, RuntimeAcceptanceEvidenceV1,
@@ -1898,6 +1900,24 @@ fn adapt_accepted_work_receipt_material_resolution_v1(
     >,
     expected_work_identity: &AcceptedWorldWorkIdentityV1,
 ) -> Result<AcceptedForegroundReceiptV1> {
+    adapt_accepted_work_receipt_material_resolution_with_runtime_v1(
+        resolution,
+        expected_work_identity,
+        None,
+        None,
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn adapt_accepted_work_receipt_material_resolution_with_runtime_v1(
+    resolution: std::result::Result<
+        AcceptedWorkReceiptMaterialResolutionV1,
+        AcceptedWorkReceiptMaterialErrorV1,
+    >,
+    expected_work_identity: &AcceptedWorldWorkIdentityV1,
+    retained_store: Option<&AgentRuntimeStateStore>,
+    retained_supervisor: Option<&WorldWorkExecutionSupervisor>,
+) -> Result<AcceptedForegroundReceiptV1> {
     let physical_class = |error: &ReadOnlyAuthoritySnapshotErrorV1| match error {
         ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootAbsentOrUnsafe => {
             "physical.authority_root_absent_or_unsafe"
@@ -2061,11 +2081,16 @@ fn adapt_accepted_work_receipt_material_resolution_v1(
                 project_active_ephemeral_task_receipt_v1(&material)?,
             ))
         }
-        AcceptedWorldWorkIdentityV1::RetainedTurn { .. } => {
-            Ok(AcceptedForegroundReceiptV1::Retained(
-                project_active_retained_turn_receipt_v1(&material)?,
-            ))
-        }
+        AcceptedWorldWorkIdentityV1::RetainedTurn { .. } => Ok(
+            AcceptedForegroundReceiptV1::Retained(match retained_store {
+                Some(store) => project_active_retained_turn_receipt_v1_with_runtime(
+                    &material,
+                    store,
+                    retained_supervisor,
+                )?,
+                None => project_active_retained_turn_receipt_v1(&material)?,
+            }),
+        ),
     }
 }
 
@@ -2211,6 +2236,302 @@ fn project_active_retained_turn_receipt_v1(
         cancel_supported: true,
         terminal: None,
     })
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Default)]
+struct RetainedTurnJournalProjectionV1 {
+    thread_id: Option<String>,
+    last_worker_event: Option<ContinueWorldWorkerEventV1>,
+}
+
+#[cfg(target_os = "linux")]
+struct ActiveRetainedTurnLifecycleProjectionV1 {
+    thread_id: Option<String>,
+    state_revision: u64,
+    state: ActiveRetainedTurnStateV1,
+    cancel_supported: bool,
+    terminal: Option<WorldWorkTerminalV1>,
+}
+
+#[cfg(target_os = "linux")]
+fn project_active_retained_turn_receipt_v1_with_runtime(
+    material: &AuthenticatedAcceptedWorkReceiptMaterialV1,
+    store: &AgentRuntimeStateStore,
+    execution_supervisor: Option<&WorldWorkExecutionSupervisor>,
+) -> Result<ActiveRetainedTurnReceiptV1> {
+    let mut receipt = project_active_retained_turn_receipt_v1(material)?;
+    if let Some(lifecycle) =
+        try_project_active_retained_turn_lifecycle_v1(material, store, execution_supervisor)?
+    {
+        receipt.thread_id = lifecycle.thread_id;
+        receipt.state_revision = lifecycle.state_revision;
+        receipt.state = lifecycle.state;
+        receipt.cancel_supported = lifecycle.cancel_supported;
+        receipt.terminal = lifecycle.terminal;
+    }
+    Ok(receipt)
+}
+
+#[cfg(target_os = "linux")]
+fn try_project_active_retained_turn_lifecycle_v1(
+    material: &AuthenticatedAcceptedWorkReceiptMaterialV1,
+    store: &AgentRuntimeStateStore,
+    execution_supervisor: Option<&WorldWorkExecutionSupervisor>,
+) -> Result<Option<ActiveRetainedTurnLifecycleProjectionV1>> {
+    let (target_participant_id, accepted_run_id) = match material.accepted_work_identity() {
+        AcceptedWorldWorkIdentityV1::RetainedTurn {
+            target_participant_id,
+            active_run_id,
+            ..
+        } => (target_participant_id.as_str(), active_run_id.as_str()),
+        AcceptedWorldWorkIdentityV1::EphemeralTask { .. } => {
+            anyhow::bail!("accepted_work_receipt_material_error: retained_subject_mismatch");
+        }
+    };
+    let observation = match execution_supervisor {
+        Some(supervisor) => match supervisor
+            .inspect_observation_by_acceptance_id(material.acceptance_record_id())
+        {
+            Ok(Some(observation))
+                if observation.claim.authority_store_id == material.authority_store_id()
+                    && observation.claim.acceptance_record_id
+                        == material.acceptance_record_id()
+                    && observation.claim.orchestration_session_id
+                        == material.orchestration_session_id()
+                    && observation.claim.caller_participant_id
+                        == material.caller_participant_id()
+                    && observation.claim.target_backend_id == material.target_backend_id()
+                    && observation.claim.work_identity == *material.accepted_work_identity()
+                    && observation.claim.world_id == material.world_id()
+                    && observation.claim.world_generation == material.world_generation() =>
+            {
+                observation
+            }
+            Ok(Some(_)) | Ok(None) | Err(_) => return Ok(None),
+        },
+        None => return Ok(None),
+    };
+    let record = match store.load_session(material.orchestration_session_id()) {
+        Ok(Some(record)) => record,
+        Ok(None) | Err(_) => return Ok(None),
+    };
+    let Some(authoritative_participant) =
+        resolve_current_retained_turn_projection_authoritative_participant_v1(&record)
+    else {
+        return Ok(None);
+    };
+    let Some(target) = record
+        .participants
+        .iter()
+        .find(|participant| {
+            participant.participant_id() == target_participant_id
+                && participant.handle.backend_id == material.target_backend_id()
+                && participant.handle.role == crate::execution::agent_runtime::mapping::MEMBER_ROLE
+                && participant.handle.execution.scope == AgentExecutionScope::World
+                && participant.handle.world_id.as_deref() == Some(material.world_id())
+                && participant.handle.world_generation == Some(material.world_generation())
+        })
+        .cloned()
+    else {
+        return Ok(None);
+    };
+    if validate_retained_worker_authoritative_lineage(&record, &authoritative_participant, &target)
+        .is_err()
+    {
+        return Ok(None);
+    }
+    let Some(journal_projection) = project_retained_turn_journal_v1(&observation) else {
+        return Ok(None);
+    };
+    let active_run_matches = target.internal.latest_run_id.as_deref() == Some(accepted_run_id);
+    if let Some(terminal) = observation.terminal.as_ref() {
+        return Ok(if active_run_matches {
+            Some(project_active_retained_turn_terminal_lifecycle_v1(
+                &target,
+                terminal.exit_code,
+                journal_projection.thread_id,
+            ))
+        } else {
+            project_active_retained_turn_terminal_from_observation_v1(
+                terminal.exit_code,
+                journal_projection.thread_id,
+            )
+        });
+    }
+    if !active_run_matches {
+        return Ok(None);
+    }
+    let state = if journal_projection
+        .last_worker_event
+        .as_ref()
+        .is_some_and(|event| {
+            continue_world_worker_event_persists_live_obligation(event.event_class)
+        }) {
+        ActiveRetainedTurnStateV1::AttentionPending
+    } else if journal_projection.last_worker_event.is_some() {
+        ActiveRetainedTurnStateV1::Running
+    } else {
+        ActiveRetainedTurnStateV1::Accepted
+    };
+    Ok(Some(ActiveRetainedTurnLifecycleProjectionV1 {
+        thread_id: journal_projection.thread_id,
+        state_revision: retained_turn_state_revision(state),
+        state,
+        cancel_supported: true,
+        terminal: None,
+    }))
+}
+
+#[cfg(target_os = "linux")]
+fn project_retained_turn_journal_v1(
+    observation: &WorldWorkExecutionObservationV1,
+) -> Option<RetainedTurnJournalProjectionV1> {
+    let mut projected = RetainedTurnJournalProjectionV1::default();
+    for entry in &observation.journal {
+        let payload = entry.canonical_ndjson_bytes.strip_suffix(b"\n")?;
+        let frame =
+            serde_json::from_slice::<transport_api_types::ExecuteStreamFrame>(payload).ok()?;
+        let transport_api_types::ExecuteStreamFrame::Event { event, .. } = frame else {
+            continue;
+        };
+        if projected.thread_id.is_none() {
+            projected.thread_id = surfaced_thread_id_from_event(&event);
+        }
+        let Some(worker_event) = event.worker_event.as_ref() else {
+            continue;
+        };
+        let projected_worker_event = typed_continue_world_worker_event_projection(
+            ContinueWorldWorkerTurnKind::GenericContinue,
+            event.channel.clone(),
+            worker_event,
+        )
+        .ok()?
+        .compatibility();
+        if projected.thread_id.is_none() {
+            projected.thread_id = projected_worker_event.thread_id.clone();
+        }
+        projected.last_worker_event = Some(projected_worker_event);
+    }
+    Some(projected)
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_current_retained_turn_projection_authoritative_participant_v1(
+    record: &AgentRuntimeSessionRecord,
+) -> Option<AgentRuntimeParticipantRecord> {
+    let authoritative_participant_id = record.session.active_participant_id()?;
+    record.participants.iter().find_map(|participant| {
+        (participant.participant_id() == authoritative_participant_id
+            && participant.handle.state.is_live()
+            && participant.matches_public_parent_linkage(&record.session))
+        .then(|| participant.clone())
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn project_active_retained_turn_terminal_lifecycle_v1(
+    target: &AgentRuntimeParticipantRecord,
+    exit_code: i32,
+    thread_id: Option<String>,
+) -> ActiveRetainedTurnLifecycleProjectionV1 {
+    let (state, terminal) = if target.has_cancelled_terminal_truth() {
+        (
+            ActiveRetainedTurnStateV1::Cancelled,
+            Some(WorldWorkTerminalV1 {
+                result_class: WorldWorkResultClassificationV1::Cancelled,
+            }),
+        )
+    } else if target.handle.state == AgentRuntimeSessionState::Stopped {
+        (
+            ActiveRetainedTurnStateV1::Stopped,
+            Some(WorldWorkTerminalV1 {
+                result_class: WorldWorkResultClassificationV1::Stopped,
+            }),
+        )
+    } else if target.handle.state == AgentRuntimeSessionState::Failed || exit_code != 0 {
+        (
+            ActiveRetainedTurnStateV1::Failed,
+            Some(WorldWorkTerminalV1 {
+                result_class: WorldWorkResultClassificationV1::Failed,
+            }),
+        )
+    } else if retained_turn_is_parked_continuity(target) {
+        (ActiveRetainedTurnStateV1::Parked, None)
+    } else if target.handle.state == AgentRuntimeSessionState::Invalidated {
+        (
+            ActiveRetainedTurnStateV1::Terminal,
+            Some(WorldWorkTerminalV1 {
+                result_class: WorldWorkResultClassificationV1::Invalidated,
+            }),
+        )
+    } else {
+        (
+            ActiveRetainedTurnStateV1::Terminal,
+            Some(WorldWorkTerminalV1 {
+                result_class: WorldWorkResultClassificationV1::Completed,
+            }),
+        )
+    };
+    ActiveRetainedTurnLifecycleProjectionV1 {
+        thread_id,
+        state_revision: retained_turn_state_revision(state),
+        state,
+        cancel_supported: false,
+        terminal,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn project_active_retained_turn_terminal_from_observation_v1(
+    exit_code: i32,
+    thread_id: Option<String>,
+) -> Option<ActiveRetainedTurnLifecycleProjectionV1> {
+    let (state, terminal) = match exit_code {
+        0 => (
+            ActiveRetainedTurnStateV1::Terminal,
+            Some(WorldWorkTerminalV1 {
+                result_class: WorldWorkResultClassificationV1::Completed,
+            }),
+        ),
+        130 => return None,
+        _ => (
+            ActiveRetainedTurnStateV1::Failed,
+            Some(WorldWorkTerminalV1 {
+                result_class: WorldWorkResultClassificationV1::Failed,
+            }),
+        ),
+    };
+    Some(ActiveRetainedTurnLifecycleProjectionV1 {
+        thread_id,
+        state_revision: retained_turn_state_revision(state),
+        state,
+        cancel_supported: false,
+        terminal,
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn retained_turn_is_parked_continuity(target: &AgentRuntimeParticipantRecord) -> bool {
+    target.handle.state == AgentRuntimeSessionState::Ready
+        && target.internal.uaa_session_id.is_some()
+        && target.internal.terminal_observed_at.is_none()
+        && !target.internal.control_owner_retained
+        && !target.internal.event_stream_active
+        && !target.internal.completion_observer_retained
+}
+
+#[cfg(target_os = "linux")]
+fn retained_turn_state_revision(state: ActiveRetainedTurnStateV1) -> u64 {
+    match state {
+        ActiveRetainedTurnStateV1::Accepted => 1,
+        ActiveRetainedTurnStateV1::Running | ActiveRetainedTurnStateV1::AttentionPending => 2,
+        ActiveRetainedTurnStateV1::Parked
+        | ActiveRetainedTurnStateV1::Terminal
+        | ActiveRetainedTurnStateV1::Failed
+        | ActiveRetainedTurnStateV1::Cancelled
+        | ActiveRetainedTurnStateV1::Stopped => 3,
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -3657,9 +3978,14 @@ async fn continue_world_worker(
                         message_id: message_id.clone(),
                     },
                 };
-                let receipt = adapt_accepted_work_receipt_material_resolution_v1(
+                let receipt = adapt_accepted_work_receipt_material_resolution_with_runtime_v1(
                     resolve_accepted_work_receipt_material(&authority, &key, &acceptance),
                     &acceptance.work_identity,
+                    Some(&prepared.store),
+                    prepared
+                        .b_owned_authority
+                        .as_ref()
+                        .map(|authority| &authority.execution_supervisor),
                 )?;
                 if !matches!(receipt, AcceptedForegroundReceiptV1::Retained(_)) {
                     anyhow::bail!(
@@ -7651,6 +7977,8 @@ async fn execute_continue_world_worker_stream_for_turn_kind_impl(
     let mut stream_error = None::<String>;
     let mut surfaced_thread_id = None::<String>;
     let mut surfaced_worker_event = None::<ContinueWorldWorkerEventV1>;
+    let retained_execution_supervisor =
+        acceptance.map(|(_, execution_supervisor, _)| execution_supervisor);
     let mut publish_and_handoff = |
         accepted: &WorldWorkAcceptanceRecordV1,
         claim: &crate::execution::agent_runtime::world_work_execution_supervisor::WorldWorkExecutionClaimV1,
@@ -7678,9 +8006,11 @@ async fn execute_continue_world_worker_stream_for_turn_kind_impl(
                 message_id: message_id.clone(),
             },
         };
-        let receipt = match adapt_accepted_work_receipt_material_resolution_v1(
+        let receipt = match adapt_accepted_work_receipt_material_resolution_with_runtime_v1(
             resolve_accepted_work_receipt_material(&context.authority, &key, accepted),
             &accepted.work_identity,
+            store,
+            retained_execution_supervisor,
         ) {
             Ok(AcceptedForegroundReceiptV1::Retained(receipt)) => receipt,
             Ok(AcceptedForegroundReceiptV1::Ephemeral(_)) => {
@@ -31560,6 +31890,997 @@ agents:
             classified.event_class,
             ContinueWorldWorkerEventClassV1::ControlAck
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn retained_active_receipt_projects_parked_lifecycle_through_successor_authoritative_lineage(
+    ) {
+        let _env_guard = world_env_guard();
+        let _world_codex_guard = EnvVarGuard::set_path(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            test_world_codex_runtime_bin().as_path(),
+        );
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
+        write_allowed_world_dispatch_policy_with_host_credentials(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["spawn_world_worker", "continue_world_worker"],
+            &["retained"],
+        );
+        write_runtime_inventory_entry(
+            substrate_home.path(),
+            "codex-world",
+            AgentExecutionScope::World,
+        );
+        let workspace_root = tempdir().expect("parked retained workspace");
+        activate_b_owned_dispatch_authority(
+            substrate_home.path(),
+            workspace_root.path(),
+            "sess_dispatch",
+            "orch_successor",
+            "cli:codex",
+            "world-17",
+            2,
+        );
+        let store = AgentRuntimeStateStore::new().expect("parked retained state store");
+        let (participant_id, _) = seed_routable_e2_spawn_source(
+            "req-retained-parked-source",
+            "orch_successor",
+            "world-17",
+            2,
+        );
+
+        let socket_home = tempdir().expect("parked retained socket home");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind parked retained socket");
+        let (start_tx, start_rx) = tokio::sync::oneshot::channel();
+        let (allow_terminal_tx, allow_terminal_rx) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            let mut allow_terminal_rx = Some(allow_terminal_rx);
+            loop {
+                let (mut stream, _) = listener
+                    .accept()
+                    .await
+                    .expect("accept parked retained request");
+                let (header, body) = read_http_request(&mut stream)
+                    .await
+                    .expect("read parked retained request");
+                let first_line = header.lines().next().unwrap_or_default();
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+                assert!(first_line.starts_with("POST /v1/member_turn/stream "));
+                let submit_request: transport_api_types::MemberTurnSubmitRequestV1 =
+                    serde_json::from_slice(&body).expect("decode parked retained submit request");
+                write_http_stream_start(&mut stream).await;
+                write_chunked_frame(
+                    &mut stream,
+                    &transport_api_types::ExecuteStreamFrame::Start {
+                        frame_identity: test_runtime_frame_identity(1),
+                        span_id: "retained-parked-foreground".to_string(),
+                    },
+                )
+                .await;
+                start_tx.send(()).expect("signal parked retained Start");
+                allow_terminal_rx
+                    .take()
+                    .expect("single parked retained terminal receiver")
+                    .await
+                    .expect("release parked retained terminal");
+                write_chunked_frame(
+                    &mut stream,
+                    &transport_api_types::ExecuteStreamFrame::Event {
+                        frame_identity: test_runtime_frame_identity(2),
+                        event: sample_typed_continue_stream_event_for_request(
+                            &submit_request,
+                            test_runtime_frame_identity(2),
+                            test_runtime_event_identity(1),
+                            json!({
+                                "event_class": "reply",
+                                "payload": { "message": "park after clean turn" }
+                            }),
+                        ),
+                    },
+                )
+                .await;
+                write_chunked_frame(
+                    &mut stream,
+                    &transport_api_types::ExecuteStreamFrame::Exit {
+                        frame_identity: test_runtime_frame_identity(3),
+                        event_identity: test_runtime_event_identity(2),
+                        terminal_identity: test_runtime_terminal_identity(2),
+                        exit: 0,
+                        span_id: "retained-parked-foreground".to_string(),
+                        scopes_used: Vec::new(),
+                        fs_diff: None,
+                        process_telemetry: Default::default(),
+                    },
+                )
+                .await;
+                finish_chunked_stream(&mut stream).await;
+                break;
+            }
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let (principal, _) = crate::execution::install_bootstrap::current_unix_principal_and_home()
+            .expect("resolve parked retained principal");
+        let request = WorldDispatchRequestV1 {
+            request_id: Some("req-retained-parked".to_string()),
+            idempotency_key: Some("idem-retained-parked".to_string()),
+            orchestration_session_id: Some("sess_dispatch".to_string()),
+            caller_participant_id: Some("orch_successor".to_string()),
+            action: WorldDispatchActionV1::ContinueWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            target_backend_id: Some("cli:codex-world".to_string()),
+            task_run_id: None,
+            target_participant_id: Some(participant_id.clone()),
+            world_id: Some("world-17".to_string()),
+            world_generation: Some(2),
+            dispatch_policy_narrowing: None,
+            payload: WorldDispatchPayloadV1::WorkerContinue(WorkerContinuePayloadV1 {
+                prompt: "project parked retained lifecycle".to_string(),
+                thread_id: Some("caller-thread-must-not-project".to_string()),
+            }),
+        };
+
+        let outcome = timeout(
+            Duration::from_secs(5),
+            dispatch_orchestrator_world_request_for_principal(&store, request, principal),
+        )
+        .await
+        .expect("parked retained receipt must not wait for terminal")
+        .expect("parked retained receipt");
+        start_rx.await.expect("parked retained Start was emitted");
+        let WorldDispatchOutcomeV1::AcceptedForeground(receipt) = outcome else {
+            panic!("parked retained turn must return an active retained receipt")
+        };
+        let AcceptedForegroundReceiptV1::Retained(receipt) = *receipt else {
+            panic!("parked retained turn must return an active retained receipt")
+        };
+        assert_eq!(receipt.state, ActiveRetainedTurnStateV1::Accepted);
+        assert_eq!(receipt.state_revision, 1);
+        assert!(receipt.thread_id.is_none());
+        assert!(receipt.terminal.is_none());
+
+        let authority = store
+            .resolve_world_work_registry_authority(
+                "sess_dispatch",
+                "orch_successor",
+                "world-17",
+                2,
+                Some((&receipt.target_participant_id, "cli:codex-world")),
+            )
+            .expect("resolve parked retained authority");
+        let acceptance = authority
+            .receipt_registry
+            .inspect_world_work_acceptance_by_id(
+                &authority.authority_store_id,
+                &receipt.acceptance_record_id,
+            )
+            .expect("inspect parked retained acceptance")
+            .expect("parked retained acceptance exists");
+        let key = DispatchPolicyCommitmentLookupKeyV1 {
+            authority_store_id: acceptance.authority_store_id.clone(),
+            orchestration_session_id: acceptance.orchestration_session_id.clone(),
+            request_id: acceptance.request_id.clone(),
+            subject: DispatchPolicyCommitmentSubjectKeyV1::RetainedWorkerTurn {
+                active_run_id: receipt.active_run_id.clone(),
+                message_id: receipt.message_id.clone(),
+            },
+        };
+        let trusted_root = TrustedAuthorityRoot::open(substrate_home.path())
+            .expect("open parked retained trusted root");
+        let hsa = HostSessionAuthority::from_trusted_root(trusted_root)
+            .expect("open parked retained HSA");
+        let material = match resolve_accepted_work_receipt_material(&hsa, &key, &acceptance)
+            .expect("resolve parked retained E2-RM")
+        {
+            AcceptedWorkReceiptMaterialResolutionV1::Resolved(material) => material,
+            AcceptedWorkReceiptMaterialResolutionV1::UnsupportedLegacyState { .. } => {
+                panic!("fresh parked retained work must have E2-RM material")
+            }
+        };
+        assert_eq!(
+            project_active_retained_turn_receipt_v1(&material)
+                .expect("project base parked retained receipt"),
+            receipt
+        );
+
+        allow_terminal_tx
+            .send(())
+            .expect("release parked retained terminal");
+        server.await.expect("join parked retained server");
+        let terminal = wait_for_b21_terminal(
+            &authority.execution_supervisor,
+            &acceptance.acceptance_record_id,
+        )
+        .await;
+        assert_eq!(terminal.exit_code, 0);
+        let _projection_home = install_secure_substrate_home();
+        let projection_store =
+            AgentRuntimeStateStore::new().expect("parked retained projection store");
+        let mut session = sample_session();
+        session.workspace_root = workspace_root.path().display().to_string();
+        session.shell_owner_pid = std::process::id();
+        let mut launch_orchestrator = sample_orchestrator_participant();
+        launch_orchestrator.handle.participant_id = "orch_launch".to_string();
+        launch_orchestrator.internal.shell_owner_pid = std::process::id();
+        launch_orchestrator.internal.uaa_session_id = Some("uaa_orch_launch".to_string());
+        launch_orchestrator.internal.last_attached_at = Some(chrono::Utc::now());
+        launch_orchestrator.mark_client_detached("successor attached");
+        let mut successor = sample_orchestrator_participant();
+        successor.handle.participant_id = "orch_successor".to_string();
+        successor.handle.resumed_from_participant_id = Some("orch_launch".to_string());
+        successor.handle.resumed_from_session_handle_id = Some("orch_launch".to_string());
+        successor.internal.shell_owner_pid = std::process::id();
+        successor.internal.uaa_session_id = Some("uaa_orch_successor".to_string());
+        successor.internal.attached_client_present = true;
+        successor.internal.last_attached_at = Some(chrono::Utc::now());
+        successor.internal.resume_eligible = true;
+        session.bind_active_session_handle("orch_successor".to_string());
+        session.host_attach_contract = HostAttachContract::from_manifest_for_test(&successor);
+        let canonical_session_dir = projection_store.sessions_dir().join("sess_dispatch");
+        let canonical_participants_dir = canonical_session_dir.join("participants");
+        fs::create_dir_all(projection_store.sessions_dir())
+            .expect("create parked retained sessions dir");
+        fs::create_dir_all(&canonical_session_dir)
+            .expect("create parked retained canonical session dir");
+        fs::write(
+            projection_store.sessions_dir().join("sess_dispatch.json"),
+            serde_json::to_vec_pretty(&session).expect("serialize parked retained session"),
+        )
+        .expect("write parked retained session");
+        fs::write(
+            canonical_session_dir.join("session.json"),
+            serde_json::to_vec_pretty(&session)
+                .expect("serialize parked retained canonical session"),
+        )
+        .expect("write parked retained canonical session");
+        let mut participant = sample_member_participant();
+        participant.handle.participant_id = receipt.target_participant_id.clone();
+        participant.handle.orchestrator_participant_id = Some("orch_launch".to_string());
+        participant.internal.shell_owner_pid = std::process::id();
+        participant.internal.uaa_session_id = Some("uaa_member_dispatch".to_string());
+        participant.internal.latest_run_id = Some(receipt.active_run_id.clone());
+        participant.release_runtime_ownership();
+        participant.transition_state(AgentRuntimeSessionState::Ready);
+        fs::create_dir_all(projection_store.participants_dir())
+            .expect("create parked retained participants dir");
+        fs::create_dir_all(&canonical_participants_dir)
+            .expect("create parked retained canonical participants dir");
+        let launch_orchestrator_bytes = serde_json::to_vec_pretty(&launch_orchestrator)
+            .expect("serialize parked retained launch orchestrator");
+        fs::write(
+            projection_store.participants_dir().join("orch_launch.json"),
+            &launch_orchestrator_bytes,
+        )
+        .expect("write parked retained launch orchestrator");
+        fs::write(
+            canonical_participants_dir.join("orch_launch.json"),
+            &launch_orchestrator_bytes,
+        )
+        .expect("write parked retained canonical launch orchestrator");
+        let successor_bytes =
+            serde_json::to_vec_pretty(&successor).expect("serialize parked retained successor");
+        fs::write(
+            projection_store
+                .participants_dir()
+                .join("orch_successor.json"),
+            &successor_bytes,
+        )
+        .expect("write parked retained successor");
+        fs::write(
+            canonical_participants_dir.join("orch_successor.json"),
+            &successor_bytes,
+        )
+        .expect("write parked retained canonical successor");
+        let participant_bytes =
+            serde_json::to_vec_pretty(&participant).expect("serialize parked retained participant");
+        fs::write(
+            projection_store
+                .participants_dir()
+                .join(format!("{}.json", receipt.target_participant_id)),
+            &participant_bytes,
+        )
+        .expect("write parked retained participant");
+        fs::write(
+            canonical_participants_dir.join(format!("{}.json", receipt.target_participant_id)),
+            &participant_bytes,
+        )
+        .expect("write parked retained canonical participant");
+
+        let record = projection_store
+            .load_session("sess_dispatch")
+            .expect("load parked retained session")
+            .expect("parked retained session must exist");
+        assert!(
+            record
+                .participants
+                .iter()
+                .any(|participant| participant.participant_id() == receipt.target_participant_id),
+            "parked retained participant must be readable from runtime snapshots"
+        );
+        let rebound_observation = authority
+            .execution_supervisor
+            .inspect_observation_by_acceptance_id(&receipt.acceptance_record_id)
+            .expect("inspect rebound parked retained observation")
+            .expect("rebound parked retained observation exists");
+        assert_eq!(
+            rebound_observation
+                .terminal
+                .as_ref()
+                .map(|terminal| terminal.exit_code),
+            Some(0)
+        );
+        let rebound_journal = project_retained_turn_journal_v1(&rebound_observation)
+            .expect("project rebound parked retained journal");
+        assert_eq!(rebound_journal.thread_id.as_deref(), Some("thread-direct"));
+        assert!(rebound_journal.last_worker_event.is_some());
+        let projected = project_active_retained_turn_receipt_v1_with_runtime(
+            &material,
+            &projection_store,
+            Some(&authority.execution_supervisor),
+        )
+        .expect("project parked retained receipt");
+        let mut expected = receipt.clone();
+        expected.thread_id = Some("thread-direct".to_string());
+        expected.state_revision = 3;
+        expected.state = ActiveRetainedTurnStateV1::Parked;
+        expected.cancel_supported = false;
+        expected.terminal = None;
+        assert_eq!(projected, expected);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn retained_active_receipt_projects_failed_lifecycle_from_nonzero_closeout() {
+        let _env_guard = world_env_guard();
+        let _world_codex_guard = EnvVarGuard::set_path(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            test_world_codex_runtime_bin().as_path(),
+        );
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
+        write_allowed_world_dispatch_policy_with_host_credentials(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["spawn_world_worker", "continue_world_worker"],
+            &["retained"],
+        );
+        write_runtime_inventory_entry(
+            substrate_home.path(),
+            "codex-world",
+            AgentExecutionScope::World,
+        );
+        let workspace_root = tempdir().expect("failed retained workspace");
+        activate_b_owned_dispatch_authority(
+            substrate_home.path(),
+            workspace_root.path(),
+            "sess_dispatch",
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
+        let store = AgentRuntimeStateStore::new().expect("failed retained state store");
+        let (participant_id, _) = seed_routable_e2_spawn_source(
+            "req-retained-failed-source",
+            "orch_dispatch",
+            "world-17",
+            2,
+        );
+
+        let socket_home = tempdir().expect("failed retained socket home");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind failed retained socket");
+        let (start_tx, start_rx) = tokio::sync::oneshot::channel();
+        let (allow_terminal_tx, allow_terminal_rx) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            let mut allow_terminal_rx = Some(allow_terminal_rx);
+            loop {
+                let (mut stream, _) = listener
+                    .accept()
+                    .await
+                    .expect("accept failed retained request");
+                let (header, body) = read_http_request(&mut stream)
+                    .await
+                    .expect("read failed retained request");
+                let first_line = header.lines().next().unwrap_or_default();
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+                assert!(first_line.starts_with("POST /v1/member_turn/stream "));
+                let submit_request: transport_api_types::MemberTurnSubmitRequestV1 =
+                    serde_json::from_slice(&body).expect("decode failed retained submit request");
+                write_http_stream_start(&mut stream).await;
+                write_chunked_frame(
+                    &mut stream,
+                    &transport_api_types::ExecuteStreamFrame::Start {
+                        frame_identity: test_runtime_frame_identity(1),
+                        span_id: "retained-failed-foreground".to_string(),
+                    },
+                )
+                .await;
+                start_tx.send(()).expect("signal failed retained Start");
+                allow_terminal_rx
+                    .take()
+                    .expect("single failed retained terminal receiver")
+                    .await
+                    .expect("release failed retained terminal");
+                write_chunked_frame(
+                    &mut stream,
+                    &transport_api_types::ExecuteStreamFrame::Event {
+                        frame_identity: test_runtime_frame_identity(2),
+                        event: sample_typed_continue_stream_event_for_request(
+                            &submit_request,
+                            test_runtime_frame_identity(2),
+                            test_runtime_event_identity(1),
+                            json!({
+                                "event_class": "reply",
+                                "payload": { "message": "fail after nonzero closeout" }
+                            }),
+                        ),
+                    },
+                )
+                .await;
+                write_chunked_frame(
+                    &mut stream,
+                    &transport_api_types::ExecuteStreamFrame::Exit {
+                        frame_identity: test_runtime_frame_identity(3),
+                        event_identity: test_runtime_event_identity(2),
+                        terminal_identity: test_runtime_terminal_identity(2),
+                        exit: 17,
+                        span_id: "retained-failed-foreground".to_string(),
+                        scopes_used: Vec::new(),
+                        fs_diff: None,
+                        process_telemetry: Default::default(),
+                    },
+                )
+                .await;
+                finish_chunked_stream(&mut stream).await;
+                break;
+            }
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let (principal, _) = crate::execution::install_bootstrap::current_unix_principal_and_home()
+            .expect("resolve failed retained principal");
+        let request = WorldDispatchRequestV1 {
+            request_id: Some("req-retained-failed".to_string()),
+            idempotency_key: Some("idem-retained-failed".to_string()),
+            orchestration_session_id: Some("sess_dispatch".to_string()),
+            caller_participant_id: Some("orch_dispatch".to_string()),
+            action: WorldDispatchActionV1::ContinueWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            target_backend_id: Some("cli:codex-world".to_string()),
+            task_run_id: None,
+            target_participant_id: Some(participant_id.clone()),
+            world_id: Some("world-17".to_string()),
+            world_generation: Some(2),
+            dispatch_policy_narrowing: None,
+            payload: WorldDispatchPayloadV1::WorkerContinue(WorkerContinuePayloadV1 {
+                prompt: "project failed retained lifecycle".to_string(),
+                thread_id: Some("caller-thread-must-not-project".to_string()),
+            }),
+        };
+
+        let outcome = timeout(
+            Duration::from_secs(5),
+            dispatch_orchestrator_world_request_for_principal(&store, request, principal),
+        )
+        .await
+        .expect("failed retained receipt must not wait for terminal")
+        .expect("failed retained receipt");
+        start_rx.await.expect("failed retained Start was emitted");
+        let WorldDispatchOutcomeV1::AcceptedForeground(receipt) = outcome else {
+            panic!("failed retained turn must return an active retained receipt")
+        };
+        let AcceptedForegroundReceiptV1::Retained(receipt) = *receipt else {
+            panic!("failed retained turn must return an active retained receipt")
+        };
+        assert_eq!(receipt.state, ActiveRetainedTurnStateV1::Accepted);
+        assert_eq!(receipt.state_revision, 1);
+        assert!(receipt.thread_id.is_none());
+        assert!(receipt.terminal.is_none());
+
+        let authority = store
+            .resolve_world_work_registry_authority(
+                "sess_dispatch",
+                "orch_dispatch",
+                "world-17",
+                2,
+                Some((&receipt.target_participant_id, "cli:codex-world")),
+            )
+            .expect("resolve failed retained authority");
+        let acceptance = authority
+            .receipt_registry
+            .inspect_world_work_acceptance_by_id(
+                &authority.authority_store_id,
+                &receipt.acceptance_record_id,
+            )
+            .expect("inspect failed retained acceptance")
+            .expect("failed retained acceptance exists");
+        let key = DispatchPolicyCommitmentLookupKeyV1 {
+            authority_store_id: acceptance.authority_store_id.clone(),
+            orchestration_session_id: acceptance.orchestration_session_id.clone(),
+            request_id: acceptance.request_id.clone(),
+            subject: DispatchPolicyCommitmentSubjectKeyV1::RetainedWorkerTurn {
+                active_run_id: receipt.active_run_id.clone(),
+                message_id: receipt.message_id.clone(),
+            },
+        };
+        let trusted_root = TrustedAuthorityRoot::open(substrate_home.path())
+            .expect("open failed retained trusted root");
+        let hsa = HostSessionAuthority::from_trusted_root(trusted_root)
+            .expect("open failed retained HSA");
+        let material = match resolve_accepted_work_receipt_material(&hsa, &key, &acceptance)
+            .expect("resolve failed retained E2-RM")
+        {
+            AcceptedWorkReceiptMaterialResolutionV1::Resolved(material) => material,
+            AcceptedWorkReceiptMaterialResolutionV1::UnsupportedLegacyState { .. } => {
+                panic!("fresh failed retained work must have E2-RM material")
+            }
+        };
+        assert_eq!(
+            project_active_retained_turn_receipt_v1(&material)
+                .expect("project base failed retained receipt"),
+            receipt
+        );
+
+        allow_terminal_tx
+            .send(())
+            .expect("release failed retained terminal");
+        server.await.expect("join failed retained server");
+        let terminal = wait_for_b21_terminal(
+            &authority.execution_supervisor,
+            &acceptance.acceptance_record_id,
+        )
+        .await;
+        assert_eq!(terminal.exit_code, 17);
+        let _projection_home = install_secure_substrate_home();
+        let projection_store =
+            AgentRuntimeStateStore::new().expect("failed retained projection store");
+        let mut session = sample_session();
+        session.workspace_root = workspace_root.path().display().to_string();
+        session.shell_owner_pid = std::process::id();
+        let mut orchestrator = sample_orchestrator_participant();
+        orchestrator.internal.shell_owner_pid = std::process::id();
+        orchestrator.internal.uaa_session_id = Some("uaa_orch_dispatch".to_string());
+        orchestrator.internal.attached_client_present = true;
+        orchestrator.internal.last_attached_at = Some(chrono::Utc::now());
+        orchestrator.internal.resume_eligible = true;
+        session.host_attach_contract = HostAttachContract::from_manifest_for_test(&orchestrator);
+        let canonical_session_dir = projection_store.sessions_dir().join("sess_dispatch");
+        let canonical_participants_dir = canonical_session_dir.join("participants");
+        fs::create_dir_all(projection_store.sessions_dir())
+            .expect("create failed retained sessions dir");
+        fs::create_dir_all(&canonical_session_dir)
+            .expect("create failed retained canonical session dir");
+        fs::write(
+            projection_store.sessions_dir().join("sess_dispatch.json"),
+            serde_json::to_vec_pretty(&session).expect("serialize failed retained session"),
+        )
+        .expect("write failed retained session");
+        fs::write(
+            canonical_session_dir.join("session.json"),
+            serde_json::to_vec_pretty(&session)
+                .expect("serialize failed retained canonical session"),
+        )
+        .expect("write failed retained canonical session");
+        let mut participant = sample_member_participant();
+        participant.handle.participant_id = receipt.target_participant_id.clone();
+        participant.internal.shell_owner_pid = std::process::id();
+        participant.internal.uaa_session_id = Some("uaa_member_dispatch".to_string());
+        participant.internal.latest_run_id = Some(receipt.active_run_id.clone());
+        participant.mark_terminal_state("world-scoped member session exited with status 17");
+        participant.transition_state(AgentRuntimeSessionState::Failed);
+        fs::create_dir_all(projection_store.participants_dir())
+            .expect("create failed retained participants dir");
+        fs::create_dir_all(&canonical_participants_dir)
+            .expect("create failed retained canonical participants dir");
+        let orchestrator_bytes = serde_json::to_vec_pretty(&orchestrator)
+            .expect("serialize failed retained orchestrator");
+        fs::write(
+            projection_store
+                .participants_dir()
+                .join("orch_dispatch.json"),
+            &orchestrator_bytes,
+        )
+        .expect("write failed retained orchestrator");
+        fs::write(
+            canonical_participants_dir.join("orch_dispatch.json"),
+            &orchestrator_bytes,
+        )
+        .expect("write failed retained canonical orchestrator");
+        let participant_bytes =
+            serde_json::to_vec_pretty(&participant).expect("serialize failed retained participant");
+        fs::write(
+            projection_store
+                .participants_dir()
+                .join(format!("{}.json", receipt.target_participant_id)),
+            &participant_bytes,
+        )
+        .expect("write failed retained participant");
+        fs::write(
+            canonical_participants_dir.join(format!("{}.json", receipt.target_participant_id)),
+            &participant_bytes,
+        )
+        .expect("write failed retained canonical participant");
+
+        let record = projection_store
+            .load_session("sess_dispatch")
+            .expect("load failed retained session")
+            .expect("failed retained session must exist");
+        assert!(
+            record
+                .participants
+                .iter()
+                .any(|participant| participant.participant_id() == receipt.target_participant_id),
+            "failed retained participant must be readable from runtime snapshots"
+        );
+        let rebound_observation = authority
+            .execution_supervisor
+            .inspect_observation_by_acceptance_id(&receipt.acceptance_record_id)
+            .expect("inspect rebound failed retained observation")
+            .expect("rebound failed retained observation exists");
+        assert_eq!(
+            rebound_observation
+                .terminal
+                .as_ref()
+                .map(|terminal| terminal.exit_code),
+            Some(17)
+        );
+        let rebound_journal = project_retained_turn_journal_v1(&rebound_observation)
+            .expect("project rebound failed retained journal");
+        assert_eq!(rebound_journal.thread_id.as_deref(), Some("thread-direct"));
+        assert!(rebound_journal.last_worker_event.is_some());
+        let projected = project_active_retained_turn_receipt_v1_with_runtime(
+            &material,
+            &projection_store,
+            Some(&authority.execution_supervisor),
+        )
+        .expect("project failed retained receipt");
+        let mut expected = receipt.clone();
+        expected.thread_id = Some("thread-direct".to_string());
+        expected.state_revision = 3;
+        expected.state = ActiveRetainedTurnStateV1::Failed;
+        expected.cancel_supported = false;
+        expected.terminal = Some(WorldWorkTerminalV1 {
+            result_class: WorldWorkResultClassificationV1::Failed,
+        });
+        assert_eq!(projected, expected);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn retained_active_receipt_projects_completed_terminal_for_older_turn_after_later_failed_run(
+    ) {
+        let _env_guard = world_env_guard();
+        let _world_codex_guard = EnvVarGuard::set_path(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            test_world_codex_runtime_bin().as_path(),
+        );
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
+        write_allowed_world_dispatch_policy_with_host_credentials(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["spawn_world_worker", "continue_world_worker"],
+            &["retained"],
+        );
+        write_runtime_inventory_entry(
+            substrate_home.path(),
+            "codex-world",
+            AgentExecutionScope::World,
+        );
+        let workspace_root = tempdir().expect("older retained workspace");
+        activate_b_owned_dispatch_authority(
+            substrate_home.path(),
+            workspace_root.path(),
+            "sess_dispatch",
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
+        let store = AgentRuntimeStateStore::new().expect("older retained state store");
+        let (participant_id, _) = seed_routable_e2_spawn_source(
+            "req-retained-older-source",
+            "orch_dispatch",
+            "world-17",
+            2,
+        );
+
+        let socket_home = tempdir().expect("older retained socket home");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind older retained socket");
+        let (start_tx, start_rx) = tokio::sync::oneshot::channel();
+        let (allow_terminal_tx, allow_terminal_rx) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            let mut allow_terminal_rx = Some(allow_terminal_rx);
+            loop {
+                let (mut stream, _) = listener
+                    .accept()
+                    .await
+                    .expect("accept older retained request");
+                let (header, body) = read_http_request(&mut stream)
+                    .await
+                    .expect("read older retained request");
+                let first_line = header.lines().next().unwrap_or_default();
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+                assert!(first_line.starts_with("POST /v1/member_turn/stream "));
+                let submit_request: transport_api_types::MemberTurnSubmitRequestV1 =
+                    serde_json::from_slice(&body).expect("decode older retained submit request");
+                write_http_stream_start(&mut stream).await;
+                write_chunked_frame(
+                    &mut stream,
+                    &transport_api_types::ExecuteStreamFrame::Start {
+                        frame_identity: test_runtime_frame_identity(1),
+                        span_id: "retained-older-foreground".to_string(),
+                    },
+                )
+                .await;
+                start_tx.send(()).expect("signal older retained Start");
+                allow_terminal_rx
+                    .take()
+                    .expect("single older retained terminal receiver")
+                    .await
+                    .expect("release older retained terminal");
+                write_chunked_frame(
+                    &mut stream,
+                    &transport_api_types::ExecuteStreamFrame::Event {
+                        frame_identity: test_runtime_frame_identity(2),
+                        event: sample_typed_continue_stream_event_for_request(
+                            &submit_request,
+                            test_runtime_frame_identity(2),
+                            test_runtime_event_identity(1),
+                            json!({
+                                "event_class": "reply",
+                                "payload": { "message": "complete before later failed run" }
+                            }),
+                        ),
+                    },
+                )
+                .await;
+                write_chunked_frame(
+                    &mut stream,
+                    &transport_api_types::ExecuteStreamFrame::Exit {
+                        frame_identity: test_runtime_frame_identity(3),
+                        event_identity: test_runtime_event_identity(2),
+                        terminal_identity: test_runtime_terminal_identity(2),
+                        exit: 0,
+                        span_id: "retained-older-foreground".to_string(),
+                        scopes_used: Vec::new(),
+                        fs_diff: None,
+                        process_telemetry: Default::default(),
+                    },
+                )
+                .await;
+                finish_chunked_stream(&mut stream).await;
+                break;
+            }
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let (principal, _) = crate::execution::install_bootstrap::current_unix_principal_and_home()
+            .expect("resolve older retained principal");
+        let request = WorldDispatchRequestV1 {
+            request_id: Some("req-retained-older".to_string()),
+            idempotency_key: Some("idem-retained-older".to_string()),
+            orchestration_session_id: Some("sess_dispatch".to_string()),
+            caller_participant_id: Some("orch_dispatch".to_string()),
+            action: WorldDispatchActionV1::ContinueWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            target_backend_id: Some("cli:codex-world".to_string()),
+            task_run_id: None,
+            target_participant_id: Some(participant_id.clone()),
+            world_id: Some("world-17".to_string()),
+            world_generation: Some(2),
+            dispatch_policy_narrowing: None,
+            payload: WorldDispatchPayloadV1::WorkerContinue(WorkerContinuePayloadV1 {
+                prompt: "project older retained lifecycle".to_string(),
+                thread_id: Some("caller-thread-must-not-project".to_string()),
+            }),
+        };
+
+        let outcome = timeout(
+            Duration::from_secs(5),
+            dispatch_orchestrator_world_request_for_principal(&store, request, principal),
+        )
+        .await
+        .expect("older retained receipt must not wait for terminal")
+        .expect("older retained receipt");
+        start_rx.await.expect("older retained Start was emitted");
+        let WorldDispatchOutcomeV1::AcceptedForeground(receipt) = outcome else {
+            panic!("older retained turn must return an active retained receipt")
+        };
+        let AcceptedForegroundReceiptV1::Retained(receipt) = *receipt else {
+            panic!("older retained turn must return an active retained receipt")
+        };
+        assert_eq!(receipt.state, ActiveRetainedTurnStateV1::Accepted);
+        assert_eq!(receipt.state_revision, 1);
+        assert!(receipt.thread_id.is_none());
+        assert!(receipt.terminal.is_none());
+
+        let authority = store
+            .resolve_world_work_registry_authority(
+                "sess_dispatch",
+                "orch_dispatch",
+                "world-17",
+                2,
+                Some((&receipt.target_participant_id, "cli:codex-world")),
+            )
+            .expect("resolve older retained authority");
+        let acceptance = authority
+            .receipt_registry
+            .inspect_world_work_acceptance_by_id(
+                &authority.authority_store_id,
+                &receipt.acceptance_record_id,
+            )
+            .expect("inspect older retained acceptance")
+            .expect("older retained acceptance exists");
+        let key = DispatchPolicyCommitmentLookupKeyV1 {
+            authority_store_id: acceptance.authority_store_id.clone(),
+            orchestration_session_id: acceptance.orchestration_session_id.clone(),
+            request_id: acceptance.request_id.clone(),
+            subject: DispatchPolicyCommitmentSubjectKeyV1::RetainedWorkerTurn {
+                active_run_id: receipt.active_run_id.clone(),
+                message_id: receipt.message_id.clone(),
+            },
+        };
+        let trusted_root = TrustedAuthorityRoot::open(substrate_home.path())
+            .expect("open older retained trusted root");
+        let hsa =
+            HostSessionAuthority::from_trusted_root(trusted_root).expect("open older retained HSA");
+        let material = match resolve_accepted_work_receipt_material(&hsa, &key, &acceptance)
+            .expect("resolve older retained E2-RM")
+        {
+            AcceptedWorkReceiptMaterialResolutionV1::Resolved(material) => material,
+            AcceptedWorkReceiptMaterialResolutionV1::UnsupportedLegacyState { .. } => {
+                panic!("fresh older retained work must have E2-RM material")
+            }
+        };
+        assert_eq!(
+            project_active_retained_turn_receipt_v1(&material)
+                .expect("project base older retained receipt"),
+            receipt
+        );
+
+        allow_terminal_tx
+            .send(())
+            .expect("release older retained terminal");
+        server.await.expect("join older retained server");
+        let terminal = wait_for_b21_terminal(
+            &authority.execution_supervisor,
+            &acceptance.acceptance_record_id,
+        )
+        .await;
+        assert_eq!(terminal.exit_code, 0);
+        let _projection_home = install_secure_substrate_home();
+        let projection_store =
+            AgentRuntimeStateStore::new().expect("older retained projection store");
+        let mut session = sample_session();
+        session.workspace_root = workspace_root.path().display().to_string();
+        session.shell_owner_pid = std::process::id();
+        let mut orchestrator = sample_orchestrator_participant();
+        orchestrator.internal.shell_owner_pid = std::process::id();
+        orchestrator.internal.uaa_session_id = Some("uaa_orch_dispatch".to_string());
+        orchestrator.internal.attached_client_present = true;
+        orchestrator.internal.last_attached_at = Some(chrono::Utc::now());
+        orchestrator.internal.resume_eligible = true;
+        session.host_attach_contract = HostAttachContract::from_manifest_for_test(&orchestrator);
+        let canonical_session_dir = projection_store.sessions_dir().join("sess_dispatch");
+        let canonical_participants_dir = canonical_session_dir.join("participants");
+        fs::create_dir_all(projection_store.sessions_dir())
+            .expect("create older retained sessions dir");
+        fs::create_dir_all(&canonical_session_dir)
+            .expect("create older retained canonical session dir");
+        fs::write(
+            projection_store.sessions_dir().join("sess_dispatch.json"),
+            serde_json::to_vec_pretty(&session).expect("serialize older retained session"),
+        )
+        .expect("write older retained session");
+        fs::write(
+            canonical_session_dir.join("session.json"),
+            serde_json::to_vec_pretty(&session)
+                .expect("serialize older retained canonical session"),
+        )
+        .expect("write older retained canonical session");
+        let mut participant = sample_member_participant();
+        participant.handle.participant_id = receipt.target_participant_id.clone();
+        participant.internal.shell_owner_pid = std::process::id();
+        participant.internal.uaa_session_id = Some("uaa_member_dispatch".to_string());
+        participant.internal.latest_run_id = Some("run-later-failed".to_string());
+        participant.mark_terminal_state("world-scoped member session exited with status 19");
+        participant.transition_state(AgentRuntimeSessionState::Failed);
+        fs::create_dir_all(projection_store.participants_dir())
+            .expect("create older retained participants dir");
+        fs::create_dir_all(&canonical_participants_dir)
+            .expect("create older retained canonical participants dir");
+        let orchestrator_bytes = serde_json::to_vec_pretty(&orchestrator)
+            .expect("serialize older retained orchestrator");
+        fs::write(
+            projection_store
+                .participants_dir()
+                .join("orch_dispatch.json"),
+            &orchestrator_bytes,
+        )
+        .expect("write older retained orchestrator");
+        fs::write(
+            canonical_participants_dir.join("orch_dispatch.json"),
+            &orchestrator_bytes,
+        )
+        .expect("write older retained canonical orchestrator");
+        let participant_bytes =
+            serde_json::to_vec_pretty(&participant).expect("serialize older retained participant");
+        fs::write(
+            projection_store
+                .participants_dir()
+                .join(format!("{}.json", receipt.target_participant_id)),
+            &participant_bytes,
+        )
+        .expect("write older retained participant");
+        fs::write(
+            canonical_participants_dir.join(format!("{}.json", receipt.target_participant_id)),
+            &participant_bytes,
+        )
+        .expect("write older retained canonical participant");
+
+        let rebound_observation = authority
+            .execution_supervisor
+            .inspect_observation_by_acceptance_id(&receipt.acceptance_record_id)
+            .expect("inspect rebound older retained observation")
+            .expect("rebound older retained observation exists");
+        assert_eq!(
+            rebound_observation
+                .terminal
+                .as_ref()
+                .map(|terminal| terminal.exit_code),
+            Some(0)
+        );
+        let rebound_journal = project_retained_turn_journal_v1(&rebound_observation)
+            .expect("project rebound older retained journal");
+        assert_eq!(rebound_journal.thread_id.as_deref(), Some("thread-direct"));
+        assert!(rebound_journal.last_worker_event.is_some());
+        let projected = project_active_retained_turn_receipt_v1_with_runtime(
+            &material,
+            &projection_store,
+            Some(&authority.execution_supervisor),
+        )
+        .expect("project older retained receipt");
+        let mut expected = receipt.clone();
+        expected.thread_id = Some("thread-direct".to_string());
+        expected.state_revision = 3;
+        expected.state = ActiveRetainedTurnStateV1::Terminal;
+        expected.cancel_supported = false;
+        expected.terminal = Some(WorldWorkTerminalV1 {
+            result_class: WorldWorkResultClassificationV1::Completed,
+        });
+        assert_eq!(projected, expected);
+        assert_ne!(projected.state, ActiveRetainedTurnStateV1::Failed);
     }
 
     #[cfg(target_os = "linux")]
