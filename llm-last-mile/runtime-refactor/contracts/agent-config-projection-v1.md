@@ -2,7 +2,8 @@
 **Stable ID:** `agent-config-projection-v1`
 **Status:** canonical specification; E3 is not admitted, dispatched, or implemented
 **Canonical for:** E3 config-projection identity, record, reference, versioned member-dispatch carrier, persistence, validation, Codex 0.125 native rendering, compatibility, and D1 handoff boundaries
-**Authority baseline:** source commit `138864a26dbc4721366c6cc8934d464d1929a189`, tree `881393e8fc6db7d4422f97cceadfa550d076a14f`, including the completed documentation-only `E2-RM` authority correction
+**Correction source baseline:** commit `81cfd33d4c5d16c31c837eeddff769995c566570`, tree `d40f6663a2aa01996ce8b4957f4aae0d30830961`, parent `138864a26dbc4721366c6cc8934d464d1929a189`
+**Landed prerequisite fact:** `E2-RM` is landed at `2012bb8b5562a73ed0ee45238c19252c16b25065`; that landing permits this documentation correction but is not an E3 runtime dependency
 **Supersedes:** only E3 planning statements that leave projection schema, persistence, versioning, Codex ambient-config closure, or the absent local `crates/codex` unresolved
 **Superseded by:** none
 **Projection consumers:** [`../slices/e3-agent-config-projection-and-gateway-adoption.md`](../slices/e3-agent-config-projection-and-gateway-adoption.md), [`managed-gateway-adoption-v1.md`](managed-gateway-adoption-v1.md), [`world-runtime-adapter-execution-envelope-v1.md`](world-runtime-adapter-execution-envelope-v1.md), [`retained-worker-manifest-v1.md`](retained-worker-manifest-v1.md)
@@ -45,8 +46,10 @@ At the authority baseline:
    validation requires `schema_version == 1`. E3 adds V2 beside it; it does not add an optional field
    to V1 or weaken V1 parsing.
 6. The completed E2 baseline already pins the immutable launch/fork cap before member registration.
-   E3 consumes that exact ref and revisions. The separately specified `E2-RM` historic accepted-work
-   read projection is coordination context for B2.2, not an E3 prerequisite or an E3 write surface.
+   E3 consumes that exact ref and revisions. `E2-RM` is already landed at
+   `2012bb8b5562a73ed0ee45238c19252c16b25065`; its landed historic accepted-work read behavior made
+   shared HSA root-lock serialization a prerequisite for this authority correction, but it is not
+   an E3 runtime dependency, E3 prerequisite, or E3 write surface.
 7. `ExecuteRequest.member_dispatch`, `WorldService::execute_stream`,
    `resolve_authoritative_member_placement_context`, `requested_shared_world_owner_spec`,
    `exact_bound_world_ownership_adoption`, `convert_member_dispatch_request`, and
@@ -115,6 +118,17 @@ At the authority baseline:
     both E3 installer source stores are root-published. Their lock and authority-object modes must
     therefore permit read/shared-lock access to the existing `substrate` group without granting any
     group write authority.
+25. `crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/layout.rs`,
+    specifically `StoreLayout::validate_closed_layout`, currently recognizes only `lock`, `tmp`,
+    `objects`, `keys`, `retained-worker-admission-v1`, and `dispatch-policy-commitment-v1` as
+    top-level directories in the closed `authority-v1` layout. The landed E2-RM read path at commit
+    `2012bb8b5562a73ed0ee45238c19252c16b25065` independently repeats that exact manifest in
+    `crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs`,
+    specifically `validate_e2_rm_authority_manifest`, and returns `UnsafeNamespaceEntry` for any
+    other entry. The E3 registry is therefore an intentional new namespace member whose later E3-B
+    storage admission
+    must bind both validators for the same one literal accepted directory name; leaving either
+    unchanged would make ordinary HSA or landed E2-RM reads reject the registry.
 
 The three draft design documents under `llm-last-mile/` remain reviewed inputs, not authority. This
 numbered contract is the controlling E3 specification.
@@ -492,6 +506,17 @@ so later E3 implementation must atomically migrate that one descriptor to V3 and
 `model: codex` plus explicit empty MCP/feature lists unless the later admission authorizes literal
 nonempty values. E3 does not infer a changing upstream model name.
 
+E3 V1 authenticates and persists provenance only for the selected contributing inventory source. A
+valid workspace descriptor that shadows a global descriptor replaces it before projection
+construction, so the shadowed global descriptor is not a contributor. Its bytes are not copied into
+the projection record, any hash preimage, the selected source revision or identity, or the retention
+set, and V1 makes no durable shadow-history reconstruction promise. Discovery still validates all
+encountered source material before selection: malformed or ambiguous global or workspace input fails
+closed even if a later valid descriptor would otherwise shadow it. “Not retained after valid shadow
+selection” is never permission to ignore invalid input. Any future durable shadow-history feature
+requires separate versioned authority and cannot be inferred into V1; no shadow-provenance field or
+schema is part of this contract.
+
 The parser opens each root through its already authenticated directory descriptor and opens each
 relative single-component `*.yaml` name with no-follow semantics. `raw_bytes_sha256` is ordinary
 SHA-256 of the exact file bytes. `source_revision` is exactly
@@ -643,7 +668,9 @@ removals are sorted bytewise by their identifier and contain no duplicates.
 For E3, `sources` is exactly the one `EffectiveSubstrateConfig` ref followed by exactly one
 `AgentInventory` ref for the selected world placement: `workspace` when a same-ID workspace V3 file
 shadows global, otherwise `global`. A shadowed global file is not a contributor and is not hashed into
-the logical projection. Missing either required source, or two candidates in the selected scope, is
+the logical projection, record, revision, source identity, or retention set. All discovered material
+must nevertheless pass the strict ambiguity and malformed-input checks before this selected-only
+provenance decision. Missing either required source, or two candidates in the selected scope, is
 `Missing` or `Conflict` before subject publication.
 
 The effective projection is deterministic and is not a new policy-composition surface.
@@ -1143,7 +1170,9 @@ validated recorded session ID, then `-` for the stdin prompt; `resume_codex_argv
 flags through `--output-last-message` and is renderer-hash input. Any argv change requires a new
 renderer version and projection revision before use.
 
-This is an E3-only local launch seam, not a capability attributed to UAA 0.3.7. Exact source shows
+This is an E3-only local launch seam, not a capability attributed to UAA 0.3.7. External
+`unified-agent-api-codex` 0.3.7 remains unchanged and is not claimed to provide descriptor-pinned
+execution or confined output-path construction. Exact source shows
 that `unified-agent-api-codex` 0.3.7 calls `std::env::temp_dir()` when
 `ExecStreamRequest.output_last_message` is absent and uses `Command::new(binary_path)`; the higher
 level `unified-agent-api` 0.3.7 Codex adapter supplies `output_last_message: None`. Those behaviors
@@ -1154,6 +1183,8 @@ non-Codex dispatch continue through the existing `PromptFulfillmentBridge::for_m
 `GatewayAdapterRuntime`/UAA path unchanged. The local adapter preserves the existing
 `AgentWrapperRunControl` event/cancel surface and Codex JSONL normalization but owns argv assembly,
 preopened output-file injection, stdin/stdout/stderr pipes, pidfd, cancellation, and exec.
+E3 neither creates nor patches a local `crates/codex` replacement; this division is clarification of
+existing ownership, not a new product primitive.
 
 The adapter uses a two-stage wrapper protocol plus a pre-exec fork gate. Before `fork`, the parent
 constructs immutable `argv`/`envp` storage from the empty environment, creates every pipe, prepares all
@@ -2337,7 +2368,49 @@ is current. The additional lowercase SHA-256 preimages are:
 | terminal-child `evidence_hash` | `{"domain":"substrate.e3.terminal-child-quiescence.v1","evidence":<terminal-child evidence with evidence_hash omitted>}` |
 | `retirement_hash` | `{"domain":"substrate.e3.config-projection-retirement.v1","retirement":<retirement with retirement_hash omitted>}` |
 
-The only authority root is:
+### HSA projection namespace and cross-process lock protocol
+
+The projection registry remains at
+`<accepted-home>/authority-v1/agent-config-projection-v1/`. This is an intentional new member of the
+existing closed `authority-v1` namespace, not a second authority hierarchy. A later E3-B storage
+implementation must extend exactly
+`crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/layout.rs`,
+specifically `StoreLayout::validate_closed_layout`, to recognize only the literal top-level directory
+`agent-config-projection-v1`. It must preserve rejection of every other unknown entry: weakening the
+closed-layout check, accepting arbitrary entries, or adding a wildcard is forbidden. That product
+path is not changed or admitted here. The same fresh E3-B admission must also bind only
+`crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs`,
+specifically `validate_e2_rm_authority_manifest`, for the identical literal recognition so the
+landed read-only snapshot remains compatible with the expanded closed HSA namespace. This is HSA
+namespace-layout compatibility, not ownership of or permission to change E2-RM authority data, read
+semantics, history, reconciliation, schema, or namespace. Every other product path required by this
+corrected ownership must likewise be bound before implementation begins.
+
+Every E3 read, publication, CAS, recovery, retirement, and GC transaction uses this mandatory
+cross-process order:
+
+1. Open and validate the accepted HSA authority root through the existing trusted-root capability.
+2. Acquire the existing exclusive `authority-v1/lock/root.lock`.
+3. While holding that parent lock, revalidate the accepted HSA root identity and the exact closed
+   `authority-v1` layout.
+4. Only then open and exclusively acquire the child registry lock at
+   `authority-v1/agent-config-projection-v1/lock`.
+5. Perform the complete E3 transaction while retaining both locks and the trusted-root capability.
+6. Before release, revalidate the HSA root, the exact closed layout, all applicable namespace
+   manifests, and every affected E3 object; then release the child lock before the parent lock.
+
+The order is always parent root lock before E3 child lock. Reverse acquisition, child-only mutation,
+lock upgrading, and releasing the parent lock during an E3 transaction are forbidden. E2-RM reads
+and ordinary HSA operations that acquire the existing parent root lock are thereby serialized
+against E3 publication and recovery. E3 does not modify E2, E2-RM, B1, B2.1, retained-worker, or any
+other namespace authority, and reconciliation may never mutate another owner's namespace. Process
+death releases kernel locks but cannot make incomplete E3 state authoritative; the next E3
+transaction must acquire both locks in this order and either recover its own namespace completely or
+fail closed. Later E3-B proof must include every publication/recovery crash boundary and concurrent
+HSA/E2-RM/E3 transactions, including successful landed E2-RM reads after E3 namespace creation plus
+deadlock, partial-state, unknown-entry, and cross-owner mutation negatives.
+
+The only E3 authority root is:
 
 ```text
 <accepted-home>/authority-v1/agent-config-projection-v1/
@@ -2406,17 +2479,19 @@ failure leaves non-E3 service paths available but makes every V2/E3 request
 `ConfiguredAcceptedHomeAuthorityV1::from_record_for_test` and must pass the same record and physical
 checks.
 
-The projection registry root is reached only from that configured accepted-home bound capability. Its already-open
-`CanonicalDirectoryV1` is revalidated, then every descendant component is opened descriptor-
-relatively with Linux `openat2` resolution flags `RESOLVE_BENEATH | RESOLVE_NO_MAGICLINKS |
-RESOLVE_NO_SYMLINKS | RESOLVE_NO_XDEV`; final opens also use `O_NOFOLLOW`. Registry directories are
-owner UID, mode `0700`; regular authority files and `lock` are owner UID, mode `0600`, link count one,
-with no unexpected ACL or xattr. The held root descriptor's device/inode must remain equal to
-`accepted_home`. The regular `lock` file is opened from that descriptor and held with
-`flock(LOCK_EX)` for the complete read/validate/recovery/publication transaction. A caller cannot
-select or override a home, store, series directory, or active-head path. Root replacement, descriptor
-rebind, unexpected metadata, mount crossing, symlink, non-regular file, link-count anomaly, or
-physical identity change fails before a read or write consumes the replacement.
+The projection registry root is reached only from that configured accepted-home bound capability and
+only after the parent HSA root lock has been acquired and the closed layout revalidated as specified
+above. Its already-open `CanonicalDirectoryV1` is revalidated, then every descendant component is
+opened descriptor-relatively with Linux `openat2` resolution flags `RESOLVE_BENEATH |
+RESOLVE_NO_MAGICLINKS | RESOLVE_NO_SYMLINKS | RESOLVE_NO_XDEV`; final opens also use `O_NOFOLLOW`.
+Registry directories are owner UID, mode `0700`; regular authority files and the child `lock` are
+owner UID, mode `0600`, link count one, with no unexpected ACL or xattr. The held root descriptor's
+device/inode must remain equal to `accepted_home`. The regular child `lock` file is opened from that
+descriptor and held with `flock(LOCK_EX)` while the already-held parent root lock remains held for the
+complete read/validate/recovery/publication transaction. A caller cannot select or override a home,
+store, series directory, or active-head path. Root replacement, descriptor rebind, unexpected
+metadata, mount crossing, symlink, non-regular file, link-count anomaly, or physical identity change
+fails before a read or write consumes the replacement.
 
 The accepted-home artifact manifest may import only immutable records from these two installer-owned
 source stores:
@@ -3337,11 +3412,77 @@ E3 does not own or modify:
 - E4 host-visible workspace projection, sync, import, export, or reconciliation; or
 - migration/backfill of legacy workers or projection state.
 
+## Serial E3 decomposition
+
+The controlling slice's E3-A through E3-F labels are internal work-packet headings, not new stable
+IDs or independent authority documents. Their binding order and owners are:
+
+| Packet | Bounded owner | Direct predecessor |
+|---|---|---|
+| `E3-A — strict V2 wire carrier and V1 compatibility` | strict transport/version-wrapper reachability and byte-identical V1 compatibility | pushed and live-verified E3-AC1 correction |
+| `E3-B — projection codec, registry, CAS, recovery, and retirement` | config-projection codec/registry plus the one literal HSA closed-layout addition | proof-clean landed E3-A |
+| `E3-C — authenticated authoring, V3 inventory, artifacts, and Codex rendering` | descriptor-pinned sources, selected-only V3 provenance, artifacts/native source, and deterministic Codex rendering | proof-clean landed E3-B |
+| `E3-D — Linux child security, capability parking, and process-wide exclusion` | Linux privilege descent, enforcement, wrapper, and universal child/helper exclusion | proof-clean landed E3-C |
+| `E3-E — dormant managed-gateway preparation and adoption` | authenticated preparation, Dormant/no-ACK publication, listener/boundary/readiness, one-time secret delivery, adoption, and revocation | proof-clean landed E3-D |
+| `E3-F — retained V2 Codex launch/resume adoption and integrated proof` | retained local-adapter/gateway capability across initial and resumed V2 turns and integrated proof | proof-clean landed E3-E |
+
+The slice specifies each packet's consumed inputs, explicit nonownership, and minimum successor proof.
+Every packet requires a later fresh admission and explicit dispatch. Passing one packet only makes
+its direct successor eligible to seek admission; it never dispatches that successor. One combined
+E3-A-through-E3-F implementation candidate is forbidden.
+
+## Executable Linux readiness prerequisite
+
+No statement in this contract means that the current host automatically satisfies the E3 acceptance
+wall. Before editing for any later E3-A through E3-F packet, that packet's fresh admission must run
+and preserve an exact pre-dispatch environmental receipt proving all of the following from its bound
+source revision:
+
+- kernel and machine are exactly Linux and `x86_64`;
+- the repository-required Rust toolchain is available (at this correction baseline, channel
+  `1.89.0` and MSRV `1.89`), the `x86_64-unknown-linux-musl` target is installed, and an actual musl
+  linker/toolchain is callable;
+- cgroup v2 is mounted and usable, and `nft`, `ip`, `jq`, `systemctl`, and `readelf` are callable;
+- the invoking proof context and installed service unit expose the exact privilege/capability posture
+  required by this contract: the existing `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`, `CAP_DAC_OVERRIDE`, and
+  `CAP_SYS_PTRACE` service authorities plus `CAP_SETUID`, `CAP_SETGID`, and `CAP_SETPCAP` solely for
+  verified transition-capability parking, with the required namespace, cgroup, nftables, Landlock,
+  seccomp, credential-descent, and readback operations executable and no substitute privilege model;
+- Yama `ptrace_scope=3` is both currently read back and backed by a boot-stable configuration, the
+  receipt binds the current boot ID, and the proof process reports `TracerPid=0`;
+- every named proof root has at least the admission's explicit minimum free bytes and inodes; and
+- the admission names a content-pinned, runnable Linux proof wrapper and its exact invocation. The
+  wrapper must require six explicit, absolute, pairwise-disjoint roots for build output, runtime,
+  durable state, sockets, temporary files, and evidence; reject implicit defaults, aliases, symlinks,
+  nonempty reused roots, or overlap with repository and accepted authority state; create no evidence
+  outside them; and record their physical identities, capacity checks, tool versions, privilege
+  readbacks, boot ID, and complete command line.
+
+The later admission must bind the wrapper path, wrapper content SHA-256, numerical capacity minima,
+and every environment or argument value needed to reproduce that invocation. A missing or drifting
+prerequisite is an environmental stop before product edits or implementation tests. It cannot weaken
+an E3 security predicate, authorize a fallback, or be reported as an inherited product failure.
+Documentation validation in this correction is not E3 implementation evidence.
+
 ## Admission fence and required proof
 
-This specification is documentation authority only. A later fresh E3 admission must bind an exact
-source commit, re-run impact analysis on every named symbol, and may authorize only the following
-symbol-level product fence:
+This specification is documentation authority only. The following is an ownership catalog partitioned
+by the serial E3-A through E3-F work packets in the controlling slice; it is not one combined
+implementation candidate. Every packet requires its own later fresh admission, exact source commit,
+readiness receipt, impact analysis on each named symbol, explicit dispatch, and packet-bounded proof.
+Success in one packet makes only its direct successor eligible to seek admission and never dispatches
+that successor automatically.
+
+For E3-B only, the later storage admission must additionally bind
+`crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/layout.rs`,
+specifically `StoreLayout::validate_closed_layout`, for the sole additive literal
+`agent-config-projection-v1` directory match described above. No other function in that product path
+and no weakening of the closed-layout validator is owned. It must also bind only
+`crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs`,
+specifically `validate_e2_rm_authority_manifest`, for the identical sole literal match; no E2-RM
+authority data, read semantics, history, reconciliation, schema, or namespace change is owned.
+Subject to those corrections, later packet admissions may select only their applicable symbols from
+this catalog:
 
 1. create exactly `crates/config-projection/{Cargo.toml,src/lib.rs,src/codec.rs,src/registry.rs,
    src/service.rs,src/codex_0125.rs,src/linux_artifacts.rs}` and add only its dependency/export entries
@@ -3825,11 +3966,14 @@ and the descriptor-pinned official Codex archive above for:
   submit-vs-unregister, submit-vs-restart, prepare-vs-revoke, and final-release-vs-revoke barriers
   proving the one control mutex's winner, no child side effect after `Revoking`, and no final gate
   write unless lifecycle is still `Active`; and
-- an exact-baseline differential wall against `138864a26dbc4721366c6cc8934d464d1929a189`
-  showing no candidate-only failure across the authorized crates and all existing world-service/
-  gateway/member-dispatch tests.
+- an exact-baseline differential wall against the pushed and live-verified E3-AC1 correction landing
+  commit showing no candidate-only failure across the packet-authorized crates and all existing
+  world-service/gateway/member-dispatch tests.
 
-No current gate becomes green from this document. E3 requires a later fresh admission and explicit
-dispatch. E4 becomes eligible for its own later admission only after E3 is implementation-clean; D1
-may then consume the opaque projection capability in V3; D3 remains the later integrated proof owner.
-E2-RM/B2.2 coordination may proceed independently and neither is an E3 prerequisite.
+`E2-RM` is already landed at `2012bb8b5562a73ed0ee45238c19252c16b25065`; that fact satisfies the
+prerequisite for landing this E3-AC1 documentation correction and is not an E3 runtime dependency.
+E3 remains unadmitted, undispatched, and unimplemented, and no E3 gate becomes green here. No D1,
+D2, D3, E4, compatibility-promotion, or non-Linux work is admitted. B4 remains separate and is
+neither modified nor adjudicated by this correction. A fresh E3-A admission may be considered only
+after this correction is pushed and its live origin identity is verified; E3-B through E3-F each
+remain separately admission- and dispatch-gated by their direct predecessor.
