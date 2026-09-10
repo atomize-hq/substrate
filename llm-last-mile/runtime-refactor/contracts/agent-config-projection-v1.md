@@ -1,6 +1,6 @@
 **Kind:** contract
 **Stable ID:** `agent-config-projection-v1`
-**Status:** canonical specification; E3 is not admitted, dispatched, or implemented
+**Status:** canonical specification; E3-A has a preserved unlanded candidate under bounded Linux proof recovery; E3-B through E3-F are not admitted, dispatched, or implemented
 **Canonical for:** E3 config-projection identity, record, reference, versioned member-dispatch carrier, persistence, validation, Codex 0.125 native rendering, compatibility, and D1 handoff boundaries
 **Correction source baseline:** commit `81cfd33d4c5d16c31c837eeddff769995c566570`, tree `d40f6663a2aa01996ce8b4957f4aae0d30830961`, parent `138864a26dbc4721366c6cc8934d464d1929a189`
 **Landed prerequisite fact:** `E2-RM` is landed at `2012bb8b5562a73ed0ee45238c19252c16b25065`; that landing permits this documentation correction but is not an E3 runtime dependency
@@ -15,6 +15,10 @@
 > fork cap without mutating, reconstructing, or re-owning E2. D1 later consumes the opaque published
 > capability and owns `WorldRuntimeAdapterExecutionEnvelopeV1`; E3 does not construct that envelope,
 > receipts, retained manifests, broker policy, or E4 workspace synchronization.
+
+The preserved E3-A wire candidate is not complete or landed. This documentation correction
+authorizes only a later bounded Linux proof-recovery dispatch; it changes no product/test bytes,
+executes no missing proof, and grants no E3-B admission or successor dispatch.
 
 ## Source-grounded correction
 
@@ -3475,9 +3479,124 @@ that can reach the changed behavior and compares canonical semantic outcomes rat
 or emission order. Unchanged commands, candidate bytes, causal inputs, and retained invocation
 evidence may be reused; candidate-only semantic failures still reject the candidate, and an invalid,
 resource-killed, incomplete, or provenance-ambiguous invocation never counts as product proof. The
-mandated E3 differential baseline remains the pushed and live-verified E3-AC1 landing commit.
+mandated E3-A comparison baseline remains
+`2b2fc6c50b40046dbeaeb5b316562fbd96480a2a`; the pushed E3-AC1 documentation landing is authority,
+not a substitute comparison commit.
 Documentation validation in this correction is not E3 implementation evidence, and this correction
 grants no packet admission, dispatch, implementation, green E3 gate, or security exception.
+
+### E3-A Linux-first proof-recovery authority
+
+The controlling platform schedule is Linux first, completely. E3-A is a Linux implementation and
+landing packet. Native macOS testing, implementation, provisioning, service work, Lima work, and the
+previously separate macOS parity lane are deferred until the Linux runtime-refactor program is
+complete. `E3A-P2-003` is therefore deferred and nonblocking for E3-A's Linux completion: the
+historical baseline and candidate Lima logs remain unavailable/zero-test evidence and must remain
+recorded honestly, but the macOS-only exact Lima test is not a Linux proof gate. A macOS-gated
+crate's empty or zero-test Linux execution establishes no macOS compatibility, correctness, or
+completion claim. Required Linux checks must exercise their intended Linux code or tests nonzero.
+No rerun is required solely to remove a non-discriminating macOS package from an already-retained
+invocation. The existing byte-preserving Lima V1-wrapper conversion in the preserved candidate is
+frozen mechanical compatibility only; it authorizes no macOS runner, VM, installer, service,
+implementation, parity work, or proof claim.
+
+The preserved recovery subject is product base
+`5e972add652224b97323f6abd496e94440d72242`, tree
+`ddbceef5f723a190cea70c310b462b3276fee82d`, with product fingerprint
+`4c4e1b4ef940621553e3a9d6472d69748117857080849cf4e246aca69d64f81a` and full-index binary
+product-delta SHA-256 `139b28a1eeb8d5e498b20723d17a37ad170be26e01585d0e6136c7a33aefbe94` against exact
+comparison baseline `2b2fc6c50b40046dbeaeb5b316562fbd96480a2a`. The semantic differential remains governed by
+retained authority commit `5b703b26431f9dee5e9e0686e280536a6fb030c8`. Existing valid E3-A
+proof is reusable only while its candidate bytes, commands, and causal inputs remain unchanged; this
+recovery does not restart admission or the full proof wall.
+
+`E3A-P2-004` retains its original failed parity fixture and result. Recovery may add only a direct
+colocated prepared-runtime builder fixture under the existing test authority, proving that
+`backend_id`, `protocol`, `binary_path`, and `backend_kind` remain frozen after descriptor drift and
+that `config_projection == None`. It must not relabel the old fixture as passing, change unrelated
+HSA semantics, or edit production behavior solely to manufacture the witness.
+
+For `E3A-P2-005`, a later recovery dispatch has exactly this harness-only ownership:
+
+1. In `crates/shell/tests/repl_world_first_routing_v1.rs`, change only the `PtyRepl::spawn`
+   argument lists inside
+   `c3_first_targeted_world_turn_uses_initial_prompt_in_member_dispatch` and
+   `c3_internal_toolbox_fork_command_reuses_retained_fork_bootstrap_with_explicit_lineage`, solely
+   to pass the global `--install-prefix PATH` selector followed by that test's existing UTF-8
+   `substrate_home`. The selector is the supported global CLI input: its Unix path is normalized and
+   selected as the invocation's install-bootstrap prefix. No other call site, helper, fixture,
+   assertion, timeout, or test behavior may change.
+2. In the actual helper `crates/shell/tests/common.rs::ensure_substrate_built`—not
+   `tests/support/common.rs`—change only the nested build program/argv so the existing build is
+   exactly `rustup run 1.89.0 cargo build -p substrate --bin substrate --locked`. Do not change the
+   helper's locking, binary selection, messages, or callers.
+
+Forged witnesses, disabled validation, unrelated installed binaries, broader fixture rewrites,
+increased timeouts, and changed assertions remain forbidden. The same minimal harness-only overlay
+is permitted for those two matched integrations on each side. The baseline commit remains immutable:
+the baseline proof subject must be labeled as exact
+`2b2fc6c50b40046dbeaeb5b316562fbd96480a2a` plus a separately fingerprinted baseline harness
+overlay, while the candidate subject is the preserved product fingerprint above plus a separately
+fingerprinted candidate harness overlay. Each overlay must contain only the three approved hunks in
+the two named files and retain its exact full-index binary patch digest plus pre/post file SHA-256
+values. It grants no baseline product repair, assertion change, or alternate comparison commit.
+Each side's receipt must bind its actual source identity, Rust 1.89.0 toolchain, built executable
+path/hash, and isolated mutable HOME, `SUBSTRATE_HOME`, target, socket, runtime, and temporary state.
+Use the existing side-specific checkouts and harness; do not create a full source copy or a bespoke
+proof framework.
+
+For `E3A-P2-006`, the only permitted E3-A inherited-product Clippy difference is:
+
+- file `crates/shell/src/execution/agent_runtime/retained_worker_runtime.rs`;
+- symbol `reject_before_registration_in_registry`;
+- diagnostic `clippy::too_many_arguments`, severity `error` under `-D warnings`, message
+  `this function has too many arguments (9/7)`;
+- owning product base `5e972add652224b97323f6abd496e94440d72242`, file blob
+  `ea701ea539a1dc85c72a1a2c4b3c843696c3570b`, and file SHA-256
+  `91e2bddab7a6c0f3d13d412c8ca86396973deed16dec118eeea878114a55482c`; and
+- retained command targets `transport-api-types`, `transport-api-client`, `world-mac-lima`, `shell`,
+  and `world-service` with `--lib --tests --locked -- -D warnings`. The baseline raw log contains
+  zero copies of the exact message and the candidate raw log contains one. The directly resulting
+  terminal summaries are baseline 12 versus candidate 13 errors for `shell` lib and baseline 11
+  versus candidate 12 errors for `shell` lib test: exactly one additional error in each summary.
+
+This is an explicit E3-A-only allowance over retained red Clippy logs, not an absolutely green
+Clippy result and not permission to ignore every inter-lineage difference. The named file and symbol
+must remain byte-identical to the owning product base, the raw diagnostic and terminal summaries
+must be retained and reported, and no lint suppression or unrelated source repair is authorized.
+Every other diagnostic identity, severity, multiplicity, terminal outcome, and semantic difference
+remains subject to the existing differential rules; any E3-A-added diagnostic or expansion of this
+single content-bound difference rejects completion. The comparison commit remains
+`2b2fc6c50b40046dbeaeb5b316562fbd96480a2a`, not the product base.
+
+The preserved review record at
+`/home/spenser/__Active_code/review-evidence/e3-a-strict-v2-wire-5e972add/review/review-cycle-record.json`
+remains unchanged at `bounded_stop`. `E3A-P2-001` and `E3A-P2-002` are fixed with reusable retained
+proof; `E3A-P2-003` is deferred and nonblocking for Linux only by the controlling decision above;
+`E3A-P2-004` and `E3A-P2-005` require only their bounded Linux recovery; `E3A-P2-006` requires the
+exact allowance disposition above; and `E3A-P2-007` is mechanically corrected in preserved
+evidence. Those are carried dispositions, not findings caused by the last remediation.
+
+After the bounded recovery and proof—but not during this documentation correction—one new process-
+evidence record may start a separate schema-version-1 review sequence solely for this scope-stop
+re-entry. It must use the existing closed fields and validator without a new kind or validator
+change. Its linked prompt/report must cite the preserved stopped record and bind one complete
+subject fingerprint covering the bounded recovery delta and both overlay fingerprints, disposition
+of `E3A-P2-003` through `E3A-P2-006`, relevant retained proof, and the final aggregate candidate
+identity. The initial schema kind is `discovery`, but the reviewer receives one fresh focused
+assessment of that recovery subject, not rediscovery of unchanged E3-A implementation. Do not copy
+historical IDs into the new record, rewrite raw reviews, or append a fictitious
+`supplemental_causal` cycle to the stopped record. `CLEAN` is terminal. If the focused assessment
+finds a new valid `P1` or `P2` in its bounded subject, assign a new ID, perform one consolidated
+in-fence remediation, and use a different fresh delta closure under the canonical procedure; no
+open-ended review is authorized.
+
+The final Linux completion decision must account explicitly for every carried `E3A-P2-001` through
+`E3A-P2-007` disposition, the macOS deferral, the exact lint allowance, all relevant retained and
+recovered proof, and the final candidate identity. Linux strict V1/V2 compatibility, fail-closed
+behavior, and every other applicable Linux safety requirement remain mandatory. This platform
+scheduling and proof-applicability correction is not a Linux safety waiver, does not itself complete
+or land E3-A, and does not admit or dispatch E3-B.
 
 ## Admission fence and required proof
 
@@ -3574,13 +3693,13 @@ this catalog:
    `ExecuteRequest`, `ExecuteRequestDef`, `ExecuteRequest::validate`, and
    `TryFrom<ExecuteRequestDef> for ExecuteRequest`. Existing `MemberDispatchRequestV1`,
    `MemberDispatchRequestDef`, and V1 fixtures are byte/behavior-frozen. In
-   `crates/world-mac-lima/src/lib.rs`, the only authorized non-Linux change is the existing
-   `convert_member_dispatch` return type/body and its call in `convert_exec_request`: it converts
-   the existing `world_api::MemberDispatchRequestV1` exactly as at the baseline and wraps that value
-   as `transport_api_types::MemberDispatchRequest::V1`. It cannot construct, accept, down-convert, or
-   claim V2/E3, and the untagged wrapper must leave the serialized V1 object byte-identical. Its
-   existing conversion fixture may add only an `as_v1`/V1-variant match around its unchanged field
-   assertions plus the identical-bytes assertion;
+   `crates/world-mac-lima/src/lib.rs`, the preserved E3-A candidate already contains only the
+   existing `convert_member_dispatch` return-type/body adaptation and its call in
+   `convert_exec_request`: it converts the existing `world_api::MemberDispatchRequestV1` exactly as
+   at the baseline and wraps that value as `transport_api_types::MemberDispatchRequest::V1`. That
+   mechanical conversion remains frozen during Linux proof recovery. It cannot construct, accept,
+   down-convert, or claim V2/E3, and the untagged wrapper must leave the serialized V1 object byte-
+   identical. Its presence grants no native macOS proof or implementation authority;
    in `crates/transport-api-client/src/lib.rs`, only new strict
    `e3_config_projection_prepare` and `e3_config_projection_cancel` methods posting to the two fixed
    routes above; existing gateway and execute client methods are frozen;
@@ -3788,8 +3907,9 @@ this catalog:
     change to accommodate E3.
 
 No file-wide authority is granted. D1 envelope code, receipt/manifest/StateStore/E2/E2-RM/B2.2,
-broker, D2, E4, unrelated gateway providers, public UX, and non-Linux product changes other than the
-one byte-preserving Lima V1 wrapper conversion named in item 3 are excluded.
+broker, D2, E4, unrelated gateway providers, public UX, and all new non-Linux product changes are
+excluded. The already-present byte-preserving Lima V1 wrapper conversion named in item 3 remains
+frozen compatibility material rather than proof-recovery ownership.
 The implementation must stop for a new authority decision if correct closure requires a symbol or
 file outside this fence.
 
@@ -3966,8 +4086,8 @@ and the descriptor-pinned official Codex archive above for:
 - V1 byte-identical compatibility while exclusion is idle, typed pre-spawn
   `UnsupportedSecurityPosture` while it is E3-exclusive, V2 success, old-server/new-client and
   new-server/old-client behavior, missing legacy state, and unknown/newer V3 rejection before D1
-  exists, plus the Lima bridge's exact untagged `MemberDispatchRequest::V1` conversion with no V2
-  construction or serialized-byte change;
+  exists. Native Lima conversion proof is deferred until Linux completion under the E3-A recovery
+  authority above and is not part of this Linux acceptance wall;
 - exact E2 launch and fork cap linkage without any E2/E2-RM mutation or current-parent
   reconstruction, including `Some(exact proof)` for `FreshSpawn`, `None` for `Fork`, and byte-equal
   nullable proof values across prepare/idempotency/sealed preparation/V2; and
@@ -3981,14 +4101,15 @@ and the descriptor-pinned official Codex archive above for:
   submit-vs-unregister, submit-vs-restart, prepare-vs-revoke, and final-release-vs-revoke barriers
   proving the one control mutex's winner, no child side effect after `Revoking`, and no final gate
   write unless lifecycle is still `Active`; and
-- an exact-baseline differential wall against the pushed and live-verified E3-AC1 correction landing
-  commit showing no candidate-only failure across the packet-authorized crates and all existing
-  world-service/gateway/member-dispatch tests.
+- an exact-baseline differential wall against
+  `2b2fc6c50b40046dbeaeb5b316562fbd96480a2a` showing no unallowed candidate-only failure across
+  the packet-authorized crates and all existing applicable Linux world-service/gateway/member-
+  dispatch tests.
 
-`E2-RM` is already landed at `2012bb8b5562a73ed0ee45238c19252c16b25065`; that fact satisfies the
-prerequisite for landing this E3-AC1 documentation correction and is not an E3 runtime dependency.
-E3 remains unadmitted, undispatched, and unimplemented, and no E3 gate becomes green here. No D1,
+`E2-RM` is already landed at `2012bb8b5562a73ed0ee45238c19252c16b25065`; that fact satisfied the
+prerequisite for the E3-AC1 documentation authority and is not an E3 runtime dependency. The
+preserved E3-A candidate remains incomplete and unlanded, and no E3 gate becomes green here. No D1,
 D2, D3, E4, compatibility-promotion, or non-Linux work is admitted. B4 remains separate and is
-neither modified nor adjudicated by this correction. A fresh E3-A admission may be considered only
-after this correction is pushed and its live origin identity is verified; E3-B through E3-F each
-remain separately admission- and dispatch-gated by their direct predecessor.
+neither modified nor adjudicated by this correction. E3-A Linux proof recovery requires a next
+explicit dispatch after this correction is pushed and its live origin identity is verified; E3-B
+through E3-F remain separately admission- and dispatch-gated by their direct predecessor.

@@ -1,8 +1,8 @@
 **Kind:** controlling numbered specification and preserved slice row
 **Stable ID:** `e3-agent-config-projection-and-gateway-adoption`
 **Canonical for:** controlling E3 authority correction, contract/file/symbol fence, dependency and gate disposition, and preserved historical row
-**Status:** canonical specification; not admitted, dispatched, or implemented
-**Authority scope:** documentation-only E3 authority; no product/test change, admission, dispatch, implementation, or green gate
+**Status:** canonical specification; E3-A has a preserved incomplete and unlanded candidate under bounded Linux proof recovery; E3-B through E3-F are not admitted, dispatched, or implemented
+**Authority scope:** documentation-only E3-A proof-recovery authority; no product/test change, proof execution, completion, landing, or successor admission/dispatch
 **Source span:** [`../03-phase-slice-map.md`](../03-phase-slice-map.md) line 222
 **Correction source baseline:** commit `81cfd33d4c5d16c31c837eeddff769995c566570`, tree `d40f6663a2aa01996ce8b4957f4aae0d30830961`, parent `138864a26dbc4721366c6cc8934d464d1929a189`
 **Landed prerequisite fact:** `E2-RM` is landed at `2012bb8b5562a73ed0ee45238c19252c16b25065`; that landing permits this documentation correction but is not an E3 runtime dependency
@@ -15,7 +15,8 @@
 > **Authority boundary:** This file is the controlling numbered E3 specification. It consumes the
 > landed E2-RM read behavior as serialization context without reopening E2, E2-RM, or B2.2. It
 > preserves the exact historical Track E row below and grants documentation authority only. E3
-> remains unadmitted, undispatched, and unimplemented.
+> remains incomplete: the preserved E3-A candidate is unlanded, its Linux proof recovery requires a
+> later explicit dispatch, and E3-B through E3-F remain unadmitted and undispatched.
 
 ## Controlling authority correction
 
@@ -165,6 +166,8 @@ forbidden.
 - **Bounded behavior:** add the strict additive V2 member-dispatch carrier and version wrapper, thread
   it through the exact shell/client/world-service transport reachability path, and preserve strict,
   byte-identical V1 behavior.
+- **Platform and landing scope:** Linux implementation and landing only. Native macOS proof and work
+  are deferred until the Linux runtime-refactor program is complete and do not block this packet.
 - **Source owner:** `crates/transport-api-types/src/lib.rs` plus only the exact client, shell routing,
   orchestration, Lima V1-wrapper, and world-service decode/validation call sites cataloged by the
   projection contract.
@@ -175,7 +178,9 @@ forbidden.
   launch, Linux child security, managed-gateway lifecycle, retained-runtime adoption, D1, and E4.
 - **Successor eligibility proof:** strict V2 canonical/unknown/newer/malformed negatives, complete
   Spawn/Fork/toolbox/continue-fork reachability, old/new mixed-version behavior, and a byte-identical
-  V1 differential with no V2 construction on compatibility paths. Only then may E3-B seek admission.
+  V1 differential with no V2 construction on compatibility paths, all exercised by applicable
+  nonzero Linux checks. Only then may E3-B seek admission; deferred macOS coverage grants no macOS
+  compatibility or completion claim.
 
 ### E3-B — projection codec, registry, CAS, recovery, and retirement
 
@@ -354,6 +359,94 @@ permits unchanged valid evidence to be reused, and still rejects every candidate
 failure. The required comparison baseline remains
 `2b2fc6c50b40046dbeaeb5b316562fbd96480a2a`.
 
+### E3-A Linux-first proof-recovery correction
+
+The controlling user decision is Linux first, completely. `E3A-P2-003` native macOS conversion
+coverage is deferred and nonblocking for Linux E3-A completion. Remove the macOS-only Lima exact
+test from the Linux acceptance wall and preserve its historical baseline/candidate zero-test results
+as unavailable, not passed. A macOS-gated crate's empty Linux run proves no compatibility. Required
+Linux commands must exercise their intended Linux code/tests; no new rerun is required solely to
+remove a non-discriminating macOS package from an already-retained invocation. No macOS runner, Lima
+VM, installer, service, implementation, provisioning, or parity work is authorized. The preserved
+candidate's existing mechanical Lima V1-wrapper conversion remains frozen and creates no macOS
+claim or Linux prerequisite.
+
+The recovery remains bound to product base
+`5e972add652224b97323f6abd496e94440d72242`, tree
+`ddbceef5f723a190cea70c310b462b3276fee82d`, product fingerprint
+`4c4e1b4ef940621553e3a9d6472d69748117857080849cf4e246aca69d64f81a`, and full-index binary
+product-delta SHA-256 `139b28a1eeb8d5e498b20723d17a37ad170be26e01585d0e6136c7a33aefbe94`, with comparison
+baseline `2b2fc6c50b40046dbeaeb5b316562fbd96480a2a` and semantic-differential authority
+`5b703b26431f9dee5e9e0686e280536a6fb030c8`. Reuse earlier valid proof when its causal inputs are
+unchanged; do not restart admission or the full proof wall.
+
+The later Linux proof-recovery dispatch has only these additional code/test permissions:
+
+1. Preserve the failed
+   `repl::async_repl::tests::build_member_dispatch_transport_request_uses_shared_contract_parity_subset`
+   result and add only a direct colocated prepared-runtime builder fixture under existing test
+   authority, proving frozen `backend_id`, `protocol`, `binary_path`, and `backend_kind` after
+   descriptor drift plus `config_projection == None`; do not relabel the old fixture, repair
+   unrelated HSA semantics, or change production behavior to forge the witness.
+2. In `crates/shell/tests/repl_world_first_routing_v1.rs`, change only the `PtyRepl::spawn`
+   argument lists in
+   `c3_first_targeted_world_turn_uses_initial_prompt_in_member_dispatch` and
+   `c3_internal_toolbox_fork_command_reuses_retained_fork_bootstrap_with_explicit_lineage`, adding
+   the supported global `--install-prefix PATH` selector for each test's existing UTF-8
+   `substrate_home`.
+3. In `crates/shell/tests/common.rs::ensure_substrate_built`—not `tests/support/common.rs`—change
+   only the nested program/argv to
+   `rustup run 1.89.0 cargo build -p substrate --bin substrate --locked`.
+
+Those two matched integrations permit the same three-hunk, two-file harness-only overlay on each
+side. The exact baseline commit stays immutable and must be reported as
+`2b2fc6c50b40046dbeaeb5b316562fbd96480a2a` plus its separately fingerprinted overlay; the
+candidate is the preserved product fingerprint plus its separately fingerprinted overlay. Record
+each overlay's full-index binary patch digest and pre/post file SHA-256 values. Each side must bind
+its actual source, Rust 1.89.0 toolchain, built executable path/hash, and isolated mutable HOME,
+`SUBSTRATE_HOME`, target, socket, runtime, and temporary state. No forged witness, validation bypass,
+unrelated installed binary, broader fixture rewrite, timeout increase, assertion change, baseline
+product repair, alternate comparison commit, full source copy, or bespoke proof framework is
+authorized.
+
+`E3A-P2-006` has exactly one E3-A inherited-product allowance: in
+`crates/shell/src/execution/agent_runtime/retained_worker_runtime.rs`, symbol
+`reject_before_registration_in_registry`, permit `clippy::too_many_arguments` as an `error` under
+`-D warnings` with exact message `this function has too many arguments (9/7)`, only while the file
+remains identical to product base `5e972add652224b97323f6abd496e94440d72242`, blob
+`ea701ea539a1dc85c72a1a2c4b3c843696c3570b`, SHA-256
+`91e2bddab7a6c0f3d13d412c8ca86396973deed16dec118eeea878114a55482c`. The retained five-package
+`transport-api-types`/`transport-api-client`/`world-mac-lima`/`shell`/`world-service`
+`--lib --tests --locked -- -D warnings` logs contain zero exact diagnostics on baseline and one on
+candidate; their directly resulting terminal counts are 12→13 errors for `shell` lib and 11→12 for
+`shell` lib test. Retain and report the raw diagnostic. This is an allowance over red logs, not an
+absolutely green Clippy result. No suppression or unrelated repair is permitted, and every other
+diagnostic identity, severity, multiplicity, terminal result, and semantic difference remains under
+the existing differential rules.
+
+Preserve the prior E3-A record at
+`/home/spenser/__Active_code/review-evidence/e3-a-strict-v2-wire-5e972add/review/review-cycle-record.json`
+as `bounded_stop`: `E3A-P2-001/002` are fixed, `E3A-P2-003` is explicitly deferred for Linux,
+`E3A-P2-004/005` require the bounded Linux recovery above, `E3A-P2-006` requires the exact allowance,
+and `E3A-P2-007` is mechanically corrected in evidence. Do not duplicate those IDs, rewrite raw
+reviews, or claim they were caused by the last remediation.
+
+After recovery and proof, one new process-evidence record may begin a separate sequence using the
+existing schema and validator. Link its prompt/report to the preserved stopped record and bind one
+subject fingerprint over the bounded recovery delta, both overlay fingerprints, dispositions of
+`E3A-P2-003` through `E3A-P2-006`, relevant retained proof, and final aggregate candidate identity.
+Its required first schema kind is `discovery`, used for one fresh focused assessment of that recovery
+subject rather than whole-candidate rediscovery; do not invent a kind, alter the validator, or append
+a fictitious `supplemental_causal` cycle to the stopped record. `CLEAN` is terminal. New valid P1/P2
+findings receive new IDs and only the canonical consolidated remediation plus different-fresh delta
+closure. The Linux completion decision must account for every carried `E3A-P2-001` through
+`E3A-P2-007` disposition, the macOS deferral, exact lint allowance, retained/recovered evidence, and
+final candidate identity.
+
+This correction changes platform scheduling and proof applicability only. Strict Linux V1/V2
+compatibility, fail-closed behavior, and all other applicable Linux safety requirements remain
+mandatory. It does not complete or land E3-A and does not admit or dispatch E3-B.
+
 Once a packet's applicable prerequisites are available, its fresh admission must require its bounded
 tests using candidate Substrate binaries built from source on Linux. Across the serial sequence,
 proof must
@@ -365,8 +458,8 @@ home/gateway isolation; secret canaries across disk, proc, FDs, logs, traces, re
 descriptor substitution/TOCTOU; deterministic Codex 0.125 reconstruction and all ambient config
 layers; strict V3 inventory sources; confined deterministic output paths; install-manifest provenance;
 strict V1/V2 mixed versions; exact E2 cap linkage; managed gateway readiness/access/revocation;
-and an exact-baseline differential against the pushed and live-verified E3-AC1 landing commit with no
-candidate-only failure.
+and an exact-baseline differential against
+`2b2fc6c50b40046dbeaeb5b316562fbd96480a2a` with no unallowed candidate-only failure.
 
 Documentation validation is not implementation evidence. No `RG-CONFIG-*`, `RG-UAA-*`,
 `RG-OBS-01`, promotion, or other E3 gate becomes green here. This correction grants no admission,
@@ -378,10 +471,11 @@ E3 does not own D1 envelopes; B1/B2.1 observations; B2.2/B3.2 receipts or retain
 policy or E2-RM history; gateway provider/upstream policy; D2 command brokerage; E4 workspace
 synchronization/reconciliation; host credential authority; or legacy migration. `E2-RM` is already
 landed at `2012bb8b5562a73ed0ee45238c19252c16b25065` but is not an E3 runtime dependency and is not
-modified here. E3 remains unadmitted, undispatched, and unimplemented. No D1, D2, D3, E4,
+modified here. The preserved E3-A candidate remains incomplete and unlanded. No D1, D2, D3, E4,
 compatibility-promotion, non-Linux, B2.2, or successor work is admitted or dispatched; B4 remains
-separate and is neither modified nor adjudicated. No E3 gate becomes green. A fresh E3-A admission
-may be considered only after this correction is pushed and its live origin identity is verified.
+separate and is neither modified nor adjudicated. No E3 gate becomes green. E3-A Linux proof
+recovery requires the next explicit dispatch after this correction is pushed and its live origin
+identity is verified.
 
 ## Preserved pre-correction row (chronology only)
 
