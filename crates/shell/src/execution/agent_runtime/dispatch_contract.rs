@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use substrate_broker::{validate_backend_id, Policy};
+#[cfg(any(target_os = "linux", test))]
+use substrate_common::agent_events::RuntimeTerminalIdentityV1;
 
 use crate::execution::agent_inventory::{
     project_inventory_entry, AgentCapabilitiesV1, AgentConfigKind, AgentInventoryBaselineOrigin,
@@ -26,7 +28,7 @@ use super::{
         DispatchPolicyCommitmentRefV1, ImmutableBytesMaterialV1,
         WorldWorkExecutionClaimDurableKeyV1,
     },
-    host_session_authority::schema::AuthorityObjectRefV1,
+    host_session_authority::schema::{AuthorityObjectCommitmentV1, AuthorityObjectRefV1},
     state_store::RuntimeAcceptanceEvidenceV1,
 };
 
@@ -216,10 +218,49 @@ impl WorldDispatchSteeringDenialV1 {
     }
 }
 
+const WORLD_DISPATCH_CONTROL_TARGET_PREFIX: &str = "substrate_target_v1:";
+
 #[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct TaskPayloadV1 {
     pub prompt: String,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(tag = "target_kind", rename_all = "snake_case", deny_unknown_fields)]
+pub(crate) enum WorldDispatchControlTargetV1 {
+    AcceptedRetainedTurn {
+        acceptance_record_id: String,
+        active_run_id: String,
+        message_id: String,
+        target_participant_id: String,
+    },
+    PendingRetainedAdmission {
+        issuer_request_id: String,
+        target_participant_id: String,
+    },
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PendingAdmissionInspectProjectionV1 {
+    pub authority_store_id: String,
+    pub issuer_request_id: String,
+    pub orchestration_session_id: String,
+    pub target_participant_id: String,
+    pub target_backend_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub admission_authority_revision: u64,
+    pub admission_authority_record_commitment: AuthorityObjectCommitmentV1,
+    pub admission_record_revision: u64,
+    pub category: String,
+    pub admission_state: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cancel_request_id: Option<String>,
+    pub summary: String,
 }
 
 #[allow(dead_code)]
@@ -442,6 +483,11 @@ impl WorldDispatchRequestV1 {
         validate_world_dispatch_action_mode(self.action, self.mode)?;
         validate_world_dispatch_payload(self.action, &mut self.payload)?;
         canonicalize_optional_world_dispatch_task_run_id(self.action, &mut self.task_run_id)?;
+        canonicalize_optional_world_dispatch_target_participant_id(
+            self.action,
+            self.mode,
+            &mut self.target_participant_id,
+        )?;
 
         let request_id = required_world_dispatch_string("request_id", self.request_id)?;
         let idempotency_key =
@@ -983,6 +1029,9 @@ fn validate_world_dispatch_target(
     value: Option<String>,
     task_run_id: Option<&str>,
 ) -> anyhow::Result<Option<String>> {
+    let exact_participant_target =
+        decode_world_dispatch_control_target("target_participant_id", value.as_deref())?;
+    let exact_task_target = decode_world_dispatch_control_target("task_run_id", task_run_id)?;
     match (action, mode) {
         (WorldDispatchActionV1::ForkWorldWorker, WorldDispatchModeV1::Retained) => {
             reject_task_run_id(action, None, task_run_id)?;
@@ -1002,17 +1051,101 @@ fn validate_world_dispatch_target(
         | (WorldDispatchActionV1::StopWorldWorker, WorldDispatchModeV1::Retained)
         | (WorldDispatchActionV1::InspectWorldWorker, WorldDispatchModeV1::Retained)
         | (WorldDispatchActionV1::CancelWorldWork, WorldDispatchModeV1::Retained) => {
-            reject_task_run_id(action, Some(mode), task_run_id)?;
-            Ok(Some(required_world_dispatch_string(
-                "target_participant_id",
-                value,
-            )?))
+            if matches!(
+                action,
+                WorldDispatchActionV1::ContinueWorldWorker | WorldDispatchActionV1::StopWorldWorker
+            ) {
+                reject_task_run_id(action, Some(mode), task_run_id)?;
+                if exact_participant_target.is_some() {
+                    anyhow::bail!(
+                        "invalid_dispatch_target: action {} mode {} does not accept exact_target pending admission carriers",
+                        action.as_str(),
+                        mode.as_str(),
+                    );
+                }
+                return Ok(Some(required_world_dispatch_string(
+                    "target_participant_id",
+                    value,
+                )?));
+            }
+            if exact_participant_target.is_none() && exact_task_target.is_none() {
+                if value.is_some() && task_run_id.is_some() {
+                    anyhow::bail!(
+                        "invalid_dispatch_target: action {} mode {} does not accept task_run_id",
+                        action.as_str(),
+                        mode.as_str(),
+                    );
+                }
+                if value.is_none() && task_run_id.is_none() {
+                    anyhow::bail!(
+                        "missing_dispatch_field: world dispatch request requires target_participant_id"
+                    );
+                }
+            }
+            match (
+                value.as_deref(),
+                task_run_id,
+                exact_participant_target.as_ref(),
+                exact_task_target.as_ref(),
+            ) {
+                (Some(_), Some(_), _, _) => anyhow::bail!(
+                    "invalid_dispatch_target: action {} mode {} requires exactly one exact handle family (task_run_id, target_participant_id, or exact_target, not multiple)",
+                    action.as_str(),
+                    mode.as_str(),
+                ),
+                (Some(_), None, Some(WorldDispatchControlTargetV1::PendingRetainedAdmission { .. }), None) => {
+                    Ok(value)
+                }
+                (Some(_), None, Some(WorldDispatchControlTargetV1::AcceptedRetainedTurn { .. }), None) => {
+                    anyhow::bail!(
+                        "invalid_dispatch_target: action {} mode {} accepts accepted_retained_turn only through task_run_id",
+                        action.as_str(),
+                        mode.as_str(),
+                    )
+                }
+                (Some(_), None, None, None) => Ok(Some(required_world_dispatch_string(
+                    "target_participant_id",
+                    value,
+                )?)),
+                (None, Some(_), None, Some(WorldDispatchControlTargetV1::AcceptedRetainedTurn { .. })) => {
+                    Ok(None)
+                }
+                (None, Some(_), None, Some(WorldDispatchControlTargetV1::PendingRetainedAdmission { .. })) => {
+                    anyhow::bail!(
+                        "invalid_dispatch_target: action {} mode {} accepts pending_retained_admission only through target_participant_id",
+                        action.as_str(),
+                        mode.as_str(),
+                    )
+                }
+                (None, Some(_), None, None) => anyhow::bail!(
+                    "invalid_dispatch_target: action {} mode {} does not accept task_run_id unless it encodes an accepted_retained_turn exact target",
+                    action.as_str(),
+                    mode.as_str(),
+                ),
+                (None, None, _, _) => anyhow::bail!(
+                    "missing_dispatch_field: {} requires target_participant_id or accepted_retained_turn exact target for mode {}",
+                    action.as_str(),
+                    mode.as_str(),
+                ),
+                _ => anyhow::bail!(
+                    "invalid_dispatch_target: action {} mode {} received an unsupported exact target carrier",
+                    action.as_str(),
+                    mode.as_str(),
+                ),
+            }
         }
         (WorldDispatchActionV1::InspectWorldWorker, WorldDispatchModeV1::Ephemeral)
         | (WorldDispatchActionV1::CancelWorldWork, WorldDispatchModeV1::Ephemeral) => {
             if value.is_some() {
                 anyhow::bail!(
                     "invalid_dispatch_target: action {} mode {} does not accept target_participant_id",
+                    action.as_str(),
+                    mode.as_str(),
+                );
+            }
+            if exact_task_target.is_some() {
+                anyhow::bail!(
+                    "invalid_dispatch_target: action {} mode {} does not accept retained exact_target carriers in task_run_id",
                     action.as_str(),
                     mode.as_str(),
                 );
@@ -1074,8 +1207,84 @@ fn canonicalize_optional_world_dispatch_task_run_id(
             action.as_str(),
         );
     }
-    *task_run_id = Some(trimmed.to_string());
+    *task_run_id = Some(
+        match decode_world_dispatch_control_target("task_run_id", Some(trimmed))? {
+            Some(target @ WorldDispatchControlTargetV1::AcceptedRetainedTurn { .. }) => {
+                encode_world_dispatch_control_target(&target)?
+            }
+            Some(WorldDispatchControlTargetV1::PendingRetainedAdmission { .. }) => {
+                anyhow::bail!(
+                    "invalid_dispatch_target: action {} does not accept pending_retained_admission carriers in task_run_id",
+                    action.as_str(),
+                );
+            }
+            None => trimmed.to_string(),
+        },
+    );
     Ok(())
+}
+
+fn canonicalize_optional_world_dispatch_target_participant_id(
+    action: WorldDispatchActionV1,
+    mode: WorldDispatchModeV1,
+    value: &mut Option<String>,
+) -> anyhow::Result<()> {
+    let Some(raw) = value.as_deref() else {
+        return Ok(());
+    };
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        anyhow::bail!(
+            "missing_dispatch_field: {} requires target_participant_id for mode {}",
+            action.as_str(),
+            mode.as_str(),
+        );
+    }
+    *value = Some(
+        match decode_world_dispatch_control_target("target_participant_id", Some(trimmed))? {
+            Some(target @ WorldDispatchControlTargetV1::PendingRetainedAdmission { .. }) => {
+                encode_world_dispatch_control_target(&target)?
+            }
+            Some(WorldDispatchControlTargetV1::AcceptedRetainedTurn { .. }) => {
+                anyhow::bail!(
+                    "invalid_dispatch_target: action {} mode {} does not accept accepted_retained_turn carriers in target_participant_id",
+                    action.as_str(),
+                    mode.as_str(),
+                );
+            }
+            None => trimmed.to_string(),
+        },
+    );
+    Ok(())
+}
+
+fn decode_world_dispatch_control_target(
+    field: &str,
+    value: Option<&str>,
+) -> anyhow::Result<Option<WorldDispatchControlTargetV1>> {
+    let Some(raw) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(None);
+    };
+    let Some(encoded) = raw.strip_prefix(WORLD_DISPATCH_CONTROL_TARGET_PREFIX) else {
+        return Ok(None);
+    };
+    serde_json::from_str(encoded).map(Some).map_err(|error| {
+        anyhow::anyhow!(
+            "invalid_dispatch_target: field {} carried a malformed exact_target: {}",
+            field,
+            error
+        )
+    })
+}
+
+fn encode_world_dispatch_control_target(
+    target: &WorldDispatchControlTargetV1,
+) -> anyhow::Result<String> {
+    Ok(format!(
+        "{}{}",
+        WORLD_DISPATCH_CONTROL_TARGET_PREFIX,
+        serde_json::to_string(target)?
+    ))
 }
 
 fn validate_world_dispatch_prompt(
@@ -1280,6 +1489,25 @@ pub(crate) struct SpawnWorldWorkerOutcomeV1 {
 
 #[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SpawnWorldWorkerPendingAdmissionOutcomeV1 {
+    pub request_id: String,
+    pub orchestration_session_id: String,
+    pub action: WorldDispatchActionV1,
+    pub mode: WorldDispatchModeV1,
+    pub participant_id: String,
+    pub orchestrator_participant_id: String,
+    pub target_backend_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub exact_target: WorldDispatchControlTargetV1,
+    pub pending_admission: PendingAdmissionInspectProjectionV1,
+    pub startup_failure: String,
+    pub summary: String,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct ForkWorldWorkerOutcomeV1 {
     pub request_id: String,
     pub orchestration_session_id: String,
@@ -1333,6 +1561,15 @@ pub(crate) struct RetainedWorkerInspectSnapshotV1 {
 
 #[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ActiveEphemeralTaskInspectSnapshotV1 {
+    pub state: ActiveTaskStateV1,
+    pub authoritative_live: bool,
+    pub cancel_supported: bool,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct InspectWorldWorkerOutcomeV1 {
     pub request_id: String,
     pub orchestration_session_id: String,
@@ -1343,7 +1580,20 @@ pub(crate) struct InspectWorldWorkerOutcomeV1 {
     pub target_backend_id: String,
     pub world_id: String,
     pub world_generation: u64,
-    pub snapshot: RetainedWorkerInspectSnapshotV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exact_target: Option<WorldDispatchControlTargetV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot: Option<RetainedWorkerInspectSnapshotV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ephemeral_snapshot: Option<ActiveEphemeralTaskInspectSnapshotV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_ref: Option<RuntimeTerminalIdentityV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal: Option<WorldWorkTerminalV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_submission_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_admission: Option<PendingAdmissionInspectProjectionV1>,
     pub summary: String,
 }
 
@@ -1360,7 +1610,17 @@ pub(crate) struct RetainedWorkerCancelCloseoutV1 {
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum CancelWorldWorkTerminalStateV1 {
-    Cancelled,
+    CancelledViaLiveTransport,
+    CancelledBeforeTransport,
+    CancelAcceptedPendingCloseout,
+    AlreadyRoutable,
+    AlreadyTerminal,
+    NoActiveCancelableWork,
+    OwnerUnreachable,
+    InvalidTarget,
+    WorldBindingMismatch,
+    AmbiguousTarget,
+    PolicyDenied,
 }
 
 #[allow(dead_code)]
@@ -1376,7 +1636,20 @@ pub(crate) struct CancelWorldWorkOutcomeV1 {
     pub world_id: String,
     pub world_generation: u64,
     pub state: CancelWorldWorkTerminalStateV1,
-    pub closeout: RetainedWorkerCancelCloseoutV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cancel_request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exact_target: Option<WorldDispatchControlTargetV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closeout: Option<RetainedWorkerCancelCloseoutV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_ref: Option<RuntimeTerminalIdentityV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal: Option<WorldWorkTerminalV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_submission_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_admission: Option<PendingAdmissionInspectProjectionV1>,
     pub summary: String,
 }
 
@@ -1481,6 +1754,7 @@ pub(crate) enum WorldDispatchOutcomeV1 {
     AcceptedForeground(Box<AcceptedForegroundReceiptV1>),
     RunWorldTask(RunWorldTaskOutcomeV1),
     SpawnWorldWorker(SpawnWorldWorkerOutcomeV1),
+    SpawnWorldWorkerPendingAdmission(SpawnWorldWorkerPendingAdmissionOutcomeV1),
     ForkWorldWorker(ForkWorldWorkerOutcomeV1),
     ContinueWorldWorker(ContinueWorldWorkerOutcomeV1),
     InspectWorldWorker(InspectWorldWorkerOutcomeV1),
@@ -2581,17 +2855,18 @@ mod tests {
         DispatchRequestEnvelope, DispatchResolutionErrorKind, FieldBaselineOrigin,
         FieldValueOrigin, ForkWorldWorkerOutcomeV1, HiddenFallbackState, HostExecutionClientStart,
         InspectWorldWorkerOutcomeV1, LiveToolSupportPosture, LiveToolSupportState,
-        LiveToolValidationState, RetainedWorkerCancelCloseoutV1, RetainedWorkerInspectSnapshotV1,
-        RetainedWorkerStopCloseoutV1, RunWorldTaskOutcomeV1, SelectedClaudeCodePathState,
-        SelectedClaudeCodeUpliftContext, SelectedClaudeCodeUpliftGate, Slice52SemanticsState,
-        StopWorldWorkerOutcomeV1, SupervisorObservationClaimV1, TargetedValidationState,
-        TaskPayloadV1, WorkerCancelPayloadV1, WorkerContinueApprovalResponsePayloadV1,
+        LiveToolValidationState, RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1,
+        RunWorldTaskOutcomeV1, SelectedClaudeCodePathState, SelectedClaudeCodeUpliftContext,
+        SelectedClaudeCodeUpliftGate, Slice52SemanticsState, StopWorldWorkerOutcomeV1,
+        SupervisorObservationClaimV1, TargetedValidationState, TaskPayloadV1,
+        WorkerCancelPayloadV1, WorkerContinueApprovalResponsePayloadV1,
         WorkerContinueClarificationResponsePayloadV1, WorkerContinueControlDirectivePayloadV1,
         WorkerContinueForkCommandPayloadV1, WorkerContinuePayloadV1,
         WorkerContinueProgressAckPayloadV1, WorkerForkPayloadV1, WorkerInspectPayloadV1,
         WorkerSpawnPayloadV1, WorkerStopPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1,
         WorldDispatchOutcomeV1, WorldDispatchPayloadV1, WorldDispatchRequestV1,
-        WorldDispatchSteeringDenialV1, WorldTaskTerminalStateV1,
+        WorldDispatchSteeringDenialV1, WorldTaskTerminalStateV1, WorldWorkResultClassificationV1,
+        WorldWorkTerminalV1,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
@@ -2608,6 +2883,7 @@ mod tests {
     use crate::execution::policy_model::PolicyPatch;
     use crate::execution::workspace::{workspace_marker_path, SUBSTRATE_DIR_NAME};
     use substrate_broker::Policy;
+    use substrate_common::agent_events::RuntimeTerminalIdentityV1;
 
     fn required_capabilities() -> AgentCapabilitiesV1 {
         AgentCapabilitiesV1 {
@@ -4751,7 +5027,8 @@ mod tests {
             target_backend_id: "cli:codex_world".to_string(),
             world_id: "world-35".to_string(),
             world_generation: 5,
-            snapshot: RetainedWorkerInspectSnapshotV1 {
+            exact_target: None,
+            snapshot: Some(RetainedWorkerInspectSnapshotV1 {
                 participant_state: AgentRuntimeSessionState::Running,
                 session_state: OrchestrationSessionState::Active,
                 session_posture: OrchestrationSessionPosture::AwaitingAttention,
@@ -4759,7 +5036,12 @@ mod tests {
                 attention_required: true,
                 parent_participant_id: Some("ash-parent-35".to_string()),
                 resumed_from_participant_id: None,
-            },
+            }),
+            ephemeral_snapshot: None,
+            terminal_ref: None,
+            terminal: None,
+            runtime_submission_id: None,
+            pending_admission: None,
             summary: "inspect snapshot is authoritative".to_string(),
         });
 
@@ -4836,11 +5118,19 @@ mod tests {
             target_backend_id: "cli:codex_world".to_string(),
             world_id: "world-37".to_string(),
             world_generation: 7,
-            state: CancelWorldWorkTerminalStateV1::Cancelled,
-            closeout: RetainedWorkerCancelCloseoutV1 {
-                participant_state: None,
-                session_state: None,
-            },
+            state: CancelWorldWorkTerminalStateV1::CancelledViaLiveTransport,
+            cancel_request_id: None,
+            exact_target: None,
+            closeout: None,
+            terminal_ref: Some(RuntimeTerminalIdentityV1 {
+                terminal_event_id: "evt-terminal-37".to_string(),
+                terminal_event_sequence: 7,
+            }),
+            terminal: Some(WorldWorkTerminalV1 {
+                result_class: WorldWorkResultClassificationV1::Cancelled,
+            }),
+            runtime_submission_id: Some("span-37".to_string()),
+            pending_admission: None,
             summary: "cancel closeout is distinct from stop".to_string(),
         });
 
@@ -4851,28 +5141,26 @@ mod tests {
         );
         assert_eq!(
             json.get("state").and_then(|value| value.as_str()),
-            Some("cancelled")
+            Some("cancelled_via_live_transport")
         );
-        let closeout = json.get("closeout").expect("closeout should serialize");
-        assert_eq!(
-            closeout
-                .get("participant_state")
-                .and_then(|value| value.as_str()),
-            None
-        );
-        assert_eq!(
-            closeout
-                .get("session_state")
-                .and_then(|value| value.as_str()),
-            None
-        );
+        assert!(json.get("closeout").is_none());
         assert!(json.get("snapshot").is_none());
         assert!(json.get("cancelled").is_none());
+        assert_eq!(
+            json.pointer("/terminal_ref/terminal_event_id")
+                .and_then(|value| value.as_str()),
+            Some("evt-terminal-37")
+        );
+        assert_eq!(
+            json.pointer("/terminal/result_class")
+                .and_then(|value| value.as_str()),
+            Some("cancelled")
+        );
     }
 
     #[test]
-    fn world_dispatch_contract_rejects_cancel_outcome_without_closeout() {
-        let error = serde_json::from_value::<WorldDispatchOutcomeV1>(serde_json::json!({
+    fn world_dispatch_contract_decodes_pending_cancel_outcome_without_closeout() {
+        let outcome = serde_json::from_value::<WorldDispatchOutcomeV1>(serde_json::json!({
             "outcome_kind": "cancel_world_work",
             "request_id": "req-37",
             "orchestration_session_id": "sess-37",
@@ -4883,15 +5171,21 @@ mod tests {
             "target_backend_id": "cli:codex_world",
             "world_id": "world-37",
             "world_generation": 7,
-            "state": "cancelled",
-            "summary": "cancel closeout is distinct from stop"
+            "state": "cancel_accepted_pending_closeout",
+            "cancel_request_id": "req-37",
+            "summary": "cancel transport was accepted and terminal closeout is pending"
         }))
-        .expect_err("missing cancel closeout must fail closed");
+        .expect("pending cancellation has canonical typed state without closeout");
 
-        assert!(
-            error.to_string().contains("missing field `closeout`"),
-            "unexpected cancel closeout serde error: {error}"
+        let WorldDispatchOutcomeV1::CancelWorldWork(cancel) = outcome else {
+            panic!("expected cancel outcome")
+        };
+        assert_eq!(
+            cancel.state,
+            CancelWorldWorkTerminalStateV1::CancelAcceptedPendingCloseout
         );
+        assert_eq!(cancel.cancel_request_id.as_deref(), Some("req-37"));
+        assert_eq!(cancel.closeout, None);
     }
 
     #[test]
@@ -4913,11 +5207,9 @@ mod tests {
         }))
         .expect_err("non-cancelled cancel outcome state must fail closed");
 
-        assert!(
-            error
-                .to_string()
-                .contains("unknown variant `failed`, expected `cancelled`"),
-            "unexpected cancel state serde error: {error}"
+        assert_eq!(
+            error.to_string(),
+            "unknown variant `failed`, expected one of `cancelled_via_live_transport`, `cancelled_before_transport`, `cancel_accepted_pending_closeout`, `already_routable`, `already_terminal`, `no_active_cancelable_work`, `owner_unreachable`, `invalid_target`, `world_binding_mismatch`, `ambiguous_target`, `policy_denied`"
         );
     }
 

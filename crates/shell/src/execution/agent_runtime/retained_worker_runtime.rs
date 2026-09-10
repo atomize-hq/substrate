@@ -124,6 +124,28 @@ pub(crate) struct RetainedWorkerAdmissionRegistrationV1 {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "state", rename_all = "snake_case", deny_unknown_fields)]
+#[must_use]
+pub(crate) enum RetainedWorkerAdmissionCancelDeliveryStateV1 {
+    Available,
+    Claimed {
+        delivery_claim_id: String,
+        claimed_at: TimestampV1,
+        claim_expires_at: TimestampV1,
+    },
+    Confirmed {
+        delivery_claim_id: String,
+        confirmed_at: TimestampV1,
+    },
+}
+
+impl Default for RetainedWorkerAdmissionCancelDeliveryStateV1 {
+    fn default() -> Self {
+        Self::Available
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "state", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum RetainedWorkerAdmissionStateV1 {
     SlotReserved {
         slot_sequence: u64,
@@ -140,10 +162,20 @@ pub(crate) enum RetainedWorkerAdmissionStateV1 {
     TransportClaimedNonterminal {
         registration: RetainedWorkerAdmissionRegistrationV1,
         transport_claim_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        transport_span_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stream_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        last_frame_sequence: Option<u64>,
         claimed_at: TimestampV1,
     },
     Routable {
         registration: RetainedWorkerAdmissionRegistrationV1,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        transport_claim_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        transport_span_id: Option<String>,
         stream_id: String,
         registered_frame_sequence: u64,
         registered_event_id: String,
@@ -152,6 +184,10 @@ pub(crate) enum RetainedWorkerAdmissionStateV1 {
     },
     InterruptedNonterminal {
         registration: RetainedWorkerAdmissionRegistrationV1,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        transport_claim_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        transport_span_id: Option<String>,
         stream_id: Option<String>,
         last_frame_sequence: Option<u64>,
         interrupted_at: TimestampV1,
@@ -164,11 +200,45 @@ pub(crate) enum RetainedWorkerAdmissionStateV1 {
         terminal_event_sequence: u64,
         exit_code: i32,
         terminal_at: TimestampV1,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cancel_request_id: Option<String>,
     },
     RejectedBeforeRegistration {
         reason: String,
         rejected_at: TimestampV1,
     },
+    CancelledBeforeRegistration {
+        cancel_request_id: String,
+        cancelled_at: TimestampV1,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        registration_head: Option<RetainedWorkerAdmissionRegistrationHeadV1>,
+    },
+    CancelledBeforeTransport {
+        registration: RetainedWorkerAdmissionRegistrationV1,
+        cancel_request_id: String,
+        cancelled_at: TimestampV1,
+    },
+    CancellationAcceptedTransportCloseoutPending {
+        registration: RetainedWorkerAdmissionRegistrationV1,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        transport_claim_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        transport_span_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stream_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        last_frame_sequence: Option<u64>,
+        cancel_request_id: String,
+        accepted_at: TimestampV1,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RetainedWorkerAdmissionRegistrationHeadV1 {
+    pub(crate) authority_revision_expected: u64,
+    pub(crate) authority_record_commitment_expected: AuthorityObjectCommitmentV1,
+    pub(crate) head_acquired_at: TimestampV1,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -223,6 +293,19 @@ struct RetainedWorkerAdmissionRecordLocatorV1 {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
+struct RetainedWorkerAdmissionCancelDeliveryRecordV1 {
+    schema_version: u32,
+    authority_store_id: String,
+    orchestration_session_id: String,
+    retained_participant_id: String,
+    cancel_request_id: String,
+    transport_span_id: String,
+    accepted_at: TimestampV1,
+    delivery_state: RetainedWorkerAdmissionCancelDeliveryStateV1,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 struct RetainedWorkerAdmissionRegistryV1 {
     schema_version: u32,
     authority_store_id: String,
@@ -230,6 +313,8 @@ struct RetainedWorkerAdmissionRegistryV1 {
     records_by_session: BTreeMap<String, BTreeMap<String, RetainedWorkerAdmissionRecordV1>>,
     issuer_request_index: BTreeMap<String, RetainedWorkerAdmissionRecordLocatorV1>,
     next_slot_sequence_by_session: BTreeMap<String, u64>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    cancel_deliveries_by_request: BTreeMap<String, RetainedWorkerAdmissionCancelDeliveryRecordV1>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -358,6 +443,82 @@ pub(crate) struct RetainedWorkerTransportClaimV1 {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct RetainedWorkerAdmissionCancelRequestV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) cancel_request_id: String,
+    pub(crate) authority_store_id: String,
+    pub(crate) issuer_request_id: String,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) caller_participant_id: String,
+    pub(crate) retained_participant_id: String,
+    pub(crate) bootstrap_run_id: String,
+    pub(crate) backend_id: String,
+    pub(crate) protocol: String,
+    pub(crate) world_binding: WorldBindingV1,
+    pub(crate) current_policy_ref: AuthorityObjectRefV1,
+    pub(crate) current_policy_revision: String,
+    pub(crate) expected_record_revision: u64,
+    pub(crate) expected_state: RetainedWorkerAdmissionStateV1,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum RetainedWorkerAdmissionCancelOutcomeV1 {
+    CancelledBeforeTransport {
+        record: RetainedWorkerAdmissionRecordV1,
+        cancel_request_id: String,
+    },
+    CancelAcceptedPendingCloseout {
+        record: RetainedWorkerAdmissionRecordV1,
+        cancel_request_id: String,
+        transport_span_id: Option<String>,
+        delivery_disposition: RetainedWorkerAdmissionCancelDeliveryDispositionV1,
+    },
+    AlreadyRoutable {
+        record: RetainedWorkerAdmissionRecordV1,
+    },
+    AlreadyTerminal {
+        record: RetainedWorkerAdmissionRecordV1,
+        cancel_request_id: Option<String>,
+    },
+    RejectedBeforeRegistration {
+        record: RetainedWorkerAdmissionRecordV1,
+    },
+}
+impl RetainedWorkerAdmissionCancelOutcomeV1 {
+    pub(crate) fn record(&self) -> &RetainedWorkerAdmissionRecordV1 {
+        match self {
+            Self::CancelledBeforeTransport { record, .. }
+            | Self::CancelAcceptedPendingCloseout { record, .. }
+            | Self::AlreadyRoutable { record }
+            | Self::AlreadyTerminal { record, .. }
+            | Self::RejectedBeforeRegistration { record } => record,
+        }
+    }
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum RetainedWorkerAdmissionRoutabilityDispositionV1 {
+    Routable,
+    CancellationWon { cancel_request_id: String },
+    AlreadyTerminal,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct RetainedWorkerAdmissionRoutabilityOutcomeV1 {
+    pub(crate) record: RetainedWorkerAdmissionRecordV1,
+    pub(crate) disposition: RetainedWorkerAdmissionRoutabilityDispositionV1,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct RetainedWorkerAdmissionTransportCancellationV1 {
+    pub(crate) authority_store_id: String,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) retained_participant_id: String,
+    pub(crate) cancel_request_id: String,
+    pub(crate) transport_span_id: String,
+    pub(crate) delivery_claim_id: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct AdmissionRejectedBeforeRegistrationInputV1 {
     pub(crate) reason: String,
     pub(crate) rejected_at: TimestampV1,
@@ -396,6 +557,10 @@ struct AdmissionTransportPublicationInputV1 {
 }
 
 enum AdmissionRuntimeTruthInputV1<'a> {
+    TransportStarted {
+        frame_identity: &'a RuntimeFrameIdentityV1,
+        transport_span_id: &'a str,
+    },
     Registered {
         frame_identity: &'a RuntimeFrameIdentityV1,
         event: &'a AgentEvent,
@@ -405,6 +570,7 @@ enum AdmissionRuntimeTruthInputV1<'a> {
         frame_identity: &'a RuntimeFrameIdentityV1,
         event_identity: &'a RuntimeEventIdentityV1,
         terminal_identity: &'a RuntimeTerminalIdentityV1,
+        transport_span_id: Option<&'a str>,
         exit_code: i32,
         terminal_at: TimestampV1,
     },
@@ -458,6 +624,15 @@ enum AdmissionRegistrationCrashPointV1 {
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum AdmissionTransportClaimCrashPointV1 {
+    BeforeTempPersistence,
+    AfterTempFsync,
+    BeforeRegistryReplacementPublication,
+    AfterPublicationBeforeResponse,
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum AdmissionCancellationCrashPointV1 {
     BeforeTempPersistence,
     AfterTempFsync,
     BeforeRegistryReplacementPublication,
@@ -629,6 +804,7 @@ impl RetainedWorkerRuntime {
                 records_by_session: BTreeMap::new(),
                 issuer_request_index: BTreeMap::new(),
                 next_slot_sequence_by_session: BTreeMap::new(),
+                cancel_deliveries_by_request: BTreeMap::new(),
             };
             let registry_bytes = retain_semantic_error(
                 encode_canonical(&registry, "encode admission registry"),
@@ -1263,6 +1439,269 @@ impl RetainedWorkerRuntime {
         result.map_err(|error| RetainedWorkerRuntimeError(error.to_string()))
     }
 
+    pub(crate) fn cancel_pending_admission(
+        &self,
+        authority: &HostSessionAuthority,
+        request: &RetainedWorkerAdmissionCancelRequestV1,
+    ) -> Result<RetainedWorkerAdmissionCancelOutcomeV1, RetainedWorkerRuntimeError> {
+        let accepted_at = TimestampV1::parse(
+            chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+        )
+        .map_err(|_| {
+            RetainedWorkerRuntimeError("create admission cancellation timestamp".into())
+        })?;
+        let mut publication_nonce = [0_u8; 16];
+        rand::rngs::OsRng.fill_bytes(&mut publication_nonce);
+        let mut delivery_claim_nonce = [0_u8; 16];
+        rand::rngs::OsRng.fill_bytes(&mut delivery_claim_nonce);
+        self.cancel_pending_admission_with(
+            authority,
+            request,
+            accepted_at,
+            delivery_claim_nonce,
+            publication_nonce,
+            #[cfg(test)]
+            None,
+            #[cfg(not(test))]
+            None,
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn cancel_pending_admission_at(
+        &self,
+        authority: &HostSessionAuthority,
+        request: &RetainedWorkerAdmissionCancelRequestV1,
+        accepted_at: TimestampV1,
+        delivery_claim_nonce: [u8; 16],
+        publication_nonce: [u8; 16],
+        crash_point: Option<AdmissionCancellationCrashPointV1>,
+    ) -> Result<RetainedWorkerAdmissionCancelOutcomeV1, RetainedWorkerRuntimeError> {
+        self.cancel_pending_admission_with(
+            authority,
+            request,
+            accepted_at,
+            delivery_claim_nonce,
+            publication_nonce,
+            crash_point,
+        )
+    }
+
+    fn cancel_pending_admission_with(
+        &self,
+        authority: &HostSessionAuthority,
+        request: &RetainedWorkerAdmissionCancelRequestV1,
+        accepted_at: TimestampV1,
+        delivery_claim_nonce: [u8; 16],
+        publication_nonce: [u8; 16],
+        #[cfg(test)] crash_point: Option<AdmissionCancellationCrashPointV1>,
+        #[cfg(not(test))] _crash_point: Option<()>,
+    ) -> Result<RetainedWorkerAdmissionCancelOutcomeV1, RetainedWorkerRuntimeError> {
+        let resolved = authority
+            .resolve_current_exact(&request.orchestration_session_id, None)
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        let current_exact = CanonicalExactCurrentAuthorityV1::from_resolved(&resolved);
+        let typed_history = authority
+            .resolve_exact_typed_history(&request.orchestration_session_id)
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        let post_r0_graphs = self.resolve_all_post_r0_registry_graphs(authority)?;
+        let storage =
+            super::host_session_authority::store::retained_worker_admission_storage_for_authority(
+                authority,
+            )
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        let authority_store_id = storage.authority_store_id().to_owned();
+        let mut semantic_failure = None;
+        let result = storage.transaction(|transaction| {
+            let registry_bytes = transaction.read_registry()?.ok_or_else(
+                super::host_session_authority::store::BootstrapError::retained_admission_semantic,
+            )?;
+            let mut registry: RetainedWorkerAdmissionRegistryV1 = retain_semantic_error(
+                decode_canonical(&registry_bytes, "decode canonical admission registry"),
+                &mut semantic_failure,
+            )?;
+            retain_semantic_error(
+                load_committed_admission_key(
+                    &authority_store_id,
+                    &registry,
+                    &transaction.read_keys()?,
+                )
+                .map(drop),
+                &mut semantic_failure,
+            )?;
+            retain_semantic_error(
+                validate_admission_registry(&registry, transaction.authority_root()),
+                &mut semantic_failure,
+            )?;
+            retain_semantic_error(
+                validate_complete_post_r0_registry_graphs(
+                    &registry,
+                    transaction.authority_root(),
+                    &post_r0_graphs,
+                ),
+                &mut semantic_failure,
+            )?;
+            let (outcome, changed) = retain_semantic_error(
+                cancel_pending_admission_in_registry(
+                    &mut registry,
+                    transaction.authority_root(),
+                    &current_exact,
+                    request,
+                    &accepted_at,
+                    &delivery_claim_nonce,
+                    typed_history.as_ref(),
+                    &post_r0_graphs,
+                ),
+                &mut semantic_failure,
+            )?;
+            if changed {
+                #[cfg(test)]
+                if crash_point == Some(AdmissionCancellationCrashPointV1::BeforeTempPersistence) {
+                    retain_semantic_error(
+                        Err(RetainedWorkerRuntimeError(
+                            "injected crash before admission cancellation temp persistence".into(),
+                        )),
+                        &mut semantic_failure,
+                    )?;
+                }
+                let bytes = retain_semantic_error(
+                    encode_canonical(&registry, "encode admission registry"),
+                    &mut semantic_failure,
+                )?;
+                let temp_name = format!(
+                    "admission-registry--{}.tmp",
+                    lower_hex(&publication_nonce)
+                );
+                #[cfg(test)]
+                if matches!(
+                    crash_point,
+                    Some(
+                        AdmissionCancellationCrashPointV1::AfterTempFsync
+                            | AdmissionCancellationCrashPointV1::BeforeRegistryReplacementPublication
+                    )
+                ) {
+                    transaction.stage_registry_replacement_for_test(&temp_name, &bytes)?;
+                    let message = if crash_point
+                        == Some(AdmissionCancellationCrashPointV1::AfterTempFsync)
+                    {
+                        "injected crash after admission cancellation temp fsync"
+                    } else {
+                        "injected crash before admission cancellation registry publication"
+                    };
+                    retain_semantic_error(
+                        Err(RetainedWorkerRuntimeError(message.into())),
+                        &mut semantic_failure,
+                    )?;
+                }
+                transaction.replace_registry(&temp_name, &bytes)?;
+                #[cfg(test)]
+                if crash_point
+                    == Some(AdmissionCancellationCrashPointV1::AfterPublicationBeforeResponse)
+                {
+                    retain_semantic_error(
+                        Err(RetainedWorkerRuntimeError(
+                            "injected crash after admission cancellation publication before response"
+                                .into(),
+                        )),
+                        &mut semantic_failure,
+                    )?;
+                }
+            }
+            Ok(outcome)
+        });
+        if let Some(error) = semantic_failure {
+            return Err(error);
+        }
+        result.map_err(|error| RetainedWorkerRuntimeError(error.to_string()))
+    }
+
+    pub(crate) fn record_pending_admission_cancel_delivery(
+        &self,
+        authority: &HostSessionAuthority,
+        completion: &RetainedWorkerAdmissionCancelDeliveryCompletionV1,
+    ) -> Result<RetainedWorkerAdmissionRecordV1, RetainedWorkerRuntimeError> {
+        let observed_at = TimestampV1::parse(
+            chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+        )
+        .map_err(|_| {
+            RetainedWorkerRuntimeError(
+                "create admission cancellation delivery result timestamp".into(),
+            )
+        })?;
+        self.record_pending_admission_cancel_delivery_at(authority, completion, observed_at)
+    }
+
+    fn record_pending_admission_cancel_delivery_at(
+        &self,
+        authority: &HostSessionAuthority,
+        completion: &RetainedWorkerAdmissionCancelDeliveryCompletionV1,
+        observed_at: TimestampV1,
+    ) -> Result<RetainedWorkerAdmissionRecordV1, RetainedWorkerRuntimeError> {
+        let mut publication_nonce = [0_u8; 16];
+        rand::rngs::OsRng.fill_bytes(&mut publication_nonce);
+        let post_r0_graphs = self.resolve_all_post_r0_registry_graphs(authority)?;
+        let storage =
+            super::host_session_authority::store::retained_worker_admission_storage_for_authority(
+                authority,
+            )
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        let authority_store_id = storage.authority_store_id().to_owned();
+        let mut semantic_failure = None;
+        let applied = storage.transaction(|transaction| {
+            let registry_bytes = transaction.read_registry()?.ok_or_else(
+                super::host_session_authority::store::BootstrapError::retained_admission_semantic,
+            )?;
+            let mut registry: RetainedWorkerAdmissionRegistryV1 = retain_semantic_error(
+                decode_canonical(&registry_bytes, "decode canonical admission registry"),
+                &mut semantic_failure,
+            )?;
+            retain_semantic_error(
+                load_committed_admission_key(
+                    &authority_store_id,
+                    &registry,
+                    &transaction.read_keys()?,
+                )
+                .map(drop),
+                &mut semantic_failure,
+            )?;
+            retain_semantic_error(
+                validate_admission_registry(&registry, transaction.authority_root()),
+                &mut semantic_failure,
+            )?;
+            retain_semantic_error(
+                validate_complete_post_r0_registry_graphs(
+                    &registry,
+                    transaction.authority_root(),
+                    &post_r0_graphs,
+                ),
+                &mut semantic_failure,
+            )?;
+            let (record, changed) = retain_semantic_error(
+                record_pending_admission_cancel_delivery_in_registry(
+                    &mut registry,
+                    transaction.authority_root(),
+                    completion,
+                    &observed_at,
+                ),
+                &mut semantic_failure,
+            )?;
+            if changed {
+                let bytes = retain_semantic_error(
+                    encode_canonical(&registry, "encode admission registry"),
+                    &mut semantic_failure,
+                )?;
+                let temp_name =
+                    format!("admission-registry--{}.tmp", lower_hex(&publication_nonce));
+                transaction.replace_registry(&temp_name, &bytes)?;
+            }
+            Ok(record)
+        });
+        if let Some(error) = semantic_failure {
+            return Err(error);
+        }
+        applied.map_err(|error| RetainedWorkerRuntimeError(error.to_string()))
+    }
+
     pub(crate) fn reconcile_existing_admission(
         &self,
         authority: &HostSessionAuthority,
@@ -1298,6 +1737,11 @@ impl RetainedWorkerRuntime {
         }
         match &durable.state {
             RetainedWorkerAdmissionStateV1::RejectedBeforeRegistration { .. } => Ok(durable),
+            RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration { .. }
+            | RetainedWorkerAdmissionStateV1::CancelledBeforeTransport { .. }
+            | RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+                ..
+            } => Ok(durable),
             RetainedWorkerAdmissionStateV1::SlotReserved { .. } => {
                 let rejection = rejection.ok_or_else(|| {
                     RetainedWorkerRuntimeError(
@@ -1960,6 +2404,10 @@ impl RetainedWorkerRuntime {
                 } else if matches!(
                     record.state,
                     RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
+                        | RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration {
+                            registration_head: Some(_),
+                            ..
+                        }
                 ) {
                     retain_semantic_error(
                         admission_registration_from_hsa(transaction.authority_root(), record),
@@ -2307,7 +2755,30 @@ impl RetainedWorkerRuntime {
         event: &AgentEvent,
         registered_at: TimestampV1,
     ) -> Result<RetainedWorkerAdmissionRecordV1, RetainedWorkerRuntimeError> {
-        self.publish_admission_runtime_truth(
+        self.mark_admission_routable_outcome(
+            authority,
+            plan,
+            retained_participant_id,
+            reservation_proof,
+            frame_identity,
+            event,
+            registered_at,
+        )
+        .map(|outcome| outcome.record)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn mark_admission_routable_outcome(
+        &self,
+        authority: &HostSessionAuthority,
+        plan: &RetainedWorkerAdmissionPlanV1,
+        retained_participant_id: &str,
+        reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
+        frame_identity: &RuntimeFrameIdentityV1,
+        event: &AgentEvent,
+        registered_at: TimestampV1,
+    ) -> Result<RetainedWorkerAdmissionRoutabilityOutcomeV1, RetainedWorkerRuntimeError> {
+        let record = self.publish_admission_runtime_truth(
             authority,
             plan,
             retained_participant_id,
@@ -2317,7 +2788,119 @@ impl RetainedWorkerRuntime {
                 event,
                 registered_at,
             },
-        )
+        )?;
+        let disposition = match &record.state {
+            RetainedWorkerAdmissionStateV1::Routable { .. } => {
+                RetainedWorkerAdmissionRoutabilityDispositionV1::Routable
+            }
+            RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration {
+                cancel_request_id,
+                ..
+            }
+            | RetainedWorkerAdmissionStateV1::CancelledBeforeTransport {
+                cancel_request_id, ..
+            }
+            | RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+                cancel_request_id,
+                ..
+            } => RetainedWorkerAdmissionRoutabilityDispositionV1::CancellationWon {
+                cancel_request_id: cancel_request_id.clone(),
+            },
+            RetainedWorkerAdmissionStateV1::Terminal { .. }
+            | RetainedWorkerAdmissionStateV1::RejectedBeforeRegistration { .. } => {
+                RetainedWorkerAdmissionRoutabilityDispositionV1::AlreadyTerminal
+            }
+            _ => {
+                return Err(RetainedWorkerRuntimeError(
+                    "Registered runtime truth did not reach a canonical routability disposition"
+                        .into(),
+                ));
+            }
+        };
+        Ok(RetainedWorkerAdmissionRoutabilityOutcomeV1 {
+            record,
+            disposition,
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn observe_admission_transport_start(
+        &self,
+        authority: &HostSessionAuthority,
+        plan: &RetainedWorkerAdmissionPlanV1,
+        retained_participant_id: &str,
+        reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
+        frame_identity: &RuntimeFrameIdentityV1,
+        transport_span_id: &str,
+    ) -> Result<Option<RetainedWorkerAdmissionTransportCancellationV1>, RetainedWorkerRuntimeError>
+    {
+        let record = self.publish_admission_runtime_truth(
+            authority,
+            plan,
+            retained_participant_id,
+            reservation_proof,
+            &AdmissionRuntimeTruthInputV1::TransportStarted {
+                frame_identity,
+                transport_span_id,
+            },
+        )?;
+        self.claim_pending_admission_cancel_delivery(authority, plan, &record)
+    }
+
+    pub(crate) fn claim_pending_admission_cancel_delivery(
+        &self,
+        authority: &HostSessionAuthority,
+        plan: &RetainedWorkerAdmissionPlanV1,
+        record: &RetainedWorkerAdmissionRecordV1,
+    ) -> Result<Option<RetainedWorkerAdmissionTransportCancellationV1>, RetainedWorkerRuntimeError>
+    {
+        let RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+            cancel_request_id,
+            ..
+        } = &record.state
+        else {
+            return Ok(None);
+        };
+        let outcome = self.cancel_pending_admission(
+            authority,
+            &RetainedWorkerAdmissionCancelRequestV1 {
+                schema_version: 1,
+                cancel_request_id: cancel_request_id.clone(),
+                authority_store_id: record.authority_store_id.clone(),
+                issuer_request_id: record.issuer_request_id.clone(),
+                orchestration_session_id: record.orchestration_session_id.clone(),
+                caller_participant_id: plan.spawn_request.caller_participant_id.clone(),
+                retained_participant_id: record.retained_participant_id.clone(),
+                bootstrap_run_id: record.bootstrap_run_id.clone(),
+                backend_id: record.backend_id.clone(),
+                protocol: record.protocol.clone(),
+                world_binding: record.world_binding.clone(),
+                current_policy_ref: record.current_policy_ref.clone(),
+                current_policy_revision: record.current_policy_revision.clone(),
+                expected_record_revision: record.record_revision,
+                expected_state: record.state.clone(),
+            },
+        )?;
+        match outcome {
+            RetainedWorkerAdmissionCancelOutcomeV1::CancelAcceptedPendingCloseout {
+                record,
+                cancel_request_id,
+                delivery_disposition:
+                    RetainedWorkerAdmissionCancelDeliveryDispositionV1::Claimed {
+                        delivery_claim_id,
+                        transport_span_id,
+                    },
+                ..
+            } => Ok(Some(RetainedWorkerAdmissionTransportCancellationV1 {
+                authority_store_id: record.authority_store_id,
+                orchestration_session_id: record.orchestration_session_id,
+                retained_participant_id: record.retained_participant_id,
+                cancel_request_id,
+                transport_span_id,
+                delivery_claim_id,
+            })),
+            _ => Ok(None),
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2342,6 +2925,37 @@ impl RetainedWorkerRuntime {
                 frame_identity,
                 event_identity,
                 terminal_identity,
+                transport_span_id: None,
+                exit_code,
+                terminal_at,
+            },
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn mark_admission_terminal_for_transport(
+        &self,
+        authority: &HostSessionAuthority,
+        plan: &RetainedWorkerAdmissionPlanV1,
+        retained_participant_id: &str,
+        reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
+        frame_identity: &RuntimeFrameIdentityV1,
+        event_identity: &RuntimeEventIdentityV1,
+        terminal_identity: &RuntimeTerminalIdentityV1,
+        transport_span_id: &str,
+        exit_code: i32,
+        terminal_at: TimestampV1,
+    ) -> Result<RetainedWorkerAdmissionRecordV1, RetainedWorkerRuntimeError> {
+        self.publish_admission_runtime_truth(
+            authority,
+            plan,
+            retained_participant_id,
+            reservation_proof,
+            &AdmissionRuntimeTruthInputV1::Terminal {
+                frame_identity,
+                event_identity,
+                terminal_identity,
+                transport_span_id: Some(transport_span_id),
                 exit_code,
                 terminal_at,
             },
@@ -3196,6 +3810,13 @@ fn prepare_registration_head_in_registry(
                 "admission slot was rejected before registration".into(),
             ));
         }
+        RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration { .. }
+        | RetainedWorkerAdmissionStateV1::CancelledBeforeTransport { .. }
+        | RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending { .. } => {
+            return Err(RetainedWorkerRuntimeError(
+                "admission cancellation prevents registration".into(),
+            ));
+        }
         RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. } => {
             admission_registration_from_hsa(authority_root, &record)?;
             return Ok((AdmissionHeadPreparationV1::Ready(record), false));
@@ -3258,6 +3879,122 @@ fn prepare_registration_head_in_registry(
     Ok((AdmissionHeadPreparationV1::Ready(record), true))
 }
 
+fn cancel_delivery_claim_expires_at(
+    claimed_at: &TimestampV1,
+) -> Result<TimestampV1, RetainedWorkerRuntimeError> {
+    let parsed = chrono::DateTime::parse_from_rfc3339(claimed_at.as_str())
+        .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+    let expires_at = parsed
+        .checked_add_signed(chrono::Duration::seconds(
+            RETAINED_ADMISSION_CANCEL_DELIVERY_CLAIM_LEASE_SECONDS,
+        ))
+        .ok_or_else(|| {
+            RetainedWorkerRuntimeError(
+                "admission cancellation delivery claim expiry overflow".into(),
+            )
+        })?
+        .with_timezone(&chrono::Utc)
+        .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+    TimestampV1::parse(expires_at).map_err(|error| RetainedWorkerRuntimeError(error.to_string()))
+}
+
+fn claim_pending_admission_cancel_delivery_in_record(
+    registry: &mut RetainedWorkerAdmissionRegistryV1,
+    record: &RetainedWorkerAdmissionRecordV1,
+    claimed_at: &TimestampV1,
+    claim_nonce: &[u8; 16],
+) -> Result<Option<String>, RetainedWorkerRuntimeError> {
+    let RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+        transport_span_id,
+        cancel_request_id,
+        accepted_at,
+        ..
+    } = &record.state
+    else {
+        return Ok(None);
+    };
+    let Some(transport_span_id) = transport_span_id.as_deref() else {
+        return Ok(None);
+    };
+    let claimed_at = if claimed_at.as_str() < accepted_at.as_str() {
+        accepted_at
+    } else {
+        claimed_at
+    };
+    let existing = registry
+        .cancel_deliveries_by_request
+        .get(cancel_request_id)
+        .cloned();
+    if existing.as_ref().is_some_and(|delivery| {
+        delivery.schema_version != 1
+            || delivery.authority_store_id != record.authority_store_id
+            || delivery.orchestration_session_id != record.orchestration_session_id
+            || delivery.retained_participant_id != record.retained_participant_id
+            || delivery.cancel_request_id != *cancel_request_id
+            || delivery.transport_span_id != transport_span_id
+            || delivery.accepted_at != *accepted_at
+    }) {
+        return Err(RetainedWorkerRuntimeError(
+            "admission cancellation delivery does not exact-join accepted cancellation truth"
+                .into(),
+        ));
+    }
+    let claim_is_available = match existing.as_ref().map(|delivery| &delivery.delivery_state) {
+        None | Some(RetainedWorkerAdmissionCancelDeliveryStateV1::Available) => true,
+        Some(RetainedWorkerAdmissionCancelDeliveryStateV1::Claimed {
+            claim_expires_at, ..
+        }) => claimed_at.as_str() >= claim_expires_at.as_str(),
+        Some(RetainedWorkerAdmissionCancelDeliveryStateV1::Confirmed { .. }) => false,
+    };
+    if !claim_is_available {
+        return Ok(None);
+    }
+    if transport_span_id.trim().is_empty() {
+        return Err(RetainedWorkerRuntimeError(
+            "admission cancellation delivery span is empty".into(),
+        ));
+    }
+    let delivery_claim_id = format!("rcdc_{}", lower_hex(claim_nonce));
+    if registry
+        .cancel_deliveries_by_request
+        .values()
+        .any(|delivery| {
+            matches!(
+                &delivery.delivery_state,
+                RetainedWorkerAdmissionCancelDeliveryStateV1::Claimed {
+                    delivery_claim_id: existing,
+                    ..
+                } | RetainedWorkerAdmissionCancelDeliveryStateV1::Confirmed {
+                    delivery_claim_id: existing,
+                    ..
+                } if existing == &delivery_claim_id
+            )
+        })
+    {
+        return Err(RetainedWorkerRuntimeError(
+            "generated admission cancellation delivery claim identity collides".into(),
+        ));
+    }
+    registry.cancel_deliveries_by_request.insert(
+        cancel_request_id.clone(),
+        RetainedWorkerAdmissionCancelDeliveryRecordV1 {
+            schema_version: 1,
+            authority_store_id: record.authority_store_id.clone(),
+            orchestration_session_id: record.orchestration_session_id.clone(),
+            retained_participant_id: record.retained_participant_id.clone(),
+            cancel_request_id: cancel_request_id.clone(),
+            transport_span_id: transport_span_id.to_owned(),
+            accepted_at: accepted_at.clone(),
+            delivery_state: RetainedWorkerAdmissionCancelDeliveryStateV1::Claimed {
+                delivery_claim_id: delivery_claim_id.clone(),
+                claimed_at: claimed_at.clone(),
+                claim_expires_at: cancel_delivery_claim_expires_at(claimed_at)?,
+            },
+        },
+    );
+    Ok(Some(delivery_claim_id))
+}
+
 fn reject_before_registration_in_registry(
     registry: &mut RetainedWorkerAdmissionRegistryV1,
     authority_root: &VersionedStateRoot,
@@ -3307,6 +4044,13 @@ fn reject_before_registration_in_registry(
                 "only pre-registration admissions may be rejected before registration".into(),
             ));
         }
+        RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration { .. }
+        | RetainedWorkerAdmissionStateV1::CancelledBeforeTransport { .. }
+        | RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending { .. } => {
+            return Err(RetainedWorkerRuntimeError(
+                "cancelled admission cannot be rejected again".into(),
+            ));
+        }
     }
     record.state = RetainedWorkerAdmissionStateV1::RejectedBeforeRegistration {
         reason: rejection.reason.clone(),
@@ -3325,6 +4069,552 @@ fn reject_before_registration_in_registry(
     Ok((record, true))
 }
 
+const RETAINED_ADMISSION_CANCEL_DELIVERY_CLAIM_LEASE_SECONDS: i64 = 60;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum RetainedWorkerAdmissionCancelDeliveryDispositionV1 {
+    Unavailable,
+    Claimed {
+        delivery_claim_id: String,
+        transport_span_id: String,
+    },
+    InProgress {
+        delivery_claim_id: String,
+        transport_span_id: String,
+        claim_expires_at: TimestampV1,
+    },
+    Confirmed {
+        transport_span_id: String,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RetainedWorkerAdmissionCancelDeliveryResultV1 {
+    ConfirmedDelivered,
+    ConfirmedNotDelivered,
+    Ambiguous,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct RetainedWorkerAdmissionCancelDeliveryCompletionV1 {
+    pub(crate) authority_store_id: String,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) retained_participant_id: String,
+    pub(crate) cancel_request_id: String,
+    pub(crate) transport_span_id: String,
+    pub(crate) delivery_claim_id: String,
+    pub(crate) result: RetainedWorkerAdmissionCancelDeliveryResultV1,
+}
+
+fn record_pending_admission_cancel_delivery_in_registry(
+    registry: &mut RetainedWorkerAdmissionRegistryV1,
+    authority_root: &VersionedStateRoot,
+    completion: &RetainedWorkerAdmissionCancelDeliveryCompletionV1,
+    observed_at: &TimestampV1,
+) -> Result<(RetainedWorkerAdmissionRecordV1, bool), RetainedWorkerRuntimeError> {
+    if completion.authority_store_id != registry.authority_store_id
+        || completion.cancel_request_id.trim().is_empty()
+        || completion.transport_span_id.trim().is_empty()
+        || !valid_generated_id(&completion.delivery_claim_id, "rcdc_")
+    {
+        return Err(RetainedWorkerRuntimeError(
+            "admission cancellation delivery result identity is invalid".into(),
+        ));
+    }
+    let mut record = registry
+        .records_by_session
+        .get(&completion.orchestration_session_id)
+        .and_then(|records| records.get(&completion.retained_participant_id))
+        .cloned()
+        .ok_or_else(|| {
+            RetainedWorkerRuntimeError(
+                "exact admission cancellation delivery target is absent".into(),
+            )
+        })?;
+    let record_cancel_request_id = match &record.state {
+        RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+            cancel_request_id,
+            ..
+        } => Some(cancel_request_id),
+        RetainedWorkerAdmissionStateV1::Terminal {
+            cancel_request_id: Some(cancel_request_id),
+            ..
+        } => Some(cancel_request_id),
+        _ => None,
+    };
+    if record.authority_store_id != completion.authority_store_id
+        || record.orchestration_session_id != completion.orchestration_session_id
+        || record.retained_participant_id != completion.retained_participant_id
+        || record_cancel_request_id != Some(&completion.cancel_request_id)
+    {
+        return Err(RetainedWorkerRuntimeError(
+            "admission cancellation delivery result does not exact-join durable admission truth"
+                .into(),
+        ));
+    }
+    let delivery = registry
+        .cancel_deliveries_by_request
+        .get(&completion.cancel_request_id)
+        .cloned()
+        .ok_or_else(|| {
+            RetainedWorkerRuntimeError(
+                "admission cancellation delivery result has no durable claim".into(),
+            )
+        })?;
+    if delivery.authority_store_id != completion.authority_store_id
+        || delivery.orchestration_session_id != completion.orchestration_session_id
+        || delivery.retained_participant_id != completion.retained_participant_id
+        || delivery.cancel_request_id != completion.cancel_request_id
+        || delivery.transport_span_id != completion.transport_span_id
+    {
+        return Err(RetainedWorkerRuntimeError(
+            "admission cancellation delivery result changed immutable delivery identity".into(),
+        ));
+    }
+    let next_state = match &delivery.delivery_state {
+        RetainedWorkerAdmissionCancelDeliveryStateV1::Claimed {
+            delivery_claim_id,
+            claim_expires_at,
+            ..
+        } if delivery_claim_id == &completion.delivery_claim_id
+            && observed_at.as_str() < claim_expires_at.as_str() =>
+        {
+            match completion.result {
+                RetainedWorkerAdmissionCancelDeliveryResultV1::ConfirmedDelivered => {
+                    RetainedWorkerAdmissionCancelDeliveryStateV1::Confirmed {
+                        delivery_claim_id: completion.delivery_claim_id.clone(),
+                        confirmed_at: observed_at.clone(),
+                    }
+                }
+                RetainedWorkerAdmissionCancelDeliveryResultV1::ConfirmedNotDelivered => {
+                    RetainedWorkerAdmissionCancelDeliveryStateV1::Available
+                }
+                RetainedWorkerAdmissionCancelDeliveryResultV1::Ambiguous => {
+                    return Ok((record, false));
+                }
+            }
+        }
+        RetainedWorkerAdmissionCancelDeliveryStateV1::Confirmed {
+            delivery_claim_id, ..
+        } if delivery_claim_id == &completion.delivery_claim_id
+            && completion.result
+                == RetainedWorkerAdmissionCancelDeliveryResultV1::ConfirmedDelivered =>
+        {
+            return Ok((record, false));
+        }
+        RetainedWorkerAdmissionCancelDeliveryStateV1::Available
+            if completion.result
+                == RetainedWorkerAdmissionCancelDeliveryResultV1::ConfirmedNotDelivered =>
+        {
+            return Ok((record, false));
+        }
+        _ => {
+            return Err(RetainedWorkerRuntimeError(
+                "admission cancellation delivery result does not own the live exact claim".into(),
+            ));
+        }
+    };
+    registry.cancel_deliveries_by_request.insert(
+        completion.cancel_request_id.clone(),
+        RetainedWorkerAdmissionCancelDeliveryRecordV1 {
+            delivery_state: next_state,
+            ..delivery
+        },
+    );
+    record.record_revision = record
+        .record_revision
+        .checked_add(1)
+        .ok_or_else(|| RetainedWorkerRuntimeError("admission record revision overflow".into()))?;
+    registry
+        .records_by_session
+        .get_mut(&record.orchestration_session_id)
+        .ok_or_else(|| RetainedWorkerRuntimeError("admission session bucket is absent".into()))?
+        .insert(record.retained_participant_id.clone(), record.clone());
+    validate_admission_registry(registry, authority_root)?;
+    Ok((record, true))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn cancel_pending_admission_in_registry(
+    registry: &mut RetainedWorkerAdmissionRegistryV1,
+    authority_root: &VersionedStateRoot,
+    current_exact: &CanonicalExactCurrentAuthorityV1,
+    request: &RetainedWorkerAdmissionCancelRequestV1,
+    accepted_at: &TimestampV1,
+    delivery_claim_nonce: &[u8; 16],
+    typed_history: Option<&BTreeMap<u64, ResolvedSessionAuthorityV1>>,
+    post_r0_graphs: &BTreeMap<(String, String), ResolvedPostR0RegistryGraphV1>,
+) -> Result<(RetainedWorkerAdmissionCancelOutcomeV1, bool), RetainedWorkerRuntimeError> {
+    if request.schema_version != 1 || request.cancel_request_id.trim().is_empty() {
+        return Err(RetainedWorkerRuntimeError(
+            "admission cancellation request identity is invalid".into(),
+        ));
+    }
+    let root = preserved_start_root_view(authority_root)?;
+    let mut record = registry
+        .records_by_session
+        .get(&request.orchestration_session_id)
+        .and_then(|records| records.get(&request.retained_participant_id))
+        .cloned()
+        .ok_or_else(|| {
+            RetainedWorkerRuntimeError("exact admission cancellation target is absent".into())
+        })?;
+    let indexed = registry
+        .issuer_request_index
+        .get(&request.issuer_request_id)
+        .ok_or_else(|| {
+            RetainedWorkerRuntimeError("admission cancellation issuer is absent".into())
+        })?;
+    if indexed.orchestration_session_id != request.orchestration_session_id
+        || indexed.retained_participant_id != request.retained_participant_id
+        || request.authority_store_id != registry.authority_store_id
+        || record.authority_store_id != request.authority_store_id
+        || record.issuer_request_id != request.issuer_request_id
+        || record.orchestration_session_id != request.orchestration_session_id
+        || current_exact.authority_store_id != request.authority_store_id
+        || current_exact.orchestration_session_id != request.orchestration_session_id
+        || current_exact.caller_participant_id != request.caller_participant_id
+        || record.retained_participant_id != request.retained_participant_id
+        || record.bootstrap_run_id != request.bootstrap_run_id
+        || record.backend_id != request.backend_id
+        || record.protocol != request.protocol
+        || record.world_binding != request.world_binding
+        || record.current_policy_ref != request.current_policy_ref
+        || record.current_policy_revision != request.current_policy_revision
+        || current_exact.authority.current_policy_ref.as_ref() != Some(&request.current_policy_ref)
+        || current_exact.current_policy.policy_revision != request.current_policy_revision
+    {
+        return Err(RetainedWorkerRuntimeError(
+            "admission cancellation request does not exact-join authority and admission truth"
+                .into(),
+        ));
+    }
+    validate_admission_to_current_exact_authority_ancestry(
+        root.as_ref(),
+        current_exact,
+        &record,
+        typed_history,
+    )?;
+
+    let cancelled_registration_head = match &record.state {
+        RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration {
+            cancel_request_id,
+            cancelled_at,
+            registration_head: Some(_),
+        } => Some((cancel_request_id.clone(), cancelled_at.clone())),
+        _ => None,
+    };
+    if let Some((cancel_request_id, cancelled_at)) = cancelled_registration_head {
+        if let Some(registration) = admission_registration_from_hsa(authority_root, &record)? {
+            let graph = post_r0_graphs
+                .get(&(
+                    record.orchestration_session_id.clone(),
+                    record.retained_participant_id.clone(),
+                ))
+                .ok_or_else(|| {
+                    RetainedWorkerRuntimeError(
+                        "reconciled R0 cancellation has no complete registration graph".into(),
+                    )
+                })?;
+            validate_post_r0_registered_graph_against_expectation(
+                root.as_ref(),
+                &record,
+                current_exact,
+                &graph.registered_graph.resolved_target.descriptor,
+                &record.current_policy_ref,
+                &graph.registered_graph.resolved_target.current_policy,
+                &registration,
+                &graph.registered_graph.result,
+                &graph.registered_graph.resolved_target,
+                typed_history,
+            )?;
+            record = replace_admission_state(
+                registry,
+                authority_root,
+                record,
+                RetainedWorkerAdmissionStateV1::CancelledBeforeTransport {
+                    registration,
+                    cancel_request_id,
+                    cancelled_at,
+                },
+            )?;
+            let outcome = admission_cancel_outcome_from_record(registry, &record, None)
+                .ok_or_else(|| {
+                    RetainedWorkerRuntimeError(
+                        "reconciled admission cancellation outcome is absent".into(),
+                    )
+                })?;
+            return Ok((outcome, true));
+        }
+    }
+
+    if matches!(
+        record.state,
+        RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending { .. }
+    ) {
+        let delivery_claim_id = claim_pending_admission_cancel_delivery_in_record(
+            registry,
+            &record,
+            accepted_at,
+            delivery_claim_nonce,
+        )?;
+        let changed = delivery_claim_id.is_some();
+        if changed {
+            record.record_revision = record.record_revision.checked_add(1).ok_or_else(|| {
+                RetainedWorkerRuntimeError("admission record revision overflow".into())
+            })?;
+            registry
+                .records_by_session
+                .get_mut(&record.orchestration_session_id)
+                .ok_or_else(|| {
+                    RetainedWorkerRuntimeError("admission session bucket is absent".into())
+                })?
+                .insert(record.retained_participant_id.clone(), record.clone());
+        }
+        validate_admission_registry(registry, authority_root)?;
+        let outcome =
+            admission_cancel_outcome_from_record(registry, &record, delivery_claim_id.as_deref())
+                .ok_or_else(|| {
+                RetainedWorkerRuntimeError(
+                    "pending admission cancellation outcome is absent".into(),
+                )
+            })?;
+        return Ok((outcome, changed));
+    }
+    if let Some(outcome) = admission_cancel_outcome_from_record(registry, &record, None) {
+        validate_admission_registry(registry, authority_root)?;
+        return Ok((outcome, false));
+    }
+    if record.record_revision != request.expected_record_revision
+        || record.state != request.expected_state
+    {
+        return Err(RetainedWorkerRuntimeError(
+            "admission cancellation expected revision or state is stale".into(),
+        ));
+    }
+
+    let next_state = match &record.state {
+        RetainedWorkerAdmissionStateV1::SlotReserved { .. } => {
+            RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration {
+                cancel_request_id: request.cancel_request_id.clone(),
+                cancelled_at: accepted_at.clone(),
+                registration_head: None,
+            }
+        }
+        RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead {
+            authority_revision_expected,
+            authority_record_commitment_expected,
+            head_acquired_at,
+        } => {
+            if let Some(registration) = admission_registration_from_hsa(authority_root, &record)? {
+                let graph = post_r0_graphs
+                    .get(&(
+                        record.orchestration_session_id.clone(),
+                        record.retained_participant_id.clone(),
+                    ))
+                    .ok_or_else(|| {
+                        RetainedWorkerRuntimeError(
+                            "applied R0 cancellation has no complete registration graph".into(),
+                        )
+                    })?;
+                validate_post_r0_registered_graph_against_expectation(
+                    root.as_ref(),
+                    &record,
+                    current_exact,
+                    &graph.registered_graph.resolved_target.descriptor,
+                    &record.current_policy_ref,
+                    &graph.registered_graph.resolved_target.current_policy,
+                    &registration,
+                    &graph.registered_graph.result,
+                    &graph.registered_graph.resolved_target,
+                    typed_history,
+                )?;
+                RetainedWorkerAdmissionStateV1::CancelledBeforeTransport {
+                    registration,
+                    cancel_request_id: request.cancel_request_id.clone(),
+                    cancelled_at: accepted_at.clone(),
+                }
+            } else {
+                RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration {
+                    cancel_request_id: request.cancel_request_id.clone(),
+                    cancelled_at: accepted_at.clone(),
+                    registration_head: Some(RetainedWorkerAdmissionRegistrationHeadV1 {
+                        authority_revision_expected: *authority_revision_expected,
+                        authority_record_commitment_expected: authority_record_commitment_expected
+                            .clone(),
+                        head_acquired_at: head_acquired_at.clone(),
+                    }),
+                }
+            }
+        }
+        RetainedWorkerAdmissionStateV1::PreTransportNonterminal { registration } => {
+            RetainedWorkerAdmissionStateV1::CancelledBeforeTransport {
+                registration: registration.clone(),
+                cancel_request_id: request.cancel_request_id.clone(),
+                cancelled_at: accepted_at.clone(),
+            }
+        }
+        RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal {
+            registration,
+            transport_claim_id,
+            transport_span_id,
+            stream_id,
+            last_frame_sequence,
+            ..
+        } => RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+            registration: registration.clone(),
+            transport_claim_id: Some(transport_claim_id.clone()),
+            transport_span_id: transport_span_id.clone(),
+            stream_id: stream_id.clone(),
+            last_frame_sequence: *last_frame_sequence,
+            cancel_request_id: request.cancel_request_id.clone(),
+            accepted_at: accepted_at.clone(),
+        },
+        RetainedWorkerAdmissionStateV1::InterruptedNonterminal {
+            registration,
+            transport_claim_id,
+            transport_span_id,
+            stream_id,
+            last_frame_sequence,
+            ..
+        } => RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+            registration: registration.clone(),
+            transport_claim_id: transport_claim_id.clone(),
+            transport_span_id: transport_span_id.clone(),
+            stream_id: stream_id.clone(),
+            last_frame_sequence: *last_frame_sequence,
+            cancel_request_id: request.cancel_request_id.clone(),
+            accepted_at: accepted_at.clone(),
+        },
+        RetainedWorkerAdmissionStateV1::Routable { .. }
+        | RetainedWorkerAdmissionStateV1::Terminal { .. }
+        | RetainedWorkerAdmissionStateV1::RejectedBeforeRegistration { .. }
+        | RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration { .. }
+        | RetainedWorkerAdmissionStateV1::CancelledBeforeTransport { .. }
+        | RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending { .. } => {
+            unreachable!("terminal outcomes were classified before mutation")
+        }
+    };
+    record.state = next_state;
+    let delivery_claim_id = claim_pending_admission_cancel_delivery_in_record(
+        registry,
+        &record,
+        accepted_at,
+        delivery_claim_nonce,
+    )?;
+    record.record_revision = record
+        .record_revision
+        .checked_add(1)
+        .ok_or_else(|| RetainedWorkerRuntimeError("admission record revision overflow".into()))?;
+    registry
+        .records_by_session
+        .get_mut(&record.orchestration_session_id)
+        .ok_or_else(|| RetainedWorkerRuntimeError("admission session bucket is absent".into()))?
+        .insert(record.retained_participant_id.clone(), record.clone());
+    validate_admission_registry(registry, authority_root)?;
+    let outcome =
+        admission_cancel_outcome_from_record(registry, &record, delivery_claim_id.as_deref())
+            .ok_or_else(|| {
+                RetainedWorkerRuntimeError(
+                    "durable admission cancellation outcome is absent".into(),
+                )
+            })?;
+    Ok((outcome, true))
+}
+fn admission_cancel_outcome_from_record(
+    registry: &RetainedWorkerAdmissionRegistryV1,
+    record: &RetainedWorkerAdmissionRecordV1,
+    newly_claimed_delivery_id: Option<&str>,
+) -> Option<RetainedWorkerAdmissionCancelOutcomeV1> {
+    match &record.state {
+        RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration {
+            cancel_request_id, ..
+        }
+        | RetainedWorkerAdmissionStateV1::CancelledBeforeTransport {
+            cancel_request_id, ..
+        } => Some(
+            RetainedWorkerAdmissionCancelOutcomeV1::CancelledBeforeTransport {
+                record: record.clone(),
+                cancel_request_id: cancel_request_id.clone(),
+            },
+        ),
+        RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+            cancel_request_id,
+            transport_span_id,
+            ..
+        } => {
+            let delivery = registry.cancel_deliveries_by_request.get(cancel_request_id);
+            let delivery_disposition = match (
+                transport_span_id,
+                delivery.map(|delivery| &delivery.delivery_state),
+            ) {
+                (_, None | Some(RetainedWorkerAdmissionCancelDeliveryStateV1::Available)) => {
+                    RetainedWorkerAdmissionCancelDeliveryDispositionV1::Unavailable
+                }
+                (
+                    Some(transport_span_id),
+                    Some(RetainedWorkerAdmissionCancelDeliveryStateV1::Claimed {
+                        delivery_claim_id,
+                        ..
+                    }),
+                ) if newly_claimed_delivery_id == Some(delivery_claim_id.as_str()) => {
+                    RetainedWorkerAdmissionCancelDeliveryDispositionV1::Claimed {
+                        delivery_claim_id: delivery_claim_id.clone(),
+                        transport_span_id: transport_span_id.clone(),
+                    }
+                }
+                (
+                    Some(transport_span_id),
+                    Some(RetainedWorkerAdmissionCancelDeliveryStateV1::Claimed {
+                        delivery_claim_id,
+                        claim_expires_at,
+                        ..
+                    }),
+                ) => RetainedWorkerAdmissionCancelDeliveryDispositionV1::InProgress {
+                    delivery_claim_id: delivery_claim_id.clone(),
+                    transport_span_id: transport_span_id.clone(),
+                    claim_expires_at: claim_expires_at.clone(),
+                },
+                (
+                    Some(transport_span_id),
+                    Some(RetainedWorkerAdmissionCancelDeliveryStateV1::Confirmed { .. }),
+                ) => RetainedWorkerAdmissionCancelDeliveryDispositionV1::Confirmed {
+                    transport_span_id: transport_span_id.clone(),
+                },
+                (None, _) => return None,
+            };
+            Some(
+                RetainedWorkerAdmissionCancelOutcomeV1::CancelAcceptedPendingCloseout {
+                    record: record.clone(),
+                    cancel_request_id: cancel_request_id.clone(),
+                    transport_span_id: transport_span_id.clone(),
+                    delivery_disposition,
+                },
+            )
+        }
+        RetainedWorkerAdmissionStateV1::Routable { .. } => {
+            Some(RetainedWorkerAdmissionCancelOutcomeV1::AlreadyRoutable {
+                record: record.clone(),
+            })
+        }
+        RetainedWorkerAdmissionStateV1::Terminal {
+            cancel_request_id, ..
+        } => Some(RetainedWorkerAdmissionCancelOutcomeV1::AlreadyTerminal {
+            record: record.clone(),
+            cancel_request_id: cancel_request_id.clone(),
+        }),
+        RetainedWorkerAdmissionStateV1::RejectedBeforeRegistration { .. } => Some(
+            RetainedWorkerAdmissionCancelOutcomeV1::RejectedBeforeRegistration {
+                record: record.clone(),
+            },
+        ),
+        RetainedWorkerAdmissionStateV1::SlotReserved { .. }
+        | RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
+        | RetainedWorkerAdmissionStateV1::PreTransportNonterminal { .. }
+        | RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal { .. }
+        | RetainedWorkerAdmissionStateV1::InterruptedNonterminal { .. } => None,
+    }
+}
 fn verify_admission_record_fingerprint(
     supplied_plan: &RetainedWorkerAdmissionPlanV1,
     record: &RetainedWorkerAdmissionRecordV1,
@@ -3398,6 +4688,10 @@ fn advance_registration_head_in_registry(
     if !matches!(
         record.state,
         RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
+            | RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration {
+                registration_head: Some(_),
+                ..
+            }
     ) {
         return Err(RetainedWorkerRuntimeError(
             "only the registration head can advance after R0".into(),
@@ -3424,7 +4718,21 @@ fn advance_registration_head_in_registry(
         &input.post_r0_graph.resolved_target,
         typed_history,
     )?;
-    record.state = RetainedWorkerAdmissionStateV1::PreTransportNonterminal { registration };
+    record.state = match &record.state {
+        RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration {
+            cancel_request_id,
+            cancelled_at,
+            ..
+        } => RetainedWorkerAdmissionStateV1::CancelledBeforeTransport {
+            registration,
+            cancel_request_id: cancel_request_id.clone(),
+            cancelled_at: cancelled_at.clone(),
+        },
+        RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. } => {
+            RetainedWorkerAdmissionStateV1::PreTransportNonterminal { registration }
+        }
+        _ => unreachable!("registration head state was checked before R0 reconciliation"),
+    };
     record.record_revision = record
         .record_revision
         .checked_add(1)
@@ -3496,6 +4804,13 @@ fn claim_transport_in_registry(
                 newly_claimed: false,
             });
         }
+        RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration { .. }
+        | RetainedWorkerAdmissionStateV1::CancelledBeforeTransport { .. }
+        | RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending { .. } => {
+            return Err(RetainedWorkerRuntimeError(
+                "admission cancellation prevents transport claim".into(),
+            ));
+        }
         RetainedWorkerAdmissionStateV1::SlotReserved { .. }
         | RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
         | RetainedWorkerAdmissionStateV1::RejectedBeforeRegistration { .. } => {
@@ -3509,14 +4824,24 @@ fn claim_transport_in_registry(
         .records_by_session
         .values()
         .flat_map(BTreeMap::values)
-        .any(|candidate| {
-            matches!(
-                &candidate.state,
-                RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal {
-                    transport_claim_id: existing,
-                    ..
-                } if existing == &transport_claim_id
-            )
+        .any(|candidate| match &candidate.state {
+            RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal {
+                transport_claim_id: existing,
+                ..
+            } => existing == &transport_claim_id,
+            RetainedWorkerAdmissionStateV1::Routable {
+                transport_claim_id: Some(existing),
+                ..
+            }
+            | RetainedWorkerAdmissionStateV1::InterruptedNonterminal {
+                transport_claim_id: Some(existing),
+                ..
+            }
+            | RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+                transport_claim_id: Some(existing),
+                ..
+            } => existing == &transport_claim_id,
+            _ => false,
         })
     {
         return Err(RetainedWorkerRuntimeError(
@@ -3526,6 +4851,9 @@ fn claim_transport_in_registry(
     record.state = RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal {
         registration,
         transport_claim_id,
+        transport_span_id: None,
+        stream_id: None,
+        last_frame_sequence: None,
         claimed_at: claim_input.claimed_at.clone(),
     };
     record.record_revision = record
@@ -3574,6 +4902,15 @@ fn advance_admission_runtime_truth_in_registry(
         typed_history,
     )?;
     verify_admission_record_fingerprint(supplied_plan, &record, secret_key)?;
+    if matches!(
+        record.state,
+        RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration { .. }
+            | RetainedWorkerAdmissionStateV1::CancelledBeforeTransport { .. }
+            | RetainedWorkerAdmissionStateV1::RejectedBeforeRegistration { .. }
+    ) {
+        validate_admission_registry(registry, authority_root)?;
+        return Ok((record, false));
+    }
     let registration = admission_registration(&record.state)
         .cloned()
         .ok_or_else(|| {
@@ -3592,6 +4929,118 @@ fn advance_admission_runtime_truth_in_registry(
     )?;
 
     let next_state = match truth {
+        AdmissionRuntimeTruthInputV1::TransportStarted {
+            frame_identity,
+            transport_span_id,
+        } => {
+            frame_identity
+                .validate()
+                .map_err(RetainedWorkerRuntimeError)?;
+            if transport_span_id.trim().is_empty() {
+                return Err(RetainedWorkerRuntimeError(
+                    "transport start span identity is empty".into(),
+                ));
+            }
+            match &record.state {
+                RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal {
+                    transport_claim_id,
+                    transport_span_id: existing_span_id,
+                    stream_id,
+                    last_frame_sequence,
+                    claimed_at,
+                    ..
+                } => {
+                    if existing_span_id
+                        .as_deref()
+                        .is_some_and(|existing| existing != *transport_span_id)
+                        || stream_id
+                            .as_ref()
+                            .is_some_and(|existing| existing != &frame_identity.stream_id)
+                        || last_frame_sequence
+                            .is_some_and(|existing| existing != frame_identity.frame_sequence)
+                    {
+                        return Err(RetainedWorkerRuntimeError(
+                            "transport start conflicts with durable admission transport identity"
+                                .into(),
+                        ));
+                    }
+                    if existing_span_id.as_deref() == Some(*transport_span_id)
+                        && stream_id.as_ref() == Some(&frame_identity.stream_id)
+                        && *last_frame_sequence == Some(frame_identity.frame_sequence)
+                    {
+                        return Ok((record, false));
+                    }
+                    RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal {
+                        registration,
+                        transport_claim_id: transport_claim_id.clone(),
+                        transport_span_id: Some((*transport_span_id).to_owned()),
+                        stream_id: Some(frame_identity.stream_id.clone()),
+                        last_frame_sequence: Some(frame_identity.frame_sequence),
+                        claimed_at: claimed_at.clone(),
+                    }
+                }
+                RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+                    transport_claim_id,
+                    transport_span_id: existing_span_id,
+                    stream_id,
+                    last_frame_sequence,
+                    cancel_request_id,
+                    accepted_at,
+                    ..
+                } => {
+                    if existing_span_id
+                        .as_deref()
+                        .is_some_and(|existing| existing != *transport_span_id)
+                        || stream_id
+                            .as_ref()
+                            .is_some_and(|existing| existing != &frame_identity.stream_id)
+                        || last_frame_sequence
+                            .is_some_and(|existing| existing != frame_identity.frame_sequence)
+                    {
+                        return Err(RetainedWorkerRuntimeError(
+                            "transport start conflicts with accepted cancellation identity".into(),
+                        ));
+                    }
+                    if existing_span_id.as_deref() == Some(*transport_span_id)
+                        && stream_id.as_ref() == Some(&frame_identity.stream_id)
+                        && *last_frame_sequence == Some(frame_identity.frame_sequence)
+                    {
+                        return Ok((record, false));
+                    }
+                    RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+                        registration,
+                        transport_claim_id: transport_claim_id.clone(),
+                        transport_span_id: Some((*transport_span_id).to_owned()),
+                        stream_id: Some(frame_identity.stream_id.clone()),
+                        last_frame_sequence: Some(frame_identity.frame_sequence),
+                        cancel_request_id: cancel_request_id.clone(),
+                        accepted_at: accepted_at.clone(),
+                    }
+                }
+                RetainedWorkerAdmissionStateV1::Routable {
+                    transport_span_id: Some(existing_span_id),
+                    stream_id,
+                    ..
+                }
+                | RetainedWorkerAdmissionStateV1::InterruptedNonterminal {
+                    transport_span_id: Some(existing_span_id),
+                    stream_id: Some(stream_id),
+                    ..
+                } if existing_span_id == *transport_span_id
+                    && stream_id == &frame_identity.stream_id =>
+                {
+                    return Ok((record, false));
+                }
+                RetainedWorkerAdmissionStateV1::Terminal { .. } => {
+                    return Ok((record, false));
+                }
+                _ => {
+                    return Err(RetainedWorkerRuntimeError(
+                        "transport start conflicts with durable admission state".into(),
+                    ));
+                }
+            }
+        }
         AdmissionRuntimeTruthInputV1::Registered {
             frame_identity,
             event,
@@ -3626,14 +5075,79 @@ fn advance_admission_runtime_truth_in_registry(
                 ));
             }
             match &record.state {
-                RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal { .. } => {
+                RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal {
+                    transport_claim_id,
+                    transport_span_id,
+                    stream_id,
+                    last_frame_sequence,
+                    ..
+                } => {
+                    if stream_id
+                        .as_ref()
+                        .is_some_and(|existing| existing != &frame_identity.stream_id)
+                        || last_frame_sequence
+                            .is_some_and(|existing| existing >= frame_identity.frame_sequence)
+                        || transport_span_id.as_ref().is_some_and(|existing| {
+                            event
+                                .span_id
+                                .as_ref()
+                                .is_some_and(|event_span| event_span != existing)
+                        })
+                    {
+                        return Err(RetainedWorkerRuntimeError(
+                            "Registered runtime truth conflicts with durable transport identity"
+                                .into(),
+                        ));
+                    }
                     RetainedWorkerAdmissionStateV1::Routable {
                         registration,
+                        transport_claim_id: Some(transport_claim_id.clone()),
+                        transport_span_id: transport_span_id
+                            .clone()
+                            .or_else(|| event.span_id.clone()),
                         stream_id: frame_identity.stream_id.clone(),
                         registered_frame_sequence: frame_identity.frame_sequence,
                         registered_event_id: event_identity.event_id.clone(),
                         registered_event_sequence: event_identity.event_sequence,
                         registered_at: registered_at.clone(),
+                    }
+                }
+                RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+                    transport_claim_id,
+                    transport_span_id,
+                    stream_id,
+                    last_frame_sequence,
+                    cancel_request_id,
+                    accepted_at,
+                    ..
+                } => {
+                    if stream_id
+                        .as_ref()
+                        .is_some_and(|existing| existing != &frame_identity.stream_id)
+                        || last_frame_sequence
+                            .is_some_and(|existing| existing >= frame_identity.frame_sequence)
+                        || transport_span_id.as_ref().is_some_and(|existing| {
+                            event
+                                .span_id
+                                .as_ref()
+                                .is_some_and(|event_span| event_span != existing)
+                        })
+                    {
+                        return Err(RetainedWorkerRuntimeError(
+                            "Registered runtime truth conflicts with accepted cancellation identity"
+                                .into(),
+                        ));
+                    }
+                    RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+                        registration,
+                        transport_claim_id: transport_claim_id.clone(),
+                        transport_span_id: transport_span_id
+                            .clone()
+                            .or_else(|| event.span_id.clone()),
+                        stream_id: Some(frame_identity.stream_id.clone()),
+                        last_frame_sequence: Some(frame_identity.frame_sequence),
+                        cancel_request_id: cancel_request_id.clone(),
+                        accepted_at: accepted_at.clone(),
                     }
                 }
                 RetainedWorkerAdmissionStateV1::Routable {
@@ -3663,6 +5177,7 @@ fn advance_admission_runtime_truth_in_registry(
             frame_identity,
             event_identity,
             terminal_identity,
+            transport_span_id,
             exit_code,
             terminal_at,
         } => {
@@ -3678,6 +5193,11 @@ fn advance_admission_runtime_truth_in_registry(
             if !terminal_identity.matches_event(event_identity) {
                 return Err(RetainedWorkerRuntimeError(
                     "terminal runtime truth does not name its exact event".into(),
+                ));
+            }
+            if transport_span_id.is_some_and(|identity| identity.trim().is_empty()) {
+                return Err(RetainedWorkerRuntimeError(
+                    "terminal runtime truth transport span is empty".into(),
                 ));
             }
             match &record.state {
@@ -3697,6 +5217,20 @@ fn advance_admission_runtime_truth_in_registry(
                 } if stream_id
                     .as_ref()
                     .is_none_or(|stream_id| stream_id == &frame_identity.stream_id)
+                    && last_frame_sequence
+                        .is_none_or(|sequence| sequence < frame_identity.frame_sequence) => {}
+                RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+                    transport_span_id: expected_transport_span_id,
+                    stream_id,
+                    last_frame_sequence,
+                    ..
+                } if transport_span_id.is_some()
+                    && expected_transport_span_id
+                        .as_deref()
+                        .is_none_or(|expected| Some(expected) == *transport_span_id)
+                    && stream_id
+                        .as_ref()
+                        .is_none_or(|stream_id| stream_id == &frame_identity.stream_id)
                     && last_frame_sequence
                         .is_none_or(|sequence| sequence < frame_identity.frame_sequence) => {}
                 RetainedWorkerAdmissionStateV1::Terminal {
@@ -3728,6 +5262,13 @@ fn advance_admission_runtime_truth_in_registry(
                 terminal_event_sequence: event_identity.event_sequence,
                 exit_code: *exit_code,
                 terminal_at: terminal_at.clone(),
+                cancel_request_id: match &record.state {
+                    RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+                        cancel_request_id,
+                        ..
+                    } => Some(cancel_request_id.clone()),
+                    _ => None,
+                },
             }
         }
         AdmissionRuntimeTruthInputV1::Interrupted {
@@ -3741,6 +5282,54 @@ fn advance_admission_runtime_truth_in_registry(
             }
             let next_stream_id = last_frame_identity.map(|identity| identity.stream_id.clone());
             let next_frame_sequence = last_frame_identity.map(|identity| identity.frame_sequence);
+            let pending_next_state = match &record.state {
+                RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+                    transport_claim_id,
+                    transport_span_id,
+                    stream_id,
+                    last_frame_sequence,
+                    cancel_request_id,
+                    accepted_at,
+                    ..
+                } => {
+                    if stream_id
+                        .as_ref()
+                        .is_some_and(|existing| next_stream_id.as_ref() != Some(existing))
+                        || last_frame_sequence.is_some_and(|existing| {
+                            next_frame_sequence.is_some_and(|observed| observed < existing)
+                        })
+                    {
+                        return Err(RetainedWorkerRuntimeError(
+                            "interrupted runtime truth conflicts with accepted cancellation identity"
+                                .into(),
+                        ));
+                    }
+                    let reconciled_stream_id = next_stream_id.clone().or_else(|| stream_id.clone());
+                    let reconciled_frame_sequence = next_frame_sequence.or(*last_frame_sequence);
+                    if &reconciled_stream_id == stream_id
+                        && &reconciled_frame_sequence == last_frame_sequence
+                    {
+                        return Ok((record, false));
+                    }
+                    Some(
+                        RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+                            registration: registration.clone(),
+                            transport_claim_id: transport_claim_id.clone(),
+                            transport_span_id: transport_span_id.clone(),
+                            stream_id: reconciled_stream_id,
+                            last_frame_sequence: reconciled_frame_sequence,
+                            cancel_request_id: cancel_request_id.clone(),
+                            accepted_at: accepted_at.clone(),
+                        },
+                    )
+                }
+                _ => None,
+            };
+            if let Some(pending_next_state) = pending_next_state {
+                let record =
+                    replace_admission_state(registry, authority_root, record, pending_next_state)?;
+                return Ok((record, true));
+            }
             match &record.state {
                 RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal { .. } => {}
                 RetainedWorkerAdmissionStateV1::Routable {
@@ -3772,6 +5361,8 @@ fn advance_admission_runtime_truth_in_registry(
             }
             RetainedWorkerAdmissionStateV1::InterruptedNonterminal {
                 registration,
+                transport_claim_id: admission_transport_claim_id(&record.state).cloned(),
+                transport_span_id: admission_transport_span_id(&record.state).cloned(),
                 stream_id: next_stream_id,
                 last_frame_sequence: next_frame_sequence,
                 interrupted_at: interrupted_at.clone(),
@@ -3797,15 +5388,27 @@ fn admission_registration_from_hsa(
     record: &RetainedWorkerAdmissionRecordV1,
 ) -> Result<Option<RetainedWorkerAdmissionRegistrationV1>, RetainedWorkerRuntimeError> {
     let root = preserved_start_root_view(authority_root)?;
-    let RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead {
-        authority_revision_expected,
-        authority_record_commitment_expected,
-        ..
-    } = &record.state
-    else {
-        return Err(RetainedWorkerRuntimeError(
-            "R0 join requires the exact admission registration head".into(),
-        ));
+    let (authority_revision_expected, authority_record_commitment_expected) = match &record.state {
+        RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead {
+            authority_revision_expected,
+            authority_record_commitment_expected,
+            ..
+        } => (
+            *authority_revision_expected,
+            authority_record_commitment_expected,
+        ),
+        RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration {
+            registration_head: Some(registration_head),
+            ..
+        } => (
+            registration_head.authority_revision_expected,
+            &registration_head.authority_record_commitment_expected,
+        ),
+        _ => {
+            return Err(RetainedWorkerRuntimeError(
+                "R0 join requires the exact admission registration head".into(),
+            ));
+        }
     };
     let issuer_request_id = format!("retained-worker-registration:{}", record.issuer_request_id);
     let Some(request) = root
@@ -3817,7 +5420,7 @@ fn admission_registration_from_hsa(
     if request.schema_version != 1
         || request.issuer_request_id != issuer_request_id
         || request.orchestration_session_id != record.orchestration_session_id
-        || request.authority_revision_before != *authority_revision_expected
+        || request.authority_revision_before != authority_revision_expected
         || request.authority_record_commitment_before != *authority_record_commitment_expected
         || request.retained_participant_id != record.retained_participant_id
         || request.current_policy_ref != record.current_policy_ref
@@ -3865,6 +5468,64 @@ fn admission_registration_from_hsa(
         &admission_registration,
     )?;
     Ok(Some(admission_registration))
+}
+
+fn replace_admission_state(
+    registry: &mut RetainedWorkerAdmissionRegistryV1,
+    authority_root: &VersionedStateRoot,
+    mut record: RetainedWorkerAdmissionRecordV1,
+    state: RetainedWorkerAdmissionStateV1,
+) -> Result<RetainedWorkerAdmissionRecordV1, RetainedWorkerRuntimeError> {
+    record.state = state;
+    record.record_revision = record
+        .record_revision
+        .checked_add(1)
+        .ok_or_else(|| RetainedWorkerRuntimeError("admission record revision overflow".into()))?;
+    registry
+        .records_by_session
+        .get_mut(&record.orchestration_session_id)
+        .ok_or_else(|| RetainedWorkerRuntimeError("admission session bucket is absent".into()))?
+        .insert(record.retained_participant_id.clone(), record.clone());
+    validate_admission_registry(registry, authority_root)?;
+    Ok(record)
+}
+
+fn admission_transport_claim_id(state: &RetainedWorkerAdmissionStateV1) -> Option<&String> {
+    match state {
+        RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal {
+            transport_claim_id, ..
+        } => Some(transport_claim_id),
+        RetainedWorkerAdmissionStateV1::Routable {
+            transport_claim_id, ..
+        }
+        | RetainedWorkerAdmissionStateV1::InterruptedNonterminal {
+            transport_claim_id, ..
+        }
+        | RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+            transport_claim_id,
+            ..
+        } => transport_claim_id.as_ref(),
+        _ => None,
+    }
+}
+
+fn admission_transport_span_id(state: &RetainedWorkerAdmissionStateV1) -> Option<&String> {
+    match state {
+        RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal {
+            transport_span_id, ..
+        }
+        | RetainedWorkerAdmissionStateV1::Routable {
+            transport_span_id, ..
+        }
+        | RetainedWorkerAdmissionStateV1::InterruptedNonterminal {
+            transport_span_id, ..
+        }
+        | RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+            transport_span_id,
+            ..
+        } => transport_span_id.as_ref(),
+        _ => None,
+    }
 }
 
 fn canonical_registration_commitment(
@@ -4114,6 +5775,10 @@ fn validate_complete_post_r0_registry_graphs(
         } else if matches!(
             record.state,
             RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
+                | RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration {
+                    registration_head: Some(_),
+                    ..
+                }
         ) {
             admission_registration_from_hsa(authority_root, record)?
         } else {
@@ -4819,6 +6484,8 @@ fn admission_state_is_live(state: &RetainedWorkerAdmissionStateV1) -> bool {
         state,
         RetainedWorkerAdmissionStateV1::Terminal { .. }
             | RetainedWorkerAdmissionStateV1::RejectedBeforeRegistration { .. }
+            | RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration { .. }
+            | RetainedWorkerAdmissionStateV1::CancelledBeforeTransport { .. }
     )
 }
 
@@ -4830,10 +6497,16 @@ fn admission_registration(
         | RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal { registration, .. }
         | RetainedWorkerAdmissionStateV1::Routable { registration, .. }
         | RetainedWorkerAdmissionStateV1::InterruptedNonterminal { registration, .. }
-        | RetainedWorkerAdmissionStateV1::Terminal { registration, .. } => Some(registration),
+        | RetainedWorkerAdmissionStateV1::Terminal { registration, .. }
+        | RetainedWorkerAdmissionStateV1::CancelledBeforeTransport { registration, .. }
+        | RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+            registration,
+            ..
+        } => Some(registration),
         RetainedWorkerAdmissionStateV1::SlotReserved { .. }
         | RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
-        | RetainedWorkerAdmissionStateV1::RejectedBeforeRegistration { .. } => None,
+        | RetainedWorkerAdmissionStateV1::RejectedBeforeRegistration { .. }
+        | RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration { .. } => None,
     }
 }
 
@@ -4858,6 +6531,7 @@ fn validate_admission_registry(
     let mut bootstrap_run_ids = BTreeSet::new();
     let mut registration_ids = BTreeSet::new();
     let mut transport_claim_ids = BTreeSet::new();
+    let mut cancel_request_ids = BTreeSet::new();
     for (session_id, records) in &registry.records_by_session {
         if session_id.is_empty() || records.is_empty() {
             return Err(RetainedWorkerRuntimeError(
@@ -4918,10 +6592,21 @@ fn validate_admission_registry(
                 }
                 RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal {
                     transport_claim_id,
+                    transport_span_id,
+                    stream_id,
+                    last_frame_sequence,
                     ..
                 } => {
                     if !valid_generated_id(transport_claim_id, "rtc_")
                         || !transport_claim_ids.insert(transport_claim_id.clone())
+                        || transport_span_id
+                            .as_ref()
+                            .is_some_and(|identity| identity.trim().is_empty())
+                        || stream_id
+                            .as_ref()
+                            .is_some_and(|identity| identity.trim().is_empty())
+                        || last_frame_sequence == &Some(0)
+                        || (stream_id.is_none() != last_frame_sequence.is_none())
                     {
                         return Err(RetainedWorkerRuntimeError(
                             "admission transport claim identity is invalid or duplicated".into(),
@@ -4929,13 +6614,21 @@ fn validate_admission_registry(
                     }
                 }
                 RetainedWorkerAdmissionStateV1::Routable {
+                    transport_claim_id,
+                    transport_span_id,
                     stream_id,
                     registered_frame_sequence,
                     registered_event_id,
                     registered_event_sequence,
                     ..
                 } => {
-                    if stream_id.trim().is_empty()
+                    if transport_claim_id.as_ref().is_some_and(|identity| {
+                        !valid_generated_id(identity, "rtc_")
+                            || !transport_claim_ids.insert(identity.clone())
+                    }) || transport_span_id
+                        .as_ref()
+                        .is_some_and(|identity| identity.trim().is_empty())
+                        || stream_id.trim().is_empty()
                         || *registered_frame_sequence == 0
                         || registered_event_id.trim().is_empty()
                         || *registered_event_sequence == 0
@@ -4946,13 +6639,21 @@ fn validate_admission_registry(
                     }
                 }
                 RetainedWorkerAdmissionStateV1::InterruptedNonterminal {
+                    transport_claim_id,
+                    transport_span_id,
                     stream_id,
                     last_frame_sequence,
                     ..
                 } => {
-                    if stream_id
+                    if transport_claim_id.as_ref().is_some_and(|identity| {
+                        !valid_generated_id(identity, "rtc_")
+                            || !transport_claim_ids.insert(identity.clone())
+                    }) || transport_span_id
                         .as_ref()
-                        .is_some_and(|stream_id| stream_id.trim().is_empty())
+                        .is_some_and(|identity| identity.trim().is_empty())
+                        || stream_id
+                            .as_ref()
+                            .is_some_and(|stream_id| stream_id.trim().is_empty())
                         || last_frame_sequence == &Some(0)
                         || (stream_id.is_none() && last_frame_sequence.is_some())
                     {
@@ -4966,15 +6667,78 @@ fn validate_admission_registry(
                     terminal_frame_sequence,
                     terminal_event_id,
                     terminal_event_sequence,
+                    cancel_request_id,
                     ..
                 } => {
                     if stream_id.trim().is_empty()
                         || *terminal_frame_sequence == 0
                         || terminal_event_id.trim().is_empty()
                         || *terminal_event_sequence == 0
+                        || cancel_request_id.as_ref().is_some_and(|identity| {
+                            identity.trim().is_empty()
+                                || !cancel_request_ids.insert(identity.clone())
+                        })
                     {
                         return Err(RetainedWorkerRuntimeError(
                             "admission terminal identity is invalid".into(),
+                        ));
+                    }
+                }
+                RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration {
+                    cancel_request_id,
+                    registration_head,
+                    ..
+                } => {
+                    if cancel_request_id.trim().is_empty()
+                        || !cancel_request_ids.insert(cancel_request_id.clone())
+                        || registration_head
+                            .as_ref()
+                            .is_some_and(|head| head.authority_revision_expected == 0)
+                    {
+                        return Err(RetainedWorkerRuntimeError(
+                            "pre-registration cancellation identity is invalid or duplicated"
+                                .into(),
+                        ));
+                    }
+                }
+                RetainedWorkerAdmissionStateV1::CancelledBeforeTransport {
+                    cancel_request_id,
+                    ..
+                } => {
+                    if cancel_request_id.trim().is_empty()
+                        || !cancel_request_ids.insert(cancel_request_id.clone())
+                    {
+                        return Err(RetainedWorkerRuntimeError(
+                            "pre-transport cancellation identity is invalid or duplicated".into(),
+                        ));
+                    }
+                }
+                RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+                    transport_claim_id,
+                    transport_span_id,
+                    stream_id,
+                    last_frame_sequence,
+                    cancel_request_id,
+                    ..
+                } => {
+                    if cancel_request_id.trim().is_empty()
+                        || !cancel_request_ids.insert(cancel_request_id.clone())
+                        || transport_claim_id.as_ref().is_some_and(|identity| {
+                            !valid_generated_id(identity, "rtc_")
+                                || !transport_claim_ids.insert(identity.clone())
+                        })
+                        || transport_span_id
+                            .as_ref()
+                            .is_some_and(|identity| identity.trim().is_empty())
+                        || stream_id
+                            .as_ref()
+                            .is_some_and(|identity| identity.trim().is_empty())
+                        || last_frame_sequence == &Some(0)
+                        || (stream_id.is_none() != last_frame_sequence.is_none())
+                    {
+                        return Err(RetainedWorkerRuntimeError(
+                            "pending-closeout cancellation identity is invalid or duplicated"
+                                .into(),
                         ));
                     }
                 }
@@ -5042,6 +6806,80 @@ fn validate_admission_registry(
             "admission registry indices are inexact".into(),
         ));
     }
+    let mut delivery_claim_ids = BTreeSet::new();
+    for (cancel_request_id, delivery) in &registry.cancel_deliveries_by_request {
+        let record = registry
+            .records_by_session
+            .get(&delivery.orchestration_session_id)
+            .and_then(|records| records.get(&delivery.retained_participant_id))
+            .ok_or_else(|| {
+                RetainedWorkerRuntimeError(
+                    "admission cancellation delivery target is absent".into(),
+                )
+            })?;
+        let exact_state = match &record.state {
+            RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+                transport_span_id: Some(transport_span_id),
+                cancel_request_id,
+                accepted_at,
+                ..
+            } => {
+                cancel_request_id == &delivery.cancel_request_id
+                    && transport_span_id == &delivery.transport_span_id
+                    && accepted_at == &delivery.accepted_at
+            }
+            RetainedWorkerAdmissionStateV1::Terminal {
+                cancel_request_id: Some(cancel_request_id),
+                ..
+            } => cancel_request_id == &delivery.cancel_request_id,
+            _ => false,
+        };
+        if delivery.schema_version != 1
+            || cancel_request_id != &delivery.cancel_request_id
+            || delivery.authority_store_id != registry.authority_store_id
+            || delivery.authority_store_id != record.authority_store_id
+            || delivery.orchestration_session_id != record.orchestration_session_id
+            || delivery.retained_participant_id != record.retained_participant_id
+            || delivery.cancel_request_id.trim().is_empty()
+            || delivery.transport_span_id.trim().is_empty()
+            || !exact_state
+        {
+            return Err(RetainedWorkerRuntimeError(
+                "admission cancellation delivery identity is inexact".into(),
+            ));
+        }
+        match &delivery.delivery_state {
+            RetainedWorkerAdmissionCancelDeliveryStateV1::Available => {}
+            RetainedWorkerAdmissionCancelDeliveryStateV1::Claimed {
+                delivery_claim_id,
+                claimed_at,
+                claim_expires_at,
+            } => {
+                if !valid_generated_id(delivery_claim_id, "rcdc_")
+                    || !delivery_claim_ids.insert(delivery_claim_id.clone())
+                    || claimed_at.as_str() < delivery.accepted_at.as_str()
+                    || claim_expires_at.as_str() <= claimed_at.as_str()
+                {
+                    return Err(RetainedWorkerRuntimeError(
+                        "admission cancellation delivery claim is invalid or duplicated".into(),
+                    ));
+                }
+            }
+            RetainedWorkerAdmissionCancelDeliveryStateV1::Confirmed {
+                delivery_claim_id,
+                confirmed_at,
+            } => {
+                if !valid_generated_id(delivery_claim_id, "rcdc_")
+                    || !delivery_claim_ids.insert(delivery_claim_id.clone())
+                    || confirmed_at.as_str() < delivery.accepted_at.as_str()
+                {
+                    return Err(RetainedWorkerRuntimeError(
+                        "confirmed admission cancellation delivery is invalid or duplicated".into(),
+                    ));
+                }
+            }
+        }
+    }
     let root = preserved_start_root_view(authority_root)?;
     for request in root.retained_worker_registration_request_index.values() {
         let admission_issuer = request
@@ -5063,27 +6901,41 @@ fn validate_admission_registry(
                 "HSA retained registration has no unique admission record".into(),
             ));
         };
-        let RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead {
-            authority_revision_expected,
-            authority_record_commitment_expected,
-            ..
-        } = &record.state
-        else {
-            let Some(registration) = admission_registration(&record.state) else {
-                return Err(RetainedWorkerRuntimeError(
-                    "HSA retained registration precedes its admission head".into(),
-                ));
-            };
-            if registration.registration_id != request.registration_id {
-                return Err(RetainedWorkerRuntimeError(
-                    "HSA retained registration request conflicts with admission state".into(),
-                ));
+        let (authority_revision_expected, authority_record_commitment_expected) = match &record
+            .state
+        {
+            RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead {
+                authority_revision_expected,
+                authority_record_commitment_expected,
+                ..
+            } => (
+                *authority_revision_expected,
+                authority_record_commitment_expected,
+            ),
+            RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration {
+                registration_head: Some(registration_head),
+                ..
+            } => (
+                registration_head.authority_revision_expected,
+                &registration_head.authority_record_commitment_expected,
+            ),
+            _ => {
+                let Some(registration) = admission_registration(&record.state) else {
+                    return Err(RetainedWorkerRuntimeError(
+                        "HSA retained registration precedes its admission head".into(),
+                    ));
+                };
+                if registration.registration_id != request.registration_id {
+                    return Err(RetainedWorkerRuntimeError(
+                        "HSA retained registration request conflicts with admission state".into(),
+                    ));
+                }
+                continue;
             }
-            continue;
         };
         if request.orchestration_session_id != record.orchestration_session_id
             || request.retained_participant_id != record.retained_participant_id
-            || request.authority_revision_before != *authority_revision_expected
+            || request.authority_revision_before != authority_revision_expected
             || request.authority_record_commitment_before != *authority_record_commitment_expected
             || request.current_policy_ref != record.current_policy_ref
             || request.world_binding != record.world_binding
@@ -12424,5 +14276,1294 @@ mod tests {
             framed,
             vec![0, 0, 0, 0, 0, 0, 0, 1, b'a', 0, 0, 0, 0, 0, 0, 0, 2, b'b', b'c']
         );
+    }
+
+    fn b4_pending_admission_cancel_request(
+        record: &RetainedWorkerAdmissionRecordV1,
+        cancel_request_id: &str,
+    ) -> RetainedWorkerAdmissionCancelRequestV1 {
+        RetainedWorkerAdmissionCancelRequestV1 {
+            schema_version: 1,
+            cancel_request_id: cancel_request_id.to_string(),
+            authority_store_id: record.authority_store_id.clone(),
+            issuer_request_id: record.issuer_request_id.clone(),
+            orchestration_session_id: record.orchestration_session_id.clone(),
+            caller_participant_id: "r0-orchestrator".into(),
+            retained_participant_id: record.retained_participant_id.clone(),
+            bootstrap_run_id: record.bootstrap_run_id.clone(),
+            backend_id: record.backend_id.clone(),
+            protocol: record.protocol.clone(),
+            world_binding: record.world_binding.clone(),
+            current_policy_ref: record.current_policy_ref.clone(),
+            current_policy_revision: record.current_policy_revision.clone(),
+            expected_record_revision: record.record_revision,
+            expected_state: record.state.clone(),
+        }
+    }
+
+    #[test]
+    fn b4_pending_admission_slot_cancellation_is_durable_and_prevents_registration() {
+        let (_parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        runtime.initialize_admission_registry(&authority).unwrap();
+        let plan = admission_plan(&authority, "b4-slot-cancel", "prompt", 1);
+        let slot = runtime
+            .reserve_admission_slot(&authority, &plan, None)
+            .unwrap();
+        let request = b4_pending_admission_cancel_request(&slot.record, "cancel-b4-slot");
+
+        let outcome = runtime
+            .cancel_pending_admission(&authority, &request)
+            .unwrap();
+        assert!(matches!(
+            outcome,
+            RetainedWorkerAdmissionCancelOutcomeV1::CancelledBeforeTransport {
+                ref cancel_request_id,
+                ..
+            } if cancel_request_id == "cancel-b4-slot"
+        ));
+        let durable = runtime
+            .read_admission_record(
+                &authority,
+                &slot.record.orchestration_session_id,
+                &slot.record.retained_participant_id,
+            )
+            .unwrap()
+            .unwrap();
+        assert!(matches!(
+            durable.state,
+            RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration {
+                ref cancel_request_id,
+                ..
+            } if cancel_request_id == "cancel-b4-slot"
+        ));
+        assert!(runtime
+            .register_admitted_worker(&authority, &plan, None)
+            .is_err());
+    }
+
+    fn b4_pending_admission_claimed_fixture(
+        authority: &HostSessionAuthority,
+        issuer: &str,
+        capacity: u64,
+    ) -> (
+        RetainedWorkerAdmissionPlanV1,
+        RetainedWorkerTransportClaimV1,
+    ) {
+        let runtime = RetainedWorkerRuntime;
+        runtime.initialize_admission_registry(authority).unwrap();
+        let plan = admission_plan(authority, issuer, "prompt", capacity);
+        let admitted = runtime
+            .register_admitted_worker(authority, &plan, None)
+            .unwrap();
+        let claim = runtime
+            .claim_admission_transport(
+                authority,
+                &plan,
+                &admitted.record.retained_participant_id,
+                None,
+            )
+            .unwrap();
+        (plan, claim)
+    }
+
+    #[test]
+    fn b4_pending_admission_pretransport_and_registration_head_cancellation_prevent_routing() {
+        for (issuer, applied_r0) in [("b4-head-before-r0", false), ("b4-head-after-r0", true)] {
+            let (_parent, authority, _) = started_authority();
+            let runtime = RetainedWorkerRuntime;
+            runtime.initialize_admission_registry(&authority).unwrap();
+            let plan = admission_plan(&authority, issuer, "prompt", 1);
+            let slot = runtime
+                .reserve_admission_slot(&authority, &plan, None)
+                .unwrap();
+            runtime
+                .register_admitted_worker_at(
+                    &authority,
+                    &plan,
+                    Some(if applied_r0 {
+                        AdmissionRegistrationCrashPointV1::AfterR0BeforeAdmissionAdvance
+                    } else {
+                        AdmissionRegistrationCrashPointV1::WhileRegistrationHead
+                    }),
+                )
+                .unwrap_err();
+            let head = runtime
+                .read_admission_record(
+                    &authority,
+                    &slot.record.orchestration_session_id,
+                    &slot.record.retained_participant_id,
+                )
+                .unwrap()
+                .unwrap();
+            let authority_root_before_cancel = authority.read_a12a_root().unwrap();
+            let request = b4_pending_admission_cancel_request(&head, &format!("cancel-{issuer}"));
+            let outcome = runtime
+                .cancel_pending_admission(&authority, &request)
+                .unwrap();
+            assert!(matches!(
+                outcome,
+                RetainedWorkerAdmissionCancelOutcomeV1::CancelledBeforeTransport { .. }
+            ));
+            let cancelled = outcome.record().clone();
+            assert!(!admission_state_is_live(&cancelled.state));
+            assert!(!matches!(
+                cancelled.state,
+                RetainedWorkerAdmissionStateV1::Routable { .. }
+            ));
+            assert!(runtime
+                .claim_admission_transport(
+                    &authority,
+                    &plan,
+                    &cancelled.retained_participant_id,
+                    None,
+                )
+                .is_err());
+            assert_eq!(
+                authority.read_a12a_root().unwrap(),
+                authority_root_before_cancel
+            );
+            if applied_r0 {
+                assert!(admission_registration(&cancelled.state).is_some());
+            }
+        }
+
+        let (_parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        runtime.initialize_admission_registry(&authority).unwrap();
+        let plan = admission_plan(&authority, "b4-pretransport", "prompt", 1);
+        let admitted = runtime
+            .register_admitted_worker(&authority, &plan, None)
+            .unwrap();
+        let request = b4_pending_admission_cancel_request(&admitted.record, "cancel-pretransport");
+        let outcome = runtime
+            .cancel_pending_admission(&authority, &request)
+            .unwrap();
+        assert!(matches!(
+            outcome,
+            RetainedWorkerAdmissionCancelOutcomeV1::CancelledBeforeTransport { .. }
+        ));
+        assert!(runtime
+            .claim_admission_transport(
+                &authority,
+                &plan,
+                &admitted.record.retained_participant_id,
+                None,
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn b4_pending_admission_cancelled_head_reconciles_late_r0_without_routing() {
+        let (_parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        runtime.initialize_admission_registry(&authority).unwrap();
+        let plan = admission_plan(&authority, "b4-cancel-before-late-r0", "prompt", 1);
+        let slot = runtime
+            .reserve_admission_slot(&authority, &plan, None)
+            .unwrap();
+        runtime
+            .register_admitted_worker_at(
+                &authority,
+                &plan,
+                Some(AdmissionRegistrationCrashPointV1::WhileRegistrationHead),
+            )
+            .unwrap_err();
+        let head = runtime
+            .read_admission_record(
+                &authority,
+                &slot.record.orchestration_session_id,
+                &slot.record.retained_participant_id,
+            )
+            .unwrap()
+            .unwrap();
+        let registration_plan = admission_registration_plan(&head, &plan).unwrap();
+        let cancelled = runtime
+            .cancel_pending_admission(
+                &authority,
+                &b4_pending_admission_cancel_request(&head, "cancel-before-late-r0"),
+            )
+            .unwrap()
+            .record()
+            .clone();
+        assert!(matches!(
+            cancelled.state,
+            RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration {
+                ref cancel_request_id,
+                registration_head: Some(_),
+                ..
+            } if cancel_request_id == "cancel-before-late-r0"
+        ));
+
+        let registration = runtime
+            .register_retained_target(&authority, &registration_plan)
+            .unwrap();
+        let resolved_target = runtime
+            .resolve_retained_target(&authority, &registration)
+            .unwrap();
+        let reconciled = runtime
+            .advance_registration_head_after_r0(
+                &authority,
+                &plan,
+                &cancelled.retained_participant_id,
+                &ResolvedPostR0RegisteredGraphV1 {
+                    result: registration,
+                    resolved_target,
+                },
+                None,
+                [0xB4; 16],
+            )
+            .unwrap();
+        assert!(matches!(
+            reconciled.state,
+            RetainedWorkerAdmissionStateV1::CancelledBeforeTransport {
+                ref cancel_request_id,
+                ..
+            } if cancel_request_id == "cancel-before-late-r0"
+        ));
+        assert!(admission_registration(&reconciled.state).is_some());
+        assert!(!admission_state_is_live(&reconciled.state));
+        assert!(
+            runtime
+                .claim_admission_transport(
+                    &authority,
+                    &plan,
+                    &reconciled.retained_participant_id,
+                    None,
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn b4_pending_admission_claimed_and_interrupted_cancellation_reject_manual_routability() {
+        for interrupted in [false, true] {
+            let (_parent, authority, _) = started_authority();
+            let runtime = RetainedWorkerRuntime;
+            let (plan, claim) = b4_pending_admission_claimed_fixture(
+                &authority,
+                if interrupted {
+                    "b4-interrupted"
+                } else {
+                    "b4-claimed"
+                },
+                1,
+            );
+            let eligible = if interrupted {
+                runtime
+                    .mark_admission_interrupted(
+                        &authority,
+                        &plan,
+                        &claim.record.retained_participant_id,
+                        None,
+                        None,
+                        timestamp("2026-09-07T10:00:00.000000000Z"),
+                    )
+                    .unwrap()
+            } else {
+                claim.record.clone()
+            };
+            let request = b4_pending_admission_cancel_request(
+                &eligible,
+                if interrupted {
+                    "cancel-interrupted"
+                } else {
+                    "cancel-claimed"
+                },
+            );
+            let outcome = runtime
+                .cancel_pending_admission(&authority, &request)
+                .unwrap();
+            let pending_revision = outcome.record().record_revision;
+            assert!(matches!(
+                outcome,
+                RetainedWorkerAdmissionCancelOutcomeV1::CancelAcceptedPendingCloseout { .. }
+            ));
+            let (frame, event) =
+                registered_runtime_truth(&plan, outcome.record(), "stream-b4-cancelled");
+            let routability = runtime
+                .mark_admission_routable_outcome(
+                    &authority,
+                    &plan,
+                    &eligible.retained_participant_id,
+                    None,
+                    &frame,
+                    &event,
+                    timestamp("2026-09-07T10:00:01.000000000Z"),
+                )
+                .unwrap();
+            assert!(matches!(
+                routability.disposition,
+                RetainedWorkerAdmissionRoutabilityDispositionV1::CancellationWon { .. }
+            ));
+            assert!(matches!(
+                routability.record.state,
+                RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending { .. }
+            ));
+            assert!(routability.record.record_revision >= pending_revision);
+            assert!(!matches!(
+                routability.record.state,
+                RetainedWorkerAdmissionStateV1::Routable { .. }
+            ));
+        }
+    }
+
+    #[test]
+    fn b4_pending_admission_pending_retry_preserves_original_cancel_identity_and_revision() {
+        let (_parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let (_plan, claim) = b4_pending_admission_claimed_fixture(&authority, "b4-idempotent", 1);
+        let first_request = b4_pending_admission_cancel_request(&claim.record, "cancel-original");
+        let first = runtime
+            .cancel_pending_admission(&authority, &first_request)
+            .unwrap();
+        let first_revision = first.record().record_revision;
+        let retry = b4_pending_admission_cancel_request(first.record(), "cancel-replacement");
+        let second = runtime
+            .cancel_pending_admission(&authority, &retry)
+            .unwrap();
+        assert_eq!(second.record().record_revision, first_revision);
+        assert!(matches!(
+            second,
+            RetainedWorkerAdmissionCancelOutcomeV1::CancelAcceptedPendingCloseout {
+                ref cancel_request_id,
+                ..
+            } if cancel_request_id == "cancel-original"
+        ));
+    }
+
+    #[test]
+    fn b4_pending_admission_confirmed_delivery_is_suppressed_across_retry_and_restart() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let (plan, claim) =
+            b4_pending_admission_claimed_fixture(&authority, "b4-delivery-authority", 1);
+        runtime
+            .observe_admission_transport_start(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                None,
+                &RuntimeFrameIdentityV1 {
+                    schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+                    stream_id: "stream-b4-delivery-authority".into(),
+                    frame_sequence: 1,
+                },
+                "span-b4-delivery-authority",
+            )
+            .unwrap();
+        let started = runtime
+            .read_admission_record(
+                &authority,
+                &claim.record.orchestration_session_id,
+                &claim.record.retained_participant_id,
+            )
+            .unwrap()
+            .unwrap();
+        let first_request = b4_pending_admission_cancel_request(&started, "cancel-first");
+        let first = runtime
+            .cancel_pending_admission(&authority, &first_request)
+            .unwrap();
+        let (delivery_claim_id, transport_span_id) = match &first {
+            RetainedWorkerAdmissionCancelOutcomeV1::CancelAcceptedPendingCloseout {
+                delivery_disposition:
+                    RetainedWorkerAdmissionCancelDeliveryDispositionV1::Claimed {
+                        delivery_claim_id,
+                        transport_span_id,
+                    },
+                ..
+            } => (delivery_claim_id.clone(), transport_span_id.clone()),
+            other => panic!("first cancellation must claim exact delivery, got {other:?}"),
+        };
+        assert_eq!(transport_span_id, "span-b4-delivery-authority");
+        let confirmed = runtime
+            .record_pending_admission_cancel_delivery(
+                &authority,
+                &RetainedWorkerAdmissionCancelDeliveryCompletionV1 {
+                    authority_store_id: started.authority_store_id.clone(),
+                    orchestration_session_id: started.orchestration_session_id.clone(),
+                    retained_participant_id: started.retained_participant_id.clone(),
+                    cancel_request_id: "cancel-first".into(),
+                    transport_span_id,
+                    delivery_claim_id,
+                    result: RetainedWorkerAdmissionCancelDeliveryResultV1::ConfirmedDelivered,
+                },
+            )
+            .unwrap();
+        let confirmed_revision = confirmed.record_revision;
+        assert!(matches!(
+            confirmed.state,
+            RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending { .. }
+        ));
+
+        let retry_request = b4_pending_admission_cancel_request(&confirmed, "cancel-retry");
+        let retry = runtime
+            .cancel_pending_admission(&authority, &retry_request)
+            .unwrap();
+        assert_eq!(retry.record().record_revision, confirmed_revision);
+        assert!(matches!(
+            retry,
+            RetainedWorkerAdmissionCancelOutcomeV1::CancelAcceptedPendingCloseout {
+                ref cancel_request_id,
+                delivery_disposition:
+                    RetainedWorkerAdmissionCancelDeliveryDispositionV1::Confirmed {
+                        ref transport_span_id,
+                    },
+                ..
+            } if cancel_request_id == "cancel-first"
+                && transport_span_id == "span-b4-delivery-authority"
+        ));
+
+        drop(authority);
+        let reopened = HostSessionAuthority::open(&parent.path().join("home")).unwrap();
+        let durable = runtime
+            .read_admission_record(
+                &reopened,
+                &claim.record.orchestration_session_id,
+                &claim.record.retained_participant_id,
+            )
+            .unwrap()
+            .unwrap();
+        let restart_request = b4_pending_admission_cancel_request(&durable, "cancel-after-restart");
+        let restart = runtime
+            .cancel_pending_admission(&reopened, &restart_request)
+            .unwrap();
+        assert_eq!(restart.record().record_revision, confirmed_revision);
+        assert!(matches!(
+            restart,
+            RetainedWorkerAdmissionCancelOutcomeV1::CancelAcceptedPendingCloseout {
+                ref cancel_request_id,
+                delivery_disposition:
+                    RetainedWorkerAdmissionCancelDeliveryDispositionV1::Confirmed { .. },
+                ..
+            } if cancel_request_id == "cancel-first"
+        ));
+    }
+
+    #[test]
+    fn b4_pending_admission_abandoned_delivery_claim_is_recoverable_after_reopen() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let (plan, claim) =
+            b4_pending_admission_claimed_fixture(&authority, "b4-abandoned-delivery", 1);
+        runtime
+            .observe_admission_transport_start(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                None,
+                &RuntimeFrameIdentityV1 {
+                    schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+                    stream_id: "stream-b4-abandoned-delivery".into(),
+                    frame_sequence: 1,
+                },
+                "span-b4-abandoned-delivery",
+            )
+            .unwrap();
+        let started = runtime
+            .read_admission_record(
+                &authority,
+                &claim.record.orchestration_session_id,
+                &claim.record.retained_participant_id,
+            )
+            .unwrap()
+            .unwrap();
+        let request = b4_pending_admission_cancel_request(&started, "cancel-abandoned");
+        let first = runtime
+            .cancel_pending_admission_at(
+                &authority,
+                &request,
+                timestamp("2026-09-08T20:00:00.000000000Z"),
+                [101_u8; 16],
+                [102_u8; 16],
+                None,
+            )
+            .unwrap();
+        let first_claim_id = match first {
+            RetainedWorkerAdmissionCancelOutcomeV1::CancelAcceptedPendingCloseout {
+                delivery_disposition:
+                    RetainedWorkerAdmissionCancelDeliveryDispositionV1::Claimed {
+                        delivery_claim_id,
+                        ref transport_span_id,
+                    },
+                ..
+            } if transport_span_id == "span-b4-abandoned-delivery" => delivery_claim_id,
+            other => panic!("first attempt must hold the exact delivery claim, got {other:?}"),
+        };
+
+        drop(authority);
+        let reopened = HostSessionAuthority::open(&parent.path().join("home")).unwrap();
+        let durable = runtime
+            .read_admission_record(
+                &reopened,
+                &started.orchestration_session_id,
+                &started.retained_participant_id,
+            )
+            .unwrap()
+            .unwrap();
+        let retry_request = b4_pending_admission_cancel_request(&durable, "cancel-replacement");
+        let recovered = runtime
+            .cancel_pending_admission_at(
+                &reopened,
+                &retry_request,
+                timestamp("2026-09-08T20:01:01.000000000Z"),
+                [103_u8; 16],
+                [104_u8; 16],
+                None,
+            )
+            .unwrap();
+        assert!(matches!(
+            recovered,
+            RetainedWorkerAdmissionCancelOutcomeV1::CancelAcceptedPendingCloseout {
+                ref cancel_request_id,
+                delivery_disposition:
+                    RetainedWorkerAdmissionCancelDeliveryDispositionV1::Claimed {
+                        ref delivery_claim_id,
+                        ref transport_span_id,
+                    },
+                ..
+            } if cancel_request_id == "cancel-abandoned"
+                && delivery_claim_id != &first_claim_id
+                && transport_span_id == "span-b4-abandoned-delivery"
+        ));
+    }
+
+    #[test]
+    fn b4_pending_admission_ambiguous_delivery_waits_for_exact_lease_recovery() {
+        let (_parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let (plan, claim) =
+            b4_pending_admission_claimed_fixture(&authority, "b4-ambiguous-delivery", 1);
+        runtime
+            .observe_admission_transport_start(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                None,
+                &RuntimeFrameIdentityV1 {
+                    schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+                    stream_id: "stream-b4-ambiguous-delivery".into(),
+                    frame_sequence: 1,
+                },
+                "span-b4-ambiguous-delivery",
+            )
+            .unwrap();
+        let started = runtime
+            .read_admission_record(
+                &authority,
+                &claim.record.orchestration_session_id,
+                &claim.record.retained_participant_id,
+            )
+            .unwrap()
+            .unwrap();
+        let first = runtime
+            .cancel_pending_admission_at(
+                &authority,
+                &b4_pending_admission_cancel_request(&started, "cancel-ambiguous-original"),
+                timestamp("2026-09-08T20:00:00.000000000Z"),
+                [111_u8; 16],
+                [112_u8; 16],
+                None,
+            )
+            .unwrap();
+        let (first_claim_id, transport_span_id) = match &first {
+            RetainedWorkerAdmissionCancelOutcomeV1::CancelAcceptedPendingCloseout {
+                cancel_request_id,
+                delivery_disposition:
+                    RetainedWorkerAdmissionCancelDeliveryDispositionV1::Claimed {
+                        delivery_claim_id,
+                        transport_span_id,
+                    },
+                ..
+            } if cancel_request_id == "cancel-ambiguous-original" => {
+                (delivery_claim_id.clone(), transport_span_id.clone())
+            }
+            other => panic!("first attempt must own exact delivery, got {other:?}"),
+        };
+        assert_eq!(transport_span_id, "span-b4-ambiguous-delivery");
+        let unchanged_revision = first.record().record_revision;
+        let ambiguous = runtime
+            .record_pending_admission_cancel_delivery_at(
+                &authority,
+                &RetainedWorkerAdmissionCancelDeliveryCompletionV1 {
+                    authority_store_id: started.authority_store_id.clone(),
+                    orchestration_session_id: started.orchestration_session_id.clone(),
+                    retained_participant_id: started.retained_participant_id.clone(),
+                    cancel_request_id: "cancel-ambiguous-original".into(),
+                    transport_span_id: transport_span_id.clone(),
+                    delivery_claim_id: first_claim_id.clone(),
+                    result: RetainedWorkerAdmissionCancelDeliveryResultV1::Ambiguous,
+                },
+                timestamp("2026-09-08T20:00:01.000000000Z"),
+            )
+            .unwrap();
+        assert_eq!(ambiguous.record_revision, unchanged_revision);
+
+        let before_expiry = runtime
+            .cancel_pending_admission_at(
+                &authority,
+                &b4_pending_admission_cancel_request(&ambiguous, "cancel-before-expiry"),
+                timestamp("2026-09-08T20:00:59.000000000Z"),
+                [113_u8; 16],
+                [114_u8; 16],
+                None,
+            )
+            .unwrap();
+        assert!(matches!(
+            before_expiry,
+            RetainedWorkerAdmissionCancelOutcomeV1::CancelAcceptedPendingCloseout {
+                ref cancel_request_id,
+                delivery_disposition:
+                    RetainedWorkerAdmissionCancelDeliveryDispositionV1::InProgress {
+                        ref delivery_claim_id,
+                        ref transport_span_id,
+                        ..
+                    },
+                ..
+            } if cancel_request_id == "cancel-ambiguous-original"
+                && delivery_claim_id == &first_claim_id
+                && transport_span_id == "span-b4-ambiguous-delivery"
+        ));
+
+        let expired = runtime.record_pending_admission_cancel_delivery_at(
+            &authority,
+            &RetainedWorkerAdmissionCancelDeliveryCompletionV1 {
+                authority_store_id: started.authority_store_id.clone(),
+                orchestration_session_id: started.orchestration_session_id.clone(),
+                retained_participant_id: started.retained_participant_id.clone(),
+                cancel_request_id: "cancel-ambiguous-original".into(),
+                transport_span_id: transport_span_id.clone(),
+                delivery_claim_id: first_claim_id.clone(),
+                result: RetainedWorkerAdmissionCancelDeliveryResultV1::ConfirmedDelivered,
+            },
+            timestamp("2026-09-08T20:01:00.000000000Z"),
+        );
+        assert!(expired
+            .expect_err("completion at claim expiry must be stale")
+            .to_string()
+            .contains("does not own the live exact claim"));
+
+        let recovered = runtime
+            .cancel_pending_admission_at(
+                &authority,
+                &b4_pending_admission_cancel_request(before_expiry.record(), "cancel-after-expiry"),
+                timestamp("2026-09-08T20:01:00.000000000Z"),
+                [115_u8; 16],
+                [116_u8; 16],
+                None,
+            )
+            .unwrap();
+        let replacement_claim_id = match &recovered {
+            RetainedWorkerAdmissionCancelOutcomeV1::CancelAcceptedPendingCloseout {
+                cancel_request_id,
+                delivery_disposition:
+                    RetainedWorkerAdmissionCancelDeliveryDispositionV1::Claimed {
+                        delivery_claim_id,
+                        transport_span_id,
+                    },
+                ..
+            } if cancel_request_id == "cancel-ambiguous-original"
+                && transport_span_id == "span-b4-ambiguous-delivery" =>
+            {
+                delivery_claim_id.clone()
+            }
+            other => panic!("expired ambiguity must reacquire exact delivery, got {other:?}"),
+        };
+        assert_ne!(replacement_claim_id, first_claim_id);
+
+        let stale = runtime.record_pending_admission_cancel_delivery_at(
+            &authority,
+            &RetainedWorkerAdmissionCancelDeliveryCompletionV1 {
+                authority_store_id: started.authority_store_id.clone(),
+                orchestration_session_id: started.orchestration_session_id.clone(),
+                retained_participant_id: started.retained_participant_id.clone(),
+                cancel_request_id: "cancel-ambiguous-original".into(),
+                transport_span_id,
+                delivery_claim_id: first_claim_id,
+                result: RetainedWorkerAdmissionCancelDeliveryResultV1::ConfirmedDelivered,
+            },
+            timestamp("2026-09-08T20:01:01.000000000Z"),
+        );
+        assert!(stale
+            .expect_err("late completion must not overwrite replacement claim")
+            .to_string()
+            .contains("does not own the live exact claim"));
+
+        let still_replaced = runtime
+            .cancel_pending_admission_at(
+                &authority,
+                &b4_pending_admission_cancel_request(
+                    recovered.record(),
+                    "cancel-after-stale-completion",
+                ),
+                timestamp("2026-09-08T20:01:01.000000000Z"),
+                [117_u8; 16],
+                [118_u8; 16],
+                None,
+            )
+            .unwrap();
+        assert!(matches!(
+            still_replaced,
+            RetainedWorkerAdmissionCancelOutcomeV1::CancelAcceptedPendingCloseout {
+                delivery_disposition:
+                    RetainedWorkerAdmissionCancelDeliveryDispositionV1::InProgress {
+                        ref delivery_claim_id,
+                        ref transport_span_id,
+                        ..
+                    },
+                ..
+            } if delivery_claim_id == &replacement_claim_id
+                && transport_span_id == "span-b4-ambiguous-delivery"
+        ));
+    }
+
+    #[test]
+    fn b4_pending_admission_undelivered_transport_releases_exact_claim_for_retry() {
+        let (_parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let (plan, claim) =
+            b4_pending_admission_claimed_fixture(&authority, "b4-undelivered-retry", 1);
+        runtime
+            .observe_admission_transport_start(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                None,
+                &RuntimeFrameIdentityV1 {
+                    schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+                    stream_id: "stream-b4-undelivered-retry".into(),
+                    frame_sequence: 1,
+                },
+                "span-b4-undelivered-retry",
+            )
+            .unwrap();
+        let started = runtime
+            .read_admission_record(
+                &authority,
+                &claim.record.orchestration_session_id,
+                &claim.record.retained_participant_id,
+            )
+            .unwrap()
+            .unwrap();
+        let first = runtime
+            .cancel_pending_admission(
+                &authority,
+                &b4_pending_admission_cancel_request(&started, "cancel-undelivered"),
+            )
+            .unwrap();
+        let (first_claim_id, transport_span_id) = match &first {
+            RetainedWorkerAdmissionCancelOutcomeV1::CancelAcceptedPendingCloseout {
+                delivery_disposition:
+                    RetainedWorkerAdmissionCancelDeliveryDispositionV1::Claimed {
+                        delivery_claim_id,
+                        transport_span_id,
+                    },
+                ..
+            } => (delivery_claim_id.clone(), transport_span_id.clone()),
+            other => panic!("first attempt must claim delivery, got {other:?}"),
+        };
+        let released = runtime
+            .record_pending_admission_cancel_delivery(
+                &authority,
+                &RetainedWorkerAdmissionCancelDeliveryCompletionV1 {
+                    authority_store_id: started.authority_store_id.clone(),
+                    orchestration_session_id: started.orchestration_session_id.clone(),
+                    retained_participant_id: started.retained_participant_id.clone(),
+                    cancel_request_id: "cancel-undelivered".into(),
+                    transport_span_id,
+                    delivery_claim_id: first_claim_id.clone(),
+                    result: RetainedWorkerAdmissionCancelDeliveryResultV1::ConfirmedNotDelivered,
+                },
+            )
+            .unwrap();
+        assert!(matches!(
+            released.state,
+            RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending { .. }
+        ));
+        let retry = runtime
+            .cancel_pending_admission(
+                &authority,
+                &b4_pending_admission_cancel_request(&released, "cancel-replacement"),
+            )
+            .unwrap();
+        assert!(matches!(
+            retry,
+            RetainedWorkerAdmissionCancelOutcomeV1::CancelAcceptedPendingCloseout {
+                ref cancel_request_id,
+                delivery_disposition:
+                    RetainedWorkerAdmissionCancelDeliveryDispositionV1::Claimed {
+                        ref delivery_claim_id,
+                        ref transport_span_id,
+                    },
+                ..
+            } if cancel_request_id == "cancel-undelivered"
+                && delivery_claim_id != &first_claim_id
+                && transport_span_id == "span-b4-undelivered-retry"
+        ));
+    }
+
+    #[test]
+    fn b4_pending_admission_concurrent_cancellations_authorize_at_most_one_delivery() {
+        use std::sync::{Arc, Barrier};
+
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let (plan, claim) =
+            b4_pending_admission_claimed_fixture(&authority, "b4-cancel-contention", 1);
+        runtime
+            .observe_admission_transport_start(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                None,
+                &RuntimeFrameIdentityV1 {
+                    schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+                    stream_id: "stream-b4-cancel-contention".into(),
+                    frame_sequence: 1,
+                },
+                "span-b4-cancel-contention",
+            )
+            .unwrap();
+        let started = runtime
+            .read_admission_record(
+                &authority,
+                &claim.record.orchestration_session_id,
+                &claim.record.retained_participant_id,
+            )
+            .unwrap()
+            .unwrap();
+        let request_a = b4_pending_admission_cancel_request(&started, "cancel-a");
+        let request_b = b4_pending_admission_cancel_request(&started, "cancel-b");
+        let home = parent.path().join("home");
+        drop(authority);
+        let barrier = Arc::new(Barrier::new(2));
+
+        let thread_a = {
+            let barrier = Arc::clone(&barrier);
+            let home = home.clone();
+            std::thread::spawn(move || {
+                let authority = HostSessionAuthority::open(&home).unwrap();
+                barrier.wait();
+                RetainedWorkerRuntime
+                    .cancel_pending_admission(&authority, &request_a)
+                    .unwrap()
+            })
+        };
+        let thread_b = {
+            let barrier = Arc::clone(&barrier);
+            std::thread::spawn(move || {
+                let authority = HostSessionAuthority::open(&home).unwrap();
+                barrier.wait();
+                RetainedWorkerRuntime
+                    .cancel_pending_admission(&authority, &request_b)
+                    .unwrap()
+            })
+        };
+        let outcomes = [thread_a.join().unwrap(), thread_b.join().unwrap()];
+        let delivery_authorizations = outcomes
+            .iter()
+            .filter(|outcome| {
+                matches!(
+                    outcome,
+                    RetainedWorkerAdmissionCancelOutcomeV1::CancelAcceptedPendingCloseout {
+                        delivery_disposition:
+                            RetainedWorkerAdmissionCancelDeliveryDispositionV1::Claimed { .. },
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(delivery_authorizations, 1);
+        assert_eq!(
+            outcomes
+                .iter()
+                .filter(|outcome| matches!(
+                    outcome,
+                    RetainedWorkerAdmissionCancelOutcomeV1::CancelAcceptedPendingCloseout {
+                        delivery_disposition:
+                            RetainedWorkerAdmissionCancelDeliveryDispositionV1::InProgress { .. },
+                        ..
+                    }
+                ))
+                .count(),
+            1
+        );
+        assert_eq!(
+            outcomes[0].record().record_revision,
+            outcomes[1].record().record_revision
+        );
+        let cancellation_ids = outcomes.map(|outcome| match outcome {
+            RetainedWorkerAdmissionCancelOutcomeV1::CancelAcceptedPendingCloseout {
+                cancel_request_id,
+                ..
+            } => cancel_request_id,
+            other => panic!("expected pending cancellation outcome, got {other:?}"),
+        });
+        assert_eq!(cancellation_ids[0], cancellation_ids[1]);
+        assert!(matches!(
+            cancellation_ids[0].as_str(),
+            "cancel-a" | "cancel-b"
+        ));
+    }
+
+    #[test]
+    fn b4_pending_admission_transport_closeout_remains_live_and_releases_capacity_once() {
+        let (_parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let (plan, claim) = b4_pending_admission_claimed_fixture(&authority, "b4-closeout", 1);
+        let start_frame = RuntimeFrameIdentityV1 {
+            schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: "stream-b4-closeout".into(),
+            frame_sequence: 1,
+        };
+        assert!(runtime
+            .observe_admission_transport_start(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                None,
+                &start_frame,
+                "span-b4-closeout",
+            )
+            .unwrap()
+            .is_none());
+        let started = runtime
+            .read_admission_record(
+                &authority,
+                &claim.record.orchestration_session_id,
+                &claim.record.retained_participant_id,
+            )
+            .unwrap()
+            .unwrap();
+        let request = b4_pending_admission_cancel_request(&started, "cancel-closeout");
+        let pending = runtime
+            .cancel_pending_admission(&authority, &request)
+            .unwrap();
+        assert!(admission_state_is_live(&pending.record().state));
+        assert!(matches!(
+            pending,
+            RetainedWorkerAdmissionCancelOutcomeV1::CancelAcceptedPendingCloseout {
+                ref cancel_request_id,
+                transport_span_id: Some(ref span_id),
+                ..
+            } if cancel_request_id == "cancel-closeout" && span_id == "span-b4-closeout"
+        ));
+        let blocked = admission_plan(&authority, "b4-closeout-blocked", "prompt", 1);
+        assert!(runtime
+            .reserve_admission_slot(&authority, &blocked, None)
+            .is_err());
+
+        let terminal_frame = RuntimeFrameIdentityV1 {
+            schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: "stream-b4-closeout".into(),
+            frame_sequence: 2,
+        };
+        let terminal_event = RuntimeEventIdentityV1 {
+            event_id: "event-b4-closeout-exit".into(),
+            event_sequence: 2,
+        };
+        let terminal_identity = RuntimeTerminalIdentityV1::from(&terminal_event);
+        let closed = runtime
+            .mark_admission_terminal_for_transport(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                None,
+                &terminal_frame,
+                &terminal_event,
+                &terminal_identity,
+                "span-b4-closeout",
+                130,
+                timestamp("2026-09-07T10:10:00.000000000Z"),
+            )
+            .unwrap();
+        assert!(!admission_state_is_live(&closed.state));
+        assert!(matches!(
+            closed.state,
+            RetainedWorkerAdmissionStateV1::Terminal {
+                cancel_request_id: Some(ref cancel_request_id),
+                ..
+            } if cancel_request_id == "cancel-closeout"
+        ));
+        let closed_revision = closed.record_revision;
+        let replay = runtime
+            .mark_admission_terminal_for_transport(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                None,
+                &terminal_frame,
+                &terminal_event,
+                &terminal_identity,
+                "span-b4-closeout",
+                130,
+                timestamp("2026-09-07T10:10:00.000000000Z"),
+            )
+            .unwrap();
+        assert_eq!(replay.record_revision, closed_revision);
+        assert!(
+            runtime
+                .reserve_admission_slot(&authority, &blocked, None)
+                .unwrap()
+                .record
+                .record_revision
+                > 0
+        );
+    }
+
+    #[test]
+    fn b4_pending_admission_terminal_truth_prevents_observer_transport_claim() {
+        let (_parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let (plan, claim) =
+            b4_pending_admission_claimed_fixture(&authority, "b4-terminal-observer", 1);
+        let terminal_frame = RuntimeFrameIdentityV1 {
+            schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: "stream-b4-terminal-observer".into(),
+            frame_sequence: 1,
+        };
+        let terminal_event = RuntimeEventIdentityV1 {
+            event_id: "event-b4-terminal-observer".into(),
+            event_sequence: 1,
+        };
+        let terminal_identity = RuntimeTerminalIdentityV1::from(&terminal_event);
+        let terminal = runtime
+            .mark_admission_terminal(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                None,
+                &terminal_frame,
+                &terminal_event,
+                &terminal_identity,
+                130,
+                timestamp("2026-09-08T21:00:00.000000000Z"),
+            )
+            .unwrap();
+
+        let late_start = runtime
+            .observe_admission_transport_start(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                None,
+                &RuntimeFrameIdentityV1 {
+                    schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+                    stream_id: terminal_frame.stream_id,
+                    frame_sequence: 2,
+                },
+                "span-b4-late-terminal-observer",
+            )
+            .unwrap();
+        assert!(late_start.is_none());
+        assert_eq!(
+            runtime
+                .read_admission_record(
+                    &authority,
+                    &terminal.orchestration_session_id,
+                    &terminal.retained_participant_id,
+                )
+                .unwrap()
+                .unwrap(),
+            terminal
+        );
+    }
+
+    #[test]
+    fn b4_pending_admission_terminal_and_rejected_records_are_revision_stable() {
+        let (_parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        runtime.initialize_admission_registry(&authority).unwrap();
+        let rejected_plan = admission_plan(&authority, "b4-rejected", "prompt", 2);
+        let slot = runtime
+            .reserve_admission_slot(&authority, &rejected_plan, None)
+            .unwrap();
+        let rejected = runtime
+            .reconcile_existing_admission(
+                &authority,
+                &rejected_plan,
+                &slot.record,
+                None,
+                Some(&AdmissionRejectedBeforeRegistrationInputV1 {
+                    reason: "policy_denied: test".into(),
+                    rejected_at: timestamp("2026-09-07T10:20:00.000000000Z"),
+                }),
+            )
+            .unwrap();
+        let request = b4_pending_admission_cancel_request(&rejected, "cancel-rejected");
+        let outcome = runtime
+            .cancel_pending_admission(&authority, &request)
+            .unwrap();
+        assert!(matches!(
+            outcome,
+            RetainedWorkerAdmissionCancelOutcomeV1::RejectedBeforeRegistration { .. }
+        ));
+        assert_eq!(outcome.record(), &rejected);
+
+        let terminal_plan = admission_plan(&authority, "b4-terminal", "prompt", 2);
+        let admitted = runtime
+            .register_admitted_worker(&authority, &terminal_plan, None)
+            .unwrap();
+        let claim = runtime
+            .claim_admission_transport(
+                &authority,
+                &terminal_plan,
+                &admitted.record.retained_participant_id,
+                None,
+            )
+            .unwrap();
+        let frame = RuntimeFrameIdentityV1 {
+            schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: "stream-b4-terminal".into(),
+            frame_sequence: 1,
+        };
+        let event = RuntimeEventIdentityV1 {
+            event_id: "event-b4-terminal".into(),
+            event_sequence: 1,
+        };
+        let terminal = RuntimeTerminalIdentityV1::from(&event);
+        let terminal_record = runtime
+            .mark_admission_terminal(
+                &authority,
+                &terminal_plan,
+                &claim.record.retained_participant_id,
+                None,
+                &frame,
+                &event,
+                &terminal,
+                143,
+                timestamp("2026-09-07T10:21:00.000000000Z"),
+            )
+            .unwrap();
+        let request = b4_pending_admission_cancel_request(&terminal_record, "cancel-terminal");
+        let outcome = runtime
+            .cancel_pending_admission(&authority, &request)
+            .unwrap();
+        assert!(matches!(
+            outcome,
+            RetainedWorkerAdmissionCancelOutcomeV1::AlreadyTerminal { .. }
+        ));
+        assert_eq!(outcome.record(), &terminal_record);
+    }
+
+    #[test]
+    fn b4_pending_admission_restart_retry_converges_without_duplicate_intent() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let (_plan, claim) = b4_pending_admission_claimed_fixture(&authority, "b4-restart", 1);
+        let request = b4_pending_admission_cancel_request(&claim.record, "cancel-restart");
+        runtime
+            .cancel_pending_admission_at(
+                &authority,
+                &request,
+                timestamp("2026-09-07T10:30:00.000000000Z"),
+                [90_u8; 16],
+                [91_u8; 16],
+                Some(AdmissionCancellationCrashPointV1::AfterPublicationBeforeResponse),
+            )
+            .unwrap_err();
+        drop(authority);
+        let reopened = HostSessionAuthority::open(&parent.path().join("home")).unwrap();
+        let durable = runtime
+            .read_admission_record(
+                &reopened,
+                &claim.record.orchestration_session_id,
+                &claim.record.retained_participant_id,
+            )
+            .unwrap()
+            .unwrap();
+        let revision = durable.record_revision;
+        let retry = b4_pending_admission_cancel_request(&durable, "cancel-later-retry");
+        let outcome = runtime.cancel_pending_admission(&reopened, &retry).unwrap();
+        assert_eq!(outcome.record().record_revision, revision);
+        assert!(matches!(
+            outcome,
+            RetainedWorkerAdmissionCancelOutcomeV1::CancelAcceptedPendingCloseout {
+                ref cancel_request_id,
+                ..
+            } if cancel_request_id == "cancel-restart"
+        ));
+    }
+
+    #[test]
+    fn b4_pending_admission_old_persisted_records_decode_without_reinterpretation() {
+        let (_parent, authority, _) = started_authority();
+        let (_plan, claim) = b4_pending_admission_claimed_fixture(&authority, "b4-old-decode", 1);
+        let bytes = encode_canonical(&claim.record, "encode old admission record").unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let state = value
+            .get("state")
+            .and_then(serde_json::Value::as_object)
+            .unwrap();
+        assert!(!state.contains_key("transport_span_id"));
+        assert!(!state.contains_key("stream_id"));
+        assert!(!state.contains_key("last_frame_sequence"));
+        let decoded: RetainedWorkerAdmissionRecordV1 =
+            decode_canonical(&bytes, "decode old admission record").unwrap();
+        assert_eq!(decoded, claim.record);
+        assert_eq!(
+            encode_canonical(&decoded, "re-encode old admission record").unwrap(),
+            bytes
+        );
+    }
+
+    #[test]
+    fn b4_pending_admission_cancellation_and_routing_contention_has_one_winner() {
+        use std::sync::{Arc, Barrier};
+
+        let (parent, authority, _) = started_authority();
+        let (plan, claim) = b4_pending_admission_claimed_fixture(&authority, "b4-contention", 1);
+        let request = b4_pending_admission_cancel_request(&claim.record, "cancel-contention");
+        let (frame, event) = registered_runtime_truth(&plan, &claim.record, "stream-b4-contention");
+        let home = parent.path().join("home");
+        drop(authority);
+        let barrier = Arc::new(Barrier::new(2));
+        let cancel_barrier = Arc::clone(&barrier);
+        let cancel_home = home.clone();
+        let cancel_thread = std::thread::spawn(move || {
+            let authority = HostSessionAuthority::open(&cancel_home).unwrap();
+            cancel_barrier.wait();
+            RetainedWorkerRuntime
+                .cancel_pending_admission(&authority, &request)
+                .unwrap()
+        });
+        let route_barrier = Arc::clone(&barrier);
+        let route_thread = std::thread::spawn(move || {
+            let authority = HostSessionAuthority::open(&home).unwrap();
+            route_barrier.wait();
+            RetainedWorkerRuntime
+                .mark_admission_routable_outcome(
+                    &authority,
+                    &plan,
+                    &claim.record.retained_participant_id,
+                    None,
+                    &frame,
+                    &event,
+                    timestamp("2026-09-07T10:40:00.000000000Z"),
+                )
+                .unwrap()
+        });
+        let cancel = cancel_thread.join().unwrap();
+        let route = route_thread.join().unwrap();
+        let cancellation_won = matches!(
+            cancel,
+            RetainedWorkerAdmissionCancelOutcomeV1::CancelAcceptedPendingCloseout { .. }
+        );
+        let routing_won = matches!(
+            route.disposition,
+            RetainedWorkerAdmissionRoutabilityDispositionV1::Routable
+        );
+        assert_ne!(cancellation_won, routing_won);
+        if cancellation_won {
+            assert!(matches!(
+                route.disposition,
+                RetainedWorkerAdmissionRoutabilityDispositionV1::CancellationWon { .. }
+            ));
+        } else {
+            assert!(matches!(
+                cancel,
+                RetainedWorkerAdmissionCancelOutcomeV1::AlreadyRoutable { .. }
+            ));
+        }
     }
 }

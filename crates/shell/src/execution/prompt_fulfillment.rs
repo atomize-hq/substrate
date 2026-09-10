@@ -100,9 +100,9 @@ pub(crate) fn compose_prompt_with_host_toolbox_contract(prompt: &str) -> String 
 - Fresh requests: run_world_task uses target_backend_id plus task payload and returns task_run_id; spawn_world_worker uses target_backend_id plus worker payload and returns participant_id.
 - Retained allocation receipts: fork_world_worker returns the child retained-worker participant_id plus explicit source_participant_id lineage.
 - Retained follow-ups: fork_world_worker, continue_world_worker, and stop_world_worker require the exact retained-worker participant_id.
-- Mixed follow-ups: inspect_world_worker and cancel_world_work require exactly one exact handle: task_run_id for an active task or participant_id for a retained worker.
+- Mixed follow-ups: inspect_world_worker and cancel_world_work require exactly one exact handle family: task_run_id for an active task, participant_id for a retained worker, or exact_target.accepted_retained_turn / exact_target.pending_retained_admission for receipt-targeted retained control.
 - Do not provide runtime-owned fields. Substrate injects request_id, idempotency_key, orchestration_session_id, caller_participant_id, world_id, and world_generation.
-- Never provide both task_run_id and participant_id in the same follow-up call; reuse the exact receipt handle returned by Substrate.
+- Never provide more than one follow-up handle family in the same call; reuse the exact receipt handle returned by Substrate.
 
 User request:
 {prompt}"

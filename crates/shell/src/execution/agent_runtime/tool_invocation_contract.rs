@@ -13,13 +13,15 @@ use super::dispatch_contract::AcceptedForegroundReceiptV1;
 
 use super::{
     dispatch_contract::{
-        CancelWorldWorkOutcomeV1, CancelWorldWorkTerminalStateV1, ContinueWorldWorkerEventV1,
-        ContinueWorldWorkerOutcomeV1, ForkWorldWorkerOutcomeV1, InspectWorldWorkerOutcomeV1,
+        ActiveEphemeralTaskInspectSnapshotV1, ActiveTaskStateV1, CancelWorldWorkOutcomeV1,
+        CancelWorldWorkTerminalStateV1, ContinueWorldWorkerEventV1, ContinueWorldWorkerOutcomeV1,
+        ForkWorldWorkerOutcomeV1, InspectWorldWorkerOutcomeV1, PendingAdmissionInspectProjectionV1,
         RetainedWorkerCancelCloseoutV1, RetainedWorkerInspectSnapshotV1,
         RetainedWorkerStopCloseoutV1, RunWorldTaskOutcomeV1, SpawnWorldWorkerOutcomeV1,
-        StopWorldWorkerOutcomeV1, TaskPayloadV1, WorkerSpawnPayloadV1, WorldDispatchActionV1,
-        WorldDispatchModeV1, WorldDispatchOutcomeV1, WorldDispatchPayloadV1,
-        WorldDispatchRequestV1, WorldTaskTerminalStateV1,
+        StopWorldWorkerOutcomeV1, TaskPayloadV1, WorkerCancelPayloadV1, WorkerSpawnPayloadV1,
+        WorldDispatchActionV1, WorldDispatchControlTargetV1, WorldDispatchModeV1,
+        WorldDispatchOutcomeV1, WorldDispatchPayloadV1, WorldDispatchRequestV1,
+        WorldTaskTerminalStateV1,
     },
     mapping::MEMBER_ROLE,
     state_store::{
@@ -27,6 +29,103 @@ use super::{
         AgentRuntimeStateStore,
     },
 };
+
+const HOST_TOOL_EXACT_TARGET_PREFIX: &str = "substrate_target_v1:";
+
+#[cfg(test)]
+thread_local! {
+    static FORCED_DUPLICATE_EXACT_TARGET_V1: std::cell::RefCell<Option<(String, String, String)>> =
+        const { std::cell::RefCell::new(None) };
+    static FORCED_PENDING_ADMISSION_WORLD_DRIFT_V1: std::cell::RefCell<Option<(String, String)>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(test)]
+pub(crate) struct ForcedDuplicateExactTargetGuardV1;
+
+#[cfg(test)]
+impl Drop for ForcedDuplicateExactTargetGuardV1 {
+    fn drop(&mut self) {
+        FORCED_DUPLICATE_EXACT_TARGET_V1.with(|forced| *forced.borrow_mut() = None);
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn force_duplicate_exact_target_for_test_v1(
+    orchestration_session_id: &str,
+    target_participant_id: &str,
+    target_backend_id: &str,
+) -> ForcedDuplicateExactTargetGuardV1 {
+    FORCED_DUPLICATE_EXACT_TARGET_V1.with(|forced| {
+        *forced.borrow_mut() = Some((
+            orchestration_session_id.to_string(),
+            target_participant_id.to_string(),
+            target_backend_id.to_string(),
+        ));
+    });
+    ForcedDuplicateExactTargetGuardV1
+}
+
+#[cfg(test)]
+fn forced_duplicate_exact_target_backend_v1(
+    orchestration_session_id: &str,
+    target_participant_id: &str,
+) -> Option<String> {
+    FORCED_DUPLICATE_EXACT_TARGET_V1.with(|forced| {
+        forced.borrow().as_ref().and_then(|forced| {
+            (forced.0 == orchestration_session_id && forced.1 == target_participant_id)
+                .then(|| forced.2.clone())
+        })
+    })
+}
+
+#[cfg(test)]
+fn duplicate_exact_target_forced_v1(
+    orchestration_session_id: &str,
+    target_participant_id: &str,
+) -> bool {
+    FORCED_DUPLICATE_EXACT_TARGET_V1.with(|forced| {
+        forced.borrow().as_ref().is_some_and(|forced| {
+            forced.0 == orchestration_session_id && forced.1 == target_participant_id
+        })
+    })
+}
+
+#[cfg(test)]
+pub(crate) struct ForcedPendingAdmissionWorldDriftGuardV1;
+
+#[cfg(test)]
+impl Drop for ForcedPendingAdmissionWorldDriftGuardV1 {
+    fn drop(&mut self) {
+        FORCED_PENDING_ADMISSION_WORLD_DRIFT_V1.with(|forced| *forced.borrow_mut() = None);
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn force_pending_admission_world_binding_drift_for_test_v1(
+    orchestration_session_id: &str,
+    target_participant_id: &str,
+) -> ForcedPendingAdmissionWorldDriftGuardV1 {
+    FORCED_PENDING_ADMISSION_WORLD_DRIFT_V1.with(|forced| {
+        *forced.borrow_mut() = Some((
+            orchestration_session_id.to_string(),
+            target_participant_id.to_string(),
+        ));
+    });
+    ForcedPendingAdmissionWorldDriftGuardV1
+}
+
+#[cfg(test)]
+fn pending_admission_world_binding_drift_forced_v1(
+    orchestration_session_id: &str,
+    target_participant_id: &str,
+) -> bool {
+    FORCED_PENDING_ADMISSION_WORLD_DRIFT_V1.with(|forced| {
+        forced.borrow().as_ref().is_some_and(|forced| {
+            forced.0 == orchestration_session_id && forced.1 == target_participant_id
+        })
+    })
+}
 
 /// Frozen adapter-visible contract for host-owned tool invocation above the
 /// already-landed internal `WorldDispatchRequestV1` transport.
@@ -159,41 +258,86 @@ impl HostToolFollowUpHandleRequirementV1 {
         task_run_id: Option<&str>,
         participant_id: Option<&str>,
     ) -> anyhow::Result<Option<HostToolFollowUpHandleV1>> {
+        self.resolve_exact_handle_with_exact_target(task_run_id, participant_id, None)
+    }
+
+    pub(crate) fn resolve_exact_handle_with_exact_target(
+        self,
+        task_run_id: Option<&str>,
+        participant_id: Option<&str>,
+        exact_target: Option<WorldDispatchControlTargetV1>,
+    ) -> anyhow::Result<Option<HostToolFollowUpHandleV1>> {
         let task_run_id = canonicalize_handle_value("task_run_id", task_run_id)?;
         let participant_id = canonicalize_handle_value("participant_id", participant_id)?;
+        let exact_target = exact_target
+            .map(canonicalize_host_tool_exact_target)
+            .transpose()?;
+        let populated_handle_count = usize::from(task_run_id.is_some())
+            + usize::from(participant_id.is_some())
+            + usize::from(exact_target.is_some());
+        let has_exact_target = exact_target.is_some();
 
         match self {
             Self::None => {
-                if task_run_id.is_some() || participant_id.is_some() {
+                if populated_handle_count != 0 {
+                    if has_exact_target {
+                        bail!(
+                            "invalid_follow_up_handle: this tool does not accept task_run_id, participant_id, or exact_target"
+                        );
+                    }
                     bail!(
                         "invalid_follow_up_handle: this tool does not accept task_run_id or participant_id"
                     );
                 }
                 Ok(None)
             }
-            Self::ExactRetainedWorker => match (task_run_id, participant_id) {
-                (Some(_), _) => bail!(
-                    "invalid_follow_up_handle: retained-worker follow-up requires exact participant_id and does not accept task_run_id"
-                ),
-                (None, Some(participant_id)) => Ok(Some(HostToolFollowUpHandleV1::RetainedWorker(
-                    RetainedWorkerHandleV1 { participant_id },
-                ))),
-                (None, None) => bail!(
-                    "missing_follow_up_handle: retained-worker follow-up requires exact participant_id"
-                ),
-            },
-            Self::EitherExactActiveTaskOrRetainedWorker => match (task_run_id, participant_id) {
-                (Some(task_run_id), None) => Ok(Some(HostToolFollowUpHandleV1::ActiveTask(
-                    ActiveTaskHandleV1 { task_run_id },
-                ))),
-                (None, Some(participant_id)) => Ok(Some(HostToolFollowUpHandleV1::RetainedWorker(
-                    RetainedWorkerHandleV1 { participant_id },
-                ))),
-                (Some(_), Some(_)) => bail!(
-                    "invalid_follow_up_handle: follow-up requires exactly one exact handle family (task_run_id or participant_id, not both)"
-                ),
-                (None, None) => bail!(
+            Self::ExactRetainedWorker => {
+                if task_run_id.is_some() || exact_target.is_some() {
+                    if has_exact_target {
+                        bail!(
+                            "invalid_follow_up_handle: retained-worker follow-up requires exact participant_id and does not accept task_run_id or exact_target"
+                        );
+                    }
+                    bail!(
+                        "invalid_follow_up_handle: retained-worker follow-up requires exact participant_id and does not accept task_run_id"
+                    );
+                }
+                match participant_id {
+                    Some(participant_id) => Ok(Some(HostToolFollowUpHandleV1::RetainedWorker(
+                        RetainedWorkerHandleV1 { participant_id },
+                    ))),
+                    None => bail!(
+                        "missing_follow_up_handle: retained-worker follow-up requires exact participant_id"
+                    ),
+                }
+            }
+            Self::EitherExactActiveTaskOrRetainedWorker => match (
+                task_run_id,
+                participant_id,
+                exact_target,
+                populated_handle_count,
+            ) {
+                (Some(task_run_id), None, None, 1) => {
+                    Ok(Some(HostToolFollowUpHandleV1::ActiveTask(ActiveTaskHandleV1 {
+                        task_run_id,
+                    })))
+                }
+                (None, Some(participant_id), None, 1) => Ok(Some(
+                    HostToolFollowUpHandleV1::RetainedWorker(RetainedWorkerHandleV1 {
+                        participant_id,
+                    }),
+                )),
+                (None, None, Some(exact_target), 1) => {
+                    Ok(Some(HostToolFollowUpHandleV1::ExactTarget(exact_target)))
+                }
+                (_, _, _, 0) => bail!(
                     "missing_follow_up_handle: follow-up requires exact task_run_id or exact participant_id"
+                ),
+                _ if has_exact_target => bail!(
+                    "invalid_follow_up_handle: follow-up requires exactly one exact handle family (task_run_id, participant_id, or exact_target, not multiple)"
+                ),
+                _ => bail!(
+                    "invalid_follow_up_handle: follow-up requires exactly one exact handle family (task_run_id or participant_id, not both)"
                 ),
             },
         }
@@ -214,6 +358,7 @@ pub(crate) struct RetainedWorkerHandleV1 {
 pub(crate) enum HostToolFollowUpHandleV1 {
     ActiveTask(ActiveTaskHandleV1),
     RetainedWorker(RetainedWorkerHandleV1),
+    ExactTarget(WorldDispatchControlTargetV1),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -291,13 +436,26 @@ pub(crate) struct HostToolInspectWorldWorkerOutcomeV1 {
     pub mode: WorldDispatchModeV1,
     pub orchestrator_participant_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exact_target: Option<WorldDispatchControlTargetV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub task_run_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub participant_id: Option<String>,
     pub target_backend_id: String,
     pub world_id: String,
     pub world_generation: u64,
-    pub snapshot: RetainedWorkerInspectSnapshotV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot: Option<RetainedWorkerInspectSnapshotV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ephemeral_snapshot: Option<ActiveEphemeralTaskInspectSnapshotV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_ref: Option<substrate_common::agent_events::RuntimeTerminalIdentityV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal: Option<crate::execution::agent_runtime::dispatch_contract::WorldWorkTerminalV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_submission_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_admission: Option<PendingAdmissionInspectProjectionV1>,
     pub summary: String,
 }
 
@@ -309,6 +467,8 @@ pub(crate) struct HostToolCancelWorldWorkOutcomeV1 {
     pub mode: WorldDispatchModeV1,
     pub orchestrator_participant_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exact_target: Option<WorldDispatchControlTargetV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub task_run_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub participant_id: Option<String>,
@@ -316,7 +476,18 @@ pub(crate) struct HostToolCancelWorldWorkOutcomeV1 {
     pub world_id: String,
     pub world_generation: u64,
     pub state: CancelWorldWorkTerminalStateV1,
-    pub closeout: RetainedWorkerCancelCloseoutV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cancel_request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closeout: Option<RetainedWorkerCancelCloseoutV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_ref: Option<substrate_common::agent_events::RuntimeTerminalIdentityV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal: Option<crate::execution::agent_runtime::dispatch_contract::WorldWorkTerminalV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_submission_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_admission: Option<PendingAdmissionInspectProjectionV1>,
     pub summary: String,
 }
 
@@ -463,6 +634,75 @@ fn canonicalize_handle_value(
     Ok(Some(trimmed.to_string()))
 }
 
+fn canonicalize_host_tool_identity_field(
+    field: &'static str,
+    value: String,
+) -> anyhow::Result<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        bail!("invalid_follow_up_handle: exact_target.{field} must be non-empty");
+    }
+    Ok(trimmed.to_string())
+}
+
+fn canonicalize_host_tool_exact_target(
+    target: WorldDispatchControlTargetV1,
+) -> anyhow::Result<WorldDispatchControlTargetV1> {
+    Ok(match target {
+        WorldDispatchControlTargetV1::AcceptedRetainedTurn {
+            acceptance_record_id,
+            active_run_id,
+            message_id,
+            target_participant_id,
+        } => WorldDispatchControlTargetV1::AcceptedRetainedTurn {
+            acceptance_record_id: canonicalize_host_tool_identity_field(
+                "acceptance_record_id",
+                acceptance_record_id,
+            )?,
+            active_run_id: canonicalize_host_tool_identity_field("active_run_id", active_run_id)?,
+            message_id: canonicalize_host_tool_identity_field("message_id", message_id)?,
+            target_participant_id: canonicalize_host_tool_identity_field(
+                "target_participant_id",
+                target_participant_id,
+            )?,
+        },
+        WorldDispatchControlTargetV1::PendingRetainedAdmission {
+            issuer_request_id,
+            target_participant_id,
+        } => WorldDispatchControlTargetV1::PendingRetainedAdmission {
+            issuer_request_id: canonicalize_host_tool_identity_field(
+                "issuer_request_id",
+                issuer_request_id,
+            )?,
+            target_participant_id: canonicalize_host_tool_identity_field(
+                "target_participant_id",
+                target_participant_id,
+            )?,
+        },
+    })
+}
+
+fn encode_host_tool_exact_target(target: &WorldDispatchControlTargetV1) -> anyhow::Result<String> {
+    Ok(format!(
+        "{}{}",
+        HOST_TOOL_EXACT_TARGET_PREFIX,
+        serde_json::to_string(target)?
+    ))
+}
+
+fn dispatch_request_identity_for_exact_target(
+    target: &WorldDispatchControlTargetV1,
+) -> anyhow::Result<(Option<String>, Option<String>)> {
+    Ok(match target {
+        WorldDispatchControlTargetV1::AcceptedRetainedTurn { .. } => {
+            (Some(encode_host_tool_exact_target(target)?), None)
+        }
+        WorldDispatchControlTargetV1::PendingRetainedAdmission { .. } => {
+            (None, Some(encode_host_tool_exact_target(target)?))
+        }
+    })
+}
+
 fn canonicalize_required_identity_value(
     field: &'static str,
     value: Option<&str>,
@@ -512,6 +752,18 @@ fn normalize_dual_handle_identity(
     match mode {
         WorldDispatchModeV1::Ephemeral => Ok((Some(normalized_target), None)),
         WorldDispatchModeV1::Retained => Ok((None, Some(normalized_target))),
+    }
+}
+
+fn normalize_follow_up_handle_identity(
+    action: WorldDispatchActionV1,
+    mode: WorldDispatchModeV1,
+    target_participant_id: &str,
+    exact_target: Option<&WorldDispatchControlTargetV1>,
+) -> anyhow::Result<(Option<String>, Option<String>)> {
+    match exact_target {
+        Some(_) => Ok((None, None)),
+        None => normalize_dual_handle_identity(action, mode, target_participant_id),
     }
 }
 
@@ -584,6 +836,8 @@ struct HostToolFollowUpArgumentsV1<P> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     participant_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    exact_target: Option<WorldDispatchControlTargetV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     dispatch_policy_narrowing: Option<transport_api_types::DispatchPolicyNarrowingPatchV1>,
     payload: P,
 }
@@ -601,6 +855,7 @@ pub(crate) struct ResolvedFollowUpDispatchAuthorityV1 {
     pub target_backend_id: String,
     pub task_run_id: Option<String>,
     pub target_participant_id: Option<String>,
+    pub exact_target: Option<WorldDispatchControlTargetV1>,
     pub world_binding: HostToolRuntimeWorldBindingV1,
 }
 
@@ -611,6 +866,7 @@ struct BuildDispatchRequestArgsV1 {
     target_backend_id: String,
     task_run_id: Option<String>,
     target_participant_id: Option<String>,
+    exact_target: Option<WorldDispatchControlTargetV1>,
     dispatch_policy_narrowing: Option<transport_api_types::DispatchPolicyNarrowingPatchV1>,
     payload: WorldDispatchPayloadV1,
 }
@@ -633,6 +889,7 @@ pub(crate) fn translate_run_world_task_to_internal_dispatch_request_v1(
             target_backend_id: call.target_backend_id,
             task_run_id: None,
             target_participant_id: None,
+            exact_target: None,
             dispatch_policy_narrowing: call.dispatch_policy_narrowing,
             payload: WorldDispatchPayloadV1::Task(call.payload),
         },
@@ -653,6 +910,7 @@ pub(crate) fn translate_spawn_world_worker_to_internal_dispatch_request_v1(
             target_backend_id: call.target_backend_id,
             task_run_id: None,
             target_participant_id: None,
+            exact_target: None,
             dispatch_policy_narrowing: call.dispatch_policy_narrowing,
             payload: WorldDispatchPayloadV1::WorkerSpawn(call.payload),
         },
@@ -774,10 +1032,86 @@ pub(crate) fn normalize_continue_world_worker_outcome_v1(
 pub(crate) fn normalize_inspect_world_worker_outcome_v1(
     outcome: &InspectWorldWorkerOutcomeV1,
 ) -> anyhow::Result<HostToolInspectWorldWorkerOutcomeV1> {
-    let (task_run_id, participant_id) = normalize_dual_handle_identity(
+    if outcome.terminal_ref.is_some() != outcome.terminal.is_some()
+        || outcome.terminal_ref.is_some() != outcome.runtime_submission_id.is_some()
+    {
+        bail!(
+            "invalid_inspect_world_worker_outcome: terminal_ref, terminal classification, and runtime_submission_id must be emitted together"
+        );
+    }
+    if outcome.mode == WorldDispatchModeV1::Ephemeral {
+        if outcome.snapshot.is_some() {
+            bail!(
+                "invalid_inspect_world_worker_outcome: ephemeral inspection cannot project a retained-worker snapshot"
+            );
+        }
+        let snapshot = outcome.ephemeral_snapshot.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "invalid_inspect_world_worker_outcome: ephemeral inspection omitted task snapshot"
+            )
+        })?;
+        match outcome.terminal.as_ref() {
+            Some(terminal) => {
+                let expected_state = match terminal.result_class {
+                    super::dispatch_contract::WorldWorkResultClassificationV1::Completed
+                    | super::dispatch_contract::WorldWorkResultClassificationV1::NeedsRetainedFollowup
+                    | super::dispatch_contract::WorldWorkResultClassificationV1::Parked
+                    | super::dispatch_contract::WorldWorkResultClassificationV1::Stopped => {
+                        ActiveTaskStateV1::Terminal
+                    }
+                    super::dispatch_contract::WorldWorkResultClassificationV1::Failed => {
+                        ActiveTaskStateV1::Failed
+                    }
+                    super::dispatch_contract::WorldWorkResultClassificationV1::Cancelled => {
+                        ActiveTaskStateV1::Cancelled
+                    }
+                    super::dispatch_contract::WorldWorkResultClassificationV1::Invalidated => {
+                        ActiveTaskStateV1::Invalidated
+                    }
+                };
+                if snapshot.state != expected_state
+                    || snapshot.authoritative_live
+                    || snapshot.cancel_supported
+                {
+                    bail!(
+                        "invalid_inspect_world_worker_outcome: terminal ephemeral snapshot contradicts exact terminal classification"
+                    );
+                }
+                let summary = outcome.summary.to_ascii_lowercase();
+                if summary.contains("authoritative active snapshot")
+                    || summary.contains("in-flight")
+                    || summary.contains("state is running")
+                    || summary.contains("currently cancelable")
+                {
+                    bail!(
+                        "invalid_inspect_world_worker_outcome: terminal ephemeral summary contradicts exact terminal classification"
+                    );
+                }
+            }
+            None => {
+                if !matches!(
+                    snapshot.state,
+                    ActiveTaskStateV1::Accepted
+                        | ActiveTaskStateV1::Running
+                        | ActiveTaskStateV1::AttentionPending
+                ) || !snapshot.authoritative_live
+                {
+                    bail!(
+                        "invalid_inspect_world_worker_outcome: nonterminal ephemeral snapshot must remain authoritative and live"
+                    );
+                }
+            }
+        }
+    } else if outcome.ephemeral_snapshot.is_some() {
+        bail!(
+            "invalid_inspect_world_worker_outcome: retained inspection cannot project an ephemeral-task snapshot"
+        );
+    }
+    let (task_run_id, participant_id) = normalize_follow_up_handle_identity(
         outcome.action,
         outcome.mode,
         &outcome.target_participant_id,
+        outcome.exact_target.as_ref(),
     )?;
 
     Ok(HostToolInspectWorldWorkerOutcomeV1 {
@@ -786,12 +1120,18 @@ pub(crate) fn normalize_inspect_world_worker_outcome_v1(
         action: outcome.action,
         mode: outcome.mode,
         orchestrator_participant_id: outcome.orchestrator_participant_id.clone(),
+        exact_target: outcome.exact_target.clone(),
         task_run_id,
         participant_id,
         target_backend_id: outcome.target_backend_id.clone(),
         world_id: outcome.world_id.clone(),
         world_generation: outcome.world_generation,
         snapshot: outcome.snapshot.clone(),
+        ephemeral_snapshot: outcome.ephemeral_snapshot.clone(),
+        terminal_ref: outcome.terminal_ref.clone(),
+        terminal: outcome.terminal.clone(),
+        runtime_submission_id: outcome.runtime_submission_id.clone(),
+        pending_admission: outcome.pending_admission.clone(),
         summary: outcome.summary.clone(),
     })
 }
@@ -799,10 +1139,43 @@ pub(crate) fn normalize_inspect_world_worker_outcome_v1(
 pub(crate) fn normalize_cancel_world_work_outcome_v1(
     outcome: &CancelWorldWorkOutcomeV1,
 ) -> anyhow::Result<HostToolCancelWorldWorkOutcomeV1> {
-    let (task_run_id, participant_id) = normalize_dual_handle_identity(
+    if outcome.state == CancelWorldWorkTerminalStateV1::CancelAcceptedPendingCloseout
+        && outcome
+            .cancel_request_id
+            .as_deref()
+            .is_none_or(|request_id| request_id.trim().is_empty())
+    {
+        bail!(
+            "invalid_cancel_world_work_outcome: cancel_accepted_pending_closeout requires stable cancel_request_id"
+        );
+    }
+    if outcome.terminal_ref.is_some() != outcome.terminal.is_some()
+        || outcome.terminal_ref.is_some() != outcome.runtime_submission_id.is_some()
+    {
+        bail!(
+            "invalid_cancel_world_work_outcome: terminal_ref, terminal classification, and runtime_submission_id must be emitted together"
+        );
+    }
+    if matches!(
+        outcome.state,
+        CancelWorldWorkTerminalStateV1::CancelledViaLiveTransport
+            | CancelWorldWorkTerminalStateV1::AlreadyTerminal
+    ) && (outcome.mode == WorldDispatchModeV1::Ephemeral
+        || matches!(
+            outcome.exact_target,
+            Some(WorldDispatchControlTargetV1::AcceptedRetainedTurn { .. })
+        ))
+        && outcome.terminal_ref.is_none()
+    {
+        bail!(
+            "invalid_cancel_world_work_outcome: exact turn terminal outcomes require authenticated terminal evidence"
+        );
+    }
+    let (task_run_id, participant_id) = normalize_follow_up_handle_identity(
         outcome.action,
         outcome.mode,
         &outcome.target_participant_id,
+        outcome.exact_target.as_ref(),
     )?;
 
     Ok(HostToolCancelWorldWorkOutcomeV1 {
@@ -811,15 +1184,190 @@ pub(crate) fn normalize_cancel_world_work_outcome_v1(
         action: outcome.action,
         mode: outcome.mode,
         orchestrator_participant_id: outcome.orchestrator_participant_id.clone(),
+        exact_target: outcome.exact_target.clone(),
         task_run_id,
         participant_id,
         target_backend_id: outcome.target_backend_id.clone(),
         world_id: outcome.world_id.clone(),
         world_generation: outcome.world_generation,
         state: outcome.state,
+        cancel_request_id: outcome.cancel_request_id.clone(),
         closeout: outcome.closeout.clone(),
+        terminal_ref: outcome.terminal_ref.clone(),
+        terminal: outcome.terminal.clone(),
+        runtime_submission_id: outcome.runtime_submission_id.clone(),
+        pending_admission: outcome.pending_admission.clone(),
         summary: outcome.summary.clone(),
     })
+}
+
+pub(crate) fn project_ambiguous_cancel_world_work_translation_outcome_v1(
+    store: &AgentRuntimeStateStore,
+    metadata: &HostToolRuntimeDispatchMetadataV1,
+    world_binding: &HostToolRuntimeWorldBindingV1,
+    request: &HostToolInvocationRequestEnvelopeV1,
+    error: &anyhow::Error,
+) -> anyhow::Result<Option<WorldDispatchOutcomeV1>> {
+    if request.tool_name != HostToolNameV1::CancelWorldWork.as_str() {
+        return Ok(None);
+    }
+    let state = error.chain().find_map(|cause| {
+        let message = cause.to_string();
+        if message.starts_with("ambiguous_target_participant:") {
+            Some(CancelWorldWorkTerminalStateV1::AmbiguousTarget)
+        } else if message.starts_with("world_binding_mismatch:") {
+            Some(CancelWorldWorkTerminalStateV1::WorldBindingMismatch)
+        } else if [
+            "caller_not_authoritative:",
+            "target_not_in_session:",
+            "invalid_target_participant:",
+            "stale_linkage:",
+        ]
+        .iter()
+        .any(|prefix| message.starts_with(prefix))
+        {
+            Some(CancelWorldWorkTerminalStateV1::InvalidTarget)
+        } else {
+            None
+        }
+    });
+    let Some(state) = state else {
+        return Ok(None);
+    };
+    metadata.validate()?;
+    world_binding.validate()?;
+    let call = decode_tool_arguments_v1::<HostToolFollowUpArgumentsV1<WorkerCancelPayloadV1>>(
+        HostToolNameV1::CancelWorldWork,
+        request.arguments.clone(),
+    )?;
+    let Some(exact_target) = call.exact_target else {
+        return Ok(None);
+    };
+    let (target_participant_id, target_backend_id) = match &exact_target {
+        WorldDispatchControlTargetV1::AcceptedRetainedTurn {
+            target_participant_id,
+            ..
+        } => {
+            #[cfg(test)]
+            let forced_backend = forced_duplicate_exact_target_backend_v1(
+                &metadata.orchestration_session_id,
+                target_participant_id,
+            );
+            #[cfg(not(test))]
+            let forced_backend: Option<String> = None;
+            let target_backend_id = if let Some(forced_backend) = forced_backend {
+                forced_backend
+            } else {
+                let Some(record) = store.load_session(&metadata.orchestration_session_id)? else {
+                    return Ok(None);
+                };
+                let matching_participants = record
+                    .participants
+                    .iter()
+                    .filter(|participant| participant.participant_id() == target_participant_id)
+                    .collect::<Vec<_>>();
+                let required_count = if state == CancelWorldWorkTerminalStateV1::AmbiguousTarget {
+                    2
+                } else {
+                    1
+                };
+                if matching_participants.len() < required_count {
+                    return Ok(None);
+                }
+                matching_participants[0].handle.backend_id.clone()
+            };
+            (target_participant_id.clone(), target_backend_id)
+        }
+        WorldDispatchControlTargetV1::PendingRetainedAdmission {
+            target_participant_id,
+            ..
+        } => {
+            if state == CancelWorldWorkTerminalStateV1::AmbiguousTarget {
+                return Ok(None);
+            }
+            #[cfg(any(target_os = "linux", test))]
+            {
+                use super::{
+                    host_session_authority::{
+                        facade::HostSessionAuthority, trusted_fs::TrustedAuthorityRoot,
+                    },
+                    retained_worker_runtime::RetainedWorkerRuntime,
+                };
+
+                let substrate_home = substrate_paths::substrate_home()
+                    .context("resolve rejected pending-admission authority home")?;
+                let trusted_root = TrustedAuthorityRoot::open(&substrate_home)
+                    .map_err(|error| anyhow::anyhow!(error.to_string()))
+                    .context("open rejected pending-admission authority home")?;
+                let authority = HostSessionAuthority::from_trusted_root(trusted_root)
+                    .map_err(|error| anyhow::anyhow!(error.to_string()))
+                    .context("bind rejected pending-admission authority")?;
+                let current = authority
+                    .resolve_current_exact(&metadata.orchestration_session_id, None)
+                    .map_err(|error| anyhow::anyhow!(error.to_string()))
+                    .context("resolve rejected pending-admission current authority")?;
+                if current.caller.participant_id != metadata.caller_participant_id {
+                    return Ok(None);
+                }
+                let Some(current_world) = current.authority.world_binding.as_ref() else {
+                    return Ok(None);
+                };
+                if current_world.world_id != world_binding.world_id
+                    || current_world.world_generation != world_binding.world_generation
+                {
+                    return Ok(None);
+                }
+                let Some(admission) = RetainedWorkerRuntime
+                    .read_admission_record(
+                        &authority,
+                        &metadata.orchestration_session_id,
+                        target_participant_id,
+                    )
+                    .map_err(|error| anyhow::anyhow!(error.to_string()))
+                    .context("read rejected pending-admission record")?
+                else {
+                    return Ok(None);
+                };
+                RetainedWorkerRuntime
+                    .validate_admission_authority_ancestry(&authority, &admission)
+                    .map_err(|error| anyhow::anyhow!(error.to_string()))
+                    .context("validate rejected pending-admission authority ancestry")?;
+                if admission.authority_store_id != current.observation.authority_store_id
+                    || admission.orchestration_session_id != metadata.orchestration_session_id
+                    || admission.retained_participant_id != *target_participant_id
+                {
+                    return Ok(None);
+                }
+                (target_participant_id.clone(), admission.backend_id)
+            }
+            #[cfg(not(any(target_os = "linux", test)))]
+            {
+                return Ok(None);
+            }
+        }
+    };
+    Ok(Some(WorldDispatchOutcomeV1::CancelWorldWork(
+        CancelWorldWorkOutcomeV1 {
+            request_id: metadata.request_id.clone(),
+            orchestration_session_id: metadata.orchestration_session_id.clone(),
+            action: WorldDispatchActionV1::CancelWorldWork,
+            mode: WorldDispatchModeV1::Retained,
+            orchestrator_participant_id: metadata.caller_participant_id.clone(),
+            target_participant_id,
+            target_backend_id,
+            world_id: world_binding.world_id.clone(),
+            world_generation: world_binding.world_generation,
+            state,
+            cancel_request_id: None,
+            exact_target: Some(exact_target),
+            closeout: None,
+            terminal_ref: None,
+            terminal: None,
+            runtime_submission_id: None,
+            pending_admission: None,
+            summary: error.to_string(),
+        },
+    )))
 }
 
 pub(crate) fn normalize_stop_world_worker_outcome_v1(
@@ -1081,19 +1629,12 @@ fn resolve_follow_up_dispatch_authority_with_hsa_continue_v1(
                         active_task.task_run_id
                     );
                 }
-                if observation.terminal.is_some() {
-                    bail!(
-                        "target_already_terminal: orchestration session {} active ephemeral task {} has exact terminal supervisor truth",
-                        metadata.orchestration_session_id,
-                        active_task.task_run_id
-                    );
-                }
-
                 Ok(ResolvedFollowUpDispatchAuthorityV1 {
                     mode: WorldDispatchModeV1::Ephemeral,
                     target_backend_id: acceptance.target_backend_id,
                     task_run_id: Some(active_task.task_run_id.clone()),
                     target_participant_id: None,
+                    exact_target: None,
                     world_binding,
                 })
             }
@@ -1131,6 +1672,7 @@ fn resolve_follow_up_dispatch_authority_with_hsa_continue_v1(
                         target_backend_id: target.backend_id,
                         task_run_id: None,
                         target_participant_id: Some(retained_worker.participant_id.clone()),
+                        exact_target: None,
                         world_binding: HostToolRuntimeWorldBindingV1 {
                             world_id: authority.world_id,
                             world_generation: authority.world_generation,
@@ -1244,8 +1786,226 @@ fn resolve_follow_up_dispatch_authority_with_hsa_continue_v1(
                 target_backend_id: target_participant.handle.backend_id,
                 task_run_id: None,
                 target_participant_id: Some(retained_worker.participant_id.clone()),
+                exact_target: None,
                 world_binding,
             })
+        }
+        HostToolFollowUpHandleV1::ExactTarget(exact_target) => {
+            resolve_exact_target_follow_up_dispatch_authority_v1(
+                store,
+                metadata,
+                tool_name,
+                exact_target,
+            )
+        }
+    }
+}
+
+fn resolve_exact_target_follow_up_dispatch_authority_v1(
+    store: &AgentRuntimeStateStore,
+    metadata: &HostToolRuntimeDispatchMetadataV1,
+    tool_name: HostToolNameV1,
+    exact_target: &WorldDispatchControlTargetV1,
+) -> anyhow::Result<ResolvedFollowUpDispatchAuthorityV1> {
+    metadata.validate()?;
+    ensure_tool_accepts_follow_up_handle(
+        tool_name,
+        &HostToolFollowUpHandleV1::ExactTarget(exact_target.clone()),
+    )?;
+
+    match exact_target {
+        WorldDispatchControlTargetV1::AcceptedRetainedTurn {
+            target_participant_id,
+            ..
+        } => {
+            #[cfg(test)]
+            if duplicate_exact_target_forced_v1(
+                &metadata.orchestration_session_id,
+                target_participant_id,
+            ) {
+                bail!(
+                    "ambiguous_target_participant: orchestration session {} has multiple retained worker records for {}",
+                    metadata.orchestration_session_id,
+                    target_participant_id
+                );
+            }
+            let authority = store.resolve_internal_world_dispatch_caller(
+                &metadata.orchestration_session_id,
+                &metadata.caller_participant_id,
+            )?;
+            let world_binding = authoritative_world_binding(&authority.session)?;
+            let Some(record) = store.load_session(&metadata.orchestration_session_id)? else {
+                bail!(
+                    "missing_orchestration_session: internal world dispatch requires authoritative orchestration session {}",
+                    metadata.orchestration_session_id
+                );
+            };
+            let mut matching_participants = record
+                .participants
+                .iter()
+                .filter(|participant| participant.participant_id() == target_participant_id)
+                .cloned()
+                .collect::<Vec<_>>();
+
+            if matching_participants.is_empty() {
+                bail!(
+                    "target_not_in_session: orchestration session {} has no exact retained worker {}",
+                    metadata.orchestration_session_id,
+                    target_participant_id
+                );
+            }
+            if matching_participants.len() > 1 {
+                bail!(
+                    "ambiguous_target_participant: orchestration session {} has multiple retained worker records for {}",
+                    metadata.orchestration_session_id,
+                    target_participant_id
+                );
+            }
+
+            let target_participant = matching_participants
+                .pop()
+                .expect("exact receipt target count checked above");
+            if target_participant.handle.role != MEMBER_ROLE
+                || target_participant.handle.execution.scope != AgentExecutionScope::World
+            {
+                bail!(
+                    "invalid_target_participant: orchestration session {} participant {} is not a retained world worker",
+                    metadata.orchestration_session_id,
+                    target_participant_id
+                );
+            }
+            validate_retained_worker_authoritative_lineage(
+                &record,
+                &authority.caller_participant,
+                &target_participant,
+            )?;
+            if !target_participant.matches_authoritative_parent_world_binding(&authority.session) {
+                bail!(
+                    "world_binding_mismatch: orchestration session {} retained worker {} no longer matches the authoritative world binding",
+                    metadata.orchestration_session_id,
+                    target_participant_id
+                );
+            }
+
+            Ok(ResolvedFollowUpDispatchAuthorityV1 {
+                mode: WorldDispatchModeV1::Retained,
+                target_backend_id: target_participant.handle.backend_id,
+                task_run_id: None,
+                target_participant_id: None,
+                exact_target: Some(exact_target.clone()),
+                world_binding,
+            })
+        }
+        WorldDispatchControlTargetV1::PendingRetainedAdmission {
+            issuer_request_id,
+            target_participant_id,
+        } => {
+            #[cfg(any(target_os = "linux", test))]
+            {
+                use crate::execution::agent_runtime::host_session_authority::{
+                    facade::HostSessionAuthority, trusted_fs::TrustedAuthorityRoot,
+                };
+                use crate::execution::agent_runtime::retained_worker_runtime::RetainedWorkerRuntime;
+
+                let substrate_home = substrate_paths::substrate_home()
+                    .context("resolve exact pending-admission authority home")?;
+                let trusted_root = TrustedAuthorityRoot::open(&substrate_home)
+                    .map_err(|error| anyhow::anyhow!(error.to_string()))
+                    .context("open exact pending-admission authority home")?;
+                let authority = HostSessionAuthority::from_trusted_root(trusted_root)
+                    .map_err(|error| anyhow::anyhow!(error.to_string()))
+                    .context("bind exact pending-admission authority")?;
+                let current = authority
+                    .resolve_current_exact(&metadata.orchestration_session_id, None)
+                    .map_err(|error| anyhow::anyhow!(error.to_string()))
+                    .context("resolve exact pending-admission current authority")?;
+                if current.caller.participant_id != metadata.caller_participant_id {
+                    bail!(
+                        "caller_not_authoritative: orchestration session {} authoritative orchestrator participant is {} not {}",
+                        metadata.orchestration_session_id,
+                        current.caller.participant_id,
+                        metadata.caller_participant_id
+                    );
+                }
+                let current_world = current.authority.world_binding.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "missing_world_binding: orchestration session {} has no authoritative world binding",
+                        metadata.orchestration_session_id
+                    )
+                })?;
+                let admission = RetainedWorkerRuntime
+                    .read_admission_record(
+                        &authority,
+                        &metadata.orchestration_session_id,
+                        target_participant_id,
+                    )
+                    .map_err(|error| anyhow::anyhow!(error.to_string()))
+                    .context("read exact pending-admission record")?
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "target_not_in_session: orchestration session {} has no exact retained worker {}",
+                            metadata.orchestration_session_id,
+                            target_participant_id
+                        )
+                    })?;
+                RetainedWorkerRuntime
+                    .validate_admission_authority_ancestry(&authority, &admission)
+                    .map_err(|error| anyhow::anyhow!(error.to_string()))
+                    .context("validate exact pending-admission authority ancestry")?;
+                if admission.issuer_request_id != *issuer_request_id {
+                    bail!(
+                        "invalid_target_participant: orchestration session {} retained admission {} is not issued by {}",
+                        metadata.orchestration_session_id,
+                        target_participant_id,
+                        issuer_request_id
+                    );
+                }
+                if admission.authority_store_id != current.observation.authority_store_id
+                    || admission.orchestration_session_id != metadata.orchestration_session_id
+                    || admission.retained_participant_id != *target_participant_id
+                {
+                    bail!(
+                        "stale_linkage: retained admission {} conflicts with current dispatch authority",
+                        target_participant_id
+                    );
+                }
+                #[cfg(test)]
+                let forced_world_drift = pending_admission_world_binding_drift_forced_v1(
+                    &metadata.orchestration_session_id,
+                    target_participant_id,
+                );
+                #[cfg(not(test))]
+                let forced_world_drift = false;
+                if forced_world_drift
+                    || admission.world_binding.world_id != current_world.world_id
+                    || admission.world_binding.world_generation != current_world.world_generation
+                {
+                    bail!(
+                        "world_binding_mismatch: orchestration session {} retained worker {} no longer matches the authoritative world binding",
+                        metadata.orchestration_session_id,
+                        target_participant_id
+                    );
+                }
+
+                Ok(ResolvedFollowUpDispatchAuthorityV1 {
+                    mode: WorldDispatchModeV1::Retained,
+                    target_backend_id: admission.backend_id,
+                    task_run_id: None,
+                    target_participant_id: None,
+                    exact_target: Some(exact_target.clone()),
+                    world_binding: HostToolRuntimeWorldBindingV1 {
+                        world_id: current_world.world_id.clone(),
+                        world_generation: current_world.world_generation,
+                    },
+                })
+            }
+            #[cfg(not(any(target_os = "linux", test)))]
+            {
+                let _ = (issuer_request_id, target_participant_id);
+                bail!(
+                    "unsupported_platform_or_posture: canonical pending-admission follow-up authority is unavailable on this platform"
+                )
+            }
         }
     }
 }
@@ -1270,17 +2030,29 @@ fn translate_follow_up_tool_with_policy_narrowing_v1(
     payload: WorldDispatchPayloadV1,
     dispatch_policy_narrowing: Option<transport_api_types::DispatchPolicyNarrowingPatchV1>,
 ) -> anyhow::Result<WorldDispatchRequestV1> {
-    let allow_hsa_retained_continue = !matches!(
-        &payload,
-        WorldDispatchPayloadV1::WorkerContinueForkCommand(_)
-    );
-    let authority = resolve_follow_up_dispatch_authority_with_hsa_continue_v1(
-        store,
-        metadata,
-        tool_name,
-        &handle,
-        allow_hsa_retained_continue,
-    )?;
+    let authority = match &handle {
+        HostToolFollowUpHandleV1::ExactTarget(exact_target) => {
+            resolve_exact_target_follow_up_dispatch_authority_v1(
+                store,
+                metadata,
+                tool_name,
+                exact_target,
+            )?
+        }
+        _ => {
+            let allow_hsa_retained_continue = !matches!(
+                &payload,
+                WorldDispatchPayloadV1::WorkerContinueForkCommand(_)
+            );
+            resolve_follow_up_dispatch_authority_with_hsa_continue_v1(
+                store,
+                metadata,
+                tool_name,
+                &handle,
+                allow_hsa_retained_continue,
+            )?
+        }
+    };
     build_dispatch_request_v1(
         metadata,
         &authority.world_binding,
@@ -1290,6 +2062,7 @@ fn translate_follow_up_tool_with_policy_narrowing_v1(
             target_backend_id: authority.target_backend_id,
             task_run_id: authority.task_run_id,
             target_participant_id: authority.target_participant_id,
+            exact_target: authority.exact_target,
             dispatch_policy_narrowing,
             payload,
         },
@@ -1305,8 +2078,9 @@ fn build_dispatch_request_v1(
         tool_name,
         mode,
         target_backend_id,
-        task_run_id,
-        target_participant_id,
+        mut task_run_id,
+        mut target_participant_id,
+        exact_target,
         dispatch_policy_narrowing,
         payload,
     } = args;
@@ -1320,6 +2094,10 @@ fn build_dispatch_request_v1(
             tool_name.as_str(),
             mode.as_str(),
         );
+    }
+    if let Some(exact_target) = exact_target.as_ref() {
+        (task_run_id, target_participant_id) =
+            dispatch_request_identity_for_exact_target(exact_target)?;
     }
 
     let request = WorldDispatchRequestV1 {
@@ -1459,6 +2237,11 @@ pub(crate) fn normalize_host_tool_invocation_outcome_v1(
             serde_json::to_value(normalize_spawn_world_worker_receipt_v1(spawn)?)
                 .context("serialize normalized spawn_world_worker receipt")
         }
+        (
+            HostToolNameV1::SpawnWorldWorker,
+            WorldDispatchOutcomeV1::SpawnWorldWorkerPendingAdmission(pending),
+        ) => serde_json::to_value(pending)
+            .context("serialize structured pending spawn_world_worker admission"),
         (HostToolNameV1::ForkWorldWorker, WorldDispatchOutcomeV1::ForkWorldWorker(fork)) => {
             serde_json::to_value(normalize_fork_world_worker_receipt_v1(fork)?)
                 .context("serialize normalized fork_world_worker receipt")
@@ -1529,7 +2312,11 @@ where
     let handle = tool_name
         .contract()
         .follow_up_handle_requirement
-        .resolve_exact_handle(call.task_run_id.as_deref(), call.participant_id.as_deref())?
+        .resolve_exact_handle_with_exact_target(
+            call.task_run_id.as_deref(),
+            call.participant_id.as_deref(),
+            call.exact_target,
+        )?
         .ok_or_else(|| {
             anyhow::anyhow!(
                 "missing_follow_up_handle: tool {} requires an exact follow-up handle",
@@ -1551,6 +2338,12 @@ fn ensure_tool_accepts_follow_up_handle(
     handle: &HostToolFollowUpHandleV1,
 ) -> anyhow::Result<()> {
     match (tool_name.contract().follow_up_handle_requirement, handle) {
+        (
+            HostToolFollowUpHandleRequirementV1::None,
+            HostToolFollowUpHandleV1::ExactTarget(_),
+        ) => bail!(
+            "invalid_follow_up_handle: this tool does not accept task_run_id, participant_id, or exact_target"
+        ),
         (HostToolFollowUpHandleRequirementV1::None, _) => bail!(
             "invalid_follow_up_handle: this tool does not accept task_run_id or participant_id"
         ),
@@ -1559,6 +2352,12 @@ fn ensure_tool_accepts_follow_up_handle(
             HostToolFollowUpHandleV1::ActiveTask(_),
         ) => bail!(
             "invalid_follow_up_handle: retained-worker follow-up requires exact participant_id and does not accept task_run_id"
+        ),
+        (
+            HostToolFollowUpHandleRequirementV1::ExactRetainedWorker,
+            HostToolFollowUpHandleV1::ExactTarget(_),
+        ) => bail!(
+            "invalid_follow_up_handle: retained-worker follow-up requires exact participant_id and does not accept task_run_id or exact_target"
         ),
         (
             HostToolFollowUpHandleRequirementV1::ExactRetainedWorker,
@@ -1621,6 +2420,7 @@ mod tests {
         normalize_continue_world_worker_outcome_v1, normalize_host_tool_invocation_outcome_v1,
         normalize_inspect_world_worker_outcome_v1, normalize_run_world_task_receipt_v1,
         normalize_spawn_world_worker_receipt_v1, normalize_stop_world_worker_outcome_v1,
+        project_ambiguous_cancel_world_work_translation_outcome_v1,
         resolve_follow_up_dispatch_authority_v1,
         translate_follow_up_tool_to_internal_dispatch_request_v1,
         translate_host_tool_invocation_request_to_internal_dispatch_request_v1,
@@ -1632,14 +2432,18 @@ mod tests {
         SpawnWorldWorkerToolCallV1,
     };
     use crate::execution::agent_runtime::dispatch_contract::{
-        AcceptedForegroundReceiptV1, ActiveEphemeralTaskReceiptV1, ActiveRetainedTurnReceiptV1,
-        CancelWorldWorkOutcomeV1, ContinueWorldWorkerEventClassV1, ContinueWorldWorkerEventV1,
-        ContinueWorldWorkerOutcomeV1, InspectWorldWorkerOutcomeV1, RetainedWorkerCancelCloseoutV1,
-        RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1, RunWorldTaskOutcomeV1,
-        SpawnWorldWorkerOutcomeV1, StopWorldWorkerOutcomeV1, WorkerCancelPayloadV1,
+        AcceptedForegroundReceiptV1, ActiveEphemeralTaskInspectSnapshotV1,
+        ActiveEphemeralTaskReceiptV1, ActiveRetainedTurnReceiptV1, ActiveTaskStateV1,
+        CancelWorldWorkOutcomeV1, CancelWorldWorkTerminalStateV1, ContinueWorldWorkerEventClassV1,
+        ContinueWorldWorkerEventV1, ContinueWorldWorkerOutcomeV1, InspectWorldWorkerOutcomeV1,
+        PendingAdmissionInspectProjectionV1, RetainedWorkerInspectSnapshotV1,
+        RetainedWorkerStopCloseoutV1, RunWorldTaskOutcomeV1, SpawnWorldWorkerOutcomeV1,
+        SpawnWorldWorkerPendingAdmissionOutcomeV1, StopWorldWorkerOutcomeV1, WorkerCancelPayloadV1,
         WorkerContinuePayloadV1, WorkerForkPayloadV1, WorkerInspectPayloadV1, WorkerStopPayloadV1,
-        WorldDispatchOutcomeV1, WorldTaskTerminalStateV1,
+        WorldDispatchControlTargetV1, WorldDispatchOutcomeV1, WorldTaskTerminalStateV1,
+        WorldWorkResultClassificationV1, WorldWorkTerminalV1,
     };
+    use crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectCommitmentV1;
     use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
     use crate::execution::agent_runtime::orchestration_session::{
         HostAttachContract, OrchestrationSessionState,
@@ -1659,6 +2463,18 @@ mod tests {
         AgentRuntimeStateStore, WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchPayloadV1,
     };
     use crate::execution::config_model::AgentExecutionScope;
+
+    fn cancellation_terminal_evidence(
+        result_class: WorldWorkResultClassificationV1,
+    ) -> (RuntimeTerminalIdentityV1, WorldWorkTerminalV1) {
+        (
+            RuntimeTerminalIdentityV1 {
+                terminal_event_id: "evt-tool-cancel-terminal".to_string(),
+                terminal_event_sequence: 3,
+            },
+            WorldWorkTerminalV1 { result_class },
+        )
+    }
 
     #[test]
     fn dispatch_contract_adapter_freezes_exactly_seven_host_tool_names() {
@@ -2327,10 +3143,8 @@ mod tests {
             parent_participant_id: None,
             resumed_from_participant_id: None,
         };
-        let retained_cancel_closeout = RetainedWorkerCancelCloseoutV1 {
-            participant_state: None,
-            session_state: None,
-        };
+        let (ephemeral_terminal_ref, ephemeral_terminal) =
+            cancellation_terminal_evidence(WorldWorkResultClassificationV1::Cancelled);
 
         let inspect_ephemeral =
             normalize_inspect_world_worker_outcome_v1(&InspectWorldWorkerOutcomeV1 {
@@ -2343,7 +3157,17 @@ mod tests {
                 target_backend_id: "cli:codex_world".to_string(),
                 world_id: "world-17".to_string(),
                 world_generation: 2,
-                snapshot: snapshot.clone(),
+                exact_target: None,
+                snapshot: None,
+                ephemeral_snapshot: Some(ActiveEphemeralTaskInspectSnapshotV1 {
+                    state: ActiveTaskStateV1::Running,
+                    authoritative_live: true,
+                    cancel_supported: true,
+                }),
+                terminal_ref: None,
+                terminal: None,
+                runtime_submission_id: None,
+                pending_admission: None,
                 summary: "inspect exposes canonical active-task identity".to_string(),
             })
             .expect("normalize ephemeral inspect");
@@ -2364,7 +3188,13 @@ mod tests {
                 target_backend_id: "cli:codex_world".to_string(),
                 world_id: "world-17".to_string(),
                 world_generation: 2,
-                snapshot: snapshot.clone(),
+                exact_target: None,
+                snapshot: Some(snapshot.clone()),
+                ephemeral_snapshot: None,
+                terminal_ref: None,
+                terminal: None,
+                runtime_submission_id: None,
+                pending_admission: None,
                 summary: "inspect exposes canonical retained identity".to_string(),
             })
             .expect("normalize retained inspect");
@@ -2384,8 +3214,14 @@ mod tests {
             target_backend_id: "cli:codex_world".to_string(),
             world_id: "world-17".to_string(),
             world_generation: 2,
-            state: crate::execution::agent_runtime::dispatch_contract::CancelWorldWorkTerminalStateV1::Cancelled,
-            closeout: retained_cancel_closeout.clone(),
+            state: crate::execution::agent_runtime::dispatch_contract::CancelWorldWorkTerminalStateV1::CancelledViaLiveTransport,
+            cancel_request_id: Some("req-packet3-cancel-e".to_string()),
+            exact_target: None,
+            closeout: None,
+            terminal_ref: Some(ephemeral_terminal_ref),
+            terminal: Some(ephemeral_terminal),
+            runtime_submission_id: Some("task-run-cancel-packet3".to_string()),
+            pending_admission: None,
             summary: "cancel exposes canonical active-task identity".to_string(),
         })
         .expect("normalize ephemeral cancel");
@@ -2405,8 +3241,14 @@ mod tests {
             target_backend_id: "cli:codex_world".to_string(),
             world_id: "world-17".to_string(),
             world_generation: 2,
-            state: crate::execution::agent_runtime::dispatch_contract::CancelWorldWorkTerminalStateV1::Cancelled,
-            closeout: retained_cancel_closeout,
+            state: crate::execution::agent_runtime::dispatch_contract::CancelWorldWorkTerminalStateV1::CancelAcceptedPendingCloseout,
+            cancel_request_id: Some("req-packet3-cancel-r".to_string()),
+            exact_target: None,
+            closeout: None,
+            terminal_ref: None,
+            terminal: None,
+            runtime_submission_id: None,
+            pending_admission: None,
             summary: "cancel exposes canonical retained identity".to_string(),
         })
         .expect("normalize retained cancel");
@@ -2415,6 +3257,386 @@ mod tests {
             cancel_retained.participant_id.as_deref(),
             Some("ash_packet3")
         );
+    }
+
+    #[test]
+    fn b4_public_pending_cancel_requires_and_reproduces_stable_request_identity() {
+        let mut outcome = CancelWorldWorkOutcomeV1 {
+            request_id: "req-b4-pending".to_string(),
+            orchestration_session_id: "sess-b4-pending".to_string(),
+            action: WorldDispatchActionV1::CancelWorldWork,
+            mode: WorldDispatchModeV1::Ephemeral,
+            orchestrator_participant_id: "orch-b4-pending".to_string(),
+            target_participant_id: "task-b4-pending".to_string(),
+            target_backend_id: "cli:codex_world".to_string(),
+            world_id: "world-b4-pending".to_string(),
+            world_generation: 1,
+            state: CancelWorldWorkTerminalStateV1::CancelAcceptedPendingCloseout,
+            cancel_request_id: None,
+            exact_target: None,
+            closeout: None,
+            terminal_ref: None,
+            terminal: None,
+            runtime_submission_id: None,
+            pending_admission: None,
+            summary: "accepted cancellation awaits exact closeout".to_string(),
+        };
+        let error = normalize_cancel_world_work_outcome_v1(&outcome)
+            .expect_err("pending cancellation without accepted identity must fail closed");
+        assert!(error
+            .to_string()
+            .contains("requires stable cancel_request_id"));
+
+        outcome.cancel_request_id = Some("cancel-b4-stable".to_string());
+        let first = normalize_cancel_world_work_outcome_v1(&outcome)
+            .expect("normalize accepted pending cancellation");
+        let retry = normalize_cancel_world_work_outcome_v1(&outcome)
+            .expect("normalize retry of accepted pending cancellation");
+        assert_eq!(first.cancel_request_id.as_deref(), Some("cancel-b4-stable"));
+        assert_eq!(retry.cancel_request_id, first.cancel_request_id);
+
+        outcome.mode = WorldDispatchModeV1::Retained;
+        outcome.target_participant_id = "ash-b4-pending".to_string();
+        let retained = normalize_cancel_world_work_outcome_v1(&outcome)
+            .expect("normalize retained accepted pending cancellation");
+        assert_eq!(retained.cancel_request_id, first.cancel_request_id);
+    }
+
+    #[test]
+    fn b4_host_tool_ephemeral_terminal_projection_preserves_truth_and_rejects_contradictions() {
+        for (result_class, state) in [
+            (
+                WorldWorkResultClassificationV1::Completed,
+                ActiveTaskStateV1::Terminal,
+            ),
+            (
+                WorldWorkResultClassificationV1::Failed,
+                ActiveTaskStateV1::Failed,
+            ),
+            (
+                WorldWorkResultClassificationV1::Cancelled,
+                ActiveTaskStateV1::Cancelled,
+            ),
+            (
+                WorldWorkResultClassificationV1::NeedsRetainedFollowup,
+                ActiveTaskStateV1::Terminal,
+            ),
+            (
+                WorldWorkResultClassificationV1::Invalidated,
+                ActiveTaskStateV1::Invalidated,
+            ),
+        ] {
+            let outcome = InspectWorldWorkerOutcomeV1 {
+                request_id: "req-b4-terminal-normalization".to_string(),
+                orchestration_session_id: "sess-b4-terminal-normalization".to_string(),
+                action: WorldDispatchActionV1::InspectWorldWorker,
+                mode: WorldDispatchModeV1::Ephemeral,
+                orchestrator_participant_id: "orch-b4-terminal-normalization".to_string(),
+                target_participant_id: "task-b4-terminal-normalization".to_string(),
+                target_backend_id: "cli:codex_world".to_string(),
+                world_id: "world-b4-terminal-normalization".to_string(),
+                world_generation: 7,
+                exact_target: None,
+                snapshot: None,
+                ephemeral_snapshot: Some(ActiveEphemeralTaskInspectSnapshotV1 {
+                    state,
+                    authoritative_live: false,
+                    cancel_supported: false,
+                }),
+                terminal_ref: Some(RuntimeTerminalIdentityV1 {
+                    terminal_event_id: "evt-b4-terminal-normalization".to_string(),
+                    terminal_event_sequence: 4,
+                }),
+                terminal: Some(WorldWorkTerminalV1 { result_class }),
+                runtime_submission_id: Some("span-b4-terminal-normalization".to_string()),
+                pending_admission: None,
+                summary: format!(
+                    "exact terminal supervisor truth for task-b4-terminal-normalization: {result_class:?}"
+                ),
+            };
+            let normalized = normalize_inspect_world_worker_outcome_v1(&outcome)
+                .expect("terminal ephemeral projection must normalize without losing truth");
+            assert_eq!(normalized.ephemeral_snapshot, outcome.ephemeral_snapshot);
+            assert_eq!(normalized.terminal, outcome.terminal);
+            assert_eq!(
+                normalized.task_run_id.as_deref(),
+                Some("task-b4-terminal-normalization")
+            );
+            assert!(normalized.participant_id.is_none());
+        }
+
+        let contradictory = InspectWorldWorkerOutcomeV1 {
+            request_id: "req-b4-contradictory-terminal".to_string(),
+            orchestration_session_id: "sess-b4-terminal-normalization".to_string(),
+            action: WorldDispatchActionV1::InspectWorldWorker,
+            mode: WorldDispatchModeV1::Ephemeral,
+            orchestrator_participant_id: "orch-b4-terminal-normalization".to_string(),
+            target_participant_id: "task-b4-terminal-normalization".to_string(),
+            target_backend_id: "cli:codex_world".to_string(),
+            world_id: "world-b4-terminal-normalization".to_string(),
+            world_generation: 7,
+            exact_target: None,
+            snapshot: None,
+            ephemeral_snapshot: Some(ActiveEphemeralTaskInspectSnapshotV1 {
+                state: ActiveTaskStateV1::Running,
+                authoritative_live: true,
+                cancel_supported: true,
+            }),
+            terminal_ref: Some(RuntimeTerminalIdentityV1 {
+                terminal_event_id: "evt-b4-contradictory-terminal".to_string(),
+                terminal_event_sequence: 5,
+            }),
+            terminal: Some(WorldWorkTerminalV1 {
+                result_class: WorldWorkResultClassificationV1::Completed,
+            }),
+            runtime_submission_id: Some("span-b4-contradictory-terminal".to_string()),
+            pending_admission: None,
+            summary: "authoritative active snapshot remains in-flight".to_string(),
+        };
+        assert_eq!(
+            normalize_inspect_world_worker_outcome_v1(&contradictory)
+                .expect_err("terminal host output must reject contradictory live fields")
+                .to_string(),
+            "invalid_inspect_world_worker_outcome: terminal ephemeral snapshot contradicts exact terminal classification"
+        );
+        let mut contradictory_summary = contradictory;
+        contradictory_summary.ephemeral_snapshot = Some(ActiveEphemeralTaskInspectSnapshotV1 {
+            state: ActiveTaskStateV1::Terminal,
+            authoritative_live: false,
+            cancel_supported: false,
+        });
+        assert_eq!(
+            normalize_inspect_world_worker_outcome_v1(&contradictory_summary)
+                .expect_err("terminal host output must reject an active summary")
+                .to_string(),
+            "invalid_inspect_world_worker_outcome: terminal ephemeral summary contradicts exact terminal classification"
+        );
+    }
+
+    #[test]
+    fn b4_host_tool_spawn_pending_handle_is_structured_and_success_bytes_are_unchanged() {
+        let exact_target = WorldDispatchControlTargetV1::PendingRetainedAdmission {
+            issuer_request_id: "req-b4-pending".to_string(),
+            target_participant_id: "worker-b4-pending".to_string(),
+        };
+        let pending = WorldDispatchOutcomeV1::SpawnWorldWorkerPendingAdmission(
+            SpawnWorldWorkerPendingAdmissionOutcomeV1 {
+                request_id: "req-b4-pending".to_string(),
+                orchestration_session_id: "sess-b4-pending".to_string(),
+                action: WorldDispatchActionV1::SpawnWorldWorker,
+                mode: WorldDispatchModeV1::Retained,
+                participant_id: "worker-b4-pending".to_string(),
+                orchestrator_participant_id: "orch-b4-pending".to_string(),
+                target_backend_id: "cli:codex_world".to_string(),
+                world_id: "world-b4-pending".to_string(),
+                world_generation: 9,
+                exact_target: exact_target.clone(),
+                pending_admission: PendingAdmissionInspectProjectionV1 {
+                    authority_store_id: "store-b4-pending".to_string(),
+                    issuer_request_id: "req-b4-pending".to_string(),
+                    orchestration_session_id: "sess-b4-pending".to_string(),
+                    target_participant_id: "worker-b4-pending".to_string(),
+                    target_backend_id: "cli:codex_world".to_string(),
+                    world_id: "world-b4-pending".to_string(),
+                    world_generation: 9,
+                    admission_authority_revision: 11,
+                    admission_authority_record_commitment:
+                        AuthorityObjectCommitmentV1::CanonicalSha256 {
+                            digest_hex: "a".repeat(64),
+                        },
+                    admission_record_revision: 12,
+                    category: "transport_ambiguous_or_cancel_pending".to_string(),
+                    admission_state: "transport_claimed_nonterminal".to_string(),
+                    cancel_request_id: None,
+                    summary: "exact durable admission truth".to_string(),
+                },
+                startup_failure: "transport result ambiguous".to_string(),
+                summary: "Spawn receipt unavailable; exact durable admission remains controllable"
+                    .to_string(),
+            },
+        );
+        let normalized =
+            normalize_host_tool_invocation_outcome_v1(HostToolNameV1::SpawnWorldWorker, &pending)
+                .expect("pending Spawn must normalize as structured output");
+        assert_eq!(
+            normalized.get("exact_target"),
+            Some(&serde_json::to_value(&exact_target).expect("serialize exact target"))
+        );
+        assert_eq!(
+            normalized
+                .pointer("/pending_admission/admission_record_revision")
+                .and_then(serde_json::Value::as_u64),
+            Some(12)
+        );
+        assert!(normalized.is_object());
+
+        let success = WorldDispatchOutcomeV1::SpawnWorldWorker(SpawnWorldWorkerOutcomeV1 {
+            request_id: "req-success".to_string(),
+            orchestration_session_id: "sess-success".to_string(),
+            action: WorldDispatchActionV1::SpawnWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            participant_id: "worker-success".to_string(),
+            orchestrator_participant_id: "orch-success".to_string(),
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+            target_backend_id: "cli:codex_world".to_string(),
+            world_id: "world-success".to_string(),
+            world_generation: 3,
+            launch_span_id: "span-success".to_string(),
+            summary: "successful Spawn receipt".to_string(),
+        });
+        let success_bytes = serde_json::to_vec(
+            &normalize_host_tool_invocation_outcome_v1(HostToolNameV1::SpawnWorldWorker, &success)
+                .expect("successful Spawn must retain its host bytes"),
+        )
+        .expect("serialize successful Spawn bytes");
+        assert_eq!(
+            success_bytes,
+            br#"{"request_id":"req-success","orchestration_session_id":"sess-success","action":"spawn_world_worker","mode":"retained","participant_id":"worker-success","orchestrator_participant_id":"orch-success","target_backend_id":"cli:codex_world","world_id":"world-success","world_generation":3,"launch_span_id":"span-success","summary":"successful Spawn receipt"}"#
+        );
+    }
+
+    #[test]
+    fn dispatch_contract_adapter_exact_target_outputs_round_trip_as_the_only_handle_family() {
+        let snapshot = RetainedWorkerInspectSnapshotV1 {
+            participant_state: crate::execution::agent_runtime::AgentRuntimeSessionState::Running,
+            session_state: OrchestrationSessionState::Active,
+            session_posture:
+                crate::execution::agent_runtime::orchestration_session::OrchestrationSessionPosture::ActiveAttached,
+            authoritative_live: true,
+            attention_required: false,
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+        };
+        let accepted_target = WorldDispatchControlTargetV1::AcceptedRetainedTurn {
+            acceptance_record_id: "wwa_exact_round_trip".to_string(),
+            active_run_id: "run_exact_round_trip".to_string(),
+            message_id: "wwm_exact_round_trip".to_string(),
+            target_participant_id: "ash_exact_round_trip".to_string(),
+        };
+        let pending_target = WorldDispatchControlTargetV1::PendingRetainedAdmission {
+            issuer_request_id: "req_pending_round_trip".to_string(),
+            target_participant_id: "ash_pending_round_trip".to_string(),
+        };
+
+        let inspect = normalize_inspect_world_worker_outcome_v1(&InspectWorldWorkerOutcomeV1 {
+            request_id: "req_exact_inspect".to_string(),
+            orchestration_session_id: "sess_exact_round_trip".to_string(),
+            action: WorldDispatchActionV1::InspectWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            orchestrator_participant_id: "orch_exact_round_trip".to_string(),
+            target_participant_id: "ash_exact_round_trip".to_string(),
+            target_backend_id: "cli:codex_world".to_string(),
+            world_id: "world-17".to_string(),
+            world_generation: 2,
+            exact_target: Some(accepted_target.clone()),
+            snapshot: Some(snapshot),
+            ephemeral_snapshot: None,
+            terminal_ref: None,
+            terminal: None,
+            runtime_submission_id: None,
+            pending_admission: None,
+            summary: "inspect exact retained receipt".to_string(),
+        })
+        .expect("normalize exact retained inspect");
+        let inspect_json = serde_json::to_value(&inspect).expect("serialize exact inspect");
+        assert_eq!(inspect.exact_target, Some(accepted_target.clone()));
+        assert!(inspect.task_run_id.is_none());
+        assert!(inspect.participant_id.is_none());
+        assert!(inspect_json.get("task_run_id").is_none());
+        assert!(inspect_json.get("participant_id").is_none());
+        assert_eq!(
+            HostToolFollowUpHandleRequirementV1::EitherExactActiveTaskOrRetainedWorker
+                .resolve_exact_handle_with_exact_target(None, None, inspect.exact_target.clone())
+                .expect("reuse exact inspect handle"),
+            Some(HostToolFollowUpHandleV1::ExactTarget(
+                accepted_target.clone()
+            ))
+        );
+
+        let (terminal_ref, terminal) =
+            cancellation_terminal_evidence(WorldWorkResultClassificationV1::Completed);
+        let cancel = normalize_cancel_world_work_outcome_v1(&CancelWorldWorkOutcomeV1 {
+            request_id: "req_exact_cancel".to_string(),
+            orchestration_session_id: "sess_exact_round_trip".to_string(),
+            action: WorldDispatchActionV1::CancelWorldWork,
+            mode: WorldDispatchModeV1::Retained,
+            orchestrator_participant_id: "orch_exact_round_trip".to_string(),
+            target_participant_id: "ash_exact_round_trip".to_string(),
+            target_backend_id: "cli:codex_world".to_string(),
+            world_id: "world-17".to_string(),
+            world_generation: 2,
+            state: CancelWorldWorkTerminalStateV1::AlreadyTerminal,
+            cancel_request_id: None,
+            exact_target: Some(accepted_target.clone()),
+            closeout: None,
+            terminal_ref: Some(terminal_ref),
+            terminal: Some(terminal),
+            runtime_submission_id: Some("spn-exact-round-trip".to_string()),
+            pending_admission: None,
+            summary: "cancel exact retained receipt".to_string(),
+        })
+        .expect("normalize exact retained cancel");
+        let cancel_json = serde_json::to_value(&cancel).expect("serialize exact cancel");
+        assert_eq!(cancel.exact_target, Some(accepted_target.clone()));
+        assert!(cancel.task_run_id.is_none());
+        assert!(cancel.participant_id.is_none());
+        assert!(cancel_json.get("task_run_id").is_none());
+        assert!(cancel_json.get("participant_id").is_none());
+        assert_eq!(
+            HostToolFollowUpHandleRequirementV1::EitherExactActiveTaskOrRetainedWorker
+                .resolve_exact_handle_with_exact_target(None, None, cancel.exact_target.clone())
+                .expect("reuse exact cancel handle"),
+            Some(HostToolFollowUpHandleV1::ExactTarget(
+                accepted_target.clone()
+            ))
+        );
+
+        let pending = normalize_inspect_world_worker_outcome_v1(&InspectWorldWorkerOutcomeV1 {
+            request_id: "req_pending_inspect".to_string(),
+            orchestration_session_id: "sess_exact_round_trip".to_string(),
+            action: WorldDispatchActionV1::InspectWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            orchestrator_participant_id: "orch_exact_round_trip".to_string(),
+            target_participant_id: "ash_pending_round_trip".to_string(),
+            target_backend_id: "cli:codex_world".to_string(),
+            world_id: "world-17".to_string(),
+            world_generation: 2,
+            exact_target: Some(pending_target.clone()),
+            snapshot: None,
+            ephemeral_snapshot: None,
+            terminal_ref: None,
+            terminal: None,
+            runtime_submission_id: None,
+            pending_admission: None,
+            summary: "inspect exact pending admission".to_string(),
+        })
+        .expect("normalize pending-admission inspect");
+        let pending_json = serde_json::to_value(&pending).expect("serialize pending inspect");
+        assert_eq!(pending.exact_target, Some(pending_target.clone()));
+        assert!(pending.task_run_id.is_none());
+        assert!(pending.participant_id.is_none());
+        assert!(pending_json.get("task_run_id").is_none());
+        assert!(pending_json.get("participant_id").is_none());
+        assert_eq!(
+            HostToolFollowUpHandleRequirementV1::EitherExactActiveTaskOrRetainedWorker
+                .resolve_exact_handle_with_exact_target(None, None, pending.exact_target.clone())
+                .expect("reuse exact pending-admission handle"),
+            Some(HostToolFollowUpHandleV1::ExactTarget(
+                pending_target.clone()
+            ))
+        );
+
+        let mixed = HostToolFollowUpHandleRequirementV1::EitherExactActiveTaskOrRetainedWorker
+            .resolve_exact_handle_with_exact_target(
+                Some("run_exact_round_trip"),
+                None,
+                Some(accepted_target),
+            )
+            .expect_err("mixed exact and legacy handles must fail closed");
+        assert!(mixed
+            .to_string()
+            .contains("exactly one exact handle family"));
     }
 
     #[test]
@@ -2501,6 +3723,116 @@ mod tests {
             err.to_string(),
             "invalid_adapter_visible_mode: action stop_world_worker emitted mode ephemeral but adapter retained-only follow-up result requires retained"
         );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn b4_host_tool_translation_preserves_authority_and_world_drift_as_typed_outcomes() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_packet2", "orch_packet2");
+            let valid_member = live_member(
+                "codex_world",
+                "sess_packet2",
+                "worker_packet2_valid",
+                "orch_packet2",
+            );
+            let mut drifted_member = live_member(
+                "codex_world",
+                "sess_packet2",
+                "worker_packet2_world_drift",
+                "orch_packet2",
+            );
+            drifted_member.handle.world_id = Some("world-drifted".to_string());
+            drifted_member.handle.world_generation = Some(99);
+            let parent = active_parent(&orchestrator);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist typed-drift parent");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist typed-drift orchestrator");
+            store
+                .persist_participant(&valid_member)
+                .expect("persist valid retained target");
+            store
+                .persist_participant(&drifted_member)
+                .expect("persist world-drifted retained target");
+
+            let request_for = |target_participant_id: &str| HostToolInvocationRequestEnvelopeV1 {
+                version: 1,
+                tool_name: HostToolNameV1::CancelWorldWork.as_str().to_string(),
+                tool_call_id: Some(format!("call-{target_participant_id}")),
+                arguments: serde_json::json!({
+                    "exact_target": {
+                        "target_kind": "accepted_retained_turn",
+                        "acceptance_record_id": format!("wwa-{target_participant_id}"),
+                        "active_run_id": format!("run-{target_participant_id}"),
+                        "message_id": format!("wwm-{target_participant_id}"),
+                        "target_participant_id": target_participant_id,
+                    },
+                    "payload": {},
+                }),
+            };
+            let world_binding = sample_world_binding();
+            let cases = [
+                (
+                    HostToolRuntimeDispatchMetadataV1 {
+                        caller_participant_id: "worker_packet2_valid".to_string(),
+                        ..sample_runtime_metadata()
+                    },
+                    request_for("worker_packet2_valid"),
+                    "caller_not_authoritative:",
+                    CancelWorldWorkTerminalStateV1::InvalidTarget,
+                ),
+                (
+                    sample_runtime_metadata(),
+                    request_for("worker_packet2_world_drift"),
+                    "world_binding_mismatch:",
+                    CancelWorldWorkTerminalStateV1::WorldBindingMismatch,
+                ),
+            ];
+
+            for (metadata, request, expected_error, expected_state) in cases {
+                let error = translate_host_tool_invocation_request_to_internal_dispatch_request_v1(
+                    store,
+                    &metadata,
+                    &world_binding,
+                    request.clone(),
+                )
+                .expect_err("recognized drift must stop before dispatch construction");
+                assert!(error.to_string().starts_with(expected_error), "{error:#}");
+                let projected = project_ambiguous_cancel_world_work_translation_outcome_v1(
+                    store,
+                    &metadata,
+                    &world_binding,
+                    &request,
+                    &error,
+                )
+                .expect("project recognized translation failure")
+                .expect("recognized translation failure must remain typed");
+                let WorldDispatchOutcomeV1::CancelWorldWork(projected_cancel) = &projected else {
+                    panic!("expected typed cancellation outcome");
+                };
+                assert_eq!(projected_cancel.state, expected_state);
+                assert!(projected_cancel.cancel_request_id.is_none());
+                assert!(projected_cancel.terminal.is_none());
+                let normalized = normalize_host_tool_invocation_outcome_v1(
+                    HostToolNameV1::CancelWorldWork,
+                    &projected,
+                )
+                .expect("recognized drift survives toolbox result normalization");
+                assert_eq!(
+                    normalized.get("state").and_then(serde_json::Value::as_str),
+                    Some(match expected_state {
+                        CancelWorldWorkTerminalStateV1::InvalidTarget => "invalid_target",
+                        CancelWorldWorkTerminalStateV1::WorldBindingMismatch => {
+                            "world_binding_mismatch"
+                        }
+                        _ => unreachable!("fixture has two typed drift categories"),
+                    })
+                );
+            }
+        });
     }
 
     #[test]
@@ -2670,7 +4002,11 @@ mod tests {
         assert_eq!(outcome.target_backend_id, "cli:codex_world");
         assert_eq!(outcome.world_id, "world-17");
         assert_eq!(outcome.world_generation, 2);
-        assert!(outcome.snapshot.authoritative_live);
+        let snapshot = outcome
+            .snapshot
+            .as_ref()
+            .expect("active-task inspect snapshot");
+        assert!(snapshot.authoritative_live);
 
         assert!(!store
             .canonical_active_ephemeral_task_path("sess_packet2", "task-run-packet2")
@@ -2923,7 +4259,7 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn dispatch_contract_adapter_active_task_resolution_rejects_exact_terminal_truth_distinctly() {
+    fn b4_terminal_active_task_resolution_allows_inspect_and_cancel_after_exact_joins() {
         let fixture = b_owned_active_task_fixture();
         let authority = fixture
             .store
@@ -2980,19 +4316,26 @@ mod tests {
             )
             .expect("journal exact terminal frame");
 
-        let err = resolve_follow_up_dispatch_authority_v1(
-            &fixture.store,
-            &sample_runtime_metadata(),
+        for tool_name in [
             HostToolNameV1::InspectWorldWorker,
-            &HostToolFollowUpHandleV1::ActiveTask(super::ActiveTaskHandleV1 {
-                task_run_id: "task-run-packet2".to_string(),
-            }),
-        )
-        .expect_err("exact terminal task cannot resolve as active");
-        assert!(
-            err.to_string().contains("target_already_terminal"),
-            "{err:#}"
-        );
+            HostToolNameV1::CancelWorldWork,
+        ] {
+            let resolved = resolve_follow_up_dispatch_authority_v1(
+                &fixture.store,
+                &sample_runtime_metadata(),
+                tool_name,
+                &HostToolFollowUpHandleV1::ActiveTask(super::ActiveTaskHandleV1 {
+                    task_run_id: "task-run-packet2".to_string(),
+                }),
+            )
+            .expect("exact terminal task must remain dispatchable after authority joins");
+            assert_eq!(resolved.mode, WorldDispatchModeV1::Ephemeral);
+            assert_eq!(resolved.target_backend_id, "cli:codex_world");
+            assert_eq!(resolved.task_run_id.as_deref(), Some("task-run-packet2"));
+            assert!(resolved.target_participant_id.is_none());
+            assert_eq!(resolved.world_binding.world_id, "world-17");
+            assert_eq!(resolved.world_binding.world_generation, 2);
+        }
     }
 
     #[test]
@@ -4176,9 +5519,23 @@ mod tests {
     }
 
     fn with_store(test: impl FnOnce(&AgentRuntimeStateStore)) {
+        #[cfg(unix)]
+        use std::os::unix::fs::PermissionsExt as _;
+
         let authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
-        let temp = TempDir::new().expect("tempdir");
-        authority_env.install_home(temp.path());
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create secure test parent");
+        let temp = tempfile::tempdir_in(safe_parent).expect("create secure test root");
+        let substrate_home = temp.path().join("home");
+        fs::create_dir_all(&substrate_home).expect("create test authority home");
+        #[cfg(unix)]
+        fs::set_permissions(&substrate_home, fs::Permissions::from_mode(0o700))
+            .expect("secure test authority home");
+        authority_env.install_home(&substrate_home);
         let store = AgentRuntimeStateStore::new().expect("state store");
         test(&store);
     }

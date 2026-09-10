@@ -2178,9 +2178,22 @@ pub(crate) enum PrivateStopOutcome {
 #[serde(rename_all = "snake_case")]
 pub(crate) enum PrivateCancelOutcome {
     Accepted,
+    ConfirmedNotDelivered,
+    EpisodeMismatch,
     AlreadyTerminal,
     OwnerUnreachable,
     ProtocolError,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PrivateCancelExpectedEpisodeV1 {
+    pub(crate) acceptance_record_id: String,
+    pub(crate) active_run_id: String,
+    pub(crate) message_id: String,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) runtime_submission_id: String,
+    pub(crate) target_participant_id: String,
 }
 
 #[derive(Debug)]
@@ -2212,6 +2225,7 @@ pub(crate) enum AuthorityManagedStopAcceptanceV1 {
 #[derive(Debug)]
 pub(crate) struct PrivateCancelRequest {
     pub payload: WorkerCancelPayloadV1,
+    pub expected_episode: Option<PrivateCancelExpectedEpisodeV1>,
     pub response_tx: oneshot::Sender<PrivateCancelOutcome>,
 }
 
@@ -3977,8 +3991,40 @@ pub(crate) fn spawn_local_private_stop_owner(
     })
 }
 
+pub(crate) fn private_cancel_targets_current_episode(
+    manifest: &Arc<Mutex<AgentRuntimeSessionManifest>>,
+    expected_episode: Option<&PrivateCancelExpectedEpisodeV1>,
+    retained_episode: Option<&PrivateCancelExpectedEpisodeV1>,
+) -> bool {
+    let Some(expected_episode) = expected_episode else {
+        return true;
+    };
+    if [
+        expected_episode.acceptance_record_id.as_str(),
+        expected_episode.active_run_id.as_str(),
+        expected_episode.message_id.as_str(),
+        expected_episode.orchestration_session_id.as_str(),
+        expected_episode.runtime_submission_id.as_str(),
+        expected_episode.target_participant_id.as_str(),
+    ]
+    .into_iter()
+    .any(|value| value.trim().is_empty())
+    {
+        return false;
+    }
+    if retained_episode != Some(expected_episode) {
+        return false;
+    }
+    let manifest = manifest.lock().expect("runtime manifest mutex poisoned");
+    manifest.handle.orchestration_session_id == expected_episode.orchestration_session_id
+        && manifest.handle.participant_id == expected_episode.target_participant_id
+        && manifest.internal.latest_run_id.as_deref()
+            == Some(expected_episode.active_run_id.as_str())
+}
+
 pub(crate) fn spawn_local_private_cancel_owner(
     manifest: Arc<Mutex<AgentRuntimeSessionManifest>>,
+    retained_episode: Arc<tokio::sync::Mutex<Option<PrivateCancelExpectedEpisodeV1>>>,
     shutdown_requested: Arc<AtomicBool>,
     cancel_requested: Arc<AtomicBool>,
     cancel: PromptFulfillmentCancelHandle,
@@ -3986,7 +4032,14 @@ pub(crate) fn spawn_local_private_cancel_owner(
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         while let Some(request) = cancel_rx.recv().await {
-            let outcome = if runtime_is_terminal(&manifest) {
+            let retained_episode_guard = retained_episode.lock().await;
+            let outcome = if !private_cancel_targets_current_episode(
+                &manifest,
+                request.expected_episode.as_ref(),
+                retained_episode_guard.as_ref(),
+            ) {
+                PrivateCancelOutcome::EpisodeMismatch
+            } else if runtime_is_terminal(&manifest) {
                 PrivateCancelOutcome::AlreadyTerminal
             } else {
                 shutdown_requested.store(true, Ordering::SeqCst);
@@ -5495,6 +5548,7 @@ fn format_private_stop_transport_connect_error(path: &Path, kind: io::ErrorKind)
 pub(crate) async fn request_private_cancel(
     path: &Path,
     payload: &WorkerCancelPayloadV1,
+    expected_episode: Option<&PrivateCancelExpectedEpisodeV1>,
 ) -> Result<PrivateCancelOutcome> {
     let mut stream = UnixStream::connect(path).await.with_context(|| {
         format!(
@@ -5507,6 +5561,7 @@ pub(crate) async fn request_private_cancel(
         action: "cancel".to_string(),
         reason: payload.reason.clone(),
         graceful: payload.graceful,
+        expected_episode: expected_episode.cloned(),
     };
     stream
         .write_all(serde_json::to_string(&request)?.as_bytes())
@@ -5801,6 +5856,7 @@ async fn handle_private_cancel_connection(
                 if cancel_tx
                     .send(PrivateCancelRequest {
                         payload,
+                        expected_episode: request.expected_episode,
                         response_tx,
                     })
                     .is_err()
@@ -5899,6 +5955,8 @@ struct PrivateCancelRequestV1 {
     reason: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     graceful: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    expected_episode: Option<PrivateCancelExpectedEpisodeV1>,
 }
 
 #[cfg(unix)]
@@ -6221,7 +6279,7 @@ pub(crate) fn world_task_terminal_state_from_exit_code(
 ) -> super::dispatch_contract::WorldTaskTerminalStateV1 {
     match exit_code {
         0 => super::dispatch_contract::WorldTaskTerminalStateV1::Completed,
-        130 => super::dispatch_contract::WorldTaskTerminalStateV1::Cancelled,
+        130 | 143 => super::dispatch_contract::WorldTaskTerminalStateV1::Cancelled,
         _ => super::dispatch_contract::WorldTaskTerminalStateV1::Failed,
     }
 }
@@ -7725,11 +7783,182 @@ mod tests {
     fn private_cancel_outcomes_are_exact() {
         let outcomes = [
             PrivateCancelOutcome::Accepted,
+            PrivateCancelOutcome::ConfirmedNotDelivered,
+            PrivateCancelOutcome::EpisodeMismatch,
             PrivateCancelOutcome::AlreadyTerminal,
             PrivateCancelOutcome::OwnerUnreachable,
             PrivateCancelOutcome::ProtocolError,
         ];
-        assert_eq!(outcomes.len(), 4);
+        assert_eq!(outcomes.len(), 6);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn b4_private_cancel_wire_preserves_exact_retained_episode_identity() {
+        let expected_episode = super::PrivateCancelExpectedEpisodeV1 {
+            acceptance_record_id: "wwa-exact".to_string(),
+            active_run_id: "run-exact".to_string(),
+            message_id: "wwm-exact".to_string(),
+            orchestration_session_id: "sess-exact".to_string(),
+            runtime_submission_id: "spn-continue-exact".to_string(),
+            target_participant_id: "ash-exact".to_string(),
+        };
+        let encoded = serde_json::to_string(&super::PrivateCancelRequestV1 {
+            version: 1,
+            action: "cancel".to_string(),
+            reason: Some("exact episode".to_string()),
+            graceful: Some(true),
+            expected_episode: Some(expected_episode.clone()),
+        })
+        .expect("encode private cancel request");
+        let decoded =
+            super::parse_private_cancel_request(&encoded).expect("decode private cancel request");
+
+        assert_eq!(decoded.expected_episode, Some(expected_episode));
+    }
+
+    #[test]
+    fn b4_private_cancel_owner_rejects_expected_active_run_mismatch() {
+        let descriptor = RuntimeSelectionDescriptor {
+            agent_id: "codex-world".to_string(),
+            backend_id: "cli:codex-world".to_string(),
+            backend_kind: AgentRuntimeBackendKind::Codex,
+            protocol: PURE_AGENT_PROTOCOL.to_string(),
+            execution_scope: AgentExecutionScope::World,
+            binary_path: PathBuf::from("/usr/bin/codex"),
+        };
+        let mut manifest = AgentRuntimeParticipantRecord::new_member_participant(
+            &descriptor,
+            "sess-exact".to_string(),
+            "ash-exact".to_string(),
+            "orch-exact".to_string(),
+            None,
+            Some(AgentRuntimeParticipantWorldBinding {
+                world_id: "world-exact".to_string(),
+                world_generation: 1,
+            }),
+            "lease-exact".to_string(),
+        )
+        .expect("construct retained runtime");
+        manifest.internal.latest_run_id = Some("run-current".to_string());
+        let manifest = Arc::new(Mutex::new(manifest));
+        let current = super::PrivateCancelExpectedEpisodeV1 {
+            acceptance_record_id: "wwa-current".to_string(),
+            active_run_id: "run-current".to_string(),
+            message_id: "wwm-current".to_string(),
+            orchestration_session_id: "sess-exact".to_string(),
+            runtime_submission_id: "spn-continue-current".to_string(),
+            target_participant_id: "ash-exact".to_string(),
+        };
+        let older = super::PrivateCancelExpectedEpisodeV1 {
+            acceptance_record_id: "wwa-older".to_string(),
+            active_run_id: "run-older".to_string(),
+            message_id: "wwm-older".to_string(),
+            ..current.clone()
+        };
+        let mismatched_submission = super::PrivateCancelExpectedEpisodeV1 {
+            runtime_submission_id: "spn-continue-other".to_string(),
+            ..current.clone()
+        };
+        let missing_submission = super::PrivateCancelExpectedEpisodeV1 {
+            runtime_submission_id: " ".to_string(),
+            ..current.clone()
+        };
+
+        assert!(super::private_cancel_targets_current_episode(
+            &manifest,
+            Some(&current),
+            Some(&current),
+        ));
+        assert!(!super::private_cancel_targets_current_episode(
+            &manifest,
+            Some(&older),
+            Some(&current),
+        ));
+        assert!(!super::private_cancel_targets_current_episode(
+            &manifest,
+            Some(&mismatched_submission),
+            Some(&current),
+        ));
+        assert!(!super::private_cancel_targets_current_episode(
+            &manifest,
+            Some(&missing_submission),
+            Some(&missing_submission),
+        ));
+        assert_eq!(
+            manifest
+                .lock()
+                .expect("runtime manifest")
+                .internal
+                .latest_run_id
+                .as_deref(),
+            Some("run-current")
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn b4_older_receipt_cannot_target_episode_installed_before_cancel_delivery() {
+        let descriptor = RuntimeSelectionDescriptor {
+            agent_id: "codex-world".to_string(),
+            backend_id: "cli:codex-world".to_string(),
+            backend_kind: AgentRuntimeBackendKind::Codex,
+            protocol: PURE_AGENT_PROTOCOL.to_string(),
+            execution_scope: AgentExecutionScope::World,
+            binary_path: PathBuf::from("/usr/bin/codex"),
+        };
+        let mut manifest = AgentRuntimeParticipantRecord::new_member_participant(
+            &descriptor,
+            "sess-race".to_string(),
+            "ash-race".to_string(),
+            "orch-race".to_string(),
+            None,
+            Some(AgentRuntimeParticipantWorldBinding {
+                world_id: "world-race".to_string(),
+                world_generation: 1,
+            }),
+            "lease-race".to_string(),
+        )
+        .expect("construct retained runtime");
+        manifest.internal.latest_run_id = Some("run-old".to_string());
+        let manifest = Arc::new(Mutex::new(manifest));
+        let old = super::PrivateCancelExpectedEpisodeV1 {
+            acceptance_record_id: "wwa-old".to_string(),
+            active_run_id: "run-old".to_string(),
+            message_id: "wwm-old".to_string(),
+            orchestration_session_id: "sess-race".to_string(),
+            runtime_submission_id: "spn-continue-old".to_string(),
+            target_participant_id: "ash-race".to_string(),
+        };
+        let newer = super::PrivateCancelExpectedEpisodeV1 {
+            acceptance_record_id: "wwa-new".to_string(),
+            active_run_id: "run-new".to_string(),
+            message_id: "wwm-new".to_string(),
+            ..old.clone()
+        };
+        let episode_gate = Arc::new(tokio::sync::Mutex::new(Some(old.clone())));
+        let continue_guard = Arc::clone(&episode_gate).lock_owned().await;
+        let cancel_manifest = Arc::clone(&manifest);
+        let cancel_gate = Arc::clone(&episode_gate);
+        let cancel = tokio::spawn(async move {
+            let installed = cancel_gate.lock().await;
+            super::private_cancel_targets_current_episode(
+                &cancel_manifest,
+                Some(&old),
+                installed.as_ref(),
+            )
+        });
+
+        manifest
+            .lock()
+            .expect("runtime manifest")
+            .internal
+            .latest_run_id = Some(newer.active_run_id.clone());
+        let mut continue_guard = continue_guard;
+        *continue_guard = Some(newer.clone());
+        drop(continue_guard);
+
+        assert!(!cancel.await.expect("cancel comparison task"));
+        assert_eq!(episode_gate.lock().await.as_ref(), Some(&newer));
     }
 
     #[test]
@@ -8861,13 +9090,17 @@ mod tests {
     }
 
     #[test]
-    fn world_task_terminal_state_tracks_public_prompt_exit_semantics() {
+    fn b4_world_task_terminal_state_tracks_cancel_and_failure_exit_semantics() {
         assert_eq!(
             super::world_task_terminal_state_from_exit_code(0),
             super::super::dispatch_contract::WorldTaskTerminalStateV1::Completed
         );
         assert_eq!(
             super::world_task_terminal_state_from_exit_code(130),
+            super::super::dispatch_contract::WorldTaskTerminalStateV1::Cancelled
+        );
+        assert_eq!(
+            super::world_task_terminal_state_from_exit_code(143),
             super::super::dispatch_contract::WorldTaskTerminalStateV1::Cancelled
         );
         assert_eq!(

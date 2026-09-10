@@ -3980,10 +3980,16 @@ fn stable_admission_link_from_record(
         | RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal { registration, .. }
         | RetainedWorkerAdmissionStateV1::Routable { registration, .. }
         | RetainedWorkerAdmissionStateV1::InterruptedNonterminal { registration, .. }
-        | RetainedWorkerAdmissionStateV1::Terminal { registration, .. } => registration.clone(),
+        | RetainedWorkerAdmissionStateV1::Terminal { registration, .. }
+        | RetainedWorkerAdmissionStateV1::CancelledBeforeTransport { registration, .. }
+        | RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+            registration,
+            ..
+        } => registration.clone(),
         RetainedWorkerAdmissionStateV1::SlotReserved { .. }
         | RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
-        | RetainedWorkerAdmissionStateV1::RejectedBeforeRegistration { .. } => {
+        | RetainedWorkerAdmissionStateV1::RejectedBeforeRegistration { .. }
+        | RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration { .. } => {
             return Err(DispatchPolicyCommitmentError::new(
                 "B3.2a record is not registration-bearing",
             ));
@@ -5787,6 +5793,47 @@ mod tests {
             },
             record_revision: 1,
         }
+    }
+
+    #[test]
+    fn b4_pending_admission_registration_cancellation_states_preserve_stable_e2_link() {
+        let (_parent, authority) = started_authority();
+        let reservation = reserve_fresh_spawn(&authority, fresh_spawn_input("stable cancel link"))
+            .expect("reserve cancellation-link worker");
+        let mut admission = test_admission_for_reservation(&reservation);
+        let expected = stable_admission_link_from_record(&admission)
+            .expect("derive pre-transport stable admission link");
+        let RetainedWorkerAdmissionStateV1::PreTransportNonterminal { registration } =
+            &admission.state
+        else {
+            panic!("fixture registration")
+        };
+        let registration = registration.clone();
+        admission.state = RetainedWorkerAdmissionStateV1::CancelledBeforeTransport {
+            registration: registration.clone(),
+            cancel_request_id: "cancel-e2-stable".into(),
+            cancelled_at: timestamp("2026-09-07T11:00:00.000000000Z"),
+        };
+        assert_eq!(
+            stable_admission_link_from_record(&admission)
+                .expect("derive cancelled pre-transport stable admission link"),
+            expected
+        );
+        admission.state =
+            RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+                registration,
+                transport_claim_id: Some("rtc_0123456789abcdef0123456789abcdef".into()),
+                transport_span_id: Some("span-e2-stable".into()),
+                stream_id: Some("stream-e2-stable".into()),
+                last_frame_sequence: Some(1),
+                cancel_request_id: "cancel-e2-stable".into(),
+                accepted_at: timestamp("2026-09-07T11:00:00.000000000Z"),
+            };
+        assert_eq!(
+            stable_admission_link_from_record(&admission)
+                .expect("derive pending-closeout stable admission link"),
+            expected
+        );
     }
 
     fn fork_commitment_input(

@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, path::Path, sync::LazyLock};
 
 use anyhow::{Context as _, Result};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use serde::{Deserialize, Serialize};
 use substrate_common::agent_events::{
     RuntimeEventIdentityV1, RuntimeFrameIdentityV1, RuntimeTerminalIdentityV1,
@@ -230,6 +230,112 @@ pub(crate) struct WorldWorkTerminalObservationV1 {
     pub(crate) span_id: String,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct WorldWorkCancellationAcceptanceV1 {
+    schema_version: u32,
+    cancel_request_id: String,
+}
+
+const WORLD_WORK_CANCELLATION_DELIVERY_LEASE_SECONDS: i64 = 30;
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "snake_case", tag = "state")]
+enum WorldWorkCancellationDeliveryStateV1 {
+    #[default]
+    Available,
+    Claimed {
+        delivery_claim_id: String,
+        claimed_at: DateTime<Utc>,
+        lease_expires_at: DateTime<Utc>,
+    },
+    Confirmed {
+        delivery_claim_id: String,
+    },
+}
+
+impl WorldWorkCancellationDeliveryStateV1 {
+    fn is_available(&self) -> bool {
+        matches!(self, Self::Available)
+    }
+
+    fn validate(&self) -> Result<()> {
+        match self {
+            Self::Available => Ok(()),
+            Self::Claimed {
+                delivery_claim_id,
+                claimed_at,
+                lease_expires_at,
+            } => {
+                validate_delivery_claim_id(delivery_claim_id)?;
+                let expected_expiry = claimed_at
+                    .checked_add_signed(TimeDelta::seconds(
+                        WORLD_WORK_CANCELLATION_DELIVERY_LEASE_SECONDS,
+                    ))
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("B4 cancellation delivery lease timestamp overflow")
+                    })?;
+                if *lease_expires_at != expected_expiry {
+                    anyhow::bail!("B4 cancellation delivery claim has a noncanonical lease");
+                }
+                Ok(())
+            }
+            Self::Confirmed { delivery_claim_id } => validate_delivery_claim_id(delivery_claim_id),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum WorldWorkCancellationDeliveryResultV1 {
+    ConfirmedDelivered,
+    ConfirmedNotDelivered,
+    Ambiguous,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum WorldWorkCancellationDeliveryRecordOutcomeV1 {
+    Recorded,
+    Stale,
+}
+
+fn validate_delivery_claim_id(delivery_claim_id: &str) -> Result<()> {
+    if delivery_claim_id.trim().is_empty() || delivery_claim_id.trim() != delivery_claim_id {
+        anyhow::bail!("B4 cancellation delivery claim identity is not canonical");
+    }
+    Ok(())
+}
+
+impl WorldWorkCancellationAcceptanceV1 {
+    fn new(cancel_request_id: &str) -> Result<Self> {
+        let acceptance = Self {
+            schema_version: 1,
+            cancel_request_id: cancel_request_id.to_string(),
+        };
+        acceptance.validate()?;
+        Ok(acceptance)
+    }
+
+    fn validate(&self) -> Result<()> {
+        if self.schema_version != 1
+            || self.cancel_request_id.trim().is_empty()
+            || self.cancel_request_id.trim() != self.cancel_request_id
+        {
+            anyhow::bail!("B4 cancellation acceptance is not canonical V1 material");
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct WorldWorkCancellationAcceptanceOutcomeV1 {
+    pub(crate) accepted_cancel_request_id: Option<String>,
+    pub(crate) should_deliver_transport: bool,
+    pub(crate) delivery_claim_id: Option<String>,
+    pub(crate) execution_claim: WorldWorkExecutionClaimV1,
+    pub(crate) cancellation_pending: bool,
+    pub(crate) terminal: Option<WorldWorkTerminalObservationV1>,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum WorldWorkInterruptionReasonV1 {
@@ -269,6 +375,13 @@ pub(crate) enum WorldWorkRecoveryAttemptV1 {
 struct SupervisedWorldWorkExecutionV1 {
     schema_version: u32,
     claim: WorldWorkExecutionClaimV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    cancellation: Option<WorldWorkCancellationAcceptanceV1>,
+    #[serde(
+        default,
+        skip_serializing_if = "WorldWorkCancellationDeliveryStateV1::is_available"
+    )]
+    cancellation_delivery: WorldWorkCancellationDeliveryStateV1,
     durable_frame_cursor: Option<u64>,
     durable_event_cursor: Option<u64>,
     journal: Vec<WorldWorkJournalEntryV1>,
@@ -281,6 +394,8 @@ impl SupervisedWorldWorkExecutionV1 {
         Self {
             schema_version: 1,
             claim,
+            cancellation: None,
+            cancellation_delivery: WorldWorkCancellationDeliveryStateV1::Available,
             durable_frame_cursor: None,
             durable_event_cursor: None,
             journal: Vec::new(),
@@ -305,6 +420,13 @@ impl SupervisedWorldWorkExecutionV1 {
             anyhow::bail!("unsupported supervised world work schema version");
         }
         self.claim.validate(authority_store_id)?;
+        if let Some(cancellation) = self.cancellation.as_ref() {
+            cancellation.validate()?;
+        }
+        self.cancellation_delivery.validate()?;
+        if self.cancellation.is_none() && !self.cancellation_delivery.is_available() {
+            anyhow::bail!("B4 cancellation delivery state exists without acceptance truth");
+        }
         let mut expected_frame_sequence = self.claim.acceptance_frame_sequence;
         let mut expected_event_sequence = 1_u64;
         let mut observed_event_cursor = None;
@@ -860,6 +982,177 @@ impl WorldWorkExecutionSupervisor {
         })
     }
 
+    pub(crate) fn accept_or_join_cancellation(
+        &self,
+        expected_claim: &WorldWorkExecutionClaimV1,
+        proposed_cancel_request_id: &str,
+    ) -> Result<WorldWorkCancellationAcceptanceOutcomeV1> {
+        self.accept_or_join_cancellation_at(
+            expected_claim,
+            proposed_cancel_request_id,
+            Utc::now(),
+            &format!("cancel_delivery_{}", Uuid::now_v7()),
+        )
+    }
+
+    fn accept_or_join_cancellation_at(
+        &self,
+        expected_claim: &WorldWorkExecutionClaimV1,
+        proposed_cancel_request_id: &str,
+        now: DateTime<Utc>,
+        proposed_delivery_claim_id: &str,
+    ) -> Result<WorldWorkCancellationAcceptanceOutcomeV1> {
+        expected_claim.validate(&self.authority_store_id)?;
+        if expected_claim.observer_instance_id != self.observer_instance_id {
+            anyhow::bail!("stale or foreign B4 cancellation observer lease");
+        }
+        let proposed = WorldWorkCancellationAcceptanceV1::new(proposed_cancel_request_id)?;
+        validate_delivery_claim_id(proposed_delivery_claim_id)?;
+        self.with_state(|state| {
+            let execution = state
+                .executions_by_acceptance_record_id
+                .get_mut(&expected_claim.acceptance_record_id)
+                .ok_or_else(|| anyhow::anyhow!("B4 cancellation execution claim is absent"))?;
+            if execution.claim != *expected_claim {
+                anyhow::bail!("stale or conflicting B4 cancellation execution claim");
+            }
+
+            if let Some(terminal) = execution.terminal.clone() {
+                return Ok((
+                    WorldWorkCancellationAcceptanceOutcomeV1 {
+                        accepted_cancel_request_id: execution
+                            .cancellation
+                            .as_ref()
+                            .map(|accepted| accepted.cancel_request_id.clone()),
+                        should_deliver_transport: false,
+                        delivery_claim_id: None,
+                        execution_claim: execution.claim.clone(),
+                        cancellation_pending: false,
+                        terminal: Some(terminal),
+                    },
+                    false,
+                ));
+            }
+
+            if let Some(accepted_cancel_request_id) = execution
+                .cancellation
+                .as_ref()
+                .map(|accepted| accepted.cancel_request_id.clone())
+            {
+                let should_acquire = match &execution.cancellation_delivery {
+                    WorldWorkCancellationDeliveryStateV1::Available => true,
+                    WorldWorkCancellationDeliveryStateV1::Claimed {
+                        lease_expires_at, ..
+                    } => now >= *lease_expires_at,
+                    WorldWorkCancellationDeliveryStateV1::Confirmed { .. } => false,
+                };
+                let delivery_claim_id = if should_acquire {
+                    execution.cancellation_delivery =
+                        cancellation_delivery_claim(proposed_delivery_claim_id, now)?;
+                    Some(proposed_delivery_claim_id.to_string())
+                } else {
+                    None
+                };
+                return Ok((
+                    WorldWorkCancellationAcceptanceOutcomeV1 {
+                        accepted_cancel_request_id: Some(accepted_cancel_request_id),
+                        should_deliver_transport: delivery_claim_id.is_some(),
+                        delivery_claim_id,
+                        execution_claim: execution.claim.clone(),
+                        cancellation_pending: true,
+                        terminal: None,
+                    },
+                    should_acquire,
+                ));
+            }
+
+            let accepted_cancel_request_id = proposed.cancel_request_id.clone();
+            execution.cancellation = Some(proposed);
+            execution.cancellation_delivery =
+                cancellation_delivery_claim(proposed_delivery_claim_id, now)?;
+            Ok((
+                WorldWorkCancellationAcceptanceOutcomeV1 {
+                    accepted_cancel_request_id: Some(accepted_cancel_request_id),
+                    should_deliver_transport: true,
+                    delivery_claim_id: Some(proposed_delivery_claim_id.to_string()),
+                    execution_claim: execution.claim.clone(),
+                    cancellation_pending: true,
+                    terminal: None,
+                },
+                true,
+            ))
+        })
+    }
+
+    pub(crate) fn record_cancellation_delivery_result(
+        &self,
+        expected_claim: &WorldWorkExecutionClaimV1,
+        delivery_claim_id: &str,
+        result: WorldWorkCancellationDeliveryResultV1,
+    ) -> Result<WorldWorkCancellationDeliveryRecordOutcomeV1> {
+        self.record_cancellation_delivery_result_at(
+            expected_claim,
+            delivery_claim_id,
+            result,
+            Utc::now(),
+        )
+    }
+
+    fn record_cancellation_delivery_result_at(
+        &self,
+        expected_claim: &WorldWorkExecutionClaimV1,
+        delivery_claim_id: &str,
+        result: WorldWorkCancellationDeliveryResultV1,
+        observed_at: DateTime<Utc>,
+    ) -> Result<WorldWorkCancellationDeliveryRecordOutcomeV1> {
+        expected_claim.validate(&self.authority_store_id)?;
+        if expected_claim.observer_instance_id != self.observer_instance_id {
+            anyhow::bail!("stale or foreign B4 cancellation observer lease");
+        }
+        validate_delivery_claim_id(delivery_claim_id)?;
+        self.with_state(|state| {
+            let execution = state
+                .executions_by_acceptance_record_id
+                .get_mut(&expected_claim.acceptance_record_id)
+                .ok_or_else(|| anyhow::anyhow!("B4 cancellation execution claim is absent"))?;
+            if execution.claim != *expected_claim {
+                anyhow::bail!("stale or conflicting B4 cancellation execution claim");
+            }
+            if execution.cancellation.is_none() {
+                anyhow::bail!("B4 cancellation delivery completion has no acceptance truth");
+            }
+            let is_current = matches!(
+                &execution.cancellation_delivery,
+                WorldWorkCancellationDeliveryStateV1::Claimed {
+                    delivery_claim_id: current,
+                    lease_expires_at,
+                    ..
+                } if current == delivery_claim_id && observed_at < *lease_expires_at
+            );
+            if !is_current {
+                return Ok((WorldWorkCancellationDeliveryRecordOutcomeV1::Stale, false));
+            }
+            match result {
+                WorldWorkCancellationDeliveryResultV1::ConfirmedDelivered => {
+                    execution.cancellation_delivery =
+                        WorldWorkCancellationDeliveryStateV1::Confirmed {
+                            delivery_claim_id: delivery_claim_id.to_string(),
+                        };
+                    Ok((WorldWorkCancellationDeliveryRecordOutcomeV1::Recorded, true))
+                }
+                WorldWorkCancellationDeliveryResultV1::ConfirmedNotDelivered => {
+                    execution.cancellation_delivery =
+                        WorldWorkCancellationDeliveryStateV1::Available;
+                    Ok((WorldWorkCancellationDeliveryRecordOutcomeV1::Recorded, true))
+                }
+                WorldWorkCancellationDeliveryResultV1::Ambiguous => Ok((
+                    WorldWorkCancellationDeliveryRecordOutcomeV1::Recorded,
+                    false,
+                )),
+            }
+        })
+    }
+
     #[allow(
         dead_code,
         reason = "B2.1-2 consumes exact durable claims for compatibility inspection and waiting"
@@ -899,6 +1192,22 @@ impl WorldWorkExecutionSupervisor {
             ))
         })
     }
+}
+
+fn cancellation_delivery_claim(
+    delivery_claim_id: &str,
+    claimed_at: DateTime<Utc>,
+) -> Result<WorldWorkCancellationDeliveryStateV1> {
+    let lease_expires_at = claimed_at
+        .checked_add_signed(TimeDelta::seconds(
+            WORLD_WORK_CANCELLATION_DELIVERY_LEASE_SECONDS,
+        ))
+        .ok_or_else(|| anyhow::anyhow!("B4 cancellation delivery lease timestamp overflow"))?;
+    Ok(WorldWorkCancellationDeliveryStateV1::Claimed {
+        delivery_claim_id: delivery_claim_id.to_string(),
+        claimed_at,
+        lease_expires_at,
+    })
 }
 
 fn current_observer_instance_id() -> &'static str {
@@ -1052,6 +1361,12 @@ mod tests {
             event_id: format!("event-b2-1-{event_sequence}"),
             event_sequence,
         }
+    }
+
+    fn cancellation_test_time() -> DateTime<Utc> {
+        "2026-09-08T12:00:00Z"
+            .parse()
+            .expect("fixed cancellation test time")
     }
 
     fn event(stream_id: &str, event_sequence: u64) -> ExecuteStreamFrame {
@@ -1634,6 +1949,854 @@ mod tests {
                     .expect("inspect concurrent unchanged claim"),
                 Some(second_claim)
             );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn b4_cancellation_acceptance_records_first_identity_and_replays_original_after_restart() {
+        with_supervisor(|supervisor, root_path| {
+            let record = accepted_record(
+                &supervisor.authority_store_id,
+                AcceptedWorldWorkIdentityV1::EphemeralTask {
+                    task_run_id: "task-run-b2-1".to_string(),
+                },
+            );
+            let authority = crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority::open(&root_path)
+                .expect("open cancellation authority");
+            let root = authority
+                .read_root()
+                .expect("read cancellation authority root");
+            let before_restart = WorldWorkExecutionSupervisor::bind_for_test_observer(
+                &root_path,
+                &root.bootstrap_home,
+                &root.authority_store_id,
+                "observer-before-cancellation-restart",
+            )
+            .expect("bind pre-restart cancellation supervisor");
+            let claim = before_restart
+                .claim_record(&record)
+                .expect("claim cancellation work");
+
+            let first = before_restart
+                .accept_or_join_cancellation(&claim, "cancel-request-a")
+                .expect("durably accept first cancellation");
+            assert_eq!(
+                first.accepted_cancel_request_id.as_deref(),
+                Some("cancel-request-a")
+            );
+            assert!(first.should_deliver_transport);
+            assert!(first.cancellation_pending);
+            assert!(first.terminal.is_none());
+
+            let retry = before_restart
+                .accept_or_join_cancellation(&claim, "cancel-request-b")
+                .expect("join accepted cancellation");
+            assert_eq!(
+                retry.accepted_cancel_request_id.as_deref(),
+                Some("cancel-request-a")
+            );
+            assert!(!retry.should_deliver_transport);
+            assert!(retry.cancellation_pending);
+            assert!(retry.terminal.is_none());
+
+            let after_restart = WorldWorkExecutionSupervisor::bind_for_test_observer(
+                &root_path,
+                &root.bootstrap_home,
+                &root.authority_store_id,
+                "observer-after-cancellation-restart",
+            )
+            .expect("bind post-restart cancellation supervisor");
+            let recovered = after_restart
+                .recover_records(std::slice::from_ref(&record))
+                .expect("recover accepted cancellation owner");
+            assert_eq!(recovered.len(), 1);
+            let replayed = after_restart
+                .accept_or_join_cancellation(&recovered[0].claim, "cancel-request-c")
+                .expect("join replayed cancellation owner");
+            assert_eq!(
+                replayed.accepted_cancel_request_id.as_deref(),
+                Some("cancel-request-a")
+            );
+            assert!(!replayed.should_deliver_transport);
+            assert!(replayed.cancellation_pending);
+            assert!(replayed.terminal.is_none());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn b4_cancellation_delivery_confirmation_suppresses_retry_after_reopen() {
+        with_supervisor(|supervisor, root_path| {
+            let record = accepted_record(
+                &supervisor.authority_store_id,
+                AcceptedWorldWorkIdentityV1::EphemeralTask {
+                    task_run_id: "task-run-b2-1".to_string(),
+                },
+            );
+            let claim = supervisor
+                .claim_record(&record)
+                .expect("claim cancellation work");
+            let accepted_at = cancellation_test_time();
+            let first = supervisor
+                .accept_or_join_cancellation_at(
+                    &claim,
+                    "cancel-request-a",
+                    accepted_at,
+                    "delivery-claim-a",
+                )
+                .expect("accept cancellation with delivery claim");
+            assert_eq!(first.delivery_claim_id.as_deref(), Some("delivery-claim-a"));
+            assert_eq!(
+                supervisor
+                    .record_cancellation_delivery_result_at(
+                        &claim,
+                        "delivery-claim-a",
+                        WorldWorkCancellationDeliveryResultV1::ConfirmedDelivered,
+                        accepted_at + chrono::TimeDelta::seconds(1),
+                    )
+                    .expect("confirm cancellation delivery"),
+                WorldWorkCancellationDeliveryRecordOutcomeV1::Recorded
+            );
+
+            let authority = crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority::open(&root_path)
+                .expect("reopen cancellation authority");
+            let root = authority
+                .read_root()
+                .expect("read cancellation authority root");
+            let reopened = WorldWorkExecutionSupervisor::bind_for_test_observer(
+                &root_path,
+                &root.bootstrap_home,
+                &root.authority_store_id,
+                "observer-after-delivery-confirmation",
+            )
+            .expect("bind reopened cancellation supervisor");
+            let recovered = reopened
+                .recover_records(std::slice::from_ref(&record))
+                .expect("recover confirmed cancellation owner");
+            let retry = reopened
+                .accept_or_join_cancellation_at(
+                    &recovered[0].claim,
+                    "cancel-request-b",
+                    accepted_at + chrono::TimeDelta::minutes(5),
+                    "delivery-claim-b",
+                )
+                .expect("join confirmed cancellation");
+            assert_eq!(
+                retry.accepted_cancel_request_id.as_deref(),
+                Some("cancel-request-a")
+            );
+            assert!(!retry.should_deliver_transport);
+            assert_eq!(retry.delivery_claim_id, None);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn b4_cancellation_delivery_false_restores_immediate_retry_eligibility() {
+        with_supervisor(|supervisor, _| {
+            let record = accepted_record(
+                &supervisor.authority_store_id,
+                AcceptedWorldWorkIdentityV1::RetainedTurn {
+                    active_run_id: "task-run-b2-1".to_string(),
+                    message_id: format!("wwm_{}", Uuid::now_v7()),
+                    target_participant_id: "participant-original".to_string(),
+                },
+            );
+            let claim = supervisor
+                .claim_record(&record)
+                .expect("claim retained cancellation work");
+            let accepted_at = cancellation_test_time();
+            let first = supervisor
+                .accept_or_join_cancellation_at(
+                    &claim,
+                    "cancel-request-a",
+                    accepted_at,
+                    "delivery-claim-a",
+                )
+                .expect("accept retained cancellation");
+            assert!(first.should_deliver_transport);
+            assert_eq!(
+                supervisor
+                    .record_cancellation_delivery_result_at(
+                        &claim,
+                        "delivery-claim-a",
+                        WorldWorkCancellationDeliveryResultV1::ConfirmedNotDelivered,
+                        accepted_at + chrono::TimeDelta::seconds(1),
+                    )
+                    .expect("release undelivered cancellation claim"),
+                WorldWorkCancellationDeliveryRecordOutcomeV1::Recorded
+            );
+
+            let retry = supervisor
+                .accept_or_join_cancellation_at(
+                    &claim,
+                    "cancel-request-b",
+                    accepted_at + chrono::TimeDelta::seconds(1),
+                    "delivery-claim-b",
+                )
+                .expect("reclaim undelivered cancellation");
+            assert_eq!(
+                retry.accepted_cancel_request_id.as_deref(),
+                Some("cancel-request-a")
+            );
+            assert_eq!(retry.delivery_claim_id.as_deref(), Some("delivery-claim-b"));
+            assert_eq!(retry.execution_claim.work_identity, claim.work_identity);
+            assert_eq!(
+                retry.execution_claim.runtime_submission_id,
+                claim.runtime_submission_id
+            );
+            assert_eq!(retry.execution_claim.stream_id, claim.stream_id);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn b4_cancellation_pre_send_failure_restores_immediate_retry_eligibility() {
+        with_supervisor(|supervisor, _| {
+            let record = accepted_record(
+                &supervisor.authority_store_id,
+                AcceptedWorldWorkIdentityV1::EphemeralTask {
+                    task_run_id: "task-run-b2-1".to_string(),
+                },
+            );
+            let claim = supervisor
+                .claim_record(&record)
+                .expect("claim cancellation work");
+            let accepted_at = cancellation_test_time();
+            supervisor
+                .accept_or_join_cancellation_at(
+                    &claim,
+                    "cancel-request-a",
+                    accepted_at,
+                    "delivery-claim-a",
+                )
+                .expect("accept cancellation before pre-send failure");
+            supervisor
+                .record_cancellation_delivery_result_at(
+                    &claim,
+                    "delivery-claim-a",
+                    WorldWorkCancellationDeliveryResultV1::ConfirmedNotDelivered,
+                    accepted_at,
+                )
+                .expect("release pre-send failure");
+            let retry = supervisor
+                .accept_or_join_cancellation_at(
+                    &claim,
+                    "cancel-request-b",
+                    accepted_at,
+                    "delivery-claim-b",
+                )
+                .expect("reclaim after pre-send failure");
+            assert_eq!(
+                retry.accepted_cancel_request_id.as_deref(),
+                Some("cancel-request-a")
+            );
+            assert_eq!(retry.delivery_claim_id.as_deref(), Some("delivery-claim-b"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn b4_cancellation_abandoned_or_ambiguous_claim_recovers_only_after_lease_expiry() {
+        with_supervisor(|supervisor, root_path| {
+            let record = accepted_record(
+                &supervisor.authority_store_id,
+                AcceptedWorldWorkIdentityV1::EphemeralTask {
+                    task_run_id: "task-run-b2-1".to_string(),
+                },
+            );
+            let claim = supervisor
+                .claim_record(&record)
+                .expect("claim cancellation work");
+            let accepted_at = cancellation_test_time();
+            supervisor
+                .accept_or_join_cancellation_at(
+                    &claim,
+                    "cancel-request-a",
+                    accepted_at,
+                    "delivery-claim-a",
+                )
+                .expect("accept first delivery claim");
+            let authority = crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority::open(&root_path)
+                .expect("reopen cancellation authority");
+            let root = authority
+                .read_root()
+                .expect("read cancellation authority root");
+            let reopened = WorldWorkExecutionSupervisor::bind_for_test_observer(
+                &root_path,
+                &root.bootstrap_home,
+                &root.authority_store_id,
+                "observer-after-ambiguous-delivery",
+            )
+            .expect("bind reopened cancellation supervisor");
+            let recovered = reopened
+                .recover_records(std::slice::from_ref(&record))
+                .expect("recover ambiguous cancellation owner");
+            let recovered_claim = &recovered[0].claim;
+            let before_expiry = reopened
+                .accept_or_join_cancellation_at(
+                    recovered_claim,
+                    "cancel-request-b",
+                    accepted_at + chrono::TimeDelta::seconds(29),
+                    "delivery-claim-b",
+                )
+                .expect("join unexpired delivery claim");
+            assert!(!before_expiry.should_deliver_transport);
+            assert_eq!(before_expiry.delivery_claim_id, None);
+
+            let at_expiry = reopened
+                .accept_or_join_cancellation_at(
+                    recovered_claim,
+                    "cancel-request-c",
+                    accepted_at + chrono::TimeDelta::seconds(30),
+                    "delivery-claim-c",
+                )
+                .expect("recover expired delivery claim");
+            assert_eq!(
+                at_expiry.accepted_cancel_request_id.as_deref(),
+                Some("cancel-request-a")
+            );
+            assert_eq!(
+                at_expiry.delivery_claim_id.as_deref(),
+                Some("delivery-claim-c")
+            );
+            assert_eq!(at_expiry.execution_claim.work_identity, claim.work_identity);
+            assert_eq!(
+                at_expiry.execution_claim.runtime_submission_id,
+                claim.runtime_submission_id
+            );
+            assert_eq!(at_expiry.execution_claim.stream_id, claim.stream_id);
+            reopened
+                .record_cancellation_delivery_result_at(
+                    recovered_claim,
+                    "delivery-claim-c",
+                    WorldWorkCancellationDeliveryResultV1::Ambiguous,
+                    accepted_at + chrono::TimeDelta::seconds(31),
+                )
+                .expect("retain ambiguous recovery claim");
+            let ambiguous_before_expiry = reopened
+                .accept_or_join_cancellation_at(
+                    recovered_claim,
+                    "cancel-request-d",
+                    accepted_at + chrono::TimeDelta::seconds(59),
+                    "delivery-claim-d",
+                )
+                .expect("join unexpired ambiguous claim");
+            assert_eq!(ambiguous_before_expiry.delivery_claim_id, None);
+            let ambiguous_at_expiry = reopened
+                .accept_or_join_cancellation_at(
+                    recovered_claim,
+                    "cancel-request-e",
+                    accepted_at + chrono::TimeDelta::seconds(60),
+                    "delivery-claim-e",
+                )
+                .expect("recover ambiguous claim at lease expiry");
+            assert_eq!(
+                ambiguous_at_expiry.delivery_claim_id.as_deref(),
+                Some("delivery-claim-e")
+            );
+            assert_eq!(
+                ambiguous_at_expiry.accepted_cancel_request_id.as_deref(),
+                Some("cancel-request-a")
+            );
+            assert_eq!(
+                ambiguous_at_expiry.execution_claim.runtime_submission_id,
+                claim.runtime_submission_id
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn b4_retained_cancellation_ambiguous_claim_blocks_retry_until_expiry() {
+        with_supervisor(|supervisor, _| {
+            let record = accepted_record(
+                &supervisor.authority_store_id,
+                AcceptedWorldWorkIdentityV1::RetainedTurn {
+                    active_run_id: "active-run-original".to_string(),
+                    message_id: format!("wwm_{}", Uuid::now_v7()),
+                    target_participant_id: "participant-original".to_string(),
+                },
+            );
+            let claim = supervisor
+                .claim_record(&record)
+                .expect("claim retained cancellation work");
+            let accepted_at = cancellation_test_time();
+            let first = supervisor
+                .accept_or_join_cancellation_at(
+                    &claim,
+                    "cancel-request-original",
+                    accepted_at,
+                    "delivery-claim-original",
+                )
+                .expect("accept retained cancellation");
+            assert!(first.should_deliver_transport);
+            supervisor
+                .record_cancellation_delivery_result_at(
+                    &claim,
+                    "delivery-claim-original",
+                    WorldWorkCancellationDeliveryResultV1::Ambiguous,
+                    accepted_at + chrono::TimeDelta::seconds(1),
+                )
+                .expect("retain ambiguous retained delivery claim");
+
+            let immediate = supervisor
+                .accept_or_join_cancellation_at(
+                    &claim,
+                    "cancel-request-retry",
+                    accepted_at + chrono::TimeDelta::seconds(1),
+                    "delivery-claim-retry",
+                )
+                .expect("join ambiguous retained cancellation");
+            assert_eq!(
+                immediate.accepted_cancel_request_id.as_deref(),
+                Some("cancel-request-original")
+            );
+            assert!(!immediate.should_deliver_transport);
+            assert_eq!(immediate.delivery_claim_id, None);
+
+            let recovered = supervisor
+                .accept_or_join_cancellation_at(
+                    &claim,
+                    "cancel-request-after-expiry",
+                    accepted_at + chrono::TimeDelta::seconds(30),
+                    "delivery-claim-recovered",
+                )
+                .expect("recover ambiguous retained cancellation");
+            assert_eq!(
+                recovered.accepted_cancel_request_id.as_deref(),
+                Some("cancel-request-original")
+            );
+            assert_eq!(
+                recovered.delivery_claim_id.as_deref(),
+                Some("delivery-claim-recovered")
+            );
+            assert_eq!(recovered.execution_claim.work_identity, claim.work_identity);
+            assert_eq!(
+                recovered.execution_claim.runtime_submission_id,
+                claim.runtime_submission_id
+            );
+            assert_eq!(recovered.execution_claim.stream_id, claim.stream_id);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn b4_cancellation_concurrent_callers_obtain_at_most_one_unexpired_delivery_claim() {
+        with_supervisor(|supervisor, _| {
+            let record = accepted_record(
+                &supervisor.authority_store_id,
+                AcceptedWorldWorkIdentityV1::EphemeralTask {
+                    task_run_id: "task-run-b2-1".to_string(),
+                },
+            );
+            let claim = supervisor
+                .claim_record(&record)
+                .expect("claim cancellation work");
+            let accepted_at = cancellation_test_time();
+            let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
+            let mut callers = Vec::new();
+            for index in 0..8 {
+                let supervisor = supervisor.clone();
+                let claim = claim.clone();
+                let barrier = barrier.clone();
+                callers.push(std::thread::spawn(move || {
+                    barrier.wait();
+                    supervisor
+                        .accept_or_join_cancellation_at(
+                            &claim,
+                            &format!("cancel-request-{index}"),
+                            accepted_at,
+                            &format!("delivery-claim-{index}"),
+                        )
+                        .expect("concurrent cancellation joins durable owner")
+                }));
+            }
+            let outcomes = callers
+                .into_iter()
+                .map(|caller| caller.join().expect("concurrent caller joins"))
+                .collect::<Vec<_>>();
+            assert_eq!(
+                outcomes
+                    .iter()
+                    .filter(|outcome| outcome.delivery_claim_id.is_some())
+                    .count(),
+                1
+            );
+            let accepted_ids = outcomes
+                .iter()
+                .map(|outcome| outcome.accepted_cancel_request_id.as_deref())
+                .collect::<std::collections::BTreeSet<_>>();
+            assert_eq!(accepted_ids.len(), 1);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn b4_cancellation_stale_completion_cannot_overwrite_newer_delivery_claim() {
+        with_supervisor(|supervisor, _| {
+            let record = accepted_record(
+                &supervisor.authority_store_id,
+                AcceptedWorldWorkIdentityV1::EphemeralTask {
+                    task_run_id: "task-run-b2-1".to_string(),
+                },
+            );
+            let claim = supervisor
+                .claim_record(&record)
+                .expect("claim cancellation work");
+            let accepted_at = cancellation_test_time();
+            supervisor
+                .accept_or_join_cancellation_at(
+                    &claim,
+                    "cancel-request-a",
+                    accepted_at,
+                    "delivery-claim-a",
+                )
+                .expect("accept first delivery claim");
+            assert_eq!(
+                supervisor
+                    .record_cancellation_delivery_result_at(
+                        &claim,
+                        "delivery-claim-a",
+                        WorldWorkCancellationDeliveryResultV1::ConfirmedDelivered,
+                        accepted_at + chrono::TimeDelta::seconds(30),
+                    )
+                    .expect("ignore completion at expired delivery lease"),
+                WorldWorkCancellationDeliveryRecordOutcomeV1::Stale
+            );
+            let recovered = supervisor
+                .accept_or_join_cancellation_at(
+                    &claim,
+                    "cancel-request-b",
+                    accepted_at + chrono::TimeDelta::seconds(30),
+                    "delivery-claim-b",
+                )
+                .expect("recover expired delivery claim");
+            assert_eq!(
+                recovered.delivery_claim_id.as_deref(),
+                Some("delivery-claim-b")
+            );
+            assert_eq!(
+                supervisor
+                    .record_cancellation_delivery_result_at(
+                        &claim,
+                        "delivery-claim-a",
+                        WorldWorkCancellationDeliveryResultV1::ConfirmedDelivered,
+                        accepted_at + chrono::TimeDelta::seconds(31),
+                    )
+                    .expect("ignore stale delivery completion"),
+                WorldWorkCancellationDeliveryRecordOutcomeV1::Stale
+            );
+            assert_eq!(
+                supervisor
+                    .record_cancellation_delivery_result_at(
+                        &claim,
+                        "delivery-claim-b",
+                        WorldWorkCancellationDeliveryResultV1::ConfirmedNotDelivered,
+                        accepted_at + chrono::TimeDelta::seconds(31),
+                    )
+                    .expect("release current delivery claim"),
+                WorldWorkCancellationDeliveryRecordOutcomeV1::Recorded
+            );
+            let third = supervisor
+                .accept_or_join_cancellation_at(
+                    &claim,
+                    "cancel-request-c",
+                    accepted_at + chrono::TimeDelta::seconds(31),
+                    "delivery-claim-c",
+                )
+                .expect("claim after current release");
+            assert_eq!(third.delivery_claim_id.as_deref(), Some("delivery-claim-c"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn b4_legacy_cancellation_without_delivery_state_remains_recoverable() {
+        with_supervisor(|supervisor, _| {
+            let record = accepted_record(
+                &supervisor.authority_store_id,
+                AcceptedWorldWorkIdentityV1::EphemeralTask {
+                    task_run_id: "task-run-b2-1".to_string(),
+                },
+            );
+            let claim = supervisor
+                .claim_record(&record)
+                .expect("claim cancellation work");
+            let accepted_at = cancellation_test_time();
+            supervisor
+                .accept_or_join_cancellation_at(
+                    &claim,
+                    "cancel-request-a",
+                    accepted_at,
+                    "delivery-claim-a",
+                )
+                .expect("persist modern cancellation fixture");
+
+            let mut transaction = supervisor
+                .storage
+                .begin_transaction()
+                .expect("begin legacy cancellation fixture read");
+            let bytes = transaction
+                .read_supervisor()
+                .expect("read modern cancellation fixture")
+                .expect("modern cancellation fixture exists");
+            transaction
+                .finish()
+                .expect("finish legacy cancellation fixture read");
+            let mut value: serde_json::Value =
+                serde_json::from_slice(&bytes).expect("decode modern cancellation fixture");
+            let executions = value
+                .get_mut("executions_by_acceptance_record_id")
+                .and_then(serde_json::Value::as_object_mut)
+                .expect("execution map");
+            let execution = executions
+                .get_mut(&record.acceptance_record_id)
+                .and_then(serde_json::Value::as_object_mut)
+                .expect("exact execution");
+            execution.remove("cancellation_delivery");
+            let legacy_bytes = super::super::host_session_authority::canonical_json::to_vec(&value)
+                .expect("encode canonical legacy cancellation fixture");
+            let mut transaction = supervisor
+                .storage
+                .begin_transaction()
+                .expect("begin legacy cancellation fixture write");
+            transaction
+                .replace_supervisor(&legacy_bytes)
+                .expect("publish legacy cancellation fixture");
+            transaction
+                .finish()
+                .expect("finish legacy cancellation fixture write");
+
+            let recovered = supervisor
+                .accept_or_join_cancellation_at(
+                    &claim,
+                    "cancel-request-b",
+                    accepted_at + chrono::TimeDelta::seconds(1),
+                    "delivery-claim-b",
+                )
+                .expect("recover legacy cancellation delivery");
+            assert_eq!(
+                recovered.accepted_cancel_request_id.as_deref(),
+                Some("cancel-request-a")
+            );
+            assert_eq!(
+                recovered.delivery_claim_id.as_deref(),
+                Some("delivery-claim-b")
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn b4_terminal_truth_suppresses_transport_independently_of_delivery_state() {
+        with_supervisor(|supervisor, _| {
+            let record = accepted_record(
+                &supervisor.authority_store_id,
+                AcceptedWorldWorkIdentityV1::EphemeralTask {
+                    task_run_id: "task-run-b2-1".to_string(),
+                },
+            );
+            let claim = supervisor
+                .claim_record(&record)
+                .expect("claim cancellation work");
+            let accepted_at = cancellation_test_time();
+            supervisor
+                .accept_or_join_cancellation_at(
+                    &claim,
+                    "cancel-request-a",
+                    accepted_at,
+                    "delivery-claim-a",
+                )
+                .expect("accept cancellation before terminal truth");
+            let start = ExecuteStreamFrame::Start {
+                frame_identity: frame_identity("stream-b2-1", 1),
+                span_id: "task-run-b2-1".to_string(),
+            };
+            supervisor
+                .journal_frame(
+                    &claim,
+                    &start,
+                    &start.canonical_ndjson_bytes().expect("canonical Start"),
+                )
+                .expect("journal Start");
+            let terminal = terminal("stream-b2-1", 2, 1);
+            supervisor
+                .journal_frame(
+                    &claim,
+                    &terminal,
+                    &terminal
+                        .canonical_ndjson_bytes()
+                        .expect("canonical terminal"),
+                )
+                .expect("journal exact terminal truth");
+
+            let retry = supervisor
+                .accept_or_join_cancellation_at(
+                    &claim,
+                    "cancel-request-b",
+                    accepted_at + chrono::TimeDelta::minutes(5),
+                    "delivery-claim-b",
+                )
+                .expect("terminal truth wins over expired delivery claim");
+            assert_eq!(
+                retry.accepted_cancel_request_id.as_deref(),
+                Some("cancel-request-a")
+            );
+            assert!(!retry.should_deliver_transport);
+            assert_eq!(retry.delivery_claim_id, None);
+            assert_eq!(retry.terminal.map(|terminal| terminal.exit_code), Some(0));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn b4_cancellation_acceptance_rejects_claim_drift_and_terminal_before_cancel() {
+        with_supervisor(|supervisor, _| {
+            let record = accepted_record(
+                &supervisor.authority_store_id,
+                AcceptedWorldWorkIdentityV1::EphemeralTask {
+                    task_run_id: "task-run-b2-1".to_string(),
+                },
+            );
+            let claim = supervisor
+                .claim_record(&record)
+                .expect("claim cancellation work");
+            let mut drifted = claim.clone();
+            drifted.world_generation += 1;
+            assert!(supervisor
+                .accept_or_join_cancellation(&drifted, "cancel-request-drift")
+                .is_err());
+            let first = supervisor
+                .accept_or_join_cancellation(&claim, "cancel-request-a")
+                .expect("claim drift must not mutate accepted cancellation");
+            assert_eq!(
+                first.accepted_cancel_request_id.as_deref(),
+                Some("cancel-request-a")
+            );
+            assert!(first.should_deliver_transport);
+
+            let terminal_record = accepted_record(
+                &supervisor.authority_store_id,
+                AcceptedWorldWorkIdentityV1::EphemeralTask {
+                    task_run_id: "task-run-b2-1".to_string(),
+                },
+            );
+            let terminal_claim = supervisor
+                .claim_record(&terminal_record)
+                .expect("claim terminal-before-cancel work");
+            let start = ExecuteStreamFrame::Start {
+                frame_identity: frame_identity("stream-b2-1", 1),
+                span_id: "task-run-b2-1".to_string(),
+            };
+            supervisor
+                .journal_frame(
+                    &terminal_claim,
+                    &start,
+                    &start.canonical_ndjson_bytes().expect("canonical Start"),
+                )
+                .expect("journal terminal-before-cancel Start");
+            let terminal = terminal("stream-b2-1", 2, 1);
+            supervisor
+                .journal_frame(
+                    &terminal_claim,
+                    &terminal,
+                    &terminal
+                        .canonical_ndjson_bytes()
+                        .expect("canonical terminal"),
+                )
+                .expect("journal terminal-before-cancel Exit");
+
+            let outcome = supervisor
+                .accept_or_join_cancellation(&terminal_claim, "must-not-be-accepted")
+                .expect("terminal truth wins before cancellation acceptance");
+            assert_eq!(outcome.accepted_cancel_request_id, None);
+            assert!(!outcome.should_deliver_transport);
+            assert!(!outcome.cancellation_pending);
+            assert_eq!(outcome.terminal.map(|terminal| terminal.exit_code), Some(0));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn b4_cancellation_acceptance_rejects_malformed_conflicting_and_noncanonical_material() {
+        with_supervisor(|supervisor, _| {
+            let record = accepted_record(
+                &supervisor.authority_store_id,
+                AcceptedWorldWorkIdentityV1::EphemeralTask {
+                    task_run_id: "task-run-b2-1".to_string(),
+                },
+            );
+            let claim = supervisor
+                .claim_record(&record)
+                .expect("claim cancellation corruption fixture");
+            supervisor
+                .accept_or_join_cancellation(&claim, "cancel-request-a")
+                .expect("persist valid cancellation fixture");
+
+            let mut transaction = supervisor
+                .storage
+                .begin_transaction()
+                .expect("begin cancellation fixture read");
+            let valid_bytes = transaction
+                .read_supervisor()
+                .expect("read valid cancellation fixture")
+                .expect("valid cancellation fixture exists");
+            transaction
+                .finish()
+                .expect("finish cancellation fixture read");
+            let valid = String::from_utf8(valid_bytes.clone()).expect("canonical UTF-8 fixture");
+            let canonical =
+                r#""cancellation":{"cancel_request_id":"cancel-request-a","schema_version":1}"#;
+            assert!(valid.contains(canonical));
+            let corruptions = [
+                valid.replace(canonical, r#""cancellation":{"schema_version":1}"#),
+                valid.replace(
+                    canonical,
+                    r#""cancellation":{"cancel_request_id":"cancel-request-a","cancel_request_id":"cancel-request-b","schema_version":1}"#,
+                ),
+                valid.replace(
+                    canonical,
+                    r#""cancellation":{"schema_version":1,"cancel_request_id":"cancel-request-a"}"#,
+                ),
+            ];
+
+            for corrupted in corruptions {
+                let mut transaction = supervisor
+                    .storage
+                    .begin_transaction()
+                    .expect("begin cancellation corruption write");
+                transaction
+                    .replace_supervisor(corrupted.as_bytes())
+                    .expect("publish cancellation corruption fixture");
+                transaction
+                    .finish()
+                    .expect("finish cancellation corruption write");
+                assert!(supervisor
+                    .accept_or_join_cancellation(&claim, "cancel-request-b")
+                    .is_err());
+
+                let mut transaction = supervisor
+                    .storage
+                    .begin_transaction()
+                    .expect("begin cancellation fixture restore");
+                transaction
+                    .replace_supervisor(&valid_bytes)
+                    .expect("restore valid cancellation fixture");
+                transaction
+                    .finish()
+                    .expect("finish cancellation fixture restore");
+            }
+
+            let retry = supervisor
+                .accept_or_join_cancellation(&claim, "cancel-request-b")
+                .expect("valid cancellation owner survives rejected corruption");
+            assert_eq!(
+                retry.accepted_cancel_request_id.as_deref(),
+                Some("cancel-request-a")
+            );
+            assert!(!retry.should_deliver_transport);
         });
     }
 }
