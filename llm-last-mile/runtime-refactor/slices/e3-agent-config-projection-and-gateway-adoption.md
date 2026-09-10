@@ -319,28 +319,44 @@ admission or the work stops.
 
 ## Required later acceptance wall
 
-No current-host property is presumed to satisfy E3. Before product editing, every later packet's
-fresh admission must preserve an exact environmental receipt proving Linux `x86_64`; the repository-
-required Rust toolchain (at this baseline, channel `1.89.0` and MSRV `1.89`); the installed
-`x86_64-unknown-linux-musl` target and a callable musl linker/toolchain; usable cgroup v2; callable
-`nft`, `ip`, `jq`, `systemctl`, and `readelf`; and the exact contract-required privilege/capability
-posture. That posture comprises the existing `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`,
-`CAP_DAC_OVERRIDE`, and `CAP_SYS_PTRACE` service authorities plus `CAP_SETUID`, `CAP_SETGID`, and
-`CAP_SETPCAP` solely for verified transition-capability parking, with every required namespace,
-cgroup, nftables, Landlock, seccomp, credential-descent, and readback operation executable.
+No current-host property is presumed to satisfy an E3 packet. Each packet's fresh admission must bind
+its exact outcome and nonownership, source and toolchain identities, actual proof commands, host
+facilities required by those commands, and realistic resource needs. The retained evidence must make
+the bounded proof reproducible without treating unfinished successor-owned behavior as a pre-edit
+prerequisite. E3-A therefore requires Linux `x86_64`, the repository-required Rust toolchain (at this
+baseline, channel `1.89.0` and MSRV `1.89`), and the other environment needed for its strict wire-
+transport and V1-compatibility tests; musl tooling, privileged facilities, gateway or Codex execution,
+and full E3 security attestation are not prerequisites solely because later packets need them. When
+an actual retained test requires one of those facilities, it must be available before the dependent
+operation, and a false green, silent skip, or invalid invocation never counts as product proof.
+Missing or drifting required facilities are environmental stops for the dependent work.
 
-The same receipt must prove boot-stable Yama `ptrace_scope=3`, bind the current boot ID, show
-`TracerPid=0`, and prove admission-specified minimum free bytes and inodes. The admission must name a
-content-pinned runnable Linux proof wrapper, wrapper SHA-256, exact command, and six explicit,
-absolute, pairwise-disjoint, fresh roots for build output, runtime, durable state, sockets, temporary
-files, and evidence. The wrapper must reject defaults, symlinks, aliases, overlap, nonempty reused
-roots, or evidence outside those roots and record physical identities, capacities, tool versions,
-privilege readbacks, boot ID, and command line. Missing or drifting prerequisites are an
-environmental stop, never grounds to weaken a security predicate or label an inherited product
-failure.
+Candidate-implemented security behavior is established by its owning packet's proof, not presumed
+before its code exists. The required existing `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`, `CAP_DAC_OVERRIDE`,
+and `CAP_SYS_PTRACE` service-authority posture and all capability-parking and readback, privilege-
+descent, boot-stable Yama, namespace/cgroup/nftables/Landlock/seccomp confinement, credential,
+activation/revocation, and control-path denial predicates remain mandatory before the operations they
+protect and before the owning packet may be claimed complete. Adding `CAP_SETUID`, `CAP_SETGID`, or
+`CAP_SETPCAP` to an otherwise unmodified service cannot substitute for implementing and proving
+E3-D's synchronous transition-capability parking, and no security fallback or substitute privilege
+model is authorized.
 
-After that pre-dispatch wall passes, the packet's fresh admission must require its bounded tests
-using candidate Substrate binaries built from source on Linux. Across the serial sequence, proof must
+Admission requires reproducible commands and sufficient persistent evidence, not a bespoke wrapper
+or six fresh directories for every packet. Existing valid build targets, roots, and evidence may be
+reused when causal inputs are unchanged. Filesystem use must not collide with repository or accepted
+authority state; must use short paths for Unix sockets; must preserve proof-required device
+relationships; and must place neither heavy builds nor durable state on tmpfs. Separation and
+isolation are required where the proof needs them, including matched baseline/candidate invocations
+that could otherwise share causal state, but incidental harness structure is not a universal gate.
+Applicable differential proof begins with the minimum valid matched commands that can reach the
+changed behavior, compares canonical semantic outcomes rather than scheduling or emission order,
+permits unchanged valid evidence to be reused, and still rejects every candidate-only semantic
+failure. The required comparison baseline remains
+`2b2fc6c50b40046dbeaeb5b316562fbd96480a2a`.
+
+Once a packet's applicable prerequisites are available, its fresh admission must require its bounded
+tests using candidate Substrate binaries built from source on Linux. Across the serial sequence,
+proof must
 cover canonical codecs and every typed failure;
 first-writer/CAS and all authority/native-realization crash/recovery/fsync boundaries; zero-live
 fencing and exact retry; privilege/capability/Landlock/seccomp/control-path denial; retained
@@ -353,7 +369,8 @@ and an exact-baseline differential against the pushed and live-verified E3-AC1 l
 candidate-only failure.
 
 Documentation validation is not implementation evidence. No `RG-CONFIG-*`, `RG-UAA-*`,
-`RG-OBS-01`, promotion, or other E3 gate becomes green here.
+`RG-OBS-01`, promotion, or other E3 gate becomes green here. This correction grants no admission,
+dispatch, implementation, security exception, or successor eligibility by implication.
 
 ## Explicit nonownership
 

@@ -3431,38 +3431,53 @@ Every packet requires a later fresh admission and explicit dispatch. Passing one
 its direct successor eligible to seek admission; it never dispatches that successor. One combined
 E3-A-through-E3-F implementation candidate is forbidden.
 
-## Executable Linux readiness prerequisite
+## Packet-proportional executable Linux readiness
 
-No statement in this contract means that the current host automatically satisfies the E3 acceptance
-wall. Before editing for any later E3-A through E3-F packet, that packet's fresh admission must run
-and preserve an exact pre-dispatch environmental receipt proving all of the following from its bound
-source revision:
+No statement in this contract means that the current host automatically satisfies an E3 packet's
+acceptance wall. Each later fresh admission must bind that packet's exact outcome and nonownership,
+source revision and toolchain identities, actual proof commands, required host facilities, and
+realistic resource needs. Its retained receipt must make those commands and inputs reproducible and
+must establish the environment needed by the bounded packet; it does not certify unfinished behavior
+owned by a successor.
 
-- kernel and machine are exactly Linux and `x86_64`;
-- the repository-required Rust toolchain is available (at this correction baseline, channel
-  `1.89.0` and MSRV `1.89`), the `x86_64-unknown-linux-musl` target is installed, and an actual musl
-  linker/toolchain is callable;
-- cgroup v2 is mounted and usable, and `nft`, `ip`, `jq`, `systemctl`, and `readelf` are callable;
-- the invoking proof context and installed service unit expose the exact privilege/capability posture
-  required by this contract: the existing `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`, `CAP_DAC_OVERRIDE`, and
-  `CAP_SYS_PTRACE` service authorities plus `CAP_SETUID`, `CAP_SETGID`, and `CAP_SETPCAP` solely for
-  verified transition-capability parking, with the required namespace, cgroup, nftables, Landlock,
-  seccomp, credential-descent, and readback operations executable and no substitute privilege model;
-- Yama `ptrace_scope=3` is both currently read back and backed by a boot-stable configuration, the
-  receipt binds the current boot ID, and the proof process reports `TracerPid=0`;
-- every named proof root has at least the admission's explicit minimum free bytes and inodes; and
-- the admission names a content-pinned, runnable Linux proof wrapper and its exact invocation. The
-  wrapper must require six explicit, absolute, pairwise-disjoint roots for build output, runtime,
-  durable state, sockets, temporary files, and evidence; reject implicit defaults, aliases, symlinks,
-  nonempty reused roots, or overlap with repository and accepted authority state; create no evidence
-  outside them; and record their physical identities, capacity checks, tool versions, privilege
-  readbacks, boot ID, and complete command line.
+E3-A requires Linux `x86_64`, the repository-required Rust toolchain (at this baseline, channel
+`1.89.0` and MSRV `1.89`), and the other environment needed for its strict wire-transport and
+V1-compatibility tests. A musl target or linker, privileged namespace/cgroup/nftables facilities,
+gateway or Codex execution, and full E3 security attestation are not E3-A prerequisites merely
+because a later packet needs them. If an actual retained E3-A invocation requires any such facility,
+however, that invocation must satisfy its real prerequisite before the dependent operation; a false
+green, silent skip, or otherwise invalid invocation is not product proof. The same rule applies
+packet by packet: missing or drifting required facilities are environmental stops for the work that
+depends on them, while security behavior implemented by a candidate is established by the owning
+packet's proof rather than presumed before that code exists.
 
-The later admission must bind the wrapper path, wrapper content SHA-256, numerical capacity minima,
-and every environment or argument value needed to reproduce that invocation. A missing or drifting
-prerequisite is an environmental stop before product edits or implementation tests. It cannot weaken
-an E3 security predicate, authorize a fallback, or be reported as an inherited product failure.
-Documentation validation in this correction is not E3 implementation evidence.
+All product-security predicates in this contract remain unchanged and fail closed. The owning packet
+must establish the required existing `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`, `CAP_DAC_OVERRIDE`, and
+`CAP_SYS_PTRACE` service-authority posture, capability parking and readback, privilege descent,
+boot-stable Yama posture, namespace/cgroup/nftables/Landlock/seccomp confinement, credential
+handling, gateway activation and revocation, and control-path denial before the operations they
+protect and before claiming that packet complete. In particular, adding `CAP_SETUID`, `CAP_SETGID`,
+or `CAP_SETPCAP` to an otherwise unmodified service is not a substitute for E3-D implementing and
+proving the specified synchronous transition-capability parking behavior; no fallback or substitute
+privilege model is authorized.
+
+Admissions require reproducible commands and sufficient retained evidence, not a bespoke proof
+wrapper or six newly created roots for every packet. Existing valid build targets, roots, and evidence
+may be reused when their causal inputs are unchanged. Filesystem use must not collide with repository
+or accepted authority state; must use short paths when Unix sockets are involved; must preserve every
+proof-required device relationship; and must keep evidence persistent while placing neither heavy
+builds nor durable state on tmpfs. Separate roots or other isolation are required where the proof
+needs them, including between baseline and candidate when shared state could affect the result, but
+incidental harness topology is not itself a universal admission predicate.
+
+Applicable differential proof begins with the minimum valid matched baseline-and-candidate commands
+that can reach the changed behavior and compares canonical semantic outcomes rather than scheduling
+or emission order. Unchanged commands, candidate bytes, causal inputs, and retained invocation
+evidence may be reused; candidate-only semantic failures still reject the candidate, and an invalid,
+resource-killed, incomplete, or provenance-ambiguous invocation never counts as product proof. The
+mandated E3 differential baseline remains the pushed and live-verified E3-AC1 landing commit.
+Documentation validation in this correction is not E3 implementation evidence, and this correction
+grants no packet admission, dispatch, implementation, green E3 gate, or security exception.
 
 ## Admission fence and required proof
 
