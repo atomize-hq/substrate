@@ -37,7 +37,8 @@ use transport_api_types::ExecuteCancelRequestV1;
 #[cfg(any(target_os = "linux", all(test, unix)))]
 use transport_api_types::PlatformPrincipalV1;
 use transport_api_types::{
-    E2MemberLaunchActivationCarrierV1, ExecuteRequest, ExecuteStreamFrame, MemberDispatchRequestV1,
+    ConfigProjectionActivationCarrierV1, E2MemberLaunchActivationCarrierV1, ExecuteRequest,
+    ExecuteStreamFrame, MemberDispatchRequest, MemberDispatchRequestV1, MemberDispatchRequestV2,
     MemberRuntimeBackendKindV1, ProcessTelemetry, ResolvedMemberRuntimeDescriptorV1,
     RetainedWorkerLaunchAuthorityProofV1, WorldFsMode,
 };
@@ -572,6 +573,7 @@ pub(crate) struct MemberDispatchTransportRequest {
     pub binary_path: String,
     pub retained_worker_launch_authority: Option<RetainedWorkerLaunchAuthorityProofV1>,
     pub e2_launch_activation: Option<E2MemberLaunchActivationCarrierV1>,
+    pub config_projection: Option<ConfigProjectionActivationCarrierV1>,
     pub exact_policy_snapshot: Option<ExactDispatchPolicySnapshotMaterialV1>,
 }
 
@@ -623,15 +625,39 @@ struct ExecuteRequestInput {
     policy_snapshot: transport_api_types::PolicySnapshotV3,
     world_network: transport_api_types::WorldNetworkRoutingV1,
     world_fs_mode: WorldFsMode,
-    member_dispatch: Option<MemberDispatchRequestV1>,
+    member_dispatch: Option<MemberDispatchRequest>,
     acceptance_context: Option<transport_api_types::WorldWorkAcceptanceContextV1>,
 }
 
 #[allow(dead_code)]
 fn build_member_dispatch_payload(
     request: &MemberDispatchTransportRequest,
-) -> MemberDispatchRequestV1 {
-    MemberDispatchRequestV1 {
+) -> MemberDispatchRequest {
+    let resolved_runtime = ResolvedMemberRuntimeDescriptorV1 {
+        backend_kind: request.backend_kind,
+        binary_path: request.binary_path.clone(),
+    };
+    if let Some(config_projection) = request.config_projection.clone() {
+        return MemberDispatchRequest::V2(MemberDispatchRequestV2 {
+            schema_version: 2,
+            orchestration_session_id: request.orchestration_session_id.clone(),
+            participant_id: request.participant_id.clone(),
+            orchestrator_participant_id: request.orchestrator_participant_id.clone(),
+            parent_participant_id: request.parent_participant_id.clone(),
+            resumed_from_participant_id: request.resumed_from_participant_id.clone(),
+            backend_id: request.backend_id.clone(),
+            protocol: request.protocol.clone(),
+            run_id: request.run_id.clone(),
+            world_id: request.world_id.clone(),
+            world_generation: request.world_generation,
+            initial_prompt: request.initial_prompt.clone(),
+            resolved_runtime,
+            retained_worker_launch_authority: request.retained_worker_launch_authority.clone(),
+            e2_launch_activation: request.e2_launch_activation.clone(),
+            config_projection,
+        });
+    }
+    MemberDispatchRequest::V1(MemberDispatchRequestV1 {
         schema_version: 1,
         orchestration_session_id: request.orchestration_session_id.clone(),
         participant_id: request.participant_id.clone(),
@@ -644,13 +670,10 @@ fn build_member_dispatch_payload(
         world_id: request.world_id.clone(),
         world_generation: request.world_generation,
         initial_prompt: request.initial_prompt.clone(),
-        resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
-            backend_kind: request.backend_kind,
-            binary_path: request.binary_path.clone(),
-        },
+        resolved_runtime,
         retained_worker_launch_authority: request.retained_worker_launch_authority.clone(),
         e2_launch_activation: request.e2_launch_activation.clone(),
-    }
+    })
 }
 
 #[cfg(target_os = "linux")]
@@ -2838,6 +2861,298 @@ mod tests {
         ResolvedMemberRuntimeDescriptorV1, WorldFsMode, WorldNetworkRoutingV1,
     };
 
+    fn e3a_projection_carrier() -> transport_api_types::ConfigProjectionActivationCarrierV1 {
+        use transport_api_types::{
+            ConfigProjectionActivationCarrierV1, ConfigProjectionRefV1, InWorldGatewayRefV1,
+            ManagedGatewayActivationIntentRefV1,
+        };
+        let authority_store_id = "cpa_018f0f2e-7b4c-7aa1-8c22-123456789ab0".to_string();
+        let series_id = "cps_018f0f2e-7b4c-7aa1-8c22-123456789ab1".to_string();
+        ConfigProjectionActivationCarrierV1 {
+            authority_store_id: authority_store_id.clone(),
+            series_id: series_id.clone(),
+            dormant_projection_ref: ConfigProjectionRefV1 {
+                authority_store_id: authority_store_id.clone(),
+                series_id,
+                record_id: "cpr_018f0f2e-7b4c-7aa1-8c22-123456789ab2".to_string(),
+                revision: 1,
+                record_hash: "1".repeat(64),
+            },
+            activation_intent_ref: ManagedGatewayActivationIntentRefV1 {
+                authority_store_id: authority_store_id.clone(),
+                activation_intent_id: "gai_018f0f2e-7b4c-7aa1-8c22-123456789ab3".to_string(),
+                intent_hash: "2".repeat(64),
+            },
+            expected_gateway_ref: InWorldGatewayRefV1 {
+                authority_store_id,
+                gateway_instance_id: "cgi_018f0f2e-7b4c-7aa1-8c22-123456789ab4".to_string(),
+                gateway_identity_hash: "3".repeat(64),
+            },
+            fence_id: "cpf_018f0f2e-7b4c-7aa1-8c22-123456789ab5".to_string(),
+            consumer_id: "cpc_018f0f2e-7b4c-7aa1-8c22-123456789ab6".to_string(),
+            consumer_lease_revision: 1,
+            consumer_lease_hash: "4".repeat(64),
+        }
+    }
+
+    fn e3a_retained_launch_authority(
+        participant_id: &str,
+        run_id: &str,
+    ) -> transport_api_types::RetainedWorkerLaunchAuthorityProofV1 {
+        use transport_api_types::{
+            RetainedWorkerAdmissionCommitmentCarrierV1, RetainedWorkerAuthorityObjectCommitmentV1,
+            RetainedWorkerLaunchAuthorityProofV1, RetainedWorkerLaunchWorldBindingV1,
+        };
+
+        RetainedWorkerLaunchAuthorityProofV1 {
+            schema_version: 1,
+            authority_store_id: "has_e3a_fixture".to_string(),
+            issuer_request_id: "request-e3a".to_string(),
+            canonical_spawn_fingerprint: RetainedWorkerAdmissionCommitmentCarrierV1 {
+                schema_version: 1,
+                algorithm: "hmac-sha-256".to_string(),
+                key_id: "adk_e3a_fixture".to_string(),
+                digest_hex: "a".repeat(64),
+            },
+            registration_id: "rwr_e3a_fixture".to_string(),
+            registration_commitment: RetainedWorkerAuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: "b".repeat(64),
+            },
+            authority_revision_after: 2,
+            authority_record_commitment_after:
+                RetainedWorkerAuthorityObjectCommitmentV1::CanonicalSha256 {
+                    digest_hex: "c".repeat(64),
+                },
+            orchestration_session_id: "orch_e3a".to_string(),
+            caller_participant_id: "orchestrator-e3a".to_string(),
+            retained_participant_id: participant_id.to_string(),
+            bootstrap_run_id: run_id.to_string(),
+            transport_claim_id: "rtc_e3a_fixture".to_string(),
+            backend_id: "cli:codex".to_string(),
+            protocol: "substrate.agent.session".to_string(),
+            world_binding: RetainedWorkerLaunchWorldBindingV1 {
+                world_id: "world-e3a".to_string(),
+                world_generation: 9,
+            },
+            current_policy_ref_id: "ao_policy_e3a_fixture".to_string(),
+            current_policy_revision: "policy-e3a".to_string(),
+            retained_worker_ref_id: "ao_worker_e3a_fixture".to_string(),
+            retained_worker_commitment:
+                RetainedWorkerAuthorityObjectCommitmentV1::CanonicalSha256 {
+                    digest_hex: "d".repeat(64),
+                },
+        }
+    }
+
+    fn e3a_launch_activation(
+        path: &str,
+        participant_id: &str,
+        run_id: &str,
+        parent_participant_id: Option<&str>,
+    ) -> transport_api_types::E2MemberLaunchActivationCarrierV1 {
+        use sha2::Digest as _;
+        use transport_api_types::{
+            AuthorityObjectKindV1, DispatchPolicyCommitmentRefCarrierV1,
+            E2DispatchPolicyReservationRefCarrierV1, E2LaunchRequestCommitmentV1,
+            E2MemberLaunchActivationCarrierV1, E2MemberLaunchKindV1, OpaqueAuthorityCommitmentV1,
+            PolicyRefV1, WorldBindingRefV1,
+        };
+
+        let launch_kind = if parent_participant_id.is_some() {
+            E2MemberLaunchKindV1::Fork
+        } else {
+            E2MemberLaunchKindV1::FreshSpawn
+        };
+        let snapshot = PolicySnapshotV3 {
+            schema_version: 3,
+            net_allowed: vec!["api.example.com".to_string()],
+            world_fs: PolicySnapshotWorldFsV3 {
+                host_visible: false,
+                fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: true },
+                deny_enforcement: None,
+                caged_required: true,
+                discover: Some(transport_api_types::PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec!["exact".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                read: Some(transport_api_types::PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec!["exact".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                write: PolicySnapshotWorldFsWriteV3 {
+                    enabled: false,
+                    allow_list: vec!["exact".to_string()],
+                    deny_list: Vec::new(),
+                },
+            },
+        };
+        let snapshot_bytes = serde_json::to_vec(&snapshot).expect("serialize E3-A policy fixture");
+        let linkage_hash = "6".repeat(64);
+        let commitment_ref = DispatchPolicyCommitmentRefCarrierV1 {
+            authority_store_id: "authority-store-e3a".to_string(),
+            commitment_id: "dpc_018f0f2e-7b4c-7aa1-8c22-123456789ab7".to_string(),
+            exact_linkage_hash: linkage_hash.clone(),
+        };
+        let policy_ref = |suffix: char, digest: char| PolicyRefV1 {
+            ref_id: format!("ao_{}", suffix.to_string().repeat(32)),
+            object_kind: AuthorityObjectKindV1::Policy,
+            schema_version: 1,
+            commitment: OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                digest_hex: digest.to_string().repeat(64),
+            },
+        };
+        let (reservation_ref, request_commitment) = match launch_kind {
+            E2MemberLaunchKindV1::FreshSpawn => (
+                Some(E2DispatchPolicyReservationRefCarrierV1 {
+                    authority_store_id: commitment_ref.authority_store_id.clone(),
+                    reservation_id: format!("reservation-{path}"),
+                    reservation_hash: "5".repeat(64),
+                }),
+                E2LaunchRequestCommitmentV1::HmacSha256 {
+                    key_id: "request-key-e3a".to_string(),
+                    domain: "substrate.e3a.test".to_string(),
+                    digest_hex: "a".repeat(64),
+                },
+            ),
+            E2MemberLaunchKindV1::Fork => (
+                None,
+                E2LaunchRequestCommitmentV1::CanonicalSha256 {
+                    domain: "substrate.e3a.test".to_string(),
+                    digest_hex: "a".repeat(64),
+                },
+            ),
+        };
+        let activation = E2MemberLaunchActivationCarrierV1 {
+            schema_version: 1,
+            activation_id: format!("e2a_{}", &linkage_hash[..32]),
+            launch_kind,
+            reservation_ref,
+            commitment_ref: commitment_ref.clone(),
+            immutable_worker_cap_ref: commitment_ref,
+            immutable_worker_cap_created_revision: 1,
+            immutable_worker_cap_application_revision: 2,
+            policy_snapshot_bytes_base64: BASE64.encode(&snapshot_bytes),
+            policy_snapshot_byte_length: snapshot_bytes.len() as u64,
+            policy_snapshot_ref: policy_ref('8', '8'),
+            policy_snapshot_hash: format!("{:x}", sha2::Sha256::digest(&snapshot_bytes)),
+            policy_snapshot_revision: "policy-revision-e3a".to_string(),
+            reason: Some("strict E3-A transport".to_string()),
+            request_id: format!("request-{path}"),
+            idempotency_key: format!("idempotency-{path}"),
+            orchestration_session_id: "orch_e3a".to_string(),
+            caller_participant_id: "orchestrator-e3a".to_string(),
+            caller_backend_id: "cli:codex".to_string(),
+            target_backend_id: "cli:codex".to_string(),
+            retained_participant_id: participant_id.to_string(),
+            bootstrap_run_id: run_id.to_string(),
+            source_participant_id: parent_participant_id.map(str::to_string),
+            target_world: WorldBindingRefV1 {
+                world_id: "world-e3a".to_string(),
+                world_generation: 9,
+            },
+            parent_policy_ref: policy_ref('9', '9'),
+            parent_policy_revision: "parent-policy-revision-e3a".to_string(),
+            request_commitment,
+            registry_publication_revision: 2,
+        };
+        activation.validate().expect("valid E3-A activation");
+        activation
+    }
+
+    fn e3a_transport_for_path(path: &str) -> MemberDispatchTransportRequest {
+        let parent_participant_id = match path {
+            "fork" => Some("source-fork"),
+            "continue-fork" => Some("source-continue-fork"),
+            "spawn" | "toolbox" => None,
+            other => panic!("unsupported E3-A fixture path {other}"),
+        };
+        let participant_id = format!("member-{path}");
+        let run_id = format!("run-{path}");
+        let retained_worker_launch_authority = parent_participant_id
+            .is_none()
+            .then(|| e3a_retained_launch_authority(&participant_id, &run_id));
+        MemberDispatchTransportRequest {
+            orchestration_session_id: "orch_e3a".to_string(),
+            participant_id: participant_id.clone(),
+            orchestrator_participant_id: "orchestrator-e3a".to_string(),
+            parent_participant_id: parent_participant_id.map(str::to_string),
+            resumed_from_participant_id: None,
+            backend_id: "cli:codex".to_string(),
+            protocol: "substrate.agent.session".to_string(),
+            run_id: run_id.clone(),
+            world_id: "world-e3a".to_string(),
+            world_generation: 9,
+            initial_prompt: Some(path.to_string()),
+            backend_kind: MemberRuntimeBackendKindV1::Codex,
+            binary_path: "/usr/bin/codex".to_string(),
+            retained_worker_launch_authority,
+            e2_launch_activation: Some(e3a_launch_activation(
+                path,
+                &participant_id,
+                &run_id,
+                parent_participant_id,
+            )),
+            config_projection: Some(e3a_projection_carrier()),
+            exact_policy_snapshot: None,
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn read_e3a_http_request(stream: &mut tokio::net::UnixStream) -> (String, Vec<u8>) {
+        use tokio::io::AsyncReadExt as _;
+
+        let mut bytes = Vec::new();
+        let mut header_end = None;
+        let mut content_length = None;
+        loop {
+            let mut chunk = [0_u8; 1024];
+            let count = stream.read(&mut chunk).await.expect("read E3-A request");
+            assert!(count > 0, "E3-A client closed before a complete request");
+            bytes.extend_from_slice(&chunk[..count]);
+            if header_end.is_none() {
+                if let Some(position) = bytes.windows(4).position(|part| part == b"\r\n\r\n") {
+                    header_end = Some(position + 4);
+                    let header = String::from_utf8_lossy(&bytes[..position + 4]);
+                    content_length = header.lines().find_map(|line| {
+                        let (name, value) = line.split_once(':')?;
+                        name.eq_ignore_ascii_case("content-length")
+                            .then(|| value.trim().parse::<usize>().ok())
+                            .flatten()
+                    });
+                }
+            }
+            if let (Some(end), Some(length)) = (header_end, content_length) {
+                if bytes.len() >= end + length {
+                    return (
+                        String::from_utf8_lossy(&bytes[..end]).into_owned(),
+                        bytes[end..end + length].to_vec(),
+                    );
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn write_e3a_http_bad_request(stream: &mut tokio::net::UnixStream, message: &str) {
+        use tokio::io::AsyncWriteExt as _;
+
+        let body = serde_json::to_vec(&serde_json::json!({ "error": message }))
+            .expect("serialize E3-A bad request");
+        let header = format!(
+            "HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        stream
+            .write_all(header.as_bytes())
+            .await
+            .expect("write E3-A response header");
+        stream
+            .write_all(&body)
+            .await
+            .expect("write E3-A response body");
+        stream.shutdown().await.expect("close E3-A response");
+    }
+
     #[cfg(target_os = "linux")]
     struct PoisonedEnvGuard {
         previous: Vec<(&'static str, Option<std::ffi::OsString>)>,
@@ -4106,8 +4421,12 @@ mod tests {
             binary_path: "/usr/bin/codex".to_string(),
             retained_worker_launch_authority: None,
             e2_launch_activation: None,
+            config_projection: None,
             exact_policy_snapshot: None,
         });
+        let payload = payload
+            .as_v1()
+            .expect("legacy transport must preserve the V1 member-dispatch variant");
 
         assert_eq!(payload.schema_version, 1);
         assert_eq!(payload.orchestration_session_id, "orch_123");
@@ -4135,6 +4454,117 @@ mod tests {
                 binary_path: "/usr/bin/codex".to_string(),
             }
         );
+    }
+
+    #[test]
+    fn e3a_member_dispatch_payload_preserves_injected_projection_for_all_admitted_paths() {
+        let projection = e3a_projection_carrier();
+        projection
+            .validate()
+            .expect("strict E3-A projection carrier");
+        for path in ["spawn", "fork", "toolbox", "continue-fork"] {
+            let payload = build_member_dispatch_payload(&e3a_transport_for_path(path));
+            payload
+                .validate()
+                .unwrap_or_else(|error| panic!("valid {path} V2 payload: {error}"));
+            let encoded = serde_json::to_vec(&payload).expect("encode strict path payload");
+            let decoded: transport_api_types::MemberDispatchRequest =
+                serde_json::from_slice(&encoded).expect("decode strict path payload");
+            assert_eq!(decoded, payload, "{path} must survive the wire codec");
+            let transport_api_types::MemberDispatchRequest::V2(payload) = payload else {
+                panic!("{path} projection must select strict V2 without fallback");
+            };
+            assert_eq!(payload.schema_version, 2);
+            assert_eq!(payload.config_projection, projection);
+            assert_eq!(payload.initial_prompt.as_deref(), Some(path));
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn e3a_injected_toolbox_transport_reaches_world_service_through_agent_client() {
+        const REJECTION: &str = "member_dispatch V2 launch is not implemented";
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("build E3-A runtime");
+        runtime.block_on(async {
+            let temp = tempfile::Builder::new()
+                .prefix("e3a-toolbox-wire-")
+                .tempdir()
+                .expect("create E3-A tempdir");
+            let socket_path = temp.path().join("world.sock");
+            let listener =
+                tokio::net::UnixListener::bind(&socket_path).expect("bind E3-A world socket");
+
+            let transport = e3a_transport_for_path("toolbox");
+            let activation = transport
+                .e2_launch_activation
+                .as_ref()
+                .expect("toolbox V2 activation");
+            let policy_snapshot = activation
+                .policy_snapshot()
+                .expect("decode toolbox activation snapshot");
+            let projection = transport
+                .config_projection
+                .clone()
+                .expect("injected toolbox projection");
+            let request = build_execute_request(ExecuteRequestInput {
+                profile: None,
+                cmd: String::new(),
+                cwd: temp.path().display().to_string(),
+                env_map: std::collections::HashMap::new(),
+                agent_id: "e3a-toolbox".to_string(),
+                policy_snapshot,
+                world_network: WorldNetworkRoutingV1 {
+                    isolate_network: true,
+                    allowed_domains: vec!["api.example.com".to_string()],
+                },
+                world_fs_mode: WorldFsMode::ReadOnly,
+                member_dispatch: Some(build_member_dispatch_payload(&transport)),
+                acceptance_context: None,
+            });
+            request.validate().expect("valid injected toolbox request");
+
+            let expected_body = serde_json::to_vec(&request).expect("encode toolbox request");
+            let state_root = temp.path().join("member-turn-state");
+            std::fs::create_dir_all(&state_root).expect("create E3-A member-turn state root");
+            let service =
+                world_service::WorldService::new_with_member_turn_state_root_for_test(&state_root)
+                    .expect("construct E3-A world service");
+            let server = tokio::spawn(async move {
+                let (mut stream, _) = listener.accept().await.expect("accept E3-A client");
+                let (header, body) = read_e3a_http_request(&mut stream).await;
+                assert!(header.starts_with("POST /v1/execute/stream "));
+                assert_eq!(body, expected_body, "client transport must not rewrite V2");
+                let received: transport_api_types::ExecuteRequest =
+                    serde_json::from_slice(&body).expect("decode toolbox request at world-service");
+                assert_eq!(
+                    received
+                        .member_dispatch
+                        .as_ref()
+                        .unwrap()
+                        .config_projection(),
+                    Some(&projection)
+                );
+                let error = service
+                    .execute_stream(received)
+                    .await
+                    .expect_err("world-service must reject E3-A before V2 launch");
+                assert_eq!(error.to_string(), REJECTION);
+                write_e3a_http_bad_request(&mut stream, REJECTION).await;
+            });
+
+            let client = transport_api_client::AgentClient::unix_socket(&socket_path)
+                .expect("construct E3-A client");
+            let error = client
+                .execute_stream(request)
+                .await
+                .expect_err("client must observe world-service V2 rejection");
+            assert!(error.to_string().contains(REJECTION));
+            server.await.expect("join E3-A world-service server");
+        });
     }
 
     #[test]
@@ -4190,6 +4620,7 @@ mod tests {
             binary_path: "/usr/bin/codex".to_string(),
             retained_worker_launch_authority: None,
             e2_launch_activation: None,
+            config_projection: None,
             exact_policy_snapshot: Some(material.clone()),
         };
 
@@ -4259,6 +4690,7 @@ mod tests {
                     binary_path: "/usr/bin/codex".to_string(),
                     retained_worker_launch_authority: None,
                     e2_launch_activation: None,
+                    config_projection: None,
                     exact_policy_snapshot: None,
                 },
             )),
@@ -4271,14 +4703,15 @@ mod tests {
             request
                 .member_dispatch
                 .as_ref()
-                .map(|dispatch| dispatch.run_id.as_str()),
+                .map(|dispatch| dispatch.common().run_id),
             Some("run_123")
         );
         assert_eq!(
-            request
-                .member_dispatch
-                .as_ref()
-                .map(|dispatch| dispatch.resolved_runtime.binary_path.as_str()),
+            request.member_dispatch.as_ref().map(|dispatch| dispatch
+                .common()
+                .resolved_runtime
+                .binary_path
+                .as_str()),
             Some("/usr/bin/codex")
         );
         request

@@ -493,6 +493,16 @@ impl WorldService {
 
     /// Execute a command with budget tracking.
     pub async fn execute(&self, req: ExecuteRequest) -> Result<ExecuteResponse> {
+        if req
+            .member_dispatch
+            .as_ref()
+            .is_some_and(|dispatch| dispatch.config_projection().is_some())
+        {
+            return Err(BadRequestError::new(
+                "member_dispatch V2 launch is not implemented".to_string(),
+            )
+            .into());
+        }
         if req.member_dispatch.is_some() {
             return Err(BadRequestError::new(
                 "member_dispatch requires POST /v1/execute/stream".to_string(),
@@ -630,7 +640,8 @@ impl WorldService {
             member_dispatch: req
                 .member_dispatch
                 .as_ref()
-                .map(convert_member_dispatch_request),
+                .map(convert_member_dispatch_request)
+                .transpose()?,
         };
 
         // Execute command
@@ -1221,6 +1232,16 @@ impl WorldService {
     /// Execute a command and stream incremental output frames via NDJSON.
     #[cfg(target_os = "linux")]
     pub async fn execute_stream(&self, req: ExecuteRequest) -> Result<Response> {
+        if req
+            .member_dispatch
+            .as_ref()
+            .is_some_and(|dispatch| dispatch.config_projection().is_some())
+        {
+            return Err(BadRequestError::new(
+                "member_dispatch V2 launch is not implemented".to_string(),
+            )
+            .into());
+        }
         if req.agent_id.is_empty() {
             anyhow::bail!("agent_id is required for API calls");
         }
@@ -1334,6 +1355,9 @@ impl WorldService {
             );
             let span_id = format!("spn_{}", uuid::Uuid::now_v7());
             let launch_placement = placement.launch_placement();
+            let dispatch = dispatch.as_v1().cloned().ok_or_else(|| {
+                BadRequestError::new("member_dispatch V2 launch is not implemented".to_string())
+            })?;
             return self
                 .member_runtime
                 .launch(
@@ -1429,7 +1453,8 @@ impl WorldService {
             member_dispatch: req
                 .member_dispatch
                 .as_ref()
-                .map(convert_member_dispatch_request),
+                .map(convert_member_dispatch_request)
+                .transpose()?,
         };
 
         let span_id = format!("spn_{}", uuid::Uuid::now_v7());
@@ -1791,7 +1816,7 @@ impl WorldService {
     #[cfg(target_os = "linux")]
     fn resolve_authoritative_member_placement_context(
         &self,
-        dispatch: &transport_api_types::MemberDispatchRequestV1,
+        dispatch: &transport_api_types::MemberDispatchRequest,
         world: WorldHandle,
         authoritative_binding: Option<&SharedWorldBindingSnapshot>,
         project_dir: &Path,
@@ -3052,7 +3077,7 @@ fn requested_shared_world_owner_spec(req: &ExecuteRequest) -> Option<SharedWorld
         req.member_dispatch
             .as_ref()
             .map(|dispatch| SharedWorldOwnerSpec {
-                orchestration_session_id: dispatch.orchestration_session_id.clone(),
+                orchestration_session_id: dispatch.common().orchestration_session_id.to_string(),
                 action: world_api::SharedWorldOwnerAction::AttachOrCreate,
             })
     })
@@ -3074,10 +3099,11 @@ fn canonical_policy_snapshot_sha256(
 
 #[cfg(target_os = "linux")]
 fn exact_bound_world_ownership_adoption(
-    dispatch: &transport_api_types::MemberDispatchRequestV1,
+    dispatch: &transport_api_types::MemberDispatchRequest,
     policy_snapshot: &transport_api_types::PolicySnapshotV3,
     target_spec: &WorldSpec,
 ) -> Result<Option<world::ExactBoundWorldOwnershipAdoptionV1>> {
+    let dispatch = dispatch.common();
     let managed_identity =
         dispatch.participant_id.starts_with("rwp_") || dispatch.run_id.starts_with("rwr_");
     let Some(proof) = dispatch.retained_worker_launch_authority.as_ref() else {
@@ -3140,10 +3166,10 @@ fn exact_bound_world_ownership_adoption(
     }
 
     Ok(Some(world::ExactBoundWorldOwnershipAdoptionV1 {
-        orchestration_session_id: dispatch.orchestration_session_id.clone(),
-        world_id: dispatch.world_id.clone(),
+        orchestration_session_id: dispatch.orchestration_session_id.to_string(),
+        world_id: dispatch.world_id.to_string(),
         world_generation: dispatch.world_generation,
-        participant_id: dispatch.participant_id.clone(),
+        participant_id: dispatch.participant_id.to_string(),
         policy_ref_id: proof.current_policy_ref_id.clone(),
         policy_revision: proof.current_policy_revision.clone(),
         policy_snapshot_hash,
@@ -3182,9 +3208,12 @@ where
 }
 
 fn convert_member_dispatch_request(
-    dispatch: &transport_api_types::MemberDispatchRequestV1,
-) -> BackendMemberDispatchRequestV1 {
-    BackendMemberDispatchRequestV1 {
+    dispatch: &transport_api_types::MemberDispatchRequest,
+) -> Result<BackendMemberDispatchRequestV1> {
+    let dispatch = dispatch.as_v1().ok_or_else(|| {
+        BadRequestError::new("member_dispatch V2 launch is not implemented".to_string())
+    })?;
+    Ok(BackendMemberDispatchRequestV1 {
         schema_version: dispatch.schema_version,
         orchestration_session_id: dispatch.orchestration_session_id.clone(),
         participant_id: dispatch.participant_id.clone(),
@@ -3203,7 +3232,7 @@ fn convert_member_dispatch_request(
             ),
             binary_path: dispatch.resolved_runtime.binary_path.clone(),
         },
-    }
+    })
 }
 
 fn convert_member_runtime_backend_kind(
@@ -3221,10 +3250,11 @@ fn convert_member_runtime_backend_kind(
 
 #[cfg(target_os = "linux")]
 fn validate_member_dispatch_binding(
-    dispatch: &transport_api_types::MemberDispatchRequestV1,
+    dispatch: &transport_api_types::MemberDispatchRequest,
     world: &WorldHandle,
     authoritative_binding: Option<&SharedWorldBindingSnapshot>,
 ) -> Result<SharedWorldBindingSnapshot> {
+    let dispatch = dispatch.common();
     let binding = authoritative_binding
         .cloned()
         .or_else(|| world.shared_binding.clone())
@@ -3658,9 +3688,185 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn e3a_v2_execute_request() -> transport_api_types::ExecuteRequest {
+        use transport_api_types::{
+            AuthorityObjectKindV1, AuthorityObjectRefV1, ConfigProjectionActivationCarrierV1,
+            ConfigProjectionRefV1, DispatchPolicyCommitmentRefCarrierV1,
+            E2LaunchRequestCommitmentV1, E2MemberLaunchActivationCarrierV1, E2MemberLaunchKindV1,
+            InWorldGatewayRefV1, ManagedGatewayActivationIntentRefV1, MemberDispatchRequest,
+            MemberDispatchRequestV2, MemberRuntimeBackendKindV1, OpaqueAuthorityCommitmentV1,
+            ResolvedMemberRuntimeDescriptorV1, WorldBindingRefV1,
+        };
+
+        let policy_snapshot = exact_bound_world_policy_snapshot()
+            .canonicalize()
+            .expect("canonical E3-A policy");
+        let policy_bytes = serde_json::to_vec(&policy_snapshot).expect("serialize E3-A policy");
+        let policy_hash = format!("{:x}", Sha256::digest(&policy_bytes));
+        let cap = DispatchPolicyCommitmentRefCarrierV1 {
+            authority_store_id: "authority-store-e3a".to_string(),
+            commitment_id: "dpc_018f0f2e-7b4c-7aa1-8c22-123456789ab7".to_string(),
+            exact_linkage_hash: "a".repeat(64),
+        };
+        let authority_store_id = "cpa_018f0f2e-7b4c-7aa1-8c22-123456789ab0".to_string();
+        let series_id = "cps_018f0f2e-7b4c-7aa1-8c22-123456789ab1".to_string();
+        let dispatch = MemberDispatchRequestV2 {
+            schema_version: 2,
+            orchestration_session_id: "orch_e3a".to_string(),
+            participant_id: "ash_member_e3a".to_string(),
+            orchestrator_participant_id: "ash_orchestrator_e3a".to_string(),
+            parent_participant_id: Some("ash_source_e3a".to_string()),
+            resumed_from_participant_id: None,
+            backend_id: "cli:codex".to_string(),
+            protocol: "substrate.agent.session".to_string(),
+            run_id: "run_e3a".to_string(),
+            world_id: "world_e3a".to_string(),
+            world_generation: 7,
+            initial_prompt: Some("must not launch".to_string()),
+            resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
+                backend_kind: MemberRuntimeBackendKindV1::Codex,
+                binary_path: "/bin/true".to_string(),
+            },
+            retained_worker_launch_authority: None,
+            e2_launch_activation: Some(E2MemberLaunchActivationCarrierV1 {
+                schema_version: 1,
+                activation_id: format!("e2a_{}", "a".repeat(32)),
+                launch_kind: E2MemberLaunchKindV1::Fork,
+                reservation_ref: None,
+                commitment_ref: cap.clone(),
+                immutable_worker_cap_ref: cap,
+                immutable_worker_cap_created_revision: 1,
+                immutable_worker_cap_application_revision: 2,
+                policy_snapshot_bytes_base64: BASE64.encode(&policy_bytes),
+                policy_snapshot_byte_length: policy_bytes.len() as u64,
+                policy_snapshot_ref: AuthorityObjectRefV1 {
+                    ref_id: "ao_0123456789abcdef0123456789abcdef".to_string(),
+                    object_kind: AuthorityObjectKindV1::Policy,
+                    schema_version: 1,
+                    commitment: OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                        digest_hex: "b".repeat(64),
+                    },
+                },
+                policy_snapshot_hash: policy_hash,
+                policy_snapshot_revision: "policy-revision-e3a".to_string(),
+                reason: Some("strict E3-A reachability".to_string()),
+                request_id: "request-e3a".to_string(),
+                idempotency_key: "idempotency-e3a".to_string(),
+                orchestration_session_id: "orch_e3a".to_string(),
+                caller_participant_id: "ash_orchestrator_e3a".to_string(),
+                caller_backend_id: "cli:codex".to_string(),
+                target_backend_id: "cli:codex".to_string(),
+                retained_participant_id: "ash_member_e3a".to_string(),
+                bootstrap_run_id: "run_e3a".to_string(),
+                source_participant_id: Some("ash_source_e3a".to_string()),
+                target_world: WorldBindingRefV1 {
+                    world_id: "world_e3a".to_string(),
+                    world_generation: 7,
+                },
+                parent_policy_ref: AuthorityObjectRefV1 {
+                    ref_id: "ao_fedcba9876543210fedcba9876543210".to_string(),
+                    object_kind: AuthorityObjectKindV1::Policy,
+                    schema_version: 1,
+                    commitment: OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                        digest_hex: "c".repeat(64),
+                    },
+                },
+                parent_policy_revision: "parent-policy-revision-e3a".to_string(),
+                request_commitment: E2LaunchRequestCommitmentV1::CanonicalSha256 {
+                    domain: "substrate.e3a.test".to_string(),
+                    digest_hex: "d".repeat(64),
+                },
+                registry_publication_revision: 2,
+            }),
+            config_projection: ConfigProjectionActivationCarrierV1 {
+                authority_store_id: authority_store_id.clone(),
+                series_id: series_id.clone(),
+                dormant_projection_ref: ConfigProjectionRefV1 {
+                    authority_store_id: authority_store_id.clone(),
+                    series_id,
+                    record_id: "cpr_018f0f2e-7b4c-7aa1-8c22-123456789ab2".to_string(),
+                    revision: 1,
+                    record_hash: "1".repeat(64),
+                },
+                activation_intent_ref: ManagedGatewayActivationIntentRefV1 {
+                    authority_store_id: authority_store_id.clone(),
+                    activation_intent_id: "gai_018f0f2e-7b4c-7aa1-8c22-123456789ab3".to_string(),
+                    intent_hash: "2".repeat(64),
+                },
+                expected_gateway_ref: InWorldGatewayRefV1 {
+                    authority_store_id,
+                    gateway_instance_id: "cgi_018f0f2e-7b4c-7aa1-8c22-123456789ab4".to_string(),
+                    gateway_identity_hash: "3".repeat(64),
+                },
+                fence_id: "cpf_018f0f2e-7b4c-7aa1-8c22-123456789ab5".to_string(),
+                consumer_id: "cpc_018f0f2e-7b4c-7aa1-8c22-123456789ab6".to_string(),
+                consumer_lease_revision: 1,
+                consumer_lease_hash: "4".repeat(64),
+            },
+        };
+        dispatch.validate().expect("well-formed injected E3-A V2");
+
+        transport_api_types::ExecuteRequest {
+            profile: None,
+            cmd: String::new(),
+            cwd: Some("/tmp/e3a-must-not-resolve".to_string()),
+            env: None,
+            pty: false,
+            agent_id: "e3a-no-effects".to_string(),
+            budget: Some(transport_api_types::Budget {
+                max_execs: Some(1),
+                max_runtime_ms: None,
+                max_egress_bytes: None,
+            }),
+            policy_snapshot,
+            shared_world: None,
+            world_network: None,
+            world_fs_mode: None,
+            member_dispatch: Some(MemberDispatchRequest::V2(dispatch)),
+            acceptance_context: None,
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn e3a_v2_execute_paths_fail_closed_before_world_budget_or_launch_effects() {
+        let service = WorldService::new_linux(None).expect("E3-A test service");
+        let request = e3a_v2_execute_request();
+        request
+            .validate()
+            .expect("well-formed E3-A execute request");
+
+        for result in [
+            service.execute(request.clone()).await.map(|_| ()),
+            service.execute_stream(request).await.map(|_| ()),
+        ] {
+            let error = result.expect_err("E3-A V2 launch must stop before implementation");
+            assert_eq!(
+                error
+                    .downcast_ref::<BadRequestError>()
+                    .map(|error| error.message.as_str()),
+                Some("member_dispatch V2 launch is not implemented")
+            );
+        }
+
+        assert!(service.budgets.read().unwrap().is_empty());
+        assert!(service.worlds.read().unwrap().is_empty());
+        assert_eq!(
+            service.last_policy_resolution_mode.load(Ordering::SeqCst),
+            0
+        );
+        assert_eq!(service.last_netfilter_requested.load(Ordering::SeqCst), 0);
+        assert!(service
+            .last_netfilter_failure_reason
+            .read()
+            .unwrap()
+            .is_none());
+    }
+
+    #[cfg(target_os = "linux")]
     fn exact_bound_world_managed_dispatch(
         policy_snapshot: &transport_api_types::PolicySnapshotV3,
-    ) -> transport_api_types::MemberDispatchRequestV1 {
+    ) -> transport_api_types::MemberDispatchRequest {
         use transport_api_types::{
             MemberRuntimeBackendKindV1, ResolvedMemberRuntimeDescriptorV1,
             RetainedWorkerAdmissionCommitmentCarrierV1, RetainedWorkerAuthorityObjectCommitmentV1,
@@ -3670,55 +3876,57 @@ mod tests {
             digest_hex: value.to_string().repeat(64),
         };
         let policy_hash = canonical_policy_snapshot_sha256(policy_snapshot).unwrap();
-        transport_api_types::MemberDispatchRequestV1 {
-            schema_version: 1,
-            orchestration_session_id: "orch_exact".into(),
-            participant_id: "rwp_exact".into(),
-            orchestrator_participant_id: "ash_orchestrator".into(),
-            parent_participant_id: None,
-            resumed_from_participant_id: None,
-            backend_id: "cli:codex".into(),
-            protocol: "substrate.agent.session".into(),
-            run_id: "rwr_exact".into(),
-            world_id: "wld_hsa_bound".into(),
-            world_generation: 7,
-            initial_prompt: Some("PROMPT_MUST_NOT_REACH_ADOPTION".into()),
-            resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
-                backend_kind: MemberRuntimeBackendKindV1::Codex,
-                binary_path: "/bin/true".into(),
-            },
-            retained_worker_launch_authority: Some(RetainedWorkerLaunchAuthorityProofV1 {
+        transport_api_types::MemberDispatchRequest::V1(
+            transport_api_types::MemberDispatchRequestV1 {
                 schema_version: 1,
-                authority_store_id: "has_exact".into(),
-                issuer_request_id: "req_exact".into(),
-                canonical_spawn_fingerprint: RetainedWorkerAdmissionCommitmentCarrierV1 {
-                    schema_version: 1,
-                    algorithm: "hmac-sha-256".into(),
-                    key_id: "adk_exact".into(),
-                    digest_hex: "a".repeat(64),
-                },
-                registration_id: "rwr_registration".into(),
-                registration_commitment: commitment('b'),
-                authority_revision_after: 2,
-                authority_record_commitment_after: commitment('c'),
                 orchestration_session_id: "orch_exact".into(),
-                caller_participant_id: "ash_orchestrator".into(),
-                retained_participant_id: "rwp_exact".into(),
-                bootstrap_run_id: "rwr_exact".into(),
-                transport_claim_id: "rtc_exact".into(),
+                participant_id: "rwp_exact".into(),
+                orchestrator_participant_id: "ash_orchestrator".into(),
+                parent_participant_id: None,
+                resumed_from_participant_id: None,
                 backend_id: "cli:codex".into(),
                 protocol: "substrate.agent.session".into(),
-                world_binding: RetainedWorkerLaunchWorldBindingV1 {
-                    world_id: "wld_hsa_bound".into(),
-                    world_generation: 7,
+                run_id: "rwr_exact".into(),
+                world_id: "wld_hsa_bound".into(),
+                world_generation: 7,
+                initial_prompt: Some("PROMPT_MUST_NOT_REACH_ADOPTION".into()),
+                resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
+                    backend_kind: MemberRuntimeBackendKindV1::Codex,
+                    binary_path: "/bin/true".into(),
                 },
-                current_policy_ref_id: "ao_policy_exact".into(),
-                current_policy_revision: policy_hash,
-                retained_worker_ref_id: "ao_worker_exact".into(),
-                retained_worker_commitment: commitment('d'),
-            }),
-            e2_launch_activation: None,
-        }
+                retained_worker_launch_authority: Some(RetainedWorkerLaunchAuthorityProofV1 {
+                    schema_version: 1,
+                    authority_store_id: "has_exact".into(),
+                    issuer_request_id: "req_exact".into(),
+                    canonical_spawn_fingerprint: RetainedWorkerAdmissionCommitmentCarrierV1 {
+                        schema_version: 1,
+                        algorithm: "hmac-sha-256".into(),
+                        key_id: "adk_exact".into(),
+                        digest_hex: "a".repeat(64),
+                    },
+                    registration_id: "rwr_registration".into(),
+                    registration_commitment: commitment('b'),
+                    authority_revision_after: 2,
+                    authority_record_commitment_after: commitment('c'),
+                    orchestration_session_id: "orch_exact".into(),
+                    caller_participant_id: "ash_orchestrator".into(),
+                    retained_participant_id: "rwp_exact".into(),
+                    bootstrap_run_id: "rwr_exact".into(),
+                    transport_claim_id: "rtc_exact".into(),
+                    backend_id: "cli:codex".into(),
+                    protocol: "substrate.agent.session".into(),
+                    world_binding: RetainedWorkerLaunchWorldBindingV1 {
+                        world_id: "wld_hsa_bound".into(),
+                        world_generation: 7,
+                    },
+                    current_policy_ref_id: "ao_policy_exact".into(),
+                    current_policy_revision: policy_hash,
+                    retained_worker_ref_id: "ao_worker_exact".into(),
+                    retained_worker_commitment: commitment('d'),
+                }),
+                e2_launch_activation: None,
+            },
+        )
     }
 
     #[test]
@@ -3772,11 +3980,16 @@ mod tests {
         );
 
         let mut missing = dispatch.clone();
-        missing.retained_worker_launch_authority = None;
+        missing
+            .as_v1_mut()
+            .unwrap()
+            .retained_worker_launch_authority = None;
         assert!(exact_bound_world_ownership_adoption(&missing, &snapshot, &spec).is_err());
 
         let mut policy_conflict = dispatch.clone();
         policy_conflict
+            .as_v1_mut()
+            .unwrap()
             .retained_worker_launch_authority
             .as_mut()
             .unwrap()
@@ -3784,13 +3997,14 @@ mod tests {
         assert!(exact_bound_world_ownership_adoption(&policy_conflict, &snapshot, &spec).is_err());
 
         let mut world_conflict = dispatch.clone();
-        world_conflict.world_id = "wld_other".into();
+        world_conflict.as_v1_mut().unwrap().world_id = "wld_other".into();
         assert!(exact_bound_world_ownership_adoption(&world_conflict, &snapshot, &spec).is_err());
 
         let mut legacy = dispatch;
-        legacy.participant_id = "ash_legacy_member".into();
-        legacy.run_id = "run_legacy".into();
-        legacy.retained_worker_launch_authority = None;
+        let legacy_v1 = legacy.as_v1_mut().unwrap();
+        legacy_v1.participant_id = "ash_legacy_member".into();
+        legacy_v1.run_id = "run_legacy".into();
+        legacy_v1.retained_worker_launch_authority = None;
         assert!(
             exact_bound_world_ownership_adoption(&legacy, &snapshot, &spec)
                 .expect("compatibility None")

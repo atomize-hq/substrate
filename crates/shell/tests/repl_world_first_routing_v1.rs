@@ -1412,8 +1412,9 @@ fn generic_reply_stream_event(
 #[cfg(target_os = "linux")]
 fn persist_test_fork_child_participant_manifest(
     config: &ForkChildPersistenceConfig,
-    member_dispatch: &transport_api_types::MemberDispatchRequestV1,
+    member_dispatch: &transport_api_types::MemberDispatchRequest,
 ) {
+    let member_dispatch = member_dispatch.common();
     let source_participant_id = member_dispatch
         .parent_participant_id
         .as_deref()
@@ -1421,16 +1422,16 @@ fn persist_test_fork_child_participant_manifest(
     let mut child = read_participant_manifest(&config.substrate_home, source_participant_id);
     let timestamp = chrono::Utc::now().to_rfc3339();
 
-    child["participant_id"] = Value::String(member_dispatch.participant_id.clone());
+    child["participant_id"] = Value::String(member_dispatch.participant_id.to_string());
     child["orchestration_session_id"] =
-        Value::String(member_dispatch.orchestration_session_id.clone());
+        Value::String(member_dispatch.orchestration_session_id.to_string());
     child["state"] = Value::String("ready".to_string());
     child["opened_at"] = Value::String(timestamp.clone());
     child["last_transition_at"] = Value::String(timestamp.clone());
-    child["world_id"] = Value::String(member_dispatch.world_id.clone());
+    child["world_id"] = Value::String(member_dispatch.world_id.to_string());
     child["world_generation"] = Value::from(member_dispatch.world_generation);
     child["orchestrator_participant_id"] =
-        Value::String(member_dispatch.orchestrator_participant_id.clone());
+        Value::String(member_dispatch.orchestrator_participant_id.to_string());
     child["parent_participant_id"] = Value::String(source_participant_id.to_string());
     child["resumed_from_participant_id"] = Value::Null;
     child["fork_source_participant_id"] = Value::Null;
@@ -1449,7 +1450,7 @@ fn persist_test_fork_child_participant_manifest(
     );
     internal.insert(
         "latest_run_id".to_string(),
-        Value::String(member_dispatch.run_id.clone()),
+        Value::String(member_dispatch.run_id.to_string()),
     );
     internal.insert(
         "last_heartbeat_at".to_string(),
@@ -1615,7 +1616,8 @@ fn start_member_turn_intercept_proxy_with_scripts_and_fork_child_persistence(
                                 >(&body)
                                 {
                                     if let Some(member_dispatch) = parsed.member_dispatch.as_ref() {
-                                        if member_dispatch.parent_participant_id.is_some() {
+                                        if member_dispatch.common().parent_participant_id.is_some()
+                                        {
                                             persist_test_fork_child_participant_manifest(
                                                 config,
                                                 member_dispatch,
@@ -3180,7 +3182,18 @@ fn c3_first_targeted_world_turn_uses_initial_prompt_in_member_dispatch() {
     );
     let records = server.records();
 
-    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    let mut repl = PtyRepl::spawn(
+        &project,
+        &home,
+        &substrate_home,
+        &sock,
+        &[],
+        &[
+            "--install-prefix",
+            substrate_home.to_str().expect("UTF-8 substrate home"),
+            "--world",
+        ],
+    );
     repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
@@ -3210,6 +3223,7 @@ fn c3_first_targeted_world_turn_uses_initial_prompt_in_member_dispatch() {
         .first()
         .and_then(|request| request.member_dispatch.as_ref())
         .expect("captured member dispatch request");
+    let dispatch = dispatch.common();
     assert_eq!(
         dispatch.initial_prompt.as_deref(),
         Some("member targeted first turn")
@@ -3824,6 +3838,7 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
         .first()
         .and_then(|request| request.member_dispatch.as_ref())
         .expect("member dispatch request");
+    let member_dispatch = member_dispatch.common();
     assert_eq!(
         guard.member_dispatch_requests.len(),
         1,
@@ -5663,7 +5678,11 @@ fn c3_internal_toolbox_fork_command_reuses_retained_fork_bootstrap_with_explicit
         &substrate_home,
         &proxy_sock,
         &[],
-        &["--world"],
+        &[
+            "--install-prefix",
+            substrate_home.to_str().expect("UTF-8 substrate home"),
+            "--world",
+        ],
     );
     repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
@@ -7255,6 +7274,7 @@ fn c3_targeted_world_turn_relaunches_exact_backend_after_world_restart() {
         .get(1)
         .and_then(|request| request.member_dispatch.as_ref())
         .expect("replacement member dispatch request");
+    let replacement_dispatch = replacement_dispatch.common();
     assert_eq!(
         replacement_dispatch.initial_prompt.as_deref(),
         Some("second")
@@ -7399,6 +7419,7 @@ fn c3_targeted_world_turn_preserves_aliased_exact_backend_identity() {
         .first()
         .and_then(|request| request.member_dispatch.as_ref())
         .expect("member dispatch request");
+    let member_dispatch = member_dispatch.common();
     let submit = guard
         .member_turn_submit_requests
         .first()

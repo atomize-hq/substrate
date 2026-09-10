@@ -110,8 +110,18 @@ pub fn ensure_substrate_built() {
     static BUILD_ONCE: OnceLock<()> = OnceLock::new();
     BUILD_ONCE.get_or_init(|| {
         let _build_lock = BuildLock::acquire();
-        let status = StdCommand::new("cargo")
-            .args(["build", "-p", "substrate", "--bin", "substrate"])
+        let status = StdCommand::new("rustup")
+            .args([
+                "run",
+                "1.89.0",
+                "cargo",
+                "build",
+                "-p",
+                "substrate",
+                "--bin",
+                "substrate",
+                "--locked",
+            ])
             .status()
             .expect("failed to invoke cargo build -p substrate --bin substrate");
         assert!(

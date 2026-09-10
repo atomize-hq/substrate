@@ -146,7 +146,8 @@ pub struct ReplWorldAgentStub {
     handle: Option<thread::JoinHandle<()>>,
 }
 
-fn assert_member_dispatch_capture(dispatch: &transport_api_types::MemberDispatchRequestV1) {
+fn assert_member_dispatch_capture(dispatch: &transport_api_types::MemberDispatchRequest) {
+    let dispatch = dispatch.common();
     assert!(
         Path::new(&dispatch.resolved_runtime.binary_path).is_absolute(),
         "captured member dispatch binary_path must remain absolute"
@@ -390,26 +391,29 @@ impl ReplWorldAgentStub {
 
                 fn build_member_dispatch_ready_event(
                     request: &transport_api_types::ExecuteRequest,
-                    dispatch: &transport_api_types::MemberDispatchRequestV1,
+                    dispatch: &transport_api_types::MemberDispatchRequest,
                     span_id: &str,
                     session_handle_id: &str,
                 ) -> transport_api_types::ExecuteStreamFrame {
+                    let dispatch = dispatch.common();
                     transport_api_types::ExecuteStreamFrame::Event {
                         frame_identity: runtime_frame_identity(span_id, 2),
                         event: substrate_common::agent_events::AgentEvent {
                             ts: chrono::Utc::now(),
                             agent_id: request.agent_id.clone(),
                             kind: substrate_common::agent_events::AgentEventKind::Registered,
-                            orchestration_session_id: dispatch.orchestration_session_id.clone(),
-                            run_id: dispatch.run_id.clone(),
+                            orchestration_session_id: dispatch.orchestration_session_id.to_string(),
+                            run_id: dispatch.run_id.to_string(),
                             parent_run_id: None,
-                            participant_id: Some(dispatch.participant_id.clone()),
-                            parent_participant_id: dispatch.parent_participant_id.clone(),
-                            resumed_from_participant_id: dispatch.resumed_from_participant_id.clone(),
-                            backend_id: Some(dispatch.backend_id.clone()),
+                            participant_id: Some(dispatch.participant_id.to_string()),
+                            parent_participant_id: dispatch.parent_participant_id.map(str::to_string),
+                            resumed_from_participant_id: dispatch
+                                .resumed_from_participant_id
+                                .map(str::to_string),
+                            backend_id: Some(dispatch.backend_id.to_string()),
                             thread_id: None,
                             role: Some("member".to_string()),
-                            world_id: Some(dispatch.world_id.clone()),
+                            world_id: Some(dispatch.world_id.to_string()),
                             world_generation: Some(dispatch.world_generation),
                             cmd_id: None,
                             span_id: Some(span_id.to_string()),
@@ -475,13 +479,17 @@ impl ReplWorldAgentStub {
                                 guard.member_dispatch_requests.push(parsed.clone());
                             }
 
-                            let span_id = format!("member-span-{}", dispatch.participant_id);
+                            let span_id =
+                                format!("member-span-{}", dispatch.common().participant_id);
                             let script = member_dispatch_scripts_for_thread
                                 .lock()
                                 .ok()
                                 .and_then(|mut guard| guard.pop_front())
                                 .unwrap_or(MemberDispatchStreamScript::ReadyAndExit {
-                                    session_handle_id: format!("session-{}", dispatch.participant_id),
+                                    session_handle_id: format!(
+                                        "session-{}",
+                                        dispatch.common().participant_id
+                                    ),
                                     exit_code: 0,
                                 });
 
@@ -496,7 +504,7 @@ impl ReplWorldAgentStub {
                                         let body = format!(
                                             r#"{{"error":"member_dispatch.world_id mismatch (expected {expected}, got {got})"}}"#,
                                             expected = expected_world_id,
-                                            got = dispatch.world_id,
+                                            got = dispatch.common().world_id,
                                         );
                                         write_http_json(&mut stream, "400 Bad Request", &body).await;
                                         return;
@@ -515,7 +523,7 @@ impl ReplWorldAgentStub {
                                         let body = format!(
                                             r#"{{"error":"member_dispatch.world_id mismatch (expected {expected}, got {got})"}}"#,
                                             expected = expected_world_id,
-                                            got = dispatch.world_id,
+                                            got = dispatch.common().world_id,
                                         );
                                         write_http_json(&mut stream, "400 Bad Request", &body).await;
                                         return;

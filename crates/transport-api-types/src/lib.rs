@@ -3106,6 +3106,251 @@ fn validate_lowercase_sha256_digest(field: &str, digest_hex: &str) -> Result<(),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "ConfigProjectionRefV1Def")]
+pub struct ConfigProjectionRefV1 {
+    pub authority_store_id: String,
+    pub series_id: String,
+    pub record_id: String,
+    pub revision: u64,
+    pub record_hash: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ConfigProjectionRefV1Def {
+    authority_store_id: String,
+    series_id: String,
+    record_id: String,
+    revision: u64,
+    record_hash: String,
+}
+
+impl ConfigProjectionRefV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        validate_prefixed_uuid_v7(
+            "config_projection.dormant_projection_ref.authority_store_id",
+            &self.authority_store_id,
+            "cpa_",
+        )?;
+        validate_prefixed_uuid_v7(
+            "config_projection.dormant_projection_ref.series_id",
+            &self.series_id,
+            "cps_",
+        )?;
+        validate_prefixed_uuid_v7(
+            "config_projection.dormant_projection_ref.record_id",
+            &self.record_id,
+            "cpr_",
+        )?;
+        if self.revision == 0 {
+            return Err(
+                "config_projection.dormant_projection_ref.revision must be positive".to_string(),
+            );
+        }
+        validate_lowercase_sha256_digest(
+            "config_projection.dormant_projection_ref.record_hash",
+            &self.record_hash,
+        )
+    }
+}
+
+impl TryFrom<ConfigProjectionRefV1Def> for ConfigProjectionRefV1 {
+    type Error = String;
+
+    fn try_from(value: ConfigProjectionRefV1Def) -> Result<Self, Self::Error> {
+        let reference = Self {
+            authority_store_id: value.authority_store_id,
+            series_id: value.series_id,
+            record_id: value.record_id,
+            revision: value.revision,
+            record_hash: value.record_hash,
+        };
+        reference.validate()?;
+        Ok(reference)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "InWorldGatewayRefV1Def")]
+pub struct InWorldGatewayRefV1 {
+    pub authority_store_id: String,
+    pub gateway_instance_id: String,
+    pub gateway_identity_hash: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InWorldGatewayRefV1Def {
+    authority_store_id: String,
+    gateway_instance_id: String,
+    gateway_identity_hash: String,
+}
+
+impl InWorldGatewayRefV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        validate_prefixed_uuid_v7(
+            "config_projection.expected_gateway_ref.authority_store_id",
+            &self.authority_store_id,
+            "cpa_",
+        )?;
+        validate_prefixed_uuid_v7(
+            "config_projection.expected_gateway_ref.gateway_instance_id",
+            &self.gateway_instance_id,
+            "cgi_",
+        )?;
+        validate_lowercase_sha256_digest(
+            "config_projection.expected_gateway_ref.gateway_identity_hash",
+            &self.gateway_identity_hash,
+        )
+    }
+}
+
+impl TryFrom<InWorldGatewayRefV1Def> for InWorldGatewayRefV1 {
+    type Error = String;
+
+    fn try_from(value: InWorldGatewayRefV1Def) -> Result<Self, Self::Error> {
+        let reference = Self {
+            authority_store_id: value.authority_store_id,
+            gateway_instance_id: value.gateway_instance_id,
+            gateway_identity_hash: value.gateway_identity_hash,
+        };
+        reference.validate()?;
+        Ok(reference)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "ManagedGatewayActivationIntentRefV1Def")]
+pub struct ManagedGatewayActivationIntentRefV1 {
+    pub authority_store_id: String,
+    pub activation_intent_id: String,
+    pub intent_hash: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ManagedGatewayActivationIntentRefV1Def {
+    authority_store_id: String,
+    activation_intent_id: String,
+    intent_hash: String,
+}
+
+impl ManagedGatewayActivationIntentRefV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        validate_prefixed_uuid_v7(
+            "config_projection.activation_intent_ref.authority_store_id",
+            &self.authority_store_id,
+            "cpa_",
+        )?;
+        validate_prefixed_uuid_v7(
+            "config_projection.activation_intent_ref.activation_intent_id",
+            &self.activation_intent_id,
+            "gai_",
+        )?;
+        validate_lowercase_sha256_digest(
+            "config_projection.activation_intent_ref.intent_hash",
+            &self.intent_hash,
+        )
+    }
+}
+
+impl TryFrom<ManagedGatewayActivationIntentRefV1Def> for ManagedGatewayActivationIntentRefV1 {
+    type Error = String;
+
+    fn try_from(value: ManagedGatewayActivationIntentRefV1Def) -> Result<Self, Self::Error> {
+        let reference = Self {
+            authority_store_id: value.authority_store_id,
+            activation_intent_id: value.activation_intent_id,
+            intent_hash: value.intent_hash,
+        };
+        reference.validate()?;
+        Ok(reference)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "ConfigProjectionActivationCarrierV1Def")]
+pub struct ConfigProjectionActivationCarrierV1 {
+    pub authority_store_id: String,
+    pub series_id: String,
+    pub dormant_projection_ref: ConfigProjectionRefV1,
+    pub activation_intent_ref: ManagedGatewayActivationIntentRefV1,
+    pub expected_gateway_ref: InWorldGatewayRefV1,
+    pub fence_id: String,
+    pub consumer_id: String,
+    pub consumer_lease_revision: u64,
+    pub consumer_lease_hash: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ConfigProjectionActivationCarrierV1Def {
+    authority_store_id: String,
+    series_id: String,
+    dormant_projection_ref: ConfigProjectionRefV1,
+    activation_intent_ref: ManagedGatewayActivationIntentRefV1,
+    expected_gateway_ref: InWorldGatewayRefV1,
+    fence_id: String,
+    consumer_id: String,
+    consumer_lease_revision: u64,
+    consumer_lease_hash: String,
+}
+
+impl ConfigProjectionActivationCarrierV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        validate_prefixed_uuid_v7(
+            "config_projection.authority_store_id",
+            &self.authority_store_id,
+            "cpa_",
+        )?;
+        validate_prefixed_uuid_v7("config_projection.series_id", &self.series_id, "cps_")?;
+        self.dormant_projection_ref.validate()?;
+        self.activation_intent_ref.validate()?;
+        self.expected_gateway_ref.validate()?;
+        validate_prefixed_uuid_v7("config_projection.fence_id", &self.fence_id, "cpf_")?;
+        validate_prefixed_uuid_v7("config_projection.consumer_id", &self.consumer_id, "cpc_")?;
+        if self.consumer_lease_revision != 1 {
+            return Err("config_projection.consumer_lease_revision must equal 1".to_string());
+        }
+        validate_lowercase_sha256_digest(
+            "config_projection.consumer_lease_hash",
+            &self.consumer_lease_hash,
+        )?;
+        if self.dormant_projection_ref.authority_store_id != self.authority_store_id
+            || self.activation_intent_ref.authority_store_id != self.authority_store_id
+            || self.expected_gateway_ref.authority_store_id != self.authority_store_id
+            || self.dormant_projection_ref.series_id != self.series_id
+        {
+            return Err(
+                "config_projection store or series references must exactly match the carrier"
+                    .to_string(),
+            );
+        }
+        Ok(())
+    }
+}
+
+impl TryFrom<ConfigProjectionActivationCarrierV1Def> for ConfigProjectionActivationCarrierV1 {
+    type Error = String;
+
+    fn try_from(value: ConfigProjectionActivationCarrierV1Def) -> Result<Self, Self::Error> {
+        let carrier = Self {
+            authority_store_id: value.authority_store_id,
+            series_id: value.series_id,
+            dormant_projection_ref: value.dormant_projection_ref,
+            activation_intent_ref: value.activation_intent_ref,
+            expected_gateway_ref: value.expected_gateway_ref,
+            fence_id: value.fence_id,
+            consumer_id: value.consumer_id,
+            consumer_lease_revision: value.consumer_lease_revision,
+            consumer_lease_hash: value.consumer_lease_hash,
+        };
+        carrier.validate()?;
+        Ok(carrier)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(try_from = "MemberDispatchRequestDef")]
 pub struct MemberDispatchRequestV1 {
     #[serde(default = "member_dispatch_request_v1_default_schema_version")]
@@ -3157,11 +3402,47 @@ struct MemberDispatchRequestDef {
     e2_launch_activation: Option<E2MemberLaunchActivationCarrierV1>,
 }
 
+#[doc(hidden)]
+#[derive(Debug, Clone, Copy)]
+pub struct MemberDispatchCommonFieldsV1<'a> {
+    pub orchestration_session_id: &'a str,
+    pub participant_id: &'a str,
+    pub orchestrator_participant_id: &'a str,
+    pub parent_participant_id: Option<&'a str>,
+    pub resumed_from_participant_id: Option<&'a str>,
+    pub backend_id: &'a str,
+    pub protocol: &'a str,
+    pub run_id: &'a str,
+    pub world_id: &'a str,
+    pub world_generation: u64,
+    pub initial_prompt: Option<&'a str>,
+    pub resolved_runtime: &'a ResolvedMemberRuntimeDescriptorV1,
+    pub retained_worker_launch_authority: Option<&'a RetainedWorkerLaunchAuthorityProofV1>,
+}
+
 fn member_dispatch_request_v1_default_schema_version() -> u32 {
     1
 }
 
 impl MemberDispatchRequestV1 {
+    pub fn common(&self) -> MemberDispatchCommonFieldsV1<'_> {
+        MemberDispatchCommonFieldsV1 {
+            orchestration_session_id: &self.orchestration_session_id,
+            participant_id: &self.participant_id,
+            orchestrator_participant_id: &self.orchestrator_participant_id,
+            parent_participant_id: self.parent_participant_id.as_deref(),
+            resumed_from_participant_id: self.resumed_from_participant_id.as_deref(),
+            backend_id: &self.backend_id,
+            protocol: &self.protocol,
+            run_id: &self.run_id,
+            world_id: &self.world_id,
+            world_generation: self.world_generation,
+            initial_prompt: self.initial_prompt.as_deref(),
+            resolved_runtime: &self.resolved_runtime,
+            retained_worker_launch_authority: self.retained_worker_launch_authority.as_ref(),
+        }
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         if self.schema_version != 1 {
             return Err(format!(
@@ -3251,6 +3532,454 @@ impl TryFrom<MemberDispatchRequestDef> for MemberDispatchRequestV1 {
         };
         request.validate()?;
         Ok(request)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct MemberDispatchRequestV2 {
+    pub schema_version: u32,
+    pub orchestration_session_id: String,
+    pub participant_id: String,
+    pub orchestrator_participant_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_participant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resumed_from_participant_id: Option<String>,
+    pub backend_id: String,
+    pub protocol: String,
+    pub run_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initial_prompt: Option<String>,
+    pub resolved_runtime: ResolvedMemberRuntimeDescriptorV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retained_worker_launch_authority: Option<RetainedWorkerLaunchAuthorityProofV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub e2_launch_activation: Option<E2MemberLaunchActivationCarrierV1>,
+    pub config_projection: ConfigProjectionActivationCarrierV1,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MemberDispatchRequestV2Def {
+    schema_version: u32,
+    orchestration_session_id: String,
+    participant_id: String,
+    orchestrator_participant_id: String,
+    #[serde(default)]
+    parent_participant_id: Option<String>,
+    #[serde(default)]
+    resumed_from_participant_id: Option<String>,
+    backend_id: String,
+    protocol: String,
+    run_id: String,
+    world_id: String,
+    world_generation: u64,
+    #[serde(default)]
+    initial_prompt: Option<String>,
+    resolved_runtime: ResolvedMemberRuntimeDescriptorV1,
+    #[serde(default)]
+    retained_worker_launch_authority: Option<RetainedWorkerLaunchAuthorityProofV1>,
+    #[serde(default)]
+    e2_launch_activation: Option<E2MemberLaunchActivationCarrierV1>,
+    config_projection: ConfigProjectionActivationCarrierV1,
+}
+
+impl MemberDispatchRequestV2 {
+    pub fn common(&self) -> MemberDispatchCommonFieldsV1<'_> {
+        MemberDispatchCommonFieldsV1 {
+            orchestration_session_id: &self.orchestration_session_id,
+            participant_id: &self.participant_id,
+            orchestrator_participant_id: &self.orchestrator_participant_id,
+            parent_participant_id: self.parent_participant_id.as_deref(),
+            resumed_from_participant_id: self.resumed_from_participant_id.as_deref(),
+            backend_id: &self.backend_id,
+            protocol: &self.protocol,
+            run_id: &self.run_id,
+            world_id: &self.world_id,
+            world_generation: self.world_generation,
+            initial_prompt: self.initial_prompt.as_deref(),
+            resolved_runtime: &self.resolved_runtime,
+            retained_worker_launch_authority: self.retained_worker_launch_authority.as_ref(),
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 2 {
+            return Err(format!(
+                "unsupported member_dispatch.schema_version: {} (expected 2)",
+                self.schema_version
+            ));
+        }
+        validate_non_empty_request_field(
+            "member_dispatch.orchestration_session_id",
+            &self.orchestration_session_id,
+        )?;
+        validate_non_empty_request_field("member_dispatch.participant_id", &self.participant_id)?;
+        validate_non_empty_request_field(
+            "member_dispatch.orchestrator_participant_id",
+            &self.orchestrator_participant_id,
+        )?;
+        validate_optional_non_empty_request_field(
+            "member_dispatch.parent_participant_id",
+            self.parent_participant_id.as_deref(),
+        )?;
+        validate_optional_non_empty_request_field(
+            "member_dispatch.resumed_from_participant_id",
+            self.resumed_from_participant_id.as_deref(),
+        )?;
+        validate_non_empty_request_field("member_dispatch.backend_id", &self.backend_id)?;
+        validate_non_empty_request_field("member_dispatch.protocol", &self.protocol)?;
+        validate_non_empty_request_field("member_dispatch.run_id", &self.run_id)?;
+        validate_non_empty_request_field("member_dispatch.world_id", &self.world_id)?;
+        validate_optional_non_empty_request_field(
+            "member_dispatch.initial_prompt",
+            self.initial_prompt.as_deref(),
+        )?;
+        self.resolved_runtime.validate()?;
+        if let Some(proof) = self.retained_worker_launch_authority.as_ref() {
+            proof.validate()?;
+        }
+        let activation = self
+            .e2_launch_activation
+            .as_ref()
+            .ok_or_else(|| "member_dispatch V2 requires e2_launch_activation".to_string())?;
+        activation.validate()?;
+        self.config_projection.validate()?;
+
+        if self.orchestrator_participant_id == self.participant_id {
+            return Err(
+                "member_dispatch.orchestrator_participant_id must not equal participant_id"
+                    .to_string(),
+            );
+        }
+        if self.parent_participant_id.as_deref() == Some(self.participant_id.as_str()) {
+            return Err(
+                "member_dispatch.parent_participant_id must not point to participant_id"
+                    .to_string(),
+            );
+        }
+        if self.resumed_from_participant_id.as_deref() == Some(self.participant_id.as_str()) {
+            return Err(
+                "member_dispatch.resumed_from_participant_id must not point to participant_id"
+                    .to_string(),
+            );
+        }
+
+        let expected_lineage = match activation.launch_kind {
+            E2MemberLaunchKindV1::FreshSpawn => {
+                self.retained_worker_launch_authority.is_some()
+                    && self.parent_participant_id.is_none()
+                    && self.resumed_from_participant_id.is_none()
+            }
+            E2MemberLaunchKindV1::Fork => {
+                self.retained_worker_launch_authority.is_none()
+                    && self.parent_participant_id.as_deref()
+                        == activation.source_participant_id.as_deref()
+                    && self.resumed_from_participant_id.is_none()
+            }
+        };
+        let expected_activation_id = format!(
+            "e2a_{}",
+            activation
+                .commitment_ref
+                .exact_linkage_hash
+                .get(..32)
+                .ok_or_else(|| {
+                    "member_dispatch V2 E2 commitment linkage hash is malformed".to_string()
+                })?
+        );
+        if !expected_lineage
+            || activation.activation_id != expected_activation_id
+            || activation.commitment_ref != activation.immutable_worker_cap_ref
+            || activation.orchestration_session_id != self.orchestration_session_id
+            || activation.caller_participant_id != self.orchestrator_participant_id
+            || activation.target_backend_id != self.backend_id
+            || activation.retained_participant_id != self.participant_id
+            || activation.bootstrap_run_id != self.run_id
+            || activation.target_world.world_id != self.world_id
+            || activation.target_world.world_generation != self.world_generation
+        {
+            return Err(
+                "member_dispatch V2 E2 activation conflicts with dispatch identity, lineage, or world binding"
+                    .to_string(),
+            );
+        }
+        if let Some(proof) = self.retained_worker_launch_authority.as_ref() {
+            if proof.orchestration_session_id != self.orchestration_session_id
+                || proof.caller_participant_id != self.orchestrator_participant_id
+                || proof.retained_participant_id != self.participant_id
+                || proof.bootstrap_run_id != self.run_id
+                || proof.backend_id != self.backend_id
+                || proof.protocol != self.protocol
+                || proof.world_binding.world_id != self.world_id
+                || proof.world_binding.world_generation != self.world_generation
+            {
+                return Err(
+                    "member_dispatch V2 launch authority conflicts with dispatch identity or world binding"
+                        .to_string(),
+                );
+            }
+        }
+        Ok(())
+    }
+}
+
+impl TryFrom<MemberDispatchRequestV2Def> for MemberDispatchRequestV2 {
+    type Error = String;
+
+    fn try_from(value: MemberDispatchRequestV2Def) -> Result<Self, Self::Error> {
+        let request = Self {
+            schema_version: value.schema_version,
+            orchestration_session_id: value.orchestration_session_id,
+            participant_id: value.participant_id,
+            orchestrator_participant_id: value.orchestrator_participant_id,
+            parent_participant_id: value.parent_participant_id,
+            resumed_from_participant_id: value.resumed_from_participant_id,
+            backend_id: value.backend_id,
+            protocol: value.protocol,
+            run_id: value.run_id,
+            world_id: value.world_id,
+            world_generation: value.world_generation,
+            initial_prompt: value.initial_prompt,
+            resolved_runtime: value.resolved_runtime,
+            retained_worker_launch_authority: value.retained_worker_launch_authority,
+            e2_launch_activation: value.e2_launch_activation,
+            config_projection: value.config_projection,
+        };
+        request.validate()?;
+        Ok(request)
+    }
+}
+
+impl<'de> Deserialize<'de> for MemberDispatchRequestV2 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = MemberDispatchRequestV2Def::deserialize(deserializer)?;
+        Self::try_from(value).map_err(serde::de::Error::custom)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(untagged)]
+#[allow(clippy::large_enum_variant)]
+pub enum MemberDispatchRequest {
+    V1(MemberDispatchRequestV1),
+    V2(MemberDispatchRequestV2),
+}
+
+impl MemberDispatchRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        match self {
+            Self::V1(request) => request.validate(),
+            Self::V2(request) => request.validate(),
+        }
+    }
+
+    pub fn common(&self) -> MemberDispatchCommonFieldsV1<'_> {
+        match self {
+            Self::V1(request) => request.common(),
+            Self::V2(request) => request.common(),
+        }
+    }
+
+    pub fn as_v1(&self) -> Option<&MemberDispatchRequestV1> {
+        match self {
+            Self::V1(request) => Some(request),
+            Self::V2(_) => None,
+        }
+    }
+
+    pub fn as_v1_mut(&mut self) -> Option<&mut MemberDispatchRequestV1> {
+        match self {
+            Self::V1(request) => Some(request),
+            Self::V2(_) => None,
+        }
+    }
+
+    pub fn e2_launch_activation(&self) -> Option<&E2MemberLaunchActivationCarrierV1> {
+        match self {
+            Self::V1(request) => request.e2_launch_activation.as_ref(),
+            Self::V2(request) => request.e2_launch_activation.as_ref(),
+        }
+    }
+
+    pub fn config_projection(&self) -> Option<&ConfigProjectionActivationCarrierV1> {
+        match self {
+            Self::V1(_) => None,
+            Self::V2(request) => Some(&request.config_projection),
+        }
+    }
+}
+
+struct StrictMemberDispatchValue(serde_json::Value);
+
+impl<'de> Deserialize<'de> for StrictMemberDispatchValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct StrictMemberDispatchValueVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for StrictMemberDispatchValueVisitor {
+            type Value = StrictMemberDispatchValue;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a JSON value without duplicate object fields")
+            }
+
+            fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E> {
+                Ok(StrictMemberDispatchValue(serde_json::Value::Bool(value)))
+            }
+
+            fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E> {
+                Ok(StrictMemberDispatchValue(serde_json::Value::Number(
+                    value.into(),
+                )))
+            }
+
+            fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E> {
+                Ok(StrictMemberDispatchValue(serde_json::Value::Number(
+                    value.into(),
+                )))
+            }
+
+            fn visit_f64<E>(self, value: f64) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                serde_json::Number::from_f64(value)
+                    .map(serde_json::Value::Number)
+                    .map(StrictMemberDispatchValue)
+                    .ok_or_else(|| E::custom("non-finite member_dispatch number"))
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E> {
+                Ok(StrictMemberDispatchValue(serde_json::Value::String(
+                    value.to_string(),
+                )))
+            }
+
+            fn visit_string<E>(self, value: String) -> Result<Self::Value, E> {
+                Ok(StrictMemberDispatchValue(serde_json::Value::String(value)))
+            }
+
+            fn visit_none<E>(self) -> Result<Self::Value, E> {
+                Ok(StrictMemberDispatchValue(serde_json::Value::Null))
+            }
+
+            fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                StrictMemberDispatchValue::deserialize(deserializer)
+            }
+
+            fn visit_unit<E>(self) -> Result<Self::Value, E> {
+                Ok(StrictMemberDispatchValue(serde_json::Value::Null))
+            }
+
+            fn visit_seq<A>(self, mut sequence: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let mut values = Vec::with_capacity(sequence.size_hint().unwrap_or(0));
+                while let Some(value) = sequence.next_element::<StrictMemberDispatchValue>()? {
+                    values.push(value.0);
+                }
+                Ok(StrictMemberDispatchValue(serde_json::Value::Array(values)))
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::MapAccess<'de>,
+            {
+                let mut values = serde_json::Map::new();
+                while let Some((key, value)) =
+                    map.next_entry::<String, StrictMemberDispatchValue>()?
+                {
+                    if values.insert(key.clone(), value.0).is_some() {
+                        return Err(serde::de::Error::custom(format!("duplicate field `{key}`")));
+                    }
+                }
+                Ok(StrictMemberDispatchValue(serde_json::Value::Object(values)))
+            }
+        }
+
+        deserializer.deserialize_any(StrictMemberDispatchValueVisitor)
+    }
+}
+
+impl<'de> Deserialize<'de> for MemberDispatchRequest {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct MemberDispatchRequestVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for MemberDispatchRequestVisitor {
+            type Value = MemberDispatchRequest;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a strict member-dispatch request object")
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::MapAccess<'de>,
+            {
+                let mut fields = serde_json::Map::new();
+                while let Some((key, value)) =
+                    map.next_entry::<String, StrictMemberDispatchValue>()?
+                {
+                    if fields.insert(key.clone(), value.0).is_some() {
+                        return Err(serde::de::Error::custom(format!(
+                            "duplicate member_dispatch field `{key}`"
+                        )));
+                    }
+                }
+                let schema_version = match fields.get("schema_version") {
+                    None => 1,
+                    Some(serde_json::Value::Number(number)) => {
+                        number.as_u64().ok_or_else(|| {
+                            serde::de::Error::custom(
+                                "member_dispatch.schema_version must be an unsigned integer",
+                            )
+                        })?
+                    }
+                    Some(_) => {
+                        return Err(serde::de::Error::custom(
+                            "member_dispatch.schema_version must be an unsigned integer",
+                        ))
+                    }
+                };
+                let object = serde_json::Value::Object(fields);
+                match schema_version {
+                    1 => serde_json::from_value::<MemberDispatchRequestDef>(object)
+                        .map_err(serde::de::Error::custom)
+                        .and_then(|request| {
+                            MemberDispatchRequestV1::try_from(request)
+                                .map(MemberDispatchRequest::V1)
+                                .map_err(serde::de::Error::custom)
+                        }),
+                    2 => serde_json::from_value::<MemberDispatchRequestV2Def>(object)
+                        .map_err(serde::de::Error::custom)
+                        .and_then(|request| {
+                            MemberDispatchRequestV2::try_from(request)
+                                .map(MemberDispatchRequest::V2)
+                                .map_err(serde::de::Error::custom)
+                        }),
+                    version => Err(serde::de::Error::custom(format!(
+                        "unsupported member_dispatch.schema_version: {version}"
+                    ))),
+                }
+            }
+        }
+
+        deserializer.deserialize_map(MemberDispatchRequestVisitor)
     }
 }
 
@@ -3543,7 +4272,7 @@ pub struct ExecuteRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub world_fs_mode: Option<WorldFsMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub member_dispatch: Option<MemberDispatchRequestV1>,
+    pub member_dispatch: Option<MemberDispatchRequest>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub acceptance_context: Option<WorldWorkAcceptanceContextV1>,
 }
@@ -3566,7 +4295,7 @@ struct ExecuteRequestDef {
     #[serde(default)]
     world_fs_mode: Option<WorldFsMode>,
     #[serde(default)]
-    member_dispatch: Option<MemberDispatchRequestV1>,
+    member_dispatch: Option<MemberDispatchRequest>,
     #[serde(default)]
     acceptance_context: Option<WorldWorkAcceptanceContextV1>,
 }
@@ -3578,6 +4307,7 @@ impl ExecuteRequest {
         match self.member_dispatch.as_ref() {
             Some(member_dispatch) => {
                 member_dispatch.validate()?;
+                let common = member_dispatch.common();
                 if !cmd_is_empty {
                     return Err(
                         "execute request member_dispatch requires cmd.trim().is_empty()"
@@ -3589,7 +4319,7 @@ impl ExecuteRequest {
                 }
                 if let Some(context) = self.acceptance_context.as_ref() {
                     context.validate()?;
-                    if context.request_id != member_dispatch.run_id {
+                    if context.request_id != common.run_id {
                         return Err(
                             "execute request acceptance_context.request_id must equal member_dispatch.run_id"
                                 .to_string(),
@@ -6115,7 +6845,7 @@ pipe_path=XFwuXHBpcGVcc3Vic3RyYXRlLWFnZW50\n";
             shared_world: None,
             world_network: None,
             world_fs_mode: None,
-            member_dispatch: Some(MemberDispatchRequestV1 {
+            member_dispatch: Some(MemberDispatchRequest::V1(MemberDispatchRequestV1 {
                 schema_version: 1,
                 orchestration_session_id: "orch_123".into(),
                 participant_id: "ash_member_123".into(),
@@ -6134,11 +6864,21 @@ pipe_path=XFwuXHBpcGVcc3Vic3RyYXRlLWFnZW50\n";
                 },
                 retained_worker_launch_authority: None,
                 e2_launch_activation: None,
-            }),
+            })),
             acceptance_context: None,
         };
 
         let json = serde_json::to_string(&req).expect("serialize request");
+        let frozen_v1 = req
+            .member_dispatch
+            .as_ref()
+            .and_then(MemberDispatchRequest::as_v1)
+            .expect("fixture remains V1");
+        assert_eq!(
+            serde_json::to_vec(&MemberDispatchRequest::V1(frozen_v1.clone())).unwrap(),
+            serde_json::to_vec(frozen_v1).unwrap(),
+            "untagged V1 wrapper must preserve exact member-dispatch bytes"
+        );
         assert!(json.contains("\"member_dispatch\""));
         assert!(!json.contains("\"acceptance_context\""));
         assert!(
@@ -6169,7 +6909,7 @@ pipe_path=XFwuXHBpcGVcc3Vic3RyYXRlLWFnZW50\n";
         assert!(back.cmd.is_empty());
         assert_eq!(
             back.member_dispatch,
-            Some(MemberDispatchRequestV1 {
+            Some(MemberDispatchRequest::V1(MemberDispatchRequestV1 {
                 schema_version: 1,
                 orchestration_session_id: "orch_123".into(),
                 participant_id: "ash_member_123".into(),
@@ -6188,7 +6928,7 @@ pipe_path=XFwuXHBpcGVcc3Vic3RyYXRlLWFnZW50\n";
                 },
                 retained_worker_launch_authority: None,
                 e2_launch_activation: None,
-            })
+            }))
         );
     }
 
@@ -6498,6 +7238,289 @@ pipe_path=XFwuXHBpcGVcc3Vic3RyYXRlLWFnZW50\n";
                 },
             },
         }
+    }
+
+    fn e3a_sample_projection_carrier() -> ConfigProjectionActivationCarrierV1 {
+        let authority_store_id = "cpa_018f0f2e-7b4c-7aa1-8c22-123456789ab0".to_string();
+        let series_id = "cps_018f0f2e-7b4c-7aa1-8c22-123456789ab1".to_string();
+        ConfigProjectionActivationCarrierV1 {
+            authority_store_id: authority_store_id.clone(),
+            series_id: series_id.clone(),
+            dormant_projection_ref: ConfigProjectionRefV1 {
+                authority_store_id: authority_store_id.clone(),
+                series_id,
+                record_id: "cpr_018f0f2e-7b4c-7aa1-8c22-123456789ab2".to_string(),
+                revision: 1,
+                record_hash: "1".repeat(64),
+            },
+            activation_intent_ref: ManagedGatewayActivationIntentRefV1 {
+                authority_store_id: authority_store_id.clone(),
+                activation_intent_id: "gai_018f0f2e-7b4c-7aa1-8c22-123456789ab3".to_string(),
+                intent_hash: "2".repeat(64),
+            },
+            expected_gateway_ref: InWorldGatewayRefV1 {
+                authority_store_id,
+                gateway_instance_id: "cgi_018f0f2e-7b4c-7aa1-8c22-123456789ab4".to_string(),
+                gateway_identity_hash: "3".repeat(64),
+            },
+            fence_id: "cpf_018f0f2e-7b4c-7aa1-8c22-123456789ab5".to_string(),
+            consumer_id: "cpc_018f0f2e-7b4c-7aa1-8c22-123456789ab6".to_string(),
+            consumer_lease_revision: 1,
+            consumer_lease_hash: "4".repeat(64),
+        }
+    }
+
+    fn e3a_sample_fresh_spawn_activation() -> E2MemberLaunchActivationCarrierV1 {
+        let snapshot = e2_sample_policy_snapshot();
+        let bytes = serde_json::to_vec(&snapshot).expect("serialize E3-A E2 snapshot");
+        let immutable_worker_cap_ref = DispatchPolicyCommitmentRefCarrierV1 {
+            authority_store_id: "authority-store-e2".to_string(),
+            commitment_id: "dpc_018f0f2e-7b4c-7aa1-8c22-123456789ab7".to_string(),
+            exact_linkage_hash: "6".repeat(64),
+        };
+        E2MemberLaunchActivationCarrierV1 {
+            schema_version: 1,
+            activation_id: format!("e2a_{}", "6".repeat(32)),
+            launch_kind: E2MemberLaunchKindV1::FreshSpawn,
+            reservation_ref: Some(E2DispatchPolicyReservationRefCarrierV1 {
+                authority_store_id: "authority-store-e2".to_string(),
+                reservation_id: "reservation-e3a".to_string(),
+                reservation_hash: "5".repeat(64),
+            }),
+            commitment_ref: immutable_worker_cap_ref.clone(),
+            immutable_worker_cap_ref,
+            immutable_worker_cap_created_revision: 1,
+            immutable_worker_cap_application_revision: 2,
+            policy_snapshot_bytes_base64: base64::engine::general_purpose::STANDARD.encode(&bytes),
+            policy_snapshot_byte_length: bytes.len() as u64,
+            policy_snapshot_ref: AuthorityObjectRefV1 {
+                ref_id: "ao_0123456789abcdef0123456789abcdef".to_string(),
+                object_kind: AuthorityObjectKindV1::Policy,
+                schema_version: 1,
+                commitment: OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                    digest_hex: "8".repeat(64),
+                },
+            },
+            policy_snapshot_hash: format!("{:x}", Sha256::digest(&bytes)),
+            policy_snapshot_revision: "policy-revision-e3a".to_string(),
+            reason: Some("strict E3-A transport".to_string()),
+            request_id: "request_123".to_string(),
+            idempotency_key: "idempotency-e3a".to_string(),
+            orchestration_session_id: "orch_123".to_string(),
+            caller_participant_id: "ash_orch_123".to_string(),
+            caller_backend_id: "cli:codex".to_string(),
+            target_backend_id: "cli:codex".to_string(),
+            retained_participant_id: "ash_member_123".to_string(),
+            bootstrap_run_id: "run_123".to_string(),
+            source_participant_id: None,
+            target_world: WorldBindingRefV1 {
+                world_id: "world_123".to_string(),
+                world_generation: 7,
+            },
+            parent_policy_ref: AuthorityObjectRefV1 {
+                ref_id: "ao_fedcba9876543210fedcba9876543210".to_string(),
+                object_kind: AuthorityObjectKindV1::Policy,
+                schema_version: 1,
+                commitment: OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                    digest_hex: "9".repeat(64),
+                },
+            },
+            parent_policy_revision: "parent-policy-revision-e3a".to_string(),
+            request_commitment: E2LaunchRequestCommitmentV1::HmacSha256 {
+                key_id: "request-key-e3a".to_string(),
+                domain: "substrate.e3a.test".to_string(),
+                digest_hex: "a".repeat(64),
+            },
+            registry_publication_revision: 2,
+        }
+    }
+
+    fn e3a_sample_member_dispatch_v2() -> MemberDispatchRequestV2 {
+        MemberDispatchRequestV2 {
+            schema_version: 2,
+            orchestration_session_id: "orch_123".to_string(),
+            participant_id: "ash_member_123".to_string(),
+            orchestrator_participant_id: "ash_orch_123".to_string(),
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+            backend_id: "cli:codex".to_string(),
+            protocol: "substrate.agent.session".to_string(),
+            run_id: "run_123".to_string(),
+            world_id: "world_123".to_string(),
+            world_generation: 7,
+            initial_prompt: Some("strict V2 launch".to_string()),
+            resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
+                backend_kind: MemberRuntimeBackendKindV1::Codex,
+                binary_path: test_absolute_binary_path(),
+            },
+            retained_worker_launch_authority: Some(sample_retained_worker_launch_authority_proof()),
+            e2_launch_activation: Some(e3a_sample_fresh_spawn_activation()),
+            config_projection: e3a_sample_projection_carrier(),
+        }
+    }
+
+    #[test]
+    fn e3a_member_dispatch_v2_round_trips_without_downgrade() {
+        let request = e3a_sample_member_dispatch_v2();
+        request.validate().expect("valid strict V2 request");
+        let wrapped = MemberDispatchRequest::V2(request.clone());
+        let bytes = serde_json::to_vec(&wrapped).expect("serialize strict V2 request");
+        let decoded: MemberDispatchRequest =
+            serde_json::from_slice(&bytes).expect("decode strict V2 request");
+
+        assert_eq!(decoded, wrapped);
+        assert!(decoded.as_v1().is_none());
+        assert!(decoded.e2_launch_activation().is_some());
+        assert_eq!(
+            decoded.config_projection(),
+            Some(&request.config_projection)
+        );
+        assert_eq!(decoded.common().participant_id, "ash_member_123");
+    }
+
+    #[test]
+    fn e3a_member_dispatch_discriminator_is_strict_and_v1_default_is_unchanged() {
+        let wrapped = MemberDispatchRequest::V2(e3a_sample_member_dispatch_v2());
+        let canonical = serde_json::to_value(&wrapped).expect("serialize V2 value");
+
+        for mutation in [
+            serde_json::json!(-1),
+            serde_json::json!(1.5),
+            serde_json::json!("2"),
+        ] {
+            let mut changed = canonical.clone();
+            changed["schema_version"] = mutation;
+            assert!(serde_json::from_value::<MemberDispatchRequest>(changed).is_err());
+        }
+
+        let mut newer = canonical.clone();
+        newer["schema_version"] = serde_json::json!(3);
+        let error = serde_json::from_value::<MemberDispatchRequest>(newer)
+            .expect_err("newer member-dispatch schema must be unsupported");
+        assert!(error
+            .to_string()
+            .contains("unsupported member_dispatch.schema_version"));
+
+        let mut unknown = canonical.clone();
+        unknown["unexpected"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<MemberDispatchRequest>(unknown).is_err());
+
+        let mut missing_projection = canonical.clone();
+        missing_projection
+            .as_object_mut()
+            .unwrap()
+            .remove("config_projection");
+        assert!(serde_json::from_value::<MemberDispatchRequest>(missing_projection).is_err());
+
+        let duplicate = serde_json::to_string(&wrapped)
+            .expect("serialize V2")
+            .replacen('{', "{\"schema_version\":2,", 1);
+        assert!(serde_json::from_str::<MemberDispatchRequest>(&duplicate).is_err());
+
+        let mut v1 = serde_json::to_value(MemberDispatchRequestV1 {
+            schema_version: 1,
+            orchestration_session_id: "orch_v1".to_string(),
+            participant_id: "member_v1".to_string(),
+            orchestrator_participant_id: "orchestrator_v1".to_string(),
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+            backend_id: "cli:codex".to_string(),
+            protocol: "substrate.agent.session".to_string(),
+            run_id: "run_v1".to_string(),
+            world_id: "world_v1".to_string(),
+            world_generation: 1,
+            initial_prompt: Some("unchanged V1".to_string()),
+            resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
+                backend_kind: MemberRuntimeBackendKindV1::Codex,
+                binary_path: test_absolute_binary_path(),
+            },
+            retained_worker_launch_authority: None,
+            e2_launch_activation: None,
+        })
+        .expect("serialize V1");
+        v1.as_object_mut().unwrap().remove("schema_version");
+        let decoded: MemberDispatchRequest =
+            serde_json::from_value(v1).expect("absent discriminator stays V1");
+        assert!(decoded.as_v1().is_some());
+        assert!(decoded.config_projection().is_none());
+
+        let v1_bytes = serde_json::to_string(decoded.as_v1().expect("decoded V1"))
+            .expect("serialize nested V1 duplicate fixture");
+        let v1_nested_duplicate = v1_bytes.replacen(
+            "\"resolved_runtime\":{",
+            "\"resolved_runtime\":{\"backend_kind\":\"codex\",",
+            1,
+        );
+        assert_ne!(v1_nested_duplicate, v1_bytes);
+        let error = serde_json::from_str::<MemberDispatchRequest>(&v1_nested_duplicate)
+            .expect_err("nested duplicate must preserve strict V1 rejection");
+        assert!(error.to_string().contains("duplicate field `backend_kind`"));
+
+        let v2_bytes =
+            serde_json::to_string(&wrapped).expect("serialize nested V2 duplicate fixture");
+        let v2_nested_duplicate = v2_bytes.replacen(
+            "\"config_projection\":{",
+            "\"config_projection\":{\"consumer_lease_revision\":1,",
+            1,
+        );
+        assert_ne!(v2_nested_duplicate, v2_bytes);
+        let error = serde_json::from_str::<MemberDispatchRequest>(&v2_nested_duplicate)
+            .expect_err("nested duplicate must preserve strict V2 rejection");
+        assert!(error
+            .to_string()
+            .contains("duplicate field `consumer_lease_revision`"));
+    }
+
+    #[test]
+    fn e3a_member_dispatch_v2_rejects_malformed_projection_and_e2_binding() {
+        let canonical =
+            serde_json::to_value(MemberDispatchRequest::V2(e3a_sample_member_dispatch_v2()))
+                .expect("serialize V2 value");
+
+        for (pointer, replacement) in [
+            (
+                "/config_projection/consumer_lease_revision",
+                serde_json::json!(0),
+            ),
+            (
+                "/config_projection/consumer_lease_hash",
+                serde_json::json!("A".repeat(64)),
+            ),
+            (
+                "/config_projection/dormant_projection_ref/revision",
+                serde_json::json!(0),
+            ),
+            (
+                "/config_projection/expected_gateway_ref/authority_store_id",
+                serde_json::json!("cpa_018f0f2e-7b4c-7aa1-8c22-123456789aff"),
+            ),
+            (
+                "/e2_launch_activation/retained_participant_id",
+                serde_json::json!("another_member"),
+            ),
+            (
+                "/e2_launch_activation/activation_id",
+                serde_json::json!(format!("e2a_{}", "7".repeat(32))),
+            ),
+            (
+                "/e2_launch_activation/immutable_worker_cap_ref/commitment_id",
+                serde_json::json!("dpc_018f0f2e-7b4c-7aa1-8c22-123456789ab8"),
+            ),
+            ("/e2_launch_activation", serde_json::Value::Null),
+            ("/retained_worker_launch_authority", serde_json::Value::Null),
+        ] {
+            let mut changed = canonical.clone();
+            *changed.pointer_mut(pointer).expect("V2 mutation pointer") = replacement;
+            assert!(
+                serde_json::from_value::<MemberDispatchRequest>(changed).is_err(),
+                "mutation at {pointer} must fail closed"
+            );
+        }
+
+        let mut nested_unknown = canonical;
+        nested_unknown["config_projection"]["expected_gateway_ref"]["unexpected"] =
+            serde_json::json!(true);
+        assert!(serde_json::from_value::<MemberDispatchRequest>(nested_unknown).is_err());
     }
 
     fn sample_world_work_acceptance_context() -> WorldWorkAcceptanceContextV1 {

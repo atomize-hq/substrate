@@ -12615,6 +12615,7 @@ fn build_member_dispatch_transport_request(
         binary_path: parity.binary_path.display().to_string(),
         retained_worker_launch_authority: prepared.retained_worker_launch_authority.clone(),
         e2_launch_activation: prepared.e2_launch_activation.clone(),
+        config_projection: None,
         exact_policy_snapshot: prepared.exact_policy_snapshot.clone(),
     })
 }
@@ -18921,6 +18922,7 @@ mod tests {
                         serde_json::from_slice(&body).expect("decode retained member request");
                     let member_dispatch = execute
                         .member_dispatch
+                        .and_then(|dispatch| dispatch.as_v1().cloned())
                         .expect("authority-managed member dispatch");
                     let stream_id = "rts_b4_pending_internal".to_string();
                     let span_id = "spn_b4_pending_internal_exact".to_string();
@@ -24650,6 +24652,7 @@ mod tests {
                                 .expect("strict startup toolbox member request");
                         let member_dispatch = execute
                             .member_dispatch
+                            .and_then(|dispatch| dispatch.as_v1().cloned())
                             .expect("startup Spawn must use member dispatch");
                         assert_eq!(
                             member_dispatch.initial_prompt.as_deref(),
@@ -25168,6 +25171,7 @@ mod tests {
                                 .expect("strict toolbox member execute request");
                         let member_dispatch = execute
                             .member_dispatch
+                            .and_then(|dispatch| dispatch.as_v1().cloned())
                             .expect("authority-managed Spawn must use member dispatch");
                         let adapter = match member_dispatch.initial_prompt.as_deref() {
                             Some("drive the direct production adapter") => "direct",
@@ -29308,6 +29312,105 @@ mod tests {
             request.backend_kind,
             member_runtime_backend_kind(expected_backend_kind)
         );
+        assert_eq!(request.config_projection, None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn build_member_dispatch_transport_request_freezes_prepared_runtime_fields_after_descriptor_drift(
+    ) {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        let temp = private_authority_test_tempdir();
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("h");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_orchestrator =
+            write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
+
+        _authority_env.install_home(&substrate_home);
+        write_runtime_inventory_with_world_member(
+            &substrate_home,
+            &fake_orchestrator,
+            &fake_member,
+        );
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let world_binding = PersistedWorldBinding {
+            world_id: "wld_member_builder_test".to_string(),
+            world_generation: 7,
+        };
+        let host_prepared =
+            prepare_host_orchestrator_runtime_startup_with_world_binding(&config, &world_binding)
+                .expect("prepare host runtime should succeed")
+                .expect("host runtime should be configured");
+        let startup_context = host_prepared.startup_context.clone();
+        let orchestrator_participant_id = host_prepared
+            .manifest
+            .lock()
+            .expect("host runtime manifest")
+            .handle
+            .participant_id
+            .clone();
+        let selected_descriptor = select_member_runtime_descriptor(&startup_context)
+            .expect("member selection should succeed")
+            .expect("one world-scoped member should be selected");
+        let expected_backend_id = selected_descriptor.backend_id.clone();
+        let expected_protocol = selected_descriptor.protocol.clone();
+        let expected_binary_path = selected_descriptor.binary_path.display().to_string();
+        let expected_backend_kind = selected_descriptor.backend_kind;
+        let member_dispatch_parity =
+            MemberDispatchParitySubset::from_descriptor(&selected_descriptor);
+        let mut manifest = AgentRuntimeSessionManifest::new_member_participant(
+            &selected_descriptor,
+            startup_context.orchestration_session_id(),
+            "ash_member_builder_test".to_string(),
+            orchestrator_participant_id,
+            None,
+            Some(AgentRuntimeParticipantWorldBinding {
+                world_id: world_binding.world_id.clone(),
+                world_generation: world_binding.world_generation,
+            }),
+            "lease_member_builder_test".to_string(),
+        )
+        .expect("construct direct prepared member runtime");
+        manifest.internal.latest_run_id = Some("run_member_builder_test".to_string());
+        let mut member_prepared = PreparedAgentRuntime {
+            descriptor: selected_descriptor,
+            member_dispatch_parity: Some(member_dispatch_parity),
+            prompt_fulfillment: None,
+            startup_context,
+            manifest: Arc::new(Mutex::new(manifest)),
+            run_id: "run_member_builder_test".to_string(),
+            exact_policy_snapshot: None,
+            retained_worker_launch_authority: None,
+            e2_launch_activation: None,
+            #[cfg(target_os = "linux")]
+            retained_worker_admission: None,
+            startup_extensions: BTreeMap::new(),
+        };
+        member_prepared.descriptor.backend_id = "cli:drifted-world".to_string();
+        member_prepared.descriptor.protocol = "drifted.protocol".to_string();
+        member_prepared.descriptor.backend_kind = AgentRuntimeBackendKind::ClaudeCode;
+        member_prepared.descriptor.binary_path = PathBuf::from("/tmp/drifted-member-binary");
+
+        let request =
+            build_member_dispatch_transport_request(&member_prepared, Some("hello".to_string()))
+                .expect("member dispatch request");
+
+        assert_eq!(request.backend_id, expected_backend_id);
+        assert_eq!(request.protocol, expected_protocol);
+        assert_eq!(request.binary_path, expected_binary_path);
+        assert_eq!(
+            request.backend_kind,
+            member_runtime_backend_kind(expected_backend_kind)
+        );
+        assert_eq!(request.config_projection, None);
     }
 
     #[cfg(unix)]

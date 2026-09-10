@@ -411,6 +411,223 @@ impl AgentClient {
 mod tests {
     use super::*;
 
+    fn e3a_passthrough_request() -> transport_api_types::ExecuteRequest {
+        use transport_api_types::{
+            AuthorityObjectKindV1, AuthorityObjectRefV1, ConfigProjectionActivationCarrierV1,
+            ConfigProjectionRefV1, DispatchPolicyCommitmentRefCarrierV1,
+            E2LaunchRequestCommitmentV1, E2MemberLaunchActivationCarrierV1, E2MemberLaunchKindV1,
+            InWorldGatewayRefV1, ManagedGatewayActivationIntentRefV1, MemberDispatchRequest,
+            MemberDispatchRequestV2, MemberRuntimeBackendKindV1, OpaqueAuthorityCommitmentV1,
+            PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3, PolicySnapshotWorldFsFailClosedV3,
+            PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
+            ResolvedMemberRuntimeDescriptorV1, WorldBindingRefV1,
+        };
+        let authority_store_id = "cpa_018f0f2e-7b4c-7aa1-8c22-123456789ab0".to_string();
+        let series_id = "cps_018f0f2e-7b4c-7aa1-8c22-123456789ab1".to_string();
+        let policy_snapshot = PolicySnapshotV3 {
+            schema_version: 3,
+            net_allowed: Vec::new(),
+            world_fs: PolicySnapshotWorldFsV3 {
+                host_visible: true,
+                fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: false },
+                deny_enforcement: None,
+                caged_required: false,
+                discover: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                read: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                write: PolicySnapshotWorldFsWriteV3 {
+                    enabled: true,
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                },
+            },
+        };
+        let immutable_worker_cap_ref = DispatchPolicyCommitmentRefCarrierV1 {
+            authority_store_id: "authority-store-e3a".to_string(),
+            commitment_id: "dpc_018f0f2e-7b4c-7aa1-8c22-123456789ab7".to_string(),
+            exact_linkage_hash: "a".repeat(64),
+        };
+        transport_api_types::ExecuteRequest {
+            profile: None,
+            cmd: String::new(),
+            cwd: Some("/workspace".to_string()),
+            env: None,
+            pty: false,
+            agent_id: "e3a-client-passthrough".to_string(),
+            budget: None,
+            policy_snapshot,
+            shared_world: None,
+            world_network: None,
+            world_fs_mode: None,
+            member_dispatch: Some(MemberDispatchRequest::V2(MemberDispatchRequestV2 {
+                schema_version: 2,
+                orchestration_session_id: "orch_e3a".to_string(),
+                participant_id: "member_e3a".to_string(),
+                orchestrator_participant_id: "orchestrator_e3a".to_string(),
+                parent_participant_id: Some("source_e3a".to_string()),
+                resumed_from_participant_id: None,
+                backend_id: "cli:codex".to_string(),
+                protocol: "substrate.agent.session".to_string(),
+                run_id: "run_e3a".to_string(),
+                world_id: "world_e3a".to_string(),
+                world_generation: 1,
+                initial_prompt: Some("strict V2 passthrough".to_string()),
+                resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
+                    backend_kind: MemberRuntimeBackendKindV1::Codex,
+                    binary_path: "/bin/true".to_string(),
+                },
+                retained_worker_launch_authority: None,
+                e2_launch_activation: Some(E2MemberLaunchActivationCarrierV1 {
+                    schema_version: 1,
+                    activation_id: format!("e2a_{}", "a".repeat(32)),
+                    launch_kind: E2MemberLaunchKindV1::Fork,
+                    reservation_ref: None,
+                    commitment_ref: immutable_worker_cap_ref.clone(),
+                    immutable_worker_cap_ref,
+                    immutable_worker_cap_created_revision: 1,
+                    immutable_worker_cap_application_revision: 2,
+                    policy_snapshot_bytes_base64: "eyJzY2hlbWFfdmVyc2lvbiI6MywibmV0X2FsbG93ZWQiOltdLCJ3b3JsZF9mcyI6eyJob3N0X3Zpc2libGUiOnRydWUsImZhaWxfY2xvc2VkIjp7InJvdXRpbmciOmZhbHNlfSwiY2FnZWRfcmVxdWlyZWQiOmZhbHNlLCJkaXNjb3ZlciI6eyJhbGxvd19saXN0IjpbIi4iXSwiZGVueV9saXN0IjpbXX0sInJlYWQiOnsiYWxsb3dfbGlzdCI6WyIuIl0sImRlbnlfbGlzdCI6W119LCJ3cml0ZSI6eyJlbmFibGVkIjp0cnVlLCJhbGxvd19saXN0IjpbIi4iXSwiZGVueV9saXN0IjpbXX19fQ==".to_string(),
+                    policy_snapshot_byte_length: 274,
+                    policy_snapshot_ref: AuthorityObjectRefV1 {
+                        ref_id: "ao_0123456789abcdef0123456789abcdef".to_string(),
+                        object_kind: AuthorityObjectKindV1::Policy,
+                        schema_version: 1,
+                        commitment: OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                            digest_hex: "b".repeat(64),
+                        },
+                    },
+                    policy_snapshot_hash:
+                        "59e3189cffd6da318ab00888b8cc8fd89d069422f72edf2d4e4a201270d76b2c"
+                            .to_string(),
+                    policy_snapshot_revision: "policy-revision-e3a".to_string(),
+                    reason: Some("strict E3-A client passthrough".to_string()),
+                    request_id: "request-e3a".to_string(),
+                    idempotency_key: "idempotency-e3a".to_string(),
+                    orchestration_session_id: "orch_e3a".to_string(),
+                    caller_participant_id: "orchestrator_e3a".to_string(),
+                    caller_backend_id: "cli:codex".to_string(),
+                    target_backend_id: "cli:codex".to_string(),
+                    retained_participant_id: "member_e3a".to_string(),
+                    bootstrap_run_id: "run_e3a".to_string(),
+                    source_participant_id: Some("source_e3a".to_string()),
+                    target_world: WorldBindingRefV1 {
+                        world_id: "world_e3a".to_string(),
+                        world_generation: 1,
+                    },
+                    parent_policy_ref: AuthorityObjectRefV1 {
+                        ref_id: "ao_fedcba9876543210fedcba9876543210".to_string(),
+                        object_kind: AuthorityObjectKindV1::Policy,
+                        schema_version: 1,
+                        commitment: OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                            digest_hex: "c".repeat(64),
+                        },
+                    },
+                    parent_policy_revision: "parent-policy-revision-e3a".to_string(),
+                    request_commitment: E2LaunchRequestCommitmentV1::CanonicalSha256 {
+                        domain: "substrate.e3a.test".to_string(),
+                        digest_hex: "d".repeat(64),
+                    },
+                    registry_publication_revision: 2,
+                }),
+                config_projection: ConfigProjectionActivationCarrierV1 {
+                    authority_store_id: authority_store_id.clone(),
+                    series_id: series_id.clone(),
+                    dormant_projection_ref: ConfigProjectionRefV1 {
+                        authority_store_id: authority_store_id.clone(),
+                        series_id,
+                        record_id: "cpr_018f0f2e-7b4c-7aa1-8c22-123456789ab2".to_string(),
+                        revision: 1,
+                        record_hash: "1".repeat(64),
+                    },
+                    activation_intent_ref: ManagedGatewayActivationIntentRefV1 {
+                        authority_store_id: authority_store_id.clone(),
+                        activation_intent_id: "gai_018f0f2e-7b4c-7aa1-8c22-123456789ab3"
+                            .to_string(),
+                        intent_hash: "2".repeat(64),
+                    },
+                    expected_gateway_ref: InWorldGatewayRefV1 {
+                        authority_store_id,
+                        gateway_instance_id: "cgi_018f0f2e-7b4c-7aa1-8c22-123456789ab4".to_string(),
+                        gateway_identity_hash: "3".repeat(64),
+                    },
+                    fence_id: "cpf_018f0f2e-7b4c-7aa1-8c22-123456789ab5".to_string(),
+                    consumer_id: "cpc_018f0f2e-7b4c-7aa1-8c22-123456789ab6".to_string(),
+                    consumer_lease_revision: 1,
+                    consumer_lease_hash: "4".repeat(64),
+                },
+            })),
+            acceptance_context: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn e3a_execute_stream_preserves_v2_body_without_client_downgrade() {
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind client passthrough listener");
+        let port = listener.local_addr().expect("listener address").port();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.expect("accept client request");
+            let mut bytes = Vec::new();
+            let header_end = loop {
+                let mut chunk = [0u8; 4096];
+                let count = stream.read(&mut chunk).await.expect("read request bytes");
+                assert!(count > 0, "client closed before HTTP headers");
+                bytes.extend_from_slice(&chunk[..count]);
+                if let Some(index) = bytes.windows(4).position(|window| window == b"\r\n\r\n") {
+                    break index + 4;
+                }
+            };
+            let headers = std::str::from_utf8(&bytes[..header_end]).expect("UTF-8 headers");
+            assert!(headers.starts_with("POST /v1/execute/stream HTTP/1.1\r\n"));
+            let content_length = headers
+                .lines()
+                .find_map(|line| {
+                    line.to_ascii_lowercase()
+                        .strip_prefix("content-length: ")
+                        .and_then(|value| value.parse::<usize>().ok())
+                })
+                .expect("content length");
+            while bytes.len() - header_end < content_length {
+                let mut chunk = [0u8; 4096];
+                let count = stream.read(&mut chunk).await.expect("read request body");
+                assert!(count > 0, "client closed before HTTP body");
+                bytes.extend_from_slice(&chunk[..count]);
+            }
+            let body = serde_json::from_slice::<serde_json::Value>(
+                &bytes[header_end..header_end + content_length],
+            )
+            .expect("decode captured request");
+            stream
+                .write_all(
+                    b"HTTP/1.1 400 Bad Request\r\ncontent-type: application/json\r\ncontent-length: 49\r\nconnection: close\r\n\r\n{\"error\":\"bad_request\",\"message\":\"expected stop\"}",
+                )
+                .await
+                .expect("write response");
+            body
+        });
+
+        let request = e3a_passthrough_request();
+        request.validate().expect("well-formed strict V2 request");
+        let expected = serde_json::to_value(&request).expect("shape expected V2 request");
+        let client = AgentClient::tcp("127.0.0.1", port).expect("TCP client");
+        client
+            .execute_stream(request)
+            .await
+            .expect_err("test server rejects after capturing V2");
+        let captured = server.await.expect("passthrough server task");
+        assert_eq!(captured, expected);
+        assert_eq!(captured["member_dispatch"]["schema_version"], 2);
+        assert!(captured["member_dispatch"]["config_projection"].is_object());
+    }
+
     #[cfg(unix)]
     #[test]
     fn test_client_creation() {

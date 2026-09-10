@@ -9,9 +9,9 @@ use std::time::Duration;
 use tempfile::tempdir;
 use tokio::time::timeout;
 use transport_api_types::{
-    ExecuteCancelRequestV1, ExecuteRequest, MemberDispatchRequestV1, MemberRuntimeBackendKindV1,
-    PolicySnapshotV3, PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3,
-    PolicySnapshotWorldFsWriteV3, ResolvedMemberRuntimeDescriptorV1,
+    ExecuteCancelRequestV1, ExecuteRequest, MemberDispatchRequest, MemberDispatchRequestV1,
+    MemberRuntimeBackendKindV1, PolicySnapshotV3, PolicySnapshotWorldFsFailClosedV3,
+    PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3, ResolvedMemberRuntimeDescriptorV1,
 };
 use world_api::{SharedWorldOwnerAction, SharedWorldOwnerSpec, WorldReuseMode, WorldSpec};
 use world_service::WorldService;
@@ -60,7 +60,7 @@ fn make_member_dispatch_request(
         world_network: None,
         world_fs_mode: None,
         acceptance_context: None,
-        member_dispatch: Some(MemberDispatchRequestV1 {
+        member_dispatch: Some(MemberDispatchRequest::V1(MemberDispatchRequestV1 {
             schema_version: 1,
             orchestration_session_id: orchestration_session_id.to_string(),
             participant_id: "ash_member_world_placement_test".to_string(),
@@ -79,7 +79,7 @@ fn make_member_dispatch_request(
             },
             retained_worker_launch_authority: None,
             e2_launch_activation: None,
-        }),
+        })),
     }
 }
 

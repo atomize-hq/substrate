@@ -14,7 +14,7 @@ use tokio::runtime::Runtime;
 use transport_api_client::AgentClient;
 use transport_api_types::{
     normalize_unix_install_bootstrap_path, ExecuteRequest, ExecuteResponse,
-    InstallBootstrapContextCarrierV1, MemberDispatchRequestV1,
+    InstallBootstrapContextCarrierV1, MemberDispatchRequest, MemberDispatchRequestV1,
     MemberRuntimeBackendKindV1 as AgentMemberRuntimeBackendKindV1, PlatformBootstrapMappingV1,
     PlatformInstanceIdentityV1, PlatformPrincipalV1, PolicySnapshotV3,
     PolicySnapshotWorldFsDimensionV3, PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3,
@@ -1019,10 +1019,8 @@ fn convert_backend_deny_enforcement(
     }
 }
 
-fn convert_member_dispatch(
-    dispatch: &world_api::MemberDispatchRequestV1,
-) -> MemberDispatchRequestV1 {
-    MemberDispatchRequestV1 {
+fn convert_member_dispatch(dispatch: &world_api::MemberDispatchRequestV1) -> MemberDispatchRequest {
+    MemberDispatchRequest::V1(MemberDispatchRequestV1 {
         schema_version: dispatch.schema_version,
         orchestration_session_id: dispatch.orchestration_session_id.clone(),
         participant_id: dispatch.participant_id.clone(),
@@ -1042,7 +1040,8 @@ fn convert_member_dispatch(
             binary_path: dispatch.resolved_runtime.binary_path.clone(),
         },
         retained_worker_launch_authority: None,
-    }
+        e2_launch_activation: None,
+    })
 }
 
 fn convert_member_runtime_backend_kind(
@@ -1641,6 +1640,9 @@ mod tests {
         };
 
         let converted = convert_member_dispatch(&original);
+        let converted = converted
+            .as_v1()
+            .expect("Lima conversion must remain the V1 variant");
         assert_eq!(converted.schema_version, original.schema_version);
         assert_eq!(
             converted.orchestration_session_id,
@@ -1674,6 +1676,7 @@ mod tests {
             convert_member_runtime_backend_kind(original.resolved_runtime.backend_kind.clone())
         );
         assert_eq!(converted.retained_worker_launch_authority, None);
+        assert_eq!(converted.e2_launch_activation, None);
     }
 
     #[test]
@@ -1767,14 +1770,18 @@ mod tests {
             })
         );
         assert_eq!(
-            agent_req.member_dispatch.as_ref().map(|dispatch| (
-                dispatch.orchestration_session_id.as_str(),
-                dispatch.participant_id.as_str(),
-                dispatch.orchestrator_participant_id.as_str(),
-                dispatch.backend_id.as_str(),
-                dispatch.world_id.as_str(),
-                dispatch.world_generation,
-            )),
+            agent_req
+                .member_dispatch
+                .as_ref()
+                .and_then(MemberDispatchRequest::as_v1)
+                .map(|dispatch| (
+                    dispatch.orchestration_session_id.as_str(),
+                    dispatch.participant_id.as_str(),
+                    dispatch.orchestrator_participant_id.as_str(),
+                    dispatch.backend_id.as_str(),
+                    dispatch.world_id.as_str(),
+                    dispatch.world_generation,
+                )),
             Some((
                 "orch_123",
                 "participant_123",

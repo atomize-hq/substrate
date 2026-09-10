@@ -4761,8 +4761,12 @@ fn prepare_task_acceptance_submission(
                         intended_host_principal,
                     )?;
                 ensure_exact_submission_policy_snapshot(&execute_request, &resolved_policy)?;
-                let member_dispatch_request =
-                    execute_request.member_dispatch.clone().ok_or_else(|| {
+                let member_dispatch_request = execute_request
+                    .member_dispatch
+                    .as_ref()
+                    .and_then(transport_api_types::MemberDispatchRequest::as_v1)
+                    .cloned()
+                    .ok_or_else(|| {
                         anyhow::anyhow!("B1 task ExecuteRequest omitted member dispatch")
                     })?;
                 let digest =
@@ -4819,7 +4823,11 @@ fn prepare_task_acceptance_submission(
     ensure_exact_submission_policy_snapshot(&execute_request, &resolved_policy)?;
     let digest = canonical_world_work_submission_sha256(&prepared.request, &execute_request)?;
     if &digest != canonical_execute_request_sha256
-        || execute_request.member_dispatch.as_ref() != Some(member_dispatch_request)
+        || execute_request
+            .member_dispatch
+            .as_ref()
+            .and_then(transport_api_types::MemberDispatchRequest::as_v1)
+            != Some(member_dispatch_request)
     {
         anyhow::bail!("B1 task proposal reconstruction conflict before transport");
     }
@@ -8126,6 +8134,7 @@ fn member_dispatch_transport_request_from_typed(
         binary_path: request.resolved_runtime.binary_path.clone(),
         retained_worker_launch_authority: request.retained_worker_launch_authority.clone(),
         e2_launch_activation: request.e2_launch_activation.clone(),
+        config_projection: None,
         exact_policy_snapshot: None,
     }
 }
@@ -8254,7 +8263,12 @@ fn validate_task_submission_against_proposal(
     else {
         anyhow::bail!("B1 task proposal changed submission family");
     };
-    if execute_request.member_dispatch.as_ref() != Some(member_dispatch_request) {
+    if execute_request
+        .member_dispatch
+        .as_ref()
+        .and_then(transport_api_types::MemberDispatchRequest::as_v1)
+        != Some(member_dispatch_request)
+    {
         anyhow::bail!("B1 task member dispatch changed before runtime submission");
     }
     let digest =
@@ -8429,6 +8443,7 @@ fn build_run_world_task_transport_request(
         binary_path: descriptor.binary_path.display().to_string(),
         retained_worker_launch_authority: None,
         e2_launch_activation: None,
+        config_projection: None,
         exact_policy_snapshot: None,
     })
 }
@@ -8480,6 +8495,7 @@ fn build_spawn_world_worker_transport_request(
         binary_path: descriptor.binary_path.display().to_string(),
         retained_worker_launch_authority: Some(launch_authority_proof.clone()),
         e2_launch_activation: Some(e2_launch_activation),
+        config_projection: None,
         exact_policy_snapshot: Some(exact_policy_snapshot),
     })
 }
@@ -8541,6 +8557,7 @@ fn build_fork_world_worker_transport_request(
         binary_path: descriptor.binary_path.display().to_string(),
         retained_worker_launch_authority: None,
         e2_launch_activation,
+        config_projection: None,
         exact_policy_snapshot,
     })
 }
@@ -14450,6 +14467,77 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn e3a_projection_carrier() -> transport_api_types::ConfigProjectionActivationCarrierV1 {
+        use transport_api_types::{
+            ConfigProjectionActivationCarrierV1, ConfigProjectionRefV1, InWorldGatewayRefV1,
+            ManagedGatewayActivationIntentRefV1,
+        };
+        let authority_store_id = "cpa_018f0f2e-7b4c-7aa1-8c22-123456789ab0".to_string();
+        let series_id = "cps_018f0f2e-7b4c-7aa1-8c22-123456789ab1".to_string();
+        ConfigProjectionActivationCarrierV1 {
+            authority_store_id: authority_store_id.clone(),
+            series_id: series_id.clone(),
+            dormant_projection_ref: ConfigProjectionRefV1 {
+                authority_store_id: authority_store_id.clone(),
+                series_id,
+                record_id: "cpr_018f0f2e-7b4c-7aa1-8c22-123456789ab2".to_string(),
+                revision: 1,
+                record_hash: "1".repeat(64),
+            },
+            activation_intent_ref: ManagedGatewayActivationIntentRefV1 {
+                authority_store_id: authority_store_id.clone(),
+                activation_intent_id: "gai_018f0f2e-7b4c-7aa1-8c22-123456789ab3".to_string(),
+                intent_hash: "2".repeat(64),
+            },
+            expected_gateway_ref: InWorldGatewayRefV1 {
+                authority_store_id,
+                gateway_instance_id: "cgi_018f0f2e-7b4c-7aa1-8c22-123456789ab4".to_string(),
+                gateway_identity_hash: "3".repeat(64),
+            },
+            fence_id: "cpf_018f0f2e-7b4c-7aa1-8c22-123456789ab5".to_string(),
+            consumer_id: "cpc_018f0f2e-7b4c-7aa1-8c22-123456789ab6".to_string(),
+            consumer_lease_revision: 1,
+            consumer_lease_hash: "4".repeat(64),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn assert_e3a_projection_reaches_execute_request(
+        transport: &MemberDispatchTransportRequest,
+        path: &str,
+    ) {
+        let projection = e3a_projection_carrier();
+        let mut injected = transport.clone();
+        injected.config_projection = Some(projection.clone());
+        let cwd = tempdir().expect("E3-A projected transport cwd");
+        let (intended_host_principal, _) =
+            crate::execution::install_bootstrap::current_unix_principal_and_home()
+                .expect("E3-A projected transport host principal");
+        let (_, execute_request, _) = build_agent_client_and_member_dispatch_request_for_cwd(
+            &injected,
+            cwd.path(),
+            None,
+            Some(&intended_host_principal),
+        )
+        .unwrap_or_else(|error| panic!("{path} projected transport: {error}"));
+        execute_request
+            .validate()
+            .unwrap_or_else(|error| panic!("{path} strict V2 execute request: {error}"));
+        assert_eq!(
+            execute_request
+                .member_dispatch
+                .as_ref()
+                .and_then(transport_api_types::MemberDispatchRequest::config_projection),
+            Some(&projection),
+            "{path} projection must reach ExecuteRequest unchanged"
+        );
+        assert!(execute_request
+            .member_dispatch
+            .as_ref()
+            .is_some_and(|dispatch| dispatch.as_v1().is_none()));
+    }
+
+    #[cfg(target_os = "linux")]
     fn b1_test_policy_ref(
     ) -> crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1 {
         use crate::execution::agent_runtime::host_session_authority::schema::{
@@ -14512,7 +14600,9 @@ mod tests {
             shared_world: None,
             world_network: None,
             world_fs_mode: None,
-            member_dispatch: Some(member_dispatch_request.clone()),
+            member_dispatch: Some(transport_api_types::MemberDispatchRequest::V1(
+                member_dispatch_request.clone(),
+            )),
             acceptance_context: Some(acceptance_context.clone()),
         };
         let canonical_execute_request_sha256 =
@@ -14781,7 +14871,10 @@ mod tests {
                     proposal.current_policy_revision = authority.current_policy_revision.clone();
                     proposal.created_at = allocation.created_at;
 
-                    execute_request.member_dispatch = Some(member_dispatch_request.clone());
+                    execute_request.member_dispatch =
+                        Some(transport_api_types::MemberDispatchRequest::V1(
+                            member_dispatch_request.clone(),
+                        ));
                     execute_request.acceptance_context = Some(proposal.acceptance_context.clone());
                     *canonical_execute_request_sha256 = canonical_world_work_submission_sha256(
                         validated_dispatch_request,
@@ -18366,26 +18459,28 @@ mod tests {
             world_network: None,
             world_fs_mode: None,
             acceptance_context: None,
-            member_dispatch: Some(MemberDispatchRequestV1 {
-                schema_version: 1,
-                orchestration_session_id: "sess_dispatch".to_string(),
-                participant_id: "ash_member".to_string(),
-                orchestrator_participant_id: "orch_dispatch".to_string(),
-                parent_participant_id: None,
-                resumed_from_participant_id: None,
-                backend_id: "cli:codex-world".to_string(),
-                protocol: "substrate.agent.session".to_string(),
-                run_id: run_id.to_string(),
-                world_id: world_id.to_string(),
-                world_generation,
-                initial_prompt: Some("bootstrap retained worker".to_string()),
-                resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
-                    backend_kind: MemberRuntimeBackendKindV1::Codex,
-                    binary_path: binary_path.display().to_string(),
+            member_dispatch: Some(transport_api_types::MemberDispatchRequest::V1(
+                MemberDispatchRequestV1 {
+                    schema_version: 1,
+                    orchestration_session_id: "sess_dispatch".to_string(),
+                    participant_id: "ash_member".to_string(),
+                    orchestrator_participant_id: "orch_dispatch".to_string(),
+                    parent_participant_id: None,
+                    resumed_from_participant_id: None,
+                    backend_id: "cli:codex-world".to_string(),
+                    protocol: "substrate.agent.session".to_string(),
+                    run_id: run_id.to_string(),
+                    world_id: world_id.to_string(),
+                    world_generation,
+                    initial_prompt: Some("bootstrap retained worker".to_string()),
+                    resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
+                        backend_kind: MemberRuntimeBackendKindV1::Codex,
+                        binary_path: binary_path.display().to_string(),
+                    },
+                    retained_worker_launch_authority: None,
+                    e2_launch_activation: None,
                 },
-                retained_worker_launch_authority: None,
-                e2_launch_activation: None,
-            }),
+            )),
         }
     }
 
@@ -19275,6 +19370,7 @@ mod tests {
             let env = execute_request.env.clone().unwrap_or_default();
             let member_dispatch = execute_request
                 .member_dispatch
+                .and_then(|dispatch| dispatch.as_v1().cloned())
                 .expect("Spawn request includes member dispatch");
             write_http_stream_start(&mut stream).await;
             write_chunked_frame(
@@ -23573,6 +23669,7 @@ agents:
                     );
                     let member_dispatch = execute_request
                         .member_dispatch
+                        .and_then(|dispatch| dispatch.as_v1().cloned())
                         .expect("member dispatch request");
                     let descriptor =
                         crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor {
@@ -23889,6 +23986,7 @@ agents:
                         serde_json::from_slice(&body).expect("member dispatch execute request");
                     let member_dispatch = execute_request
                         .member_dispatch
+                        .and_then(|dispatch| dispatch.as_v1().cloned())
                         .expect("member dispatch request");
                     let child = authoritative_registered_fork_child(
                         &store_for_server,
@@ -26600,6 +26698,7 @@ agents:
                         serde_json::from_slice(&body).expect("decode retained Spawn request");
                     let member_dispatch = execute_request
                         .member_dispatch
+                        .and_then(|dispatch| dispatch.as_v1().cloned())
                         .expect("Spawn request includes member dispatch");
                     write_http_stream_start(&mut stream).await;
                     write_chunked_frame(
@@ -34660,6 +34759,7 @@ agents:
         assert_eq!(transport.world_generation, 2);
         assert_eq!(transport.initial_prompt.as_deref(), Some("hello world"));
         assert_eq!(transport.retained_worker_launch_authority, None);
+        assert_eq!(transport.config_projection, None);
     }
 
     #[cfg(target_os = "linux")]
@@ -34704,6 +34804,7 @@ agents:
             exact_policy_snapshot,
         )
         .expect("transport");
+        assert_e3a_projection_reaches_execute_request(&transport, "spawn");
 
         assert_eq!(transport.orchestration_session_id, "sess_dispatch");
         assert_eq!(transport.orchestrator_participant_id, "orch_dispatch");
@@ -34718,6 +34819,7 @@ agents:
         assert_eq!(transport.run_id, "rwr_bootstrap_fixture");
         assert_eq!(transport.retained_worker_launch_authority, Some(proof));
         assert_eq!(transport.e2_launch_activation, Some(activation));
+        assert_eq!(transport.config_projection, None);
         assert!(transport.exact_policy_snapshot.is_some());
     }
 
@@ -34875,6 +34977,7 @@ agents:
             transport.participant_id
         );
         assert_eq!(transport.retained_worker_launch_authority, None);
+        assert_eq!(transport.config_projection, None);
     }
 
     #[cfg(target_os = "linux")]
@@ -34932,6 +35035,23 @@ agents:
             Some(&policy_commitment),
         )
         .expect("E2 fork transport");
+        assert_e3a_projection_reaches_execute_request(&transport, "fork");
+
+        let mut continue_request = sample_continue_fork_command_world_dispatch_request();
+        continue_request.caller_participant_id = Some("orch_successor".to_string());
+        let continue_request = continue_request
+            .validate()
+            .expect("validated E2 continue-fork request");
+        let continue_transport = build_continue_world_worker_fork_command_transport_request(
+            &continue_request,
+            "ash_member",
+            Some("orch_launch"),
+            &descriptor,
+            Some(&policy_commitment),
+        )
+        .expect("E2 continue-fork transport");
+        assert_eq!(continue_transport.config_projection, None);
+        assert_e3a_projection_reaches_execute_request(&continue_transport, "continue-fork");
 
         assert_eq!(
             transport.participant_id,
@@ -34944,6 +35064,7 @@ agents:
         );
         assert_eq!(transport.retained_worker_launch_authority, None);
         assert_eq!(transport.e2_launch_activation, Some(activation));
+        assert_eq!(transport.config_projection, None);
         let carried = transport
             .exact_policy_snapshot
             .expect("E2 fork carries exact policy snapshot");
@@ -35086,6 +35207,7 @@ agents:
             binary_path: "/bin/true".to_string(),
             retained_worker_launch_authority: None,
             e2_launch_activation: None,
+            config_projection: None,
             exact_policy_snapshot: None,
         };
 
@@ -35521,6 +35643,7 @@ agents:
                     );
                     let member_dispatch = execute_request
                         .member_dispatch
+                        .and_then(|dispatch| dispatch.as_v1().cloned())
                         .expect("member dispatch request");
 
                     write_http_stream_start(&mut stream).await;
@@ -35790,6 +35913,7 @@ agents:
                         serde_json::from_slice(&body).expect("decode direct execute request");
                     let member = execute
                         .member_dispatch
+                        .and_then(|dispatch| dispatch.as_v1().cloned())
                         .expect("direct retained member dispatch");
                     let stream_id = "rts_b4_direct_terminal_observer".to_string();
                     let span_id = "spn_b4_direct_terminal_observer".to_string();
@@ -36208,6 +36332,7 @@ agents:
                         serde_json::from_slice(&body).expect("execute request");
                     let member_dispatch = execute_request
                         .member_dispatch
+                        .and_then(|dispatch| dispatch.as_v1().cloned())
                         .expect("member dispatch request");
                     write_http_stream_start(&mut stream).await;
                     write_chunked_frame(
@@ -36379,6 +36504,7 @@ agents:
                     saw_bootstrap = true;
                     let member_dispatch = execute_request
                         .member_dispatch
+                        .and_then(|dispatch| dispatch.as_v1().cloned())
                         .expect("member dispatch request");
                     assert_eq!(
                         member_dispatch.orchestrator_participant_id,
@@ -36620,6 +36746,7 @@ agents:
                     );
                     let member_dispatch = execute_request
                         .member_dispatch
+                        .and_then(|dispatch| dispatch.as_v1().cloned())
                         .expect("member dispatch request");
                     assert_eq!(
                         member_dispatch.orchestrator_participant_id,
@@ -36857,6 +36984,7 @@ agents:
                         serde_json::from_slice(&body).expect("member dispatch execute request");
                     let member_dispatch = execute_request
                         .member_dispatch
+                        .and_then(|dispatch| dispatch.as_v1().cloned())
                         .expect("member dispatch request");
                     let child = authoritative_registered_fork_child(
                         &store_for_server,
@@ -37077,6 +37205,7 @@ agents:
                         serde_json::from_slice(&body).expect("member dispatch execute request");
                     let member_dispatch = execute_request
                         .member_dispatch
+                        .and_then(|dispatch| dispatch.as_v1().cloned())
                         .expect("member dispatch request");
                     let descriptor =
                         crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor {
@@ -37358,6 +37487,7 @@ agents:
                         serde_json::from_slice(&body).expect("member dispatch execute request");
                     let member_dispatch = execute_request
                         .member_dispatch
+                        .and_then(|dispatch| dispatch.as_v1().cloned())
                         .expect("member dispatch request");
                     let authoritative_child = authoritative_registered_fork_child(
                         &store_for_server,
@@ -37595,6 +37725,7 @@ agents:
                         serde_json::from_slice(&body).expect("member dispatch execute request");
                     let member_dispatch = execute_request
                         .member_dispatch
+                        .and_then(|dispatch| dispatch.as_v1().cloned())
                         .expect("member dispatch request");
                     let child = authoritative_registered_fork_child(
                         &store_for_server,

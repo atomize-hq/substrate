@@ -15,13 +15,13 @@ use transport_api_types::{
     AuthorityObjectKindV1, AuthorityObjectRefV1, DispatchPolicyCommitmentRefCarrierV1,
     DispatchPolicySnapshotCarrierV1, E2DispatchPolicyReservationRefCarrierV1,
     E2LaunchRequestCommitmentV1, E2MemberLaunchActivationCarrierV1, E2MemberLaunchKindV1,
-    ExecuteRequest, MemberDispatchRequestV1, MemberRuntimeBackendKindV1, MemberTurnSubmitRequestV1,
-    OpaqueAuthorityCommitmentV1, PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3,
-    PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
-    ResolvedMemberRuntimeDescriptorV1, RetainedTurnPolicyCommitmentSubjectV1,
-    RetainedWorkerAdmissionCommitmentCarrierV1, RetainedWorkerAuthorityObjectCommitmentV1,
-    RetainedWorkerLaunchAuthorityProofV1, RetainedWorkerLaunchWorldBindingV1, WorldBindingRefV1,
-    WorldWorkAcceptanceContextV1,
+    ExecuteRequest, MemberDispatchRequest, MemberDispatchRequestV1, MemberRuntimeBackendKindV1,
+    MemberTurnSubmitRequestV1, OpaqueAuthorityCommitmentV1, PolicySnapshotV3,
+    PolicySnapshotWorldFsDimensionV3, PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3,
+    PolicySnapshotWorldFsWriteV3, ResolvedMemberRuntimeDescriptorV1,
+    RetainedTurnPolicyCommitmentSubjectV1, RetainedWorkerAdmissionCommitmentCarrierV1,
+    RetainedWorkerAuthorityObjectCommitmentV1, RetainedWorkerLaunchAuthorityProofV1,
+    RetainedWorkerLaunchWorldBindingV1, WorldBindingRefV1, WorldWorkAcceptanceContextV1,
 };
 use world_api::{
     SharedWorldBindingSnapshot, SharedWorldBindingState, SharedWorldOwnerAction,
@@ -86,7 +86,7 @@ fn make_member_dispatch_request(
         world_network: None,
         world_fs_mode: None,
         acceptance_context: None,
-        member_dispatch: Some(MemberDispatchRequestV1 {
+        member_dispatch: Some(MemberDispatchRequest::V1(MemberDispatchRequestV1 {
             schema_version: 1,
             orchestration_session_id: orchestration_session_id.to_string(),
             participant_id: participant_id.to_string(),
@@ -105,7 +105,7 @@ fn make_member_dispatch_request(
             },
             retained_worker_launch_authority: None,
             e2_launch_activation: None,
-        }),
+        })),
     }
 }
 
@@ -123,7 +123,8 @@ fn attach_exact_retained_launch_authority(request: &mut ExecuteRequest) {
     let dispatch = request
         .member_dispatch
         .as_mut()
-        .expect("member dispatch request");
+        .and_then(MemberDispatchRequest::as_v1_mut)
+        .expect("V1 member dispatch request");
     let commitment = |value: char| RetainedWorkerAuthorityObjectCommitmentV1::CanonicalSha256 {
         digest_hex: value.to_string().repeat(64),
     };
