@@ -86,6 +86,17 @@ pub(crate) fn read_existing_accepted_work_authority_snapshot(
     platform::read_existing_accepted_work_authority_snapshot_opened(authority.trusted_root())
 }
 
+#[cfg(target_os = "linux")]
+pub(super) fn with_config_projection_hsa_parent(
+    root: &TrustedAuthorityRoot,
+    operation: &mut dyn for<'fd> FnMut(
+        std::os::fd::BorrowedFd<'fd>,
+    )
+        -> Result<(), config_projection::ConfigProjectionFailureV1>,
+) -> Result<(), config_projection::ConfigProjectionFailureV1> {
+    platform::with_opened_config_projection_hsa_parent(root, operation)
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(crate) fn dispatch_policy_commitment_storage_for_authority(
     authority: &super::facade::HostSessionAuthority,
@@ -825,6 +836,8 @@ mod platform {
     use transaction::retain_classified_legacy_directories_test;
     #[cfg(all(test, target_os = "linux"))]
     pub(crate) use transaction::set_e2_rm_before_final_verify_hook;
+    #[cfg(target_os = "linux")]
+    pub(super) use transaction::with_opened_config_projection_hsa_parent;
     #[cfg(target_os = "linux")]
     use transaction::with_opened_existing_versioned_read_only_snapshot;
     #[cfg(test)]

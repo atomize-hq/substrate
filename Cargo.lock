@@ -667,6 +667,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "config-projection"
+version = "0.2.8"
+dependencies = [
+ "chrono",
+ "libc",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "transport-api-types",
+ "uuid",
+]
+
+[[package]]
 name = "console"
 version = "0.15.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5383,6 +5397,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "clap",
+ "config-projection",
  "crossterm 0.29.0",
  "ctrlc",
  "dirs 5.0.1",

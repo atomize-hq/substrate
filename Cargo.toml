@@ -45,6 +45,7 @@ display = false
 resolver = "2"
 members = [
     "crates/common",
+    "crates/config-projection",
     "crates/shim", 
     "crates/shell",
     "crates/gateway",

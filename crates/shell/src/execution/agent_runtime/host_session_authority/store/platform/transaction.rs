@@ -768,6 +768,207 @@ pub(super) fn with_opened_existing_versioned_read_only_snapshot<T>(
 }
 
 #[cfg(target_os = "linux")]
+struct ConfigProjectionHsaParentTransactionV1<'root> {
+    trusted_root: &'root TrustedAuthorityRoot,
+    layout: StoreLayout<'root>,
+    versioned_root: VersionedStateRoot,
+    legacy: LegacyObservation,
+    non_e3_entries: BTreeMap<String, (DirectoryEntry, TrustedEntryMetadataV1)>,
+    e3_entry: Option<DirectoryEntry>,
+    _lock: TrustedOwnedFileLock,
+}
+
+#[cfg(target_os = "linux")]
+impl<'root> ConfigProjectionHsaParentTransactionV1<'root> {
+    fn begin(
+        trusted_root: &'root TrustedAuthorityRoot,
+    ) -> Result<Self, config_projection::ConfigProjectionFailureV1> {
+        trusted_root
+            .revalidate()
+            .map_err(config_projection_hsa_error)?;
+        let lock_scope = StoreLayoutLockScope::open_existing_activated(trusted_root.directory())
+            .map_err(config_projection_hsa_error)?;
+        let lock = lock_scope
+            .root_lock
+            .lock_exclusive_owned()
+            .map_err(config_projection_hsa_error)?;
+        trusted_root
+            .revalidate()
+            .map_err(config_projection_hsa_error)?;
+        lock_scope
+            .validate_temps()
+            .map_err(config_projection_hsa_error)?;
+        let layout = lock_scope.finish().map_err(config_projection_hsa_error)?;
+        Self::validate_locked_layout(&layout)?;
+        let legacy =
+            LegacyObservation::capture(layout.bootstrap).map_err(config_projection_hsa_error)?;
+        if legacy.has_artifact {
+            return Err(config_projection::ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+        }
+        let versioned_root = layout
+            .read_existing_versioned_without_reconciliation(trusted_root.identity())
+            .map_err(config_projection_hsa_error)?;
+        Self::validate_marker(&layout, &versioned_root)?;
+        let (non_e3_entries, e3_entry) = Self::capture_children(&layout)?;
+        let transaction = Self {
+            trusted_root,
+            layout,
+            versioned_root,
+            legacy,
+            non_e3_entries,
+            e3_entry,
+            _lock: lock,
+        };
+        transaction.verify_scope()?;
+        Ok(transaction)
+    }
+
+    fn authority_fd(&self) -> std::os::fd::BorrowedFd<'_> {
+        self.layout.authority.borrow_fd()
+    }
+
+    fn finish(self) -> Result<(), config_projection::ConfigProjectionFailureV1> {
+        self.verify_scope()
+    }
+
+    fn verify_scope(&self) -> Result<(), config_projection::ConfigProjectionFailureV1> {
+        self.trusted_root
+            .revalidate()
+            .map_err(config_projection_hsa_error)?;
+        Self::validate_locked_layout(&self.layout)?;
+        self.legacy
+            .revalidate(self.layout.bootstrap)
+            .map_err(config_projection_hsa_error)?;
+        let current_root = self
+            .layout
+            .read_existing_versioned_without_reconciliation(self.trusted_root.identity())
+            .map_err(config_projection_hsa_error)?;
+        if current_root != self.versioned_root {
+            return Err(config_projection::ConfigProjectionFailureV1::Conflict);
+        }
+        Self::validate_marker(&self.layout, &current_root)?;
+        let (current_non_e3, current_e3) = Self::capture_children(&self.layout)?;
+        if current_non_e3 != self.non_e3_entries {
+            return Err(config_projection::ConfigProjectionFailureV1::Conflict);
+        }
+        match (&self.e3_entry, current_e3) {
+            (None, Some(entry)) if entry.kind == EntryKind::Directory => {}
+            (None, None) => {}
+            (Some(expected), Some(current)) if expected == &current => {}
+            _ => return Err(config_projection::ConfigProjectionFailureV1::Conflict),
+        }
+        self.trusted_root
+            .revalidate()
+            .map_err(config_projection_hsa_error)
+    }
+
+    fn validate_locked_layout(
+        layout: &StoreLayout<'_>,
+    ) -> Result<(), config_projection::ConfigProjectionFailureV1> {
+        layout
+            .validate_closed_layout()
+            .map_err(config_projection_hsa_error)?;
+        let manifest = layout
+            .authority
+            .entries()
+            .map_err(config_projection_hsa_error)?;
+        validate_e2_rm_authority_manifest(&manifest).map_err(config_projection_hsa_error)?;
+        if !layout
+            .tmp
+            .entries()
+            .map_err(config_projection_hsa_error)?
+            .is_empty()
+        {
+            return Err(config_projection::ConfigProjectionFailureV1::PartialPublication);
+        }
+        Ok(())
+    }
+
+    fn validate_marker(
+        layout: &StoreLayout<'_>,
+        root: &VersionedStateRoot,
+    ) -> Result<(), config_projection::ConfigProjectionFailureV1> {
+        match root {
+            VersionedStateRoot::V1(root) => layout
+                .validate_matching_marker_if_present(root)
+                .map_err(config_projection_hsa_error),
+            VersionedStateRoot::V2(root) => layout
+                .validate_matching_marker_if_present_v2(root)
+                .map_err(config_projection_hsa_error),
+            VersionedStateRoot::V3(root) => layout
+                .validate_matching_marker_if_present_v3(root)
+                .map_err(config_projection_hsa_error),
+        }
+    }
+
+    #[allow(
+        clippy::type_complexity,
+        reason = "the snapshot deliberately retains each non-E3 entry and its exact metadata"
+    )]
+    fn capture_children(
+        layout: &StoreLayout<'_>,
+    ) -> Result<
+        (
+            BTreeMap<String, (DirectoryEntry, TrustedEntryMetadataV1)>,
+            Option<DirectoryEntry>,
+        ),
+        config_projection::ConfigProjectionFailureV1,
+    > {
+        let mut non_e3 = BTreeMap::new();
+        let mut e3 = None;
+        for entry in layout
+            .authority
+            .entries()
+            .map_err(config_projection_hsa_error)?
+        {
+            layout
+                .authority
+                .revalidate_entry(&entry)
+                .map_err(config_projection_hsa_error)?;
+            if entry.name == "agent-config-projection-v1" {
+                if entry.kind != EntryKind::Directory || e3.replace(entry).is_some() {
+                    return Err(
+                        config_projection::ConfigProjectionFailureV1::UnsupportedSecurityPosture,
+                    );
+                }
+                continue;
+            }
+            let metadata = layout
+                .authority
+                .entry_metadata(&entry)
+                .map_err(config_projection_hsa_error)?;
+            non_e3.insert(entry.name.clone(), (entry, metadata));
+        }
+        Ok((non_e3, e3))
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(in super::super) fn with_opened_config_projection_hsa_parent(
+    trusted_root: &TrustedAuthorityRoot,
+    operation: &mut dyn for<'fd> FnMut(
+        std::os::fd::BorrowedFd<'fd>,
+    )
+        -> Result<(), config_projection::ConfigProjectionFailureV1>,
+) -> Result<(), config_projection::ConfigProjectionFailureV1> {
+    let transaction = ConfigProjectionHsaParentTransactionV1::begin(trusted_root)?;
+    let result = operation(transaction.authority_fd());
+    let verification = transaction.finish();
+    match result {
+        Ok(()) => verification,
+        Err(error) => {
+            verification?;
+            Err(error)
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn config_projection_hsa_error<T>(_error: T) -> config_projection::ConfigProjectionFailureV1 {
+    config_projection::ConfigProjectionFailureV1::UnsupportedSecurityPosture
+}
+
+#[cfg(target_os = "linux")]
 fn decode_read_only_versioned_root(
     bytes: &[u8],
 ) -> Result<VersionedStateRoot, ReadOnlyAuthoritySnapshotErrorV1> {
@@ -802,7 +1003,8 @@ fn validate_e2_rm_authority_manifest(
                     | "objects"
                     | "keys"
                     | "retained-worker-admission-v1"
-                    | "dispatch-policy-commitment-v1",
+                    | "dispatch-policy-commitment-v1"
+                    | "agent-config-projection-v1",
                 EntryKind::Directory
             ) | (ROOT_FILE | INIT_FILE, EntryKind::RegularFile)
         );

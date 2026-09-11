@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
-#[cfg(test)]
+#[cfg(any(test, target_os = "linux"))]
 use std::path::Path;
 
 use super::canonical_json;
@@ -39,6 +39,70 @@ use super::validation::validate_fork_successor_attach_semantics;
 #[derive(Debug)]
 pub(crate) struct HostSessionAuthority {
     root: TrustedAuthorityRoot,
+}
+
+/// Shell-owned, sealed implementation of the E3 projection HSA bridge.
+#[cfg(target_os = "linux")]
+#[derive(Debug)]
+pub struct OpenedConfigProjectionHsaAuthorityV1 {
+    root: TrustedAuthorityRoot,
+}
+
+#[cfg(target_os = "linux")]
+impl OpenedConfigProjectionHsaAuthorityV1 {
+    pub fn from_configured_accepted_home(
+        configured: &config_projection::ConfiguredAcceptedHomeAuthorityV1,
+    ) -> Result<Self, config_projection::ConfigProjectionFailureV1> {
+        configured.revalidate()?;
+        let owner_uid = libc::uid_t::try_from(configured.intended_uid())
+            .map_err(|_| config_projection::ConfigProjectionFailureV1::Malformed)?;
+        let accepted = configured.accepted_home();
+        let root =
+            TrustedAuthorityRoot::open_for_owner(Path::new(&accepted.physical_path), owner_uid)
+                .map_err(|_| {
+                    config_projection::ConfigProjectionFailureV1::UnsupportedSecurityPosture
+                })?;
+        let shell_identity = root.identity();
+        let identities_match = match (
+            &shell_identity.physical_identity,
+            &accepted.physical_identity,
+        ) {
+            (
+                super::schema::DirectoryPhysicalIdentityV1::Linux {
+                    device_id: shell_device,
+                    inode: shell_inode,
+                },
+                config_projection::DirectoryPhysicalIdentityV1::Linux {
+                    device_id: accepted_device,
+                    inode: accepted_inode,
+                },
+            ) => shell_device == accepted_device && shell_inode == accepted_inode,
+            _ => false,
+        };
+        if shell_identity.physical_path != accepted.physical_path || !identities_match {
+            return Err(config_projection::ConfigProjectionFailureV1::WrongBinding);
+        }
+        configured.revalidate()?;
+        root.revalidate().map_err(|_| {
+            config_projection::ConfigProjectionFailureV1::UnsupportedSecurityPosture
+        })?;
+        Ok(Self { root })
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl config_projection::ConfigProjectionHsaAuthorityV1 for OpenedConfigProjectionHsaAuthorityV1 {
+    fn with_locked_parent(
+        &self,
+        operation: &mut dyn for<'fd> FnMut(
+            std::os::fd::BorrowedFd<'fd>,
+        ) -> Result<
+            (),
+            config_projection::ConfigProjectionFailureV1,
+        >,
+    ) -> Result<(), config_projection::ConfigProjectionFailureV1> {
+        store::with_config_projection_hsa_parent(&self.root, operation)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -224,6 +288,285 @@ impl fmt::Display for AuthorityFacadeError {
 }
 
 impl std::error::Error for AuthorityFacadeError {}
+
+#[cfg(all(test, target_os = "linux"))]
+mod e3_b_hsa_bridge_tests {
+    use std::collections::BTreeMap;
+    use std::fs::File;
+    use std::os::fd::AsFd;
+    use std::os::unix::fs::PermissionsExt;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{mpsc, Arc, Barrier};
+    use std::time::Duration;
+
+    use config_projection::{
+        CanonicalDirectoryV1 as ProjectionDirectoryV1, ConfigProjectionCodecV1,
+        ConfigProjectionFailureV1, ConfigProjectionHsaAuthorityV1, ConfigProjectionRegistryV1,
+        ConfiguredAcceptedHomeAuthorityV1, InstalledAcceptedHomeBootstrapRecordV1, Timestamp,
+    };
+    use transport_api_types::{InstallBootstrapContextCarrierV1, InstallBootstrapContextV1};
+
+    use super::{HostSessionAuthority, OpenedConfigProjectionHsaAuthorityV1};
+    use crate::execution::agent_runtime::host_session_authority::store;
+
+    fn current_account() -> String {
+        let uid = unsafe { libc::geteuid() };
+        let mut pwd = std::mem::MaybeUninit::<libc::passwd>::uninit();
+        let mut result = std::ptr::null_mut();
+        let mut buffer = vec![0_u8; 16 * 1024];
+        assert_eq!(
+            unsafe {
+                libc::getpwuid_r(
+                    uid,
+                    pwd.as_mut_ptr(),
+                    buffer.as_mut_ptr().cast(),
+                    buffer.len(),
+                    &mut result,
+                )
+            },
+            0
+        );
+        assert!(!result.is_null());
+        unsafe { std::ffi::CStr::from_ptr((*result).pw_name) }
+            .to_str()
+            .unwrap()
+            .to_string()
+    }
+
+    fn configured(home: &std::path::Path) -> ConfiguredAcceptedHomeAuthorityV1 {
+        let descriptor = File::open(home).unwrap();
+        let accepted_home =
+            ProjectionDirectoryV1::capture_linux_from_fd(descriptor.as_fd()).unwrap();
+        let uid = unsafe { libc::geteuid() };
+        let gid = unsafe { libc::getegid() };
+        let carrier = InstallBootstrapContextCarrierV1::from_context(
+            InstallBootstrapContextV1::new_unix(
+                accepted_home.physical_path.as_str(),
+                &current_account(),
+                uid,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let mut record = InstalledAcceptedHomeBootstrapRecordV1 {
+            schema_version: 1,
+            install_bootstrap_carrier: carrier.encode().unwrap(),
+            host_context_commitment: carrier.host_context_commitment,
+            intended_account: current_account(),
+            intended_uid: u64::from(uid),
+            intended_gid: u64::from(gid),
+            accepted_home,
+            installed_at: Timestamp("2026-09-10T00:00:00.000000Z".to_string()),
+            record_hash: String::new(),
+        };
+        let mut value = serde_json::to_value(&record).unwrap();
+        value.as_object_mut().unwrap().remove("record_hash");
+        let mut payload = BTreeMap::new();
+        payload.insert("record", value);
+        record.record_hash = ConfigProjectionCodecV1::domain_sha256(
+            "substrate.e3.installed-accepted-home-bootstrap.v1",
+            &payload,
+        )
+        .unwrap();
+        ConfiguredAcceptedHomeAuthorityV1::from_record_for_test(record).unwrap()
+    }
+
+    struct TestHome {
+        _parent: tempfile::TempDir,
+        path: std::path::PathBuf,
+    }
+
+    impl TestHome {
+        fn path(&self) -> &std::path::Path {
+            &self.path
+        }
+    }
+
+    fn activated_home() -> (TestHome, HostSessionAuthority) {
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| {
+                std::path::PathBuf::from(std::env::var_os("HOME").expect("tests require HOME"))
+                    .join(".cache")
+            });
+        std::fs::create_dir_all(&safe_parent).unwrap();
+        let parent = tempfile::tempdir_in(safe_parent).unwrap();
+        std::fs::set_permissions(parent.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        let path = parent.path().join("home");
+        std::fs::create_dir(&path).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let authority = HostSessionAuthority::open(&path).unwrap();
+        authority.bootstrap().unwrap();
+        (
+            TestHome {
+                _parent: parent,
+                path,
+            },
+            authority,
+        )
+    }
+
+    #[test]
+    fn e3_b_hsa_bridge_callback_is_exactly_once_and_e2_rm_reads_after_creation() {
+        let (home, authority) = activated_home();
+        let configured = configured(home.path());
+        let bridge = Arc::new(
+            OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home(&configured)
+                .unwrap(),
+        );
+        let calls = AtomicUsize::new(0);
+        bridge
+            .with_locked_parent(&mut |_| {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+        let registry = ConfigProjectionRegistryV1::open(bridge).unwrap();
+        registry.recover().unwrap();
+        let snapshot = store::read_existing_accepted_work_authority_snapshot(&authority).unwrap();
+        assert!(!snapshot.hsa_state_root_bytes().is_empty());
+    }
+
+    #[test]
+    fn e3_b_hsa_bridge_rejected_substitution_never_invokes_callback() {
+        let (home, _authority) = activated_home();
+        let configured = configured(home.path());
+        let bridge =
+            OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home(&configured)
+                .unwrap();
+        let moved = home.path().with_extension("held-e3-original");
+        std::fs::rename(home.path(), &moved).unwrap();
+        std::fs::create_dir(home.path()).unwrap();
+        std::fs::set_permissions(home.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(
+            OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home(&configured)
+                .is_err()
+        );
+        let calls = AtomicUsize::new(0);
+        assert!(bridge
+            .with_locked_parent(&mut |_| {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            })
+            .is_err());
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        std::fs::remove_dir(home.path()).unwrap();
+        std::fs::rename(moved, home.path()).unwrap();
+    }
+
+    #[test]
+    fn e3_b_hsa_bridge_parent_lock_releases_on_error_unwind_and_process_death() {
+        let (home, _authority) = activated_home();
+        let configured = configured(home.path());
+        let bridge = Arc::new(
+            OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home(&configured)
+                .unwrap(),
+        );
+        assert_eq!(
+            bridge.with_locked_parent(&mut |_| Err(ConfigProjectionFailureV1::Conflict)),
+            Err(ConfigProjectionFailureV1::Conflict)
+        );
+        let unwind = std::panic::catch_unwind(std::panic::AssertUnwindSafe({
+            let bridge = Arc::clone(&bridge);
+            move || {
+                let _ = bridge.with_locked_parent(&mut |_| panic!("intentional E3-B unwind"));
+            }
+        }));
+        assert!(unwind.is_err());
+        bridge.with_locked_parent(&mut |_| Ok(())).unwrap();
+
+        let child = unsafe { libc::fork() };
+        assert!(child >= 0);
+        if child == 0 {
+            let _ = bridge.with_locked_parent(&mut |_| unsafe { libc::_exit(0) });
+            unsafe { libc::_exit(127) };
+        }
+        let mut status = 0;
+        assert_eq!(unsafe { libc::waitpid(child, &mut status, 0) }, child);
+        assert_eq!(libc::WEXITSTATUS(status), 0);
+        bridge.with_locked_parent(&mut |_| Ok(())).unwrap();
+    }
+
+    #[test]
+    fn e3_b_hsa_bridge_serializes_concurrent_hsa_and_e3_access() {
+        let (home, _authority) = activated_home();
+        let configured = configured(home.path());
+        let bridge = Arc::new(
+            OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home(&configured)
+                .unwrap(),
+        );
+        let barrier = Arc::new(Barrier::new(2));
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let holder = {
+            let bridge = Arc::clone(&bridge);
+            let barrier = Arc::clone(&barrier);
+            std::thread::spawn(move || {
+                barrier.wait();
+                bridge
+                    .with_locked_parent(&mut |_| {
+                        entered_tx.send(()).unwrap();
+                        release_rx.recv().unwrap();
+                        Ok(())
+                    })
+                    .unwrap();
+            })
+        };
+        barrier.wait();
+        entered_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        let (done_tx, done_rx) = mpsc::channel();
+        let ordinary = {
+            let path = home.path().to_path_buf();
+            let done_tx = done_tx.clone();
+            std::thread::spawn(move || {
+                let authority = HostSessionAuthority::open(&path).unwrap();
+                authority.read_root().unwrap();
+                done_tx.send("ordinary").unwrap();
+            })
+        };
+        let e2_rm = {
+            let path = home.path().to_path_buf();
+            std::thread::spawn(move || {
+                let authority = HostSessionAuthority::open(&path).unwrap();
+                store::read_existing_accepted_work_authority_snapshot(&authority).unwrap();
+                done_tx.send("e2-rm").unwrap();
+            })
+        };
+        assert!(done_rx.recv_timeout(Duration::from_millis(100)).is_err());
+        release_tx.send(()).unwrap();
+        let mut completed = [
+            done_rx.recv_timeout(Duration::from_secs(5)).unwrap(),
+            done_rx.recv_timeout(Duration::from_secs(5)).unwrap(),
+        ];
+        completed.sort_unstable();
+        assert_eq!(completed, ["e2-rm", "ordinary"]);
+        holder.join().unwrap();
+        ordinary.join().unwrap();
+        e2_rm.join().unwrap();
+    }
+
+    #[test]
+    fn e3_b_hsa_bridge_unknown_authority_entry_is_rejected_and_preserved() {
+        let (home, _authority) = activated_home();
+        let configured = configured(home.path());
+        let bridge =
+            OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home(&configured)
+                .unwrap();
+        let unknown = home.path().join("authority-v1").join("unknown-e3-neighbor");
+        std::fs::create_dir(&unknown).unwrap();
+        let calls = AtomicUsize::new(0);
+        assert!(bridge
+            .with_locked_parent(&mut |_| {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            })
+            .is_err());
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert!(unknown.is_dir());
+    }
+}
 
 pub(crate) struct OpenedBootstrapHomeV1<'authority> {
     root: &'authority TrustedAuthorityRoot,

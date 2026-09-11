@@ -358,6 +358,8 @@ mod platform {
     use std::fs::OpenOptions;
     use std::io;
     use std::mem::MaybeUninit;
+    #[cfg(target_os = "linux")]
+    use std::os::fd::{AsFd, BorrowedFd};
     use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
     use std::os::unix::ffi::OsStrExt;
     use std::os::unix::fs::OpenOptionsExt;
@@ -1748,6 +1750,11 @@ mod platform {
     }
 
     impl TrustedDirectory {
+        #[cfg(target_os = "linux")]
+        pub(crate) fn borrow_fd(&self) -> BorrowedFd<'_> {
+            self.file.as_fd()
+        }
+
         pub(crate) fn create_directory(&self, name: &str) -> Result<Self, TrustedFsError> {
             let name = component(name)?;
             // SAFETY: parent fd is open and name is a single validated component.

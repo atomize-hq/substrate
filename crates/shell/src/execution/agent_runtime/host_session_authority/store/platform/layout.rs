@@ -280,7 +280,8 @@ impl<'a> StoreLayout<'a> {
                         | "objects"
                         | "keys"
                         | "retained-worker-admission-v1"
-                        | "dispatch-policy-commitment-v1",
+                        | "dispatch-policy-commitment-v1"
+                        | "agent-config-projection-v1",
                     EntryKind::Directory
                 ) | (ROOT_FILE | INIT_FILE, EntryKind::RegularFile)
             );

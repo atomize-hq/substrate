@@ -22,3 +22,6 @@ pub use execution::{lock, manager_init, shim_deploy};
 pub use transport_api_types::{
     InstallBootstrapContextCarrierV1, PlatformBootstrapMappingV1, PlatformPrincipalV1,
 };
+
+#[cfg(target_os = "linux")]
+pub use execution::agent_runtime::host_session_authority::facade::OpenedConfigProjectionHsaAuthorityV1;
