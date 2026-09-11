@@ -386,10 +386,14 @@ wrapper, and Codex descriptors and every unrelated descriptor remain close-on-ex
 their own immediate `execveat`.
 
 The expected bytes do not come from running or hashing a caller-selected executable during
-projection construction. The Linux provisioner installs root-owned source-build manifest entries for
-the exact installed `substrate-world-entry` helper and `substrate-gateway`, including
-source commit, tree, `Cargo.lock` hash, exact `x86_64-unknown-linux-musl` target, profile,
-installed-path digest, and physical file identity. Source-build record creation requires a clean tracked tree whose computed commit/tree and
+projection construction. E3-C implements the admitted installer source-store schemas, strict
+validation and import, publication/recovery helpers, and rendering/native-source behavior. E3-D
+consumes that landed machinery: its Linux provisioning integration builds and installs the actual
+`substrate-world-entry` helper and E3-eligible `substrate-gateway`, descriptor-readback-validates both,
+and only then invokes the Substrate publication helper to create the root-owned source-build record
+and head. That record includes source commit, tree, `Cargo.lock` hash, exact
+`x86_64-unknown-linux-musl` target, profile, installed-path digest, and physical file identity.
+Source-build record creation requires a clean tracked tree whose computed commit/tree and
 `Cargo.lock` digest equal the recorded build inputs; an uncommitted product build is not E3-eligible.
 The world-deps Codex installer publishes a separate root-owned entry only after verifying
 the official archive, extracting the uniquely named executable, hashing that extracted executable,
@@ -2605,15 +2609,29 @@ that disagrees with provenance is malformed or wrong-binding. The source entry's
 authenticates its `runtime_support` because that nested value is present while only `entry_hash` is
 omitted from the entry-hash preimage.
 
-`install_linux_managed_state` publishes a new immutable Substrate record only after building,
-installing, and descriptor-readback-hashing both entries. The rendered Codex installer does the same
-only after official-archive verification, unique-entry extraction, install, and installed-descriptor
-readback. A source record's `predecessor_ref` is null at revision 1 and thereafter equals the exact
-prior head ref; its revision is prior plus one. The stream head advances by expected-bytes CAS and
-records its own predecessor-head hash. Exact retry is byte-equal. A different valid source build or
-installed byte sequence creates a new immutable record and head revision, and any accepted projection
-using it creates a new projection series; no fixed immutable filename blocks an upgrade and no old
-record is rewritten.
+In E3-D, `install_linux_managed_state` invokes E3-C's landed helper to publish a new immutable
+Substrate record only after building, installing, and descriptor-readback-validating both real
+entries against their exact build provenance. No Substrate artifact record or head may be published
+or promoted before both entries pass those checks. A V1 artifact, placeholder ELF, invented
+provenance, partial manifest, or publisher success that silently omits either required artifact is
+never a substitute. The rendered Codex installer does the same only after official-archive
+verification, unique-entry extraction, install, and installed-descriptor readback. A source record's
+`predecessor_ref` is null at revision 1 and thereafter equals the exact prior head ref; its revision
+is prior plus one. The stream head advances by expected-bytes CAS and records its own predecessor-head
+hash. Exact retry is byte-equal. A different valid source build or installed byte sequence creates a
+new immutable record and head revision, and any accepted projection using it creates a new projection
+series; no fixed immutable filename blocks an upgrade and no old record is rewritten. A later gateway
+replacement must establish its matching valid source record before the replacement bytes become
+E3-eligible; a stale record cannot authorize different bytes.
+
+Before E3-D's real Substrate artifact producers and integration exist, the missing installed
+artifacts and absent valid Substrate source head have the explicit disposition `Unavailable`.
+Ordinary non-E3 provisioning may remain available, but it cannot report successful E3 artifact
+publication or E3 readiness. Any invocation that actually requires E3 Substrate artifact publication
+must fail closed. E3-C exercises its schemas, validators, import path, and publication/recovery
+helpers with valid bounded test inputs; those inputs are never production artifact authority or
+installed-runtime readiness evidence, and E3-C completion does not require executing or installing
+the E3-D-owned wrapper.
 
 Both source directory chains are `root:substrate` mode `0750`, non-group/other-writable, and opened
 no-follow. `source-store.json`, records, heads, and `lock` are `root:substrate` mode `0640`, link count
@@ -3501,8 +3519,8 @@ IDs or independent authority documents. Their binding order and owners are:
 |---|---|---|
 | `E3-A — strict V2 wire carrier and V1 compatibility` | strict transport/version-wrapper reachability and byte-identical V1 compatibility | pushed and live-verified E3-AC1 correction |
 | `E3-B — projection codec, registry, CAS, recovery, and retirement` | config-projection codec/registry plus the one literal HSA closed-layout addition | proof-clean landed E3-A |
-| `E3-C — authenticated authoring, V3 inventory, artifacts, and Codex rendering` | descriptor-pinned sources, selected-only V3 provenance, artifacts/native source, and deterministic Codex rendering | proof-clean landed E3-B |
-| `E3-D — Linux child security, capability parking, and process-wide exclusion` | Linux privilege descent, enforcement, wrapper, and universal child/helper exclusion | proof-clean landed E3-C |
+| `E3-C — authenticated authoring, V3 inventory, artifacts, and Codex rendering` | descriptor-pinned source-store schemas, validation/import, publication/recovery helpers, selected-only V3 provenance, native source, and deterministic Codex rendering; no E3-D artifact production | proof-clean landed E3-B |
+| `E3-D — Linux child security, capability parking, and process-wide exclusion` | Linux privilege descent, enforcement, actual wrapper implementation, static Substrate build/install and publication integration, and universal child/helper exclusion | proof-clean landed E3-C |
 | `E3-E — dormant managed-gateway preparation and adoption` | authenticated preparation, Dormant/no-ACK publication, listener/boundary/readiness, one-time secret delivery, adoption, and revocation | proof-clean landed E3-D |
 | `E3-F — retained V2 Codex launch/resume adoption and integrated proof` | retained local-adapter/gateway capability across initial and resumed V2 turns and integrated proof | proof-clean landed E3-E |
 
@@ -3530,6 +3548,16 @@ green, silent skip, or otherwise invalid invocation is not product proof. The sa
 packet by packet: missing or drifting required facilities are environmental stops for the work that
 depends on them, while security behavior implemented by a candidate is established by the owning
 packet's proof rather than presumed before that code exists.
+
+E3-C's bounded proof uses valid test inputs to exercise its source-store schemas, strict validators,
+import and publication/recovery helpers, and native-source/rendering behavior. It neither executes nor
+installs the E3-D-owned `substrate-world-entry` implementation, and its inputs cannot be promoted to
+production artifact authority or installed-runtime readiness evidence. E3-D must consume the landed
+E3-C machinery, implement and statically build/install the real wrapper and gateway, readback-validate
+their descriptors and exact build provenance, and establish the valid Substrate source record/head
+before any dependent E3 runtime operation. Until then the E3 artifact capability is unavailable and
+an invocation requiring its publication fails closed; unrelated non-E3 provisioning may continue
+without claiming E3 publication or readiness.
 
 All product-security predicates in this contract remain unchanged and fail closed. The owning packet
 must establish the required existing `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`, `CAP_DAC_OVERRIDE`, and
@@ -3953,27 +3981,40 @@ this catalog:
    `build_e3_in_world_app`, `serve_e3_inherited_listener`, `e3_validate_member_identity`, and
    `e3_health_check`. Existing `build_app`, `health_check`, every OAuth/token/messages/chat route,
    and the non-E3 main/port-1455 bind behavior are frozen and unreachable in E3 mode;
-8. in `crates/shell/src/builtins/world_deps/inventory.rs`, only existing
+8. E3-C owns the following publication machinery without owning production of the E3-D wrapper: in
+   `crates/shell/src/builtins/world_deps/inventory.rs`, only existing
    `codex_runtime_install_script_template_v1` plus new
    `render_codex_installer_artifact_source_v1`; in
    `crates/shell/src/builtins/world_deps/surfaces.rs`, only existing
    `CodexRuntimeInstallSpecV1`, `resolve_codex_runtime_install_spec_for_target_v1`, and
    `render_codex_runtime_install_script_v1`. The version remains exactly `0.125.0`. In
    `scripts/linux/world-lifecycle.sh`, only existing `record_linux_managed_state`,
-   `install_linux_managed_state`, and `restore_linux_managed_state`, plus new shell functions
+   `install_linux_managed_state`, and `restore_linux_managed_state` for the E3-C-owned system-config,
+   installed-home-bootstrap, and source-store lifecycle changes, plus new shell functions
    `provision_e3_system_config_mount_target_v1`, `publish_installed_home_bootstrap_v1`, and
-   `publish_substrate_artifact_source_v1`; in
-   `scripts/linux/world-provision.sh`, only existing `resolve_install_bootstrap_context`, the
-   `cargo build` target list, `SERVICE_UNIT_CONTENT` (including explicit `CAP_SETUID`, `CAP_SETGID`,
-   and `CAP_SETPCAP` solely for the verified one-way child transition plus
-   `SecureBits=noroot-locked`), and the exact
-   carrier/account/UID/primary-GID/source-build values passed
-   into `install_linux_managed_state`. That lifecycle function alone calls the two new publication
-   helpers. The new ELF target is added to the existing world-service package; provisioning builds
+   `publish_substrate_artifact_source_v1`. E3-C's production lifecycle integration may call the
+   system-config and installed-home-bootstrap helpers, but it must not invoke the Substrate artifact
+   publisher as a production success path. It tests the Substrate helper with valid bounded inputs
+   that are neither production artifact authority nor installed-runtime readiness evidence. In
+   `scripts/linux/world-provision.sh`, E3-C owns only existing `resolve_install_bootstrap_context` and
+   the exact carrier/account/UID/primary-GID values passed into `install_linux_managed_state` for its
+   owned bootstrap behavior.
+
+   E3-D owns the corresponding Substrate production integration: only the later additive changes to
+   existing `install_linux_managed_state` needed to build/install/readback-validate the two real
+   Substrate artifacts and invoke the landed Substrate publication helper without a missing-artifact
+   success path; and in `scripts/linux/world-provision.sh`, only the `cargo build` target list,
+   `SERVICE_UNIT_CONTENT` (including explicit `CAP_SETUID`, `CAP_SETGID`, and `CAP_SETPCAP` solely for
+   the verified one-way child transition plus `SecureBits=noroot-locked`), and the exact source-build
+   values passed into `install_linux_managed_state`. The new ELF target is added to the existing
+   world-service package; E3-D provisioning builds
    and installs `substrate-world-entry` and the E3-eligible `substrate-gateway` for exact
    `x86_64-unknown-linux-musl`, rejects either ELF unless it is exact `StaticExec` or constrained
    relocation-only `StaticPie` under support policy V1, and does not replace the baseline host-
-   target world-service daemon or V1 gateway artifact; and
+   target world-service daemon or V1 gateway artifact. It must publish and read back the complete
+   valid Substrate record/head before dependent E3 runtime use; no V1 fallback, placeholder ELF,
+   invented provenance, partial manifest, silent missing-artifact success, or stale record for
+   replacement bytes is admitted; and
 9. only the exact V2-to-V3 Codex world placement change in `config/agents/codex.yaml`, setting the
    fixed installed Codex path, `model: codex`, and empty MCP/feature lists. No host placement meaning
    changes; and

@@ -256,35 +256,47 @@ forbidden.
 ### E3-C — authenticated authoring, V3 inventory, artifacts, and Codex rendering
 
 - **Bounded behavior:** construct descriptor-pinned effective-config and selected-only inventory
-  sources, strict inventory V3, authenticated artifact manifests/native sources, and deterministic
+  sources, strict inventory V3, the admitted source-store schemas and strict validation/import plus
+  publication/recovery helpers, authenticated artifact manifests/native sources, and deterministic
   non-secret Codex 0.125 rendering.
 - **Source owner:** the packet-admitted `crates/config-projection` service/Codex/artifact surfaces;
   shell `config_model`, `agent_inventory`, and world-dependency installer surfaces; the one Codex
-  placement descriptor; and exact Linux lifecycle/provision publication helpers cataloged by the
-  contract.
+  placement descriptor; and the exact Linux installer publication helpers cataloged by the contract,
+  without their E3-D production call-site wiring.
 - **Direct predecessor:** independently landed and proof-clean E3-B.
 - **Consumes:** E3-B registry/codec capability and the pre-existing E2 immutable launch/fork link.
-- **Explicit nonownership:** shadow-history authority, policy recomposition, child privilege descent,
-  process-wide exclusion, gateway activation or secrets, retained launch/resume, D1, and E4.
+- **Explicit nonownership:** implementation or installation of `substrate-world-entry`, static
+  Substrate artifact build/install and production publication integration, shadow-history authority,
+  policy recomposition, child privilege descent, process-wide exclusion, gateway activation or
+  secrets, retained launch/resume, D1, and E4.
 - **Successor eligibility proof:** strict V3 parse/discovery negatives before selection; deterministic
   selected-only provenance with no shadowed bytes retained or hashed; descriptor/source substitution
-  negatives; artifact/source-manifest and native-source crash proof; and byte-identical Codex 0.125
-  reconstruction with ambient-layer closure. Only then may E3-D seek admission.
+  negatives; artifact/source-manifest and native-source crash proof using valid bounded test inputs;
+  and byte-identical Codex 0.125 reconstruction with ambient-layer closure. Those inputs are never
+  production artifact authority or installed-runtime readiness evidence, and this proof neither
+  executes nor installs the E3-D-owned wrapper. Only then may E3-D seek admission.
 
 ### E3-D — Linux child security, capability parking, and process-wide exclusion
 
-- **Bounded behavior:** install the synchronous internal-exec-first capability parking sequence,
-  descriptor-pinned wrapper security, cgroup/nftables/Landlock/seccomp/credential descent, and one
-  process-wide exclusion shared by every child/helper path.
+- **Bounded behavior:** implement `substrate-world-entry`; add its corresponding static build/install
+  wiring; consume E3-C's landed artifact machinery to build, install, descriptor-readback-validate,
+  and publish the actual Substrate artifacts with exact provenance; install the synchronous internal-
+  exec-first capability parking sequence, descriptor-pinned wrapper security,
+  cgroup/nftables/Landlock/seccomp/credential descent, and one process-wide exclusion shared by every
+  child/helper path.
 - **Source owner:** the packet-admitted world-service `main`, child-security, internal-exec, wrapper,
-  service, PTY, observation-handler, GC, and exclusion surfaces cataloged by the contract.
+  service, PTY, observation-handler, GC, and exclusion surfaces plus the exact Linux lifecycle and
+  provisioning production-integration surfaces cataloged by the contract.
 - **Direct predecessor:** independently landed and proof-clean E3-C.
-- **Consumes:** E3-C pinned artifacts, native roots, and enforcement inputs, plus the landed E2
-  filesystem plan without changing E2.
+- **Consumes:** E3-C source-store schemas, validators, import and publication/recovery helpers, pinned
+  artifact/native-root behavior, and enforcement inputs, plus the landed E2 filesystem plan without
+  changing E2.
 - **Explicit nonownership:** inventory or projection schema changes, gateway secret preparation or
   adoption, retained V2 Codex lifecycle, provider policy, V1/UAA semantics while exclusion is idle,
   D1, and E4.
-- **Successor eligibility proof:** sole-thread transition-capability parking/readback; exact child
+- **Successor eligibility proof:** actual static wrapper and gateway build/install, descriptor
+  readback, exact build-provenance validation, and complete valid Substrate source publication before
+  dependent E3 runtime operations; sole-thread transition-capability parking/readback; exact child
   UID/GID/zero-capability, Landlock, seccomp, dumpability, Yama, and control-path denial evidence;
   cgroup/nftables crash recovery; and races proving no ordinary/PTY/UAA/compatibility-gateway/GC
   helper can spawn during E3 exclusivity while idle compatibility behavior is unchanged. Only then
@@ -300,8 +312,9 @@ forbidden.
   authenticated local transport and gateway-runtime surfaces, and existing gateway launch/server
   adoption points cataloged by the projection and managed-gateway contracts.
 - **Direct predecessor:** independently landed and proof-clean E3-D.
-- **Consumes:** E3-B durable authority, E3-C pinned gateway artifacts/rendered inputs, E3-D child
-  security and exclusion, and the already-landed secure-FD consumer.
+- **Consumes:** E3-B durable authority, E3-C artifact machinery/rendered inputs, E3-D's valid
+  production-published pinned gateway artifact plus child security and exclusion, and the already-
+  landed secure-FD consumer.
 - **Explicit nonownership:** a new secret carrier, UAA changes, provider/upstream policy, retained V2
   Codex launch/resume, D1 envelopes, compatibility-gateway promotion, and E4.
 - **Successor eligibility proof:** authenticated-UDS/peer negatives before body read; Dormant/no-ACK
@@ -362,8 +375,8 @@ ownership;
 the exact E3-B cross-crate bridge, visibility, and acyclic dependency edges fixed in
 [`agent-config-projection-v1.md#hsa-projection-namespace-and-cross-process-lock-protocol`](../contracts/agent-config-projection-v1.md#hsa-projection-namespace-and-cross-process-lock-protocol),
 strict V2/version-wrapper transport plumbing through every currently V1-typed world-service helper;
-exact Spawn/Fork/toolbox/continue-fork carrier paths; the V2-only local Codex adapter and installed
-`substrate-world-entry` two-stage descriptor helper while V1 keeps UAA; descriptor-pinned gateway
+exact Spawn/Fork/toolbox/continue-fork carrier paths; the V2-only local Codex adapter and E3-D-owned
+installed `substrate-world-entry` two-stage descriptor helper while V1 keeps UAA; descriptor-pinned gateway
 start/readiness/access-boundary/ACK symbols; the existing gateway one-time consumer/identity metadata
 points; content-addressed root-owned bootstrap/artifact-source installer surfaces; and the exact Codex placement/version
 assertion. File-wide changes, a new local Codex helper crate, D1 envelope code, receipts, retained
@@ -385,6 +398,22 @@ and full E3 security attestation are not prerequisites solely because later pack
 an actual retained test requires one of those facilities, it must be available before the dependent
 operation, and a false green, silent skip, or invalid invocation never counts as product proof.
 Missing or drifting required facilities are environmental stops for the dependent work.
+
+E3-C completion does not require executing or installing an E3-D implementation. It exercises its
+source-store schemas, strict validators/import, publication/recovery helpers, and native-source and
+rendering behavior with valid bounded test inputs; those inputs can never stand for production
+artifact authority or installed-runtime readiness. Before E3-D produces the real artifacts, a
+missing installed artifact or valid Substrate source head is explicitly unavailable. Ordinary non-E3
+provisioning may remain available but cannot claim E3 artifact publication or E3 readiness, and an
+invocation requiring E3 artifact publication fails closed.
+
+E3-D must consume the landed E3-C machinery, implement and statically build/install
+`substrate-world-entry` and the E3-eligible gateway, descriptor-readback-validate both real artifacts
+and their exact build provenance, and establish a complete valid Substrate source publication before
+dependent E3 runtime operations. No record/head may be published or promoted using V1 artifacts, a
+placeholder ELF, invented provenance, a partial manifest, or silent success with a required artifact
+missing. Later gateway replacement bytes require matching new valid provenance; a stale record cannot
+authorize them.
 
 Candidate-implemented security behavior is established by its owning packet's proof, not presumed
 before its code exists. The required existing `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`, `CAP_DAC_OVERRIDE`,
