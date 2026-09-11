@@ -246,6 +246,8 @@ struct E3GatewaySecretReadyAttestationV1 {
     launch_input_hash: String,
     gateway_pid: u32,
     gateway_pid_start_time_ticks: u64,
+    user_namespace_device_id: u64,
+    user_namespace_inode: u64,
     dumpable: u32, // exactly 0 after PR_SET_DUMPABLE and PR_GET_DUMPABLE
     rlimit_core_soft: u64, // exactly 0
     rlimit_core_hard: u64, // exactly 0
@@ -422,7 +424,7 @@ Lowercase SHA-256 values are computed over:
 | `boundary_hash` | `{"boundary":<boundary with boundary_hash omitted>,"domain":"substrate.e3.gateway-access-boundary.v1"}` |
 | `intent_hash` | `{"domain":"substrate.e3.managed-gateway-activation-intent.v1","intent":<intent with intent_hash omitted>}` |
 | `launch_input_hash` | `{"domain":"substrate.e3.managed-gateway-launch-input.v1","launch_input":<launch input with launch_input_hash omitted>}` |
-| gateway secret-ready `attestation_hash` | `{"attestation":<secret-ready attestation with attestation_hash omitted>,"domain":"substrate.e3.gateway-secret-ready-attestation.v1"}` |
+| gateway secret-ready `attestation_hash` | `{"attestation":<complete secret-ready attestation, including user-namespace device/inode, with attestation_hash omitted>,"domain":"substrate.e3.gateway-secret-ready-attestation.v1"}` |
 | handoff `revision_hash` | `{"domain":"substrate.e3.config-projection-secret-handoff-revision.v1","revision":<handoff revision wrapper with revision_hash omitted>}` |
 | `ack_hash` | `{"ack":<ack with ack_hash omitted>,"domain":"substrate.e3.managed-gateway-activation-ack.v1"}` |
 | readiness-probe `input_hash` | `{"domain":"substrate.e3.managed-gateway-readiness-probe-input.v1","input":<probe input with input_hash omitted>}` |
@@ -436,7 +438,8 @@ The ACK embeds the exact nonsecret wrapper security attestation validated before
 secret delivery; its recomputed hash must equal
 `gateway_process_identity.child_security_attestation_hash`. Its process identity also carries the
 exact validated post-exec secret-ready attestation hash; that attestation must bind the same gateway
-instance, launch input, PID, and start time and prove zero dumpability/core limits before delivery.
+instance, launch input, PID, start time, and parent-validated user-namespace device/inode and prove
+zero dumpability/core limits before delivery.
 A gateway self-report without the pinned pipe/barrier, later `/proc` snapshot, same-PID value, or
 equal attestation under another projection cannot replace either proof.
 `ManagedGatewayLaunchInputRefV1` resolves exactly one immutable launch input by configured store and
@@ -560,20 +563,32 @@ SUBSTRATE_LLM_AUTH_BUNDLE_FD
 
 The immediate executable is not the gateway. World-service uses the same manifest-pinned ELF
 `substrate-world-entry` helper and two-stage protocol defined by the projection contract, with
-`SUBSTRATE_WORLD_ENTRY_ROLE=managed_gateway`; its five wrapper pointers identify the held gateway
-ELF, gateway working directory, enforcement-input reader, setup-ready writer, and final-exec reader.
+`SUBSTRATE_WORLD_ENTRY_ROLE=managed_gateway`; its six wrapper pointers identify the held gateway
+ELF, gateway working directory, enforcement-input reader, setup-ready writer, final-exec reader, and
+the parent-created `SUBSTRATE_WORLD_ENTRY_USERNS_FD` setup socket.
 The launch-input, reserved-listener, secret-ready write end, and empty secret-handoff read end also
 survive the wrapper exec;
 no cgroup, nftables, registry, installer-store, or other enforcement-control descriptor does. The
 parent attaches the gated PID to the exact gateway cgroup before releasing wrapper exec. The wrapper
-derives the exact E2 plan and installs the projection contract's derived-support layer followed by
-its gateway role-narrowing layer, which carries no E2 workspace/project right, then clears all
+creates its fresh per-gateway user namespace and blocks while world-service installs and validates
+the exact identity maps through the projection contract's parent-owned handshake. World-service
+retains the resulting namespace descriptor through cgroup-empty revocation; no caller, Codex,
+sibling, readiness probe, or other role receives it or shares that namespace. Only after mapped
+release does the wrapper create its private mount namespace, derive the exact E2 plan, and install the
+projection contract's derived-support layer followed by its gateway role-narrowing layer, which
+carries no E2 workspace/project right, then clears all
 ambient/effective/permitted/inheritable/bounding
 capabilities, drops to the installed UID/GID with no supplementary groups, installs the exact
-no-new-privileges/dumpability/ptrace/seccomp posture, and emits the strict
+no-new-privileges/dumpability/protected-user-namespace/seccomp posture, and emits the strict
 `E3ChildSecurityAttestationV1`. It cannot read the still-empty secret pipe. World-service
 exact-validates the attestation and independent `/proc`/pidfd/cgroup/FD/negative-access probes before
 writing the one final-exec byte.
+
+The user-namespace boundary protects memory and file descriptors across the validated namespace
+edge; it does not block same-UID signals or changes to intentionally shared user files. Existing
+artifact/configuration integrity, policy, Landlock, gateway access binding, activation/revocation,
+and retained-turn protections remain authoritative. No same-UID process is trusted merely by UID,
+and this contract makes no claim against a hostile host administrator or compromised kernel.
 
 The already unprivileged wrapper then uses the held manifest-matched gateway descriptor with
 `execveat(AT_EMPTY_PATH)` and argv exactly
@@ -603,10 +618,10 @@ bytes, or any ambient identity value aborts before readiness.
 After `/proc/<pinned-pid>/exe` exact-matches the held no-setid/no-file-capability gateway artifact,
 the inherited listener inventory still matches, and independent post-exec checks reproduce the
 attested UID/GID, zero capability masks, no-new-privileges, `TracerPid=0`, both zero core limits, the
-exact boot ID and irreversible Yama `ptrace_scope=3` denial, seccomp mode,
+exact boot ID and exact membership in the parent-held protected user namespace, seccomp mode,
 both Landlock layer hashes and their effective-intersection hash, and cgroup, world-service reads the
 secret-ready pipe to bounded EOF and exact-validates its hash, gateway/launch/PID/start binding,
-`dumpable=0`, zero core limits, and tracer value. That descriptor-pinned self-attestation plus the
+user-namespace device/inode, `dumpable=0`, zero core limits, and tracer value. That descriptor-pinned self-attestation plus the
 parent's live process readback becomes `GatewayProcessIdentityV1.secret_ready_attestation_hash`.
 Only then does world-service write the existing `GatewayAuthBundleV1` bytes into the
 pipe, closes and scrubs its writer/transient buffer, and publishes the unique `Delivered` handoff
@@ -719,11 +734,12 @@ The parent forks through the same prebuilt syscall-only gate, attaches the child
 `readiness_probe_cgroup`, and descriptor-execs the already manifest-pinned `substrate-world-entry`
 with role `ManagedGatewayReadinessProbe`. Its argv is exactly `["substrate-world-entry"]`, its working
 directory is `/`, and its environment starts empty and contains exactly the authenticated literal
-`SUBSTRATE_WORLD_ENTRY_ROLE=managed_gateway_readiness_probe` plus these seven decimal FD pointers:
+`SUBSTRATE_WORLD_ENTRY_ROLE=managed_gateway_readiness_probe` plus these eight decimal FD pointers:
 
 ```text
 SUBSTRATE_E3_READINESS_PROBE_INPUT_FD
 SUBSTRATE_WORLD_ENTRY_SETUP_READY_FD
+SUBSTRATE_WORLD_ENTRY_USERNS_FD
 SUBSTRATE_E3_READINESS_PROBE_START_FD
 SUBSTRATE_E3_READINESS_PROBE_CONNECTED_FD
 SUBSTRATE_E3_READINESS_PROBE_REQUEST_RELEASE_FD
@@ -733,16 +749,17 @@ SUBSTRATE_WORLD_ENTRY_SELF_ARTIFACT_FD
 
 The role parser accepts that lowercase literal only for this ABI and routes it exclusively to
 `run_managed_gateway_readiness_probe`; a missing, duplicate, differently cased, aliased, nondecimal,
-or extra environment entry aborts before any socket syscall or setup-ready output. The seven values
-identify respectively the immutable probe-input reader, setup-ready writer, one-byte probe-start
-reader, bounded connected-attestation writer, one-byte request-release
+or extra environment entry aborts before any socket syscall or setup-ready output. The eight values
+identify respectively the immutable probe-input reader, setup-ready writer, user-namespace setup
+socket, one-byte probe-start reader, bounded connected-attestation writer, one-byte request-release
 reader, bounded result writer, and a duplicate of the exact held wrapper ELF descriptor. The last FD
 is used only to byte/metadata/runtime-support match `enforcement_input.executable_artifact`, is closed
 before the start byte, and can never select or execute another artifact. It inherits no listener,
 gateway secret, config, workspace, cgroup, nftables, registry, or second/final target-executable
-descriptor. The wrapper validates the input, self-artifact, and its cgroup,
-applies the exact readiness-probe support closure, drops to the target UID/GID with zero groups and
-all capability sets zero, installs the common anti-ptrace/no-new-privileges posture and a probe
+descriptor. The wrapper validates the input, self-artifact, and its cgroup, creates a fresh
+readiness-probe user namespace through the parent-owned mapping handshake, then applies the exact
+readiness-probe support closure, drops to the target UID/GID with zero groups and all capability sets
+zero, installs the common protected-user-namespace/no-new-privileges posture and a probe
 seccomp profile. Before installing that filter it allocates and fixes all
 request/connected-attestation/result/parser buffers, resolves the exact numeric IPv4 listener, reads
 the immutable deadline durations, and performs every pre-socket filesystem, cgroup, identity, hash, and
@@ -849,9 +866,12 @@ The only valid sequence is:
    unwritten secret bytes solely in world-service transient memory. The gateway may not bind a
    replacement socket. Construct the sealed launch capability and descriptor-exec the pinned wrapper
    behind its parent cgroup gate with the nonsecret launch input, listener, enforcement input, and
-   empty secret reader. The wrapper applies the exact derived-support and gateway role-narrowing
+   empty secret reader. The wrapper creates its fresh user namespace and blocks while world-service
+   installs and validates only the configured identity maps; after mapped release it creates the
+   private mount namespace and applies the exact derived-support and gateway role-narrowing
    filesystem layers, privilege drop,
-   capability clearing, anti-ptrace posture, and seccomp filter, emits its security attestation, and
+   capability clearing, protected-user-namespace posture, and seccomp filter, emits its security
+   attestation, and
    blocks. Only the readiness probe can connect; Codex and gateway do not yet exist.
 3. Exact-validate the wrapper security attestation and independent live process state, then release
    the final wrapper gate. Require that the same pinned unprivileged PID descriptor-execed the exact
@@ -877,8 +897,9 @@ The only valid sequence is:
    the ACK points to its dormant predecessor, never to the record that contains the ACK. Create the
    Codex child with prebuilt argv/environment/descriptors behind the wrapper-exec gate, attach it to
    the exact member cgroup, and release only that gate. The pinned wrapper creates the private config
-   namespace, applies the authenticated E2 filesystem policy, completes the exact UID/GID/capability/
-   no-new-privileges/anti-ptrace/seccomp transition, emits the exact setup-ready and child-security
+   mount namespace inside its already parent-validated fresh user namespace, applies the authenticated
+   E2 filesystem policy, completes the exact UID/GID/capability/
+   no-new-privileges/protected-user-namespace/seccomp transition, emits the exact setup-ready and child-security
    attestations, and blocks on the independent
    final-exec gate; Codex does not exist and cannot connect yet.
 6. Immediately before activation, resolve the configured accepted-home active head and revalidate
@@ -888,7 +909,8 @@ The only valid sequence is:
    `AllowExactMember` successor for the exact child cgroup and publish the `Active/Released`
    projection revision with that successor ref.
 7. Immediately before final-exec release for the initial or any later sequential resumed turn,
-   validate the setup-ready/security attestation and child namespace,
+   validate the setup-ready/security attestation and exact membership in the parent-held child user
+   namespace and private mount namespace,
    then repeat the same authority and live-identity validation, including equality with the
    just-published active head and complete ordered rule set. Write exactly one final-exec byte; the
    wrapper revalidates and descriptor-execs Codex.
@@ -986,8 +1008,11 @@ listener acceptable, cannot satisfy an E3 gate, and is never automatic fallback 
 malformed, newer, legacy, wrong-bound, hash-invalid, stale, partially published, or conflicting E3
 authority. Gateway absence or an unsupported kernel boundary is typed `UnsupportedLegacyState` or
 `UnsupportedPlatform`; missing authenticated E2/Landlock confinement, privilege/capability descent,
-anti-ptrace posture, or control-path denial is `UnsupportedSecurityPosture`; corruption/substitution
-is fail-closed.
+valid trusted-service-owned user-namespace identity/membership, required trusted tracing, gateway
+non-dumpability, or control-path denial is `UnsupportedSecurityPosture`; corruption/substitution is
+fail-closed. Substrate does not change or require a value for host-wide Yama policy; a host policy
+that blocks required tracing produces the actual compatibility failure rather than a silent tracing
+fallback.
 
 This contract adds no implementation evidence and marks no gate green. E3 still requires later fresh
 admission and explicit dispatch; D1 later consumes the ACK/projection capability in its V3 carrier,

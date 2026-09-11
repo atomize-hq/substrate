@@ -108,9 +108,10 @@ At the authority baseline:
     E3 `Dormant` record bound to a process-local credential source before a V2 execute merely by
     extending the execute carrier. E3 requires the bounded preparation route specified below.
 21. Baseline gateway `codex_auth_context.rs` retains the access token in process-lifetime static
-    state, while the Linux service unit has no core-dump exclusion. Yama 3 blocks ptrace but does not
-    prevent a dumpable process from writing a core. Both world-service before E3 body acceptance and
-    the gateway before secret delivery therefore require the non-dumpable/zero-core barriers below.
+    state, while the Linux service unit has no core-dump exclusion. A process-scoped user-namespace
+    boundary does not prevent a dumpable process from writing a core. Both world-service before E3
+    body acceptance and the gateway before secret delivery therefore require the independent
+    non-dumpable/zero-core barriers below.
 22. The landed E2 launch validator requires `retained_worker_launch_authority = Some(exact proof)`
     only for `FreshSpawn` and requires it to be `None` for `Fork`. The E3 prepare request and sealed
     equality join must preserve that exact nullable value.
@@ -735,7 +736,7 @@ SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME,SUBSTRATE_LLM_AUTH_BUNDLE_FD,
 SUBSTRATE_WORLD_ENTRY_BINARY,SUBSTRATE_WORLD_ENTRY_BINARY_FD,
 SUBSTRATE_WORLD_ENTRY_CGROUP_PROCS_FD,SUBSTRATE_WORLD_ENTRY_CGROUP_PROCS_PATH,
 SUBSTRATE_WORLD_ENTRY_FINAL_EXEC_FD,SUBSTRATE_WORLD_ENTRY_REQUIRE_CGROUP_ATTACH,
-SUBSTRATE_WORLD_ENTRY_ROLE,SUBSTRATE_WORLD_ENTRY_SETUP_READY_FD,SUBSTRATE_WORLD_ENTRY_WORKING_DIR,
+SUBSTRATE_WORLD_ENTRY_ROLE,SUBSTRATE_WORLD_ENTRY_SETUP_READY_FD,SUBSTRATE_WORLD_ENTRY_USERNS_FD,
 SUBSTRATE_WORLD_ENTRY_WORKING_DIR_FD]`. The FD-named keys are numeric nonsecret descriptor pointers
 that exist only in the wrapper launch environment described below.
 Unknown inherited environment is absent because inheritance is empty, not because the denylist is
@@ -904,7 +905,7 @@ struct E3WorldFsEnforcementInputV1 {
     policy_snapshot_revision: String,
     expected_process_cgroup: CanonicalCgroupIdentityV1,
     kernel_boot_id: String,
-    required_yama_ptrace_scope: u32, // exactly 3
+    user_namespace_requirement: E3UserNamespaceRequirementV1,
     target_uid: u64,
     target_gid: u64,
     immutable_config_source: Option<CanonicalDirectoryV1>,
@@ -917,6 +918,30 @@ struct E3WorldFsEnforcementInputV1 {
 }
 
 enum E3IsolatedChildRoleV1 { Codex, ManagedGateway, ManagedGatewayReadinessProbe }
+
+struct E3LinuxIdMapExtentV1 {
+    inside_id: u64,
+    outside_id: u64,
+    length: u64, // exactly 1
+}
+
+struct E3UserNamespaceRequirementV1 {
+    trusted_service_uid: u64, // exactly the installed primary service UID, currently 0
+    parent_namespace_device_id: u64,
+    parent_namespace_inode: u64,
+    uid_map: E3LinuxIdMapExtentV1,
+    gid_map: E3LinuxIdMapExtentV1,
+}
+
+struct E3UserNamespaceAttestationV1 {
+    namespace_device_id: u64,
+    namespace_inode: u64,
+    owner_uid: u64,
+    parent_namespace_device_id: u64,
+    parent_namespace_inode: u64,
+    uid_map: E3LinuxIdMapExtentV1,
+    gid_map: E3LinuxIdMapExtentV1,
+}
 
 enum E3PolicyAuthoritySourceV1 {
     InitialLaunch { e2_activation_id: String, commitment_ref: DispatchPolicyCommitmentRefCarrierV1 },
@@ -985,9 +1010,9 @@ struct E3ChildSecurityAttestationV1 {
     cap_last_cap: u32, // must be at most 63 and every value through it was dropped
     no_new_privs: bool, // exactly true
     dumpable: u32, // exactly 0 in the pre-final-exec wrapper/probe
-    ptracer_pid: u32, // exactly 0 in the pre-final-exec wrapper/probe
+    tracer_pid: u32, // 0 for an untraced role; otherwise the exact trusted service tracer PID
     kernel_boot_id: String,
-    yama_ptrace_scope: u32, // exactly 3
+    user_namespace: E3UserNamespaceAttestationV1,
     seccomp_mode: u32, // exactly 2, filter
     landlock_abi: u32,
     e2_enforcement_plan_hash: String,
@@ -1219,31 +1244,34 @@ member cgroup through a control descriptor retained only by world-service. One g
 the descriptor-pinned wrapper `execveat(AT_EMPTY_PATH)`. No cgroup, nftables, accepted-home registry,
 installer-store, or other enforcement-control descriptor is inherited by the child.
 
-For that wrapper exec, the already-built environment contains exactly nine pairwise-distinct decimal
+For that wrapper exec, the already-built environment contains exactly ten pairwise-distinct decimal
 descriptor pointers: `SUBSTRATE_E3_CODEX_LAUNCH_PLAN_FD`,
 `SUBSTRATE_E3_NATIVE_REALIZATION_FD`, `SUBSTRATE_E3_NATIVE_SOURCE_FD`,
 `SUBSTRATE_E3_SYSTEM_EMPTY_FD`, `SUBSTRATE_E3_WORLD_FS_INPUT_FD`,
 `SUBSTRATE_WORLD_ENTRY_BINARY_FD`, `SUBSTRATE_WORLD_ENTRY_FINAL_EXEC_FD`,
-`SUBSTRATE_WORLD_ENTRY_SETUP_READY_FD`, and `SUBSTRATE_WORLD_ENTRY_WORKING_DIR_FD`, plus the literal
+`SUBSTRATE_WORLD_ENTRY_SETUP_READY_FD`, `SUBSTRATE_WORLD_ENTRY_USERNS_FD`, and
+`SUBSTRATE_WORLD_ENTRY_WORKING_DIR_FD`, plus the literal
 child role `SUBSTRATE_WORLD_ENTRY_ROLE=codex`. They name the bounded launch-plan reader, native
 realization/source/system-empty directories, bounded enforcement-input reader, exact manifest-pinned
-Codex ELF, final-exec reader, setup-ready writer, and pinned workspace directory. File descriptors
+Codex ELF, final-exec reader, setup-ready writer, user-namespace setup socket, and pinned workspace
+directory. File descriptors
 0, 1, and 2 are respectively the already-created prompt reader, event stdout writer, and stderr
 writer; the plan fixes those numbers and the wrapper validates their pipe types and directions. The
 wrapper-exec gate and its parent end are closed before wrapper exec. `CODEX_BINARY`, every cgroup
 control pointer, pathname-valued V1 wrapper key, and every other environment entry are absent.
 
-The descriptor-pinned ELF wrapper strictly parses and removes those ten variables, verifies all
+The descriptor-pinned ELF wrapper strictly parses and removes those eleven variables, verifies all
 descriptor types and non-aliasing, reads the launch plan and enforcement input once each to separate
 64-KiB bounded EOF, closes both pipe FDs, strictly decodes/re-encodes them, reproduces both hashes,
 requires the plan hash to equal the enforcement input, exact-matches every plan directory to its held
 descriptor, validates the plan's internal argv/environment/output/turn rules, reproduces the E2
 snapshot bytes/hash, and verifies its PID is
-already in `expected_process_cgroup`. It creates its private mount namespace, bind-mounts the accepted
+already in `expected_process_cgroup`. It completes the protected-user-namespace setup handshake, then
+creates its private mount namespace, bind-mounts the accepted
 immutable config and `system-empty` mounts as specified above, applies the exact authenticated E2
 filesystem policy plus only the role-specific execution-support paths below, and performs the
 complete source-matched loader-input validation inside that namespace. It then completes the
-irreversible security transition below and writes exactly one bounded canonical
+one-way security transition below and writes exactly one bounded canonical
 `CodexSetupReadyAttestationV1` to the setup-ready pipe, closes that pipe, and blocks on the
 close-on-exec final-exec pipe. The parent exact-validates the attestation, pinned PID/cgroup, native
 root, `/proc/<pinned-pid>/ns/mnt`, and `/proc/<pinned-pid>/root/etc/codex` against its retained
@@ -1401,27 +1429,79 @@ link, a non-procfs mount, a PID/start-time mismatch, another numeric PID, or any
 or sibling is `UnsupportedSecurityPosture`; `/proc/self` is never an admitted or opened E3 support
 path.
 
-E3 V1 additionally requires Linux Yama `ptrace_scope=3`, whose kernel-defined posture is no attach
-at all and cannot be lowered until reboot ([Linux Yama documentation](https://docs.kernel.org/admin-guide/LSM/Yama.html)).
-Before creating the process-wide exclusive gate, world-service descriptor-opens the procfs
-`/proc/sys/kernel/yama/ptrace_scope` object no-follow, requires root ownership, a procfs mount, and
-exact bytes `3\n`, and records the lowercase canonical `/proc/sys/kernel/random/boot_id` UUID. The
-same boot ID and required value are bound into every enforcement input/attestation and re-read
-immediately before secret write, readiness start, boundary allowance, every final-exec release, and
-post-exec prompt release. Missing Yama, another value, another boot ID, or any inability to prove the
-same procfs authority is `UnsupportedSecurityPosture` before E3 effects. E3 does not write a sysctl;
-the administrator/provisioning environment must have entered this irreversible-for-the-boot posture.
+E3 V1 does not use host-wide Yama policy as authority. Substrate must not write or temporarily toggle
+`/proc/sys/kernel/yama/ptrace_scope`, require an administrator to change it, or encode any observed
+value as an enforcement input, attestation, or canonical hash. The existing host value may be read
+only as diagnostic and acceptance evidence that it stayed byte-identical before, during, and after
+E3 operation; no particular value, including the feasibility probe's observed `1`, is required. If
+the unchanged host policy prevents an operation whose existing Substrate semantics require trusted
+tracing, that exact operation fails with its real compatibility error before release; E3 may not
+silently disable tracing or claim a weaker execution result. The boot ID remains required because it
+binds process and namespace identities across PID/inode reuse, not because it attests Yama.
 
-Before emitting setup-ready, the wrapper uses its provisioned parent-only `CAP_SETUID`, `CAP_SETGID`,
-and `CAP_SETPCAP` to perform this exact one-way order: install all mount/Landlock/E2 deny controls;
-clear supplementary groups; clear ambient capabilities; set and lock securebits `NOROOT` and
-`NO_SETUID_FIXUP` with `KEEP_CAPS` clear; drop every capability from the bounding set through the
-kernel's authenticated `cap_last_cap`, including those three last; set real/effective/saved/fs GID and
-UID to the bootstrap-authenticated target; zero both capability data words for effective, permitted,
-and inheritable sets; set `PR_SET_NO_NEW_PRIVS=1`, `PR_SET_DUMPABLE=0`, and
-`PR_SET_PTRACER=0`; and install a seccomp filter returning `EPERM` for `ptrace`,
+The primary world-service process remains in the inherited host user namespace for its complete
+lifetime. Before registering E3 routes it descriptor-opens its own user namespace and binds that
+descriptor's device/inode plus the installed trusted service UID and boot-bound service PID/start
+identity. It never calls `unshare(CLONE_NEWUSER)` or enters a child user namespace. Each Codex,
+managed-gateway, and managed-gateway-readiness wrapper instead creates a fresh user namespace for
+that one descriptor-pinned wrapper/final-exec process tree. The namespace must be distinct from the
+service namespace and every sibling or other-role namespace; descendants may inherit only their
+exact parent's namespace. A shared user namespace is not isolation among members, so no gateway,
+separate participant, sibling, readiness probe, non-E3 child, or unclassified helper may join that
+unit. The existing cgroup, role-specific Landlock, seccomp, gateway non-dumpability, and process-wide
+exclusion requirements remain independently mandatory.
+
+World-service creates one parent-owned `SOCK_SEQPACKET|SOCK_CLOEXEC` user-namespace setup socketpair
+for the exact child and clears close-on-exec only on the child endpoint for the single pinned wrapper
+exec. Only that endpoint and the nonsecret decimal pointer
+`SUBSTRATE_WORLD_ENTRY_USERNS_FD` cross the pinned wrapper exec. After strictly parsing its trusted
+launch descriptors, and before a mount, policy effect, target executable, secret byte, listener
+allowance, or prompt can be exposed, `prepare_private_child_namespace` calls
+`unshare(CLONE_NEWUSER)`, sends the sole one-byte namespace-created message `0x01`, and blocks. The trusted wrapper
+exec before this call is intentionally inside the parent namespace but is descriptor-pinned, receives
+no secret, and cannot pass either release gate; the gateway and authorized agent executable never run
+there. World-service binds the notification to the held pidfd/PID/start tuple, opens
+`/proc/<pid>/ns/user` itself, and validates `NS_GET_NSTYPE`, `NS_GET_OWNER_UID`, `NS_GET_PARENT`, and
+descriptor identity. The owner is exactly the installed trusted service UID, currently host UID 0;
+it is never the ordinary developer UID. The parent is byte-identical to the service's held host-user-
+namespace descriptor. The parent accepts only one `0x01` packet and no ancillary descriptor.
+
+While the wrapper remains blocked, the same synchronous service thread raises only its already-
+parked `CAP_SETUID` and `CAP_SETGID` into its effective set, writes one UID-map extent and one GID-map
+extent, and immediately clears and reads back both effective bits before sending the fixed mapped
+release `0x02`. There is no await, callback, fork, or unrelated work while those bits are raised. Each extent
+is exactly `<target-id> <same-host-target-id> 1`, where the nonzero UID and GID come from the installed
+bootstrap identity; no inside or outside host-root mapping, subordinate range, supplementary identity,
+caller-selected map, new account, or additional host capability is allowed. The parent rereads both
+map files exactly, validates the held namespace descriptor again, and retains that descriptor and its
+bound pidfd/process identity until the exact child cgroup is empty. The wrapper independently verifies
+its actual namespace membership and exact maps after receiving the sole one-byte mapped release
+`0x02`, then closes the setup socket. EOF, duplicate/trailing bytes, or a substituted
+notification, descriptor, owner, parent, map, member PID, or reused namespace identity fails closed.
+Every error or unwind after a parent capability is raised must clear and read it back; inability to do
+so aborts the service while the child remains unreleased.
+
+This per-child direct-creation lifecycle uses no later user-namespace `setns`: precreating one shared
+namespace and entering it later is neither required nor authorized. Any already-required network-
+namespace entry happens in the existing trusted post-fork setup before wrapper exec and before the
+user-namespace boundary using the already-effective service `CAP_SYS_ADMIN`. The trusted wrapper uses
+that same existing bit only for direct user-namespace creation; afterward its setup capabilities are
+scoped to the new namespace and cannot administer the parent namespace. After mapped release it uses
+namespace-local `CAP_SYS_ADMIN` to create its private mount namespace, fixes its filesystem UID/GID to
+the configured identity, and performs the existing descriptor-rooted mount and Landlock setup. It
+then clears supplementary groups, uses only namespace-local `CAP_SETGID`/`CAP_SETUID` for final ID
+descent and `CAP_SETPCAP` for the securebits/bounding-set transition, descends all
+real/effective/saved/filesystem IDs to the configured UID/GID, and removes every capability. It then
+sets `PR_SET_NO_NEW_PRIVS=1`, establishes `PTRACE_TRACEME` before filtering only
+when the existing execution path requires the trusted service parent to trace it, applies the role's
+dumpability/core posture, and installs the existing seccomp filter returning `EPERM` for `ptrace`,
 `process_vm_readv`, `process_vm_writev`, `kcmp`, `pidfd_getfd`, `bpf`, `perf_event_open`, all
-mount-family calls, and namespace creation/setns. Failure of any syscall or readback aborts.
+mount-family calls, and namespace creation/setns. Final exec cannot change namespace membership.
+Failure of namespace creation/mapping, filesystem setup, ID descent, capability removal, required
+trusted tracing, or any readback aborts before secret delivery or final-exec/prompt release. The
+forked-child feasibility probe did not exercise this wrapper/world-service integration, a precreated
+namespace, or later `setns`; E3-D must prove the selected ordering against the actual static wrapper.
+
 Provisioning adds those three transition capabilities to both `CapabilityBoundingSet` and
 `AmbientCapabilities` so primary service exec initially places them in
 bounding/permitted/inheritable/effective sets, and sets `SecureBits=noroot-locked`. The installed
@@ -1434,9 +1514,10 @@ and call `run_world_service`. Every runtime worker is therefore created from the
 `on_thread_start` readback aborts the process if any worker differs, and later blocking/helper threads
 inherit from an already-verified thread. Existing baseline service capabilities remain explicitly
 ambient/effective as at the baseline. A non-E3 fork never raises the three parked transition bits,
-and locked `NOROOT` prevents UID-0 exec semantics from regaining them; only the E3 post-fork syscall
-stub raises exactly those three for the manifest-pinned wrapper. They are absent again before either
-released E3 child exec.
+and locked `NOROOT` prevents UID-0 exec semantics from regaining them. Only the E3 post-fork syscall
+stub raises all three for the manifest-pinned wrapper, and only the bounded parent map-installation
+scope above raises `CAP_SETUID`/`CAP_SETGID` on its one service thread. They are parked again before
+mapped release and absent from every released E3 child exec.
 
 The baseline capabilities that remain effective in trusted world-service include
 `CAP_SYS_PTRACE`, `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`, and `CAP_DAC_OVERRIDE`. Baseline V1/UAA,
@@ -1480,8 +1561,9 @@ control descriptor is inherited: the wrapper derives the one probe pathname or n
 solely from this authenticated, hash-bound input, and a caller or ambient path cannot select it.
 
 The trusted wrapper reads back its own UID/GID tuples, zero supplementary groups, all five zero
-capability masks, `NoNewPrivs: 1`, seccomp-filter mode, dumpability and ptracer posture, Landlock ABI
-and ruleset hash, and exact E2/input hashes into `E3ChildSecurityAttestationV1`. A kernel
+capability masks, `NoNewPrivs: 1`, seccomp-filter mode, role-appropriate dumpability and tracer
+posture, Landlock ABI and ruleset hash, the exact user-namespace owner/parent/maps/membership, and
+exact E2/input hashes into `E3ChildSecurityAttestationV1`. A kernel
 `cap_last_cap > 63` is unsupported by V1 rather than truncated. It also performs negative
 probes in that exact target order: operation `open_read_directory` returns `EACCES` for the registry,
 sibling root, world-service state, and other-role private root; `open_write_cgroup_procs` returns
@@ -1495,23 +1577,43 @@ is omission, never a successful probe; before a later sibling's first child rele
 runs reciprocal same-UID probes against both existing runtimes. The canonical ordered results form
 `denied_control_probe_hash`. The parent treats the wrapper-emitted pipe bytes only
 as evidence from the manifest-pinned trusted wrapper, independently checks `/proc/<pinned-pid>/status`,
-UID/GID maps, groups, cgroup, seccomp, namespace, open-FD inventory, and the descriptor identities
-bound into the wrapper's negative target set, revalidating every held target after the results return.
-It checks pre-exec dumpability/ptracer state and Yama denial through a fresh
-same-target-UID probe child with zero capabilities,
-no shared namespace handles, and the pinned target PID/start-time tuple; the privileged parent itself
-cannot substitute its `CAP_SYS_PTRACE` result. Every exact zero/value/hash is required before release. Same host UID does not
-permit Codex to inspect the credential-bearing gateway: pre-exec dumpability/ptracer posture plus the
-syscall filter, boot-bound Yama-3 posture, and inaccessible `/proc/<gateway-pid>` rule are mandatory,
-and a failed cross-process canary
-probe aborts activation.
+UID/GID maps, groups, cgroup, seccomp, user/mount namespace membership, open-FD inventory, and the
+descriptor identities bound into the wrapper's negative target set, revalidating every held target
+after the results return. The namespace fields in the enforcement input and child attestation are
+covered by their existing canonical hashes; a matching hash never substitutes for the parent-held
+namespace descriptor and live membership readback.
+
+The same-UID denial canary must isolate the user-namespace effect from ambient host policy. A fresh
+same-target-UID, zero-capability inspector outside the target namespace first exercises the identical
+operations against a `Dumpable=1` same-host-user-namespace control that explicitly authorizes that
+inspector; ptrace attach, `process_vm_readv`, `/proc/<pid>/mem`, and `pidfd_getfd` must all succeed.
+Using the same inspector and authorization shape against the post-exec protected target, ptrace and
+`process_vm_readv` must fail with `EPERM`, `/proc/<pid>/mem` must fail with `EACCES` or `EPERM`, and
+`pidfd_open` may succeed but `pidfd_getfd` must fail with `EPERM`. The inspector receives no namespace
+descriptor. A failed positive control is inconclusive and cannot be reported as namespace protection;
+the exact compatibility/security failure is surfaced without changing host policy. The privileged
+parent's own `CAP_SYS_PTRACE` result cannot substitute. Every exact identity/value/hash and conclusive
+canary is required before release. Separate fresh namespaces, the syscall filter, Landlock's
+inaccessible `/proc/<gateway-pid>` rule, and the gateway's non-dumpability together keep same-host-UID
+Codex and sibling/other-role processes from inspecting the credential-bearing gateway.
 
 Gateway exec is the one stricter post-exec case because that process retains the credential. Before
 world-service writes the auth bundle, the pinned gateway must complete the managed-gateway
 secret-ready barrier proving `PR_GET_DUMPABLE=0`, both `RLIMIT_CORE` values zero, and `TracerPid=0`;
 those values remain zero for the gateway lifetime. A non-secret Codex exec may have `Dumpable=1`
-only because it receives no gateway credential, while the same boot-stable Yama-3 and cross-process
-denial checks still gate its prompt release.
+only because it receives no gateway credential, while its exact protected-user-namespace membership
+and the conclusive cross-process denial checks still gate its prompt release. When an existing
+Substrate path requires trusted tracing, `TracerPid` instead must identify the boot-bound trusted
+service tracer and the expected exec/exit stops and readbacks must succeed; an untraced role still
+requires `TracerPid=0`.
+
+This boundary protects process memory and file descriptors across its validated namespace edge. It
+does not prevent same-UID signals or modification of intentionally shared user files, and it does not
+make every same-UID process trusted. Descriptor-pinned executables, installed configuration, policy
+inputs, accepted-home/native-source authority, and control objects retain all existing integrity,
+Landlock, mode, ownership, and hash requirements. E3 claims no resistance to a hostile host
+administrator, kernel compromise, or another process already admitted inside the same protected
+process tree.
 
 Only after the `Active/Released` record and allowed boundary are durable and exact-revalidated does
 the parent write one final-exec byte for this initial or resumed turn. The wrapper consumes it,
@@ -1533,8 +1635,8 @@ launch/join uncertainty rules and is never retried merely from the E3 record.
 
 The parent retains the prompt pipe write end until the pinned PID's `/proc/<pid>/exe` matches the
 no-setid/no-file-capability Codex artifact and post-exec checks reproduce target UID/GID, zero
-capability masks, no-new-privileges, `Dumpable=1`, `TracerPid=0`, the same boot ID and irreversible
-Yama-3 denial, seccomp mode, Landlock/cgroup
+capability masks, no-new-privileges, `Dumpable=1`, role-appropriate trusted-tracer identity, the same
+boot ID, exact membership in the still-held protected user namespace, seccomp mode, Landlock/cgroup
 identity, and absence of every wrapper/gateway/secret/control descriptor. Only then does it write the prompt plus LF and close the
 pipe. Failure kills the cgroup and follows the same E2 uncertainty path; a Codex event or session ID
 cannot substitute for this check.
@@ -1840,14 +1942,14 @@ Lowercase SHA-256 domains and preimages are:
 | `managed_gateway.projection_hash` | `{"domain":"substrate.e3.managed-gateway-projection.v1","projection":<managed_gateway with projection_hash omitted>}` |
 | `nonsecret_handoff.projection_hash` | `{"domain":"substrate.e3.nonsecret-handoff-projection.v1","projection":<nonsecret_handoff with projection_hash omitted>}` |
 | runtime-support `manifest_hash` | `{"domain":"substrate.e3.runtime-support-manifest.v1","manifest":<runtime support manifest with manifest_hash omitted>}` |
-| enforcement-input `enforcement_input_hash` | `{"domain":"substrate.e3.world-fs-enforcement-input.v1","input":<input with enforcement_input_hash omitted>}` |
+| enforcement-input `enforcement_input_hash` | `{"domain":"substrate.e3.world-fs-enforcement-input.v1","input":<complete input, including user_namespace_requirement, with enforcement_input_hash omitted>}` |
 | `e2_enforcement_plan_hash` | `{"discover":<exact ordered E2 paths>,"domain":"substrate.e3.e2-enforcement-plan.v1","execute":<exact ordered E2 paths>,"policy_snapshot_hash":<hash>,"read":<exact ordered E2 paths>,"write":<exact ordered E2 paths>}` |
 | `derived_support_ruleset_hash` | `{"domain":"substrate.e3.derived-support-landlock-layer.v1","e2_enforcement_plan_hash":<hash>,"support_discover":<ordered explicitly enumerable E3 subtree paths; no synthetic ancestors>,"support_execute":<ordered paths>,"support_read":<ordered paths>,"support_write":<ordered paths>}` |
 | `role_narrowing_ruleset_hash` | `{"child_role":<role>,"discover":<ordered final explicitly enumerable subtree paths; no synthetic ancestors>,"domain":"substrate.e3.role-narrowing-landlock-layer.v1","execute":<ordered final role paths>,"read":<ordered final role paths>,"write":<ordered final role paths>}` |
 | `effective_landlock_hash` | `{"derived_support_ruleset_hash":<hash>,"domain":"substrate.e3.effective-landlock-intersection.v1","role_narrowing_ruleset_hash":<hash>}` |
 | denied-control target `target_hash` | `{"domain":"substrate.e3.denied-control-probe-target.v1","target":<target with target_hash omitted>}` |
 | `denied_control_probe_hash` | `{"domain":"substrate.e3.denied-control-probes.v1","probes":<the ordered complete E3DeniedControlProbeV1 array>}` |
-| child-security `attestation_hash` | `{"attestation":<child security attestation with attestation_hash omitted>,"domain":"substrate.e3.child-security-attestation.v1"}` |
+| child-security `attestation_hash` | `{"attestation":<complete child security attestation, including user_namespace, with attestation_hash omitted>,"domain":"substrate.e3.child-security-attestation.v1"}` |
 | setup-ready `attestation_hash` | `{"attestation":<setup attestation with attestation_hash omitted>,"domain":"substrate.e3.codex-setup-ready.v1"}` |
 | native-source `manifest_hash` | `{"domain":"substrate.e3.native-projection-source-manifest.v1","manifest":<manifest with manifest_hash omitted>}` |
 | native-realization `manifest_hash` | `{"domain":"substrate.e3.native-projection-realization-manifest.v1","manifest":<manifest with manifest_hash omitted>}` |
@@ -2885,8 +2987,10 @@ activation or final-exec release. A Codex/version/source identity outside the fi
 nftables primitive is `UnsupportedPlatform`. A false/mismatched eight-key activation predicate or
 missing installed accepted-home authority is `UnsupportedConfiguration`; a nonempty V1 MCP/feature
 surface is `UnsupportedPolicySurface`. Missing full-isolation Landlock, unauthenticated E2
-enforcement input, nonzero child capability state, privilege-transition failure, dumpable/ptrace
-exposure, or any failed control-path probe is `UnsupportedSecurityPosture`. None degrades to
+enforcement input, nonzero child capability state, privilege-transition failure, invalid or
+substituted protected-user-namespace identity/membership, unavailable required trusted tracing,
+dumpable credential-process exposure, or any failed control-path probe is
+`UnsupportedSecurityPosture`. None degrades to
 compatibility automatically.
 
 `MissingPreparation` means the V2 carrier has no live sealed preparation in this process even though
@@ -3562,12 +3666,14 @@ without claiming E3 publication or readiness.
 All product-security predicates in this contract remain unchanged and fail closed. The owning packet
 must establish the required existing `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`, `CAP_DAC_OVERRIDE`, and
 `CAP_SYS_PTRACE` service-authority posture, capability parking and readback, privilege descent,
-boot-stable Yama posture, namespace/cgroup/nftables/Landlock/seccomp confinement, credential
+trusted-service-owned per-child user-namespace identity/membership, required tracing,
+namespace/cgroup/nftables/Landlock/seccomp confinement, credential
 handling, gateway activation and revocation, and control-path denial before the operations they
 protect and before claiming that packet complete. In particular, adding `CAP_SETUID`, `CAP_SETGID`,
 or `CAP_SETPCAP` to an otherwise unmodified service is not a substitute for E3-D implementing and
-proving the specified synchronous transition-capability parking behavior; no fallback or substitute
-privilege model is authorized.
+proving the specified synchronous transition-capability parking and bounded parent map-installation
+behavior; no fallback or substitute privilege model is authorized. Host-wide Yama policy remains
+untouched and is not an E3 authority input.
 
 Admissions require reproducible commands and sufficient retained evidence, not a bespoke proof
 wrapper or six newly created roots for every packet. Existing valid build targets, roots, and evidence
@@ -3733,7 +3839,12 @@ this catalog:
    depends downward on `transport-api-types`.
    `transport-api-types` receives no dependency on the new crate. The new crate may expose only the
    data types named in this contract and `managed-gateway-adoption-v1` other than the explicitly
-   transport-owned wire types above, plus these operational symbols:
+   transport-owned wire types above, plus these operational symbols. E3-D alone owns the narrow
+   security-field correction in `src/lib.rs`: add the embedded `E3LinuxIdMapExtentV1`,
+   `E3UserNamespaceRequirementV1`, and `E3UserNamespaceAttestationV1` types; replace only the Yama
+   field in `E3WorldFsEnforcementInputV1` and `E3ChildSecurityAttestationV1`; and add the exact child
+   namespace device/inode fields to `E3GatewaySecretReadyAttestationV1`. It owns no other projection,
+   gateway, record, receipt, or codec-schema change. The admitted operational symbols are:
    `ConfigProjectionCodecV1::{encode_canonical_json,decode_canonical_json,domain_sha256}`,
    `ConfigProjectionRegistryV1::{open,recover,resolve,publish_dormant,publish_ready_closed,
    publish_active,publish_native_source,realize_native_root,recover_native_realization,
@@ -3754,8 +3865,10 @@ this catalog:
    `CanonicalDirectoryV1::{capture_linux_from_fd,revalidate_linux_from_fd}`,
    `Codex0125ProjectionV1::{render,validate_loader_inputs,validate_setup_ready}`, and
    `LinuxArtifactSourceV1::{validate_store,resolve_ref,import_manifest,
-   validate_e3_static_elf_v1,validate_system_config_mount_target_v1,
-   validate_host_ptrace_posture_v1}`. Colocated `mod tests` blocks
+   validate_e3_static_elf_v1,validate_system_config_mount_target_v1}`. The obsolete
+   `validate_host_ptrace_posture_v1` name is deleted rather than renamed or left with artifact-source
+   ownership; host process security belongs to E3-D's world-service child-security path below.
+   Colocated `mod tests` blocks
    are allowed. No other `pub`/`pub(crate)` surface is admitted. Within only the E3-B-owned
    `src/codec.rs` and `src/registry.rs`, ordinary private free functions, private inherent methods,
    and private implementation types necessary to implement the admitted codec/registry operations
@@ -3930,8 +4043,12 @@ this catalog:
    `ClockBoottimeDeadline`; create exactly `crates/world-service/src/e3_codex_launch.rs` with
    `E3Codex0125LaunchAdapterV1::{new,prepare,spawn_setup_wrapper,validate_setup_ready,
    release_final_exec,cancel}` and `crates/world-service/src/e3_child_security.rs` with only
+   `bind_e3_service_user_namespace_v1`,
    `build_authenticated_world_fs_enforcement_input_v1`,
-   `validate_child_security_attestation_v1`, `probe_child_control_path_denials_v1`, and
+   `create_e3_child_user_namespace_channel_v1`,
+   `install_and_validate_e3_child_user_namespace_v1`,
+   `validate_child_security_attestation_v1`, `probe_child_control_path_denials_v1`, the private
+   `HeldE3ServiceUserNamespaceV1`, private `HeldE3ChildUserNamespaceV1`, and
    `E3PrivilegedChildExclusionV1::{new_recovering,register_recovered_non_e3_child,
    finish_recovery,acquire_non_e3_child,
    acquire_e3_exclusive,release_non_e3_child,release_e3_exclusive,poison_recovering}`. In
@@ -3949,7 +4066,10 @@ this catalog:
    `apply_authenticated_world_fs_enforcement`, `drop_child_privileges_and_caps`,
    `install_child_seccomp`, `write_setup_ready_attestation`, `await_final_exec`, and
    `exec_pinned_child`, plus `run_managed_gateway_readiness_probe` for the exact no-final-exec probe
-   role. In
+   role. `parse_launch_descriptors` owns the exact `SUBSTRATE_WORLD_ENTRY_USERNS_FD` startup pointer,
+   and `prepare_private_child_namespace` owns only the child-side direct-unshare/setup handshake and
+   subsequent private mount-namespace setup; neither may accept a caller namespace or use `setns`
+   for user-namespace entry. In
    `crates/world-service/src/gateway_runtime.rs`, only existing `GatewayRuntimeManager`,
    `GatewayRuntimeManager::{new,status,sync,sync_with_timeout,sync_with_timeout_locked,restart}`,
    `start_runtime`, `stop_runtime`, `recover_runtime`, `runtime_for_world_or_manifest`,
@@ -4114,21 +4234,37 @@ and the descriptor-pinned official Codex archive above for:
   a non-procfs mount, or any magic/symbolic-link resolution; first-provision/exact-existing
   `/etc/codex` target success plus nonempty/symlink/mount/metadata/identity/crash failure, with no
   per-child shared-root creation or cleanup;
-- for both gateway and every initial/resumed Codex child, exact target UID/GID with zero supplementary
-  groups and zero ambient/effective/permitted/inheritable/bounding capabilities, `NoNewPrivs=1`,
-  wrapper/probe setup `dumpable=0` and ptracer 0, gateway post-exec secret-ready `Dumpable=0` plus
-  soft/hard `RLIMIT_CORE=0` for its credential lifetime, and non-secret Codex post-exec
-  `Dumpable=1`; all require `TracerPid=0`, boot-stable Yama `ptrace_scope=3`, and same-UID
-  ptrace/process-vm/pidfd-getfd denial,
-  seccomp-filter mode, exact E2 plan hash plus derived-support,
+- for every gateway, readiness probe, and initial/resumed Codex child, proof that the primary service
+  remained in its bound host user namespace while the wrapper created a fresh per-process-tree user
+  namespace before exposure; exact trusted-service owner, held parent descriptor, one-extent
+  identity UID/GID maps, actual child membership, and distinct sibling/other-role namespace identities;
+  rejection of wrong/substituted owner, parent, map, descriptor, member, reused identity, shared role
+  namespace, host-root mapping, caller namespace, or premature setup release; and exact target UID/GID
+  with zero supplementary groups and zero ambient/effective/permitted/inheritable/bounding
+  capabilities, `NoNewPrivs=1`, wrapper/probe setup `Dumpable=0`, gateway post-exec secret-ready
+  `Dumpable=0` plus soft/hard `RLIMIT_CORE=0` for its credential lifetime, non-secret Codex post-exec
+  `Dumpable=1`, role-appropriate `TracerPid`, seccomp-filter mode, exact E2 plan hash plus derived-support,
   role-narrowing, and effective-intersection Landlock hash equality, including positive access to
   each required E3 `/run`/mounted-config object and denied access outside the union; denied
   registry/sibling/cgroup/nftables/world-service/other-role probes whose ordered concrete targets are
   byte-equal across the enforcement input, per-target hashes, emitted results, and parent-held
   identity revalidation, and failure before secret write or final release for every
-  missing/extra/reordered/substituted target or transition/readback error, plus proof that the three parked transition
-  capabilities are never effective/ambient in world-service and are never acquired by any V1 or
-  non-E3 child;
+  missing/extra/reordered/substituted target or transition/readback error, plus proof that the three
+  parked transition capabilities are never effective/ambient in world-service except the exact
+  synchronous `CAP_SETUID`/`CAP_SETGID` map-write scope, are parked and read back before child release,
+  and are never acquired by any V1 or non-E3 child;
+- a same-host-UID, zero-capability denial canary whose explicitly authorized, `Dumpable=1`, same-host-
+  namespace positive control succeeds for ptrace, `process_vm_readv`, `/proc/<pid>/mem`, and
+  `pidfd_getfd` before the identical inspector is denied against the post-exec protected target with
+  exact `EPERM` for ptrace/process-vm, `EACCES|EPERM` for proc-mem, and successful `pidfd_open` allowed
+  only when `pidfd_getfd` then returns `EPERM`; an unsuccessful control is inconclusive, not a pass;
+  trusted service tracing across the protected boundary must retain its required initial exec stop,
+  exit stop, cwd/environment readback, and applicable PTY `FIONREAD`/drain marker, while unrelated
+  same-user host tracing retains the same result and errno before, during, and after E3, the distinct
+  canary positive control succeeds, and the global Yama bytes are unchanged;
+  invalid namespace identity or unavailable required tracing fails closed without changing host
+  policy; and a target-UID mode-`0600` file retains ordinary target-user ownership and read/write
+  access;
 - service/gateway crash-dump barriers proving service `RLIMIT_CORE=0`/`PR_GET_DUMPABLE=0` readback
   precedes E3 route registration, an injected service barrier failure accepts no E3 body,
   and a canonical gateway secret-ready attestation precedes every secret delivery; missing, malformed,
@@ -4139,7 +4275,7 @@ and the descriptor-pinned official Codex archive above for:
   side effect for every other baseline method/path;
 - readiness-probe cgroup enforcement proving the probe is the descriptor-pinned wrapper child rather
   than a world-service thread, receives and exact-validates the complete nested enforcement input and
-  self-artifact descriptor through the seven-FD/two-barrier ABI, has the exact zero-capability/support/seccomp
+  self-artifact descriptor through the eight-FD/three-barrier ABI, has the exact zero-capability/support/seccomp
   posture, cannot access secrets/config/workspace/control objects, is denied from the wrong cgroup,
   permits only the enumerated syscall/argument filter, proves the exact socket remains connected and
   in the readiness cgroup while the parent withholds the request-release byte, transmits its canonical
@@ -4156,10 +4292,10 @@ and the descriptor-pinned official Codex archive above for:
   unclassified descendant; compatibility-gateway `sync`/timeout/restart/start and manifest-recovery
   paths all transfer one shared lease into the runtime before spawn/adoption, retain it through every
   runtime handle until cgroup-empty stop, and startup recovery seeds the exact legacy count; E3
-  rejects absent/non-3/mutated Yama posture or boot-ID drift before any relevant barrier; a
-  non-secret Codex exec's `Dumpable=1` remains protected by Yama-3 and the exact same-UID
-  ptrace/process-vm/pidfd-getfd denial canary, while the credential-bearing gateway must remain
-  non-dumpable with both core limits zero;
+  rejects boot-ID drift or any protected-user-namespace identity/membership drift before the relevant
+  barrier; a non-secret Codex exec's `Dumpable=1` remains protected by its held user namespace and the
+  positive-controlled same-UID memory/FD denial canary, while the credential-bearing gateway must
+  remain in its separate held namespace, non-dumpable, and at both core limits zero;
 - doctor/pending-diff/clear/reconcile/world-fs-read races proving each route holds one non-E3 lease
   before strategy selection, `ensure_session`, probe-file mutation, or helper spawn and returns typed
   `UnsupportedSecurityPosture` with no side effect during E3-exclusive mode; kernel-overlay, transient

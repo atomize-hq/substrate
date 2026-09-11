@@ -52,9 +52,13 @@ layer, drops to the bootstrap-authenticated UID/GID with no
 supplementary groups or capabilities, and proves Landlock/no-new-privileges/seccomp posture. The
 wrapper and probe must prove `dumpable=0`; world-service is non-dumpable with zero core limits before
 accepting E3 secret bytes, and the credential-bearing gateway reasserts and attests that same posture
-after exec and before delivery. Only non-secret Codex may remain `Dumpable=1`, gated by boot-stable
-Yama `ptrace_scope=3`, `TracerPid=0`, and same-UID ptrace/process-vm/pidfd-getfd denial before prompt
-release.
+after exec and before delivery. The primary service remains in its host user namespace while every
+gateway, readiness probe, and authorized Codex wrapper creates a fresh trusted-service-owned user
+namespace with exact one-identity UID/GID maps; the parent retains and validates its descriptor,
+owner, parent, maps, membership, and role isolation before exposure. Only non-secret Codex may remain
+`Dumpable=1`, gated by that held boundary, a positive-controlled same-UID memory/FD denial, and
+role-appropriate trusted-tracing validation before prompt release. Substrate leaves host-wide Yama
+policy unchanged and requires no particular value.
 
 `MemberDispatchRequestV1` remains strict with byte-identical codec, fields, and post-admission
 semantics. E3 adds strict
@@ -281,23 +285,40 @@ forbidden.
 - **Bounded behavior:** implement `substrate-world-entry`; add its corresponding static build/install
   wiring; consume E3-C's landed artifact machinery to build, install, descriptor-readback-validate,
   and publish the actual Substrate artifacts with exact provenance; install the synchronous internal-
-  exec-first capability parking sequence, descriptor-pinned wrapper security,
+  exec-first capability parking sequence, descriptor-pinned wrapper security, direct per-child user-
+  namespace creation and parent-owned identity-map validation,
   cgroup/nftables/Landlock/seccomp/credential descent, and one process-wide exclusion shared by every
   child/helper path.
 - **Source owner:** the packet-admitted world-service `main`, child-security, internal-exec, wrapper,
   service, PTY, observation-handler, GC, and exclusion surfaces plus the exact Linux lifecycle and
-  provisioning production-integration surfaces cataloged by the contract.
+  provisioning production-integration surfaces cataloged by the contract. For this correction,
+  `crates/config-projection/src/lib.rs` owns only the embedded `E3LinuxIdMapExtentV1`,
+  `E3UserNamespaceRequirementV1`, and `E3UserNamespaceAttestationV1` types, the Yama-field
+  replacements in `E3WorldFsEnforcementInputV1` and `E3ChildSecurityAttestationV1`, and the child
+  user-namespace device/inode fields in `E3GatewaySecretReadyAttestationV1`;
+  `crates/world-service/src/e3_child_security.rs` owns only
+  `bind_e3_service_user_namespace_v1` and private `HeldE3ServiceUserNamespaceV1`,
+  `create_e3_child_user_namespace_channel_v1`,
+  `install_and_validate_e3_child_user_namespace_v1`,
+  `validate_child_security_attestation_v1`, and private `HeldE3ChildUserNamespaceV1`;
+  `crates/world-service/src/bin/substrate-world-entry.rs::parse_launch_descriptors` owns the exact
+  `SUBSTRATE_WORLD_ENTRY_USERNS_FD` parameter and `prepare_private_child_namespace` owns direct child
+  creation/handshake plus private mount setup. The service daemon may not unshare or enter that user
+  namespace, and no generic namespace manager or caller-selected namespace is admitted.
 - **Direct predecessor:** independently landed and proof-clean E3-C.
 - **Consumes:** E3-C source-store schemas, validators, import and publication/recovery helpers, pinned
   artifact/native-root behavior, and enforcement inputs, plus the landed E2 filesystem plan without
   changing E2.
-- **Explicit nonownership:** inventory or projection schema changes, gateway secret preparation or
+- **Explicit nonownership:** inventory or any projection schema change other than the exact
+  `config-projection/src/lib.rs` security-field exception above, gateway secret preparation or
   adoption, retained V2 Codex lifecycle, provider policy, V1/UAA semantics while exclusion is idle,
   D1, and E4.
 - **Successor eligibility proof:** actual static wrapper and gateway build/install, descriptor
   readback, exact build-provenance validation, and complete valid Substrate source publication before
   dependent E3 runtime operations; sole-thread transition-capability parking/readback; exact child
-  UID/GID/zero-capability, Landlock, seccomp, dumpability, Yama, and control-path denial evidence;
+  user-namespace owner/parent/map/membership, UID/GID/zero-capability, Landlock, seccomp,
+  role-appropriate dumpability/tracing, positive-controlled same-UID memory/FD denial, unchanged host
+  debugging/Yama policy, expected file access, and control-path denial evidence;
   cgroup/nftables crash recovery; and races proving no ordinary/PTY/UAA/compatibility-gateway/GC
   helper can spawn during E3 exclusivity while idle compatibility behavior is unchanged. Only then
   may E3-E seek admission.
@@ -418,12 +439,32 @@ authorize them.
 Candidate-implemented security behavior is established by its owning packet's proof, not presumed
 before its code exists. The required existing `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`, `CAP_DAC_OVERRIDE`,
 and `CAP_SYS_PTRACE` service-authority posture and all capability-parking and readback, privilege-
-descent, boot-stable Yama, namespace/cgroup/nftables/Landlock/seccomp confinement, credential,
+descent, trusted-service-owned per-child user-namespace owner/parent/map/membership, required tracing,
+namespace/cgroup/nftables/Landlock/seccomp confinement, credential,
 activation/revocation, and control-path denial predicates remain mandatory before the operations they
 protect and before the owning packet may be claimed complete. Adding `CAP_SETUID`, `CAP_SETGID`, or
 `CAP_SETPCAP` to an otherwise unmodified service cannot substitute for implementing and proving
-E3-D's synchronous transition-capability parking, and no security fallback or substitute privilege
-model is authorized.
+E3-D's synchronous transition-capability parking and bounded parent mapping scope, and no security
+fallback or substitute privilege model is authorized. The service remains in its host user namespace;
+Substrate never writes or toggles Yama, and no exact host value is required. A host policy that blocks
+required tracing must produce the actual compatibility failure rather than silently disable tracing.
+
+E3-D acceptance must use a successful same-host-namespace `Dumpable=1` same-UID/zero-capability
+positive control before attributing post-exec ptrace/process-vm/proc-mem/pidfd-getfd denial to the
+protected namespace, preserve the probe's `EPERM` versus `EACCES|EPERM` distinctions, prove trusted
+exec/exit tracing plus applicable PTY readback/drain behavior, and show unrelated host debugging and
+global policy bytes unchanged before/during/after. It must also prove ordinary target-user ownership
+and access for a mode-`0600` file and fail closed on invalid namespace identity or unavailable
+required tracing. The forked-child feasibility probe did not test actual world-service/static-wrapper
+integration or a precreated shared namespace plus later `setns`; those remain E3-D implementation
+proof, and the selected production lifecycle requires neither shared precreation nor later user-
+namespace entry.
+
+The process boundary does not block same-UID signals or changes to intentionally shared user files,
+does not trust every same-UID process, and makes no claim against a hostile host administrator or
+kernel compromise. Existing executable/configuration/control-input integrity requirements remain in
+force, as do distinct namespaces for sibling/other-role processes because a shared namespace alone
+does not isolate its members.
 
 Admission requires reproducible commands and sufficient persistent evidence, not a bespoke wrapper
 or six fresh directories for every packet. Existing valid build targets, roots, and evidence may be
