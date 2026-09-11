@@ -133,6 +133,50 @@ its own namespace or fail closed while holding both locks. Crash-boundary tests 
 HSA/E2-RM/E3 tests, including a successful landed E2-RM read after E3 namespace creation plus
 deadlock, unknown-entry, and cross-owner-mutation negatives, are mandatory.
 
+E3-B resolves the cross-crate ownership boundary once on `#[cfg(target_os = "linux")]`. Public,
+object-safe `ConfigProjectionHsaAuthorityV1::with_locked_parent` lives in
+`crates/config-projection/src/registry.rs`; `ConfigProjectionRegistryV1::open` retains an
+`Arc<dyn ConfigProjectionHsaAuthorityV1>`. The only production implementation is the public but
+sealed-field `OpenedConfigProjectionHsaAuthorityV1` in
+`crates/shell/src/execution/agent_runtime/host_session_authority/facade.rs`, constructed only by
+`from_configured_accepted_home(&ConfiguredAcceptedHomeAuthorityV1)`. That constructor takes no
+caller path or raw descriptor: it revalidates the sealed installed authority, uses only its exact
+`accepted_home` and `intended_uid`, opens through `TrustedAuthorityRoot::open_for_owner`, exact-
+matches path/device/inode after checked conversion of the UID, revalidates the configured descriptor,
+and retains the trusted root. Other platforms retain their existing unsupported E3 posture.
+
+The shell implementation enters private
+`ConfigProjectionHsaParentTransactionV1::{begin,authority_fd,finish}` in
+`crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs`
+through `store.rs::with_config_projection_hsa_parent`, the sole `pub(super)` forwarder. It acquires
+the existing parent `root.lock`, then
+revalidates the named root/lock objects, strict versioned root and marker, both literal-only layout
+validators, HSA temp absence, legacy absence, and the exact non-E3 child set. It deliberately does
+not call the landed E2-RM read-only snapshot wrapper, whose final all-child metadata equality cannot
+admit a legitimate E3 mutation, and it performs no HSA or E2-RM recovery. Its callback lends only a
+lifetime-bounded `BorrowedFd<'_>` for the already-open `authority-v1` directory, supplied by the sole
+new `pub(crate)` `TrustedDirectory::borrow_fd`; it exposes no shell authority type, owned descriptor,
+parent lock, or path.
+
+Within that callback, `config-projection/src/registry.rs` opens or creates only the literal E3 child,
+opens/validates and locks its child `lock`, and runs the operation through private
+`ConfigProjectionChildTransactionV1::{begin,finish}`. On both ordinary success and error, child
+validation/readback finishes and the child guard drops before callback return; shell then verifies
+that the root and every non-E3 entry are unchanged, that the E3 entry is the same directory or the
+sole absent-to-directory addition, and that both closed manifests remain exact before its parent
+guard drops. On unwinding, RAII drops the inner child guard before the outer parent guard; destructors
+perform no publication or recovery. Recovery after either error form is confined to recognized E3
+state in the next dual-locked transaction. The bridge is re-exported directly from
+`crates/shell/src/lib.rs` without making HSA modules public. Dependency direction is exactly
+`config-projection -> transport-api-types`, `shell -> config-projection`, and, when the later
+world-service consumer constructs the bridge, `world-service -> {shell, config-projection}`; no edge
+from `config-projection` to shell is permitted.
+
+The later `WorldService::new_linux` consumer must retain the sealed configured authority, construct
+the shell bridge from that exact value, and pass both it and the resulting
+`Arc<dyn ConfigProjectionHsaAuthorityV1>` to `AgentConfigProjectionServiceV1::new`; request handlers,
+registries, gateways, and members receive no construction authority.
+
 ## Selected-only inventory provenance
 
 E3 V1 authenticates and persists provenance only for the selected contributing inventory source. A
@@ -187,8 +231,12 @@ forbidden.
 - **Bounded behavior:** implement canonical projection codec/reference validation and the accepted-
   home registry's first-writer publication, CAS, recovery, leases, retirement, and GC under the exact
   parent-before-child lock protocol.
-- **Source owner:** the packet-admitted codec/registry surfaces in `crates/config-projection`, the
-  existing trusted-root facade needed to open the accepted HSA authority, and only
+- **Source owner:** the packet-admitted codec/registry surfaces and
+  `ConfigProjectionHsaAuthorityV1::with_locked_parent` in `crates/config-projection`, the exact
+  `OpenedConfigProjectionHsaAuthorityV1` facade/constructor/trait implementation, its direct
+  `crates/shell/src/lib.rs` re-export, the `store.rs` forwarder, the private parent transaction in
+  `store/platform/transaction.rs`, and only `TrustedDirectory::borrow_fd` in `trusted_fs.rs`; plus
+  only
   `crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/layout.rs`,
   specifically `StoreLayout::validate_closed_layout`, plus only
   `crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs`,
@@ -311,6 +359,8 @@ projection adapter; the identical single literal recognition in
 `crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs`,
 specifically `validate_e2_rm_authority_manifest`, without any E2-RM authority-data or semantic
 ownership;
+the exact E3-B cross-crate bridge, visibility, and acyclic dependency edges fixed in
+[`agent-config-projection-v1.md#hsa-projection-namespace-and-cross-process-lock-protocol`](../contracts/agent-config-projection-v1.md#hsa-projection-namespace-and-cross-process-lock-protocol),
 strict V2/version-wrapper transport plumbing through every currently V1-typed world-service helper;
 exact Spawn/Fork/toolbox/continue-fork carrier paths; the V2-only local Codex adapter and installed
 `substrate-world-entry` two-stage descriptor helper while V1 keeps UAA; descriptor-pinned gateway

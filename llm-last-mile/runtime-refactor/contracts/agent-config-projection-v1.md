@@ -1053,10 +1053,18 @@ The new `config-projection` crate depends downward on `transport-api-types`, own
 projection/gateway persistence schemas and operational services, and consumes the wire refs. Shell,
 world-service, and gateway depend on both crates as needed. `transport-api-types` never depends on or
 re-exports `config-projection`, so no Cargo edge points back upward.
-The service's operational methods accept and validate only its own typed nonsecret observations and
-held generic descriptors; they publish/resolve projection authority but never instantiate a
-world-service manager, spawn a process, read a transport body, or own a secret/listener capability.
-World-service composes those downward calls with its gateway and child lifecycle.
+For the E3-B HSA transaction bridge specifically, `config-projection` also owns the object-safe
+`ConfigProjectionHsaAuthorityV1` consumer trait described below, shell depends on and implements that
+trait, and world-service later depends on shell only to construct the implementation from the sealed
+installed accepted-home authority. `config-projection` does not depend on shell. Thus the normal
+edges are `config-projection -> transport-api-types`, `shell -> config-projection`, and
+`world-service -> {shell, config-projection}`; gateway's later edge remains
+`gateway -> config-projection`. The existing shell-to-world-service test-only dev dependency remains
+test-only and creates no reverse normal edge. The service's operational methods accept and validate
+only their own typed nonsecret observations and this one narrow capability; they publish/resolve
+projection authority but never instantiate a world-service manager, spawn a process, read a
+transport body, or own a secret/listener capability. World-service composes those downward calls
+with its gateway and child lifecycle.
 
 `root_id` is `cnr_<lowercase UUIDv7>`. `authority_relative_path` is exactly
 `authority-v1/agent-config-projection-v1/native-sources/<series-id>/<fence-id>` beneath accepted
@@ -2414,6 +2422,74 @@ fail closed. Later E3-B proof must include every publication/recovery crash boun
 HSA/E2-RM/E3 transactions, including successful landed E2-RM reads after E3 namespace creation plus
 deadlock, partial-state, unknown-entry, and cross-owner mutation negatives.
 
+The exact E3-B cross-crate bridge is fixed rather than left to implementation choice:
+
+- On `#[cfg(target_os = "linux")]`, `crates/config-projection/src/registry.rs` owns public trait
+  `ConfigProjectionHsaAuthorityV1: Send + Sync`. Its sole operation is object-safe
+  `with_locked_parent`, taking one
+  `&mut dyn for<'fd> FnMut(BorrowedFd<'fd>) -> Result<(), ConfigProjectionFailureV1>` and returning
+  `Result<(), ConfigProjectionFailureV1>`. It must invoke that callback exactly once while the shell
+  parent transaction is live. `ConfigProjectionRegistryV1::open` accepts an
+  `Arc<dyn ConfigProjectionHsaAuthorityV1>` and retains no other HSA access. A registry operation
+  that returns a value captures that value in its own caller frame; the callback itself remains the
+  object-safe unit-returning boundary.
+- On that same Linux gate,
+  `crates/shell/src/execution/agent_runtime/host_session_authority/facade.rs` owns the public,
+  non-serializable `OpenedConfigProjectionHsaAuthorityV1`, its sole constructor
+  `OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home`, and its implementation of
+  `ConfigProjectionHsaAuthorityV1`. The constructor accepts only a sealed
+  `&ConfiguredAcceptedHomeAuthorityV1`; it accepts no pathname, environment value, request field, or
+  raw descriptor. It calls `ConfiguredAcceptedHomeAuthorityV1::revalidate`, reads only that type's
+  exact `accepted_home` and `intended_uid` accessors, opens the named root through existing
+  `TrustedAuthorityRoot::open_for_owner` after a checked `u64`-to-`uid_t` conversion, exact-compares
+  physical path/device/inode, revalidates the
+  still-held configured descriptor, and then retains the `TrustedAuthorityRoot` for the bridge
+  lifetime. Private fields prevent any other production construction.
+- `crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs`
+  owns private `ConfigProjectionHsaParentTransactionV1` with only `begin`, `authority_fd`, and
+  `finish`, plus `with_opened_config_projection_hsa_parent`; `store.rs` owns only the corresponding
+  `pub(super)` `with_config_projection_hsa_parent` forwarding operation. `begin` composes the current
+  trusted-directory entry guards,
+  `StoreLayout`, strict versioned-root decoding, matching-marker checks, and
+  `TrustedOwnedFileLock`: it opens the fixed `authority-v1/lock/root.lock`, acquires it exclusively,
+  revalidates the accepted root and named authority/lock objects, runs
+  `StoreLayout::validate_closed_layout` and `validate_e2_rm_authority_manifest`, rejects HSA temp or
+  legacy state rather than reconciling it, and snapshots the exact root plus every non-E3 authority
+  entry. `finish` repeats those checks and requires the root and every non-E3 entry to be unchanged;
+  the only permitted top-level transition is absent-to-one-directory for the literal E3 child, or
+  retention of that child's exact directory identity. It never calls the landed E2-RM read wrapper,
+  whose deliberately read-only final metadata equality would reject a real E3 mutation, and it does
+  not alter that wrapper's semantics.
+- Linux-only `TrustedDirectory::borrow_fd` is the only new `trusted_fs.rs` allowance and remains
+  `pub(crate)`. The sole value crossing into `config-projection` is the callback-bounded
+  `BorrowedFd<'fd>` for the already-open exact `authority-v1` directory. No `TrustedAuthorityRoot`,
+  `TrustedDirectory`, `TrustedFile`, parent-lock descriptor, shell-private directory identity, owned
+  descriptor, or path crosses the boundary. The registry must not duplicate, persist, return, or
+  expose the borrowed descriptor; its lifetime prevents a safe retained reference after the
+  callback.
+
+Inside that callback, `crates/config-projection/src/registry.rs` alone opens or creates the literal
+`agent-config-projection-v1` child descriptor-relatively, opens or creates and validates its literal
+`lock`, acquires the child `flock(LOCK_EX)`, and constructs private
+`ConfigProjectionChildTransactionV1`. Every registry operation runs through that type's private
+`begin`/`finish` wrapper. For both `Ok` and ordinary `Err`, the wrapper preserves the operation
+result, performs the required child namespace/object/readback revalidation, and drops the child lock
+before returning from the callback; the shell wrapper then performs its root/layout/non-E3
+revalidation and only afterward drops the parent lock. A verification failure overrides an otherwise
+successful or domain-error result and fails closed. During panic unwinding, the child transaction's
+RAII guard is in the inner config-projection callback frame and is therefore dropped before the
+shell parent transaction's RAII guard in the outer frame; neither destructor publishes or recovers
+state. The next transaction may recover only recognized E3-owned state while holding both locks.
+This supplies safe child-before-parent release during unwinding without pretending that fallible
+post-operation revalidation can execute after a panic.
+
+The later `WorldService::new_linux` consumer constructs and retains one
+`Arc<ConfiguredAcceptedHomeAuthorityV1>`, calls
+`OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home` with that sealed value, and
+passes the resulting `Arc<dyn ConfigProjectionHsaAuthorityV1>` together with the same configured
+authority into `AgentConfigProjectionServiceV1::new`. No request handler, registry method, gateway,
+or member caller may construct or replace the bridge.
+
 The only E3 authority root is:
 
 ```text
@@ -3611,10 +3687,12 @@ For E3-B only, the later storage admission must additionally bind
 `crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/layout.rs`,
 specifically `StoreLayout::validate_closed_layout`, for the sole additive literal
 `agent-config-projection-v1` directory match described above. No other function in that product path
-and no weakening of the closed-layout validator is owned. It must also bind only
+and no weakening of the closed-layout validator is owned. It must also bind
 `crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs`,
-specifically `validate_e2_rm_authority_manifest`, for the identical sole literal match; no E2-RM
-authority data, read semantics, history, reconciliation, schema, or namespace change is owned.
+specifically `validate_e2_rm_authority_manifest` for the identical sole literal match and the exact
+`ConfigProjectionHsaParentTransactionV1::{begin,authority_fd,finish}` plus
+`with_opened_config_projection_hsa_parent` bridge named above; no E2-RM authority data, read
+semantics, history, reconciliation, schema, or namespace change is owned.
 Subject to those corrections, later packet admissions may select only their applicable symbols from
 this catalog:
 
@@ -3643,13 +3721,19 @@ this catalog:
    activate_managed_gateway,prepare_codex_launch,
    validate_resumed_turn,release_codex_launch,revoke_retained_runtime}`,
    `ConfiguredAcceptedHomeAuthorityV1::{from_installed_bootstrap_authority,from_record_for_test,
-   revalidate}`,
+   revalidate,accepted_home,intended_uid}`,
+   `ConfigProjectionHsaAuthorityV1::with_locked_parent`,
    `CanonicalDirectoryV1::{capture_linux_from_fd,revalidate_linux_from_fd}`,
    `Codex0125ProjectionV1::{render,validate_loader_inputs,validate_setup_ready}`, and
    `LinuxArtifactSourceV1::{validate_store,resolve_ref,import_manifest,
    validate_e3_static_elf_v1,validate_system_config_mount_target_v1,
    validate_host_ptrace_posture_v1}`. Colocated `mod tests` blocks
-   are allowed; no other `pub`/`pub(crate)` function or free private helper is admitted;
+   are allowed. No other `pub`/`pub(crate)` surface is admitted. Within only the E3-B-owned
+   `src/codec.rs` and `src/registry.rs`, ordinary private free functions, private inherent methods,
+   and private implementation types necessary to implement the admitted codec/registry operations
+   are allowed without a separate authority amendment; they may not expand the public API, product
+   behavior, file ownership, or later-packet scope. Private helpers in any other new-crate file remain
+   unadmitted;
 2. in `crates/shell/src/execution/config_model.rs`, only new private
    `E3PinnedConfigPatchSourceV1`, `E3EffectiveConfigResolutionSnapshotV1`,
    `open_e3_workspace_config_source_v1`, `resolve_e3_effective_config_source_v1`, and
@@ -3666,7 +3750,18 @@ this catalog:
    `OpenedBootstrapHomeV1::read_config_yaml` unchanged. Existing
    `resolve_effective_config_with_explain_for_bootstrap_home`, cached/pathname loaders,
    `ConfigExplainV1`, `ConfigExplainKey`, `ConfigExplainSource`, and all non-E3 config resolution
-   remain byte/behavior-frozen; in
+   remain byte/behavior-frozen. For E3-B in that same facade file, only public
+   `OpenedConfigProjectionHsaAuthorityV1`, its
+   `from_configured_accepted_home` constructor, and its `ConfigProjectionHsaAuthorityV1`
+   implementation are additionally admitted. The constructor and implementation may call only the
+   exact configured-authority accessors and shell parent-transaction bridge named above. E3-B may
+   also add only: `with_config_projection_hsa_parent` as the one `pub(super)` forwarding operation in
+   `host_session_authority/store.rs`; `TrustedDirectory::borrow_fd` as `pub(crate)` in
+   `host_session_authority/trusted_fs.rs`; and one direct public re-export of
+   `OpenedConfigProjectionHsaAuthorityV1` from `crates/shell/src/lib.rs`, without making any
+   intermediate HSA module public. No other HSA type, descriptor, operation, or facade visibility is
+   admitted. All of these bridge additions and the re-export are Linux-gated; other platforms retain
+   their existing unsupported E3 posture. In
    `crates/shell/src/execution/agent_inventory.rs`, only additive `AgentFileV3`, `AgentConfigV3`,
    `AgentPlacementsV3`, `AgentPlacementConfigV3`, `AgentRuntimeProjectionInputV1`,
    `PlacementProjectedInventoryEntryV3`, and `AgentInventorySourceMaterialV1`, the V3 variants/arms in
