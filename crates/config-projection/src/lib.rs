@@ -1,14 +1,21 @@
 //! Durable, accepted-home authority for E3 agent configuration projections.
 
 mod codec;
+mod codex_0125;
+mod linux_artifacts;
 mod registry;
+mod service;
 
 pub use codec::ConfigProjectionCodecV1;
+pub use codex_0125::*;
+pub use linux_artifacts::*;
 pub use registry::*;
+pub use service::*;
 
 pub use transport_api_types::{
-    ConfigProjectionRefV1, DispatchPolicyCommitmentRefCarrierV1, E2MemberLaunchKindV1,
-    InWorldGatewayRefV1, ManagedGatewayActivationIntentRefV1, PolicyRefV1, WorldBindingRefV1,
+    ConfigProjectionAuthoringInputRefV1, ConfigProjectionRefV1,
+    DispatchPolicyCommitmentRefCarrierV1, E2MemberLaunchKindV1, InWorldGatewayRefV1,
+    ManagedGatewayActivationIntentRefV1, PolicyRefV1, WorldBindingRefV1,
 };
 
 use serde::{Deserialize, Serialize};
@@ -207,6 +214,198 @@ pub enum RuntimeArtifactProvenanceV1 {
         profile: String,
         executable_sha256: String,
     },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EffectiveSubstrateConfigSourceV1 {
+    pub schema_version: u32,
+    pub authority_store_id: String,
+    pub accepted_home: CanonicalDirectoryV1,
+    pub workspace_root: CanonicalDirectoryV1,
+    pub values: E3EffectiveConfigInputV1,
+    pub ordered_explain_origins: Vec<E3ConfigExplainOriginV1>,
+    pub source_revision: String,
+    pub source_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct E3EffectiveConfigInputV1 {
+    pub llm_enabled: bool,
+    pub agents_enabled: bool,
+    pub world_enabled: bool,
+    pub default_execution_scope: String,
+    pub default_cli_mode: String,
+    pub managed_gateway_enabled: bool,
+    pub managed_gateway_mode: String,
+    pub default_backend_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct E3ConfigExplainOriginV1 {
+    pub key: String,
+    pub source_kind: E3ConfigExplainOriginKindV1,
+    pub source_location: Option<E3ConfigExplainFileV1>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum E3ConfigExplainOriginKindV1 {
+    Default,
+    GlobalPatch,
+    WorkspacePatch,
+    OverrideEnv,
+    CliFlag,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct E3ConfigExplainFileV1 {
+    pub source_root: CanonicalDirectoryV1,
+    pub source_relative_path: String,
+    pub source_bytes_sha256: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentInventorySourceMaterialV1 {
+    pub inventory_scope: String,
+    pub accepted_root: CanonicalDirectoryV1,
+    pub relative_path: String,
+    pub file_device_id: u64,
+    pub file_inode: u64,
+    pub byte_length: u64,
+    pub raw_bytes_sha256: String,
+    pub source_revision: String,
+    pub source_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TrustedRuntimeArtifactManifestV1 {
+    pub schema_version: u32,
+    pub authority_store_id: String,
+    pub manifest_id: String,
+    pub revision: u64,
+    pub entries: Vec<RuntimeArtifactManifestEntryV1>,
+    pub created_at: Timestamp,
+    pub manifest_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RuntimeArtifactManifestEntryV1 {
+    pub manifest_entry_id: String,
+    pub authority_role: RuntimeArtifactAuthorityRoleV1,
+    pub configured_absolute_path: String,
+    pub device_id: u64,
+    pub inode: u64,
+    pub mode: u32,
+    pub owner_uid: u64,
+    pub byte_length: u64,
+    pub sha256: String,
+    pub installer_source_ref: InstallerArtifactSourceRefV1,
+    pub provenance: RuntimeArtifactProvenanceV1,
+    pub runtime_support: E3RuntimeSupportManifestV1,
+    pub entry_hash: String,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum RuntimeArtifactAuthorityRoleV1 {
+    Codex0125,
+    ManagedGateway,
+    WorldEntryWrapper,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct InstallerArtifactSourceRefV1 {
+    pub source_store_id: String,
+    pub source_record_id: String,
+    pub revision: u64,
+    pub record_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct InstallerArtifactSourceStoreV1 {
+    pub schema_version: u32,
+    pub source_store_id: String,
+    pub root: CanonicalDirectoryV1,
+    pub created_at: Timestamp,
+    pub store_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct InstallerArtifactSourceRecordV1 {
+    pub schema_version: u32,
+    pub source_store_id: String,
+    pub source_record_id: String,
+    pub source_stream: InstallerArtifactSourceStreamV1,
+    pub revision: u64,
+    pub predecessor_ref: Option<InstallerArtifactSourceRefV1>,
+    pub build_input: InstallerArtifactBuildInputV1,
+    pub entries: Vec<InstallerArtifactSourceEntryV1>,
+    pub created_at: Timestamp,
+    pub record_hash: String,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+pub enum InstallerArtifactSourceStreamV1 {
+    SubstrateSourceBuild,
+    Codex0125OfficialArchive,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum InstallerArtifactBuildInputV1 {
+    SubstrateSourceBuild {
+        source_commit: String,
+        source_tree: String,
+        cargo_lock_sha256: String,
+        rustc_version: String,
+        target_triple: String,
+        profile: String,
+    },
+    CodexOfficialArchive {
+        version: String,
+        target_triple: String,
+        archive_name: String,
+        archive_url: String,
+        archive_sha256: String,
+        archive_entry_path: String,
+        extracted_executable_sha256: String,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct InstallerArtifactSourceEntryV1 {
+    pub component: String,
+    pub installed_absolute_path: String,
+    pub device_id: u64,
+    pub inode: u64,
+    pub file_type: String,
+    pub mode: u32,
+    pub owner_uid: u64,
+    pub byte_length: u64,
+    pub sha256: String,
+    pub runtime_support: E3RuntimeSupportManifestV1,
+    pub entry_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct InstallerArtifactSourceHeadV1 {
+    pub schema_version: u32,
+    pub source_store_id: String,
+    pub source_stream: InstallerArtifactSourceStreamV1,
+    pub head_ref: InstallerArtifactSourceRefV1,
+    pub head_revision: u64,
+    pub predecessor_head_hash: Option<String>,
+    pub updated_at: Timestamp,
+    pub head_hash: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -446,6 +645,20 @@ pub enum CodexLoaderInputDispositionV1 {
     DisabledByEphemeralCredentialStoreAndProvenAbsent,
     DisabledByEmptyMcpSetAndProvenAbsent,
     DisabledByNoEphemeralAuthAndProvenAbsent,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct NativeProjectionSourceManifestV1 {
+    pub schema_version: u32,
+    pub authority_store_id: String,
+    pub series_id: String,
+    pub fence_id: String,
+    pub source_root: CanonicalDirectoryV1,
+    pub native_projection_hash: String,
+    pub ordered_file_hashes: Vec<String>,
+    pub created_at: Timestamp,
+    pub manifest_hash: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

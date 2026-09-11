@@ -1647,6 +1647,11 @@ mod tests {
             spec.archive_sha256,
             "4a20a53943a7e6a0c5fa4463d4e47c58dd8e553ecebde455a4107e9906bfb001"
         );
+        assert_eq!(spec.archive_entry_path, "codex-x86_64-unknown-linux-musl");
+        assert_eq!(
+            spec.extracted_executable_sha256,
+            "86dc42ac5823f25233d6dc4ec5ff34693afd8c32ff2d17b54c5eb0d15bc7d902"
+        );
     }
 
     #[test]
@@ -1706,9 +1711,12 @@ mod tests {
             "expected script to record the no-bundle outcome: {script}"
         );
         assert!(
-            script.contains("${stage_dir}/codex-${target_triple}"),
-            "expected script to handle the official archive filename layout: {script}"
+            script.contains("${stage_dir}/${archive_entry_path}"),
+            "expected script to use only the pinned archive entry: {script}"
         );
+        assert!(!script.contains("find \"${stage_dir}\""));
+        assert!(script.contains("runtime-artifacts-v1"));
+        assert!(script.contains("Codex0125OfficialArchive"));
         assert!(
             script.contains("command -v wget"),
             "expected script to prefer wget when available in the guest: {script}"
@@ -1812,6 +1820,20 @@ mod tests {
             .next()
             .expect("sha256 token")
             .to_string();
+        let executable_sha_output = Command::new("sha256sum")
+            .arg(&archive_binary)
+            .output()
+            .expect("sha256sum executable");
+        assert!(
+            executable_sha_output.status.success(),
+            "expected executable sha256sum to succeed"
+        );
+        let executable_sha = String::from_utf8(executable_sha_output.stdout)
+            .expect("executable sha256sum utf8")
+            .split_whitespace()
+            .next()
+            .expect("executable sha256 token")
+            .to_string();
 
         let script = render_codex_runtime_install_script_v1(
             crate::builtins::world_deps::inventory::codex_runtime_install_script_template_v1(),
@@ -1828,6 +1850,14 @@ mod tests {
             .replace(
                 "4a20a53943a7e6a0c5fa4463d4e47c58dd8e553ecebde455a4107e9906bfb001",
                 &sha,
+            )
+            .replace(
+                "86dc42ac5823f25233d6dc4ec5ff34693afd8c32ff2d17b54c5eb0d15bc7d902",
+                &executable_sha,
+            )
+            .replace(
+                crate::builtins::world_deps::inventory::render_codex_installer_artifact_source_v1(),
+                "",
             );
 
         let script_path = fixture.path().join("install-codex-runtime.sh");
@@ -1887,6 +1917,8 @@ struct CodexRuntimeInstallSpecV1 {
     archive_name: String,
     archive_url: String,
     archive_sha256: String,
+    archive_entry_path: String,
+    extracted_executable_sha256: String,
 }
 
 #[allow(dead_code)]
@@ -2070,6 +2102,10 @@ fn resolve_codex_runtime_install_spec_for_target_v1(
             archive_sha256:
                 "4a20a53943a7e6a0c5fa4463d4e47c58dd8e553ecebde455a4107e9906bfb001"
                     .to_string(),
+            archive_entry_path: "codex-x86_64-unknown-linux-musl".to_string(),
+            extracted_executable_sha256:
+                "86dc42ac5823f25233d6dc4ec5ff34693afd8c32ff2d17b54c5eb0d15bc7d902"
+                    .to_string(),
         }),
         _ => Err(config_model::user_error(format!(
             "world deps package '{}' cannot provision validated guest target '{}' at version '{}' because Substrate has no pinned official Codex release mapping for that guest target",
@@ -2090,8 +2126,20 @@ fn render_codex_runtime_install_script_v1(
         .replace("__SUBSTRATE_CODEX_ARCHIVE_NAME__", &spec.archive_name)
         .replace("__SUBSTRATE_CODEX_ARCHIVE_URL__", &spec.archive_url)
         .replace("__SUBSTRATE_CODEX_ARCHIVE_SHA256__", &spec.archive_sha256)
+        .replace(
+            "__SUBSTRATE_CODEX_ARCHIVE_ENTRY_PATH__",
+            &spec.archive_entry_path,
+        )
+        .replace(
+            "__SUBSTRATE_CODEX_EXECUTABLE_SHA256__",
+            &spec.extracted_executable_sha256,
+        )
         .replace("__SUBSTRATE_CODEX_VERSION__", &spec.version)
         .replace("__SUBSTRATE_CODEX_TARGET_TRIPLE__", &spec.target_triple)
+        .replace(
+            "__SUBSTRATE_CODEX_INSTALLER_ARTIFACT_SOURCE_V1__",
+            crate::builtins::world_deps::inventory::render_codex_installer_artifact_source_v1(),
+        )
 }
 
 struct WrapperFileV1 {

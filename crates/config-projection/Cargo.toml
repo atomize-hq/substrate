@@ -10,6 +10,7 @@ default = []
 test-support = []
 
 [dependencies]
+base64 = { workspace = true }
 chrono = { workspace = true }
 libc = "0.2"
 serde = { version = "1", features = ["derive"] }

@@ -32,8 +32,8 @@ use super::store_schema::{
 };
 use super::transition::{verify_applied_start, ApplyHostSessionTransitionRequestV1};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-use super::trusted_fs::EntryKind;
-use super::trusted_fs::TrustedAuthorityRoot;
+use super::trusted_fs::{DirectoryEntry, EntryKind};
+use super::trusted_fs::{TrustedAuthorityRoot, TrustedFile};
 use super::validation::validate_fork_successor_attach_semantics;
 
 #[derive(Debug)]
@@ -572,7 +572,15 @@ pub(crate) struct OpenedBootstrapHomeV1<'authority> {
     root: &'authority TrustedAuthorityRoot,
 }
 
-impl OpenedBootstrapHomeV1<'_> {
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) struct OpenedBootstrapConfigSourceV1<'authority> {
+    trusted_root: &'authority TrustedAuthorityRoot,
+    trusted_entry: Option<DirectoryEntry>,
+    trusted_file: Option<TrustedFile>,
+    source_bytes: Option<Vec<u8>>,
+}
+
+impl<'authority> OpenedBootstrapHomeV1<'authority> {
     pub(crate) fn identity(&self) -> Result<&CanonicalDirectoryV1, AuthorityFacadeError> {
         self.revalidate()?;
         #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -600,6 +608,45 @@ impl OpenedBootstrapHomeV1<'_> {
 
     pub(crate) fn read_config_yaml(&self) -> Result<Option<Vec<u8>>, AuthorityFacadeError> {
         self.read_optional_file("config.yaml")
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    pub(crate) fn open_e3_config_source(
+        &self,
+    ) -> Result<OpenedBootstrapConfigSourceV1<'authority>, AuthorityFacadeError> {
+        self.revalidate()?;
+        let root = self.root.directory();
+        let entry = root
+            .entries()
+            .map_err(trusted_fs_error)?
+            .into_iter()
+            .find(|entry| entry.name == "config.yaml");
+        let opened = match entry {
+            None => OpenedBootstrapConfigSourceV1 {
+                trusted_root: self.root,
+                trusted_entry: None,
+                trusted_file: None,
+                source_bytes: None,
+            },
+            Some(entry) if entry.kind == EntryKind::RegularFile => {
+                let trusted_file = root.open_file_entry(&entry).map_err(trusted_fs_error)?;
+                let source_bytes = trusted_file.read_all().map_err(trusted_fs_error)?;
+                root.revalidate_entry(&entry).map_err(trusted_fs_error)?;
+                OpenedBootstrapConfigSourceV1 {
+                    trusted_root: self.root,
+                    trusted_entry: Some(entry),
+                    trusted_file: Some(trusted_file),
+                    source_bytes: Some(source_bytes),
+                }
+            }
+            Some(_) => {
+                return Err(AuthorityFacadeError(
+                    "bootstrap-home configuration entry is not a regular file".into(),
+                ))
+            }
+        };
+        opened.revalidate()?;
+        Ok(opened)
     }
 
     pub(crate) fn read_policy_yaml(&self) -> Result<Option<Vec<u8>>, AuthorityFacadeError> {
@@ -695,6 +742,85 @@ impl OpenedBootstrapHomeV1<'_> {
         {
             let _ = (name, after_revalidation);
             Err(unsupported_platform())
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl OpenedBootstrapConfigSourceV1<'_> {
+    pub(crate) fn physical_root_path(&self) -> Result<&str, AuthorityFacadeError> {
+        self.revalidate()?;
+        Ok(&self.trusted_root.identity().physical_path)
+    }
+
+    pub(crate) fn source_bytes(&self) -> Option<&[u8]> {
+        self.source_bytes.as_deref()
+    }
+
+    pub(crate) fn validate_e3_public_root_identity(
+        &self,
+        expected: &config_projection::CanonicalDirectoryV1,
+    ) -> Result<(), AuthorityFacadeError> {
+        self.revalidate()?;
+        let identity = self.trusted_root.identity();
+        let matches = identity.physical_path == expected.physical_path
+            && match (&identity.physical_identity, &expected.physical_identity) {
+                (
+                    super::schema::DirectoryPhysicalIdentityV1::Linux {
+                        device_id: actual_device,
+                        inode: actual_inode,
+                    },
+                    config_projection::DirectoryPhysicalIdentityV1::Linux {
+                        device_id: expected_device,
+                        inode: expected_inode,
+                    },
+                ) => actual_device == expected_device && actual_inode == expected_inode,
+                (super::schema::DirectoryPhysicalIdentityV1::MacOs { .. }, _) => false,
+            };
+        if !matches {
+            return Err(AuthorityFacadeError(
+                "bootstrap-home public root identity mismatch".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn revalidate(&self) -> Result<(), AuthorityFacadeError> {
+        self.trusted_root.revalidate().map_err(trusted_fs_error)?;
+        let named_kind = self
+            .trusted_root
+            .directory()
+            .entry_kind("config.yaml")
+            .map_err(trusted_fs_error)?;
+        match (
+            &self.trusted_entry,
+            &self.trusted_file,
+            &self.source_bytes,
+            named_kind,
+        ) {
+            (None, None, None, None) => Ok(()),
+            (
+                Some(trusted_entry),
+                Some(_trusted_file),
+                Some(source_bytes),
+                Some(EntryKind::RegularFile),
+            ) => {
+                let root = self.trusted_root.directory();
+                root.revalidate_entry(trusted_entry)
+                    .map_err(trusted_fs_error)?;
+                let named = root
+                    .open_file_entry(trusted_entry)
+                    .map_err(trusted_fs_error)?;
+                if named.read_all().map_err(trusted_fs_error)? != *source_bytes {
+                    return Err(AuthorityFacadeError(
+                        "bootstrap-home configuration source bytes changed".into(),
+                    ));
+                }
+                Ok(())
+            }
+            _ => Err(AuthorityFacadeError(
+                "bootstrap-home configuration source posture changed".into(),
+            )),
         }
     }
 }

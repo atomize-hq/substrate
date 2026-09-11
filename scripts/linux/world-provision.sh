@@ -43,6 +43,7 @@ INSTALL_BOOTSTRAP_CONTEXT_DECLARED=0
 INSTALL_BOOTSTRAP_COMMITMENT=""
 INSTALL_BOOTSTRAP_ACCOUNT=""
 INSTALL_BOOTSTRAP_UID=""
+INSTALL_BOOTSTRAP_PRIMARY_GID=""
 INSTALL_BOOTSTRAP_ACCOUNT_HOME=""
 HELP_REQUESTED=0
 INTERNAL_CHILD_OPTION_PRESENT=0
@@ -208,7 +209,12 @@ try:
             commitment_input + f"host_context_commitment={commitment}\n".encode("ascii")
         ).decode("ascii")
     account_home = normalize_path(entry.pw_dir)
-    for value in (prefix, carrier, commitment, account, str(uid), account_home):
+    primary_gid = entry.pw_gid
+    if primary_gid < 0 or primary_gid > 0xFFFFFFFF:
+        fail()
+    if pwd.getpwuid(uid).pw_gid != primary_gid:
+        fail()
+    for value in (prefix, carrier, commitment, account, str(uid), str(primary_gid), account_home):
         sys.stdout.buffer.write(value.encode("utf-8") + b"\0")
 except Exception:
     print("invalid install bootstrap context", file=sys.stderr)
@@ -220,6 +226,7 @@ PY
     IFS= read -r -d '' INSTALL_BOOTSTRAP_COMMITMENT <&"${context_fd}" || return 2
     IFS= read -r -d '' INSTALL_BOOTSTRAP_ACCOUNT <&"${context_fd}" || return 2
     IFS= read -r -d '' INSTALL_BOOTSTRAP_UID <&"${context_fd}" || return 2
+    IFS= read -r -d '' INSTALL_BOOTSTRAP_PRIMARY_GID <&"${context_fd}" || return 2
     IFS= read -r -d '' INSTALL_BOOTSTRAP_ACCOUNT_HOME <&"${context_fd}" || return 2
     exec {context_fd}<&-
 

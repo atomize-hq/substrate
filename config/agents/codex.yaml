@@ -1,4 +1,4 @@
-version: 2
+version: 3
 id: codex
 config:
   kind: cli
@@ -24,7 +24,7 @@ config:
       enabled: true
       cli:
         runtime_family: codex
-        binary: /var/lib/substrate/world-deps/bin/codex
+        binary: /var/lib/substrate/world-deps/codex-runtime/bin/codex
         mode: persistent
       capabilities:
         session_start: true
@@ -35,3 +35,7 @@ config:
         event_stream: true
         llm: true
         mcp_client: false
+      runtime_projection:
+        model: codex
+        mcp_servers: []
+        features: []

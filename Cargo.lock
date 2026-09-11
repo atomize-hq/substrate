@@ -670,6 +670,7 @@ dependencies = [
 name = "config-projection"
 version = "0.2.8"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
  "libc",
  "serde",

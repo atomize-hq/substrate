@@ -3171,6 +3171,124 @@ impl TryFrom<ConfigProjectionRefV1Def> for ConfigProjectionRefV1 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "ConfigProjectionAuthoringInputRefV1Def")]
+pub struct ConfigProjectionAuthoringInputRefV1 {
+    pub authority_store_id: String,
+    pub effective_config_source_hash: String,
+    pub agent_inventory_source_hash: String,
+    pub runtime_artifact_manifest_id: String,
+    pub runtime_artifact_manifest_revision: u64,
+    pub runtime_artifact_manifest_hash: String,
+    pub input_ref_hash: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ConfigProjectionAuthoringInputRefV1Def {
+    authority_store_id: String,
+    effective_config_source_hash: String,
+    agent_inventory_source_hash: String,
+    runtime_artifact_manifest_id: String,
+    runtime_artifact_manifest_revision: u64,
+    runtime_artifact_manifest_hash: String,
+    input_ref_hash: String,
+}
+
+#[derive(Serialize)]
+struct ConfigProjectionAuthoringInputRefV1HashBody<'a> {
+    agent_inventory_source_hash: &'a str,
+    authority_store_id: &'a str,
+    effective_config_source_hash: &'a str,
+    runtime_artifact_manifest_hash: &'a str,
+    runtime_artifact_manifest_id: &'a str,
+    runtime_artifact_manifest_revision: u64,
+}
+
+#[derive(Serialize)]
+struct ConfigProjectionAuthoringInputRefV1HashPreimage<'a> {
+    domain: &'static str,
+    input_ref: ConfigProjectionAuthoringInputRefV1HashBody<'a>,
+}
+
+impl ConfigProjectionAuthoringInputRefV1 {
+    pub fn canonical_hash(&self) -> Result<String, String> {
+        let preimage = ConfigProjectionAuthoringInputRefV1HashPreimage {
+            domain: "substrate.e3.config-projection-authoring-input-ref.v1",
+            input_ref: ConfigProjectionAuthoringInputRefV1HashBody {
+                agent_inventory_source_hash: &self.agent_inventory_source_hash,
+                authority_store_id: &self.authority_store_id,
+                effective_config_source_hash: &self.effective_config_source_hash,
+                runtime_artifact_manifest_hash: &self.runtime_artifact_manifest_hash,
+                runtime_artifact_manifest_id: &self.runtime_artifact_manifest_id,
+                runtime_artifact_manifest_revision: self.runtime_artifact_manifest_revision,
+            },
+        };
+        let bytes = serde_json::to_vec(&preimage).map_err(|error| error.to_string())?;
+        Ok(format!("{:x}", Sha256::digest(bytes)))
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        validate_prefixed_uuid_v7(
+            "config_projection.authoring_input_ref.authority_store_id",
+            &self.authority_store_id,
+            "cpa_",
+        )?;
+        validate_lowercase_sha256_digest(
+            "config_projection.authoring_input_ref.effective_config_source_hash",
+            &self.effective_config_source_hash,
+        )?;
+        validate_lowercase_sha256_digest(
+            "config_projection.authoring_input_ref.agent_inventory_source_hash",
+            &self.agent_inventory_source_hash,
+        )?;
+        validate_prefixed_uuid_v7(
+            "config_projection.authoring_input_ref.runtime_artifact_manifest_id",
+            &self.runtime_artifact_manifest_id,
+            "ram_",
+        )?;
+        if self.runtime_artifact_manifest_revision != 1 {
+            return Err(
+                "config_projection.authoring_input_ref.runtime_artifact_manifest_revision must equal 1"
+                    .to_string(),
+            );
+        }
+        validate_lowercase_sha256_digest(
+            "config_projection.authoring_input_ref.runtime_artifact_manifest_hash",
+            &self.runtime_artifact_manifest_hash,
+        )?;
+        validate_lowercase_sha256_digest(
+            "config_projection.authoring_input_ref.input_ref_hash",
+            &self.input_ref_hash,
+        )?;
+        if self.canonical_hash()? != self.input_ref_hash {
+            return Err(
+                "config_projection.authoring_input_ref.input_ref_hash does not match canonical input"
+                    .to_string(),
+            );
+        }
+        Ok(())
+    }
+}
+
+impl TryFrom<ConfigProjectionAuthoringInputRefV1Def> for ConfigProjectionAuthoringInputRefV1 {
+    type Error = String;
+
+    fn try_from(value: ConfigProjectionAuthoringInputRefV1Def) -> Result<Self, Self::Error> {
+        let reference = Self {
+            authority_store_id: value.authority_store_id,
+            effective_config_source_hash: value.effective_config_source_hash,
+            agent_inventory_source_hash: value.agent_inventory_source_hash,
+            runtime_artifact_manifest_id: value.runtime_artifact_manifest_id,
+            runtime_artifact_manifest_revision: value.runtime_artifact_manifest_revision,
+            runtime_artifact_manifest_hash: value.runtime_artifact_manifest_hash,
+            input_ref_hash: value.input_ref_hash,
+        };
+        reference.validate()?;
+        Ok(reference)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(try_from = "InWorldGatewayRefV1Def")]
 pub struct InWorldGatewayRefV1 {
     pub authority_store_id: String,
@@ -7268,6 +7386,46 @@ pipe_path=XFwuXHBpcGVcc3Vic3RyYXRlLWFnZW50\n";
             consumer_lease_revision: 1,
             consumer_lease_hash: "4".repeat(64),
         }
+    }
+
+    fn e3c_sample_authoring_input_ref() -> ConfigProjectionAuthoringInputRefV1 {
+        let mut reference = ConfigProjectionAuthoringInputRefV1 {
+            authority_store_id: "cpa_018f0f2e-7b4c-7aa1-8c22-123456789ab0".to_string(),
+            effective_config_source_hash: "1".repeat(64),
+            agent_inventory_source_hash: "2".repeat(64),
+            runtime_artifact_manifest_id: "ram_018f0f2e-7b4c-7aa1-8c22-123456789ab7".to_string(),
+            runtime_artifact_manifest_revision: 1,
+            runtime_artifact_manifest_hash: "3".repeat(64),
+            input_ref_hash: String::new(),
+        };
+        reference.input_ref_hash = reference
+            .canonical_hash()
+            .expect("hash strict E3-C authoring reference");
+        reference
+    }
+
+    #[test]
+    fn config_projection_authoring_input_ref_v1_is_strict_and_hash_bound() {
+        let reference = e3c_sample_authoring_input_ref();
+        reference.validate().expect("valid authoring input ref");
+
+        let bytes = serde_json::to_vec(&reference).expect("serialize authoring input ref");
+        let decoded: ConfigProjectionAuthoringInputRefV1 =
+            serde_json::from_slice(&bytes).expect("strict round trip");
+        assert_eq!(decoded, reference);
+
+        let mut unknown = serde_json::to_value(&reference).expect("serialize value");
+        unknown["unexpected"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<ConfigProjectionAuthoringInputRefV1>(unknown).is_err());
+
+        let mut substituted = reference.clone();
+        substituted.agent_inventory_source_hash = "4".repeat(64);
+        assert!(substituted.validate().is_err());
+
+        let mut wrong_revision = reference;
+        wrong_revision.runtime_artifact_manifest_revision = 2;
+        wrong_revision.input_ref_hash = wrong_revision.canonical_hash().unwrap();
+        assert!(wrong_revision.validate().is_err());
     }
 
     fn e3a_sample_fresh_spawn_activation() -> E2MemberLaunchActivationCarrierV1 {

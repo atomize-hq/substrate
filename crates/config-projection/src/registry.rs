@@ -8,21 +8,28 @@ mod linux {
     use std::path::{Component, Path};
     use std::sync::{Arc, Mutex, OnceLock};
 
+    use base64::engine::general_purpose::STANDARD;
+    use base64::Engine;
     use serde::de::{DeserializeOwned, IgnoredAny, MapAccess, Visitor};
     use serde::{Deserialize, Deserializer, Serialize};
     use sha2::{Digest, Sha256};
     use uuid::Uuid;
 
     use crate::{
-        AgentConfigProjectionRecordV1, CanonicalDirectoryV1, ConfigProjectionCodecV1,
+        AgentConfigProjectionRecordV1, AgentInventorySourceMaterialV1, CanonicalDirectoryV1,
+        ConfigProjectionAuthoringInputRefV1, ConfigProjectionCodecV1,
         ConfigProjectionConsumerKindV1, ConfigProjectionConsumerLeasePostureV1,
         ConfigProjectionConsumerLeaseV1, ConfigProjectionFailureV1, ConfigProjectionHeadV1,
         ConfigProjectionIdentityV1, ConfigProjectionRefV1, ConfigProjectionRetirementV1,
         ConfigProjectionStoreV1, ConfigProjectionSubjectBindingV1, DirectoryPhysicalIdentityV1,
-        E3TerminalChildQuiescenceEvidenceV1, GatewayAccessBoundaryRefV1, GatewayAccessBoundaryV1,
+        E3ConfigExplainOriginKindV1, E3TerminalChildQuiescenceEvidenceV1,
+        EffectiveSubstrateConfigSourceV1, GatewayAccessBoundaryRefV1, GatewayAccessBoundaryV1,
         GatewayAccessPostureV1, InstalledAcceptedHomeBootstrapHeadV1,
         InstalledAcceptedHomeBootstrapRecordV1, ManagedGatewayProjectionPostureV1,
-        NftablesRuleRoleV1, SecretDeliveryMechanismV1, SecretHandoffStateV1, Timestamp,
+        NativeAgentConfigProjectionV1, NativeProjectedFileRoleV1, NativeProjectionSourceManifestV1,
+        NftablesRuleRoleV1, RuntimeArtifactAuthorityRoleV1, RuntimeArtifactProvenanceV1,
+        SecretDeliveryMechanismV1, SecretHandoffStateV1, Timestamp,
+        TrustedRuntimeArtifactManifestV1,
     };
 
     const CHILD_NAME: &str = "agent-config-projection-v1";
@@ -371,6 +378,57 @@ mod linux {
             )
         }
 
+        pub fn import_runtime_artifacts(
+            &self,
+            effective_config: &EffectiveSubstrateConfigSourceV1,
+            agent_inventory: &AgentInventorySourceMaterialV1,
+            created_at: Timestamp,
+        ) -> Result<ConfigProjectionAuthoringInputRefV1, ConfigProjectionFailureV1> {
+            self.with_transaction(|transaction| {
+                let store = require_store(transaction)?;
+                validate_effective_config_source(effective_config, &store)?;
+                validate_agent_inventory_source(agent_inventory, effective_config, &store)?;
+                crate::LinuxArtifactSourceV1::import_manifest(
+                    Path::new("/var/lib/substrate/runtime-artifacts-v1"),
+                    Path::new("/var/lib/substrate/world-deps/runtime-artifacts-v1"),
+                    &store.authority_store_id,
+                    created_at,
+                    |artifact_manifest| {
+                        validate_runtime_artifact_manifest(artifact_manifest, &store)?;
+                        publish_authoring_inputs(
+                            transaction,
+                            &store,
+                            effective_config,
+                            agent_inventory,
+                            artifact_manifest,
+                        )
+                    },
+                )
+            })
+        }
+
+        pub fn publish_native_source(
+            &self,
+            series_id: &str,
+            fence_id: &str,
+            native: &NativeAgentConfigProjectionV1,
+            created_at: Timestamp,
+        ) -> Result<NativeProjectionSourceManifestV1, ConfigProjectionFailureV1> {
+            self.with_transaction(|transaction| {
+                let store = require_store(transaction)?;
+                validate_native_projection_source_input(native, series_id, fence_id)?;
+                validate_timestamp(&created_at)?;
+                publish_native_source_directory(
+                    transaction,
+                    &store,
+                    series_id,
+                    fence_id,
+                    native,
+                    created_at,
+                )
+            })
+        }
+
         pub fn acquire_consumer_lease(
             &self,
             acquired_projection_ref: &ConfigProjectionRefV1,
@@ -586,6 +644,7 @@ mod linux {
                 let result = ConfigProjectionChildTransactionV1::begin(authority_fd).and_then(
                     |mut transaction| {
                         recover_owned_temps(&transaction)?;
+                        recover_native_source_temps(&transaction)?;
                         let operation_result = operation
                             .take()
                             .ok_or(ConfigProjectionFailureV1::Conflict)?(
@@ -906,6 +965,9 @@ mod linux {
         transaction: &ConfigProjectionChildTransactionV1,
     ) -> Result<(), ConfigProjectionFailureV1> {
         for name in [
+            "inputs",
+            "runtime-artifacts",
+            "native-sources",
             "subjects",
             "series",
             "leases",
@@ -915,6 +977,11 @@ mod linux {
         ] {
             open_or_create_directory(transaction.root.as_fd(), name, transaction.owner_uid)?;
         }
+        let inputs = open_directory_at(transaction.root.as_fd(), "inputs")?;
+        for name in ["effective-config", "agent-inventory"] {
+            open_or_create_directory(inputs.as_fd(), name, transaction.owner_uid)?;
+        }
+        fsync(&inputs)?;
         fsync(&transaction.root)
     }
 
@@ -1397,6 +1464,735 @@ mod linux {
         }
     }
 
+    fn publish_authoring_inputs(
+        transaction: &ConfigProjectionChildTransactionV1,
+        store: &ConfigProjectionStoreV1,
+        effective_config: &EffectiveSubstrateConfigSourceV1,
+        agent_inventory: &AgentInventorySourceMaterialV1,
+        artifact_manifest: &TrustedRuntimeArtifactManifestV1,
+    ) -> Result<ConfigProjectionAuthoringInputRefV1, ConfigProjectionFailureV1> {
+        let inputs = open_directory_at(transaction.root.as_fd(), "inputs")?;
+        let effective_root = open_directory_at(inputs.as_fd(), "effective-config")?;
+        let inventory_root = open_directory_at(inputs.as_fd(), "agent-inventory")?;
+        let effective_bytes = ConfigProjectionCodecV1::encode_canonical_json(effective_config)?;
+        write_immutable(
+            effective_root.as_fd(),
+            &format!("{}.json", effective_config.source_hash),
+            &effective_bytes,
+            "input",
+            transaction.owner_uid,
+        )?;
+        let inventory_bytes = ConfigProjectionCodecV1::encode_canonical_json(agent_inventory)?;
+        write_immutable(
+            inventory_root.as_fd(),
+            &format!("{}.json", agent_inventory.source_hash),
+            &inventory_bytes,
+            "input",
+            transaction.owner_uid,
+        )?;
+
+        let artifacts = open_directory_at(transaction.root.as_fd(), "runtime-artifacts")?;
+        let manifest_root = open_or_create_directory(
+            artifacts.as_fd(),
+            &artifact_manifest.manifest_id,
+            transaction.owner_uid,
+        )?;
+        let manifest_bytes = ConfigProjectionCodecV1::encode_canonical_json(artifact_manifest)?;
+        write_immutable(
+            manifest_root.as_fd(),
+            &format!("{:020}.json", artifact_manifest.revision),
+            &manifest_bytes,
+            "artifact-manifest",
+            transaction.owner_uid,
+        )?;
+
+        let mut reference = ConfigProjectionAuthoringInputRefV1 {
+            authority_store_id: store.authority_store_id.clone(),
+            effective_config_source_hash: effective_config.source_hash.clone(),
+            agent_inventory_source_hash: agent_inventory.source_hash.clone(),
+            runtime_artifact_manifest_id: artifact_manifest.manifest_id.clone(),
+            runtime_artifact_manifest_revision: artifact_manifest.revision,
+            runtime_artifact_manifest_hash: artifact_manifest.manifest_hash.clone(),
+            input_ref_hash: String::new(),
+        };
+        reference.input_ref_hash = reference
+            .canonical_hash()
+            .map_err(|_| ConfigProjectionFailureV1::Malformed)?;
+        reference
+            .validate()
+            .map_err(|_| ConfigProjectionFailureV1::Malformed)?;
+
+        let effective_readback: EffectiveSubstrateConfigSourceV1 = read_canonical_at(
+            effective_root.as_fd(),
+            &format!("{}.json", effective_config.source_hash),
+        )?;
+        let inventory_readback: AgentInventorySourceMaterialV1 = read_canonical_at(
+            inventory_root.as_fd(),
+            &format!("{}.json", agent_inventory.source_hash),
+        )?;
+        let manifest_readback: TrustedRuntimeArtifactManifestV1 = read_canonical_at(
+            manifest_root.as_fd(),
+            &format!("{:020}.json", artifact_manifest.revision),
+        )?;
+        if effective_readback != *effective_config
+            || inventory_readback != *agent_inventory
+            || manifest_readback != *artifact_manifest
+        {
+            return Err(ConfigProjectionFailureV1::PartialPublication);
+        }
+        Ok(reference)
+    }
+
+    fn validate_effective_config_source(
+        source: &EffectiveSubstrateConfigSourceV1,
+        store: &ConfigProjectionStoreV1,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        if source.schema_version != 1
+            || source.authority_store_id != store.authority_store_id
+            || source.accepted_home != store.accepted_home
+            || source.workspace_root.physical_path.is_empty()
+            || source.values.managed_gateway_mode != "in_world"
+            || source.values.default_execution_scope != "world"
+            || source.values.default_cli_mode != "persistent"
+            || source.values.default_backend_id != "cli:codex-world"
+            || !source.values.llm_enabled
+            || !source.values.agents_enabled
+            || !source.values.world_enabled
+            || !source.values.managed_gateway_enabled
+        {
+            return Err(ConfigProjectionFailureV1::UnsupportedConfiguration);
+        }
+        let expected_keys = [
+            "llm.enabled",
+            "llm.gateway.enabled",
+            "llm.gateway.mode",
+            "llm.routing.default_backend",
+            "agents.enabled",
+            "agents.defaults.execution.scope",
+            "agents.defaults.cli.mode",
+            "world.enabled",
+        ];
+        if source
+            .ordered_explain_origins
+            .iter()
+            .map(|origin| origin.key.as_str())
+            .ne(expected_keys)
+        {
+            return Err(ConfigProjectionFailureV1::Malformed);
+        }
+        for origin in &source.ordered_explain_origins {
+            match origin.source_kind {
+                E3ConfigExplainOriginKindV1::GlobalPatch => {
+                    let location = origin
+                        .source_location
+                        .as_ref()
+                        .ok_or(ConfigProjectionFailureV1::Malformed)?;
+                    if location.source_root != source.accepted_home
+                        || location.source_relative_path != "config.yaml"
+                    {
+                        return Err(ConfigProjectionFailureV1::WrongBinding);
+                    }
+                    validate_sha256(&location.source_bytes_sha256)?;
+                }
+                E3ConfigExplainOriginKindV1::WorkspacePatch => {
+                    let location = origin
+                        .source_location
+                        .as_ref()
+                        .ok_or(ConfigProjectionFailureV1::Malformed)?;
+                    if location.source_root != source.workspace_root
+                        || location.source_relative_path != ".substrate/workspace.yaml"
+                    {
+                        return Err(ConfigProjectionFailureV1::WrongBinding);
+                    }
+                    validate_sha256(&location.source_bytes_sha256)?;
+                }
+                E3ConfigExplainOriginKindV1::CliFlag => {
+                    return Err(ConfigProjectionFailureV1::Malformed)
+                }
+                E3ConfigExplainOriginKindV1::Default | E3ConfigExplainOriginKindV1::OverrideEnv => {
+                    if origin.source_location.is_some() {
+                        return Err(ConfigProjectionFailureV1::Malformed);
+                    }
+                }
+            }
+        }
+        let mut revision_value =
+            serde_json::to_value(source).map_err(|_| ConfigProjectionFailureV1::Malformed)?;
+        let revision_object = revision_value
+            .as_object_mut()
+            .ok_or(ConfigProjectionFailureV1::Malformed)?;
+        revision_object.remove("source_revision");
+        revision_object.remove("source_hash");
+        let revision = ordinary_sha256(&ConfigProjectionCodecV1::encode_canonical_json(
+            &revision_value,
+        )?);
+        if source.source_revision != format!("ecsr1_{revision}") {
+            return Err(ConfigProjectionFailureV1::HashInvalid);
+        }
+        validate_hash_field(
+            &source.source_hash,
+            hash_omitting(
+                "substrate.e3.effective-substrate-config-source.v1",
+                "source",
+                source,
+                "source_hash",
+            )?,
+        )
+    }
+
+    fn validate_agent_inventory_source(
+        source: &AgentInventorySourceMaterialV1,
+        effective: &EffectiveSubstrateConfigSourceV1,
+        store: &ConfigProjectionStoreV1,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        let expected_root = match source.inventory_scope.as_str() {
+            "global" => &store.accepted_home,
+            "workspace" => &effective.workspace_root,
+            _ => return Err(ConfigProjectionFailureV1::Malformed),
+        };
+        if &source.accepted_root != expected_root
+            || source.relative_path.is_empty()
+            || source.relative_path.starts_with('/')
+            || source
+                .relative_path
+                .split('/')
+                .any(|part| part == ".." || part.is_empty())
+            || !source.relative_path.ends_with(".yaml")
+            || source.file_device_id == 0
+            || source.file_inode == 0
+            || source.byte_length == 0
+        {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        validate_sha256(&source.raw_bytes_sha256)?;
+        if source.source_revision != format!("aisr1_{}", source.raw_bytes_sha256) {
+            return Err(ConfigProjectionFailureV1::HashInvalid);
+        }
+        validate_hash_field(
+            &source.source_hash,
+            hash_omitting(
+                "substrate.e3.agent-inventory-source.v1",
+                "source",
+                source,
+                "source_hash",
+            )?,
+        )
+    }
+
+    fn validate_runtime_artifact_manifest(
+        manifest: &TrustedRuntimeArtifactManifestV1,
+        store: &ConfigProjectionStoreV1,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        if manifest.schema_version != 1
+            || manifest.authority_store_id != store.authority_store_id
+            || manifest.revision != 1
+        {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        validate_prefixed_uuid(&manifest.manifest_id, "ram_")?;
+        validate_timestamp(&manifest.created_at)?;
+        let expected_roles = [
+            RuntimeArtifactAuthorityRoleV1::Codex0125,
+            RuntimeArtifactAuthorityRoleV1::ManagedGateway,
+            RuntimeArtifactAuthorityRoleV1::WorldEntryWrapper,
+        ];
+        if manifest
+            .entries
+            .iter()
+            .map(|entry| entry.authority_role)
+            .ne(expected_roles)
+        {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        for (entry, expected_path) in manifest.entries.iter().zip([
+            "/var/lib/substrate/world-deps/codex-runtime/bin/codex",
+            "/usr/local/lib/substrate/e3/substrate-gateway",
+            "/usr/local/lib/substrate/e3/substrate-world-entry",
+        ]) {
+            validate_prefixed_uuid(&entry.manifest_entry_id, "rae_")?;
+            validate_prefixed_uuid(&entry.installer_source_ref.source_store_id, "ias_")?;
+            validate_prefixed_uuid(&entry.installer_source_ref.source_record_id, "iar_")?;
+            if entry.configured_absolute_path != expected_path
+                || entry.device_id == 0
+                || entry.inode == 0
+                || entry.mode != 0o755
+                || entry.owner_uid != 0
+                || entry.byte_length == 0
+                || entry.installer_source_ref.revision == 0
+            {
+                return Err(ConfigProjectionFailureV1::WrongBinding);
+            }
+            validate_sha256(&entry.sha256)?;
+            validate_sha256(&entry.installer_source_ref.record_hash)?;
+            validate_runtime_support(&entry.runtime_support)?;
+            match (&entry.authority_role, &entry.provenance) {
+                (
+                    RuntimeArtifactAuthorityRoleV1::Codex0125,
+                    RuntimeArtifactProvenanceV1::OfficialCodexRelease {
+                        version,
+                        target_triple,
+                        archive_name,
+                        archive_url,
+                        archive_sha256,
+                        archive_entry_path,
+                        extracted_executable_sha256,
+                    },
+                ) if version == "0.125.0"
+                    && target_triple == "x86_64-unknown-linux-musl"
+                    && archive_name == "codex-x86_64-unknown-linux-musl.tar.gz"
+                    && archive_url == "https://github.com/openai/codex/releases/download/rust-v0.125.0/codex-x86_64-unknown-linux-musl.tar.gz"
+                    && archive_sha256 == "4a20a53943a7e6a0c5fa4463d4e47c58dd8e553ecebde455a4107e9906bfb001"
+                    && archive_entry_path == "codex-x86_64-unknown-linux-musl"
+                    && extracted_executable_sha256 == "86dc42ac5823f25233d6dc4ec5ff34693afd8c32ff2d17b54c5eb0d15bc7d902"
+                    && entry.sha256 == *extracted_executable_sha256 => {}
+                (
+                    RuntimeArtifactAuthorityRoleV1::ManagedGateway,
+                    RuntimeArtifactProvenanceV1::SubstrateSourceBuild {
+                        component,
+                        source_commit,
+                        source_tree,
+                        cargo_lock_sha256,
+                        target_triple,
+                        profile,
+                        executable_sha256,
+                    },
+                ) if component == "substrate-gateway"
+                    && validate_git_object_id(source_commit).is_ok()
+                    && validate_git_object_id(source_tree).is_ok()
+                    && validate_sha256(cargo_lock_sha256).is_ok()
+                    && target_triple == "x86_64-unknown-linux-musl"
+                    && profile == "release"
+                    && executable_sha256 == &entry.sha256 => {}
+                (
+                    RuntimeArtifactAuthorityRoleV1::WorldEntryWrapper,
+                    RuntimeArtifactProvenanceV1::SubstrateSourceBuild {
+                        component,
+                        source_commit,
+                        source_tree,
+                        cargo_lock_sha256,
+                        target_triple,
+                        profile,
+                        executable_sha256,
+                    },
+                ) if component == "substrate-world-entry"
+                    && validate_git_object_id(source_commit).is_ok()
+                    && validate_git_object_id(source_tree).is_ok()
+                    && validate_sha256(cargo_lock_sha256).is_ok()
+                    && target_triple == "x86_64-unknown-linux-musl"
+                    && profile == "release"
+                    && executable_sha256 == &entry.sha256 => {}
+                _ => return Err(ConfigProjectionFailureV1::WrongBinding),
+            }
+            validate_hash_field(
+                &entry.entry_hash,
+                hash_omitting(
+                    "substrate.e3.runtime-artifact-entry.v1",
+                    "entry",
+                    entry,
+                    "entry_hash",
+                )?,
+            )?;
+        }
+        validate_hash_field(
+            &manifest.manifest_hash,
+            hash_omitting(
+                "substrate.e3.runtime-artifact-manifest.v1",
+                "manifest",
+                manifest,
+                "manifest_hash",
+            )?,
+        )
+    }
+
+    fn validate_native_projection_source_input(
+        native: &NativeAgentConfigProjectionV1,
+        series_id: &str,
+        fence_id: &str,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        validate_prefixed_uuid(series_id, "cps_")?;
+        validate_prefixed_uuid(fence_id, "cpf_")?;
+        validate_prefixed_uuid(&native.root.root_id, "cnr_")?;
+        if native.root.authority_relative_path
+            != format!(
+                "authority-v1/agent-config-projection-v1/native-sources/{series_id}/{fence_id}"
+            )
+            || native.root.guest_absolute_path
+                != format!("/run/substrate/member-config/{series_id}/{fence_id}")
+            || native.root.directory_mode != 0o700
+            || native.directories
+                != [
+                    ".",
+                    "system-empty",
+                    "home",
+                    "codex-home",
+                    "state",
+                    "state/sqlite",
+                    "state/log",
+                    "tmp",
+                    "tmp/output-last-message",
+                ]
+                .into_iter()
+                .map(|relative_path| crate::NativeProjectedDirectoryV1 {
+                    relative_path: relative_path.to_string(),
+                    mode: 0o700,
+                })
+                .collect::<Vec<_>>()
+            || native.files.len() != 1
+            || native.files[0].role != NativeProjectedFileRoleV1::CodexConfigToml
+            || native.files[0].relative_path != "codex-home/config.toml"
+            || native.files[0].mode != 0o600
+        {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        validate_sha256(&native.projection_hash)?;
+        validate_sha256(&native.files[0].sha256)?;
+        let bytes = STANDARD
+            .decode(&native.files[0].bytes_base64)
+            .map_err(|_| ConfigProjectionFailureV1::Malformed)?;
+        if bytes.len() as u64 != native.files[0].byte_length
+            || ordinary_sha256(&bytes) != native.files[0].sha256
+        {
+            return Err(ConfigProjectionFailureV1::HashInvalid);
+        }
+        let mut value =
+            serde_json::to_value(native).map_err(|_| ConfigProjectionFailureV1::Malformed)?;
+        value
+            .as_object_mut()
+            .ok_or(ConfigProjectionFailureV1::Malformed)?
+            .remove("projection_hash");
+        validate_hash_field(
+            &native.projection_hash,
+            ConfigProjectionCodecV1::domain_sha256(
+                "",
+                &serde_json::json!({
+                    "domain": "substrate.e3.native-config-projection.v1",
+                    "projection": value,
+                }),
+            )?,
+        )
+    }
+
+    fn publish_native_source_directory(
+        transaction: &ConfigProjectionChildTransactionV1,
+        store: &ConfigProjectionStoreV1,
+        series_id: &str,
+        fence_id: &str,
+        native: &NativeAgentConfigProjectionV1,
+        created_at: Timestamp,
+    ) -> Result<NativeProjectionSourceManifestV1, ConfigProjectionFailureV1> {
+        let native_sources = open_directory_at(transaction.root.as_fd(), "native-sources")?;
+        let series =
+            open_or_create_directory(native_sources.as_fd(), series_id, transaction.owner_uid)?;
+        let config = &native.files[0];
+        let config_bytes = STANDARD
+            .decode(&config.bytes_base64)
+            .map_err(|_| ConfigProjectionFailureV1::Malformed)?;
+        match open_directory_at(series.as_fd(), fence_id) {
+            Ok(_) => {
+                let existing = validate_native_source_directory(
+                    &series,
+                    fence_id,
+                    None,
+                    Some(&config_bytes),
+                    transaction.owner_uid,
+                )?;
+                let expected_physical_path = format!(
+                    "{}/authority-v1/agent-config-projection-v1/native-sources/{series_id}/{fence_id}",
+                    store.accepted_home.physical_path
+                );
+                if existing.authority_store_id == store.authority_store_id
+                    && existing.series_id == series_id
+                    && existing.fence_id == fence_id
+                    && existing.source_root.physical_path == expected_physical_path
+                    && existing.native_projection_hash == native.projection_hash
+                    && existing.ordered_file_hashes == [config.sha256.clone()]
+                    && existing.created_at == created_at
+                {
+                    return Ok(existing);
+                }
+                return Err(ConfigProjectionFailureV1::Conflict);
+            }
+            Err(ConfigProjectionFailureV1::MissingPreparation) => {}
+            Err(error) => return Err(error),
+        }
+        let temp_name = format!(".e3-native-source-tmp.{}", Uuid::now_v7());
+        let temp = open_or_create_directory(series.as_fd(), &temp_name, transaction.owner_uid)?;
+        let codex_home =
+            open_or_create_directory(temp.as_fd(), "codex-home", transaction.owner_uid)?;
+        let system_empty =
+            open_or_create_directory(temp.as_fd(), "system-empty", transaction.owner_uid)?;
+        if !list_names(&system_empty)?.is_empty() {
+            return Err(ConfigProjectionFailureV1::Conflict);
+        }
+        write_exclusive_file(
+            codex_home.as_fd(),
+            "config.toml",
+            &config_bytes,
+            transaction.owner_uid,
+        )?;
+
+        let temp_metadata = fstat(temp.as_raw_fd())?;
+        if native.root.owner_uid != transaction.owner_uid as u64
+            || native.root.owner_gid != temp_metadata.st_gid as u64
+        {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        let source_root = CanonicalDirectoryV1 {
+            physical_path: format!(
+                "{}/authority-v1/agent-config-projection-v1/native-sources/{series_id}/{fence_id}",
+                store.accepted_home.physical_path
+            ),
+            physical_identity: DirectoryPhysicalIdentityV1::Linux {
+                device_id: temp_metadata.st_dev,
+                inode: temp_metadata.st_ino,
+            },
+        };
+        let mut manifest = NativeProjectionSourceManifestV1 {
+            schema_version: 1,
+            authority_store_id: store.authority_store_id.clone(),
+            series_id: series_id.to_string(),
+            fence_id: fence_id.to_string(),
+            source_root,
+            native_projection_hash: native.projection_hash.clone(),
+            ordered_file_hashes: vec![config.sha256.clone()],
+            created_at,
+            manifest_hash: String::new(),
+        };
+        manifest.manifest_hash = hash_omitting(
+            "substrate.e3.native-projection-source-manifest.v1",
+            "manifest",
+            &manifest,
+            "manifest_hash",
+        )?;
+        let manifest_bytes = ConfigProjectionCodecV1::encode_canonical_json(&manifest)?;
+        write_exclusive_file(
+            temp.as_fd(),
+            "source-manifest.json",
+            &manifest_bytes,
+            transaction.owner_uid,
+        )?;
+        fsync(&codex_home)?;
+        fsync(&system_empty)?;
+        fsync(&temp)?;
+        match rename_noreplace(series.as_fd(), &temp_name, fence_id) {
+            Ok(()) => {}
+            Err(ConfigProjectionFailureV1::Conflict) => {
+                let existing = validate_native_source_directory(
+                    &series,
+                    fence_id,
+                    Some(&manifest),
+                    Some(&config_bytes),
+                    transaction.owner_uid,
+                )?;
+                if existing != manifest {
+                    return Err(ConfigProjectionFailureV1::Conflict);
+                }
+                remove_native_source_temp(&series, &temp_name)?;
+            }
+            Err(error) => return Err(error),
+        }
+        fsync(&series)?;
+        let readback = validate_native_source_directory(
+            &series,
+            fence_id,
+            Some(&manifest),
+            Some(&config_bytes),
+            transaction.owner_uid,
+        )?;
+        if readback == manifest {
+            Ok(manifest)
+        } else {
+            Err(ConfigProjectionFailureV1::PartialPublication)
+        }
+    }
+
+    fn write_exclusive_file(
+        parent: BorrowedFd<'_>,
+        name: &str,
+        bytes: &[u8],
+        owner_uid: libc::uid_t,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        let mut file = open_file_at(
+            parent,
+            name,
+            libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL,
+            0o600,
+        )?;
+        verify_regular_file(&file, owner_uid, 0o600)?;
+        file.write_all(bytes)
+            .map_err(|_| ConfigProjectionFailureV1::PartialPublication)?;
+        fsync(&file)?;
+        fsync_fd(parent.as_raw_fd())
+    }
+
+    fn validate_native_source_directory(
+        series: &File,
+        name: &str,
+        expected_manifest: Option<&NativeProjectionSourceManifestV1>,
+        expected_config: Option<&[u8]>,
+        owner_uid: libc::uid_t,
+    ) -> Result<NativeProjectionSourceManifestV1, ConfigProjectionFailureV1> {
+        let root = open_directory_at(series.as_fd(), name)?;
+        verify_directory(&root, owner_uid, 0o700)?;
+        if list_names(&root)? != ["codex-home", "source-manifest.json", "system-empty"] {
+            return Err(ConfigProjectionFailureV1::PartialPublication);
+        }
+        let codex_home = open_directory_at(root.as_fd(), "codex-home")?;
+        let system_empty = open_directory_at(root.as_fd(), "system-empty")?;
+        if list_names(&codex_home)? != ["config.toml"] || !list_names(&system_empty)?.is_empty() {
+            return Err(ConfigProjectionFailureV1::PartialPublication);
+        }
+        let config = read_file_at(codex_home.as_fd(), "config.toml")?;
+        let manifest: NativeProjectionSourceManifestV1 =
+            read_canonical_at(root.as_fd(), "source-manifest.json")?;
+        validate_prefixed_uuid(&manifest.series_id, "cps_")?;
+        validate_prefixed_uuid(&manifest.fence_id, "cpf_")?;
+        validate_timestamp(&manifest.created_at)?;
+        validate_sha256(&manifest.native_projection_hash)?;
+        if manifest.series_id != fstat_series_component(series, &manifest.series_id)?
+            || (!name.starts_with(".e3-native-source-tmp.") && manifest.fence_id != name)
+            || manifest.ordered_file_hashes != [ordinary_sha256(&config)]
+        {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        let metadata = fstat(root.as_raw_fd())?;
+        let DirectoryPhysicalIdentityV1::Linux { device_id, inode } =
+            &manifest.source_root.physical_identity;
+        if *device_id != metadata.st_dev || *inode != metadata.st_ino {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        validate_hash_field(
+            &manifest.manifest_hash,
+            hash_omitting(
+                "substrate.e3.native-projection-source-manifest.v1",
+                "manifest",
+                &manifest,
+                "manifest_hash",
+            )?,
+        )?;
+        if expected_manifest.is_some_and(|expected| expected != &manifest)
+            || expected_config.is_some_and(|expected| expected != config)
+        {
+            return Err(ConfigProjectionFailureV1::Conflict);
+        }
+        Ok(manifest)
+    }
+
+    fn fstat_series_component(
+        series: &File,
+        expected: &str,
+    ) -> Result<String, ConfigProjectionFailureV1> {
+        let link = std::fs::read_link(format!("/proc/self/fd/{}", series.as_raw_fd()))
+            .map_err(|_| ConfigProjectionFailureV1::UnsupportedSecurityPosture)?;
+        let component = link
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or(ConfigProjectionFailureV1::WrongBinding)?;
+        if component == expected {
+            Ok(component.to_string())
+        } else {
+            Err(ConfigProjectionFailureV1::WrongBinding)
+        }
+    }
+
+    fn remove_native_source_temp(
+        series: &File,
+        temp_name: &str,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        let temp = open_directory_at(series.as_fd(), temp_name)?;
+        let codex_home = open_directory_at(temp.as_fd(), "codex-home")?;
+        unlink_at(codex_home.as_fd(), "config.toml")?;
+        unlink_directory_at(temp.as_fd(), "codex-home")?;
+        unlink_directory_at(temp.as_fd(), "system-empty")?;
+        unlink_at(temp.as_fd(), "source-manifest.json")?;
+        unlink_directory_at(series.as_fd(), temp_name)?;
+        fsync(series)
+    }
+
+    fn unlink_directory_at(
+        parent: BorrowedFd<'_>,
+        name: &str,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        let name = CString::new(name).map_err(|_| ConfigProjectionFailureV1::Malformed)?;
+        if unsafe { libc::unlinkat(parent.as_raw_fd(), name.as_ptr(), libc::AT_REMOVEDIR) } != 0 {
+            return Err(ConfigProjectionFailureV1::PartialPublication);
+        }
+        Ok(())
+    }
+
+    fn recover_native_source_temps(
+        transaction: &ConfigProjectionChildTransactionV1,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        let Some(native_sources) =
+            open_optional_directory_at(transaction.root.as_fd(), "native-sources")?
+        else {
+            return Ok(());
+        };
+        for series_id in list_names(&native_sources)? {
+            validate_prefixed_uuid(&series_id, "cps_")?;
+            let series = open_directory_at(native_sources.as_fd(), &series_id)?;
+            let temps = list_names(&series)?
+                .into_iter()
+                .filter(|name| name.starts_with(".e3-native-source-tmp."))
+                .collect::<Vec<_>>();
+            if temps.len() > 1 {
+                return Err(ConfigProjectionFailureV1::PartialPublication);
+            }
+            let Some(temp_name) = temps.first() else {
+                continue;
+            };
+            validate_native_temp_name(temp_name)?;
+            let candidate = validate_native_source_directory(
+                &series,
+                temp_name,
+                None,
+                None,
+                transaction.owner_uid,
+            )?;
+            match open_directory_at(series.as_fd(), &candidate.fence_id) {
+                Ok(_) => {
+                    let final_manifest = validate_native_source_directory(
+                        &series,
+                        &candidate.fence_id,
+                        Some(&candidate),
+                        None,
+                        transaction.owner_uid,
+                    )?;
+                    if final_manifest != candidate {
+                        return Err(ConfigProjectionFailureV1::Conflict);
+                    }
+                    remove_native_source_temp(&series, temp_name)?;
+                }
+                Err(ConfigProjectionFailureV1::MissingPreparation) => {
+                    rename_noreplace(series.as_fd(), temp_name, &candidate.fence_id)?;
+                    fsync(&series)?;
+                    validate_native_source_directory(
+                        &series,
+                        &candidate.fence_id,
+                        Some(&candidate),
+                        None,
+                        transaction.owner_uid,
+                    )?;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_native_temp_name(name: &str) -> Result<(), ConfigProjectionFailureV1> {
+        let raw = name
+            .strip_prefix(".e3-native-source-tmp.")
+            .ok_or(ConfigProjectionFailureV1::PartialPublication)?;
+        let parsed =
+            Uuid::parse_str(raw).map_err(|_| ConfigProjectionFailureV1::PartialPublication)?;
+        if parsed.get_version_num() == 7 && parsed.to_string() == raw {
+            Ok(())
+        } else {
+            Err(ConfigProjectionFailureV1::PartialPublication)
+        }
+    }
+
     fn validate_artifact(
         artifact: &crate::DescriptorPinnedArtifactV1,
         expected_role: crate::ConfigProjectionArtifactRoleV1,
@@ -1429,6 +2225,28 @@ mod linux {
     ) -> Result<(), ConfigProjectionFailureV1> {
         if support.schema_version != 1
             || support.support_policy_version != 1
+            || support.elf_interpreter.is_some()
+            || support.dynamic_loader_cache.is_some()
+            || !support.ordered_elf_dependencies.is_empty()
+            || support
+                .ordered_present_common_files
+                .iter()
+                .map(|file| file.absolute_path.as_str())
+                .ne([
+                    "/etc/hosts",
+                    "/etc/nsswitch.conf",
+                    "/etc/passwd",
+                    "/etc/group",
+                    "/etc/resolv.conf",
+                    "/etc/ssl/certs/ca-certificates.crt",
+                ])
+            || support.ordered_present_common_files.iter().any(|file| {
+                file.device_id == 0
+                    || file.inode == 0
+                    || file.mode & 0o022 != 0
+                    || file.byte_length == 0
+                    || validate_sha256(&file.sha256).is_err()
+            })
             || support.system_config_mount_target.absolute_path != "/etc/codex"
             || support.system_config_mount_target.device_id == 0
             || support.system_config_mount_target.inode == 0
@@ -2232,6 +3050,18 @@ mod linux {
         }
     }
 
+    fn validate_git_object_id(value: &str) -> Result<(), ConfigProjectionFailureV1> {
+        if matches!(value.len(), 40 | 64)
+            && value
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            Ok(())
+        } else {
+            Err(ConfigProjectionFailureV1::Malformed)
+        }
+    }
+
     fn ordinary_sha256(bytes: &[u8]) -> String {
         format!("{:x}", Sha256::digest(bytes))
     }
@@ -2831,6 +3661,41 @@ mod linux {
                 validate_store(&store, transaction)?;
                 Ok(("store.json".to_string(), false))
             }
+            "input" if path == ["inputs", "effective-config"] => {
+                let store = require_store(transaction)?;
+                let source: EffectiveSubstrateConfigSourceV1 =
+                    ConfigProjectionCodecV1::decode_canonical_json(bytes)?;
+                validate_effective_config_source(&source, &store)?;
+                Ok((format!("{}.json", source.source_hash), false))
+            }
+            "input" if path == ["inputs", "agent-inventory"] => {
+                let source: AgentInventorySourceMaterialV1 =
+                    ConfigProjectionCodecV1::decode_canonical_json(bytes)?;
+                validate_sha256(&source.raw_bytes_sha256)?;
+                if source.source_revision != format!("aisr1_{}", source.raw_bytes_sha256) {
+                    return Err(ConfigProjectionFailureV1::HashInvalid);
+                }
+                validate_hash_field(
+                    &source.source_hash,
+                    hash_omitting(
+                        "substrate.e3.agent-inventory-source.v1",
+                        "source",
+                        &source,
+                        "source_hash",
+                    )?,
+                )?;
+                Ok((format!("{}.json", source.source_hash), false))
+            }
+            "artifact-manifest" if path.len() == 2 && path[0] == "runtime-artifacts" => {
+                let store = require_store(transaction)?;
+                let manifest: TrustedRuntimeArtifactManifestV1 =
+                    ConfigProjectionCodecV1::decode_canonical_json(bytes)?;
+                validate_runtime_artifact_manifest(&manifest, &store)?;
+                if manifest.manifest_id != path[1] {
+                    return Err(ConfigProjectionFailureV1::WrongBinding);
+                }
+                Ok((format!("{:020}.json", manifest.revision), false))
+            }
             "subject" if path == ["subjects"] => {
                 let store = require_store(transaction)?;
                 let binding: ConfigProjectionSubjectBindingV1 =
@@ -3018,6 +3883,9 @@ mod linux {
         let allowed: BTreeSet<&str> = [
             "lock",
             "store.json",
+            "inputs",
+            "runtime-artifacts",
+            "native-sources",
             "subjects",
             "series",
             "leases",
@@ -3047,11 +3915,178 @@ mod linux {
             validate_store(&store, transaction)?;
         }
         validate_subject_tree(transaction, verify_objects)?;
+        validate_input_tree(transaction, verify_objects)?;
+        validate_runtime_artifact_tree(transaction, verify_objects)?;
+        validate_native_source_tree(transaction, verify_objects)?;
         validate_series_tree(transaction, verify_objects)?;
         validate_lease_tree(transaction, verify_objects)?;
         validate_gateway_boundary_tree(transaction, verify_objects)?;
         validate_terminal_evidence_tree(transaction, verify_objects)?;
         validate_retirement_tree(transaction, verify_objects)?;
+        Ok(())
+    }
+
+    fn validate_input_tree(
+        transaction: &ConfigProjectionChildTransactionV1,
+        verify_objects: bool,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        let Some(inputs) = open_optional_directory_at(transaction.root.as_fd(), "inputs")? else {
+            return Ok(());
+        };
+        let names = list_names(&inputs)?;
+        if names != ["agent-inventory", "effective-config"] {
+            return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+        }
+        let store = verify_objects
+            .then(|| require_store(transaction))
+            .transpose()?;
+        for kind in ["effective-config", "agent-inventory"] {
+            let root = open_directory_at(inputs.as_fd(), kind)?;
+            for name in list_names(&root)? {
+                if name.starts_with(".e3-tmp.") {
+                    if parse_temp_name(&name)? != "input" {
+                        return Err(ConfigProjectionFailureV1::PartialPublication);
+                    }
+                    let _ = read_file_at(root.as_fd(), &name)?;
+                    continue;
+                }
+                let hash = name
+                    .strip_suffix(".json")
+                    .ok_or(ConfigProjectionFailureV1::UnsupportedSecurityPosture)?;
+                validate_sha256(hash)?;
+                if verify_objects {
+                    if kind == "effective-config" {
+                        let source: EffectiveSubstrateConfigSourceV1 =
+                            read_canonical_at(root.as_fd(), &name)?;
+                        validate_effective_config_source(
+                            &source,
+                            store
+                                .as_ref()
+                                .ok_or(ConfigProjectionFailureV1::WrongBinding)?,
+                        )?;
+                        if source.source_hash != hash {
+                            return Err(ConfigProjectionFailureV1::WrongBinding);
+                        }
+                    } else {
+                        let source: AgentInventorySourceMaterialV1 =
+                            read_canonical_at(root.as_fd(), &name)?;
+                        if source.source_hash != hash
+                            || !matches!(source.inventory_scope.as_str(), "global" | "workspace")
+                            || source.source_revision
+                                != format!("aisr1_{}", source.raw_bytes_sha256)
+                        {
+                            return Err(ConfigProjectionFailureV1::WrongBinding);
+                        }
+                        validate_sha256(&source.raw_bytes_sha256)?;
+                        validate_hash_field(
+                            &source.source_hash,
+                            hash_omitting(
+                                "substrate.e3.agent-inventory-source.v1",
+                                "source",
+                                &source,
+                                "source_hash",
+                            )?,
+                        )?;
+                    }
+                }
+                let _ = read_file_at(root.as_fd(), &name)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_runtime_artifact_tree(
+        transaction: &ConfigProjectionChildTransactionV1,
+        verify_objects: bool,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        let Some(root) = open_optional_directory_at(transaction.root.as_fd(), "runtime-artifacts")?
+        else {
+            return Ok(());
+        };
+        let store = verify_objects
+            .then(|| require_store(transaction))
+            .transpose()?;
+        for manifest_id in list_names(&root)? {
+            validate_prefixed_uuid(&manifest_id, "ram_")?;
+            let manifest_root = open_directory_at(root.as_fd(), &manifest_id)?;
+            for name in list_names(&manifest_root)? {
+                if name.starts_with(".e3-tmp.") {
+                    if parse_temp_name(&name)? != "artifact-manifest" {
+                        return Err(ConfigProjectionFailureV1::PartialPublication);
+                    }
+                } else {
+                    validate_revision_filename(&name)?;
+                    if verify_objects {
+                        let manifest: TrustedRuntimeArtifactManifestV1 =
+                            read_canonical_at(manifest_root.as_fd(), &name)?;
+                        validate_runtime_artifact_manifest(
+                            &manifest,
+                            store
+                                .as_ref()
+                                .ok_or(ConfigProjectionFailureV1::WrongBinding)?,
+                        )?;
+                        if manifest.manifest_id != manifest_id
+                            || name != format!("{:020}.json", manifest.revision)
+                        {
+                            return Err(ConfigProjectionFailureV1::WrongBinding);
+                        }
+                    }
+                }
+                let _ = read_file_at(manifest_root.as_fd(), &name)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_native_source_tree(
+        transaction: &ConfigProjectionChildTransactionV1,
+        verify_objects: bool,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        let Some(root) = open_optional_directory_at(transaction.root.as_fd(), "native-sources")?
+        else {
+            return Ok(());
+        };
+        let store = if verify_objects || !list_names(&root)?.is_empty() {
+            Some(require_store(transaction)?)
+        } else {
+            None
+        };
+        for series_id in list_names(&root)? {
+            validate_prefixed_uuid(&series_id, "cps_")?;
+            let series = open_directory_at(root.as_fd(), &series_id)?;
+            let mut temp_count = 0usize;
+            for name in list_names(&series)? {
+                if name.starts_with(".e3-native-source-tmp.") {
+                    validate_native_temp_name(&name)?;
+                    temp_count += 1;
+                } else {
+                    validate_prefixed_uuid(&name, "cpf_")?;
+                }
+                let manifest = validate_native_source_directory(
+                    &series,
+                    &name,
+                    None,
+                    None,
+                    transaction.owner_uid,
+                )?;
+                let store = store
+                    .as_ref()
+                    .ok_or(ConfigProjectionFailureV1::PartialPublication)?;
+                if manifest.authority_store_id != store.authority_store_id
+                    || manifest.series_id != series_id
+                    || manifest.source_root.physical_path
+                        != format!(
+                            "{}/authority-v1/agent-config-projection-v1/native-sources/{}/{}",
+                            store.accepted_home.physical_path, series_id, manifest.fence_id
+                        )
+                {
+                    return Err(ConfigProjectionFailureV1::WrongBinding);
+                }
+            }
+            if temp_count > 1 {
+                return Err(ConfigProjectionFailureV1::PartialPublication);
+            }
+        }
         Ok(())
     }
 
@@ -3420,6 +4455,8 @@ mod linux {
             || !matches!(
                 kind,
                 "store"
+                    | "input"
+                    | "artifact-manifest"
                     | "subject"
                     | "record"
                     | "head"
@@ -3805,7 +4842,14 @@ mod linux {
                         "elf_interpreter": null,
                         "dynamic_loader_cache": null,
                         "ordered_elf_dependencies": [],
-                        "ordered_present_common_files": [],
+                        "ordered_present_common_files": [
+                            {"absolute_path": "/etc/hosts", "device_id": 10, "inode": 20, "mode": 0o644, "byte_length": 1, "sha256": digest()},
+                            {"absolute_path": "/etc/nsswitch.conf", "device_id": 10, "inode": 21, "mode": 0o644, "byte_length": 1, "sha256": digest()},
+                            {"absolute_path": "/etc/passwd", "device_id": 10, "inode": 22, "mode": 0o644, "byte_length": 1, "sha256": digest()},
+                            {"absolute_path": "/etc/group", "device_id": 10, "inode": 23, "mode": 0o644, "byte_length": 1, "sha256": digest()},
+                            {"absolute_path": "/etc/resolv.conf", "device_id": 10, "inode": 24, "mode": 0o644, "byte_length": 1, "sha256": digest()},
+                            {"absolute_path": "/etc/ssl/certs/ca-certificates.crt", "device_id": 10, "inode": 25, "mode": 0o644, "byte_length": 1, "sha256": digest()}
+                        ],
                         "system_config_mount_target": {
                             "absolute_path": "/etc/codex",
                             "device_id": 1,
@@ -4285,6 +5329,236 @@ mod linux {
                 active_ref
             );
             assert!(parent.calls.load(Ordering::SeqCst) >= 6);
+        }
+
+        #[test]
+        fn e3c_authoring_preserves_noncloneable_held_lease_resolution() {
+            let (_temp, _parent, registry, store) = test_registry();
+            let record = test_record(&store, id("cps_"));
+            let projection_ref = registry.publish_dormant(&record).unwrap();
+            let held = registry
+                .acquire_consumer_lease(
+                    &projection_ref,
+                    ConfigProjectionConsumerKindV1::MemberDispatchV2,
+                    Timestamp("2026-09-10T00:01:00.000000Z".to_string()),
+                )
+                .unwrap();
+
+            assert!(matches!(
+                registry.resolve(&record.identity, &held).unwrap(),
+                ConfigProjectionResolutionV1::Current {
+                    projection_ref: resolved,
+                    ..
+                } if resolved == projection_ref
+            ));
+        }
+
+        #[test]
+        fn e3c_authoring_objects_recover_only_valid_interrupted_publications() {
+            let (temp, _parent, registry, store) = test_registry();
+            let keys = [
+                "llm.enabled",
+                "llm.gateway.enabled",
+                "llm.gateway.mode",
+                "llm.routing.default_backend",
+                "agents.enabled",
+                "agents.defaults.execution.scope",
+                "agents.defaults.cli.mode",
+                "world.enabled",
+            ];
+            let mut effective = EffectiveSubstrateConfigSourceV1 {
+                schema_version: 1,
+                authority_store_id: store.authority_store_id.clone(),
+                accepted_home: store.accepted_home.clone(),
+                workspace_root: store.accepted_home.clone(),
+                values: crate::E3EffectiveConfigInputV1 {
+                    llm_enabled: true,
+                    agents_enabled: true,
+                    world_enabled: true,
+                    default_execution_scope: "world".to_string(),
+                    default_cli_mode: "persistent".to_string(),
+                    managed_gateway_enabled: true,
+                    managed_gateway_mode: "in_world".to_string(),
+                    default_backend_id: "cli:codex-world".to_string(),
+                },
+                ordered_explain_origins: keys
+                    .into_iter()
+                    .map(|key| crate::E3ConfigExplainOriginV1 {
+                        key: key.to_string(),
+                        source_kind: E3ConfigExplainOriginKindV1::Default,
+                        source_location: None,
+                    })
+                    .collect(),
+                source_revision: String::new(),
+                source_hash: String::new(),
+            };
+            let mut revision_value = serde_json::to_value(&effective).unwrap();
+            revision_value
+                .as_object_mut()
+                .unwrap()
+                .remove("source_revision");
+            revision_value
+                .as_object_mut()
+                .unwrap()
+                .remove("source_hash");
+            effective.source_revision = format!(
+                "ecsr1_{}",
+                ordinary_sha256(
+                    &ConfigProjectionCodecV1::encode_canonical_json(&revision_value).unwrap()
+                )
+            );
+            effective.source_hash = hash_omitting(
+                "substrate.e3.effective-substrate-config-source.v1",
+                "source",
+                &effective,
+                "source_hash",
+            )
+            .unwrap();
+
+            let raw_hash = ordinary_sha256(b"version: 3\n");
+            let mut inventory = AgentInventorySourceMaterialV1 {
+                inventory_scope: "global".to_string(),
+                accepted_root: store.accepted_home.clone(),
+                relative_path: "agents/codex.yaml".to_string(),
+                file_device_id: 1,
+                file_inode: 2,
+                byte_length: 11,
+                raw_bytes_sha256: raw_hash.clone(),
+                source_revision: format!("aisr1_{raw_hash}"),
+                source_hash: String::new(),
+            };
+            inventory.source_hash = hash_omitting(
+                "substrate.e3.agent-inventory-source.v1",
+                "source",
+                &inventory,
+                "source_hash",
+            )
+            .unwrap();
+
+            let record = test_record(&store, id("cps_"));
+            let roles = [
+                (
+                    RuntimeArtifactAuthorityRoleV1::Codex0125,
+                    "/var/lib/substrate/world-deps/codex-runtime/bin/codex",
+                    RuntimeArtifactProvenanceV1::OfficialCodexRelease {
+                        version: "0.125.0".to_string(),
+                        target_triple: "x86_64-unknown-linux-musl".to_string(),
+                        archive_name: "codex-x86_64-unknown-linux-musl.tar.gz".to_string(),
+                        archive_url: "https://github.com/openai/codex/releases/download/rust-v0.125.0/codex-x86_64-unknown-linux-musl.tar.gz".to_string(),
+                        archive_sha256: "4a20a53943a7e6a0c5fa4463d4e47c58dd8e553ecebde455a4107e9906bfb001".to_string(),
+                        archive_entry_path: "codex-x86_64-unknown-linux-musl".to_string(),
+                        extracted_executable_sha256: "86dc42ac5823f25233d6dc4ec5ff34693afd8c32ff2d17b54c5eb0d15bc7d902".to_string(),
+                    },
+                    "86dc42ac5823f25233d6dc4ec5ff34693afd8c32ff2d17b54c5eb0d15bc7d902".to_string(),
+                    record.identity.runtime_artifacts.codex.runtime_support,
+                ),
+                (
+                    RuntimeArtifactAuthorityRoleV1::ManagedGateway,
+                    "/usr/local/lib/substrate/e3/substrate-gateway",
+                    RuntimeArtifactProvenanceV1::SubstrateSourceBuild {
+                        component: "substrate-gateway".to_string(),
+                        source_commit: "11".repeat(20),
+                        source_tree: "22".repeat(20),
+                        cargo_lock_sha256: "33".repeat(32),
+                        target_triple: "x86_64-unknown-linux-musl".to_string(),
+                        profile: "release".to_string(),
+                        executable_sha256: "44".repeat(32),
+                    },
+                    "44".repeat(32),
+                    record.identity.runtime_artifacts.managed_gateway.runtime_support,
+                ),
+                (
+                    RuntimeArtifactAuthorityRoleV1::WorldEntryWrapper,
+                    "/usr/local/lib/substrate/e3/substrate-world-entry",
+                    RuntimeArtifactProvenanceV1::SubstrateSourceBuild {
+                        component: "substrate-world-entry".to_string(),
+                        source_commit: "11".repeat(20),
+                        source_tree: "22".repeat(20),
+                        cargo_lock_sha256: "33".repeat(32),
+                        target_triple: "x86_64-unknown-linux-musl".to_string(),
+                        profile: "release".to_string(),
+                        executable_sha256: "55".repeat(32),
+                    },
+                    "55".repeat(32),
+                    record.identity.runtime_artifacts.world_entry_wrapper.runtime_support,
+                ),
+            ];
+            let entries = roles
+                .into_iter()
+                .enumerate()
+                .map(
+                    |(index, (authority_role, path, provenance, sha256, runtime_support))| {
+                        let mut entry = crate::RuntimeArtifactManifestEntryV1 {
+                            manifest_entry_id: id("rae_"),
+                            authority_role,
+                            configured_absolute_path: path.to_string(),
+                            device_id: 10 + index as u64,
+                            inode: 20 + index as u64,
+                            mode: 0o755,
+                            owner_uid: 0,
+                            byte_length: 100 + index as u64,
+                            sha256,
+                            installer_source_ref: crate::InstallerArtifactSourceRefV1 {
+                                source_store_id: id("ias_"),
+                                source_record_id: id("iar_"),
+                                revision: 1,
+                                record_hash: "66".repeat(32),
+                            },
+                            provenance,
+                            runtime_support,
+                            entry_hash: String::new(),
+                        };
+                        entry.entry_hash = hash_omitting(
+                            "substrate.e3.runtime-artifact-entry.v1",
+                            "entry",
+                            &entry,
+                            "entry_hash",
+                        )
+                        .unwrap();
+                        entry
+                    },
+                )
+                .collect();
+            let mut manifest = TrustedRuntimeArtifactManifestV1 {
+                schema_version: 1,
+                authority_store_id: store.authority_store_id.clone(),
+                manifest_id: id("ram_"),
+                revision: 1,
+                entries,
+                created_at: Timestamp("2026-09-11T12:00:00.000000Z".to_string()),
+                manifest_hash: String::new(),
+            };
+            manifest.manifest_hash = hash_omitting(
+                "substrate.e3.runtime-artifact-manifest.v1",
+                "manifest",
+                &manifest,
+                "manifest_hash",
+            )
+            .unwrap();
+            validate_effective_config_source(&effective, &store).unwrap();
+            validate_agent_inventory_source(&inventory, &effective, &store).unwrap();
+            validate_runtime_artifact_manifest(&manifest, &store).unwrap();
+            let reference = registry
+                .with_transaction(|transaction| {
+                    publish_authoring_inputs(transaction, &store, &effective, &inventory, &manifest)
+                })
+                .unwrap();
+            reference.validate().unwrap();
+
+            let child = temp.path().join("authority-v1").join(CHILD_NAME);
+            let effective_path = child
+                .join("inputs/effective-config")
+                .join(format!("{}.json", effective.source_hash));
+            let interrupted = effective_path.parent().unwrap().join(temp_name("input"));
+            std::fs::rename(&effective_path, &interrupted).unwrap();
+            registry.recover().unwrap();
+            assert!(effective_path.is_file());
+
+            let malformed = effective_path.parent().unwrap().join(temp_name("input"));
+            std::fs::write(&malformed, b"{").unwrap();
+            std::fs::set_permissions(&malformed, std::fs::Permissions::from_mode(0o600)).unwrap();
+            assert!(registry.recover().is_err());
+            assert!(malformed.is_file());
         }
 
         #[test]
