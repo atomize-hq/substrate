@@ -203,8 +203,12 @@ linux_restore_path() {
 
     case "${type}" in
         absent)
-            sudo_cmd rm -f "${target}" || true
-            sudo_cmd rm -rf "${target}" || true
+            if sudo_cmd test -d "${target}" >/dev/null 2>&1 \
+                && ! sudo_cmd test -L "${target}" >/dev/null 2>&1; then
+                sudo_cmd rm -rf -- "${target}"
+            else
+                sudo_cmd rm -f -- "${target}"
+            fi
             ;;
         dir)
             sudo_cmd install -d -m"${install_mode}" "${target}"
@@ -244,7 +248,7 @@ linux_restore_service_state() {
 
     if [[ "${active}" == "active" && ( "${enabled}" == "masked" || "${enabled}" == "masked-runtime" ) ]]; then
         sudo_cmd systemctl unmask "${unit}"
-        linux_start_service_unit "${unit}"
+        linux_restart_service_unit "${unit}"
         case "${enabled}" in
             masked)
                 sudo_cmd systemctl mask "${unit}"
@@ -285,7 +289,7 @@ linux_restore_service_state() {
 
     case "${active}" in
         active)
-            linux_start_service_unit "${unit}"
+            linux_restart_service_unit "${unit}"
             ;;
         inactive)
             sudo_cmd systemctl stop "${unit}"
@@ -306,6 +310,25 @@ linux_start_service_unit() {
         return 0
     fi
     sudo_cmd systemctl start "${unit}"
+}
+
+linux_stop_service_unit() {
+    local unit="$1"
+    if [[ "${unit}" == "substrate-lifecycle-publisher-v1.service" ]]; then
+        invoke_linux_lifecycle_executor service-state --service-unit "${unit}" --action stop >/dev/null
+        return
+    fi
+    sudo_cmd systemctl stop "${unit}"
+}
+
+linux_restart_service_unit() {
+    local unit="$1"
+    if [[ "${unit}" == "substrate-lifecycle-publisher-v1.service" ]]; then
+        linux_stop_service_unit "${unit}" || return $?
+        invoke_linux_lifecycle_executor service-state --service-unit "${unit}" --action start >/dev/null
+        return
+    fi
+    sudo_cmd systemctl restart "${unit}"
 }
 
 linux_restore_account_state() {
@@ -1607,6 +1630,15 @@ restore_linux_managed_state() {
         return 0
     fi
 
+    if [[ -f "$(linux_snapshot_service_path)" ]]; then
+        while IFS=$'\t' read -r unit _enabled _active; do
+            [[ "${unit}" == *.service ]] || continue
+            if sudo_cmd systemctl is-active --quiet "${unit}"; then
+                linux_stop_service_unit "${unit}"
+            fi
+        done <"$(linux_snapshot_service_path)"
+    fi
+
     if [[ -f "$(linux_snapshot_manifest_path)" ]]; then
         tac "$(linux_snapshot_manifest_path)" | while IFS=$'\t' read -r label target type mode backup owner group; do
             [[ -n "${label}" ]] || continue
@@ -1617,10 +1649,13 @@ restore_linux_managed_state() {
     sudo_cmd systemctl daemon-reload || true
 
     if [[ -f "$(linux_snapshot_service_path)" ]]; then
-        while IFS=$'\t' read -r unit enabled active; do
-            [[ -n "${unit}" ]] || continue
-            linux_restore_service_state "${unit}" "${enabled}" "${active}"
-        done <"$(linux_snapshot_service_path)"
+        local unit_kind
+        for unit_kind in socket service; do
+            while IFS=$'\t' read -r unit enabled active; do
+                [[ "${unit}" == *."${unit_kind}" ]] || continue
+                linux_restore_service_state "${unit}" "${enabled}" "${active}"
+            done <"$(linux_snapshot_service_path)"
+        done
     fi
 
     if [[ -f "$(linux_snapshot_acl_state_path)" ]]; then

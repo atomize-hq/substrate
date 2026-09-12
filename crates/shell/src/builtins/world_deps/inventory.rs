@@ -2313,4 +2313,99 @@ for candidate, message in ((gateway, "extra symbols"), (os.environ["MALFORMED_EL
         assert!(provision.contains("SecureBits=noroot-locked"));
         assert!(provision.contains("CAP_SETUID CAP_SETGID CAP_SETPCAP"));
     }
+
+    #[test]
+    fn e3d_linux_rollback_removes_absent_directories_and_restarts_sockets_before_services() {
+        let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let lifecycle = repository.join("scripts/linux/world-lifecycle.sh");
+        let root = tempfile::tempdir().expect("rollback fixture root");
+        let output = Command::new("bash")
+            .arg("-c")
+            .arg(
+r#"source "$1"
+LOG_PATH="$3/systemctl.log"
+export LOG_PATH
+sudo_cmd() {
+    if [[ "$1" == systemctl ]]; then
+        if [[ "$2" == is-active ]]; then
+            [[ "${4:-}" == world.service || "${4:-}" == substrate-lifecycle-publisher-v1.service ]]
+            return
+        fi
+        shift
+        printf '%s\n' "$*" >>"$LOG_PATH"
+        return 0
+    fi
+    if [[ "$1" == rm && "$*" == *"${EXECUTOR_PATH:-missing-executor-path}"* ]]; then
+        printf 'remove-executor %s\n' "$*" >>"$LOG_PATH"
+    fi
+    "$@"
+}
+LIFECYCLE_EXECUTOR_INSTALL_PATH="$2/missing-executor"
+if linux_stop_service_unit substrate-lifecycle-publisher-v1.service; then
+    exit 91
+fi
+if linux_restart_service_unit substrate-lifecycle-publisher-v1.service; then
+    exit 92
+fi
+EXECUTOR_PATH="$2/executor"
+export EXECUTOR_PATH
+printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    'printf '\''executor %s\n'\'' "$*" >>"${LOG_PATH:?}"' >"$EXECUTOR_PATH"
+chmod 0755 "$EXECUTOR_PATH"
+LIFECYCLE_EXECUTOR_INSTALL_PATH="$EXECUTOR_PATH"
+LINUX_MANAGED_STATE_SNAPSHOT_ROOT="$2/snapshot"
+mkdir -p "$LINUX_MANAGED_STATE_SNAPSHOT_ROOT" "$2/new-directory"
+printf 'lifecycle-executor\t%s\tabsent\t-\t-\t-\t-\n' "$EXECUTOR_PATH" >"$(linux_snapshot_manifest_path)"
+: >"$(linux_snapshot_account_state_path)"
+: >"$(linux_snapshot_acl_state_path)"
+printf 'world.service\tenabled\tactive\nworld.socket\tenabled\tactive\nsubstrate-lifecycle-publisher-v1.service\tdisabled\tinactive\nsubstrate-lifecycle-publisher-v1.socket\tenabled\tactive\n' >"$(linux_snapshot_service_path)"
+linux_restore_path fixture "$2/new-directory" absent - - - -
+test ! -e "$2/new-directory"
+restore_linux_managed_state
+test ! -e "$EXECUTOR_PATH"
+"#,
+            )
+            .arg("e3d-linux-rollback-test")
+            .arg(lifecycle)
+            .arg(root.path())
+            .arg(root.path())
+            .output()
+            .expect("exercise Linux E3-D rollback ordering");
+        assert!(
+            output.status.success(),
+            "Linux E3-D rollback fixture failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let calls = std::fs::read_to_string(root.path().join("systemctl.log"))
+            .expect("read systemctl call order");
+        let calls = calls.lines().collect::<Vec<_>>();
+        let stop_publisher = calls
+            .iter()
+            .position(|line| {
+                *line
+                    == "executor service-state --service-unit substrate-lifecycle-publisher-v1.service --action stop"
+            })
+            .expect("publisher pre-stop through installed executor");
+        let remove_executor = calls
+            .iter()
+            .position(|line| line.starts_with("remove-executor rm "))
+            .expect("executor removal during manifest restoration");
+        let stop_service = calls
+            .iter()
+            .position(|line| *line == "stop world.service")
+            .expect("service pre-stop");
+        let restart_socket = calls
+            .iter()
+            .position(|line| *line == "restart world.socket")
+            .expect("socket restart");
+        let restart_service = calls
+            .iter()
+            .position(|line| *line == "restart world.service")
+            .expect("service restart");
+        assert!(stop_publisher < remove_executor);
+        assert!(remove_executor < restart_socket);
+        assert!(stop_service < restart_socket);
+        assert!(restart_socket < restart_service);
+    }
 }
