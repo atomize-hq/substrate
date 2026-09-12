@@ -1238,12 +1238,116 @@ def validate_complete_record_chain(head, pending_records=None):
         raise RuntimeError("orphan Substrate artifact source record")
 
 def file_support(path, recorded_path=None):
+    logical_path = path if recorded_path is None else recorded_path
+    ca_path = "/etc/ssl/certs/ca-certificates.crt"
+    if logical_path == ca_path:
+        if not path.endswith(ca_path):
+            raise RuntimeError("logical E3 CA path does not match its installed root")
+        root_path = path[:-len(ca_path)] or "/"
+        directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW
+
+        def mount_id(descriptor):
+            fdinfo = os.open(f"/proc/self/fdinfo/{descriptor}", os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+            try:
+                payload = os.read(fdinfo, 4097)
+            finally:
+                os.close(fdinfo)
+            if len(payload) == 4097:
+                raise RuntimeError("required E3 CA mount identity is oversized")
+            values = [line[len(b"mnt_id:\t"):] for line in payload.splitlines() if line.startswith(b"mnt_id:\t")]
+            if len(values) != 1 or not values[0].isdigit() or int(values[0]) == 0:
+                raise RuntimeError("required E3 CA mount identity is malformed")
+            return int(values[0])
+
+        def trusted_directory(parent, name, boundary_device=None, boundary_mount_id=None):
+            try:
+                descriptor = os.open(os.fsencode(name), directory_flags, dir_fd=parent)
+            except OSError as error:
+                raise RuntimeError("required E3 CA directory is not trusted") from error
+            info = os.fstat(descriptor)
+            descriptor_mount_id = mount_id(descriptor)
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) & 0o022 or (boundary_device is not None and info.st_dev != boundary_device) or (boundary_mount_id is not None and descriptor_mount_id != boundary_mount_id):
+                os.close(descriptor)
+                raise RuntimeError("required E3 CA directory is not trusted")
+            return descriptor, info, descriptor_mount_id
+
+        def endpoint(parent, name, boundary_device, boundary_mount_id):
+            try:
+                descriptor = os.open(os.fsencode(name), os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW, dir_fd=parent)
+            except OSError as error:
+                raise RuntimeError("required E3 CA endpoint is not trusted") from error
+            before = os.fstat(descriptor)
+            if not stat.S_ISREG(before.st_mode) or before.st_dev != boundary_device or mount_id(descriptor) != boundary_mount_id or before.st_uid != 0 or before.st_nlink != 1 or stat.S_IMODE(before.st_mode) & 0o022 or before.st_size < 0 or before.st_size > 64 * 1024 * 1024:
+                os.close(descriptor)
+                raise RuntimeError("required E3 CA endpoint is not trusted")
+            digest = hashlib.sha256()
+            offset = 0
+            while True:
+                data = os.pread(descriptor, 64 * 1024, offset)
+                if not data:
+                    break
+                digest.update(data)
+                offset += len(data)
+            after = os.fstat(descriptor)
+            fields = lambda value: (value.st_dev, value.st_ino, value.st_mode, value.st_uid, value.st_gid, value.st_nlink, value.st_size)
+            if offset != before.st_size or fields(before) != fields(after):
+                os.close(descriptor)
+                raise RuntimeError("required E3 CA endpoint changed while hashing")
+            return descriptor, before, digest.hexdigest()
+
+        def resolve():
+            opened = []
+            try:
+                root_descriptor = os.open(root_path, directory_flags)
+                opened.append(root_descriptor)
+                etc, etc_info, boundary_mount_id = trusted_directory(root_descriptor, "etc")
+                opened.append(etc)
+                boundary_device = etc_info.st_dev
+                ssl, _, _ = trusted_directory(etc, "ssl", boundary_device, boundary_mount_id)
+                opened.append(ssl)
+                certs, _, _ = trusted_directory(ssl, "certs", boundary_device, boundary_mount_id)
+                opened.append(certs)
+                leaf = os.stat(os.fsencode("ca-certificates.crt"), dir_fd=certs, follow_symlinks=False)
+                if stat.S_ISREG(leaf.st_mode):
+                    return endpoint(certs, "ca-certificates.crt", boundary_device, boundary_mount_id)
+                if not stat.S_ISLNK(leaf.st_mode) or leaf.st_uid != 0 or leaf.st_dev != boundary_device:
+                    raise RuntimeError("logical E3 CA leaf is neither the direct file nor exact link")
+                raw_target = os.readlink(os.fsencode("ca-certificates.crt"), dir_fd=certs)
+                if raw_target != b"../../ca-certificates/extracted/tls-ca-bundle.pem":
+                    raise RuntimeError("logical E3 CA link target is not the sole admitted relative target")
+                stack = [etc, ssl, certs]
+                for _ in range(2):
+                    if len(stack) <= 1:
+                        raise RuntimeError("logical E3 CA link escapes the held /etc boundary")
+                    stack.pop()
+                ca_certificates, _, _ = trusted_directory(stack[-1], "ca-certificates", boundary_device, boundary_mount_id)
+                opened.append(ca_certificates)
+                extracted, _, _ = trusted_directory(ca_certificates, "extracted", boundary_device, boundary_mount_id)
+                opened.append(extracted)
+                return endpoint(extracted, "tls-ca-bundle.pem", boundary_device, boundary_mount_id)
+            finally:
+                for descriptor in reversed(opened):
+                    os.close(descriptor)
+
+        first_descriptor, first_info, first_digest = resolve()
+        try:
+            second_descriptor, second_info, second_digest = resolve()
+            try:
+                fields = lambda value: (value.st_dev, value.st_ino, value.st_mode, value.st_uid, value.st_gid, value.st_nlink, value.st_size)
+                if fields(first_info) != fields(second_info) or first_digest != second_digest:
+                    raise RuntimeError("logical E3 CA link or endpoint was substituted")
+            finally:
+                os.close(second_descriptor)
+            return {"absolute_path": ca_path, "device_id": first_info.st_dev, "inode": first_info.st_ino, "mode": stat.S_IMODE(first_info.st_mode), "byte_length": first_info.st_size, "sha256": first_digest}
+        finally:
+            os.close(first_descriptor)
+
     info = os.stat(path, follow_symlinks=False)
     if not stat.S_ISREG(info.st_mode) or stat.S_IMODE(info.st_mode) & 0o022:
         raise RuntimeError("required E3 support object is not regular")
     with open(path, "rb") as source:
         digest = hashlib.sha256(source.read()).hexdigest()
-    return {"absolute_path": path if recorded_path is None else recorded_path, "device_id": info.st_dev, "inode": info.st_ino, "mode": stat.S_IMODE(info.st_mode), "byte_length": info.st_size, "sha256": digest}
+    return {"absolute_path": logical_path, "device_id": info.st_dev, "inode": info.st_ino, "mode": stat.S_IMODE(info.st_mode), "byte_length": info.st_size, "sha256": digest}
 
 def file_record(path):
     installed_suffixes = ["/usr/local/lib/substrate/e3/substrate-gateway", "/usr/local/lib/substrate/e3/substrate-world-entry"]

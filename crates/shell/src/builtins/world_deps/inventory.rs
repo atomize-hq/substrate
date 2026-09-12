@@ -2161,6 +2161,150 @@ test -f "${FAKE_ROOT}/var/lib/substrate/runtime-artifacts-v1/heads/substrate-sou
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn e3d_substrate_publisher_accepts_only_the_exact_ca_layout_and_rejects_substitution() {
+        let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let lifecycle =
+            std::fs::read_to_string(repository.join("scripts/linux/world-lifecycle.sh"))
+                .expect("read lifecycle source");
+        let publisher_start = lifecycle
+            .find("publish_substrate_artifact_source_v1() {")
+            .expect("Substrate publisher");
+        let helper_start = lifecycle[publisher_start..]
+            .find("def file_support(path, recorded_path=None):")
+            .map(|offset| publisher_start + offset)
+            .expect("Substrate support-file helper");
+        let helper_end = lifecycle[helper_start..]
+            .find("\ndef file_record(path):")
+            .map(|offset| helper_start + offset)
+            .expect("Substrate support-file helper boundary");
+        let helper = &lifecycle[helper_start..helper_end];
+        let program = format!(
+            r#"import hashlib
+import os
+import stat
+
+{helper}
+
+base = os.environ["FIXTURE_ROOT"]
+logical = "/etc/ssl/certs/ca-certificates.crt"
+target = "../../ca-certificates/extracted/tls-ca-bundle.pem"
+
+def directories(root):
+    for relative in ("etc", "etc/ssl", "etc/ssl/certs"):
+        path = os.path.join(root, relative)
+        os.makedirs(path, mode=0o755, exist_ok=True)
+        os.chmod(path, 0o755)
+
+def direct(name, data=b"direct-ca\n"):
+    root = os.path.join(base, name)
+    directories(root)
+    path = os.path.join(root, logical.lstrip("/"))
+    with open(path, "wb") as destination:
+        destination.write(data)
+    os.chmod(path, 0o444)
+    return root, path
+
+def linked(name, link_target=target, data=b"linked-ca\n"):
+    root = os.path.join(base, name)
+    directories(root)
+    endpoint_dir = os.path.join(root, "etc/ca-certificates/extracted")
+    os.makedirs(endpoint_dir, mode=0o755, exist_ok=True)
+    os.chmod(os.path.join(root, "etc/ca-certificates"), 0o755)
+    os.chmod(endpoint_dir, 0o755)
+    endpoint = os.path.join(endpoint_dir, "tls-ca-bundle.pem")
+    with open(endpoint, "wb") as destination:
+        destination.write(data)
+    os.chmod(endpoint, 0o444)
+    path = os.path.join(root, logical.lstrip("/"))
+    os.symlink(link_target, path)
+    return root, path, endpoint
+
+def rejected(operation):
+    try:
+        operation()
+    except RuntimeError:
+        return
+    raise AssertionError("unsafe CA layout was accepted")
+
+direct_root, direct_path = direct("direct")
+direct_value = file_support(direct_path, logical)
+direct_info = os.stat(direct_path, follow_symlinks=True)
+assert direct_value["absolute_path"] == logical
+assert (direct_value["device_id"], direct_value["inode"]) == (direct_info.st_dev, direct_info.st_ino)
+
+linked_root, linked_path, linked_endpoint = linked("linked")
+linked_value = file_support(linked_path, logical)
+linked_info = os.stat(linked_endpoint, follow_symlinks=False)
+assert os.readlink(linked_path) == target
+assert (linked_value["device_id"], linked_value["inode"]) == (linked_info.st_dev, linked_info.st_ino)
+assert linked_value["sha256"] == hashlib.sha256(b"linked-ca\n").hexdigest()
+
+_, alternate_path, _ = linked("alternate", "../../ca-certificates/extracted/other.pem")
+rejected(lambda: file_support(alternate_path, logical))
+
+_, further_path, further_endpoint = linked("further")
+os.rename(further_endpoint, further_endpoint + ".real")
+os.symlink("tls-ca-bundle.pem.real", further_endpoint)
+rejected(lambda: file_support(further_path, logical))
+
+_, writable_path = direct("writable")
+os.chmod(os.path.dirname(os.path.dirname(writable_path)), 0o777)
+rejected(lambda: file_support(writable_path, logical))
+
+_, writable_endpoint_path, writable_endpoint = linked("writable-endpoint")
+os.chmod(writable_endpoint, 0o666)
+rejected(lambda: file_support(writable_endpoint_path, logical))
+
+_, unowned_path, _ = linked("unowned-link")
+os.lchown(unowned_path, 1234, 0)
+rejected(lambda: file_support(unowned_path, logical))
+
+nonregular_root = os.path.join(base, "nonregular")
+directories(nonregular_root)
+nonregular_path = os.path.join(nonregular_root, logical.lstrip("/"))
+os.mkdir(nonregular_path, 0o755)
+rejected(lambda: file_support(nonregular_path, logical))
+
+_, substitution_path, substitution_endpoint = linked("substitution", data=b"first-ca\n")
+original_pread = os.pread
+original_inode = os.stat(substitution_endpoint, follow_symlinks=False).st_ino
+swapped = False
+def swapping_pread(fd, length, offset):
+    global swapped
+    data = original_pread(fd, length, offset)
+    if not swapped and not data and os.fstat(fd).st_ino == original_inode:
+        os.rename(substitution_endpoint, substitution_endpoint + ".old")
+        with open(substitution_endpoint, "wb") as destination:
+            destination.write(b"second-ca\n")
+        os.chmod(substitution_endpoint, 0o444)
+        swapped = True
+    return data
+os.pread = swapping_pread
+try:
+    rejected(lambda: file_support(substitution_path, logical))
+finally:
+    os.pread = original_pread
+assert swapped
+"#
+        );
+        let root = tempfile::tempdir().expect("CA publisher fixture root");
+        let output = Command::new("fakeroot")
+            .arg("--")
+            .arg("python3")
+            .arg("-c")
+            .arg(program)
+            .env("FIXTURE_ROOT", root.path())
+            .output()
+            .expect("exercise exact Substrate CA support helper");
+        assert!(
+            output.status.success(),
+            "exact Substrate CA support helper failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn e3c_both_publishers_reject_malformed_elf_and_extra_dynamic_symbols() {
         use std::os::unix::fs::PermissionsExt;
 

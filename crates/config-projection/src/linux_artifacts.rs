@@ -143,6 +143,277 @@ fn open_file_component_v1(parent: &File, name: &str) -> Result<File, ConfigProje
     Ok(unsafe { File::from_raw_fd(descriptor) })
 }
 
+fn resolve_exact_installed_ca_bundle_v1(
+    filesystem_root: &File,
+) -> Result<File, ConfigProjectionFailureV1> {
+    const LOGICAL_LEAF: &str = "ca-certificates.crt";
+    const LINK_TARGET: &[u8] = b"../../ca-certificates/extracted/tls-ca-bundle.pem";
+    const MAX_SUPPORT_BYTES: u64 = 64 * 1024 * 1024;
+
+    fn mount_id(descriptor: &File) -> Result<u64, ConfigProjectionFailureV1> {
+        let path = CString::new(format!("/proc/self/fdinfo/{}", descriptor.as_raw_fd())).unwrap();
+        // SAFETY: the fixed procfs path remains live for the call.
+        let fd = unsafe {
+            libc::open(
+                path.as_ptr(),
+                libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+            )
+        };
+        if fd < 0 {
+            return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+        }
+        // SAFETY: successful `open` returned one uniquely owned descriptor.
+        let mut fdinfo = unsafe { File::from_raw_fd(fd) };
+        let mut payload = Vec::new();
+        fdinfo
+            .by_ref()
+            .take(4097)
+            .read_to_end(&mut payload)
+            .map_err(|_| ConfigProjectionFailureV1::UnsupportedSecurityPosture)?;
+        if payload.len() > 4096 {
+            return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+        }
+        let prefix = b"mnt_id:\t";
+        let values = payload
+            .split(|byte| *byte == b'\n')
+            .filter_map(|line| line.strip_prefix(prefix))
+            .collect::<Vec<_>>();
+        if values.len() != 1 || values[0].is_empty() || !values[0].iter().all(u8::is_ascii_digit) {
+            return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+        }
+        let value = std::str::from_utf8(values[0])
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .filter(|value| *value != 0)
+            .ok_or(ConfigProjectionFailureV1::UnsupportedSecurityPosture)?;
+        Ok(value)
+    }
+
+    fn open_trusted_directory(
+        parent: &File,
+        name: &str,
+        boundary_device: Option<u64>,
+        boundary_mount_id: Option<u64>,
+    ) -> Result<File, ConfigProjectionFailureV1> {
+        let name = CString::new(name).map_err(|_| ConfigProjectionFailureV1::Malformed)?;
+        // SAFETY: the parent descriptor and component string remain live for the call.
+        let descriptor = unsafe {
+            libc::openat(
+                parent.as_raw_fd(),
+                name.as_ptr(),
+                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+            )
+        };
+        if descriptor < 0 {
+            return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+        }
+        // SAFETY: successful `openat` returned one uniquely owned descriptor.
+        let descriptor = unsafe { File::from_raw_fd(descriptor) };
+        let metadata = descriptor
+            .metadata()
+            .map_err(|_| ConfigProjectionFailureV1::UnsupportedSecurityPosture)?;
+        if !metadata.is_dir()
+            || metadata.uid() != 0
+            || metadata.mode() & 0o022 != 0
+            || boundary_device.is_some_and(|device| metadata.dev() != device)
+            || boundary_mount_id.is_some_and(|id| mount_id(&descriptor).ok() != Some(id))
+        {
+            return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+        }
+        Ok(descriptor)
+    }
+
+    fn named_metadata(parent: &File, name: &str) -> Result<libc::stat, ConfigProjectionFailureV1> {
+        let name = CString::new(name).map_err(|_| ConfigProjectionFailureV1::Malformed)?;
+        let mut metadata = std::mem::MaybeUninit::<libc::stat>::uninit();
+        // SAFETY: the parent and component are live and the output storage is writable.
+        if unsafe {
+            libc::fstatat(
+                parent.as_raw_fd(),
+                name.as_ptr(),
+                metadata.as_mut_ptr(),
+                libc::AT_SYMLINK_NOFOLLOW,
+            )
+        } != 0
+        {
+            return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+        }
+        // SAFETY: successful `fstatat` initialized the structure.
+        Ok(unsafe { metadata.assume_init() })
+    }
+
+    fn open_trusted_endpoint(
+        parent: &File,
+        name: &str,
+        boundary_device: u64,
+        boundary_mount_id: u64,
+    ) -> Result<(File, std::fs::Metadata, String), ConfigProjectionFailureV1> {
+        let name = CString::new(name).map_err(|_| ConfigProjectionFailureV1::Malformed)?;
+        // SAFETY: the parent descriptor and component string remain live for the call.
+        let descriptor = unsafe {
+            libc::openat(
+                parent.as_raw_fd(),
+                name.as_ptr(),
+                libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+            )
+        };
+        if descriptor < 0 {
+            return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+        }
+        // SAFETY: successful `openat` returned one uniquely owned descriptor.
+        let descriptor = unsafe { File::from_raw_fd(descriptor) };
+        let before = descriptor
+            .metadata()
+            .map_err(|_| ConfigProjectionFailureV1::UnsupportedSecurityPosture)?;
+        if !before.is_file()
+            || before.dev() != boundary_device
+            || mount_id(&descriptor)? != boundary_mount_id
+            || before.uid() != 0
+            || before.nlink() != 1
+            || before.mode() & 0o022 != 0
+            || before.len() > MAX_SUPPORT_BYTES
+        {
+            return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+        }
+        let mut digest = Sha256::new();
+        let mut offset = 0_u64;
+        let mut buffer = [0_u8; 64 * 1024];
+        loop {
+            let count = descriptor
+                .read_at(&mut buffer, offset)
+                .map_err(|_| ConfigProjectionFailureV1::PartialPublication)?;
+            if count == 0 {
+                break;
+            }
+            digest.update(&buffer[..count]);
+            offset = offset
+                .checked_add(count as u64)
+                .ok_or(ConfigProjectionFailureV1::PartialPublication)?;
+        }
+        let after = descriptor
+            .metadata()
+            .map_err(|_| ConfigProjectionFailureV1::UnsupportedSecurityPosture)?;
+        if offset != before.len()
+            || (
+                before.dev(),
+                before.ino(),
+                before.mode(),
+                before.uid(),
+                before.gid(),
+                before.nlink(),
+                before.len(),
+            ) != (
+                after.dev(),
+                after.ino(),
+                after.mode(),
+                after.uid(),
+                after.gid(),
+                after.nlink(),
+                after.len(),
+            )
+        {
+            return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+        }
+        Ok((descriptor, before, format!("{:x}", digest.finalize())))
+    }
+
+    fn resolve_once(
+        filesystem_root: &File,
+    ) -> Result<(File, std::fs::Metadata, String), ConfigProjectionFailureV1> {
+        let etc = open_trusted_directory(filesystem_root, "etc", None, None)?;
+        let boundary_device = etc
+            .metadata()
+            .map_err(|_| ConfigProjectionFailureV1::UnsupportedSecurityPosture)?
+            .dev();
+        let boundary_mount_id = mount_id(&etc)?;
+        let ssl =
+            open_trusted_directory(&etc, "ssl", Some(boundary_device), Some(boundary_mount_id))?;
+        let certs = open_trusted_directory(
+            &ssl,
+            "certs",
+            Some(boundary_device),
+            Some(boundary_mount_id),
+        )?;
+        let leaf = named_metadata(&certs, LOGICAL_LEAF)?;
+        if leaf.st_mode & libc::S_IFMT == libc::S_IFREG {
+            return open_trusted_endpoint(&certs, LOGICAL_LEAF, boundary_device, boundary_mount_id);
+        }
+        if leaf.st_mode & libc::S_IFMT != libc::S_IFLNK
+            || leaf.st_uid != 0
+            || leaf.st_dev != boundary_device
+        {
+            return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+        }
+        let leaf_name = CString::new(LOGICAL_LEAF).unwrap();
+        let mut target = [0_u8; LINK_TARGET.len() + 1];
+        // SAFETY: the parent, component, and bounded output buffer remain live for the call.
+        let length = unsafe {
+            libc::readlinkat(
+                certs.as_raw_fd(),
+                leaf_name.as_ptr(),
+                target.as_mut_ptr().cast(),
+                target.len(),
+            )
+        };
+        if length != LINK_TARGET.len() as isize || &target[..LINK_TARGET.len()] != LINK_TARGET {
+            return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+        }
+
+        // The only admitted target starts at /etc/ssl/certs, pops exactly twice,
+        // and therefore remains rooted at the held /etc descriptor.
+        let mut stack = vec![etc, ssl, certs];
+        for _ in 0..2 {
+            if stack.len() <= 1 {
+                return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+            }
+            stack.pop();
+        }
+        let ca_certificates = open_trusted_directory(
+            stack.last().unwrap(),
+            "ca-certificates",
+            Some(boundary_device),
+            Some(boundary_mount_id),
+        )?;
+        let extracted = open_trusted_directory(
+            &ca_certificates,
+            "extracted",
+            Some(boundary_device),
+            Some(boundary_mount_id),
+        )?;
+        open_trusted_endpoint(
+            &extracted,
+            "tls-ca-bundle.pem",
+            boundary_device,
+            boundary_mount_id,
+        )
+    }
+
+    let (first, first_metadata, first_digest) = resolve_once(filesystem_root)?;
+    let (_, second_metadata, second_digest) = resolve_once(filesystem_root)?;
+    if (
+        first_metadata.dev(),
+        first_metadata.ino(),
+        first_metadata.mode(),
+        first_metadata.uid(),
+        first_metadata.gid(),
+        first_metadata.nlink(),
+        first_metadata.len(),
+        first_digest,
+    ) != (
+        second_metadata.dev(),
+        second_metadata.ino(),
+        second_metadata.mode(),
+        second_metadata.uid(),
+        second_metadata.gid(),
+        second_metadata.nlink(),
+        second_metadata.len(),
+        second_digest,
+    ) {
+        return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+    }
+    Ok(first)
+}
+
 impl LinuxArtifactSourceV1 {
     pub fn validate_store(
         root: &Path,
@@ -957,7 +1228,11 @@ impl LinuxArtifactSourceV1 {
             filesystem_root: &File,
             path: &str,
         ) -> Result<(File, crate::RuntimeSupportFileV1), ConfigProjectionFailureV1> {
-            let mut file = open_absolute_file(filesystem_root, path)?;
+            let mut file = if path == "/etc/ssl/certs/ca-certificates.crt" {
+                resolve_exact_installed_ca_bundle_v1(filesystem_root)?
+            } else {
+                open_absolute_file(filesystem_root, path)?
+            };
             let metadata = file
                 .metadata()
                 .map_err(|_| ConfigProjectionFailureV1::UnsupportedSecurityPosture)?;
@@ -1234,6 +1509,11 @@ impl LinuxArtifactSourceV1 {
         revalidate_absolute_directory_v1(&substrate_source_root)?;
         revalidate_absolute_directory_v1(&codex_source_root)?;
         revalidate_absolute_directory_v1(&held_system_config_mount_target)?;
+        let (_, revalidated_ca) =
+            support_file_identity(&filesystem_root, "/etc/ssl/certs/ca-certificates.crt")?;
+        if common_files.last() != Some(&revalidated_ca) {
+            return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+        }
         drop(held_executables);
         drop(held_support_files);
         drop(held_system_config_mount_target);
@@ -1761,6 +2041,132 @@ impl LinuxArtifactSourceV1 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn e3d_exact_ca_resolver_accepts_only_direct_or_observed_symlink_layouts() {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        use std::process::Command;
+
+        const CHILD: &str = "SUBSTRATE_E3D_CA_RESOLVER_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let status = Command::new("fakeroot")
+                .arg("--")
+                .arg(std::env::current_exe().unwrap())
+                .arg("e3d_exact_ca_resolver_accepts_only_direct_or_observed_symlink_layouts")
+                .arg("--nocapture")
+                .env(CHILD, "1")
+                .status()
+                .expect("run exact CA resolver fixture as synthetic root");
+            assert!(status.success(), "synthetic-root CA resolver test failed");
+            return;
+        }
+
+        fn root_descriptor(path: &Path) -> File {
+            OpenOptions::new()
+                .read(true)
+                .custom_flags(libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW)
+                .open(path)
+                .unwrap()
+        }
+
+        fn create_direct(root: &Path, bytes: &[u8]) {
+            let certs = root.join("etc/ssl/certs");
+            std::fs::create_dir_all(&certs).unwrap();
+            std::fs::write(certs.join("ca-certificates.crt"), bytes).unwrap();
+            std::fs::set_permissions(
+                certs.join("ca-certificates.crt"),
+                std::fs::Permissions::from_mode(0o444),
+            )
+            .unwrap();
+        }
+
+        fn create_link(root: &Path, target: &str, endpoint: &[u8]) {
+            std::fs::create_dir_all(root.join("etc/ssl/certs")).unwrap();
+            std::fs::create_dir_all(root.join("etc/ca-certificates/extracted")).unwrap();
+            std::fs::write(
+                root.join("etc/ca-certificates/extracted/tls-ca-bundle.pem"),
+                endpoint,
+            )
+            .unwrap();
+            std::fs::set_permissions(
+                root.join("etc/ca-certificates/extracted/tls-ca-bundle.pem"),
+                std::fs::Permissions::from_mode(0o444),
+            )
+            .unwrap();
+            symlink(target, root.join("etc/ssl/certs/ca-certificates.crt")).unwrap();
+        }
+
+        let fixtures = tempfile::tempdir().unwrap();
+
+        let direct = fixtures.path().join("direct");
+        create_direct(&direct, b"direct-ca\n");
+        let direct_file = resolve_exact_installed_ca_bundle_v1(&root_descriptor(&direct)).unwrap();
+        assert_eq!(format!("{:x}", Sha256::digest(b"direct-ca\n")), {
+            let mut bytes = Vec::new();
+            (&direct_file).read_to_end(&mut bytes).unwrap();
+            format!("{:x}", Sha256::digest(bytes))
+        });
+
+        let linked = fixtures.path().join("linked");
+        create_link(
+            &linked,
+            "../../ca-certificates/extracted/tls-ca-bundle.pem",
+            b"linked-ca\n",
+        );
+        let linked_file = resolve_exact_installed_ca_bundle_v1(&root_descriptor(&linked)).unwrap();
+        let linked_metadata = linked_file.metadata().unwrap();
+        let endpoint_metadata =
+            std::fs::metadata(linked.join("etc/ca-certificates/extracted/tls-ca-bundle.pem"))
+                .unwrap();
+        assert_eq!(
+            (linked_metadata.dev(), linked_metadata.ino()),
+            (endpoint_metadata.dev(), endpoint_metadata.ino())
+        );
+        assert_eq!(
+            std::fs::read_link(linked.join("etc/ssl/certs/ca-certificates.crt")).unwrap(),
+            Path::new("../../ca-certificates/extracted/tls-ca-bundle.pem")
+        );
+
+        let alternate = fixtures.path().join("alternate");
+        create_link(
+            &alternate,
+            "../../ca-certificates/extracted/other.pem",
+            b"alternate-ca\n",
+        );
+        assert!(resolve_exact_installed_ca_bundle_v1(&root_descriptor(&alternate)).is_err());
+
+        let further_link = fixtures.path().join("further-link");
+        create_link(
+            &further_link,
+            "../../ca-certificates/extracted/tls-ca-bundle.pem",
+            b"placeholder\n",
+        );
+        std::fs::rename(
+            further_link.join("etc/ca-certificates/extracted/tls-ca-bundle.pem"),
+            further_link.join("etc/ca-certificates/extracted/real.pem"),
+        )
+        .unwrap();
+        symlink(
+            "real.pem",
+            further_link.join("etc/ca-certificates/extracted/tls-ca-bundle.pem"),
+        )
+        .unwrap();
+        assert!(resolve_exact_installed_ca_bundle_v1(&root_descriptor(&further_link)).is_err());
+
+        let writable = fixtures.path().join("writable");
+        create_direct(&writable, b"writable-ca\n");
+        std::fs::set_permissions(
+            writable.join("etc/ssl"),
+            std::fs::Permissions::from_mode(0o777),
+        )
+        .unwrap();
+        assert!(resolve_exact_installed_ca_bundle_v1(&root_descriptor(&writable)).is_err());
+
+        let nonregular = fixtures.path().join("nonregular");
+        std::fs::create_dir_all(nonregular.join("etc/ssl/certs/ca-certificates.crt")).unwrap();
+        assert!(resolve_exact_installed_ca_bundle_v1(&root_descriptor(&nonregular)).is_err());
+    }
 
     #[test]
     fn e3c_held_absolute_directory_rejects_root_substitution() {

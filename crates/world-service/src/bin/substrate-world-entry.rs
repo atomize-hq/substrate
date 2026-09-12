@@ -16,7 +16,8 @@ use config_projection::{
     E3DeniedControlProbeV1, E3DerivedWorldFsEnforcementPlanV1, E3ElfExecutionModelV1,
     E3IsolatedChildRoleV1, E3LinuxIdMapExtentV1, E3UserNamespaceAttestationV1,
     E3WorldFsEnforcementInputV1, EffectiveEnvironmentV1, GatewayListenerIdentityV1,
-    InWorldGatewayRefV1, LinuxArtifactSourceV1, RuntimeArtifactProvenanceV1, SecretHandoffRefV1,
+    InWorldGatewayRefV1, LinuxArtifactSourceV1, RuntimeArtifactProvenanceV1, RuntimeSupportFileV1,
+    SecretHandoffRefV1,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -313,9 +314,10 @@ fn main() -> Result<()> {
         None
     };
 
-    let namespace = prepare_private_child_namespace(&descriptors, &input)?;
+    let (namespace, retained_ca) = prepare_private_child_namespace(&descriptors, &input)?;
     let derived =
         apply_authenticated_world_fs_enforcement(&descriptors, &input, codex_plan.as_ref())?;
+    drop(retained_ca);
     drop_child_privileges_and_caps(&input, &namespace)?;
     install_child_seccomp()?;
     let denied_control_probe_hash = probe_child_control_path_denials_v1(&input)?;
@@ -396,9 +398,18 @@ fn parse_launch_descriptors(environment: &BTreeMap<String, String>) -> Result<La
 fn prepare_private_child_namespace(
     descriptors: &LaunchDescriptorsV1,
     input: &E3WorldFsEnforcementInputV1,
-) -> Result<PreparedPrivateNamespaceV1> {
+) -> Result<(PreparedPrivateNamespaceV1, OwnedFd)> {
     validate_current_process_cgroup(&input.expected_process_cgroup)?;
     validate_current_kernel_boot_id(&input.kernel_boot_id)?;
+    let expected_ca = input
+        .executable_artifact
+        .runtime_support
+        .ordered_present_common_files
+        .iter()
+        .find(|entry| entry.absolute_path == "/etc/ssl/certs/ca-certificates.crt")
+        .context("E3-D runtime support manifest lacks the exact CA entry")?;
+    let filesystem_root = File::open("/").context("open root for final E3-D CA resolution")?;
+    let held_ca = resolve_exact_e3_ca_bundle_v1(filesystem_root.as_raw_fd(), 0)?;
     if unsafe { libc::unshare(libc::CLONE_NEWUSER) } != 0 {
         return Err(std::io::Error::last_os_error()).context("create private E3-D user namespace");
     }
@@ -445,6 +456,12 @@ fn prepare_private_child_namespace(
     {
         return Err(std::io::Error::last_os_error()).context("make E3-D mounts private");
     }
+    install_exact_e3_ca_bundle_mount_v1(
+        held_ca.as_raw_fd(),
+        expected_ca,
+        input.target_uid,
+        input.target_gid,
+    )?;
     let mount_namespace: OwnedFd = File::open(format!("/proc/{pid}/ns/mnt"))
         .context("open wrapper mount namespace")?
         .into();
@@ -467,21 +484,26 @@ fn prepare_private_child_namespace(
     if cap_last_cap > 63 {
         bail!("E3-D does not support capability numbers above 63");
     }
-    Ok(PreparedPrivateNamespaceV1 {
-        user_namespace: E3UserNamespaceAttestationV1 {
-            namespace_device_id,
-            namespace_inode,
-            owner_uid: input.user_namespace_requirement.trusted_service_uid,
-            parent_namespace_device_id: input.user_namespace_requirement.parent_namespace_device_id,
-            parent_namespace_inode: input.user_namespace_requirement.parent_namespace_inode,
-            uid_map: input.user_namespace_requirement.uid_map.clone(),
-            gid_map: input.user_namespace_requirement.gid_map.clone(),
+    Ok((
+        PreparedPrivateNamespaceV1 {
+            user_namespace: E3UserNamespaceAttestationV1 {
+                namespace_device_id,
+                namespace_inode,
+                owner_uid: input.user_namespace_requirement.trusted_service_uid,
+                parent_namespace_device_id: input
+                    .user_namespace_requirement
+                    .parent_namespace_device_id,
+                parent_namespace_inode: input.user_namespace_requirement.parent_namespace_inode,
+                uid_map: input.user_namespace_requirement.uid_map.clone(),
+                gid_map: input.user_namespace_requirement.gid_map.clone(),
+            },
+            mount_namespace_inode,
+            self_proc_fd,
+            pid_start_time_ticks,
+            cap_last_cap,
         },
-        mount_namespace_inode,
-        self_proc_fd,
-        pid_start_time_ticks,
-        cap_last_cap,
-    })
+        held_ca,
+    ))
 }
 
 fn open_numeric_self_proc_directory(pid: u32) -> Result<OwnedFd> {
@@ -1538,8 +1560,13 @@ fn validate_runtime_support_manifest(artifact: &DescriptorPinnedArtifactV1) -> R
         if expected.absolute_path != expected_path || !is_lower_hex_sha256(&expected.sha256) {
             bail!("pinned E3-D artifact common support path mismatch");
         }
-        let file = open_absolute_beneath_root_no_symlinks(expected_path, libc::O_RDONLY, false)
-            .with_context(|| format!("open E3-D support file {expected_path}"))?;
+        let file = if expected_path == "/etc/ssl/certs/ca-certificates.crt" {
+            let root = File::open("/").context("open root for E3-D CA validation")?;
+            resolve_exact_e3_ca_bundle_v1(root.as_raw_fd(), 0)?
+        } else {
+            open_absolute_beneath_root_no_symlinks(expected_path, libc::O_RDONLY, false)
+                .with_context(|| format!("open E3-D support file {expected_path}"))?
+        };
         let mut metadata: libc::stat = unsafe { zeroed() };
         if unsafe { libc::fstat(file.as_raw_fd(), &mut metadata) } != 0 {
             return Err(std::io::Error::last_os_error())
@@ -1614,6 +1641,488 @@ fn validate_runtime_support_manifest(artifact: &DescriptorPinnedArtifactV1) -> R
     )?;
     if support.manifest_hash != expected_hash {
         bail!("pinned E3-D runtime support manifest hash mismatch");
+    }
+    Ok(())
+}
+
+fn resolve_exact_e3_ca_bundle_v1(
+    filesystem_root: RawFd,
+    root_owner_uid_view: libc::uid_t,
+) -> Result<OwnedFd> {
+    const LOGICAL_LEAF: &str = "ca-certificates.crt";
+    const LINK_TARGET: &[u8] = b"../../ca-certificates/extracted/tls-ca-bundle.pem";
+    const MAX_SUPPORT_BYTES: u64 = 64 * 1024 * 1024;
+
+    fn metadata(fd: RawFd, operation: &str) -> Result<libc::stat> {
+        let mut value: libc::stat = unsafe { zeroed() };
+        if unsafe { libc::fstat(fd, &mut value) } != 0 {
+            return Err(std::io::Error::last_os_error()).context(operation.to_string());
+        }
+        Ok(value)
+    }
+
+    fn mount_id(fd: RawFd) -> Result<u64> {
+        let path = CString::new(format!("/proc/self/fdinfo/{fd}")).unwrap();
+        let descriptor = unsafe {
+            libc::open(
+                path.as_ptr(),
+                libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+            )
+        };
+        if descriptor < 0 {
+            return Err(std::io::Error::last_os_error())
+                .context("open E3-D CA descriptor mount identity");
+        }
+        let mut fdinfo = unsafe { File::from_raw_fd(descriptor) };
+        let mut payload = Vec::new();
+        fdinfo
+            .by_ref()
+            .take(4097)
+            .read_to_end(&mut payload)
+            .context("read E3-D CA descriptor mount identity")?;
+        let prefix = b"mnt_id:\t";
+        let values = payload
+            .split(|byte| *byte == b'\n')
+            .filter_map(|line| line.strip_prefix(prefix))
+            .collect::<Vec<_>>();
+        if payload.len() > 4096
+            || values.len() != 1
+            || values[0].is_empty()
+            || !values[0].iter().all(u8::is_ascii_digit)
+        {
+            bail!("E3-D CA descriptor lacks a mount identity");
+        }
+        std::str::from_utf8(values[0])
+            .context("decode E3-D CA descriptor mount identity")?
+            .parse::<u64>()
+            .context("parse E3-D CA descriptor mount identity")
+            .and_then(|value| {
+                if value == 0 {
+                    bail!("E3-D CA descriptor has a zero mount identity");
+                }
+                Ok(value)
+            })
+    }
+
+    fn open_directory(
+        parent: RawFd,
+        name: &str,
+        boundary_device: Option<u64>,
+        boundary_mount_id: Option<u64>,
+        root_owner_uid_view: libc::uid_t,
+    ) -> Result<OwnedFd> {
+        let name = CString::new(name).context("CA directory component contains NUL")?;
+        let fd = unsafe {
+            libc::openat(
+                parent,
+                name.as_ptr(),
+                libc::O_PATH | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+            )
+        };
+        if fd < 0 {
+            return Err(std::io::Error::last_os_error())
+                .context("open trusted E3-D CA directory component");
+        }
+        let fd = unsafe { OwnedFd::from_raw_fd(fd) };
+        let value = metadata(fd.as_raw_fd(), "stat trusted E3-D CA directory")?;
+        if value.st_mode & libc::S_IFMT != libc::S_IFDIR
+            || value.st_uid != root_owner_uid_view
+            || value.st_mode & 0o022 != 0
+            || boundary_device.is_some_and(|device| value.st_dev != device)
+            || boundary_mount_id.is_some_and(|id| mount_id(fd.as_raw_fd()).ok() != Some(id))
+        {
+            bail!("untrusted E3-D CA directory component");
+        }
+        Ok(fd)
+    }
+
+    fn named_metadata(parent: RawFd, name: &str) -> Result<libc::stat> {
+        let name = CString::new(name).context("CA leaf component contains NUL")?;
+        let mut value = std::mem::MaybeUninit::<libc::stat>::uninit();
+        if unsafe {
+            libc::fstatat(
+                parent,
+                name.as_ptr(),
+                value.as_mut_ptr(),
+                libc::AT_SYMLINK_NOFOLLOW,
+            )
+        } != 0
+        {
+            return Err(std::io::Error::last_os_error()).context("stat logical E3-D CA leaf");
+        }
+        Ok(unsafe { value.assume_init() })
+    }
+
+    fn open_endpoint(
+        parent: RawFd,
+        name: &str,
+        boundary_device: u64,
+        boundary_mount_id: u64,
+        root_owner_uid_view: libc::uid_t,
+    ) -> Result<(OwnedFd, libc::stat, String)> {
+        let name = CString::new(name).context("CA endpoint component contains NUL")?;
+        let fd = unsafe {
+            libc::openat(
+                parent,
+                name.as_ptr(),
+                libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+            )
+        };
+        if fd < 0 {
+            return Err(std::io::Error::last_os_error()).context("open exact E3-D CA endpoint");
+        }
+        let fd = unsafe { OwnedFd::from_raw_fd(fd) };
+        let before = metadata(fd.as_raw_fd(), "stat exact E3-D CA endpoint")?;
+        if before.st_mode & libc::S_IFMT != libc::S_IFREG
+            || before.st_dev != boundary_device
+            || mount_id(fd.as_raw_fd())? != boundary_mount_id
+            || before.st_uid != root_owner_uid_view
+            || before.st_nlink != 1
+            || before.st_mode & 0o022 != 0
+            || before.st_size < 0
+            || before.st_size as u64 > MAX_SUPPORT_BYTES
+        {
+            bail!("untrusted exact E3-D CA endpoint");
+        }
+        let digest = hash_descriptor(fd.as_raw_fd())?;
+        let after = metadata(fd.as_raw_fd(), "restat exact E3-D CA endpoint")?;
+        if (
+            before.st_dev,
+            before.st_ino,
+            before.st_mode,
+            before.st_uid,
+            before.st_gid,
+            before.st_nlink,
+            before.st_size,
+        ) != (
+            after.st_dev,
+            after.st_ino,
+            after.st_mode,
+            after.st_uid,
+            after.st_gid,
+            after.st_nlink,
+            after.st_size,
+        ) {
+            bail!("exact E3-D CA endpoint changed while hashing");
+        }
+        Ok((fd, before, digest))
+    }
+
+    fn resolve_once(
+        filesystem_root: RawFd,
+        root_owner_uid_view: libc::uid_t,
+    ) -> Result<(OwnedFd, libc::stat, String)> {
+        let etc = open_directory(filesystem_root, "etc", None, None, root_owner_uid_view)?;
+        let boundary_device = metadata(etc.as_raw_fd(), "stat held /etc boundary")?.st_dev;
+        let boundary_mount_id = mount_id(etc.as_raw_fd())?;
+        let ssl = open_directory(
+            etc.as_raw_fd(),
+            "ssl",
+            Some(boundary_device),
+            Some(boundary_mount_id),
+            root_owner_uid_view,
+        )?;
+        let certs = open_directory(
+            ssl.as_raw_fd(),
+            "certs",
+            Some(boundary_device),
+            Some(boundary_mount_id),
+            root_owner_uid_view,
+        )?;
+        let leaf = named_metadata(certs.as_raw_fd(), LOGICAL_LEAF)?;
+        if leaf.st_mode & libc::S_IFMT == libc::S_IFREG {
+            return open_endpoint(
+                certs.as_raw_fd(),
+                LOGICAL_LEAF,
+                boundary_device,
+                boundary_mount_id,
+                root_owner_uid_view,
+            );
+        }
+        if leaf.st_mode & libc::S_IFMT != libc::S_IFLNK
+            || leaf.st_uid != root_owner_uid_view
+            || leaf.st_dev != boundary_device
+        {
+            bail!("logical E3-D CA leaf is neither the direct file nor exact link");
+        }
+        let leaf_name = CString::new(LOGICAL_LEAF).unwrap();
+        let mut target = [0_u8; LINK_TARGET.len() + 1];
+        let length = unsafe {
+            libc::readlinkat(
+                certs.as_raw_fd(),
+                leaf_name.as_ptr(),
+                target.as_mut_ptr().cast(),
+                target.len(),
+            )
+        };
+        if length != LINK_TARGET.len() as isize || &target[..LINK_TARGET.len()] != LINK_TARGET {
+            bail!("logical E3-D CA link target is not the sole admitted relative target");
+        }
+
+        let mut stack = vec![etc, ssl, certs];
+        for _ in 0..2 {
+            if stack.len() <= 1 {
+                bail!("logical E3-D CA link escapes the held /etc boundary");
+            }
+            stack.pop();
+        }
+        let ca_certificates = open_directory(
+            stack.last().unwrap().as_raw_fd(),
+            "ca-certificates",
+            Some(boundary_device),
+            Some(boundary_mount_id),
+            root_owner_uid_view,
+        )?;
+        let extracted = open_directory(
+            ca_certificates.as_raw_fd(),
+            "extracted",
+            Some(boundary_device),
+            Some(boundary_mount_id),
+            root_owner_uid_view,
+        )?;
+        open_endpoint(
+            extracted.as_raw_fd(),
+            "tls-ca-bundle.pem",
+            boundary_device,
+            boundary_mount_id,
+            root_owner_uid_view,
+        )
+    }
+
+    let (first, first_metadata, first_digest) = resolve_once(filesystem_root, root_owner_uid_view)?;
+    let (_, second_metadata, second_digest) = resolve_once(filesystem_root, root_owner_uid_view)?;
+    if (
+        first_metadata.st_dev,
+        first_metadata.st_ino,
+        first_metadata.st_mode,
+        first_metadata.st_uid,
+        first_metadata.st_gid,
+        first_metadata.st_nlink,
+        first_metadata.st_size,
+        first_digest,
+    ) != (
+        second_metadata.st_dev,
+        second_metadata.st_ino,
+        second_metadata.st_mode,
+        second_metadata.st_uid,
+        second_metadata.st_gid,
+        second_metadata.st_nlink,
+        second_metadata.st_size,
+        second_digest,
+    ) {
+        bail!("logical E3-D CA link or endpoint was substituted");
+    }
+    Ok(first)
+}
+
+fn install_exact_e3_ca_bundle_mount_v1(
+    held_ca_fd: RawFd,
+    expected: &RuntimeSupportFileV1,
+    target_uid: u64,
+    target_gid: u64,
+) -> Result<()> {
+    const LOGICAL_PATH: &str = "/etc/ssl/certs/ca-certificates.crt";
+    if expected.absolute_path != LOGICAL_PATH || !is_lower_hex_sha256(&expected.sha256) {
+        bail!("private E3-D CA realization has malformed authority");
+    }
+    let mut held_metadata: libc::stat = unsafe { zeroed() };
+    if unsafe { libc::fstat(held_ca_fd, &mut held_metadata) } != 0 {
+        return Err(std::io::Error::last_os_error()).context("stat held E3-D CA descriptor");
+    }
+    if held_metadata.st_mode & libc::S_IFMT != libc::S_IFREG
+        || held_metadata.st_nlink != 1
+        || held_metadata.st_mode & 0o022 != 0
+        || held_metadata.st_dev != expected.device_id
+        || held_metadata.st_ino != expected.inode
+        || held_metadata.st_mode & 0o7777 != expected.mode
+        || held_metadata.st_size < 0
+        || held_metadata.st_size as u64 != expected.byte_length
+        || hash_descriptor(held_ca_fd)? != expected.sha256
+    {
+        bail!("held E3-D CA descriptor does not match its manifest");
+    }
+
+    let logical_path = CString::new(LOGICAL_PATH).unwrap();
+    let etc_path = CString::new("/etc").unwrap();
+    if unsafe {
+        libc::mount(
+            etc_path.as_ptr(),
+            etc_path.as_ptr(),
+            std::ptr::null(),
+            libc::MS_BIND | libc::MS_REC,
+            std::ptr::null(),
+        )
+    } != 0
+    {
+        return Err(std::io::Error::last_os_error())
+            .context("create private E3-D /etc resolution mount");
+    }
+    let private_root = File::open("/").context("open root for private E3-D CA re-resolution")?;
+    let private_source =
+        resolve_exact_e3_ca_bundle_v1(private_root.as_raw_fd(), held_metadata.st_uid)?;
+    if descriptor_identity(private_source.as_raw_fd())? != descriptor_identity(held_ca_fd)?
+        || hash_descriptor(private_source.as_raw_fd())? != expected.sha256
+    {
+        bail!("private E3-D CA re-resolution changed endpoint identity or bytes");
+    }
+
+    let source = CString::new("tmpfs").unwrap();
+    let target = CString::new("/etc/ssl/certs").unwrap();
+    let filesystem = CString::new("tmpfs").unwrap();
+    let target_uid = u32::try_from(target_uid).context("E3-D CA target uid exceeds uid_t")?;
+    let target_gid = u32::try_from(target_gid).context("E3-D CA target gid exceeds gid_t")?;
+    let options = CString::new(format!(
+        "mode=0755,uid={target_uid},gid={target_gid},size=1048576,nr_inodes=2"
+    ))
+    .unwrap();
+    if unsafe {
+        libc::mount(
+            source.as_ptr(),
+            target.as_ptr(),
+            filesystem.as_ptr(),
+            libc::MS_NODEV | libc::MS_NOSUID | libc::MS_NOEXEC,
+            options.as_ptr().cast(),
+        )
+    } != 0
+    {
+        return Err(std::io::Error::last_os_error()).context("mount private E3-D CA filesystem");
+    }
+    let certs_fd = unsafe {
+        libc::open(
+            target.as_ptr(),
+            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+        )
+    };
+    if certs_fd < 0 {
+        return Err(std::io::Error::last_os_error()).context("open private E3-D CA filesystem");
+    }
+    let certs_fd = unsafe { OwnedFd::from_raw_fd(certs_fd) };
+    let leaf = CString::new("ca-certificates.crt").unwrap();
+    unsafe {
+        libc::setfsgid(target_gid);
+        libc::setfsuid(target_uid);
+    }
+    if unsafe { libc::setfsgid(u32::MAX) } as u32 != target_gid
+        || unsafe { libc::setfsuid(u32::MAX) } as u32 != target_uid
+    {
+        bail!("E3-D CA mountpoint ownership could not use the mapped child identity");
+    }
+    let mountpoint = unsafe {
+        libc::openat(
+            certs_fd.as_raw_fd(),
+            leaf.as_ptr(),
+            libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+            0o444,
+        )
+    };
+    if mountpoint < 0 {
+        return Err(std::io::Error::last_os_error()).context("create private E3-D CA mountpoint");
+    }
+    let mountpoint = unsafe { OwnedFd::from_raw_fd(mountpoint) };
+    if unsafe { libc::fchmod(mountpoint.as_raw_fd(), 0o444) } != 0 {
+        return Err(std::io::Error::last_os_error())
+            .context("make private E3-D CA mountpoint non-writable");
+    }
+    drop(mountpoint);
+    if unsafe { libc::fchmod(certs_fd.as_raw_fd(), 0o555) } != 0 {
+        return Err(std::io::Error::last_os_error())
+            .context("make private E3-D CA directory non-writable");
+    }
+
+    let private_source_path =
+        CString::new(format!("/proc/self/fd/{}", private_source.as_raw_fd())).unwrap();
+    if unsafe {
+        libc::mount(
+            private_source_path.as_ptr(),
+            logical_path.as_ptr(),
+            std::ptr::null(),
+            libc::MS_BIND,
+            std::ptr::null(),
+        )
+    } != 0
+    {
+        return Err(std::io::Error::last_os_error()).context("bind held E3-D CA endpoint");
+    }
+    if unsafe {
+        libc::mount(
+            std::ptr::null(),
+            logical_path.as_ptr(),
+            std::ptr::null(),
+            libc::MS_BIND
+                | libc::MS_REMOUNT
+                | libc::MS_RDONLY
+                | libc::MS_NODEV
+                | libc::MS_NOSUID
+                | libc::MS_NOEXEC,
+            std::ptr::null(),
+        )
+    } != 0
+    {
+        return Err(std::io::Error::last_os_error())
+            .context("remount private E3-D CA endpoint read-only");
+    }
+
+    let reopened = unsafe {
+        libc::openat(
+            certs_fd.as_raw_fd(),
+            leaf.as_ptr(),
+            libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+        )
+    };
+    if reopened < 0 {
+        return Err(std::io::Error::last_os_error()).context("reopen private E3-D CA realization");
+    }
+    let reopened = unsafe { OwnedFd::from_raw_fd(reopened) };
+    let mut realized: libc::stat = unsafe { zeroed() };
+    if unsafe { libc::fstat(reopened.as_raw_fd(), &mut realized) } != 0 {
+        return Err(std::io::Error::last_os_error()).context("stat private E3-D CA realization");
+    }
+    if (
+        realized.st_dev,
+        realized.st_ino,
+        realized.st_mode,
+        realized.st_uid,
+        realized.st_gid,
+        realized.st_nlink,
+        realized.st_size,
+    ) != (
+        held_metadata.st_dev,
+        held_metadata.st_ino,
+        held_metadata.st_mode,
+        held_metadata.st_uid,
+        held_metadata.st_gid,
+        held_metadata.st_nlink,
+        held_metadata.st_size,
+    ) || hash_descriptor(reopened.as_raw_fd())? != expected.sha256
+    {
+        bail!("private E3-D CA realization changed endpoint identity or bytes");
+    }
+    let mut mount_status: libc::statvfs = unsafe { zeroed() };
+    if unsafe { libc::fstatvfs(reopened.as_raw_fd(), &mut mount_status) } != 0 {
+        return Err(std::io::Error::last_os_error())
+            .context("read back private E3-D CA mount flags");
+    }
+    let required_mount_flags = libc::ST_RDONLY | libc::ST_NODEV | libc::ST_NOSUID | libc::ST_NOEXEC;
+    if mount_status.f_flag & required_mount_flags != required_mount_flags {
+        bail!("private E3-D CA realization lacks required mount restrictions");
+    }
+    let write_fd = unsafe {
+        libc::openat(
+            certs_fd.as_raw_fd(),
+            leaf.as_ptr(),
+            libc::O_WRONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+        )
+    };
+    if write_fd >= 0 {
+        unsafe { libc::close(write_fd) };
+        bail!("private E3-D CA realization remained writable");
+    }
+    let write_errno = std::io::Error::last_os_error();
+    if !matches!(
+        write_errno.raw_os_error(),
+        Some(libc::EACCES) | Some(libc::EROFS)
+    ) {
+        return Err(write_errno).context("private E3-D CA writable-open denial was unexpected");
     }
     Ok(())
 }
@@ -1833,8 +2342,9 @@ fn run_managed_gateway_readiness_probe(descriptors: &LaunchDescriptorsV1) -> Res
     )?;
     let input = &probe.enforcement_input;
     validate_role_binding(descriptors.role, input.child_role)?;
-    let namespace = prepare_private_child_namespace(descriptors, input)?;
+    let (namespace, retained_ca) = prepare_private_child_namespace(descriptors, input)?;
     let derived = apply_authenticated_world_fs_enforcement(descriptors, input, None)?;
+    drop(retained_ca);
     drop_child_privileges_and_caps(input, &namespace)?;
     install_child_seccomp()?;
     let denied_control_probe_hash = probe_child_control_path_denials_v1(input)?;
@@ -3526,6 +4036,251 @@ fn close_wrapper_descriptors_before_final_exec(descriptors: &LaunchDescriptorsV1
 mod tests {
     use super::*;
     use std::os::fd::IntoRawFd;
+
+    #[test]
+    fn exact_e3_ca_resolver_accepts_the_supported_host_layout() {
+        use std::os::unix::fs::MetadataExt;
+
+        let logical = "/etc/ssl/certs/ca-certificates.crt";
+        let logical_metadata = std::fs::symlink_metadata(logical).unwrap();
+        if logical_metadata.file_type().is_symlink() {
+            assert_eq!(logical_metadata.uid(), 0);
+            assert_eq!(
+                std::fs::read_link(logical).unwrap(),
+                std::path::Path::new("../../ca-certificates/extracted/tls-ca-bundle.pem")
+            );
+        } else {
+            assert!(logical_metadata.is_file());
+        }
+        let root = File::open("/").unwrap();
+        let resolved = resolve_exact_e3_ca_bundle_v1(root.as_raw_fd(), 0).unwrap();
+        let mut resolved_metadata: libc::stat = unsafe { zeroed() };
+        assert_eq!(
+            unsafe { libc::fstat(resolved.as_raw_fd(), &mut resolved_metadata) },
+            0
+        );
+        let endpoint_metadata = std::fs::metadata(logical).unwrap();
+        assert_eq!(
+            (resolved_metadata.st_dev, resolved_metadata.st_ino),
+            (endpoint_metadata.dev(), endpoint_metadata.ino())
+        );
+        assert_eq!(
+            hash_descriptor(resolved.as_raw_fd()).unwrap(),
+            format!("{:x}", Sha256::digest(std::fs::read(logical).unwrap()))
+        );
+    }
+
+    #[test]
+    fn ca_endpoint_ownership_spans_landlock_and_closes_before_privilege_descent() {
+        fn section<'a>(source: &'a str, start: &str, end: &str) -> &'a str {
+            source
+                .split_once(start)
+                .unwrap()
+                .1
+                .split_once(end)
+                .unwrap()
+                .0
+        }
+
+        fn assert_lifetime_order(body: &str) {
+            let prepare = body.find("let (namespace, retained_ca)").unwrap();
+            let landlock = body
+                .find("apply_authenticated_world_fs_enforcement")
+                .unwrap();
+            let close = body.find("drop(retained_ca);").unwrap();
+            let privilege_descent = body.find("drop_child_privileges_and_caps").unwrap();
+            assert!(prepare < landlock);
+            assert!(landlock < close);
+            assert!(close < privilege_descent);
+        }
+
+        let source = include_str!("substrate-world-entry.rs");
+        let main_body = section(
+            source,
+            "fn main() -> Result<()> {",
+            "\nfn collect_exact_environment",
+        );
+        assert_lifetime_order(main_body);
+        let readiness_body = section(
+            source,
+            "fn run_managed_gateway_readiness_probe",
+            "\n#[allow(clippy::too_many_arguments)]",
+        );
+        assert_lifetime_order(readiness_body);
+        let preparation_body = section(
+            source,
+            "fn prepare_private_child_namespace",
+            "\nfn open_numeric_self_proc_directory",
+        );
+        assert!(!preparation_body.contains("IntoRawFd"));
+
+        let retained: OwnedFd = File::open("/dev/null").unwrap().into();
+        let retained_raw = retained.as_raw_fd();
+        let failed: Result<()> = (|| {
+            let _retained = retained;
+            bail!("synthetic Landlock failure")
+        })();
+        assert!(failed.is_err());
+        assert_eq!(unsafe { libc::fcntl(retained_raw, libc::F_GETFD) }, -1);
+        assert_eq!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::EBADF)
+        );
+    }
+
+    #[test]
+    #[ignore = "requires the explicit privileged E3-D CA mount acceptance environment"]
+    fn privileged_private_ca_realization_preserves_the_host_link_and_exact_file_rule() {
+        use std::os::unix::fs::MetadataExt;
+
+        assert_eq!(
+            std::env::var_os("SUBSTRATE_E3D_PRIVILEGED_TEST").as_deref(),
+            Some(std::ffi::OsStr::new("1")),
+            "privileged E3-D acceptance must be explicitly enabled"
+        );
+        assert_eq!(unsafe { libc::geteuid() }, 0);
+        let logical = "/etc/ssl/certs/ca-certificates.crt";
+        let before_link = std::fs::symlink_metadata(logical).unwrap();
+        let before_target = std::fs::read_link(logical).ok();
+        let before_endpoint = std::fs::metadata(logical).unwrap();
+        let before_digest = format!("{:x}", Sha256::digest(std::fs::read(logical).unwrap()));
+
+        let child = unsafe { libc::fork() };
+        assert!(child >= 0);
+        if child == 0 {
+            let result = (|| -> Result<()> {
+                if unsafe { libc::unshare(libc::CLONE_NEWNS) } != 0 {
+                    return Err(std::io::Error::last_os_error())
+                        .context("create private CA test mount namespace");
+                }
+                let root_path = CString::new("/").unwrap();
+                if unsafe {
+                    libc::mount(
+                        std::ptr::null(),
+                        root_path.as_ptr(),
+                        std::ptr::null(),
+                        libc::MS_REC | libc::MS_PRIVATE,
+                        std::ptr::null(),
+                    )
+                } != 0
+                {
+                    return Err(std::io::Error::last_os_error())
+                        .context("make CA test mounts private");
+                }
+                let ssl_path = CString::new("/etc/ssl").unwrap();
+                if unsafe {
+                    libc::mount(
+                        ssl_path.as_ptr(),
+                        ssl_path.as_ptr(),
+                        std::ptr::null(),
+                        libc::MS_BIND,
+                        std::ptr::null(),
+                    )
+                } != 0
+                {
+                    return Err(std::io::Error::last_os_error())
+                        .context("create same-device CA mount-crossing negative");
+                }
+                let root = File::open("/").unwrap();
+                if resolve_exact_e3_ca_bundle_v1(root.as_raw_fd(), 0).is_ok() {
+                    bail!("CA resolver accepted a same-device mount crossing");
+                }
+                if unsafe { libc::umount2(ssl_path.as_ptr(), 0) } != 0 {
+                    return Err(std::io::Error::last_os_error())
+                        .context("remove same-device CA mount-crossing negative");
+                }
+                let held = resolve_exact_e3_ca_bundle_v1(root.as_raw_fd(), 0)?;
+                let expected = config_projection::RuntimeSupportFileV1 {
+                    absolute_path: logical.to_string(),
+                    device_id: before_endpoint.dev(),
+                    inode: before_endpoint.ino(),
+                    mode: before_endpoint.mode() & 0o7777,
+                    byte_length: before_endpoint.len(),
+                    sha256: before_digest.clone(),
+                };
+                install_exact_e3_ca_bundle_mount_v1(held.as_raw_fd(), &expected, 1000, 1000)?;
+                let realized = std::fs::symlink_metadata(logical)?;
+                if !realized.is_file() || realized.file_type().is_symlink() {
+                    bail!("private CA path was not realized as a regular file");
+                }
+                if (realized.dev(), realized.ino()) != (expected.device_id, expected.inode)
+                    || format!("{:x}", Sha256::digest(std::fs::read(logical)?)) != expected.sha256
+                {
+                    bail!("private CA realization changed endpoint identity or bytes");
+                }
+                let entries = std::fs::read_dir("/etc/ssl/certs")?
+                    .map(|entry| entry.map(|entry| entry.file_name()))
+                    .collect::<std::io::Result<Vec<_>>>()?;
+                if entries != [std::ffi::OsString::from("ca-certificates.crt")] {
+                    bail!("private CA filesystem contains an unexpected entry");
+                }
+
+                let policy = world::landlock::LandlockFilesystemPolicy {
+                    exec_paths: Vec::new(),
+                    discover_paths: Vec::new(),
+                    read_paths: vec![logical.to_string()],
+                    write_paths: Vec::new(),
+                };
+                let policy = world_service::internal_exec::resolve_authenticated_world_fs_enforcement_plan_v1(policy);
+                let report =
+                    world_service::internal_exec::apply_authenticated_world_fs_enforcement_plan_v1(
+                        &policy,
+                    );
+                if !report.support.supported || !report.attempted || !report.applied {
+                    bail!(
+                        "exact-file CA Landlock rule was unavailable: {:?}",
+                        report.reason
+                    );
+                }
+                if std::fs::read(logical)?
+                    != std::fs::read(format!("/proc/self/fd/{}", held.as_raw_fd()))?
+                {
+                    bail!("exact-file CA Landlock read did not consume the held endpoint");
+                }
+                if std::fs::read_dir("/etc/ssl/certs").is_ok() {
+                    bail!("exact-file CA Landlock rule unexpectedly allowed directory enumeration");
+                }
+                Ok(())
+            })();
+            if let Err(error) = result {
+                eprintln!("{error:#}");
+                unsafe { libc::_exit(120) };
+            }
+            unsafe { libc::_exit(0) };
+        }
+        let mut status = 0;
+        assert_eq!(unsafe { libc::waitpid(child, &mut status, 0) }, child);
+        assert!(libc::WIFEXITED(status));
+        assert_eq!(libc::WEXITSTATUS(status), 0);
+
+        let after_link = std::fs::symlink_metadata(logical).unwrap();
+        assert_eq!(
+            (
+                before_link.dev(),
+                before_link.ino(),
+                before_link.mode(),
+                before_link.uid(),
+                before_link.gid(),
+            ),
+            (
+                after_link.dev(),
+                after_link.ino(),
+                after_link.mode(),
+                after_link.uid(),
+                after_link.gid(),
+            )
+        );
+        assert_eq!(before_target, std::fs::read_link(logical).ok());
+        let after_endpoint = std::fs::metadata(logical).unwrap();
+        assert_eq!(
+            (before_endpoint.dev(), before_endpoint.ino()),
+            (after_endpoint.dev(), after_endpoint.ino())
+        );
+        assert_eq!(
+            before_digest,
+            format!("{:x}", Sha256::digest(std::fs::read(logical).unwrap()))
+        );
+    }
 
     fn open_test_fds(count: usize) -> Vec<RawFd> {
         (0..count)
