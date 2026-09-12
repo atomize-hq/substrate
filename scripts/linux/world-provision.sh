@@ -1128,7 +1128,7 @@ ProtectHome=read-only
 ReadWritePaths="${SYSTEMD_SUBSTRATE_HOME}" /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE CAP_SETUID CAP_SETGID CAP_SETPCAP
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE CAP_SETUID CAP_SETGID CAP_SETPCAP
-SecureBits=noroot-locked
+SecureBits=noroot noroot-locked
 
 [Install]
 WantedBy=multi-user.target
