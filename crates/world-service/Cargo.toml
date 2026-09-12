@@ -11,6 +11,10 @@ repository = "https://github.com/atomize-hq/substrate"
 name = "world-service"
 path = "src/main.rs"
 
+[[bin]]
+name = "substrate-world-entry"
+path = "src/bin/substrate-world-entry.rs"
+
 [package.metadata.dist]
 dist = true
 targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
@@ -41,6 +45,7 @@ libc = "0.2"
 sha2 = { workspace = true }
 hmac = "0.12"
 substrate-common = { path = "../common" }
+config-projection = { path = "../config-projection" }
 substrate-gateway = { path = "../gateway" }
 transport-api-core = { path = "../transport-api-core" }
 transport-api-types = { path = "../transport-api-types" }

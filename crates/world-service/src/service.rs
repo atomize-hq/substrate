@@ -64,6 +64,8 @@ use world_api::{
     WorldHandle, WorldReuseMode, WorldSpec,
 };
 
+#[cfg(target_os = "linux")]
+use crate::e3_child_security::{E3PrivilegedChildExclusionV1, HeldNonE3PrivilegedChildLeaseV1};
 use crate::enforcement_plan;
 #[cfg(target_os = "linux")]
 use crate::gateway_runtime::{
@@ -211,6 +213,8 @@ pub struct WorldService {
     member_turn_join: Option<MemberTurnJoinRegistry>,
     #[cfg(target_os = "linux")]
     pending_diff_origin: Arc<RwLock<HashMap<String, PendingDiffOriginTracker>>>,
+    #[cfg(target_os = "linux")]
+    privileged_child_exclusion: Arc<E3PrivilegedChildExclusionV1>,
     #[allow(dead_code)]
     worlds: Arc<RwLock<HashMap<String, WorldHandle>>>,
     budgets: Arc<RwLock<HashMap<String, AgentBudgetTracker>>>,
@@ -272,19 +276,11 @@ impl WorldService {
     pub fn new() -> Result<Self> {
         #[cfg(target_os = "linux")]
         {
-            let member_turn_join = match MemberTurnJoinRegistry::open(Path::new(
-                "/var/lib/substrate",
-            )) {
-                Ok(registry) => Some(registry),
-                Err(error) => {
-                    tracing::warn!(
-                        error = %error,
-                        "durable E2 member-turn join authority is unavailable; activated E2 retained turns will fail closed"
-                    );
-                    None
-                }
-            };
-            Self::new_linux(member_turn_join)
+            let privileged_child_exclusion = E3PrivilegedChildExclusionV1::new_recovering()?;
+            let service =
+                Self::new_with_privileged_child_exclusion(Arc::clone(&privileged_child_exclusion))?;
+            privileged_child_exclusion.finish_recovery()?;
+            Ok(service)
         }
 
         #[cfg(not(target_os = "linux"))]
@@ -303,13 +299,49 @@ impl WorldService {
     }
 
     #[cfg(target_os = "linux")]
-    #[doc(hidden)]
-    pub fn new_with_member_turn_state_root_for_test(state_root: &Path) -> Result<Self> {
-        Self::new_linux(Some(MemberTurnJoinRegistry::open(state_root)?))
+    pub(crate) fn new_with_privileged_child_exclusion(
+        privileged_child_exclusion: Arc<E3PrivilegedChildExclusionV1>,
+    ) -> Result<Self> {
+        let member_turn_join = match MemberTurnJoinRegistry::open(Path::new("/var/lib/substrate")) {
+            Ok(registry) => Some(registry),
+            Err(error) => {
+                tracing::warn!(
+                    error = %error,
+                    "durable E2 member-turn join authority is unavailable; activated E2 retained turns will fail closed"
+                );
+                None
+            }
+        };
+        let service = Self::new_linux(member_turn_join, privileged_child_exclusion)?;
+        #[cfg(not(test))]
+        service
+            .gateway_runtime
+            .recover_existing_non_e3_gateways_for_exclusion()?;
+        Ok(service)
     }
 
     #[cfg(target_os = "linux")]
-    fn new_linux(member_turn_join: Option<MemberTurnJoinRegistry>) -> Result<Self> {
+    #[doc(hidden)]
+    pub fn new_with_member_turn_state_root_for_test(state_root: &Path) -> Result<Self> {
+        let privileged_child_exclusion = E3PrivilegedChildExclusionV1::new_recovering()?;
+        let service = Self::new_linux(
+            Some(MemberTurnJoinRegistry::open(state_root)?),
+            Arc::clone(&privileged_child_exclusion),
+        )?;
+        if let Err(error) = privileged_child_exclusion.finish_recovery() {
+            tracing::warn!(
+                error = %error,
+                "test-only member-turn service remains recovery-closed around an inherited child"
+            );
+        }
+        Ok(service)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn new_linux(
+        member_turn_join: Option<MemberTurnJoinRegistry>,
+        privileged_child_exclusion: Arc<E3PrivilegedChildExclusionV1>,
+    ) -> Result<Self> {
         let linux_backend = Arc::new(world::LinuxLocalBackend::new());
         let backend: Arc<dyn WorldBackend> = linux_backend.clone();
         let runtime_replay = RuntimeReplayRegistry::with_durable_e2(member_turn_join.clone());
@@ -317,20 +349,41 @@ impl WorldService {
         Ok(Self {
             backend,
             linux_backend,
-            gateway_runtime: Arc::new(GatewayRuntimeManager::new()),
-            member_runtime: Arc::new(MemberRuntimeManager::with_replay_registry(
+            gateway_runtime: Arc::new(GatewayRuntimeManager::new(Arc::clone(
+                &privileged_child_exclusion,
+            ))),
+            member_runtime: Arc::new(MemberRuntimeManager::with_replay_and_e3_projection_service(
                 runtime_replay.clone(),
                 member_turn_join.clone(),
+                Arc::clone(&privileged_child_exclusion),
             )),
             runtime_replay,
             member_turn_join,
             pending_diff_origin: Arc::new(RwLock::new(HashMap::new())),
+            privileged_child_exclusion,
             worlds: Arc::new(RwLock::new(HashMap::new())),
             budgets: Arc::new(RwLock::new(HashMap::new())),
             last_policy_resolution_mode: Arc::new(AtomicU8::new(0)),
             last_netfilter_requested: Arc::new(AtomicU8::new(0)),
             last_netfilter_failure_reason: Arc::new(RwLock::new(None)),
         })
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn acquire_non_e3_helper_operation(
+        &self,
+    ) -> Result<HeldNonE3PrivilegedChildLeaseV1> {
+        self.privileged_child_exclusion.acquire_non_e3_child()
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn ensure_non_e3_world_session(
+        &self,
+        spec: &WorldSpec,
+    ) -> Result<(WorldHandle, HeldNonE3PrivilegedChildLeaseV1)> {
+        let lease = self.acquire_non_e3_helper_operation()?;
+        let world = self.backend.ensure_session(spec)?;
+        Ok((world, lease))
     }
 
     /// Ensure a session world (thin wrapper over backend)
@@ -578,6 +631,20 @@ impl WorldService {
         );
 
         // Ensure world exists
+        #[cfg(target_os = "linux")]
+        let (world, _privileged_child_exclusion_lease) =
+            match self.ensure_non_e3_world_session(&spec) {
+                Ok(selection) => selection,
+                Err(e) => {
+                    if e.to_string().contains("UnsupportedSecurityPosture") {
+                        return Err(e);
+                    }
+                    self.record_last_netfilter_failure_for_error(isolate_network, &e);
+                    tracing::error!(error = %e, error_debug = ?e, "ensure_session failed");
+                    return Err(anyhow::anyhow!("Failed to ensure session world"));
+                }
+            };
+        #[cfg(not(target_os = "linux"))]
         let world = match self.backend.ensure_session(&spec) {
             Ok(w) => w,
             Err(e) => {
@@ -691,6 +758,8 @@ impl WorldService {
                 anyhow::bail!("agent_id is required for API calls");
             }
 
+            let _privileged_child_exclusion_lease = self.acquire_non_e3_helper_operation()?;
+
             let cwd = req
                 .cwd
                 .clone()
@@ -799,6 +868,8 @@ impl WorldService {
                 anyhow::bail!("agent_id is required for API calls");
             }
 
+            let _privileged_child_exclusion_lease = self.acquire_non_e3_helper_operation()?;
+
             let cwd = req
                 .cwd
                 .clone()
@@ -877,6 +948,8 @@ impl WorldService {
             if req.agent_id.is_empty() {
                 anyhow::bail!("agent_id is required for API calls");
             }
+
+            let _privileged_child_exclusion_lease = self.acquire_non_e3_helper_operation()?;
 
             let cwd = req
                 .cwd
@@ -1018,6 +1091,8 @@ impl WorldService {
                     BadRequestError::new(format!("path segments must not be '..': {rel}")).into(),
                 );
             }
+
+            let _privileged_child_exclusion_lease = self.acquire_non_e3_helper_operation()?;
 
             let cwd = req
                 .cwd
@@ -1250,6 +1325,8 @@ impl WorldService {
             anyhow::bail!("PTY streaming is handled via /v1/stream");
         }
 
+        let privileged_child_exclusion_lease = self.acquire_non_e3_helper_operation()?;
+
         if let Some(budget) = req.budget.clone() {
             let mut budgets = self.budgets.write().unwrap();
             let tracker = budgets
@@ -1481,6 +1558,7 @@ impl WorldService {
         let producer_for_exec = producer.clone();
         let replay_publisher_for_exec = replay_publisher.clone();
         task::spawn_blocking(move || {
+            let _privileged_child_exclusion_lease = privileged_child_exclusion_lease;
             let sink = Arc::new(StreamingSink::new(
                 tx.clone(),
                 producer_for_exec.clone(),
@@ -3830,7 +3908,12 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[tokio::test]
     async fn e3a_v2_execute_paths_fail_closed_before_world_budget_or_launch_effects() {
-        let service = WorldService::new_linux(None).expect("E3-A test service");
+        let exclusion = E3PrivilegedChildExclusionV1::new_recovering()
+            .expect("bind E3-A fixture child exclusion");
+        exclusion
+            .finish_recovery()
+            .expect("finish E3-A fixture child-exclusion recovery");
+        let service = WorldService::new_linux(None, exclusion).expect("E3-A test service");
         let request = e3a_v2_execute_request();
         request
             .validate()

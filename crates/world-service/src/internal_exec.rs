@@ -641,17 +641,12 @@ pub fn run_landlock_exec() -> Result<()> {
                         }
                     }
 
-                    policy.discover_paths.sort();
-                    policy.discover_paths.dedup();
-                    policy.read_paths.sort();
-                    policy.read_paths.dedup();
-                    policy.write_paths.sort();
-                    policy.write_paths.dedup();
+                    let policy = resolve_authenticated_world_fs_enforcement_plan_v1(policy);
 
                     trusted_system_roots
                         .revalidate()
                         .context("revalidate fixed trusted system roots before landlock")?;
-                    let report = world::landlock::apply_filesystem_policy(&policy);
+                    let report = apply_authenticated_world_fs_enforcement_plan_v1(&policy);
                     if report.attempted && !report.applied {
                         eprintln!(
                             "substrate: error: landlock apply failed: {}",
@@ -809,6 +804,29 @@ pub fn run_landlock_exec() -> Result<()> {
             .context("failed to run inner command under landlock exec wrapper")?;
         std::process::exit(status.code().unwrap_or(1));
     }
+}
+
+#[cfg(target_os = "linux")]
+pub fn resolve_authenticated_world_fs_enforcement_plan_v1(
+    mut policy: world::landlock::LandlockFilesystemPolicy,
+) -> world::landlock::LandlockFilesystemPolicy {
+    for paths in [
+        &mut policy.exec_paths,
+        &mut policy.discover_paths,
+        &mut policy.read_paths,
+        &mut policy.write_paths,
+    ] {
+        paths.sort();
+        paths.dedup();
+    }
+    policy
+}
+
+#[cfg(target_os = "linux")]
+pub fn apply_authenticated_world_fs_enforcement_plan_v1(
+    policy: &world::landlock::LandlockFilesystemPolicy,
+) -> world::landlock::LandlockApplyReport {
+    world::landlock::apply_filesystem_policy(policy)
 }
 
 fn parse_allowlist_env(key: &str) -> Vec<String> {

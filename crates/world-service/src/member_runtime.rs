@@ -33,6 +33,7 @@ use transport_api_types::{
 };
 use world_api::SharedWorldBindingSnapshot;
 
+use crate::e3_child_security::{E3PrivilegedChildExclusionV1, HeldNonE3PrivilegedChildLeaseV1};
 use crate::gateway_runtime::{prepare_linux_world_entry_launcher, LinuxWorldPlacementContext};
 use crate::member_turn_join::{
     MemberTurnJoinError, MemberTurnJoinLeader, MemberTurnJoinRegistry, MemberTurnJoinStateV1,
@@ -67,12 +68,13 @@ export SUBSTRATE_WORLD_ENTRY_BINARY="${SUBSTRATE_LANDLOCK_HELPER_SRC}"
 exec "${SUBSTRATE_E2_TURN_WORLD_ENTRY}" "__substrate_world_landlock_exec"
 "##;
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub(crate) struct MemberRuntimeManager {
     active_members: Arc<RwLock<ActiveMemberRegistry>>,
     active_turns_by_span_id: Arc<RwLock<HashMap<String, Arc<ActiveSubmittedTurn>>>>,
     runtime_replay: RuntimeReplayRegistry,
     member_turn_join: Option<MemberTurnJoinRegistry>,
+    privileged_child_exclusion: Arc<E3PrivilegedChildExclusionV1>,
 }
 
 pub(crate) struct MemberRuntimeLaunchAdmissionV1 {
@@ -108,6 +110,8 @@ struct ActiveMemberRuntime {
     uaa_session_id: Mutex<Option<String>>,
     e2_launch_activation: Option<E2MemberLaunchActivationCarrierV1>,
     authenticated_worker_cap_identity: Mutex<Option<RetainedTurnWorkerCapIdentity>>,
+    #[allow(dead_code)]
+    privileged_child_exclusion_lease: Arc<HeldNonE3PrivilegedChildLeaseV1>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -179,9 +183,21 @@ struct RetainedMemberSlot {
 
 impl MemberRuntimeManager {
     pub(crate) fn new() -> Self {
-        Self::default()
+        let privileged_child_exclusion = E3PrivilegedChildExclusionV1::new_recovering()
+            .expect("bind standalone member-runtime child exclusion");
+        privileged_child_exclusion
+            .finish_recovery()
+            .expect("finish standalone member-runtime child-exclusion recovery");
+        Self {
+            active_members: Arc::default(),
+            active_turns_by_span_id: Arc::default(),
+            runtime_replay: RuntimeReplayRegistry::default(),
+            member_turn_join: None,
+            privileged_child_exclusion,
+        }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn with_replay_registry(
         runtime_replay: RuntimeReplayRegistry,
         member_turn_join: Option<MemberTurnJoinRegistry>,
@@ -190,6 +206,20 @@ impl MemberRuntimeManager {
             runtime_replay,
             member_turn_join,
             ..Self::new()
+        }
+    }
+
+    pub(crate) fn with_replay_and_e3_projection_service(
+        runtime_replay: RuntimeReplayRegistry,
+        member_turn_join: Option<MemberTurnJoinRegistry>,
+        privileged_child_exclusion: Arc<E3PrivilegedChildExclusionV1>,
+    ) -> Self {
+        Self {
+            active_members: Arc::default(),
+            active_turns_by_span_id: Arc::default(),
+            runtime_replay,
+            member_turn_join,
+            privileged_child_exclusion,
         }
     }
 
@@ -279,6 +309,11 @@ impl MemberRuntimeManager {
             dispatch.resolved_runtime.backend_kind,
             &placement.working_dir,
         );
+        let privileged_child_exclusion_lease = Arc::new(
+            self.privileged_child_exclusion
+                .acquire_non_e3_child()
+                .context("UnsupportedSecurityPosture: member child admission is closed")?,
+        );
         let AgentWrapperRunControl { handle, cancel } = match prompt_fulfillment
             .run_control(AgentWrapperRunRequest {
                 prompt: initial_prompt,
@@ -323,6 +358,7 @@ impl MemberRuntimeManager {
             uaa_session_id: Mutex::new(None),
             e2_launch_activation: dispatch.e2_launch_activation.clone(),
             authenticated_worker_cap_identity: Mutex::new(pinned_e2_activation),
+            privileged_child_exclusion_lease,
         });
         if let Err(err) = self.register_member(active.clone()) {
             active.cancel_bootstrap();
@@ -3883,6 +3919,16 @@ mod tests {
         fs::create_dir_all(&launcher_dir).expect("create launcher dir");
         fs::create_dir_all(&codex_home).expect("create codex home");
         fs::write(&binary_path, "#!/bin/sh\nexit 0\n").expect("write binary");
+        let exclusion =
+            E3PrivilegedChildExclusionV1::new_recovering().expect("bind fixture child exclusion");
+        exclusion
+            .finish_recovery()
+            .expect("finish fixture child-exclusion recovery");
+        let privileged_child_exclusion_lease = Arc::new(
+            exclusion
+                .acquire_non_e3_child()
+                .expect("acquire fixture child lease"),
+        );
 
         Arc::new(ActiveMemberRuntime {
             agent_id: "codex_world".to_string(),
@@ -3909,6 +3955,7 @@ mod tests {
             uaa_session_id: Mutex::new(None),
             e2_launch_activation: None,
             authenticated_worker_cap_identity: Mutex::new(None),
+            privileged_child_exclusion_lease,
         })
     }
 

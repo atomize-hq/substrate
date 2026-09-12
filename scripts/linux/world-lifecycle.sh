@@ -833,8 +833,8 @@ import uuid
 root, gateway, wrapper, source_commit, source_tree, lock_hash, rustc_version, target, profile, build_performed = sys.argv[1:]
 if target != "x86_64-unknown-linux-musl" or profile != "release":
     raise RuntimeError("Substrate E3 artifacts require the exact release musl build")
-if build_performed not in ("0", "1"):
-    raise RuntimeError("invalid Substrate E3 source-build evidence")
+if build_performed != "1":
+    raise RuntimeError("Substrate E3 artifact publication requires an exact current source build")
 
 def canonical(value):
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
@@ -1383,8 +1383,6 @@ try:
             raise SystemExit(0)
     else:
         validate_complete_record_chain(None)
-    if build_performed != "1":
-        raise RuntimeError("--skip-build cannot publish a new Substrate E3 artifact source")
     revision = 1 if prior is None else prior["head_revision"] + 1
     record = {"schema_version": 1, "source_store_id": store["source_store_id"], "source_record_id": "iar_" + uuid7(), "source_stream": "SubstrateSourceBuild", "revision": revision, "predecessor_ref": None if prior is None else prior["head_ref"], "build_input": build, "entries": entries, "created_at": timestamp(), "record_hash": ""}
     record["record_hash"] = domain_hash("substrate.e3.installer-artifact-source-record.v1", "record", record, "record_hash")
@@ -1422,6 +1420,9 @@ record_linux_managed_state() {
 
     linux_snapshot_path "world-service-binary" "/usr/local/bin/substrate-world-service"
     linux_snapshot_path "gateway-binary" "/usr/local/bin/substrate-gateway"
+    linux_snapshot_path "e3-artifact-directory" "/usr/local/lib/substrate/e3"
+    linux_snapshot_path "e3-gateway-binary" "/usr/local/lib/substrate/e3/substrate-gateway"
+    linux_snapshot_path "e3-world-entry-binary" "/usr/local/lib/substrate/e3/substrate-world-entry"
     linux_snapshot_path "acl-helper" "${ACL_HELPER_INSTALL_PATH}"
     linux_snapshot_path "world-service-unit" "${SERVICE_PATH}"
     linux_snapshot_path "world-socket-unit" "${SOCKET_PATH}"
@@ -1456,6 +1457,23 @@ invoke_linux_lifecycle_executor() {
 }
 
 install_linux_managed_state() {
+    local required_e3_value
+    for required_e3_value in \
+        E3_GATEWAY_BIN_PATH \
+        E3_WORLD_ENTRY_BIN_PATH \
+        SUBSTRATE_SOURCE_COMMIT \
+        SUBSTRATE_SOURCE_TREE \
+        SUBSTRATE_CARGO_LOCK_SHA256 \
+        SUBSTRATE_RUSTC_VERSION \
+        SUBSTRATE_SOURCE_TARGET \
+        SUBSTRATE_SOURCE_PROFILE \
+        SUBSTRATE_SOURCE_BUILD_PERFORMED; do
+        if [[ -z "${!required_e3_value:-}" ]]; then
+            printf 'world-lifecycle missing required E3-D context: %s\n' "${required_e3_value}" >&2
+            return 2
+        fi
+    done
+
     echo "==> Ensuring ${SUBSTRATE_GROUP} group and membership"
     ensure_substrate_group_exists
     ensure_user_in_group "${INVOKING_USER}"
@@ -1464,6 +1482,14 @@ install_linux_managed_state() {
     sudo_cmd install -Dm0755 "${WORLD_AGENT_BIN_PATH}" /usr/local/bin/substrate-world-service
     echo "==> Installing substrate-gateway to /usr/local/bin (no dedicated service)"
     sudo_cmd install -Dm0755 "${GATEWAY_BIN_PATH}" /usr/local/bin/substrate-gateway
+    echo "==> Installing descriptor-pinned E3 static artifacts"
+    sudo_cmd install -d -m0755 -o root -g root /usr/local/lib/substrate/e3
+    sudo_cmd install -Dm0755 -o root -g root \
+        "${E3_GATEWAY_BIN_PATH}" \
+        /usr/local/lib/substrate/e3/substrate-gateway
+    sudo_cmd install -Dm0755 -o root -g root \
+        "${E3_WORLD_ENTRY_BIN_PATH}" \
+        /usr/local/lib/substrate/e3/substrate-world-entry
     echo "==> Installing ACL bridge helper to ${ACL_HELPER_INSTALL_PATH}"
     sudo_cmd install -Dm0755 "${ACL_HELPER_SOURCE_PATH}" "${ACL_HELPER_INSTALL_PATH}"
     echo "==> Installing Linux lifecycle executor to /usr/libexec/substrate/substrate-lifecycle-linux"
@@ -1479,6 +1505,8 @@ install_linux_managed_state() {
     provision_e3_system_config_mount_target_v1
     echo "==> Publishing the authenticated installed-home bootstrap"
     publish_installed_home_bootstrap_v1
+    echo "==> Publishing the readback-validated E3 Substrate artifact source"
+    publish_substrate_artifact_source_v1
 
     echo "==> Writing world systemd units to ${SERVICE_PATH} and ${SOCKET_PATH}"
     install_unit "${SERVICE_PATH}" "${SERVICE_UNIT_CONTENT}"
@@ -1559,6 +1587,10 @@ install_linux_managed_state() {
     verify_world_deps_acl_bridge "${INVOKING_USER}"
     echo "==> Installed gateway binary"
     sudo_cmd ls -l /usr/local/bin/substrate-gateway
+    echo "==> Installed E3 static artifacts"
+    sudo_cmd ls -l \
+        /usr/local/lib/substrate/e3/substrate-gateway \
+        /usr/local/lib/substrate/e3/substrate-world-entry
     echo "==> Installed lifecycle executor"
     sudo_cmd ls -l /usr/libexec/substrate/substrate-lifecycle-linux
 

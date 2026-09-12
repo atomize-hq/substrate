@@ -4,9 +4,37 @@ use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::process::Command;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::task;
 use tracing::{debug, info, warn};
+
+#[cfg(target_os = "linux")]
+use crate::e3_child_security::HeldNonE3PrivilegedChildLeaseV1;
+
+#[cfg(target_os = "linux")]
+pub(crate) enum E3GcSweepAdmissionV1 {
+    StartupRecovery,
+    NonE3Lease(HeldNonE3PrivilegedChildLeaseV1),
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) enum E3GcSweepAdmissionV1 {
+    StartupRecovery,
+}
+
+impl E3GcSweepAdmissionV1 {
+    fn authorize_command(&self) -> Result<()> {
+        match self {
+            Self::StartupRecovery => Ok(()),
+            #[cfg(target_os = "linux")]
+            Self::NonE3Lease(lease) => {
+                let _ = lease;
+                Ok(())
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GcReport {
@@ -49,7 +77,8 @@ fn extract_world_id(ns_name: &str) -> Option<String> {
     None
 }
 
-pub fn list_netns() -> Result<Vec<String>> {
+pub(crate) fn list_netns(admission: &E3GcSweepAdmissionV1) -> Result<Vec<String>> {
+    admission.authorize_command()?;
     let output = Command::new("ip")
         .args(["netns", "list"])
         .output()
@@ -78,7 +107,8 @@ pub fn list_netns() -> Result<Vec<String>> {
     Ok(namespaces)
 }
 
-pub fn netns_pids(ns: &str) -> Result<Vec<i32>> {
+pub(crate) fn netns_pids(ns: &str, admission: &E3GcSweepAdmissionV1) -> Result<Vec<i32>> {
+    admission.authorize_command()?;
     let output = Command::new("ip")
         .args(["netns", "pids", ns])
         .output()
@@ -117,7 +147,12 @@ pub fn cgroup_procs(world_id: &str) -> Result<Vec<i32>> {
     Ok(pids)
 }
 
-pub fn delete_nft_table(ns: &str, world_id: &str) -> Result<()> {
+pub(crate) fn delete_nft_table(
+    ns: &str,
+    world_id: &str,
+    admission: &E3GcSweepAdmissionV1,
+) -> Result<()> {
+    admission.authorize_command()?;
     let table_name = format!("substrate_{}", world_id);
 
     let output = Command::new("timeout")
@@ -153,7 +188,8 @@ pub fn delete_nft_table(ns: &str, world_id: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn delete_netns(ns: &str) -> Result<()> {
+pub(crate) fn delete_netns(ns: &str, admission: &E3GcSweepAdmissionV1) -> Result<()> {
+    admission.authorize_command()?;
     let output = Command::new("ip")
         .args(["netns", "delete", ns])
         .output()
@@ -205,7 +241,11 @@ fn get_netns_mtime(ns: &str) -> Result<SystemTime> {
         .context(format!("Failed to get mtime for {}", netns_path))
 }
 
-pub async fn sweep(ttl: Option<Duration>) -> Result<GcReport> {
+pub(crate) async fn sweep(
+    ttl: Option<Duration>,
+    admission: E3GcSweepAdmissionV1,
+) -> Result<GcReport> {
+    let admission = Arc::new(admission);
     let mut report = GcReport {
         removed: Vec::new(),
         kept: Vec::new(),
@@ -214,7 +254,12 @@ pub async fn sweep(ttl: Option<Duration>) -> Result<GcReport> {
 
     info!("Starting netns GC sweep");
 
-    let namespaces = match run_blocking(list_netns).await {
+    let namespaces = match run_blocking({
+        let admission = Arc::clone(&admission);
+        move || list_netns(&admission)
+    })
+    .await
+    {
         Ok(ns) => ns,
         Err(e) => {
             warn!("Failed to list network namespaces: {}", e);
@@ -260,7 +305,8 @@ pub async fn sweep(ttl: Option<Duration>) -> Result<GcReport> {
 
         match run_blocking({
             let ns = ns.clone();
-            move || netns_pids(&ns)
+            let admission = Arc::clone(&admission);
+            move || netns_pids(&ns, &admission)
         })
         .await
         {
@@ -309,7 +355,8 @@ pub async fn sweep(ttl: Option<Duration>) -> Result<GcReport> {
         if let Err(e) = run_blocking({
             let ns = ns.clone();
             let world_id = world_id.clone();
-            move || delete_nft_table(&ns, &world_id)
+            let admission = Arc::clone(&admission);
+            move || delete_nft_table(&ns, &world_id, &admission)
         })
         .await
         {
@@ -318,7 +365,8 @@ pub async fn sweep(ttl: Option<Duration>) -> Result<GcReport> {
 
         match run_blocking({
             let ns = ns.clone();
-            move || delete_netns(&ns)
+            let admission = Arc::clone(&admission);
+            move || delete_netns(&ns, &admission)
         })
         .await
         {
@@ -448,7 +496,9 @@ mod integration_tests {
             .args(["-n", test_ns, "link", "set", "lo", "up"])
             .output();
 
-        let report = sweep(None).await.expect("Sweep failed");
+        let report = sweep(None, E3GcSweepAdmissionV1::StartupRecovery)
+            .await
+            .expect("Sweep failed");
 
         // Clean up after test
         let _ = Command::new("ip")
@@ -496,7 +546,9 @@ mod integration_tests {
         // Give the process a moment to start
         std::thread::sleep(std::time::Duration::from_millis(100));
 
-        let report = sweep(None).await.expect("Sweep failed");
+        let report = sweep(None, E3GcSweepAdmissionV1::StartupRecovery)
+            .await
+            .expect("Sweep failed");
 
         let kept_names: Vec<String> = report.kept.iter().map(|k| k.name.clone()).collect();
 

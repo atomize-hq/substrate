@@ -15,7 +15,8 @@ pub use service::*;
 pub use transport_api_types::{
     ConfigProjectionAuthoringInputRefV1, ConfigProjectionRefV1,
     DispatchPolicyCommitmentRefCarrierV1, E2MemberLaunchKindV1, InWorldGatewayRefV1,
-    ManagedGatewayActivationIntentRefV1, PolicyRefV1, WorldBindingRefV1,
+    ManagedGatewayActivationIntentRefV1, PolicyRefV1, RetainedTurnPolicyCommitmentSubjectV1,
+    WorldBindingRefV1,
 };
 
 use serde::{Deserialize, Serialize};
@@ -649,6 +650,220 @@ pub enum CodexLoaderInputDispositionV1 {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
+pub struct CodexSetupReadyAttestationV1 {
+    pub schema_version: u32,
+    pub series_id: String,
+    pub fence_id: String,
+    pub wrapper_pid: u32,
+    pub wrapper_pid_start_time_ticks: u64,
+    pub mount_namespace_inode: u64,
+    pub masked_system_directory: CanonicalDirectoryV1,
+    pub native_root: CanonicalDirectoryV1,
+    pub codex_launch_plan_hash: String,
+    pub validated_loader_input_fingerprint: String,
+    pub child_security: E3ChildSecurityAttestationV1,
+    pub attestation_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct E3WorldFsEnforcementInputV1 {
+    pub schema_version: u32,
+    pub child_role: E3IsolatedChildRoleV1,
+    pub projection_identity_hash: String,
+    pub policy_authority: E3PolicyAuthoritySourceV1,
+    pub immutable_worker_cap_ref: DispatchPolicyCommitmentRefCarrierV1,
+    pub policy_snapshot_bytes_base64: String,
+    pub policy_snapshot_byte_length: u64,
+    pub policy_snapshot_ref: PolicyRefV1,
+    pub policy_snapshot_hash: String,
+    pub policy_snapshot_revision: String,
+    pub expected_process_cgroup: CanonicalCgroupIdentityV1,
+    pub kernel_boot_id: String,
+    pub user_namespace_requirement: E3UserNamespaceRequirementV1,
+    pub target_uid: u64,
+    pub target_gid: u64,
+    pub immutable_config_source: Option<CanonicalDirectoryV1>,
+    pub private_realization: Option<CanonicalDirectoryV1>,
+    pub codex_launch_plan_hash: Option<String>,
+    pub executable_artifact: DescriptorPinnedArtifactV1,
+    pub denied_control_probe_targets: Vec<E3DeniedControlProbeTargetV1>,
+    pub support_policy_version: u32,
+    pub enforcement_input_hash: String,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+pub enum E3IsolatedChildRoleV1 {
+    Codex,
+    ManagedGateway,
+    ManagedGatewayReadinessProbe,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct E3LinuxIdMapExtentV1 {
+    pub inside_id: u64,
+    pub outside_id: u64,
+    pub length: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct E3UserNamespaceRequirementV1 {
+    pub trusted_service_uid: u64,
+    pub parent_namespace_device_id: u64,
+    pub parent_namespace_inode: u64,
+    pub uid_map: E3LinuxIdMapExtentV1,
+    pub gid_map: E3LinuxIdMapExtentV1,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct E3UserNamespaceAttestationV1 {
+    pub namespace_device_id: u64,
+    pub namespace_inode: u64,
+    pub owner_uid: u64,
+    pub parent_namespace_device_id: u64,
+    pub parent_namespace_inode: u64,
+    pub uid_map: E3LinuxIdMapExtentV1,
+    pub gid_map: E3LinuxIdMapExtentV1,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub enum E3PolicyAuthoritySourceV1 {
+    InitialLaunch {
+        e2_activation_id: String,
+        commitment_ref: DispatchPolicyCommitmentRefCarrierV1,
+    },
+    RetainedTurn {
+        subject: RetainedTurnPolicyCommitmentSubjectV1,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct E3DeniedControlProbeTargetV1 {
+    pub binding: E3DeniedControlProbeTargetBindingV1,
+    pub target_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub enum E3DeniedControlProbeTargetBindingV1 {
+    AcceptedHomeRegistry {
+        directory: CanonicalDirectoryV1,
+    },
+    SiblingNativeRealization {
+        directory: CanonicalDirectoryV1,
+    },
+    CgroupControl {
+        cgroup: CanonicalCgroupIdentityV1,
+        control_file: String,
+    },
+    NftablesControl {
+        network_namespace_inode: u64,
+    },
+    WorldServiceState {
+        directory: CanonicalDirectoryV1,
+    },
+    OtherRolePrivateRoot {
+        directory: CanonicalDirectoryV1,
+    },
+    OtherRoleProcessState {
+        pid: u32,
+        pid_start_time_ticks: u64,
+        procfs_mount_device_id: u64,
+        procfs_mount_inode: u64,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct E3DerivedWorldFsEnforcementPlanV1 {
+    pub e2_plan_hash: String,
+    pub e2_discover_paths: Vec<String>,
+    pub e2_execute_paths: Vec<String>,
+    pub e2_read_paths: Vec<String>,
+    pub e2_write_paths: Vec<String>,
+    pub e3_support_discover_paths: Vec<String>,
+    pub e3_support_execute_paths: Vec<String>,
+    pub e3_support_read_paths: Vec<String>,
+    pub e3_support_write_paths: Vec<String>,
+    pub derived_support_ruleset_hash: String,
+    pub role_narrowing_ruleset_hash: String,
+    pub effective_landlock_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct E3ChildSecurityAttestationV1 {
+    pub schema_version: u32,
+    pub child_role: E3IsolatedChildRoleV1,
+    pub projection_identity_hash: String,
+    pub pid: u32,
+    pub pid_start_time_ticks: u64,
+    pub real_uid: u64,
+    pub effective_uid: u64,
+    pub saved_uid: u64,
+    pub filesystem_uid: u64,
+    pub real_gid: u64,
+    pub effective_gid: u64,
+    pub saved_gid: u64,
+    pub filesystem_gid: u64,
+    pub supplementary_group_count: u32,
+    pub cap_inheritable: String,
+    pub cap_permitted: String,
+    pub cap_effective: String,
+    pub cap_bounding: String,
+    pub cap_ambient: String,
+    pub cap_last_cap: u32,
+    pub no_new_privs: bool,
+    pub dumpable: u32,
+    pub tracer_pid: u32,
+    pub kernel_boot_id: String,
+    pub user_namespace: E3UserNamespaceAttestationV1,
+    pub seccomp_mode: u32,
+    pub landlock_abi: u32,
+    pub e2_enforcement_plan_hash: String,
+    pub derived_support_ruleset_hash: String,
+    pub role_narrowing_ruleset_hash: String,
+    pub effective_landlock_hash: String,
+    pub policy_snapshot_ref: PolicyRefV1,
+    pub policy_snapshot_hash: String,
+    pub policy_snapshot_revision: String,
+    pub enforcement_input_hash: String,
+    pub denied_control_probe_hash: String,
+    pub attestation_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct E3DeniedControlProbeV1 {
+    pub target: E3DeniedControlProbeTargetV1,
+    pub operation: String,
+    pub result_errno: i32,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct E3GatewaySecretReadyAttestationV1 {
+    pub schema_version: u32,
+    pub gateway_instance_id: String,
+    pub launch_input_hash: String,
+    pub gateway_pid: u32,
+    pub gateway_pid_start_time_ticks: u64,
+    pub user_namespace_device_id: u64,
+    pub user_namespace_inode: u64,
+    pub dumpable: u32,
+    pub rlimit_core_soft: u64,
+    pub rlimit_core_hard: u64,
+    pub tracer_pid: u32,
+    pub attestation_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct NativeProjectionSourceManifestV1 {
     pub schema_version: u32,
     pub authority_store_id: String,
@@ -676,6 +891,95 @@ pub struct E3KernelEffectIntentRefV1 {
     pub authority_store_id: String,
     pub effect_intent_id: String,
     pub intent_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct E3KernelEffectIntentV1 {
+    pub schema_version: u32,
+    pub authority_store_id: String,
+    pub series_id: String,
+    pub effect_intent_id: String,
+    pub preparation_id: String,
+    pub fence_id: String,
+    pub effect: E3KernelEffectKindV1,
+    pub created_at: Timestamp,
+    pub intent_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub enum E3KernelEffectKindV1 {
+    CreateChildCgroup {
+        cgroup_registration_id: String,
+        role: E3TerminalProcessRoleV1,
+        parent_cgroup: CanonicalCgroupIdentityV1,
+        child_component: String,
+        expected_relative_path: String,
+    },
+    InstallGatewayBoundary {
+        access_boundary_id: String,
+        network_namespace_inode: u64,
+        table_name: String,
+        chain_name: String,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct E3KernelEffectResolutionV1 {
+    pub schema_version: u32,
+    pub authority_store_id: String,
+    pub resolution_id: String,
+    pub effect_intent_ref: E3KernelEffectIntentRefV1,
+    pub disposition: E3KernelEffectResolutionDispositionV1,
+    pub observed_cgroup: Option<CanonicalCgroupIdentityV1>,
+    pub observed_nftables_table_handle: Option<u64>,
+    pub resolved_at: Timestamp,
+    pub resolution_hash: String,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum E3KernelEffectResolutionDispositionV1 {
+    NoEffectObserved,
+    RevertedAndQuiescent,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct E3ChildProcessRegistrationV1 {
+    pub schema_version: u32,
+    pub authority_store_id: String,
+    pub series_id: String,
+    pub registration_id: String,
+    pub cgroup_registration_id: String,
+    pub cgroup_registration_hash: String,
+    pub fence_id: String,
+    pub role: E3TerminalProcessRoleV1,
+    pub pid: u32,
+    pub pid_start_time_ticks: u64,
+    pub process_cgroup: CanonicalCgroupIdentityV1,
+    pub kernel_boot_id: String,
+    pub parent_service_instance_id: String,
+    pub registered_at: Timestamp,
+    pub registration_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct E3ChildCgroupRegistrationV1 {
+    pub schema_version: u32,
+    pub authority_store_id: String,
+    pub series_id: String,
+    pub cgroup_registration_id: String,
+    pub kernel_effect_intent_ref: E3KernelEffectIntentRefV1,
+    pub fence_id: String,
+    pub turn_id: Option<String>,
+    pub role: E3TerminalProcessRoleV1,
+    pub cgroup: CanonicalCgroupIdentityV1,
+    pub kernel_boot_id: String,
+    pub registered_at: Timestamp,
+    pub cgroup_registration_hash: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

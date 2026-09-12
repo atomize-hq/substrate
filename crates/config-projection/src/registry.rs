@@ -22,14 +22,16 @@ mod linux {
         ConfigProjectionConsumerLeaseV1, ConfigProjectionFailureV1, ConfigProjectionHeadV1,
         ConfigProjectionIdentityV1, ConfigProjectionRefV1, ConfigProjectionRetirementV1,
         ConfigProjectionStoreV1, ConfigProjectionSubjectBindingV1, DirectoryPhysicalIdentityV1,
-        E3ConfigExplainOriginKindV1, E3TerminalChildQuiescenceEvidenceV1,
-        EffectiveSubstrateConfigSourceV1, GatewayAccessBoundaryRefV1, GatewayAccessBoundaryV1,
-        GatewayAccessPostureV1, InstalledAcceptedHomeBootstrapHeadV1,
-        InstalledAcceptedHomeBootstrapRecordV1, ManagedGatewayProjectionPostureV1,
-        NativeAgentConfigProjectionV1, NativeProjectedFileRoleV1, NativeProjectionSourceManifestV1,
-        NftablesRuleRoleV1, RuntimeArtifactAuthorityRoleV1, RuntimeArtifactProvenanceV1,
-        SecretDeliveryMechanismV1, SecretHandoffStateV1, Timestamp,
-        TrustedRuntimeArtifactManifestV1,
+        E3ChildCgroupRegistrationV1, E3ChildProcessRegistrationV1, E3ConfigExplainOriginKindV1,
+        E3KernelEffectIntentRefV1, E3KernelEffectIntentV1, E3KernelEffectKindV1,
+        E3KernelEffectResolutionDispositionV1, E3KernelEffectResolutionV1,
+        E3TerminalChildQuiescenceEvidenceV1, EffectiveSubstrateConfigSourceV1,
+        GatewayAccessBoundaryRefV1, GatewayAccessBoundaryV1, GatewayAccessPostureV1,
+        InstalledAcceptedHomeBootstrapHeadV1, InstalledAcceptedHomeBootstrapRecordV1,
+        ManagedGatewayProjectionPostureV1, NativeAgentConfigProjectionV1,
+        NativeProjectedFileRoleV1, NativeProjectionSourceManifestV1, NftablesRuleRoleV1,
+        RuntimeArtifactAuthorityRoleV1, RuntimeArtifactProvenanceV1, SecretDeliveryMechanismV1,
+        SecretHandoffStateV1, Timestamp, TrustedRuntimeArtifactManifestV1,
     };
 
     const CHILD_NAME: &str = "agent-config-projection-v1";
@@ -557,6 +559,179 @@ mod linux {
             })
         }
 
+        pub fn publish_kernel_effect_intent(
+            &self,
+            intent: &E3KernelEffectIntentV1,
+        ) -> Result<E3KernelEffectIntentRefV1, ConfigProjectionFailureV1> {
+            self.with_transaction(|transaction| {
+                let store = require_store(transaction)?;
+                validate_kernel_effect_intent(intent, &store)?;
+                let root = open_directory_at(transaction.root.as_fd(), "kernel-effects")?;
+                let intents = open_directory_at(root.as_fd(), "intents")?;
+                let bytes = ConfigProjectionCodecV1::encode_canonical_json(intent)?;
+                write_immutable(
+                    intents.as_fd(),
+                    &format!("{}.json", intent.effect_intent_id),
+                    &bytes,
+                    "kernel-effect-intent",
+                    transaction.owner_uid,
+                )?;
+                let readback: E3KernelEffectIntentV1 = read_canonical_at(
+                    intents.as_fd(),
+                    &format!("{}.json", intent.effect_intent_id),
+                )?;
+                if readback != *intent {
+                    return Err(ConfigProjectionFailureV1::PartialPublication);
+                }
+                Ok(kernel_effect_intent_ref(intent))
+            })
+        }
+
+        pub fn publish_kernel_effect_resolution(
+            &self,
+            resolution: &E3KernelEffectResolutionV1,
+        ) -> Result<E3KernelEffectResolutionV1, ConfigProjectionFailureV1> {
+            self.with_transaction(|transaction| {
+                let store = require_store(transaction)?;
+                let intent = resolve_kernel_effect_intent(
+                    transaction,
+                    &store,
+                    &resolution.effect_intent_ref,
+                )?;
+                validate_kernel_effect_resolution(resolution, &store, &intent)?;
+                ensure_intent_has_no_other_resolution(transaction, resolution)?;
+                let root = open_directory_at(transaction.root.as_fd(), "kernel-effects")?;
+                let resolutions = open_directory_at(root.as_fd(), "resolutions")?;
+                let bytes = ConfigProjectionCodecV1::encode_canonical_json(resolution)?;
+                write_immutable(
+                    resolutions.as_fd(),
+                    &format!("{}.json", resolution.resolution_id),
+                    &bytes,
+                    "kernel-effect-resolution",
+                    transaction.owner_uid,
+                )?;
+                let readback: E3KernelEffectResolutionV1 = read_canonical_at(
+                    resolutions.as_fd(),
+                    &format!("{}.json", resolution.resolution_id),
+                )?;
+                if readback != *resolution {
+                    return Err(ConfigProjectionFailureV1::PartialPublication);
+                }
+                Ok(readback)
+            })
+        }
+
+        pub fn publish_child_cgroup_registration(
+            &self,
+            registration: &E3ChildCgroupRegistrationV1,
+        ) -> Result<E3ChildCgroupRegistrationV1, ConfigProjectionFailureV1> {
+            self.with_transaction(|transaction| {
+                let store = require_store(transaction)?;
+                let intent = resolve_kernel_effect_intent(
+                    transaction,
+                    &store,
+                    &registration.kernel_effect_intent_ref,
+                )?;
+                validate_child_cgroup_registration(registration, &store, &intent)?;
+                let root = open_directory_at(transaction.root.as_fd(), "child-cgroups")?;
+                let series = open_or_create_directory(
+                    root.as_fd(),
+                    &registration.series_id,
+                    transaction.owner_uid,
+                )?;
+                let bytes = ConfigProjectionCodecV1::encode_canonical_json(registration)?;
+                write_immutable(
+                    series.as_fd(),
+                    &format!("{}.json", registration.cgroup_registration_id),
+                    &bytes,
+                    "child-cgroup",
+                    transaction.owner_uid,
+                )?;
+                let readback: E3ChildCgroupRegistrationV1 = read_canonical_at(
+                    series.as_fd(),
+                    &format!("{}.json", registration.cgroup_registration_id),
+                )?;
+                if readback != *registration {
+                    return Err(ConfigProjectionFailureV1::PartialPublication);
+                }
+                Ok(readback)
+            })
+        }
+
+        pub fn publish_child_process_registration(
+            &self,
+            registration: &E3ChildProcessRegistrationV1,
+        ) -> Result<E3ChildProcessRegistrationV1, ConfigProjectionFailureV1> {
+            self.with_transaction(|transaction| {
+                let store = require_store(transaction)?;
+                let cgroup = resolve_child_cgroup_registration(
+                    transaction,
+                    &store,
+                    &registration.series_id,
+                    &registration.cgroup_registration_id,
+                )?;
+                validate_child_process_registration(registration, &store, &cgroup)?;
+                let root = open_directory_at(transaction.root.as_fd(), "child-processes")?;
+                let series = open_or_create_directory(
+                    root.as_fd(),
+                    &registration.series_id,
+                    transaction.owner_uid,
+                )?;
+                let bytes = ConfigProjectionCodecV1::encode_canonical_json(registration)?;
+                write_immutable(
+                    series.as_fd(),
+                    &format!("{}.json", registration.registration_id),
+                    &bytes,
+                    "child-process",
+                    transaction.owner_uid,
+                )?;
+                let readback: E3ChildProcessRegistrationV1 = read_canonical_at(
+                    series.as_fd(),
+                    &format!("{}.json", registration.registration_id),
+                )?;
+                if readback != *registration {
+                    return Err(ConfigProjectionFailureV1::PartialPublication);
+                }
+                Ok(readback)
+            })
+        }
+
+        pub fn publish_terminal_child_evidence(
+            &self,
+            evidence: &E3TerminalChildQuiescenceEvidenceV1,
+        ) -> Result<crate::E3TerminalChildQuiescenceEvidenceRefV1, ConfigProjectionFailureV1>
+        {
+            self.with_transaction(|transaction| {
+                let store = require_store(transaction)?;
+                validate_terminal_evidence_object(transaction, &store, evidence)?;
+                let root = open_directory_at(transaction.root.as_fd(), "terminal-child-evidence")?;
+                let series = open_or_create_directory(
+                    root.as_fd(),
+                    &evidence.series_id,
+                    transaction.owner_uid,
+                )?;
+                let bytes = ConfigProjectionCodecV1::encode_canonical_json(evidence)?;
+                write_immutable(
+                    series.as_fd(),
+                    &format!("{}.json", evidence.evidence_id),
+                    &bytes,
+                    "terminal-child",
+                    transaction.owner_uid,
+                )?;
+                let readback: E3TerminalChildQuiescenceEvidenceV1 =
+                    read_canonical_at(series.as_fd(), &format!("{}.json", evidence.evidence_id))?;
+                if readback != *evidence {
+                    return Err(ConfigProjectionFailureV1::PartialPublication);
+                }
+                Ok(crate::E3TerminalChildQuiescenceEvidenceRefV1 {
+                    authority_store_id: evidence.authority_store_id.clone(),
+                    series_id: evidence.series_id.clone(),
+                    evidence_id: evidence.evidence_id.clone(),
+                    evidence_hash: evidence.evidence_hash.clone(),
+                })
+            })
+        }
+
         pub fn retire(
             &self,
             retirement: &ConfigProjectionRetirementV1,
@@ -972,6 +1147,9 @@ mod linux {
             "series",
             "leases",
             "gateway-boundaries",
+            "kernel-effects",
+            "child-cgroups",
+            "child-processes",
             "terminal-child-evidence",
             "retirement",
         ] {
@@ -981,6 +1159,11 @@ mod linux {
         for name in ["effective-config", "agent-inventory"] {
             open_or_create_directory(inputs.as_fd(), name, transaction.owner_uid)?;
         }
+        let kernel_effects = open_directory_at(transaction.root.as_fd(), "kernel-effects")?;
+        for name in ["intents", "resolutions"] {
+            open_or_create_directory(kernel_effects.as_fd(), name, transaction.owner_uid)?;
+        }
+        fsync(&kernel_effects)?;
         fsync(&inputs)?;
         fsync(&transaction.root)
     }
@@ -2485,6 +2668,324 @@ mod linux {
         Ok(())
     }
 
+    fn kernel_effect_intent_ref(intent: &E3KernelEffectIntentV1) -> E3KernelEffectIntentRefV1 {
+        E3KernelEffectIntentRefV1 {
+            authority_store_id: intent.authority_store_id.clone(),
+            effect_intent_id: intent.effect_intent_id.clone(),
+            intent_hash: intent.intent_hash.clone(),
+        }
+    }
+
+    fn validate_kernel_effect_intent(
+        intent: &E3KernelEffectIntentV1,
+        store: &ConfigProjectionStoreV1,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        if intent.schema_version != 1 || intent.authority_store_id != store.authority_store_id {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        validate_prefixed_uuid(&intent.authority_store_id, "cpa_")?;
+        validate_prefixed_uuid(&intent.series_id, "cps_")?;
+        validate_prefixed_uuid(&intent.effect_intent_id, "eki_")?;
+        validate_prefixed_uuid(&intent.preparation_id, "e3p_")?;
+        validate_prefixed_uuid(&intent.fence_id, "cpf_")?;
+        validate_timestamp(&intent.created_at)?;
+        match &intent.effect {
+            E3KernelEffectKindV1::CreateChildCgroup {
+                cgroup_registration_id,
+                parent_cgroup,
+                child_component,
+                expected_relative_path,
+                ..
+            } => {
+                validate_prefixed_uuid(cgroup_registration_id, "ecg_")?;
+                validate_cgroup_identity(parent_cgroup)?;
+                let expected_component = format!(
+                    "substrate-e3-{}",
+                    &ordinary_sha256(cgroup_registration_id.as_bytes())[..24]
+                );
+                let expected_path = format!(
+                    "{}/{}",
+                    parent_cgroup.cgroup_relative_path, expected_component
+                );
+                if child_component != &expected_component
+                    || expected_relative_path != &expected_path
+                {
+                    return Err(ConfigProjectionFailureV1::WrongBinding);
+                }
+            }
+            E3KernelEffectKindV1::InstallGatewayBoundary {
+                access_boundary_id,
+                network_namespace_inode,
+                table_name,
+                chain_name,
+            } => {
+                validate_prefixed_uuid(access_boundary_id, "gab_")?;
+                let expected_table = format!(
+                    "substrate_e3_{}",
+                    &ordinary_sha256(access_boundary_id.as_bytes())[..24]
+                );
+                if *network_namespace_inode == 0
+                    || table_name != &expected_table
+                    || chain_name != "gateway_output"
+                {
+                    return Err(ConfigProjectionFailureV1::WrongBinding);
+                }
+            }
+        }
+        validate_hash_field(
+            &intent.intent_hash,
+            hash_omitting(
+                "substrate.e3.kernel-effect-intent.v1",
+                "intent",
+                intent,
+                "intent_hash",
+            )?,
+        )
+    }
+
+    fn resolve_kernel_effect_intent(
+        transaction: &ConfigProjectionChildTransactionV1,
+        store: &ConfigProjectionStoreV1,
+        reference: &E3KernelEffectIntentRefV1,
+    ) -> Result<E3KernelEffectIntentV1, ConfigProjectionFailureV1> {
+        if reference.authority_store_id != store.authority_store_id {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        validate_prefixed_uuid(&reference.effect_intent_id, "eki_")?;
+        validate_sha256(&reference.intent_hash)?;
+        let kernel_effects = open_directory_at(transaction.root.as_fd(), "kernel-effects")?;
+        let intents = open_directory_at(kernel_effects.as_fd(), "intents")?;
+        let intent: E3KernelEffectIntentV1 = read_canonical_at(
+            intents.as_fd(),
+            &format!("{}.json", reference.effect_intent_id),
+        )?;
+        validate_kernel_effect_intent(&intent, store)?;
+        if kernel_effect_intent_ref(&intent) != *reference {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        Ok(intent)
+    }
+
+    fn validate_kernel_effect_resolution(
+        resolution: &E3KernelEffectResolutionV1,
+        store: &ConfigProjectionStoreV1,
+        intent: &E3KernelEffectIntentV1,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        if resolution.schema_version != 1
+            || resolution.authority_store_id != store.authority_store_id
+            || resolution.effect_intent_ref != kernel_effect_intent_ref(intent)
+        {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        validate_prefixed_uuid(&resolution.resolution_id, "ekr_")?;
+        validate_timestamp(&resolution.resolved_at)?;
+        match (
+            resolution.disposition,
+            &intent.effect,
+            &resolution.observed_cgroup,
+            resolution.observed_nftables_table_handle,
+        ) {
+            (E3KernelEffectResolutionDispositionV1::NoEffectObserved, _, None, None) => {}
+            (
+                E3KernelEffectResolutionDispositionV1::RevertedAndQuiescent,
+                E3KernelEffectKindV1::CreateChildCgroup {
+                    parent_cgroup,
+                    expected_relative_path,
+                    ..
+                },
+                Some(cgroup),
+                None,
+            ) => {
+                validate_cgroup_identity(cgroup)?;
+                if cgroup.cgroup_v2_mount_device_id != parent_cgroup.cgroup_v2_mount_device_id
+                    || cgroup.cgroup_v2_mount_inode != parent_cgroup.cgroup_v2_mount_inode
+                    || cgroup.cgroup_relative_path != *expected_relative_path
+                {
+                    return Err(ConfigProjectionFailureV1::WrongBinding);
+                }
+            }
+            (
+                E3KernelEffectResolutionDispositionV1::RevertedAndQuiescent,
+                E3KernelEffectKindV1::InstallGatewayBoundary { .. },
+                None,
+                Some(handle),
+            ) if handle != 0 => {}
+            _ => return Err(ConfigProjectionFailureV1::WrongBinding),
+        }
+        validate_hash_field(
+            &resolution.resolution_hash,
+            hash_omitting(
+                "substrate.e3.kernel-effect-resolution.v1",
+                "resolution",
+                resolution,
+                "resolution_hash",
+            )?,
+        )
+    }
+
+    fn ensure_intent_has_no_other_resolution(
+        transaction: &ConfigProjectionChildTransactionV1,
+        candidate: &E3KernelEffectResolutionV1,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        let kernel_effects = open_directory_at(transaction.root.as_fd(), "kernel-effects")?;
+        let resolutions = open_directory_at(kernel_effects.as_fd(), "resolutions")?;
+        for name in list_names(&resolutions)? {
+            if name.starts_with(".e3-tmp.") {
+                continue;
+            }
+            let existing: E3KernelEffectResolutionV1 =
+                read_canonical_at(resolutions.as_fd(), &name)?;
+            if existing.effect_intent_ref == candidate.effect_intent_ref
+                && existing.resolution_id != candidate.resolution_id
+            {
+                return Err(ConfigProjectionFailureV1::Conflict);
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_child_cgroup_registration(
+        registration: &E3ChildCgroupRegistrationV1,
+        store: &ConfigProjectionStoreV1,
+        intent: &E3KernelEffectIntentV1,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        let E3KernelEffectKindV1::CreateChildCgroup {
+            cgroup_registration_id,
+            role,
+            parent_cgroup,
+            expected_relative_path,
+            ..
+        } = &intent.effect
+        else {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        };
+        if registration.schema_version != 1
+            || registration.authority_store_id != store.authority_store_id
+            || registration.series_id != intent.series_id
+            || registration.cgroup_registration_id != *cgroup_registration_id
+            || registration.kernel_effect_intent_ref != kernel_effect_intent_ref(intent)
+            || registration.fence_id != intent.fence_id
+            || registration.role != *role
+            || registration.cgroup.cgroup_relative_path != *expected_relative_path
+            || registration.cgroup.cgroup_v2_mount_device_id
+                != parent_cgroup.cgroup_v2_mount_device_id
+            || registration.cgroup.cgroup_v2_mount_inode != parent_cgroup.cgroup_v2_mount_inode
+        {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        if registration
+            .turn_id
+            .as_ref()
+            .is_some_and(|value| value.is_empty())
+        {
+            return Err(ConfigProjectionFailureV1::Malformed);
+        }
+        validate_cgroup_identity(&registration.cgroup)?;
+        validate_kernel_boot_id(&registration.kernel_boot_id)?;
+        validate_timestamp(&registration.registered_at)?;
+        validate_hash_field(
+            &registration.cgroup_registration_hash,
+            hash_omitting(
+                "substrate.e3.child-cgroup-registration.v1",
+                "cgroup_registration",
+                registration,
+                "cgroup_registration_hash",
+            )?,
+        )
+    }
+
+    fn resolve_child_cgroup_registration(
+        transaction: &ConfigProjectionChildTransactionV1,
+        store: &ConfigProjectionStoreV1,
+        series_id: &str,
+        cgroup_registration_id: &str,
+    ) -> Result<E3ChildCgroupRegistrationV1, ConfigProjectionFailureV1> {
+        validate_prefixed_uuid(series_id, "cps_")?;
+        validate_prefixed_uuid(cgroup_registration_id, "ecg_")?;
+        let root = open_directory_at(transaction.root.as_fd(), "child-cgroups")?;
+        let series = open_directory_at(root.as_fd(), series_id)?;
+        let registration: E3ChildCgroupRegistrationV1 =
+            read_canonical_at(series.as_fd(), &format!("{cgroup_registration_id}.json"))?;
+        let intent = resolve_kernel_effect_intent(
+            transaction,
+            store,
+            &registration.kernel_effect_intent_ref,
+        )?;
+        validate_child_cgroup_registration(&registration, store, &intent)?;
+        if registration.series_id != series_id
+            || registration.cgroup_registration_id != cgroup_registration_id
+        {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        Ok(registration)
+    }
+
+    fn validate_child_process_registration(
+        registration: &E3ChildProcessRegistrationV1,
+        store: &ConfigProjectionStoreV1,
+        cgroup: &E3ChildCgroupRegistrationV1,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        if registration.schema_version != 1
+            || registration.authority_store_id != store.authority_store_id
+            || registration.series_id != cgroup.series_id
+            || registration.cgroup_registration_id != cgroup.cgroup_registration_id
+            || registration.cgroup_registration_hash != cgroup.cgroup_registration_hash
+            || registration.fence_id != cgroup.fence_id
+            || registration.role != cgroup.role
+            || registration.process_cgroup != cgroup.cgroup
+            || registration.kernel_boot_id != cgroup.kernel_boot_id
+            || registration.pid == 0
+            || registration.pid_start_time_ticks == 0
+        {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        validate_prefixed_uuid(&registration.registration_id, "ecp_")?;
+        validate_prefixed_uuid(&registration.parent_service_instance_id, "wsi_")?;
+        validate_timestamp(&registration.registered_at)?;
+        validate_hash_field(
+            &registration.registration_hash,
+            hash_omitting(
+                "substrate.e3.child-process-registration.v1",
+                "registration",
+                registration,
+                "registration_hash",
+            )?,
+        )
+    }
+
+    fn resolve_child_process_registration(
+        transaction: &ConfigProjectionChildTransactionV1,
+        store: &ConfigProjectionStoreV1,
+        series_id: &str,
+        registration_id: &str,
+    ) -> Result<E3ChildProcessRegistrationV1, ConfigProjectionFailureV1> {
+        validate_prefixed_uuid(series_id, "cps_")?;
+        validate_prefixed_uuid(registration_id, "ecp_")?;
+        let root = open_directory_at(transaction.root.as_fd(), "child-processes")?;
+        let series = open_directory_at(root.as_fd(), series_id)?;
+        let registration: E3ChildProcessRegistrationV1 =
+            read_canonical_at(series.as_fd(), &format!("{registration_id}.json"))?;
+        let cgroup = resolve_child_cgroup_registration(
+            transaction,
+            store,
+            series_id,
+            &registration.cgroup_registration_id,
+        )?;
+        validate_child_process_registration(&registration, store, &cgroup)?;
+        if registration.series_id != series_id || registration.registration_id != registration_id {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        Ok(registration)
+    }
+
+    fn validate_kernel_boot_id(value: &str) -> Result<(), ConfigProjectionFailureV1> {
+        let parsed = Uuid::parse_str(value).map_err(|_| ConfigProjectionFailureV1::Malformed)?;
+        if parsed.to_string() != value {
+            return Err(ConfigProjectionFailureV1::Malformed);
+        }
+        Ok(())
+    }
+
     fn validate_boundary_object(
         boundary: &GatewayAccessBoundaryV1,
         store: &ConfigProjectionStoreV1,
@@ -2710,6 +3211,7 @@ mod linux {
             return Err(ConfigProjectionFailureV1::WrongBinding);
         }
         let mut prior_process_key = None;
+        let mut observed_process_registrations = BTreeSet::new();
         for observation in &evidence.ordered_terminal_processes {
             validate_prefixed_uuid(&observation.registration_id, "ecp_")?;
             validate_sha256(&observation.registration_hash)?;
@@ -2717,6 +3219,32 @@ mod linux {
                 return Err(ConfigProjectionFailureV1::Malformed);
             }
             validate_terminal_observation_shape(observation)?;
+            let registration = resolve_child_process_registration(
+                transaction,
+                store,
+                &evidence.series_id,
+                &observation.registration_id,
+            )?;
+            if observation.registration_hash != registration.registration_hash
+                || observation.role != registration.role
+                || observation.pid != registration.pid
+                || observation.pid_start_time_ticks != registration.pid_start_time_ticks
+                || !observed_process_registrations.insert(observation.registration_id.as_str())
+            {
+                return Err(ConfigProjectionFailureV1::WrongBinding);
+            }
+            if let crate::E3TerminalProcessObservationKindV1::RecoveryObservedTerminal {
+                original_service_instance_id,
+                recovery_service_instance_id,
+                ..
+            } = &observation.observation
+            {
+                if original_service_instance_id != &registration.parent_service_instance_id
+                    || recovery_service_instance_id == original_service_instance_id
+                {
+                    return Err(ConfigProjectionFailureV1::WrongBinding);
+                }
+            }
             let key = (
                 terminal_role_rank(observation.role),
                 observation.pid,
@@ -2731,7 +3259,19 @@ mod linux {
             }
             prior_process_key = Some(key);
         }
+        let process_root = open_directory_at(transaction.root.as_fd(), "child-processes")?;
+        let durable_process_registrations =
+            list_registration_ids_for_series(&process_root, &evidence.series_id)?;
+        if durable_process_registrations
+            != observed_process_registrations
+                .into_iter()
+                .map(str::to_owned)
+                .collect()
+        {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
         let mut prior_cgroup_key = None;
+        let mut observed_cgroup_registrations = BTreeSet::new();
         for entry in &evidence.ordered_empty_cgroups {
             validate_prefixed_uuid(&entry.cgroup_registration_id, "ecg_")?;
             validate_sha256(&entry.cgroup_registration_hash)?;
@@ -2739,6 +3279,19 @@ mod linux {
             validate_sha256(&entry.cgroup_procs_sha256)?;
             validate_cgroup_identity(&entry.cgroup)?;
             if entry.populated || !entry.ordered_live_pids.is_empty() {
+                return Err(ConfigProjectionFailureV1::WrongBinding);
+            }
+            let registration = resolve_child_cgroup_registration(
+                transaction,
+                store,
+                &evidence.series_id,
+                &entry.cgroup_registration_id,
+            )?;
+            if entry.cgroup_registration_hash != registration.cgroup_registration_hash
+                || entry.role != registration.role
+                || entry.cgroup != registration.cgroup
+                || !observed_cgroup_registrations.insert(entry.cgroup_registration_id.as_str())
+            {
                 return Err(ConfigProjectionFailureV1::WrongBinding);
             }
             let key = (
@@ -2754,6 +3307,17 @@ mod linux {
             }
             prior_cgroup_key = Some(key);
         }
+        let cgroup_root = open_directory_at(transaction.root.as_fd(), "child-cgroups")?;
+        let durable_cgroup_registrations =
+            list_registration_ids_for_series(&cgroup_root, &evidence.series_id)?;
+        if durable_cgroup_registrations
+            != observed_cgroup_registrations
+                .into_iter()
+                .map(str::to_owned)
+                .collect()
+        {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
         validate_hash_field(
             &evidence.evidence_hash,
             hash_omitting(
@@ -2763,6 +3327,26 @@ mod linux {
                 "evidence_hash",
             )?,
         )
+    }
+
+    fn list_registration_ids_for_series(
+        root: &File,
+        series_id: &str,
+    ) -> Result<BTreeSet<String>, ConfigProjectionFailureV1> {
+        let series = match open_directory_at(root.as_fd(), series_id) {
+            Ok(series) => series,
+            Err(ConfigProjectionFailureV1::MissingPreparation) => return Ok(BTreeSet::new()),
+            Err(error) => return Err(error),
+        };
+        list_names(&series)?
+            .into_iter()
+            .filter(|name| !name.starts_with(".e3-tmp."))
+            .map(|name| {
+                name.strip_suffix(".json")
+                    .map(str::to_owned)
+                    .ok_or(ConfigProjectionFailureV1::Malformed)
+            })
+            .collect()
     }
 
     fn terminal_role_rank(role: crate::E3TerminalProcessRoleV1) -> u8 {
@@ -3726,6 +4310,60 @@ mod linux {
                 }
                 Ok((format!("{:020}.json", lease.revision), false))
             }
+            "kernel-effect-intent" if path == ["kernel-effects", "intents"] => {
+                let store = require_store(transaction)?;
+                let intent: E3KernelEffectIntentV1 =
+                    ConfigProjectionCodecV1::decode_canonical_json(bytes)?;
+                validate_kernel_effect_intent(&intent, &store)?;
+                Ok((format!("{}.json", intent.effect_intent_id), false))
+            }
+            "kernel-effect-resolution" if path == ["kernel-effects", "resolutions"] => {
+                let store = require_store(transaction)?;
+                let resolution: E3KernelEffectResolutionV1 =
+                    ConfigProjectionCodecV1::decode_canonical_json(bytes)?;
+                let intent = resolve_kernel_effect_intent(
+                    transaction,
+                    &store,
+                    &resolution.effect_intent_ref,
+                )?;
+                validate_kernel_effect_resolution(&resolution, &store, &intent)?;
+                ensure_intent_has_no_other_resolution(transaction, &resolution)?;
+                Ok((format!("{}.json", resolution.resolution_id), false))
+            }
+            "child-cgroup" if path.len() == 2 && path[0] == "child-cgroups" => {
+                let store = require_store(transaction)?;
+                let registration: E3ChildCgroupRegistrationV1 =
+                    ConfigProjectionCodecV1::decode_canonical_json(bytes)?;
+                let intent = resolve_kernel_effect_intent(
+                    transaction,
+                    &store,
+                    &registration.kernel_effect_intent_ref,
+                )?;
+                validate_child_cgroup_registration(&registration, &store, &intent)?;
+                if registration.series_id != path[1] {
+                    return Err(ConfigProjectionFailureV1::WrongBinding);
+                }
+                Ok((
+                    format!("{}.json", registration.cgroup_registration_id),
+                    false,
+                ))
+            }
+            "child-process" if path.len() == 2 && path[0] == "child-processes" => {
+                let store = require_store(transaction)?;
+                let registration: E3ChildProcessRegistrationV1 =
+                    ConfigProjectionCodecV1::decode_canonical_json(bytes)?;
+                let cgroup = resolve_child_cgroup_registration(
+                    transaction,
+                    &store,
+                    &registration.series_id,
+                    &registration.cgroup_registration_id,
+                )?;
+                validate_child_process_registration(&registration, &store, &cgroup)?;
+                if registration.series_id != path[1] {
+                    return Err(ConfigProjectionFailureV1::WrongBinding);
+                }
+                Ok((format!("{}.json", registration.registration_id), false))
+            }
             "terminal-child" if path.len() == 2 && path[0] == "terminal-child-evidence" => {
                 let store = require_store(transaction)?;
                 let evidence: E3TerminalChildQuiescenceEvidenceV1 =
@@ -3890,6 +4528,9 @@ mod linux {
             "series",
             "leases",
             "gateway-boundaries",
+            "kernel-effects",
+            "child-cgroups",
+            "child-processes",
             "terminal-child-evidence",
             "retirement",
         ]
@@ -3921,6 +4562,9 @@ mod linux {
         validate_series_tree(transaction, verify_objects)?;
         validate_lease_tree(transaction, verify_objects)?;
         validate_gateway_boundary_tree(transaction, verify_objects)?;
+        validate_kernel_effect_tree(transaction, verify_objects)?;
+        validate_child_cgroup_tree(transaction, verify_objects)?;
+        validate_child_process_tree(transaction, verify_objects)?;
         validate_terminal_evidence_tree(transaction, verify_objects)?;
         validate_retirement_tree(transaction, verify_objects)?;
         Ok(())
@@ -4281,6 +4925,161 @@ mod linux {
         Ok(())
     }
 
+    fn validate_kernel_effect_tree(
+        transaction: &ConfigProjectionChildTransactionV1,
+        verify_objects: bool,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        let Some(root) = open_optional_directory_at(transaction.root.as_fd(), "kernel-effects")?
+        else {
+            return Ok(());
+        };
+        if list_names(&root)? != ["intents", "resolutions"] {
+            return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+        }
+        let store = verify_objects
+            .then(|| require_store(transaction))
+            .transpose()?;
+        for (kind, prefix, temp_kind) in [
+            ("intents", "eki_", "kernel-effect-intent"),
+            ("resolutions", "ekr_", "kernel-effect-resolution"),
+        ] {
+            let directory = open_directory_at(root.as_fd(), kind)?;
+            let mut resolved_intents = BTreeSet::new();
+            for name in list_names(&directory)? {
+                if name.starts_with(".e3-tmp.") {
+                    if parse_temp_name(&name)? != temp_kind {
+                        return Err(ConfigProjectionFailureV1::PartialPublication);
+                    }
+                } else {
+                    let object_id = name
+                        .strip_suffix(".json")
+                        .ok_or(ConfigProjectionFailureV1::UnsupportedSecurityPosture)?;
+                    validate_prefixed_uuid(object_id, prefix)?;
+                    if let Some(store) = store.as_ref() {
+                        if kind == "intents" {
+                            let intent: E3KernelEffectIntentV1 =
+                                read_canonical_at(directory.as_fd(), &name)?;
+                            validate_kernel_effect_intent(&intent, store)?;
+                            if intent.effect_intent_id != object_id {
+                                return Err(ConfigProjectionFailureV1::WrongBinding);
+                            }
+                        } else {
+                            let resolution: E3KernelEffectResolutionV1 =
+                                read_canonical_at(directory.as_fd(), &name)?;
+                            let intent = resolve_kernel_effect_intent(
+                                transaction,
+                                store,
+                                &resolution.effect_intent_ref,
+                            )?;
+                            validate_kernel_effect_resolution(&resolution, store, &intent)?;
+                            if resolution.resolution_id != object_id
+                                || !resolved_intents
+                                    .insert(resolution.effect_intent_ref.effect_intent_id.clone())
+                            {
+                                return Err(ConfigProjectionFailureV1::Conflict);
+                            }
+                        }
+                    }
+                }
+                let _ = read_file_at(directory.as_fd(), &name)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_child_cgroup_tree(
+        transaction: &ConfigProjectionChildTransactionV1,
+        verify_objects: bool,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        let Some(root) = open_optional_directory_at(transaction.root.as_fd(), "child-cgroups")?
+        else {
+            return Ok(());
+        };
+        let store = verify_objects
+            .then(|| require_store(transaction))
+            .transpose()?;
+        for series_id in list_names(&root)? {
+            validate_prefixed_uuid(&series_id, "cps_")?;
+            let series = open_directory_at(root.as_fd(), &series_id)?;
+            for name in list_names(&series)? {
+                if name.starts_with(".e3-tmp.") {
+                    if parse_temp_name(&name)? != "child-cgroup" {
+                        return Err(ConfigProjectionFailureV1::PartialPublication);
+                    }
+                } else {
+                    let registration_id = name
+                        .strip_suffix(".json")
+                        .ok_or(ConfigProjectionFailureV1::UnsupportedSecurityPosture)?;
+                    validate_prefixed_uuid(registration_id, "ecg_")?;
+                    if let Some(store) = store.as_ref() {
+                        let registration: E3ChildCgroupRegistrationV1 =
+                            read_canonical_at(series.as_fd(), &name)?;
+                        let intent = resolve_kernel_effect_intent(
+                            transaction,
+                            store,
+                            &registration.kernel_effect_intent_ref,
+                        )?;
+                        validate_child_cgroup_registration(&registration, store, &intent)?;
+                        if registration.series_id != series_id
+                            || registration.cgroup_registration_id != registration_id
+                        {
+                            return Err(ConfigProjectionFailureV1::WrongBinding);
+                        }
+                    }
+                }
+                let _ = read_file_at(series.as_fd(), &name)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_child_process_tree(
+        transaction: &ConfigProjectionChildTransactionV1,
+        verify_objects: bool,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        let Some(root) = open_optional_directory_at(transaction.root.as_fd(), "child-processes")?
+        else {
+            return Ok(());
+        };
+        let store = verify_objects
+            .then(|| require_store(transaction))
+            .transpose()?;
+        for series_id in list_names(&root)? {
+            validate_prefixed_uuid(&series_id, "cps_")?;
+            let series = open_directory_at(root.as_fd(), &series_id)?;
+            for name in list_names(&series)? {
+                if name.starts_with(".e3-tmp.") {
+                    if parse_temp_name(&name)? != "child-process" {
+                        return Err(ConfigProjectionFailureV1::PartialPublication);
+                    }
+                } else {
+                    let registration_id = name
+                        .strip_suffix(".json")
+                        .ok_or(ConfigProjectionFailureV1::UnsupportedSecurityPosture)?;
+                    validate_prefixed_uuid(registration_id, "ecp_")?;
+                    if let Some(store) = store.as_ref() {
+                        let registration: E3ChildProcessRegistrationV1 =
+                            read_canonical_at(series.as_fd(), &name)?;
+                        let cgroup = resolve_child_cgroup_registration(
+                            transaction,
+                            store,
+                            &series_id,
+                            &registration.cgroup_registration_id,
+                        )?;
+                        validate_child_process_registration(&registration, store, &cgroup)?;
+                        if registration.series_id != series_id
+                            || registration.registration_id != registration_id
+                        {
+                            return Err(ConfigProjectionFailureV1::WrongBinding);
+                        }
+                    }
+                }
+                let _ = read_file_at(series.as_fd(), &name)?;
+            }
+        }
+        Ok(())
+    }
+
     fn validate_terminal_evidence_tree(
         transaction: &ConfigProjectionChildTransactionV1,
         verify_objects: bool,
@@ -4462,6 +5261,10 @@ mod linux {
                     | "head"
                     | "boundary"
                     | "lease"
+                    | "kernel-effect-intent"
+                    | "kernel-effect-resolution"
+                    | "child-cgroup"
+                    | "child-process"
                     | "terminal-child"
                     | "retirement"
             )
@@ -6197,6 +7000,266 @@ mod linux {
                 .file_name()
                 .to_string_lossy()
                 .ends_with(".binding")));
+        }
+
+        #[test]
+        fn e3_d_registry_publishes_exact_kernel_and_child_identity_chain() {
+            let (temp, _parent, registry, store) = test_registry();
+            let root = temp.path().join("authority-v1").join(CHILD_NAME);
+            let series_id = id("cps_");
+            let record = test_record(&store, series_id.clone());
+            let projection_ref = registry.publish_dormant(&record).unwrap();
+            let cgroup_registration_id = id("ecg_");
+            let parent_cgroup = crate::CanonicalCgroupIdentityV1 {
+                cgroup_v2_mount_device_id: 11,
+                cgroup_v2_mount_inode: 12,
+                cgroup_directory_inode: 13,
+                cgroup_relative_path: "substrate/world-7".to_string(),
+            };
+            let child_component = format!(
+                "substrate-e3-{}",
+                &ordinary_sha256(cgroup_registration_id.as_bytes())[..24]
+            );
+            let mut intent = crate::E3KernelEffectIntentV1 {
+                schema_version: 1,
+                authority_store_id: store.authority_store_id.clone(),
+                series_id: series_id.clone(),
+                effect_intent_id: id("eki_"),
+                preparation_id: id("e3p_"),
+                fence_id: id("cpf_"),
+                effect: crate::E3KernelEffectKindV1::CreateChildCgroup {
+                    cgroup_registration_id: cgroup_registration_id.clone(),
+                    role: crate::E3TerminalProcessRoleV1::Codex,
+                    parent_cgroup: parent_cgroup.clone(),
+                    child_component: child_component.clone(),
+                    expected_relative_path: format!(
+                        "{}/{}",
+                        parent_cgroup.cgroup_relative_path, child_component
+                    ),
+                },
+                created_at: now_timestamp(),
+                intent_hash: String::new(),
+            };
+            intent.intent_hash = hash_omitting(
+                "substrate.e3.kernel-effect-intent.v1",
+                "intent",
+                &intent,
+                "intent_hash",
+            )
+            .unwrap();
+            let intent_ref = registry
+                .publish_kernel_effect_intent(&intent)
+                .expect("publish intent");
+            assert_eq!(
+                registry.publish_kernel_effect_intent(&intent).unwrap(),
+                intent_ref
+            );
+            move_final_to_temp(
+                &root.join("kernel-effects/intents"),
+                &format!("{}.json", intent.effect_intent_id),
+                "kernel-effect-intent",
+            );
+            registry.recover().expect("recover child-cgroup intent");
+
+            let child_cgroup = crate::CanonicalCgroupIdentityV1 {
+                cgroup_v2_mount_device_id: 11,
+                cgroup_v2_mount_inode: 12,
+                cgroup_directory_inode: 14,
+                cgroup_relative_path: format!(
+                    "{}/{}",
+                    parent_cgroup.cgroup_relative_path, child_component
+                ),
+            };
+            let mut cgroup = crate::E3ChildCgroupRegistrationV1 {
+                schema_version: 1,
+                authority_store_id: store.authority_store_id.clone(),
+                series_id: series_id.clone(),
+                cgroup_registration_id: cgroup_registration_id.clone(),
+                kernel_effect_intent_ref: intent_ref,
+                fence_id: intent.fence_id.clone(),
+                turn_id: Some(id("turn_")),
+                role: crate::E3TerminalProcessRoleV1::Codex,
+                cgroup: child_cgroup.clone(),
+                kernel_boot_id: Uuid::now_v7().to_string(),
+                registered_at: now_timestamp(),
+                cgroup_registration_hash: String::new(),
+            };
+            cgroup.cgroup_registration_hash = hash_omitting(
+                "substrate.e3.child-cgroup-registration.v1",
+                "cgroup_registration",
+                &cgroup,
+                "cgroup_registration_hash",
+            )
+            .unwrap();
+            registry
+                .publish_child_cgroup_registration(&cgroup)
+                .expect("publish child cgroup");
+            move_final_to_temp(
+                &root.join("child-cgroups").join(&series_id),
+                &format!("{}.json", cgroup.cgroup_registration_id),
+                "child-cgroup",
+            );
+            registry
+                .recover()
+                .expect("recover child-cgroup registration");
+
+            let mut child = crate::E3ChildProcessRegistrationV1 {
+                schema_version: 1,
+                authority_store_id: store.authority_store_id.clone(),
+                series_id: series_id.clone(),
+                registration_id: id("ecp_"),
+                cgroup_registration_id: cgroup_registration_id.clone(),
+                cgroup_registration_hash: cgroup.cgroup_registration_hash.clone(),
+                fence_id: intent.fence_id,
+                role: crate::E3TerminalProcessRoleV1::Codex,
+                pid: std::process::id(),
+                pid_start_time_ticks: 1,
+                process_cgroup: child_cgroup.clone(),
+                kernel_boot_id: cgroup.kernel_boot_id.clone(),
+                parent_service_instance_id: id("wsi_"),
+                registered_at: now_timestamp(),
+                registration_hash: String::new(),
+            };
+            child.registration_hash = hash_omitting(
+                "substrate.e3.child-process-registration.v1",
+                "registration",
+                &child,
+                "registration_hash",
+            )
+            .unwrap();
+            registry
+                .publish_child_process_registration(&child)
+                .expect("publish child process");
+            move_final_to_temp(
+                &root.join("child-processes").join(&series_id),
+                &format!("{}.json", child.registration_id),
+                "child-process",
+            );
+            registry
+                .recover()
+                .expect("recover child-process registration");
+
+            let mut incomplete = crate::E3TerminalChildQuiescenceEvidenceV1 {
+                schema_version: 1,
+                authority_store_id: record.identity.authority_store_id.clone(),
+                series_id: series_id.clone(),
+                evidence_id: id("tce_"),
+                final_projection_ref: projection_ref.clone(),
+                world_id: record.identity.world_id.clone(),
+                world_generation: record.identity.world_generation,
+                ordered_terminal_processes: Vec::new(),
+                ordered_empty_cgroups: Vec::new(),
+                observed_at: now_timestamp(),
+                evidence_hash: String::new(),
+            };
+            incomplete.evidence_hash = hash_omitting(
+                "substrate.e3.terminal-child-quiescence.v1",
+                "evidence",
+                &incomplete,
+                "evidence_hash",
+            )
+            .unwrap();
+            assert_eq!(
+                registry.publish_terminal_child_evidence(&incomplete),
+                Err(ConfigProjectionFailureV1::WrongBinding)
+            );
+
+            let mut evidence = incomplete;
+            evidence.evidence_id = id("tce_");
+            evidence.ordered_terminal_processes = vec![crate::E3TerminalProcessObservationV1 {
+                registration_id: child.registration_id.clone(),
+                registration_hash: child.registration_hash.clone(),
+                role: child.role,
+                pid: child.pid,
+                pid_start_time_ticks: child.pid_start_time_ticks,
+                observation: crate::E3TerminalProcessObservationKindV1::ParentWaitid {
+                    terminal_wait_status: 0,
+                },
+            }];
+            evidence.ordered_empty_cgroups = vec![crate::E3TerminalCgroupQuiescenceV1 {
+                cgroup_registration_id: cgroup.cgroup_registration_id.clone(),
+                cgroup_registration_hash: cgroup.cgroup_registration_hash.clone(),
+                role: cgroup.role,
+                cgroup: cgroup.cgroup.clone(),
+                cgroup_events_sha256: ordinary_sha256(b"populated 0\n"),
+                cgroup_procs_sha256: ordinary_sha256(b""),
+                populated: false,
+                ordered_live_pids: Vec::new(),
+            }];
+            evidence.evidence_hash = hash_omitting(
+                "substrate.e3.terminal-child-quiescence.v1",
+                "evidence",
+                &evidence,
+                "evidence_hash",
+            )
+            .unwrap();
+            registry
+                .publish_terminal_child_evidence(&evidence)
+                .expect("publish complete terminal-child evidence");
+            move_final_to_temp(
+                &root.join("terminal-child-evidence").join(&series_id),
+                &format!("{}.json", evidence.evidence_id),
+                "terminal-child",
+            );
+            registry.recover().expect("recover terminal-child evidence");
+
+            let access_boundary_id = id("gab_");
+            let mut boundary_intent = crate::E3KernelEffectIntentV1 {
+                schema_version: 1,
+                authority_store_id: store.authority_store_id.clone(),
+                series_id,
+                effect_intent_id: id("eki_"),
+                preparation_id: id("e3p_"),
+                fence_id: id("cpf_"),
+                effect: crate::E3KernelEffectKindV1::InstallGatewayBoundary {
+                    table_name: format!(
+                        "substrate_e3_{}",
+                        &ordinary_sha256(access_boundary_id.as_bytes())[..24]
+                    ),
+                    access_boundary_id,
+                    network_namespace_inode: 41,
+                    chain_name: "gateway_output".to_string(),
+                },
+                created_at: now_timestamp(),
+                intent_hash: String::new(),
+            };
+            boundary_intent.intent_hash = hash_omitting(
+                "substrate.e3.kernel-effect-intent.v1",
+                "intent",
+                &boundary_intent,
+                "intent_hash",
+            )
+            .unwrap();
+            let boundary_intent_ref = registry
+                .publish_kernel_effect_intent(&boundary_intent)
+                .expect("publish boundary intent");
+            let mut resolution = crate::E3KernelEffectResolutionV1 {
+                schema_version: 1,
+                authority_store_id: store.authority_store_id,
+                resolution_id: id("ekr_"),
+                effect_intent_ref: boundary_intent_ref,
+                disposition: crate::E3KernelEffectResolutionDispositionV1::NoEffectObserved,
+                observed_cgroup: None,
+                observed_nftables_table_handle: None,
+                resolved_at: now_timestamp(),
+                resolution_hash: String::new(),
+            };
+            resolution.resolution_hash = hash_omitting(
+                "substrate.e3.kernel-effect-resolution.v1",
+                "resolution",
+                &resolution,
+                "resolution_hash",
+            )
+            .unwrap();
+            registry
+                .publish_kernel_effect_resolution(&resolution)
+                .expect("publish no-effect recovery resolution");
+            move_final_to_temp(
+                &root.join("kernel-effects/resolutions"),
+                &format!("{}.json", resolution.resolution_id),
+                "kernel-effect-resolution",
+            );
+            registry.recover().expect("recover exact E3-D publications");
         }
     }
 }

@@ -1,4 +1,6 @@
 use anyhow::{anyhow, Context, Result};
+#[cfg(not(test))]
+use config_projection::CanonicalCgroupIdentityV1;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -23,6 +25,8 @@ use transport_api_types::{
     validate_gateway_backend_id_selector, GatewayCliCodexIntegratedAuthV1, GatewayClientWiringV1,
     GatewayIntegratedAuthPayloadV1, GatewayLifecycleResponseV1, GatewayStatusV1,
 };
+
+use crate::e3_child_security::{E3PrivilegedChildExclusionV1, HeldNonE3PrivilegedChildLeaseV1};
 
 pub(crate) const GATEWAY_REQUEST_ENABLED_ENV: &str = "SUBSTRATE_LLM_GATEWAY_ENABLED";
 pub(crate) const GATEWAY_REQUEST_MODE_ENV: &str = "SUBSTRATE_LLM_GATEWAY_MODE";
@@ -364,6 +368,8 @@ struct ManagedGatewayRuntime {
     pid_start_time_ticks: u64,
     process: Arc<Mutex<ManagedGatewayProcess>>,
     state: Arc<RwLock<GatewayRuntimeState>>,
+    #[allow(dead_code)]
+    privileged_child_exclusion_lease: Arc<HeldNonE3PrivilegedChildLeaseV1>,
 }
 
 impl ManagedGatewayRuntime {
@@ -445,15 +451,103 @@ impl Drop for GatewayLifecycleStateGuard {
     }
 }
 
-#[derive(Default)]
 pub(crate) struct GatewayRuntimeManager {
     runtimes: Mutex<HashMap<String, ManagedGatewayRuntime>>,
     lifecycle: Mutex<HashMap<String, Arc<GatewayLifecycleWorldState>>>,
+    privileged_child_exclusion: Arc<E3PrivilegedChildExclusionV1>,
 }
 
 impl GatewayRuntimeManager {
-    pub(crate) fn new() -> Self {
-        Self::default()
+    pub(crate) fn new(privileged_child_exclusion: Arc<E3PrivilegedChildExclusionV1>) -> Self {
+        Self {
+            runtimes: Mutex::default(),
+            lifecycle: Mutex::default(),
+            privileged_child_exclusion,
+        }
+    }
+
+    #[cfg(not(test))]
+    pub(crate) fn recover_existing_non_e3_gateways_for_exclusion(&self) -> Result<()> {
+        let root = gateway_runtime_root_dir();
+        let entries = match fs::read_dir(&root) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("scan gateway runtime root {}", root.display()))
+            }
+        };
+        for backend_entry in entries {
+            let backend_entry = backend_entry.context("read gateway backend runtime entry")?;
+            if !backend_entry
+                .file_type()
+                .context("inspect gateway backend runtime entry")?
+                .is_dir()
+            {
+                bail_unclassified_gateway_runtime(&backend_entry.path())?;
+            }
+            for world_entry in
+                fs::read_dir(backend_entry.path()).context("scan gateway world runtime entries")?
+            {
+                let world_entry = world_entry.context("read gateway world runtime entry")?;
+                if !world_entry
+                    .file_type()
+                    .context("inspect gateway world runtime entry")?
+                    .is_dir()
+                {
+                    bail_unclassified_gateway_runtime(&world_entry.path())?;
+                }
+                let manifest_path = world_entry.path().join(GATEWAY_RUNTIME_MANIFEST_NAME);
+                if !manifest_path.is_file() {
+                    continue;
+                }
+                let manifest = read_runtime_manifest(&manifest_path).with_context(|| {
+                    format!(
+                        "classify recovered gateway manifest {}",
+                        manifest_path.display()
+                    )
+                })?;
+                if manifest_path
+                    != manifest_path_for_world(&manifest.world_id, &manifest.backend_id)
+                {
+                    anyhow::bail!(
+                        "unclassified recovered gateway manifest path {}",
+                        manifest_path.display()
+                    );
+                }
+                if !pid_is_running(manifest.pid) {
+                    delete_runtime_manifest(&manifest_path);
+                    continue;
+                }
+                if read_pid_start_time_ticks(manifest.pid).ok()
+                    != Some(manifest.pid_start_time_ticks)
+                {
+                    anyhow::bail!(
+                        "live recovered gateway PID/start identity is unclassified: {}",
+                        manifest.pid
+                    );
+                }
+                let cgroup = canonical_cgroup_identity_for_pid(manifest.pid)?;
+                let lease = Arc::new(
+                    self.privileged_child_exclusion
+                        .register_recovered_non_e3_child(
+                            manifest.pid,
+                            manifest.pid_start_time_ticks,
+                            cgroup,
+                        )?,
+                );
+                if self
+                    .recover_runtime(&manifest.world_id, &manifest.backend_id, lease)
+                    .is_none()
+                {
+                    anyhow::bail!(
+                        "live recovered gateway failed exact pre-adoption validation: {}",
+                        manifest.pid
+                    );
+                }
+            }
+        }
+        Ok(())
     }
 
     pub(crate) async fn status(
@@ -465,7 +559,7 @@ impl GatewayRuntimeManager {
             return Err(lifecycle_status_transient_failure(world_id, state));
         }
 
-        let Some(runtime) = self.runtime_for_world_or_manifest(world_id, backend_id) else {
+        let Some(runtime) = self.runtime_for_world_or_manifest(world_id, backend_id)? else {
             return Ok(unavailable_response());
         };
 
@@ -507,7 +601,7 @@ impl GatewayRuntimeManager {
         lifecycle: Option<&Arc<GatewayLifecycleWorldState>>,
     ) -> Result<GatewayLifecycleResponseV1, GatewayRuntimeFailure> {
         if let Some(runtime) =
-            self.runtime_for_world_or_manifest(&ctx.world_id, ctx.binding.backend_id)
+            self.runtime_for_world_or_manifest(&ctx.world_id, ctx.binding.backend_id)?
         {
             match self.observe_runtime_state(&runtime).await? {
                 GatewayRuntimeState::Ready => return Ok(available_response(runtime.port)),
@@ -526,7 +620,12 @@ impl GatewayRuntimeManager {
         };
 
         let backend_id = ctx.binding.backend_id;
-        let runtime = start_runtime(binary_path, ctx)?;
+        let privileged_child_exclusion_lease = Arc::new(
+            self.privileged_child_exclusion
+                .acquire_non_e3_child()
+                .map_err(|error| GatewayRuntimeFailure::policy(error.to_string()))?,
+        );
+        let runtime = start_runtime(binary_path, ctx, privileged_child_exclusion_lease)?;
         let world_id = runtime.world_id.clone();
         self.insert_runtime(runtime.clone());
         match self.wait_until_ready(runtime, ready_timeout).await {
@@ -550,7 +649,7 @@ impl GatewayRuntimeManager {
         let _restart_state = lifecycle.scoped_state(GatewayRuntimeState::RestartInProgress);
 
         if let Some(existing) =
-            self.runtime_for_world_or_manifest(&ctx.world_id, ctx.binding.backend_id)
+            self.runtime_for_world_or_manifest(&ctx.world_id, ctx.binding.backend_id)?
         {
             existing.set_state(GatewayRuntimeState::RestartInProgress);
             self.take_runtime(&ctx.world_id);
@@ -606,9 +705,16 @@ impl GatewayRuntimeManager {
         &self,
         world_id: &str,
         backend_id: &str,
-    ) -> Option<ManagedGatewayRuntime> {
-        self.runtime_for_world(world_id)
-            .or_else(|| self.recover_runtime(world_id, backend_id))
+    ) -> Result<Option<ManagedGatewayRuntime>, GatewayRuntimeFailure> {
+        if let Some(runtime) = self.runtime_for_world(world_id) {
+            return Ok(Some(runtime));
+        }
+        let lease = Arc::new(
+            self.privileged_child_exclusion
+                .acquire_non_e3_child()
+                .map_err(|error| GatewayRuntimeFailure::policy(error.to_string()))?,
+        );
+        Ok(self.recover_runtime(world_id, backend_id, lease))
     }
 
     fn insert_runtime(&self, runtime: ManagedGatewayRuntime) {
@@ -630,7 +736,12 @@ impl GatewayRuntimeManager {
             .and_then(|mut guard| guard.remove(world_id))
     }
 
-    fn recover_runtime(&self, world_id: &str, backend_id: &str) -> Option<ManagedGatewayRuntime> {
+    fn recover_runtime(
+        &self,
+        world_id: &str,
+        backend_id: &str,
+        privileged_child_exclusion_lease: Arc<HeldNonE3PrivilegedChildLeaseV1>,
+    ) -> Option<ManagedGatewayRuntime> {
         let manifest_path = manifest_path_for_world(world_id, backend_id);
         let manifest = match read_runtime_manifest(&manifest_path) {
             Ok(manifest) => manifest,
@@ -668,6 +779,7 @@ impl GatewayRuntimeManager {
                 manifest.pid,
             ))),
             state: Arc::new(RwLock::new(manifest.state)),
+            privileged_child_exclusion_lease,
         };
         self.insert_runtime(runtime.clone());
         Some(runtime)
@@ -731,9 +843,46 @@ impl GatewayRuntimeManager {
     }
 }
 
+#[cfg(not(test))]
+fn bail_unclassified_gateway_runtime(path: &Path) -> Result<()> {
+    anyhow::bail!(
+        "unclassified entry in recovered gateway runtime tree: {}",
+        path.display()
+    )
+}
+
+#[cfg(not(test))]
+fn canonical_cgroup_identity_for_pid(pid: u32) -> Result<CanonicalCgroupIdentityV1> {
+    use std::os::unix::fs::MetadataExt;
+
+    let membership = fs::read_to_string(format!("/proc/{pid}/cgroup"))
+        .context("read recovered gateway cgroup membership")?;
+    let relative = membership
+        .strip_prefix("0::/")
+        .and_then(|value| value.strip_suffix('\n'))
+        .context("recovered gateway has noncanonical cgroup v2 membership")?;
+    if relative.is_empty()
+        || relative
+            .split('/')
+            .any(|component| component.is_empty() || component == "." || component == "..")
+    {
+        anyhow::bail!("recovered gateway cgroup path is not canonical");
+    }
+    let mount = fs::metadata("/sys/fs/cgroup").context("stat cgroup v2 mount")?;
+    let directory = fs::metadata(Path::new("/sys/fs/cgroup").join(relative))
+        .context("stat recovered gateway cgroup")?;
+    Ok(CanonicalCgroupIdentityV1 {
+        cgroup_v2_mount_device_id: mount.dev(),
+        cgroup_v2_mount_inode: mount.ino(),
+        cgroup_directory_inode: directory.ino(),
+        cgroup_relative_path: relative.to_string(),
+    })
+}
+
 fn start_runtime(
     binary_path: PathBuf,
     ctx: GatewayRuntimeStartContext,
+    privileged_child_exclusion_lease: Arc<HeldNonE3PrivilegedChildLeaseV1>,
 ) -> Result<ManagedGatewayRuntime, GatewayRuntimeFailure> {
     validate_binding_capabilities(ctx.binding)?;
     let placement = LinuxWorldPlacementContext::from(&ctx);
@@ -823,6 +972,7 @@ fn start_runtime(
         pid_start_time_ticks,
         process: Arc::new(Mutex::new(ManagedGatewayProcess::Child(child))),
         state: Arc::new(RwLock::new(GatewayRuntimeState::Starting)),
+        privileged_child_exclusion_lease,
     };
     if let Err(err) = runtime.persist_manifest() {
         if let Ok(mut process) = runtime.process.lock() {
@@ -1627,6 +1777,23 @@ mod tests {
         }
     }
 
+    fn finished_child_exclusion() -> Arc<E3PrivilegedChildExclusionV1> {
+        let exclusion = E3PrivilegedChildExclusionV1::new_recovering()
+            .expect("bind gateway fixture child exclusion");
+        exclusion
+            .finish_recovery()
+            .expect("finish gateway fixture child-exclusion recovery");
+        exclusion
+    }
+
+    fn ordinary_gateway_child_lease() -> Arc<HeldNonE3PrivilegedChildLeaseV1> {
+        Arc::new(
+            finished_child_exclusion()
+                .acquire_non_e3_child()
+                .expect("acquire gateway fixture child lease"),
+        )
+    }
+
     fn start_context(project_dir: &Path, world_id: &str) -> GatewayRuntimeStartContext {
         start_context_with_codex_auth(
             project_dir,
@@ -2282,6 +2449,7 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
         let err = start_runtime(
             temp_dir.path().join("missing-binary"),
             start_context_with_binding(temp_dir.path(), world_id, &MISSING_CAPABILITY_BINDING),
+            ordinary_gateway_child_lease(),
         )
         .expect_err("capability gate should fail before spawn");
 
@@ -2331,6 +2499,7 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
         let runtime = start_runtime(
             PathBuf::from(std::env::var_os(GATEWAY_BINARY_OVERRIDE_ENV).unwrap()),
             start_context(&project_dir, "world-modes"),
+            ordinary_gateway_child_lease(),
         )
         .expect("create runtime");
 
@@ -2376,7 +2545,7 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
         let _runtime_root_guard = EnvGuard::set("SUBSTRATE_GATEWAY_RUNTIME_ROOT", &runtime_root);
         let (binary, pid_dir, launch_count_path) = delayed_gateway_binary(&temp_dir, 350);
         let _binary_guard = EnvGuard::set(GATEWAY_BINARY_OVERRIDE_ENV, binary);
-        let manager = Arc::new(GatewayRuntimeManager::new());
+        let manager = Arc::new(GatewayRuntimeManager::new(finished_child_exclusion()));
         let ctx = start_context(temp_dir.path(), "same-world");
 
         let left = tokio::spawn({
@@ -2407,7 +2576,7 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
         let (binary, pid_dir, launch_count_path) =
             first_launch_hangs_second_ready_binary(&temp_dir);
         let _binary_guard = EnvGuard::set(GATEWAY_BINARY_OVERRIDE_ENV, binary);
-        let manager = Arc::new(GatewayRuntimeManager::new());
+        let manager = Arc::new(GatewayRuntimeManager::new(finished_child_exclusion()));
         let ctx = start_context(temp_dir.path(), "cleanup-safe");
 
         let first = tokio::spawn({
@@ -2450,7 +2619,7 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
         let _runtime_root_guard = EnvGuard::set("SUBSTRATE_GATEWAY_RUNTIME_ROOT", &runtime_root);
         let (binary, pid_dir, _) = delayed_gateway_binary(&temp_dir, 1000);
         let _binary_guard = EnvGuard::set(GATEWAY_BINARY_OVERRIDE_ENV, binary);
-        let manager = Arc::new(GatewayRuntimeManager::new());
+        let manager = Arc::new(GatewayRuntimeManager::new(finished_child_exclusion()));
         let ctx = start_context(temp_dir.path(), "status-start");
 
         let sync = tokio::spawn({
@@ -2485,7 +2654,7 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
         let _runtime_root_guard = EnvGuard::set("SUBSTRATE_GATEWAY_RUNTIME_ROOT", &runtime_root);
         let (ready_binary, _, _) = delayed_gateway_binary(&temp_dir, 0);
         let _binary_guard = EnvGuard::set(GATEWAY_BINARY_OVERRIDE_ENV, &ready_binary);
-        let manager = Arc::new(GatewayRuntimeManager::new());
+        let manager = Arc::new(GatewayRuntimeManager::new(finished_child_exclusion()));
         let ctx = start_context(temp_dir.path(), "restart-start");
 
         manager
@@ -2537,7 +2706,7 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
         let _runtime_root_guard = EnvGuard::set("SUBSTRATE_GATEWAY_RUNTIME_ROOT", &runtime_root);
         let (binary, _pid_dir, launch_count_path) = delayed_gateway_binary(&temp_dir, 0);
         let _binary_guard = EnvGuard::set(GATEWAY_BINARY_OVERRIDE_ENV, binary);
-        let manager = Arc::new(GatewayRuntimeManager::new());
+        let manager = Arc::new(GatewayRuntimeManager::new(finished_child_exclusion()));
 
         let first = start_context_with_codex_auth(
             temp_dir.path(),

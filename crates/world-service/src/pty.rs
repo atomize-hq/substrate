@@ -896,6 +896,24 @@ async fn handle_persistent_session(
     sanitize_session_env(&mut session_env);
     ensure_xdg_dirs(&mut session_env);
 
+    let _privileged_child_exclusion_lease = match service.acquire_non_e3_helper_operation() {
+        Ok(lease) => lease,
+        Err(error) => {
+            let _ = send_persistent_ws_message(
+                &tx,
+                &PersistentServerMessage::Error {
+                    code: "unsupported_security_posture".to_string(),
+                    message: error.to_string(),
+                    fatal: true,
+                    seq: None,
+                },
+            )
+            .await;
+            close_ws_connection(&tx).await;
+            return;
+        }
+    };
+
     let pty = match open_raw_pty(rows, cols) {
         Ok(pty) => pty,
         Err(e) => {
@@ -2326,6 +2344,20 @@ async fn handle_legacy_start(
 
     let (cmd, cwd, env_map, policy_snapshot, shared_world, _world_network, _span_id, cols, rows) =
         start_msg;
+    #[cfg(target_os = "linux")]
+    let _privileged_child_exclusion_lease = match service.acquire_non_e3_helper_operation() {
+        Ok(lease) => lease,
+        Err(error) => {
+            let _ = send_ws_message(
+                &tx,
+                &ServerMessage::Error {
+                    message: error.to_string(),
+                },
+            )
+            .await;
+            return;
+        }
+    };
     #[cfg(not(target_os = "linux"))]
     let _policy_snapshot = policy_snapshot;
     #[cfg(target_os = "linux")]

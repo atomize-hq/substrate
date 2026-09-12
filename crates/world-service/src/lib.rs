@@ -1,5 +1,7 @@
 //! World agent library for execution inside worlds/VMs.
 
+#[cfg(target_os = "linux")]
+mod e3_child_security;
 mod enforcement_plan;
 #[cfg(target_os = "linux")]
 mod gateway_runtime;
@@ -41,6 +43,8 @@ use std::os::unix::fs::PermissionsExt;
 #[cfg(unix)]
 use std::path::Path;
 use std::path::PathBuf;
+#[cfg(target_os = "linux")]
+use std::sync::Arc;
 use substrate_broker::{set_global_broker, BrokerHandle};
 use tokio::net::TcpListener;
 #[cfg(unix)]
@@ -59,9 +63,19 @@ const SOCKET_ENV_VAR: &str = "SUBSTRATE_WORLD_SOCKET";
 pub async fn run_world_service() -> Result<()> {
     fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
+    #[cfg(target_os = "linux")]
+    lock_e3_service_secret_memory_v1()?;
+
     let _ = set_global_broker(BrokerHandle::new());
 
     info!("Starting Substrate World Service");
+
+    #[cfg(target_os = "linux")]
+    let privileged_child_exclusion =
+        e3_child_security::E3PrivilegedChildExclusionV1::new_recovering()?;
+    #[cfg(target_os = "linux")]
+    let service =
+        WorldService::new_with_privileged_child_exclusion(Arc::clone(&privileged_child_exclusion))?;
 
     let socket_path = std::env::var_os(SOCKET_ENV_VAR)
         .map(PathBuf::from)
@@ -112,7 +126,8 @@ pub async fn run_world_service() -> Result<()> {
         .filter(|&t| t > 0)
         .map(std::time::Duration::from_secs);
 
-    match gc::sweep(ttl).await {
+    #[cfg(target_os = "linux")]
+    match gc::sweep(ttl, gc::E3GcSweepAdmissionV1::StartupRecovery).await {
         Ok(report) => {
             info!(
                 "Initial GC sweep complete: removed={}, kept={}, errors={}",
@@ -122,10 +137,20 @@ pub async fn run_world_service() -> Result<()> {
             );
         }
         Err(e) => {
-            warn!("Initial GC sweep failed: {}", e);
+            privileged_child_exclusion.poison_recovering()?;
+            return Err(e).context("initial E3-D startup recovery sweep failed");
         }
     }
 
+    #[cfg(not(target_os = "linux"))]
+    if let Err(error) = gc::sweep(ttl, gc::E3GcSweepAdmissionV1::StartupRecovery).await {
+        warn!("Initial GC sweep failed: {}", error);
+    }
+
+    #[cfg(target_os = "linux")]
+    privileged_child_exclusion.finish_recovery()?;
+
+    #[cfg(not(target_os = "linux"))]
     let service = WorldService::new()?;
     let router = build_router(service.clone());
 
@@ -137,7 +162,7 @@ pub async fn run_world_service() -> Result<()> {
             "Starting periodic GC sweep every {} seconds",
             gc_interval_secs
         );
-        spawn_periodic_gc(gc_interval_secs);
+        spawn_periodic_gc(gc_interval_secs, service.clone());
     } else {
         info!("Periodic GC sweep disabled");
     }
@@ -242,6 +267,37 @@ pub async fn run_world_service() -> Result<()> {
     }
 
     result
+}
+
+#[cfg(target_os = "linux")]
+fn lock_e3_service_secret_memory_v1() -> Result<()> {
+    if unsafe { libc::geteuid() } != 0 {
+        anyhow::bail!("installed E3-D world-service must run as trusted host UID 0");
+    }
+    let zero = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    if unsafe { libc::setrlimit(libc::RLIMIT_CORE, &zero) } != 0 {
+        return Err(std::io::Error::last_os_error()).context("disable world-service core dumps");
+    }
+    if unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0, 0, 0, 0) } != 0 {
+        return Err(std::io::Error::last_os_error()).context("disable world-service dumpability");
+    }
+    let mut observed = libc::rlimit {
+        rlim_cur: libc::RLIM_INFINITY,
+        rlim_max: libc::RLIM_INFINITY,
+    };
+    if unsafe { libc::getrlimit(libc::RLIMIT_CORE, &mut observed) } != 0 {
+        return Err(std::io::Error::last_os_error()).context("read world-service core limit");
+    }
+    if observed.rlim_cur != 0
+        || observed.rlim_max != 0
+        || unsafe { libc::prctl(libc::PR_GET_DUMPABLE, 0, 0, 0, 0) } != 0
+    {
+        anyhow::bail!("world-service dump/core posture readback mismatch");
+    }
+    Ok(())
 }
 
 #[cfg(unix)]
@@ -524,7 +580,7 @@ fn get_env_u64(key: &str, default: u64) -> Option<u64> {
         .or(Some(default))
 }
 
-fn spawn_periodic_gc(interval_secs: u64) {
+fn spawn_periodic_gc(interval_secs: u64, service: WorldService) {
     use tokio::time::{interval, Duration};
 
     tokio::spawn(async move {
@@ -552,7 +608,17 @@ fn spawn_periodic_gc(interval_secs: u64) {
                 .map(Duration::from_secs);
 
             info!("Starting periodic GC sweep");
-            match gc::sweep(ttl).await {
+            #[cfg(target_os = "linux")]
+            let admission = match service.acquire_non_e3_helper_operation() {
+                Ok(lease) => gc::E3GcSweepAdmissionV1::NonE3Lease(lease),
+                Err(error) => {
+                    warn!(error = %error, "Periodic GC sweep skipped by E3-D child exclusion");
+                    continue;
+                }
+            };
+            #[cfg(not(target_os = "linux"))]
+            let admission = gc::E3GcSweepAdmissionV1::StartupRecovery;
+            match gc::sweep(ttl, admission).await {
                 Ok(report) => {
                     info!(
                         "Periodic GC sweep complete: removed={}, kept={}, errors={}",
@@ -609,6 +675,36 @@ mod tests {
         let err = read_tcp_port().unwrap_err();
         assert!(err.to_string().contains("Failed to parse"));
         reset_env();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "requires the explicit privileged E3-D acceptance environment"]
+    fn privileged_service_core_and_dump_posture_is_read_back() {
+        assert_eq!(
+            std::env::var_os("SUBSTRATE_E3D_PRIVILEGED_TEST").as_deref(),
+            Some(std::ffi::OsStr::new("1")),
+            "privileged E3-D acceptance must be explicitly enabled"
+        );
+        assert_eq!(unsafe { libc::geteuid() }, 0);
+        let pid = unsafe { libc::fork() };
+        assert!(pid >= 0);
+        if pid == 0 {
+            lock_e3_service_secret_memory_v1().unwrap();
+            let mut limit = libc::rlimit {
+                rlim_cur: libc::RLIM_INFINITY,
+                rlim_max: libc::RLIM_INFINITY,
+            };
+            assert_eq!(unsafe { libc::getrlimit(libc::RLIMIT_CORE, &mut limit) }, 0);
+            assert_eq!(limit.rlim_cur, 0);
+            assert_eq!(limit.rlim_max, 0);
+            assert_eq!(unsafe { libc::prctl(libc::PR_GET_DUMPABLE) }, 0);
+            unsafe { libc::_exit(0) };
+        }
+        let mut status = 0;
+        assert_eq!(unsafe { libc::waitpid(pid, &mut status, 0) }, pid);
+        assert!(libc::WIFEXITED(status));
+        assert_eq!(libc::WEXITSTATUS(status), 0);
     }
 
     #[cfg(target_os = "linux")]

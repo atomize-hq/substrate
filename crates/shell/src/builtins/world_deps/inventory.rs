@@ -2275,7 +2275,7 @@ for candidate, message in ((gateway, "extra symbols"), (os.environ["MALFORMED_EL
     }
 
     #[test]
-    fn e3c_production_lifecycle_does_not_claim_e3d_artifact_publication() {
+    fn e3c_substrate_publisher_is_wired_only_after_e3d_static_install() {
         let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let lifecycle =
             std::fs::read_to_string(repository.join("scripts/linux/world-lifecycle.sh"))
@@ -2291,10 +2291,26 @@ for candidate, message in ((gateway, "extra symbols"), (os.environ["MALFORMED_EL
             .map(|offset| install_start + offset)
             .expect("install function boundary");
 
-        assert!(
-            !lifecycle[install_start..install_end].contains("publish_substrate_artifact_source_v1")
-        );
-        assert!(!provision.contains("SUBSTRATE_SOURCE_BUILD_PERFORMED"));
-        assert!(!provision.contains("SUBSTRATE_SOURCE_TARGET"));
+        let install = &lifecycle[install_start..install_end];
+        let gateway_install = install
+            .find("/usr/local/lib/substrate/e3/substrate-gateway")
+            .expect("E3 gateway installation");
+        let wrapper_install = install
+            .find("/usr/local/lib/substrate/e3/substrate-world-entry")
+            .expect("E3 wrapper installation");
+        let publication = install
+            .find("publish_substrate_artifact_source_v1")
+            .expect("E3 artifact source publication");
+        assert!(gateway_install < publication);
+        assert!(wrapper_install < publication);
+        assert!(provision.contains("SUBSTRATE_SOURCE_BUILD_PERFORMED"));
+        assert!(provision.contains("status --porcelain=v1 --untracked-files=all"));
+        assert!(provision.contains("--skip-build is unavailable"));
+        assert!(provision.contains("SUBSTRATE_SOURCE_TARGET=\"x86_64-unknown-linux-musl\""));
+        assert!(provision.contains("rustup run 1.89.0 cargo build --locked --release"));
+        assert!(provision.contains("--bin substrate-world-entry"));
+        assert!(lifecycle.contains("if build_performed != \"1\""));
+        assert!(provision.contains("SecureBits=noroot-locked"));
+        assert!(provision.contains("CAP_SETUID CAP_SETGID CAP_SETPCAP"));
     }
 }

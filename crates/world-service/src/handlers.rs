@@ -117,6 +117,10 @@ pub async fn capabilities() -> Result<ResponseJson<Value>, ApiErrorResponse> {
 pub async fn doctor_world(
     State(service): State<WorldService>,
 ) -> Result<ResponseJson<WorldDoctorReportV1>, ApiErrorResponse> {
+    #[cfg(target_os = "linux")]
+    let _privileged_child_exclusion_lease = service
+        .acquire_non_e3_helper_operation()
+        .map_err(|error| ApiErrorResponse(ApiError::Internal(error.to_string())))?;
     let collected_at_utc = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
 
     #[cfg(target_os = "linux")]
@@ -510,7 +514,7 @@ pub async fn request_scopes(
 
 /// Garbage collect orphaned network namespaces.
 pub async fn gc(
-    State(_service): State<WorldService>,
+    State(service): State<WorldService>,
 ) -> Result<ResponseJson<Value>, ApiErrorResponse> {
     // Read TTL from environment
     let ttl = std::env::var("SUBSTRATE_NETNS_GC_TTL_SECS")
@@ -519,7 +523,14 @@ pub async fn gc(
         .filter(|&ttl| ttl > 0)
         .map(std::time::Duration::from_secs);
 
-    let report = crate::gc::sweep(ttl)
+    #[cfg(target_os = "linux")]
+    let admission = service
+        .acquire_non_e3_helper_operation()
+        .map(crate::gc::E3GcSweepAdmissionV1::NonE3Lease)
+        .map_err(|error| ApiErrorResponse(ApiError::Internal(error.to_string())))?;
+    #[cfg(not(target_os = "linux"))]
+    let admission = crate::gc::E3GcSweepAdmissionV1::StartupRecovery;
+    let report = crate::gc::sweep(ttl, admission)
         .await
         .map_err(|e| ApiErrorResponse(ApiError::Internal(e.to_string())))?;
 

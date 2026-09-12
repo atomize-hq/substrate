@@ -956,9 +956,22 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
 WORLD_AGENT_BIN_PATH="${REPO_ROOT}/target/${PROFILE}/world-service"
 GATEWAY_BIN_PATH="${REPO_ROOT}/target/${PROFILE}/substrate-gateway"
+E3_GATEWAY_BIN_PATH="${REPO_ROOT}/target/x86_64-unknown-linux-musl/release/substrate-gateway"
+E3_WORLD_ENTRY_BIN_PATH="${REPO_ROOT}/target/x86_64-unknown-linux-musl/release/substrate-world-entry"
 SUBSTRATE_CLI_BIN_PATH="${REPO_ROOT}/target/${PROFILE}/substrate"
 LIFECYCLE_EXECUTOR_BIN_PATH="${REPO_ROOT}/target/${PROFILE}/substrate-lifecycle-linux"
 ACL_HELPER_SOURCE_PATH="${REPO_ROOT}/scripts/linux/substrate-apply-socket-acl.sh"
+
+if [[ ${DRY_RUN} -eq 0 ]]; then
+    if [[ ${SKIP_BUILD} -ne 0 ]]; then
+        echo "E3 artifact publication requires an exact build in this provisioning invocation; --skip-build is unavailable" >&2
+        exit 1
+    fi
+    if [[ -n "$(git -C "${REPO_ROOT}" status --porcelain=v1 --untracked-files=all)" ]]; then
+        echo "E3 artifact publication requires a clean source checkout" >&2
+        exit 1
+    fi
+fi
 
 if [[ ${SKIP_BUILD} -eq 0 ]]; then
     echo "==> Building substrate + substrate-lifecycle-linux + world-service + substrate-gateway (profile: ${PROFILE})"
@@ -968,16 +981,26 @@ if [[ ${SKIP_BUILD} -eq 0 ]]; then
         SUBSTRATE_CLI_BIN_PATH="${REPO_ROOT}/target/release/substrate"
         LIFECYCLE_EXECUTOR_BIN_PATH="${REPO_ROOT}/target/release/substrate-lifecycle-linux"
         if [[ ${DRY_RUN} -eq 1 ]]; then
-            show_cmd cargo build -p substrate --bin substrate --bin substrate-lifecycle-linux -p world-service -p substrate-gateway --release --manifest-path "${REPO_ROOT}/Cargo.toml"
+            show_cmd cargo build --locked -p substrate --bin substrate --bin substrate-lifecycle-linux -p world-service --bin world-service -p substrate-gateway --bin substrate-gateway --release --manifest-path "${REPO_ROOT}/Cargo.toml"
         else
-            cargo build -p substrate --bin substrate --bin substrate-lifecycle-linux -p world-service -p substrate-gateway --release --manifest-path "${REPO_ROOT}/Cargo.toml"
+            cargo build --locked -p substrate --bin substrate --bin substrate-lifecycle-linux -p world-service --bin world-service -p substrate-gateway --bin substrate-gateway --release --manifest-path "${REPO_ROOT}/Cargo.toml"
         fi
     else
         if [[ ${DRY_RUN} -eq 1 ]]; then
-            show_cmd cargo build -p substrate --bin substrate --bin substrate-lifecycle-linux -p world-service -p substrate-gateway --profile "${PROFILE}" --manifest-path "${REPO_ROOT}/Cargo.toml"
+            show_cmd cargo build --locked -p substrate --bin substrate --bin substrate-lifecycle-linux -p world-service --bin world-service -p substrate-gateway --bin substrate-gateway --profile "${PROFILE}" --manifest-path "${REPO_ROOT}/Cargo.toml"
         else
-            cargo build -p substrate --bin substrate --bin substrate-lifecycle-linux -p world-service -p substrate-gateway --profile "${PROFILE}" --manifest-path "${REPO_ROOT}/Cargo.toml"
+            cargo build --locked -p substrate --bin substrate --bin substrate-lifecycle-linux -p world-service --bin world-service -p substrate-gateway --bin substrate-gateway --profile "${PROFILE}" --manifest-path "${REPO_ROOT}/Cargo.toml"
         fi
+    fi
+    echo "==> Building descriptor-pinned E3 static artifacts (Rust 1.89.0, release, x86_64-unknown-linux-musl)"
+    if [[ ${DRY_RUN} -eq 1 ]]; then
+        show_cmd rustup run 1.89.0 cargo build --locked --release --target x86_64-unknown-linux-musl -p world-service --bin substrate-world-entry -p substrate-gateway --bin substrate-gateway --manifest-path "${REPO_ROOT}/Cargo.toml"
+    else
+        CARGO_BUILD_JOBS=4 rustup run 1.89.0 cargo build --locked --release \
+            --target x86_64-unknown-linux-musl \
+            -p world-service --bin substrate-world-entry \
+            -p substrate-gateway --bin substrate-gateway \
+            --manifest-path "${REPO_ROOT}/Cargo.toml"
     fi
 else
     echo "==> Skipping build as requested"
@@ -1002,6 +1025,24 @@ if [[ ${DRY_RUN} -eq 0 && ! -x "${LIFECYCLE_EXECUTOR_BIN_PATH}" ]]; then
     echo "substrate-lifecycle-linux binary not found at ${LIFECYCLE_EXECUTOR_BIN_PATH}. Did the build succeed?" >&2
     exit 1
 fi
+
+if [[ ${DRY_RUN} -eq 0 && ! -x "${E3_GATEWAY_BIN_PATH}" ]]; then
+    echo "E3 static substrate-gateway not found at ${E3_GATEWAY_BIN_PATH}. Did the exact musl release build succeed?" >&2
+    exit 1
+fi
+
+if [[ ${DRY_RUN} -eq 0 && ! -x "${E3_WORLD_ENTRY_BIN_PATH}" ]]; then
+    echo "E3 static substrate-world-entry not found at ${E3_WORLD_ENTRY_BIN_PATH}. Did the exact musl release build succeed?" >&2
+    exit 1
+fi
+
+SUBSTRATE_SOURCE_COMMIT="$(git -C "${REPO_ROOT}" rev-parse --verify 'HEAD^{commit}')"
+SUBSTRATE_SOURCE_TREE="$(git -C "${REPO_ROOT}" rev-parse --verify 'HEAD^{tree}')"
+SUBSTRATE_CARGO_LOCK_SHA256="$(sha256sum "${REPO_ROOT}/Cargo.lock" | awk '{print $1}')"
+SUBSTRATE_RUSTC_VERSION="$(rustup run 1.89.0 rustc --version)"
+SUBSTRATE_SOURCE_TARGET="x86_64-unknown-linux-musl"
+SUBSTRATE_SOURCE_PROFILE="release"
+SUBSTRATE_SOURCE_BUILD_PERFORMED=1
 
 if [[ ${DRY_RUN} -eq 0 && ! -f "${ACL_HELPER_SOURCE_PATH}" ]]; then
     echo "ACL bridge helper not found at ${ACL_HELPER_SOURCE_PATH}. Did the repo checkout complete?" >&2
@@ -1081,11 +1122,13 @@ WorkingDirectory=/var/lib/substrate
 StandardOutput=journal
 StandardError=journal
 NoNewPrivileges=yes
+LimitCORE=0
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths="${SYSTEMD_SUBSTRATE_HOME}" /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE CAP_SETUID CAP_SETGID CAP_SETPCAP
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE CAP_SETUID CAP_SETGID CAP_SETPCAP
+SecureBits=noroot-locked
 
 [Install]
 WantedBy=multi-user.target
