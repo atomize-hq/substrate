@@ -2631,9 +2631,57 @@ post-operation revalidation can execute after a panic.
 The later `WorldService::new_linux` consumer constructs and retains one
 `Arc<ConfiguredAcceptedHomeAuthorityV1>`, calls
 `OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home` with that sealed value, and
-passes the resulting `Arc<dyn ConfigProjectionHsaAuthorityV1>` together with the same configured
-authority into `AgentConfigProjectionServiceV1::new`. No request handler, registry method, gateway,
-or member caller may construct or replace the bridge.
+retains the result as one concrete `Arc<OpenedConfigProjectionHsaAuthorityV1>`. It passes a clone
+coerced to `Arc<dyn ConfigProjectionHsaAuthorityV1>` together with the same configured authority into
+`AgentConfigProjectionServiceV1::new`, and passes the concrete `Arc` into
+`E3ConfigProjectionPreparationManagerV1::new`. No request handler, registry method, gateway, or
+member caller may construct or replace the bridge.
+
+E3-E adds exactly one Linux-only service-callable operation on that existing sealed facade:
+
+```rust
+pub fn authenticate_e3_member_launch_activation_v1(
+    &self,
+    common: transport_api_types::MemberDispatchCommonFieldsV1<'_>,
+    supplied: &transport_api_types::E2MemberLaunchActivationCarrierV1,
+) -> Result<
+    transport_api_types::E2MemberLaunchActivationCarrierV1,
+    config_projection::ConfigProjectionFailureV1,
+>
+```
+
+`OpenedConfigProjectionHsaAuthorityV1` retains one private `HostSessionAuthority` constructed from
+the already opened, identity-matched `TrustedAuthorityRoot`; its existing projection-parent trait
+implementation uses that same authority's root. The new method therefore derives authority only from
+the configured accepted-home capability and accepts no pathname, descriptor, key, or authority
+locator. It sequentially calls the existing shell-private `resolve_retained_worker_cap` for
+`common.orchestration_session_id` and `common.participant_id`, requires its compatible cap, calls
+`authenticate_dispatch_policy_commitment` on that exact cap ref, and uses the existing
+`AuthenticatedDispatchPolicyCommitmentV1::member_launch_activation_carrier` conversion. It requires
+the cap descriptor's store, ref, session, participant, parent-policy ref, and parent-policy revision
+to equal the authenticated material, and requires the reconstructed carrier to equal `supplied` in
+full, including the durable record/key,
+commitment/cap linkage, exact snapshot bytes/hash/ref/revisions, request/idempotency, parent-policy,
+publication-revision, backend, participant, run, and world bindings. It also rechecks the complete
+common and lineage join before returning: `FreshSpawn` requires the exact validated launch-authority
+proof and null parent/resume fields; `Fork` requires no launch-authority proof, the authenticated
+source participant as parent, and a null resume field; session, caller, target, protocol, bootstrap,
+and world/generation values must match their applicable authenticated carrier/proof values. Only the
+reconstructed typed `E2MemberLaunchActivationCarrierV1` crosses the facade; private HSA roots,
+transactions, records, keys, descriptors, snapshots, and errors do not.
+
+`E3ConfigProjectionPreparationManagerV1::prepare` is the sole production consumer. It invokes this
+operation after strict request decoding but before accepting integrated auth, opening an E3
+projection transaction, publishing, or creating any preparation side effect, and thereafter uses
+only the returned reconstructed carrier. The two existing E2 reads retain their transaction,
+authentication, and failure behavior and run sequentially; neither the facade nor `prepare` calls
+them from `with_locked_parent` or while an E3 projection transaction/parent lock is live. Missing or
+unsupported cap state and any E2 read/authentication/conversion failure map fail-closed to the
+existing `UnsupportedSecurityPosture`; a supplied-versus-authenticated or launch/fork join mismatch
+maps to `WrongBinding`. There is no retry, repair, E2 mutation, current-policy cap recomputation,
+carrier-only acceptance, or request-selected authority. This operation adds no public intermediate
+module or type, raw accessor, parser, registry, authentication algorithm, key reader, schema,
+dependency edge, or non-Linux support.
 
 The only E3 authority root is:
 
@@ -3956,9 +4004,17 @@ this catalog:
    `host_session_authority/store.rs`; `TrustedDirectory::borrow_fd` as `pub(crate)` in
    `host_session_authority/trusted_fs.rs`; and one direct public re-export of
    `OpenedConfigProjectionHsaAuthorityV1` from `crates/shell/src/lib.rs`, without making any
-   intermediate HSA module public. No other HSA type, descriptor, operation, or facade visibility is
-   admitted. All of these bridge additions and the re-export are Linux-gated; other platforms retain
-   their existing unsupported E3 posture. In
+   intermediate HSA module public. For E3-E only, that same facade file may replace the facade's
+   private `TrustedAuthorityRoot` field with one private `HostSessionAuthority`, adapt the existing
+   constructor and `with_locked_parent` implementation to that same retained root, import the
+   existing shell-private `resolve_retained_worker_cap`, `authenticate_dispatch_policy_commitment`,
+   `ResolvedPolicyCommitmentCompatibilityV1`, and authenticated carrier conversion, and add only
+   `OpenedConfigProjectionHsaAuthorityV1::authenticate_e3_member_launch_activation_v1` with the exact
+   signature and behavior above. The method is available through the facade's existing direct root
+   re-export; no intermediate module visibility changes. No other HSA type, descriptor, operation,
+   facade visibility, or `dispatch_policy_commitment.rs` change is admitted. All of these bridge
+   additions and the re-export are Linux-gated; other platforms retain their existing unsupported E3
+   posture. In
    `crates/shell/src/execution/agent_inventory.rs`, only additive `AgentFileV3`, `AgentConfigV3`,
    `AgentPlacementsV3`, `AgentPlacementConfigV3`, `AgentRuntimeProjectionInputV1`,
    `PlacementProjectedInventoryEntryV3`, and `AgentInventorySourceMaterialV1`, the V3 variants/arms in
@@ -4096,7 +4152,12 @@ this catalog:
 6. create exactly `crates/world-service/src/e3_config_projection_prepare.rs` with only
    `E3ConfigProjectionPreparationManagerV1::{new,prepare,cancel,take_for_v2,recover_expired}` and
    its private `SealedE3ConfigProjectionPreparationV1`, `SealedCredentialSourceCapabilityV1`, and
-   `ClockBoottimeDeadline`; create exactly `crates/world-service/src/e3_codex_launch.rs` with
+   `ClockBoottimeDeadline`. Its private state may retain the one concrete
+   `Arc<substrate_shell::OpenedConfigProjectionHsaAuthorityV1>` passed by `WorldService::new_linux`;
+   `prepare` is the sole production call site of
+   `authenticate_e3_member_launch_activation_v1` and must obey the pre-transaction ordering above.
+   No other world-service symbol receives or exposes that facade. Create exactly
+   `crates/world-service/src/e3_codex_launch.rs` with
    `E3Codex0125LaunchAdapterV1::{new,prepare,spawn_setup_wrapper,validate_setup_ready,
    release_final_exec,cancel}` and `crates/world-service/src/e3_child_security.rs` with only
    `bind_e3_service_user_namespace_v1`,
@@ -4437,8 +4498,11 @@ and the descriptor-pinned official Codex archive above for:
   exists. Native Lima conversion proof is deferred until Linux completion under the E3-A recovery
   authority above and is not part of this Linux acceptance wall;
 - exact E2 launch and fork cap linkage without any E2/E2-RM mutation or current-parent
-  reconstruction, including `Some(exact proof)` for `FreshSpawn`, `None` for `Fork`, and byte-equal
-  nullable proof values across prepare/idempotency/sealed preparation/V2; and
+  reconstruction, including ordinary colocated facade-adapter tests, reusing the existing E2 fixture
+  patterns, for valid `FreshSpawn` and `Fork` plus missing, tampered, wrong-store, wrong-cap, and
+  session/participant/backend/run/world/lineage-mismatched durable authority; every negative must
+  fail before preparation side effects. These retain `Some(exact proof)` for `FreshSpawn`, `None` for
+  `Fork`, and byte-equal nullable proof values across prepare/idempotency/sealed preparation/V2; and
 - V2 emission and equality fixtures through both
   `continue_world_worker_fork_command_bootstrap_after_delivery` and
   `build_continue_world_worker_fork_command_transport_request`, plus every direct Spawn/Fork path;
