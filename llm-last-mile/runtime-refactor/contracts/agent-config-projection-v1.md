@@ -3920,7 +3920,17 @@ this catalog:
    and private implementation types necessary to implement the admitted codec/registry operations
    are allowed without a separate authority amendment; they may not expand the public API, product
    behavior, file ownership, or later-packet scope. Private helpers in any other new-crate file remain
-   unadmitted;
+   unadmitted. One E3-E exception is admitted in `crates/config-projection/src/lib.rs`: E3-E may
+   define `LaunchTimeSecretHandoffV1` there as a private, non-exported, non-reexported type used only
+   as the private `handoff` constituent of `ConfigProjectionSecretHandoffRevisionV1`. Its fields and
+   semantics remain exactly those specified in `launch-time-secret-handoff-v1.md`, and its embedding,
+   revision hashing, bindings, and lifecycle remain exactly those specified in
+   `managed-gateway-adoption-v1.md`. The implementation reuses the existing constituent types and
+   established strict codec patterns. This exception authorizes no public type or accessor, second
+   handoff representation, new credential carrier, new wire field, changed hashing, or changed
+   lifecycle behavior; it rewrites neither the schema nor its preserved extracted source body and does
+   not generalize the private-helper allowance. All other file/symbol restrictions and E3-D/E3-E/E3-F
+   ownership remain unchanged;
 2. in `crates/shell/src/execution/config_model.rs`, only new private
    `E3PinnedConfigPatchSourceV1`, `E3EffectiveConfigResolutionSnapshotV1`,
    `open_e3_workspace_config_source_v1`, `resolve_e3_effective_config_source_v1`, and
