@@ -288,7 +288,10 @@ forbidden.
   exec-first capability parking sequence, descriptor-pinned wrapper security, direct per-child user-
   namespace creation and parent-owned identity-map validation,
   cgroup/nftables/Landlock/seccomp/credential descent, and one process-wide exclusion shared by every
-  child/helper path.
+  child/helper path. The bounded installed-CA corrective delta additionally permits only the exact
+  logical `/etc/ssl/certs/ca-certificates.crt` path to resolve through the trusted relative symlink
+  form specified by the projection contract and to be realized from its validated final descriptor
+  at that same logical path inside the existing private mount namespace before Landlock.
 - **Source owner:** the packet-admitted world-service `main`, child-security, internal-exec, wrapper,
   service, PTY, observation-handler, GC, and exclusion surfaces plus the exact Linux lifecycle and
   provisioning production-integration surfaces cataloged by the contract. For this correction,
@@ -304,13 +307,25 @@ forbidden.
   `crates/world-service/src/bin/substrate-world-entry.rs::parse_launch_descriptors` owns the exact
   `SUBSTRATE_WORLD_ENTRY_USERNS_FD` parameter and `prepare_private_child_namespace` owns direct child
   creation/handshake plus private mount setup. The service daemon may not unshare or enter that user
-  namespace, and no generic namespace manager or caller-selected namespace is admitted.
+  namespace, and no generic namespace manager or caller-selected namespace is admitted. For this CA
+  delta, the exact later product-change fence additionally contains only:
+  `scripts/linux/world-lifecycle.sh::publish_substrate_artifact_source_v1`'s private `file_support`;
+  `crates/shell/src/builtins/world_deps/inventory.rs::e3c_tests` for focused publisher cases;
+  `crates/config-projection/src/linux_artifacts.rs::LinuxArtifactSourceV1::import_manifest`, private
+  `resolve_exact_installed_ca_bundle_v1`, and its colocated tests for the otherwise-frozen E3-C
+  support-validation exception; and
+  `crates/world-service/src/bin/substrate-world-entry.rs::{validate_runtime_support_manifest,
+  prepare_private_child_namespace}` plus private `resolve_exact_e3_ca_bundle_v1` and
+  `install_exact_e3_ca_bundle_mount_v1`. No `crates/world/src/landlock.rs`, schema, registry,
+  lifecycle-order, alternate trust-store, or other product surface is owned.
 - **Direct predecessor:** independently landed and proof-clean E3-C.
 - **Consumes:** E3-C source-store schemas, validators, import and publication/recovery helpers, pinned
   artifact/native-root behavior, and enforcement inputs, plus the landed E2 filesystem plan without
   changing E2.
 - **Explicit nonownership:** inventory or any projection schema change other than the exact
-  `config-projection/src/lib.rs` security-field exception above, gateway secret preparation or
+  `config-projection/src/lib.rs` security-field exception above, and any E3-C implementation change
+  other than the exact `LinuxArtifactSourceV1::import_manifest` CA support-validation exception and
+  publisher-test fence above; gateway secret preparation or
   adoption, retained V2 Codex lifecycle, provider policy, V1/UAA semantics while exclusion is idle,
   D1, and E4.
 - **Successor eligibility proof:** actual static wrapper and gateway build/install, descriptor
@@ -322,6 +337,16 @@ forbidden.
   cgroup/nftables crash recovery; and races proving no ordinary/PTY/UAA/compatibility-gateway/GC
   helper can spawn during E3 exclusivity while idle compatibility behavior is unchanged. Only then
   may E3-E seek admission.
+
+  The corrective implementation's focused acceptance is limited to: direct regular-file CA success;
+  success for the observed root-owned relative symlink to
+  `../../ca-certificates/extracted/tls-ca-bundle.pem`; fail-closed boundary-escape, magic-link,
+  second-link/cycle, different otherwise-safe relative target, ownership/writeability,
+  nonregular-endpoint, and substitution cases;
+  publisher/importer/wrapper agreement on the final object consumed through the unchanged logical
+  path under the existing Landlock boundary; and compatibility of the existing relevant support-
+  manifest tests. These are later implementation requirements, not evidence produced by this
+  documentation correction.
 
 ### E3-E — dormant managed-gateway preparation and adoption
 

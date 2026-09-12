@@ -289,6 +289,12 @@ struct RuntimeSupportFileV1 {
     sha256: String,
 }
 
+For the sole CA entry, `absolute_path` remains the logical
+`/etc/ssl/certs/ca-certificates.crt` name while `device_id`, `inode`, `mode`, `byte_length`, and
+`sha256` describe the opened final regular file after the bounded resolution below. The existing
+struct and `runtime-support` canonical hash already bind both facts; this correction adds no field,
+schema version, manifest family, alternate trust-source name, or registry object.
+
 struct RuntimeSupportDirectoryV1 {
     absolute_path: String, // exactly "/etc/codex"
     device_id: u64,
@@ -1364,10 +1370,10 @@ entry bytes including the terminal `DT_NULL`. This form matches the pinned Codex
 artifact without treating its relocation metadata as a loader dependency.
 
 Any dynamically linked, malformed, or architecture-mismatched artifact is
-`UnsupportedRuntimeVersion` before publication or child creation. The wrapper resolves every
-remaining support object component-by-
-component from held `/` and realization descriptors, rejects magic links and escapes, opens the final
-object with `O_NOFOLLOW`, and computes this exact closure:
+`UnsupportedRuntimeVersion` before publication or child creation. Except for the exact CA rule
+below, the wrapper resolves every remaining support object component-by-component from held `/` and
+realization descriptors, rejects every symbolic or magic link and escape, opens the final object
+with `O_NOFOLLOW`, and computes this exact closure:
 
 1. `validate_e3_static_elf_v1` reproduces the static-ELF checks above on the same target descriptor
    used for final execution. No library root, loader, loader cache, or shared object enters either
@@ -1377,9 +1383,42 @@ object with `O_NOFOLLOW`, and computes this exact closure:
    `/etc/hosts`, `/etc/nsswitch.conf`, `/etc/passwd`, `/etc/group`, `/etc/resolv.conf`, and
    `/etc/ssl/certs/ca-certificates.crt` (read). Every named regular file is mandatory, and its
    device/inode/SHA-256 is in the trusted installed artifact support manifest and projection
-   identity. An absence, alternate CA directory, symlink, special file where a regular file is
-   required, or identity/hash drift is
-   `UnsupportedSecurityPosture`. No other `/etc`, `/usr`, `/lib*`, `/dev`, or CA object is admitted.
+   identity. Ordinary direct regular-file installation of the logical CA path remains valid. As the
+   sole symlink exception in support policy V1, that exact logical CA path may instead be one
+   root-owned symbolic link whose raw `readlinkat` bytes are exactly
+   `../../ca-certificates/extracted/tls-ca-bundle.pem` and whose final object remains beneath the held
+   `/etc` resolution boundary. The publisher, importer, and wrapper each open and validate the same way:
+   they descriptor-open `/etc`, require it and every traversed directory to be root-owned and not
+   group/other-writable, walk without directory enumeration, require the logical CA leaf to be the
+   only encountered symlink, and compare its owner and raw target before expansion. `..` in that
+   target pops one already-held
+   descendant descriptor and is valid only while the stack remains at or below the held `/etc`;
+   an absolute target or a pop above that boundary is an escape. A different relative target is not
+   accepted even if it would remain beneath `/etc`. Resolution rejects a mount crossing, magic link,
+   second symlink or cycle, NUL or malformed component, and any substituted, untrusted-owned, or
+   group/other-writable component.
+
+   The final open is `O_RDONLY|O_CLOEXEC|O_NOFOLLOW` from the resolved parent descriptor. Its object
+   must be a root-owned, non-group/other-writable regular file with link count one and the existing
+   support-file size bound. Metadata is captured by `fstat` on that descriptor; SHA-256 is read from
+   the same descriptor; a second `fstat` must reproduce device/inode/type/mode/owner/link-count/length.
+   Re-resolving the exact logical name before publication/import completion or private realization
+   must select the same final device/inode and bytes. The manifest continues to store the logical CA
+   pathname plus that final object's identity and digest, so link or endpoint substitution, endpoint
+   drift, a nonregular endpoint, absence, or hash mismatch is `UnsupportedSecurityPosture`.
+
+   Before either artifact's Landlock layers are installed, `substrate-world-entry` performs the final
+   re-resolution while unrestricted setup authority exists, retains the validated endpoint
+   descriptor, and uses only its already-private mount namespace to mount an empty
+   `nodev,nosuid,noexec` filesystem over `/etc/ssl/certs`, create its single non-writable
+   `ca-certificates.crt` mountpoint, and bind/remount the held endpoint there read-only. It then
+   reopens the logical path without following links and requires the mounted file's
+   device/inode/type/mode/length/digest to equal the manifest and held descriptor before applying the
+   existing exact-file Landlock rule. The host symlink and endpoint are never changed. No Landlock
+   rule or runtime access is added for `/etc`, `/etc/ssl`, `/etc/ssl/certs`, the resolved endpoint
+   pathname, or another trust source; directory enumeration remains denied, and the descriptor is
+   closed after the rule is installed. All other support-file symlinks remain forbidden. No other
+   `/etc`, `/usr`, `/lib*`, `/dev`, or CA object is admitted.
    The separately represented `/etc/codex` mount target is the sole additional `/etc` directory: it
    is descriptor-resolved and covered by the private bind mount before Landlock restriction, receives
    no E3 rule for `/`, `/etc`, or another ancestor, and grants no read or enumeration of the underlying
@@ -3868,6 +3907,13 @@ this catalog:
    validate_e3_static_elf_v1,validate_system_config_mount_target_v1}`. The obsolete
    `validate_host_ptrace_posture_v1` name is deleted rather than renamed or left with artifact-source
    ownership; host process security belongs to E3-D's world-service child-security path below.
+   For the bounded installed-CA corrective delta only, E3-D may add private
+   `resolve_exact_installed_ca_bundle_v1`, call it only from the otherwise-frozen support-file opening
+   inside `LinuxArtifactSourceV1::import_manifest`, and change that file's colocated `mod tests` in
+   `crates/config-projection/src/linux_artifacts.rs`, solely to implement the exact logical-CA
+   resolver and final-descriptor validation above. The exception adds no public symbol, schema,
+   registry behavior, manifest field, alternate pathname, or resolution rule for another support
+   object.
    Colocated `mod tests` blocks
    are allowed. No other `pub`/`pub(crate)` surface is admitted. Within only the E3-B-owned
    `src/codec.rs` and `src/registry.rs`, ordinary private free functions, private inherent methods,
@@ -4069,7 +4115,13 @@ this catalog:
    role. `parse_launch_descriptors` owns the exact `SUBSTRATE_WORLD_ENTRY_USERNS_FD` startup pointer,
    and `prepare_private_child_namespace` owns only the child-side direct-unshare/setup handshake and
    subsequent private mount-namespace setup; neither may accept a caller namespace or use `setns`
-   for user-namespace entry. In
+   for user-namespace entry. For the bounded installed-CA corrective delta only,
+   `validate_runtime_support_manifest` may add private `resolve_exact_e3_ca_bundle_v1`, and
+   `prepare_private_child_namespace` may add and call private
+   `install_exact_e3_ca_bundle_mount_v1`, solely for the exact descriptor validation and private
+   single-file realization above before `apply_authenticated_world_fs_enforcement`. The existing
+   Landlock implementation and path-policy model are unchanged; no generic resolver, directory rule,
+   or symlink-capable Landlock surface is owned. In
    `crates/world-service/src/gateway_runtime.rs`, only existing `GatewayRuntimeManager`,
    `GatewayRuntimeManager::{new,status,sync,sync_with_timeout,sync_with_timeout_locked,restart}`,
    `start_runtime`, `stop_runtime`, `recover_runtime`, `runtime_for_world_or_manifest`,
@@ -4134,7 +4186,12 @@ this catalog:
    target world-service daemon or V1 gateway artifact. It must publish and read back the complete
    valid Substrate record/head before dependent E3 runtime use; no V1 fallback, placeholder ELF,
    invented provenance, partial manifest, silent missing-artifact success, or stale record for
-   replacement bytes is admitted; and
+   replacement bytes is admitted. For the bounded installed-CA corrective delta only, E3-D may also
+   change the private `file_support` logic inside
+   `scripts/linux/world-lifecycle.sh::publish_substrate_artifact_source_v1` and the `e3c_tests`
+   module in `crates/shell/src/builtins/world_deps/inventory.rs`, solely for the direct-file and exact
+   relative-symlink cases above. Lifecycle order, artifact-production requirements, other support
+   objects, and every other E3-C publication/import surface remain frozen; and
 9. only the exact V2-to-V3 Codex world placement change in `config/agents/codex.yaml`, setting the
    fixed installed Codex path, `model: codex`, and empty MCP/feature lists. No host placement meaning
    changes; and
@@ -4225,8 +4282,17 @@ and the descriptor-pinned official Codex archive above for:
   fields; acceptance of both exact `StaticExec` and constrained relocation-only `StaticPie`, including
   the descriptor-pinned Codex 0.125 `ET_DYN` artifact; rejection of every interpreter, `DT_NEEDED`,
   forbidden dynamic tag, non-relative relocation, nonempty dynamic symbol/string payload,
-  loader/dependency/architecture mismatch; symlink/hash/inode
-  drift; every fixed device/regular file; exact explicitly enumerable subtree closure; rejection of
+  loader/dependency/architecture mismatch; direct-regular-file CA success; success for the exact
+  logical CA path resolving through the observed trusted relative
+  `../../ca-certificates/extracted/tls-ca-bundle.pem` layout beneath `/etc`; publisher/importer/wrapper
+  agreement on the logical pathname and consumed final device/inode/mode/length/hash; and rejection
+  of a boundary escape, absolute or magic link, cycle or second traversal, different otherwise-safe
+  relative target, untrusted or writable component, nonregular endpoint, link/endpoint substitution,
+  or final identity/hash drift. The
+  privately realized logical CA path must reopen as the same regular object and remain readable under
+  the existing exact-file Landlock rule without a CA-directory/discovery rule. Existing direct-file
+  support-manifest fixtures and every non-CA support-file symlink rejection remain compatible;
+  every fixed device/regular file; exact explicitly enumerable subtree closure; rejection of
   every E3-synthesized ancestor discovery rule, including `/`, `/etc`, `/usr`, `/lib*`, `/dev`, an
   accepted-home ancestor, or a realization parent; and proof that no directory-wide CA or ambient
   path can enter a self-consistent hash; numeric self-proc descriptor success plus rejection of
