@@ -353,7 +353,11 @@ converts shell's private type. `authority_store_id` is `cpa_<lowercase UUIDv7>`,
 `cps_<lowercase UUIDv7>`, `record_id` is `cpr_<lowercase UUIDv7>`, and a projection consumer ID is
 `cpc_<lowercase UUIDv7>`. Artifact manifest and entry IDs are `ram_<lowercase UUIDv7>` and
 `rae_<lowercase UUIDv7>`. Revision begins at 1. IDs are allocated once by the accepted-home authority
-store and reused only by exact retry.
+store and reused only by exact retry. The one E3-E `MemberDispatchV2` preparation lease narrows that
+rule: its consumer ID is preallocated before effects as `cpc_` plus the exact UUIDv7 suffix of the
+already authenticated `e3p_` preparation ID. It remains store-validated rather than caller-selected;
+the same durable preparation UUID therefore recovers the same consumer path after an ambiguous
+lease write without a new index or lookup key.
 Installer source-store and source-record IDs are `ias_<lowercase UUIDv7>` and
 `iar_<lowercase UUIDv7>`; each installer stream starts at revision 1 and advances only by exact
 prior revision plus one.
@@ -2792,28 +2796,67 @@ live, and completes the source-ref, default-backend, request backend, resolved-r
 authenticated launch/fork joins before accepting integrated auth, locking the preparation map,
 acquiring exclusion, binding a listener, publishing, or creating any other preparation side effect.
 Only the reconstructed carrier and returned logical projection are used thereafter. The manager
-passes that exact projection as the second argument in the existing service operation's sole
-admitted E3-E signature:
+uses those authenticated values to construct the exact nonsecret projection identity/record and
+the intent-first gateway objects below; it never passes the secret-bearing prepare request into
+`config-projection`. The manager creates and retains
+`E3PreparedRetainedLaunchPublicationV1` before the first kernel effect, completes its public
+publication chain after the manager-owned gateway authority has produced the required readbacks,
+and calls the sole admitted E3-E service signature:
 
 ```rust
 pub fn publish_prepared_retained_launch(
     &self,
-    request: &transport_api_types::E3ConfigProjectionPrepareRequestV1,
-    logical: &LogicalAgentConfigProjectionV1,
-) -> Result<transport_api_types::E3ConfigProjectionPrepareResponseV1, ConfigProjectionFailureV1>
+    authoring_input_ref: &ConfigProjectionAuthoringInputRefV1,
+    authenticated_e2_launch_activation: &transport_api_types::E2MemberLaunchActivationCarrierV1,
+    publication: &mut E3PreparedRetainedLaunchPublicationV1,
+) -> Result<
+    (
+        transport_api_types::E3ConfigProjectionPrepareResponseV1,
+        PublishedConfigProjectionCapabilityV1,
+    ),
+    ConfigProjectionFailureV1,
+>
 ```
 
-`AgentConfigProjectionServiceV1::publish_prepared_retained_launch`'s existing
-authoring-input readback must equal the same effective/source inputs before it constructs or
-publishes a record. The two existing E2 reads retain their transaction, authentication, and failure
+For this path only, the existing lease operation has this additive optional final argument:
+
+```rust
+pub fn acquire_consumer_lease(
+    &self,
+    acquired_projection_ref: &ConfigProjectionRefV1,
+    consumer_kind: ConfigProjectionConsumerKindV1,
+    acquired_at: Timestamp,
+    prepared_consumer_id: Option<&str>,
+) -> Result<ConfigProjectionConsumerLeaseV1, ConfigProjectionFailureV1>
+```
+
+`None` preserves the existing E3-B allocation behavior byte-for-byte. `Some` is accepted only for
+`MemberDispatchV2` and only when it equals the `cpc_` form derived from the exact `e3p_` preparation
+ID in the acquired Dormant record's already published and validated Prepared handoff. It is never a
+general caller-selected ID. Under the existing transaction/lock, absence writes revision-1 `Held`;
+an existing path must exact-resolve to the same store, series, consumer kind, acquired projection,
+`acquired_at`, revision 1, `Held` posture, and lease hash and returns those byte-equal durable bytes.
+Any unequal or Released occupant fails closed and no second consumer is allocated.
+
+The publication value's `record.logical` is the exact logical projection returned by the selected
+V3 reader; it is not a second source read. The service revalidates the configured accepted home and
+re-resolves `authoring_input_ref`; that readback must equal the effective/source/artifact inputs
+bound by `record`, and `authenticated_e2_launch_activation` must equal the record identity's exact
+normalized E2 cap link and all launch/fork, session, participant, backend, run, world, generation,
+and lineage bindings. It then exact-validates every publication member against that record and the
+durable registry objects as specified below. Passing typed observations is not authentication.
+
+The two existing shell E2/source reads retain their transaction, authentication, and failure
 behavior and run sequentially; neither facade operation nor `prepare` calls them from
 `with_locked_parent` or while an E3 projection transaction/parent lock is live. Missing or
 unsupported cap state and any E2 read/authentication/conversion failure map fail-closed to the
 existing `UnsupportedSecurityPosture`; a supplied-versus-authenticated or launch/fork join mismatch
 maps to `WrongBinding`. There is no retry, repair, E2 mutation, current-policy cap recomputation,
 carrier-only acceptance, request-selected authority, or projection assembled from provenance-only
-material. These operations add no public intermediate module or type, raw accessor, parser,
-registry, authentication algorithm, key reader, schema, dependency edge, or non-Linux support.
+material. The one narrowly exported publication carrier below is an in-memory call argument, not a
+durable/wire schema or an authority accessor. These operations add no public intermediate module,
+raw accessor, parser, registry, authentication algorithm, key reader, dependency edge, or non-Linux
+support.
 
 The only E3 authority root is:
 
@@ -3509,12 +3552,58 @@ struct E3ConfigProjectionCancelResponseV1 {
 
 enum E3ConfigProjectionCancelDispositionV1 { Cancelled, AlreadyTerminal }
 
+// Public only for world-service across its existing dependency on config-projection. This value is
+// non-serializable, non-cloneable, non-debuggable, and has private fields.
+struct E3PreparedRetainedLaunchPublicationV1 {
+    identity: ConfigProjectionIdentityV1,
+    gateway: InWorldGatewayIdentityV1,
+    prepared_handoff: ConfigProjectionSecretHandoffRevisionV1,
+    prepared_handoff_ref: SecretHandoffRefV1,
+    preparation_idempotency_key: String,
+    consumer_id: String,
+    record: Option<AgentConfigProjectionRecordV1>,
+    ordered_child_cgroups: Option<[E3ChildCgroupRegistrationV1; 3]>,
+    dormant_boundary: Option<GatewayAccessBoundaryV1>,
+    activation_intent: Option<ManagedGatewayActivationIntentV1>,
+    launch_input: Option<ManagedGatewayLaunchInputV1>,
+    published_head: Option<ConfigProjectionRefV1>,
+    held_consumer_lease: Option<ConfigProjectionConsumerLeaseV1>,
+}
+
+impl E3PreparedRetainedLaunchPublicationV1 {
+    pub fn new(
+        identity: &ConfigProjectionIdentityV1,
+        gateway: &InWorldGatewayIdentityV1,
+        credential_source_ref: &CredentialSourceRefV1,
+        handoff_id: String,
+        preparation_idempotency_key: String,
+        created_at: Timestamp,
+        expires_at: Timestamp,
+    ) -> Result<Self, ConfigProjectionFailureV1>;
+
+    pub fn prepared_handoff_ref(&self) -> &SecretHandoffRefV1;
+
+    pub fn bind_prepared_chain(
+        &mut self,
+        record: AgentConfigProjectionRecordV1,
+        ordered_child_cgroups: [E3ChildCgroupRegistrationV1; 3],
+        dormant_boundary: GatewayAccessBoundaryV1,
+        activation_intent: ManagedGatewayActivationIntentV1,
+        launch_input: ManagedGatewayLaunchInputV1,
+    ) -> Result<(), ConfigProjectionFailureV1>;
+
+    pub fn published_head(&self) -> Option<&ConfigProjectionRefV1>;
+
+    pub fn held_consumer_lease(&self) -> Option<&ConfigProjectionConsumerLeaseV1>;
+}
+
 // Private, non-serializable, non-cloneable world-service state.
 struct SealedE3ConfigProjectionPreparationV1 {
     preparation_id: String,
     preparation_idempotency_key: String,
-    response: E3ConfigProjectionPrepareResponseV1,
-    projection: PublishedConfigProjectionCapabilityV1,
+    response: Option<E3ConfigProjectionPrepareResponseV1>,
+    projection: Option<PublishedConfigProjectionCapabilityV1>,
+    publication: Option<E3PreparedRetainedLaunchPublicationV1>,
     credential_source: SealedCredentialSourceCapabilityV1,
     gateway_authority: E3GatewayRuntimeAuthorityV1,
     expires_deadline: ClockBoottimeDeadline,
@@ -3560,12 +3649,32 @@ enum MemberDispatchRequest {
 }
 ```
 
+`E3PreparedRetainedLaunchPublicationV1` is defined in
+`crates/config-projection/src/service.rs`, reexported only through the crate's existing
+`pub use service::*`. Its exact `new` operation copies only the nonsecret identity, gateway, and
+credential-source reference, validates the IDs/timestamps/bindings, constructs the private
+`LaunchTimeSecretHandoffV1` and `ConfigProjectionSecretHandoffRevisionV1` in `Prepared` posture with
+the fixed E3 secure-FD delivery, and stores its exact nonsecret ref. The chain and progress fields
+begin `None`; `consumer_id` is fixed at construction from
+`credential_source_ref.preparation_id` by the exact prefix substitution above, before any effect or
+lease transaction. `prepared_handoff_ref` exposes only a shared reference to that public nonsecret ref so
+the manager can construct the activation intent and record without a second handoff representation.
+`bind_prepared_chain` fills the five chain fields exactly once after structural/hash/cross-binding
+validation and cannot alter the identity, gateway, handoff, key, or timestamps. `published_head` and
+`held_consumer_lease` each return a shared reference to the corresponding optional existing type so
+the preparation manager can drive exact abandonment/release without raw store access. No field is
+public, and no clone, debug, serde, default, conversion, raw-descriptor, or general context API is
+implemented. The service alone may set the progress fields, first writing the exact returned
+Dormant head and later the exact revision-1 Held lease; neither may be cleared or replaced within an
+attempt.
+
 `SealedE3ConfigProjectionPreparationV1`, `SealedCredentialSourceCapabilityV1`, and
 `ClockBoottimeDeadline` are private world-service implementation types, not wire or
-`config-projection` exports. The world-service preparation manager owns the sealed map and composes
-the downward `AgentConfigProjectionServiceV1` persistence API with the sibling gateway-runtime and
-child-exclusion APIs. The shared crate neither imports world-service nor owns listener/process/secret
-capabilities, preserving the stated acyclic Cargo graph.
+`config-projection` exports. Before the first publication call, the world-service preparation
+manager moves the new publication carrier into the sealed map alongside the secret owner and live
+gateway owner. The manager therefore continues to own any head/lease progress if the call returns
+an error or unwinds. The shared crate neither imports world-service nor owns
+listener/process/secret capabilities, preserving the stated acyclic Cargo graph.
 
 The E3 local route additionally uses these private, non-serializable world-service observations:
 
@@ -3677,23 +3786,93 @@ buffers. Traces contain only preparation ID, nonsecret idempotency key, backend 
 disposition, and redacted diagnostic ref.
 
 For one accepted preparation, world-service acquires or joins the process-wide E3-exclusive lease,
-moves the integrated-auth payload into a sealed process-local credential-source capability, binds and
-retains the sole listener without listening, installs/readback-validates the initial deny-all
-boundary, calls `listen(16)`, and proves the accepting queue empty before it publishes in dependency
-order the nonsecret credential-source ref, `Prepared` handoff, gateway identity, activation intent,
-native source, `Dormant/ZeroLiveClosed` projection, and revision-1 Held consumer lease. The Dormant
-head and lease are committed before the response is returned. No gateway, readiness probe, Codex,
-UAA, provider, or other child is spawned by either preparation route. The sealed preparation retains
-the credential capability, listener descriptor, artifact descriptors, cgroup/boundary handles,
-consumer lease, and E3-exclusive admission, keyed by preparation ID and exact carrier, until one
-matching V2 launch consumes it or cancellation/expiry/recovery terminates it. Thus the returned
-projection is independently valid before D1 while remaining launch-inhibiting.
+moves the integrated-auth payload into a sealed process-local credential-source capability, and
+binds and retains the sole listener without listening. From the authenticated source/E2 inputs it
+constructs the record identity and zero-live fence, preallocates the fixed IDs, constructs the
+gateway identity and nonsecret credential-source ref, creates the publication carrier, and moves it
+into the sealed attempt before a kernel effect. Through the existing
+`ConfigProjectionRegistryV1::publish_kernel_effect_intent` transaction
+and scoped callback, it directs its retained `E3GatewayRuntimeAuthorityV1` to create and
+readback-validate exactly the `ManagedGateway`, `ReadinessProbe`, and `Codex` cgroups in that order;
+the same transaction publishes and exact-readback-validates each returned
+`E3ChildCgroupRegistrationV1`. It then first-writer publishes and exact-readback-validates the
+gateway identity, publishes the boundary intent before the nftables effect, installs and
+readback-validates the deny-all boundary, calls `listen(16)`, proves the accepting queue empty, and
+obtains the `GatewayAccessBoundaryV1` plus those same three registrations from the live gateway
+owner. Kernel/listener/cgroup/nftables construction, callbacks, readback, and live ownership remain
+entirely in world-service.
+
+This order has no record/handoff cycle. After boundary readback, the manager uses only the
+carrier's exact `prepared_handoff_ref` to construct the `ManagedGatewayActivationIntentV1`; it then
+constructs and hashes the complete `AgentConfigProjectionRecordV1`, whose ref permits construction
+of `ManagedGatewayLaunchInputV1`. It calls `bind_prepared_chain` exactly once with that record, the
+three returned registrations, boundary, activation intent, and launch input. Before calling the
+projection service it has therefore retained both the live owners and a complete existing-typed
+nonsecret publication chain; no private handoff body was exposed or independently recomputed. The
+service exact-validates the bindings of its two explicit inputs without repeating either shell-owned
+source/E2 read and validates all member hashes and cross-bindings. Its registry transaction must
+exact-resolve the three durable cgroup registrations and their intent refs, in the fixed role order,
+as well as the gateway identity and boundary intent; each must equal the passed readback and the
+record's store/series/fence/preparation/world/generation/gateway/boundary values. Only then may
+`publish_dormant` publish, in its existing dependency-first order, the nonsecret credential-source
+ref, `Prepared` handoff, gateway identity, activation intent, boundary, native source, launch input,
+and finally the `Dormant/ZeroLiveClosed` record/head. It writes that exact returned head into the
+manager-owned carrier before any subsequent fallible operation.
+
+The service next calls the existing `acquire_consumer_lease` with
+`prepared_consumer_id = Some(&publication.consumer_id)` to acquire-or-resolve the revision-1
+`MemberDispatchV2` lease against that exact published head with the record's `created_at`, writes the
+exact returned lease into the same carrier immediately, and calls
+`ConfigProjectionRegistryV1::resolve(Some((&record.identity, held_lease)), None)` only after the
+lease-acquisition transaction has ended. It accepts only `Current` with byte-equal identity,
+record, and head, uses that resolution's existing `PublishedConfigProjectionCapabilityV1`, and
+constructs the response carrier/hash from the exact head, intent, gateway, fence, and lease. The
+service returns `(response, capability)`; while still holding the preparation map entry, the manager
+stores both beside the publication carrier and live gateway/credential/resource owners, verifies
+the response joins those retained objects, and only then returns success. The Dormant head and lease
+are therefore committed and owned before the response is observable. Neither route spawns a
+gateway, readiness probe, Codex, UAA, provider, or other child. FreshSpawn and Fork use this same
+handoff; their already specified nullable proof, lineage, and authenticated E2 joins differ, but
+there is no separate fork rediscovery or publication interface.
+
+The aggregate constructor and one-time chain binder perform only bounded structural, role-order,
+timestamp, and canonical-hash checks; they grant no authority. Malformed shape/timestamp/enum/ID is
+`Malformed`, a bad canonical digest is `HashInvalid`, and any unequal source/E2/record/gateway/
+registration/intent/boundary/launch-input binding is `WrongBinding`. A missing or unreadable
+required immutable object or incomplete dependency chain is `PartialPublication`; a noncurrent head or lease is
+`StaleRevision`; an unequal first-writer/idempotent retry is `Conflict`; and a retired series remains
+`RetiredSeries`. Configured-root, descriptor, transaction-lock, kernel-owner, or exact-readback
+security failure remains `UnsupportedSecurityPosture`. Existing registry operations preserve their
+more specific failure unchanged; the service neither converts a failed validation into success nor
+repairs, substitutes, or republishes through a different path.
 
 An exact retry with the same preparation ID, idempotency key, and byte-equal nonsecret request joins
-the live sealed attempt and returns the identical response. Because reusable secret equality is
-forbidden, world-service does not compare the retried secret values: it immediately closes and
+the live sealed attempt and returns the identical stored response when publication completed. If a
+previous call stopped after durable dependencies/head or after an attempted lease acquisition but before the
+response became observable, the manager retries with the same retained publication carrier and live
+owners. The service exact-resolves its recorded head; it joins a byte-equal immutable publication
+instead of allocating another record/fence or replaying a kernel effect, and it acquires a lease only
+when `held_consumer_lease` is still `None`. That call uses the already retained deterministic
+consumer ID, so an earlier durable write whose return was lost resolves the exact existing lease. A
+present lease must exact-resolve as revision-1 `Held` against that head and is reused; a second
+consumer ID is forbidden. Because reusable secret equality
+is forbidden, world-service does not compare the retried secret values: it immediately closes and
 scrubs that duplicate payload without changing the original capability. A reused preparation ID or
-key with any nonsecret difference is `Conflict`. A preparation expires after exactly 120 seconds by
+key with any nonsecret difference is `Conflict`.
+
+Any failure before a kernel effect may use the existing child-free cleanup. Once an intent/effect,
+publication head, or lease exists, the sealed entry retains the gateway owner, publication carrier,
+exact progress, credential owner, and E3-exclusive lease until cancellation, expiry, exact retry, or
+restart recovery has durably resolved or abandoned every object. An error or unwind cannot remove
+that entry, release exclusion, fabricate a response, or discard the only lease/effect owner; cleanup
+failure remains fail-closed. Existing CAS/idempotent immutable writes and intent recovery decide
+ambiguous durability, and no effect callback is replayed. In-process cleanup first reconciles an
+empty lease slot through the same exact-ID acquire-or-resolve call whenever a head exists; restart
+recovery derives that ID from the durable Prepared handoff/preparation binding and resolves or
+reacquires that known Held lease through the same operation before the existing release operation.
+Neither case enumerates leases, invents a new ID, or requires an in-memory return that may have been
+lost. A preparation expires after exactly
+120 seconds by
 the service's `CLOCK_BOOTTIME` deadline; `expires_at` is the corresponding informational RFC 3339
 UTC projection and is not the timer authority. Cancel and expiry kill any unreleased child, revoke
 and verify the boundary, terminate the handoff as `Failed` or `Expired`, make the old carrier
@@ -4094,10 +4273,28 @@ this catalog:
    resolver and final-descriptor validation above. The exception adds no public symbol, schema,
    registry behavior, manifest field, alternate pathname, or resolution rule for another support
    object.
-   For E3-E only, the existing `AgentConfigProjectionServiceV1::publish_prepared_retained_launch`
-   may add the exact `&LogicalAgentConfigProjectionV1` argument described above and consume it only
-   after its existing authoring-input readback equals the inputs from which that value was built; no
-   other service method signature or public config-projection surface changes.
+   For E3-E only, `crates/config-projection/src/service.rs` may define the exact
+   `E3PreparedRetainedLaunchPublicationV1` and its `new`, `prepared_handoff_ref`,
+   `bind_prepared_chain`, `published_head`, and `held_consumer_lease` operations described above;
+   may change
+   `AgentConfigProjectionServiceV1::publish_prepared_retained_launch` to the exact three-argument
+   and tuple-result signature above; and may add only private
+   `validate_prepared_retained_launch_publication_v1`,
+   `build_prepared_secret_handoff_revision_v1`, and `build_prepared_response_v1` helpers. The type
+   is exported only by the existing `crates/config-projection/src/lib.rs::pub use service::*`; no
+   other `lib.rs` change is admitted. The service receives no prepare request, integrated-auth
+   payload, raw descriptor, kernel callback, or world-service type. In
+   `crates/config-projection/src/registry.rs`, E3-E may extend only the private
+   `PreparedGatewayChainV1` and `validate_prepared_gateway_chain` to accept the fixed ordered
+   `&[E3ChildCgroupRegistrationV1; 3]` and authenticate each with the existing
+   `resolve_child_cgroup_registration`; `publish_prepared_gateway_chain` may mechanically ignore
+   that validation-only tuple member. E3-E may also add only the optional final
+   `prepared_consumer_id` argument shown above to the existing `acquire_consumer_lease` operation,
+   plus crate-private `prepared_member_dispatch_consumer_id_v1` and private
+   `acquire_or_resolve_prepared_consumer_lease_v1` in `src/registry.rs`, solely for the exact
+   deterministic `MemberDispatchV2` acquire-or-resolve/recovery behavior above; `None` preserves all
+   other existing callers and behavior. No public registry operation is added. No other service
+   method signature or public config-projection surface changes.
    Colocated `mod tests` blocks
    are allowed. No other `pub`/`pub(crate)` surface is admitted. Within only the E3-B-owned
    `src/codec.rs` and `src/registry.rs`, ordinary private free functions, private inherent methods,
@@ -4315,9 +4512,18 @@ this catalog:
    `authenticate_e3_member_launch_activation_v1` and
    `read_e3_selected_inventory_projection_v1`. It may call the existing
    `ConfigProjectionRegistryV1::resolve` once for the pre-side-effect authoring-input read described
-   above and pass the returned logical projection only to
-   `AgentConfigProjectionServiceV1::publish_prepared_retained_launch`; it must obey the completed
-   no-overlapping-lock ordering above.
+   above; construct the admitted existing nonsecret identity, gateway, kernel-intent, registration,
+   boundary, activation-intent, record, and launch-input types; call the already admitted registry
+   kernel-intent/gateway-identity operations in the exact intent/effect/readback order above; create
+   and retain `E3PreparedRetainedLaunchPublicationV1` before those effects, use only its exact
+   Prepared-ref accessor to complete and one-time-bind the public chain after readback, and pass only
+   the authoring ref, authenticated E2 carrier, and mutable publication carrier to
+   `AgentConfigProjectionServiceV1::publish_prepared_retained_launch`. It stores the returned
+   response/capability while retaining that carrier, gateway authority, credential owner, and
+   exclusion before success. Its existing `cancel`, `take_for_v2`, and `recover_expired` may call
+   only the publication carrier's two shared-reference accessors to drive the already admitted
+   abandonment/lease-release lifecycle; no raw registry or descriptor accessor is added. It must
+   obey the completed no-overlapping-lock ordering above.
    No other world-service symbol receives or exposes that facade. Create exactly
    `crates/world-service/src/e3_codex_launch.rs` with
    `E3Codex0125LaunchAdapterV1::{new,prepare,spawn_setup_wrapper,validate_setup_ready,
@@ -4372,6 +4578,11 @@ this catalog:
    Arc<E3PrivilegedChildExclusionV1>` and
    `ManagedGatewayRuntime.privileged_child_exclusion_lease:
    Arc<HeldNonE3PrivilegedChildLeaseV1>` field held for a non-E3 gateway lifetime.
+   For E3-E, only the return of existing
+   `E3GatewayRuntimeAuthorityV1::listen_after_dormant_boundary` may narrow to
+   `Result<(GatewayAccessBoundaryV1, [E3ChildCgroupRegistrationV1; 3])>` so the manager receives the
+   already owned/readback registrations in exact `ManagedGateway`, `ReadinessProbe`, `Codex` order;
+   it creates no second observation or authority and exposes no descriptor or new helper.
    Existing `prepare_linux_world_entry_launcher` and
    `render_linux_world_entry_wrapper`, `gateway_health_ready`, and
    `gateway_health_ready_blocking` remain V1-only and frozen;
@@ -4674,6 +4885,23 @@ and the descriptor-pinned official Codex archive above for:
   effective, request, or resolved-runtime backend mismatch must produce the mapped typed failure
   before preparation-map, exclusion, listener, credential-acceptance, or publication side effects;
   the existing V1/V2 fixture results remain byte/behavior-identical; and
+- ordinary colocated service/registry/gateway-owner/preparation-manager tests for both FreshSpawn
+  and Fork proving that the exact authenticated authoring/E2 inputs and manager-owned cgroup/
+  boundary readbacks produce dependency-first immutable publication, one Dormant head, one
+  revision-1 Held lease, one matching resolved capability/response, and retention of that exact
+  lease plus every live resource owner before success. Missing, reordered, duplicated, stale,
+  substituted, or wrong-store/series/fence/preparation/world/generation/role/intent registration or
+  boundary material must fail before the head. Injected failure after the head but before the lease,
+  and after the lease but before response retention, must leave the sealed owner/exclusion and exact
+  head/lease progress reachable; an exact retry must join the same head, acquire at most one lease,
+  return the same response, and never replay an effect. A fault immediately after the lease's
+  durable commit but before its return/carrier write must reacquire the exact deterministic consumer
+  path and prove the byte-equal Held lease; restart must derive the same path from durable
+  preparation/handoff material and release it without enumeration. Cancellation, expiry, cleanup failure, and
+  restart ambiguity at those boundaries must publish no success, prematurely release no exclusion,
+  and retain or recover enough exact authority to revoke/abandon/release through the existing
+  lifecycle. These tests reuse existing E2, V3, registry intent, gateway-owner, and preparation
+  fixtures and add no proof framework; and
 - V2 emission and equality fixtures through both
   `continue_world_worker_fork_command_bootstrap_after_delivery` and
   `build_continue_world_worker_fork_command_transport_request`, plus every direct Spawn/Fork path;
