@@ -4414,13 +4414,75 @@ this catalog:
    deterministic `MemberDispatchV2` acquire-or-resolve/recovery behavior above; `None` preserves all
    other existing callers and behavior. No public registry operation is added. No other service
    method signature or public config-projection surface changes.
+
+   For the already admitted E3-E abandonment lifecycle, `src/service.rs` owns
+   `AgentConfigProjectionServiceV1::publish_preparation_abandonment` and the private nonsecret
+   construction/validation helpers necessary for that operation. The service uses the retained
+   publication's identity, fence, and private handoff revision to construct the exact
+   `Failed`/`Expired` successor, preserving the preparation and gateway bindings. It supplies that
+   complete existing wrapper, including its immediate `predecessor_ref`, timestamps, nullable
+   diagnostic ref, and unchanged revision hash domain, through this sole additional internal
+   callable boundary owned by `src/registry.rs`:
+
+   ```rust
+   impl ConfigProjectionRegistryV1 {
+       pub(crate) fn publish_handoff_transition_v1(
+           &self,
+           identity: &ConfigProjectionIdentityV1,
+           fence_id: &str,
+           successor: &ConfigProjectionSecretHandoffRevisionV1,
+       ) -> Result<SecretHandoffRefV1, ConfigProjectionFailureV1>;
+   }
+   ```
+
+   `identity` supplies the exact store and immutable series subject; `fence_id` supplies the attempt
+   fence that neither the identity nor the handoff ref carries. The successor carries the
+   preparation/receiver bindings and the expected handoff head in its required non-null
+   `predecessor_ref`; no duplicate expected-ref argument or private-handoff accessor is needed.
+   The registry exact-resolves that predecessor and the existing gateway/attempt evidence under
+   the parent-before-child locks, validates all store/subject/preparation/gateway/fence bindings
+   and unchanged handoff fields, and admits only the legal unique successor with revision increment
+   one defined by [managed gateway adoption](managed-gateway-adoption-v1.md) and
+   [launch-time secret handoff](launch-time-secret-handoff-v1.md). Revision-1 `Prepared` remains
+   owned by the existing prepared-chain writer. This internal transaction may also be reused by
+   already admitted handoff lifecycle callers for their existing legal transitions; it is not
+   restricted to a terminal target or a Dormant-only projection posture. Each caller's existing
+   lifecycle prerequisites remain mandatory. Abandonment must reject another or already Active
+   attempt, with the durable attempt/head checks repeated under these same locks before mutation.
+
+   `src/registry.rs` owns the necessary private validation, write, readback, and recovery helpers
+   for this transaction. It compares the handoff head's exact canonical bytes to the predecessor,
+   publishes and durably validates the immutable successor revision before advancing the head by
+   the existing expected-bytes CAS, and returns its nonsecret ref only after durable exact readback
+   and successful child/parent transaction completion. If that head already names the supplied
+   successor, success requires byte-equal revision and head readback with the same predecessor and
+   all bindings; a matching terminal enum alone is insufficient. Unequal successor bytes, a second
+   successor, or any other stale/conflicting head rejects. A lost return is retried with the same
+   successor bytes, never freshly chosen timestamps or diagnostics. An installed revision whose
+   head still names its predecessor can complete only that same validated CAS; a temporary or
+   immutable revision alone never proves the transition committed. Existing recovery may read and
+   reconcile the exact retained chain privately, including progress preceding a projection-head
+   return, but may neither invent terminal evidence nor replay a secret or kernel effect. An
+   unresolved or failed readback retains accountable ownership and exclusion.
+
+   The returned ref records only the handoff transition. The abandonment service and preparation
+   manager still perform cancellation/expiry in the order above: kill unreleased children, revoke
+   and verify the boundary, terminate the handoff, make the old carrier terminal/stale, then release
+   consumer and exclusion leases while retaining authority objects. Recording `Failed`/`Expired`
+   does not attest kernel cleanup, descriptor/buffer cleanup, lease release, or complete cancellation;
+   their existing obligations and cleanup-failure retention remain unchanged. This exception adds
+   no public API, raw transaction/descriptor accessor, arbitrary callback, generic persistence
+   interface, new schema/store/hash domain, credential carrier, lookup system, transition, or
+   future-packet behavior. It changes neither the two linked contracts nor their lifecycle.
+
    Colocated `mod tests` blocks
    are allowed. No other `pub`/`pub(crate)` surface is admitted. Within only the E3-B-owned
    `src/codec.rs` and `src/registry.rs`, ordinary private free functions, private inherent methods,
    and private implementation types necessary to implement the admitted codec/registry operations
    are allowed without a separate authority amendment; they may not expand the public API, product
    behavior, file ownership, or later-packet scope. Private helpers in any other new-crate file remain
-   unadmitted. One E3-E exception is admitted in `crates/config-projection/src/lib.rs`: E3-E may
+   unadmitted except for the explicitly named service allowances above. One E3-E exception is admitted
+   in `crates/config-projection/src/lib.rs`: E3-E may
    define `LaunchTimeSecretHandoffV1` there as a private, non-exported, non-reexported type used only
    as the private `handoff` constituent of `ConfigProjectionSecretHandoffRevisionV1`. Its fields and
    semantics remain exactly those specified in `launch-time-secret-handoff-v1.md`, and its embedding,
