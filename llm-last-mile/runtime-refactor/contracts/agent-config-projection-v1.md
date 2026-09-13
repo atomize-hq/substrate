@@ -1121,9 +1121,40 @@ below must also remain absent at every per-exec and post-turn wall. `directories
 `files` contains its sole entry; no filesystem enumeration order is hashed. `cwd` equals
 `identity.workspace_root`.
 
-The record's embedded native bytes are the semantic authority. Before the dormant record is
-published, the registry also realizes those bytes once into the immutable accepted-home source
-directory named by `authority_relative_path`. That directory contains exactly
+The record's embedded native bytes are the semantic authority. Their first construction is an
+explicit acyclic two-phase operation. `Codex0125ProjectionV1::render` first returns one opaque
+`Codex0125ProjectionPlanV1`; it runs the one canonical TOML generator and fixes the renderer,
+identity/effective/gateway/root/fence inputs, exact config bytes/length/SHA-256, environment,
+invocation, and the already observed source-independent `Project` loader inputs, but contains no
+source, realization, or per-exec device/inode claim. The plan is process-local, non-serializable,
+non-cloneable, has private fields, and is neither authority nor a completed security attestation.
+It cannot be fabricated or used to publish a projection head.
+
+`ConfigProjectionRegistryV1::publish_native_source` consumes that plan under the existing accepted-
+home parent/child transaction. It creates or exact-resolves the fixed temporary source tree, writes
+the planned config bytes once, then descriptor-reopens the temp root, `codex-home`, `config.toml`,
+and `system-empty` with the existing no-follow/beneath rules. The same held config descriptor supplies
+both metadata and bytes: owner, mode, link count, device, inode, length, and SHA-256 are validated,
+the bytes are required to equal the plan, and a second `fstat` must reproduce the identity and
+metadata. Only those actual accepted-home observations may complete the source-rooted `System` and
+`User` entries and allow private `Codex0125ProjectionV1::finalize_from_native_source_v1` to construct
+`NativeAgentConfigProjectionV1` and its hash. The source manifest then binds that completed native
+hash, the same observed source-root identity, and the same config digest; it is written, synced,
+installed by no-replace rename, and exact-read back before the operation returns the pair
+`(NativeAgentConfigProjectionV1, NativeProjectionSourceManifestV1)`. The source root's descriptor
+identity is known before its same-filesystem rename and is required to remain identical through the
+final reopen; no object's hash depends on its own future hash.
+
+The registry's `publish_dormant` path never creates a source tree from record bytes. It requires the
+already published final source, descriptor-reconstructs and validates the same native/source pair,
+and rejects a missing, incomplete, substituted, or unequal source before any record or head
+publication. Exact retry of `publish_native_source` reopens the same final source and must reproduce
+the same plan finalization and manifest; recovery may promote only a complete, exactly revalidated
+temporary with its finalized manifest. A pre-finalization plan or incomplete temporary remains
+non-authoritative and fails closed under the existing recovery rules.
+
+The resulting immutable accepted-home source directory is named by `authority_relative_path`. It
+contains exactly
 `source-manifest.json`, `codex-home/config.toml`, and an empty `system-empty/`; it contains no
 `home`, `state`, `tmp`, log, socket, or process-created file. The source directory and its children
 are descriptor-created beneath the accepted-home root, owned by the authenticated UID/GID, mode
@@ -1768,8 +1799,14 @@ Any upstream-source mismatch is `UnsupportedRuntimeVersion`, not best-effort val
 
 `allowed_enabled_layers` is exactly `["System","User"]`, in Codex precedence order. Before record
 publication, the authority creates and descriptor-validates the empty owner-only `system-empty`
-directory beneath the native root. Before each initial or resumed exec, the wrapper creates a private
-mount namespace and bind-mounts that exact directory read-only over `/etc/codex`; the validator descriptor-opens that mount and
+directory beneath the immutable accepted-home source root. The durable closure's `System` and `User`
+entries are truthful source observations: their directories are respectively that held
+`system-empty` and held `codex-home`, and the projected config device/inode/length/hash come from the
+same held accepted-home config descriptor whose bytes were finalized into the native projection.
+They are expected-source evidence, not observations of a `/run` file or a future mount. Before each
+initial or resumed exec, the wrapper creates a private
+mount namespace and bind-mounts the exact held `system-empty` directory read-only over `/etc/codex`;
+the validator descriptor-opens that mount and
 records `ProvenAbsent` attestations for `config.toml`, `managed_config.toml`, `requirements.toml`,
 `rules/`, and `skills/`. The `System` layer consequently exists only as Codex's required empty layer.
 The `User` attestation is the exact projected `codex-home/config.toml`; `codex-home/rules/`,
@@ -1777,7 +1814,14 @@ The `User` attestation is the exact projected `codex-home/config.toml`; `codex-h
 `ProvenAbsent`. The immutable projection records the expected source-directory and loader-input
 closure. The wrapper's setup-ready attestation proves the per-exec mount realization; both wrapper and
 parent revalidate the mount and native-root descriptors after namespace setup and immediately before
-the final-exec barrier release.
+the final-exec barrier release. The `/run` realization and mounted loader objects have their own real
+descriptor identities and are never copied into or represented as the accepted-home source
+attestations. The wrapper instead proves the exact source-manifest -> realization-manifest -> mounted
+object chain, exact-matches layer/relative-path/disposition and bytes to the durable closure, and only
+then reports that durable closure's unchanged `validated_loader_input_fingerprint`. The parent
+independently repeats the descriptor and byte joins. Thus a source descriptor is never presented as
+a runtime observation, and a logical runtime path or planned value is never accepted as completed
+setup evidence.
 
 The validator implements the pinned loader's default project-root-marker and trust-key algorithms.
 With `cwd` exactly the recorded workspace root and no CLI overrides, it enumerates and attests the
@@ -1826,11 +1870,14 @@ carry Codex session data but cannot carry authentication or cloud-requirements i
 
 Thread-config layers must be empty and session/CLI overrides are exactly empty; the forbidden
 argument check is repeated on the final argv. `validated_loader_input_fingerprint` is the canonical domain hash of
-`{"domain":"substrate.e3.codex-0.125-loader-inputs.v1","inputs":<ordered complete attestations>,"loader_source":<loader source>}`.
-The input list is ordered by Codex precedence, then locator bytes. Activation recomputes the entire
-list after all mounts and requires byte-equal attestations and fingerprint. Missing evidence, an
-extra locator, a newly enabled layer, an unrepresented cloud/thread/runtime input, or any effective
-value difference fails closed. Differential fixtures execute the pinned official binary against
+`{"domain":"substrate.e3.codex-0.125-loader-inputs.v1","inputs":<ordered complete accepted-home source closure>,"loader_source":<loader source>}`.
+The input list is ordered by Codex precedence, then locator bytes. After all mounts, activation
+enumerates the complete runtime loader set and validates its actual descriptors, absences, and bytes
+against the held source and realization manifests; it does not demand or fabricate device/inode
+equality between distinct accepted-home, `/run`, and per-exec mount objects. Only a successful exact
+join authorizes the setup attestation to carry the durable source-closure fingerprint. Missing
+evidence, an extra locator, a newly enabled layer, an unrepresented cloud/thread/runtime input, an
+identity or byte substitution, or any effective-value difference fails closed. Differential fixtures execute the pinned official binary against
 each layer permutation and must match the validator's enabled/disabled and effective-value result;
 merely setting `CODEX_HOME` or writing `trust_level = "untrusted"` is not proof of closure.
 
@@ -2006,7 +2053,10 @@ equal the ref and whose recomputed `record_hash` equals the ref. A caller-suppli
 never part of reference resolution.
 
 Validation recomputes all nested hashes, decodes every native file, checks length/hash/mode/path,
-re-renders native bytes from the effective/gateway values and requires byte equality, validates the
+re-runs the one renderer from the effective/gateway values to reproduce the plan bytes, reopens the
+bound immutable accepted-home source, and requires descriptor-backed finalization to reproduce the
+native projection and source manifest byte-for-byte. It separately validates the later realization
+and per-exec observations through the manifest chain described above. It validates the
 E2 record/ref/cap/snapshot through E2's existing authenticated read capability, and compares every
 overlapping session/participant/bootstrap/backend/world/generation/policy field. It does not write,
 repair, migrate, or synthesize E2 state. Equal hashes do not permit object substitution: every ID,
@@ -3803,21 +3853,25 @@ owner. Kernel/listener/cgroup/nftables construction, callbacks, readback, and li
 entirely in world-service.
 
 This order has no record/handoff cycle. After boundary readback, the manager uses only the
-carrier's exact `prepared_handoff_ref` to construct the `ManagedGatewayActivationIntentV1`; it then
-constructs and hashes the complete `AgentConfigProjectionRecordV1`, whose ref permits construction
-of `ManagedGatewayLaunchInputV1`. It calls `bind_prepared_chain` exactly once with that record, the
-three returned registrations, boundary, activation intent, and launch input. Before calling the
-projection service it has therefore retained both the live owners and a complete existing-typed
+carrier's exact `prepared_handoff_ref` to construct the `ManagedGatewayActivationIntentV1`. With the
+gateway endpoint now final, it invokes the renderer to produce the opaque plan, passes that plan to
+`publish_native_source`, and retains the returned descriptor-finalized native projection and source
+manifest. It then constructs and hashes the complete `AgentConfigProjectionRecordV1` from that exact
+native value; the record ref permits construction of `ManagedGatewayLaunchInputV1`. It calls
+`bind_prepared_chain` exactly once with that record, the three returned registrations, boundary,
+activation intent, and launch input. Before calling the projection service it has therefore retained
+both the live owners, the exact immutable accepted-home source, and a complete existing-typed
 nonsecret publication chain; no private handoff body was exposed or independently recomputed. The
 service exact-validates the bindings of its two explicit inputs without repeating either shell-owned
 source/E2 read and validates all member hashes and cross-bindings. Its registry transaction must
 exact-resolve the three durable cgroup registrations and their intent refs, in the fixed role order,
-as well as the gateway identity and boundary intent; each must equal the passed readback and the
-record's store/series/fence/preparation/world/generation/gateway/boundary values. Only then may
-`publish_dormant` publish, in its existing dependency-first order, the nonsecret credential-source
-ref, `Prepared` handoff, gateway identity, activation intent, boundary, native source, launch input,
-and finally the `Dormant/ZeroLiveClosed` record/head. It writes that exact returned head into the
-manager-owned carrier before any subsequent fallible operation.
+as well as the gateway identity, boundary intent, and already published native source; each must
+equal the passed readback and the record's store/series/fence/preparation/world/generation/gateway/
+boundary/native values. Only then may `publish_dormant` publish, in its existing dependency-first
+order, the nonsecret credential-source ref, `Prepared` handoff, gateway identity, activation intent,
+boundary and launch input, validate the already complete native source, and finally publish the
+`Dormant/ZeroLiveClosed` record/head. It writes that exact returned head into the manager-owned
+carrier before any subsequent fallible operation.
 
 The service next calls the existing `acquire_consumer_lease` with
 `prepared_consumer_id = Some(&publication.consumer_id)` to acquire-or-resolve the revision-1
@@ -4266,6 +4320,71 @@ this catalog:
    validate_e3_static_elf_v1,validate_system_config_mount_target_v1}`. The obsolete
    `validate_host_ptrace_posture_v1` name is deleted rather than renamed or left with artifact-source
    ownership; host process security belongs to E3-D's world-service child-security path below.
+   For the bounded E3-E native-construction correction only, E3-E may consume the following narrow
+   E3-C-owned adaptations in `crates/config-projection/src/codex_0125.rs` and
+   `crates/config-projection/src/registry.rs`; this does not reopen any other E3-C finding or behavior.
+   The exact revised renderer signature is:
+
+   ```rust
+   impl Codex0125ProjectionV1 {
+       pub fn render(
+           identity: &ConfigProjectionIdentityV1,
+           effective: &EffectiveAgentConfigProjectionV1,
+           managed_gateway: &ManagedGatewayProjectionV1,
+           root: NativeProjectionRootV1,
+           fence_id: &str,
+           project_loader_inputs: Vec<CodexLoaderInputAttestationV1>,
+       ) -> Result<Codex0125ProjectionPlanV1, ConfigProjectionFailureV1>;
+   }
+   ```
+
+   `project_loader_inputs` contains all and only the already observed, source-matched `Project`
+   entries; `System`, `User`, `McpCredentials`, `Auth`, and `CloudRequirements` entries are rejected
+   at this boundary because they depend on the not-yet-created accepted-home source. The public
+   `Codex0125ProjectionPlanV1` is an opaque, non-`Clone`, non-Serde process-local type with private
+   fields exactly `identity`, `effective`, `managed_gateway`, `root`, `fence_id`,
+   `project_loader_inputs`, `config_bytes`, `config_byte_length`, `config_sha256`, `renderer`,
+   `environment`, and `invocation`; it has no public constructor, getter, mutation, or persistence
+   representation. `render_config_toml_v1` is the sole private TOML byte generator, extracted from
+   the existing nested implementation without a second grammar. The only new crate-private
+   operations in this file are `Codex0125ProjectionPlanV1::config_bytes_v1` for the registry's
+   immediate write and `Codex0125ProjectionV1::finalize_from_native_source_v1(&Codex0125ProjectionPlanV1,
+   &Codex0125NativeSourceObservationV1) -> Result<NativeAgentConfigProjectionV1,
+   ConfigProjectionFailureV1>`. The crate-private, non-cloneable, non-serializable
+   `Codex0125NativeSourceObservationV1` has private fields exactly `source_root`, `codex_home`,
+   `system_empty`, `config_device_id`, `config_inode`, `config_mode`, `config_owner_uid`,
+   `config_owner_gid`, `config_link_count`, `config_byte_length`, and `config_sha256`, plus one
+   crate-private `new` constructor used only by the registry after same-descriptor validation.
+   Finalization alone constructs the source-rooted `System`/`User`/pseudo-layer entries, appends the
+   plan's already observed `Project` entries in canonical precedence order, validates the complete
+   closure, and computes the unchanged native hash domain.
+
+   The exact revised registry signature is:
+
+   ```rust
+   impl ConfigProjectionRegistryV1 {
+       pub fn publish_native_source(
+           &self,
+           series_id: &str,
+           fence_id: &str,
+           plan: &Codex0125ProjectionPlanV1,
+           created_at: Timestamp,
+       ) -> Result<
+           (NativeAgentConfigProjectionV1, NativeProjectionSourceManifestV1),
+           ConfigProjectionFailureV1,
+       >;
+   }
+   ```
+
+   In `src/registry.rs`, only private `capture_codex_native_source_observation_v1` and the existing
+   `publish_native_source_directory`, `validate_native_source_directory`,
+   `validate_native_projection_source_input`, and `recover_native_source_temps` may be adapted to
+   implement the acyclic construction/readback sequence above. The capture helper retains the opened
+   config descriptor through read/hash/two-`fstat` validation and constructs the one observation;
+   it exposes no descriptor. `publish_dormant` may change only its existing native-source call site
+   to require and exact-validate that already published source instead of creating one. No schema,
+   hash domain, public registry operation, source-store layout, realization operation, recovery
+   fallback, or permissive partial-tree promotion is added.
    For the bounded installed-CA corrective delta only, E3-D may add private
    `resolve_exact_installed_ca_bundle_v1`, call it only from the otherwise-frozen support-file opening
    inside `LinuxArtifactSourceV1::import_manifest`, and change that file's colocated `mod tests` in
@@ -4508,6 +4627,11 @@ this catalog:
    its private `SealedE3ConfigProjectionPreparationV1`, `SealedCredentialSourceCapabilityV1`, and
    `ClockBoottimeDeadline`. Its private state may retain the one concrete
    `Arc<substrate_shell::OpenedConfigProjectionHsaAuthorityV1>` passed by `WorldService::new_linux`;
+   for the bounded native-construction correction it may add only
+   `native_plan: Option<config_projection::Codex0125ProjectionPlanV1>` and
+   `native_source_manifest: Option<config_projection::NativeProjectionSourceManifestV1>` to
+   `SealedE3ConfigProjectionPreparationV1`. Both are nonsecret retry state, neither is a new durable
+   schema, and neither may be returned or treated as publication authority.
    `prepare` is the sole production call site of
    `authenticate_e3_member_launch_activation_v1` and
    `read_e3_selected_inventory_projection_v1`. It may call the existing
@@ -4515,7 +4639,13 @@ this catalog:
    above; construct the admitted existing nonsecret identity, gateway, kernel-intent, registration,
    boundary, activation-intent, record, and launch-input types; call the already admitted registry
    kernel-intent/gateway-identity operations in the exact intent/effect/readback order above; create
-   and retain `E3PreparedRetainedLaunchPublicationV1` before those effects, use only its exact
+   and retain `E3PreparedRetainedLaunchPublicationV1` before those effects, use its exact Prepared-ref
+   accessor while completing the gateway observations, then call the revised
+   `Codex0125ProjectionV1::render` and `ConfigProjectionRegistryV1::publish_native_source` exactly
+   once for first construction after the managed-gateway base URL and all source-independent inputs
+   are final. It constructs the record only from the returned native projection, retains the returned
+   source manifest for equality/readback checks, and never supplies a guessed source/runtime identity.
+   It then uses only the carrier's exact
    Prepared-ref accessor to complete and one-time-bind the public chain after readback, and pass only
    the authoring ref, authenticated E2 carrier, and mutable publication carrier to
    `AgentConfigProjectionServiceV1::publish_prepared_retained_launch`. It stores the returned
@@ -4523,7 +4653,13 @@ this catalog:
    exclusion before success. Its existing `cancel`, `take_for_v2`, and `recover_expired` may call
    only the publication carrier's two shared-reference accessors to drive the already admitted
    abandonment/lease-release lifecycle; no raw registry or descriptor accessor is added. It must
-   obey the completed no-overlapping-lock ordering above.
+   obey the completed no-overlapping-lock ordering above. An error after immutable source
+   publication retains the same attempt, carrier, credential/gateway/exclusion owners, plan
+   coordinates, and source identity for exact retry or bounded cleanup; it cannot release exclusion,
+   fabricate a record, or publish success. `realize_native_root` remains a later operation over the
+   published exact head/source manifest, and setup-ready validation remains in
+   `E3Codex0125LaunchAdapterV1`; neither operation nor any per-exec observation moves into
+   preparation publication.
    No other world-service symbol receives or exposes that facade. Create exactly
    `crates/world-service/src/e3_codex_launch.rs` with
    `E3Codex0125LaunchAdapterV1::{new,prepare,spawn_setup_wrapper,validate_setup_ready,
@@ -4681,10 +4817,17 @@ and the descriptor-pinned official Codex archive above for:
   that V1/V2 cannot source E3 model/MCP/feature values;
 - first-writer/CAS, two-process conflict, every temp/rename/file-fsync/directory-fsync/readback crash
   boundary, exact retry, reopen, retention, and retirement;
-- immutable accepted-home native-source publication and separate `/run` realization at every
-  directory-create/copy/manifest/fsync/rename/readback crash boundary, including wrong UID/GID,
-  config mutation, read-only bind failure, mutable-state non-aliasing, safe pre-ownership recovery,
-  and kill/revoke-before-cleanup after possible ownership;
+- first native construction with no pre-existing output and no duplicated renderer; byte-identical
+  plan rendering; actual held accepted-home source-root/config/system-empty identity and same-opened-
+  file byte/hash binding; native-before-source-manifest hash ordering; rejection of changed plan
+  bytes, substituted source objects, incomplete publication, synthetic identity, and unequal retry;
+  and exact retry/recovery at every affected create/write/finalize/fsync/rename/readback boundary;
+- immutable accepted-home native-source publication and separate later `/run` realization at every
+  directory-create/copy/manifest/fsync/rename/readback crash boundary, including proof that source
+  observations, realization identities, and per-exec mounted-loader observations remain distinct;
+  wrong UID/GID, config mutation, source/realization or realization/mount substitution, read-only
+  bind failure, mutable-state non-aliasing, safe pre-ownership recovery, and
+  kill/revoke-before-cleanup after possible ownership;
 - every cgroup and nftables boundary crash at intent-before-effect, effect-before-effect-record,
   effect-record publication, recovery-resolution publication, and resolution-readback boundaries,
   proving fixed-name absence or exact safe reversal, no unrecorded/adopted/orphaned kernel object,
