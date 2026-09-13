@@ -2733,6 +2733,9 @@ The complete, source-derived allowance is:
   `open_controlled_directory_entry`, `open_file_entry`, `entry_metadata`, `revalidate_entry`,
   `read_regular_file_entry_stable_single_link`, and `verify_named_file_identity` must inherit the
   same expectation through these opens, without bypassing their identity or stable-read checks.
+- Retain that same authenticated owner across the existing dispatch-policy storage reopen, only
+  through the internal operation and one caller substitution specified in
+  [Authenticated-owner storage reopen](#authenticated-owner-storage-reopen) below.
 - Only if necessary to thread that existing capability, allow private plumbing at
   `OpenedConfigProjectionHsaAuthorityV1::{from_configured_accepted_home,with_locked_parent}` in
   `facade.rs`, `with_config_projection_hsa_parent` in `store.rs`,
@@ -2800,6 +2803,91 @@ neither rerun it in this documentation correction nor create a replacement proof
 separate same-subject fresh-fence/restart lookup/API and terminal-old-fence transition findings
 remain recorded and unresolved outside this allowance. Ownership acceptance alone does not prove
 the manager lifecycle, restart, or complete E3-E acceptance.
+
+##### Authenticated-owner storage reopen
+
+This documentation-only extension covers the next observed boundary after parent/registry owner
+propagation. Its source subject is the preserved product checkout at
+`4c5cac9e721ed1de8e355fea5d96022cdfb5765c`, tree
+`6469628a1b28785fb5a7be2c8d3f37c8f48d0f00`, plus `e3e-ownership-candidate.patch`, SHA-256
+`f2074fc1c8d600b0a1f32dd061cfef70547dacb1118f74ee569ad8a34afb2a13`. The checkpoint and causal
+bindings are `ingress-auth-scope-blocker.md`, `ownership-causal-review.md`,
+`ownership-e2-reopen-causal-binding.json`, `ownership-hsa-auth-diagnostic.log`, and
+`e3e-resume-bindings.json` under
+`/home/spenser/__Active_code/review-evidence/e3-e-standalone-4c5cac9e`. The failed diagnostic reports
+`DispatchPolicyCommitmentError("open dispatch policy commitment authority root")`; it is not
+positive authentication or lifecycle evidence.
+
+The complete bounded call/return path is
+`OpenedConfigProjectionHsaAuthorityV1::authenticate_e3_member_launch_activation_v1` ->
+`resolve_retained_worker_cap` -> `dispatch_policy_commitment_registry_exists_for_authority`
+(held-root descendant opens), then `dispatch_policy_commitment_storage_for_authority` ->
+`dispatch_policy_commitment_storage_opened`. That last helper revalidates the authenticated root
+but calls ordinary `TrustedAuthorityRoot::open` on its physical path, losing the private expected
+owner to effective UID. It returns an independently owned `DispatchPolicyCommitmentStorageV1`,
+whose `transaction` uses `with_opened_existing_versioned_semantic_preflight`, existing reconciliation,
+`open_transaction`, and registry/key reads before returning the compatible cap. The facade then
+calls `authenticate_dispatch_policy_commitment`, which repeats the same storage helper and
+transaction path, validates the exact cap/commitment material, and returns owned authenticated
+material. `member_launch_activation_carrier` converts that material in memory; the facade checks
+the descriptor, full supplied carrier, common fields, and lineage before returning the reconstructed
+carrier to the manager. Both transactions release before the next stage. Source inspection of this
+path through its success and error returns found no second distinct owner-context loss: the second
+read reaches the same reopen, and subsequent directory/file opens consume the retained owner.
+Other pathname constructors, including the separate read-only snapshot and retained-admission
+storage reopens, are not called by this path and gain no allowance.
+
+Only the following additional implementation is authorized:
+
+- In the existing platform implementation of `TrustedAuthorityRoot` in `trusted_fs.rs`, add
+  `pub(in crate::execution::agent_runtime::host_session_authority) fn
+  reopen_for_dispatch_policy_commitment_storage(&self) -> Result<Self, TrustedFsError>`.
+  This visibility reaches the sibling `store::platform::dispatch_policy_commitment` caller through
+  the existing type re-export while remaining internal to HSA; no module or re-export visibility
+  changes are needed. Keep the existing platform gates and unsupported-platform behavior.
+- The operation accepts only `&self`, derives the expected UID from private `self.owner_uid` and
+  the reopen path from private `self.identity.physical_path`, and returns an independently owned,
+  validated root. Revalidate the original held root before opening; reuse existing `open_for_owner`
+  and its `from_opened` validation, including input/ancestor traversal, parent locking, no-follow,
+  owner/mode/ACL and named-to-held path checks. Compare the complete reopened physical identity
+  with the original, revalidate both roots after opening before return, and reject any owner,
+  path, held-descriptor, or identity substitution. Do not replace this opening with descriptor
+  duplication that omits ancestor/path checks. No owner getter, caller-selected UID/path, raw
+  descriptor, public overload, `Clone` implementation, or general cloning API is admitted; this
+  operation has only the named storage helper as its production caller.
+- In `host_session_authority/store/platform/dispatch_policy_commitment.rs`, change only
+  `dispatch_policy_commitment_storage_opened` to call
+  `opened.reopen_for_dispatch_policy_commitment_storage()` in place of the effective-UID
+  constructor. Keep its original-root revalidation, rebound identity comparison, existing error
+  mapping, semantic preflight, reconciliation, authority-store identity capture, and returned
+  storage behavior. The storage transaction's authority-store identity check is unchanged.
+  Ordinary `TrustedAuthorityRoot::open` continues to use effective UID; ordinary same-user E2
+  callers acquire no different ownership authority.
+
+This is the sole added exception to this document's E2/file-symbol exclusions. No changes to E2
+HMAC, cap or commitment authentication, key/registry/schema/history, reconciliation, transaction or
+error semantics are authorized beyond the validation necessary for this reopen. No ownership
+repair, permissions change, process UID/capability change, or fresh-fence/restart API or transition
+is authorized. In particular, the existing reconciliation code is neither replaced with a new read
+wrapper nor expanded to repair authentication inputs.
+
+Later focused acceptance extends the existing HSA/facade and trusted-filesystem tests: root must
+complete the actual two-stage E3 authenticated retained-cap read and return the exact carrier from
+the existing non-root fixture; ordinary same-user E2 reads must retain their behavior, while root's
+ordinary effective-UID constructor still rejects that non-root home. Wrong-owner and replaced
+root/path/held-descriptor cases, including substitution during the reopen, must reject without
+repair. Capture exact E2 key, registry, cap/commitment, root and history bytes before and after the
+valid-fixture read and rejected substitutions: no bytes may be repaired or rewritten merely to
+authenticate. Preserve existing reconciliation semantics and reuse current parent/registry ownership
+evidence where unchanged; do not repeat the complete ownership wall. The existing
+`e3_e_authenticated_preparation_response_and_cancellation` manager probe must proceed beyond this
+reopen and authenticated read; report its actual next outcome without claiming complete lifecycle
+acceptance. Its synthetic-directory `EEXIST` rerun is a separate harness failure, not authentication
+evidence. Later execution uses fresh test-owned state or the fixture's existing safe setup mechanism,
+without changing production behavior for stale fixture state or creating a replacement harness.
+No Cargo, probe execution, installation, host changes, or product edits occur in this documentation
+correction, and landing it does not automatically resume E3-E implementation. Fresh-fence/restart
+findings remain separately unresolved.
 
 For authenticated E2 re-resolution, E3-E adds one Linux-only service-callable operation on that
 existing sealed facade:
@@ -4644,7 +4732,9 @@ restart and does not broaden any other catalog entry:
    below, and use existing `TrustedWorkspaceRoot::{open_exact,revalidate}` plus the exact opaque
    held-root/source bridge named below. Both methods are available through the facade's existing direct root
    re-export; no intermediate module visibility changes. No other HSA type, descriptor, operation,
-   facade visibility, or `dispatch_policy_commitment.rs` change is admitted. All of these bridge
+   facade visibility, or `dispatch_policy_commitment.rs` change is admitted, except the exact
+   internal storage reopen and helper substitution in
+   [Authenticated-owner storage reopen](#authenticated-owner-storage-reopen). All of these bridge
    additions and the re-export are Linux-gated; other platforms retain their existing unsupported E3
    posture. In
    `crates/shell/src/execution/agent_inventory.rs`, only additive `AgentFileV3`, `AgentConfigV3`,
