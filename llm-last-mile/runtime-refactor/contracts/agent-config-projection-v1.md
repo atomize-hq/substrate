@@ -2659,7 +2659,7 @@ The exact E3-B cross-crate bridge is fixed rather than left to implementation ch
   retention of that child's exact directory identity. It never calls the landed E2-RM read wrapper,
   whose deliberately read-only final metadata equality would reject a real E3 mutation, and it does
   not alter that wrapper's semantics.
-- Linux-only `TrustedDirectory::borrow_fd` is the only new `trusted_fs.rs` allowance and remains
+- Linux-only `TrustedDirectory::borrow_fd` is the E3-B descriptor bridge allowance and remains
   `pub(crate)`. The sole value crossing into `config-projection` is the callback-bounded
   `BorrowedFd<'fd>` for the already-open exact `authority-v1` directory. No `TrustedAuthorityRoot`,
   `TrustedDirectory`, `TrustedFile`, parent-lock descriptor, shell-private directory identity, owned
@@ -2690,6 +2690,116 @@ coerced to `Arc<dyn ConfigProjectionHsaAuthorityV1>` together with the same conf
 `AgentConfigProjectionServiceV1::new`, and passes the concrete `Arc` into
 `E3ConfigProjectionPreparationManagerV1::new`. No request handler, registry method, gateway, or
 member caller may construct or replace the bridge.
+
+#### Authenticated-owner propagation for the E3 parent and registry
+
+For the existing E3-E continuation, the ownership-only exception below makes this same bridge
+usable when world-service executes as root for a configured non-root user. It does not restart
+admission, introduce a security model, or authorize E2 schema, authentication, reconciliation,
+history, or lifecycle changes. It supersedes only the conflicting file/symbol exclusions in this
+document for the exact private ownership plumbing named here; all other packet fences remain.
+
+The observed UID-1000 fixture failure is
+`ConfigProjectionHsaParentTransactionV1::begin` -> `StoreLayoutLockScope::open_existing_activated`
+-> `TrustedDirectory::open_directory` -> `open_directory_cstr` -> `validate_open_directory`:
+the last check compares `st_uid` to `effective_uid()` and rejects before the callback. The root
+already retains its authenticated `owner_uid`; descendant capabilities lose it. Independently,
+registry creation helpers create under the executing identity and then check the authenticated
+owner. That is a source-identified latent defect, not an effect reached by the failed parent probe.
+
+Expected ownership must originate only from the existing sealed
+`ConfiguredAcceptedHomeAuthorityV1` and the validated, held `TrustedAuthorityRoot` opened by
+`OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home`. Carry that owner privately
+through existing capabilities, rather than adding a caller-selected UID, path, descriptor, owner
+setter, public overload, or generic privileged filesystem API. The registry continues deriving its
+private transaction owner from the already-validated `authority-v1` descriptor inside the existing
+callback; no caller may substitute that descriptor or choose its expected owner. Root must satisfy
+the same exact expected-owner comparison, with no root or accept-any-owner bypass. Ordinary
+`TrustedAuthorityRoot::open` and same-user HSA/E2 callers retain their existing effective-user
+expectation and checks; unrelated workspace trust rules remain unchanged.
+
+The complete, source-derived allowance is:
+
+- In `crates/shell/src/execution/agent_runtime/host_session_authority/trusted_fs.rs`, retain the
+  authenticated owner in private `TrustedDirectory` state seeded by
+  `TrustedAuthorityRoot::from_opened`, and propagate it in
+  `TrustedDirectory::{open_directory,open_directory_cstr,open_controlled_directory,open_file}`.
+  Adapt private `validate_open_directory` and `validate_open_file` to compare against that retained
+  expectation, including `TrustedDirectory::metadata` and the `create_file` validation call.
+  Only mechanical field initialization/copying is additionally allowed in existing
+  `HeldE3AgentInventoryRootV1::{from_global,from_workspace,source_relative_paths}` and
+  `rollback_candidate_is_empty`; their selection, trust, read, and cleanup behavior is unchanged.
+  No HSA creation, bootstrap, or reconciliation expansion is authorized. Existing
+  `open_controlled_directory_entry`, `open_file_entry`, `entry_metadata`, `revalidate_entry`,
+  `read_regular_file_entry_stable_single_link`, and `verify_named_file_identity` must inherit the
+  same expectation through these opens, without bypassing their identity or stable-read checks.
+- Only if necessary to thread that existing capability, allow private plumbing at
+  `OpenedConfigProjectionHsaAuthorityV1::{from_configured_accepted_home,with_locked_parent}` in
+  `facade.rs`, `with_config_projection_hsa_parent` in `store.rs`,
+  `ConfigProjectionHsaParentTransactionV1::{begin,authority_fd,finish,verify_scope,
+  validate_locked_layout,validate_marker,capture_children}` and
+  `with_opened_config_projection_hsa_parent` in `store/platform/transaction.rs`, and
+  `StoreLayoutLockScope::{open_existing_activated,finish}`, `create_or_open_lock`, and
+  `StoreLayout::{validate_closed_layout,read_existing_versioned_without_reconciliation,
+  validate_matching_marker_if_present,validate_matching_marker_if_present_v2,
+  validate_matching_marker_if_present_v3}` in `store/platform/layout.rs`, all under that same
+  `host_session_authority/` directory. Prefer unchanged callers consuming the corrected capability.
+  Keep strict existing-only opening of HSA directories and `lock/root.lock`, the owned lock,
+  versioned-root/key/object/history and marker validation, temp/legacy rejection, closed manifests,
+  and exact non-E3 snapshots. `finish` must successfully repeat all checks with the same owner;
+  merely reaching the callback is insufficient. `TrustedFile::{read_all,lock_exclusive_owned}` and
+  `TrustedOwnedFileLock` continue operating on the already-validated held file; no lock or E2
+  read-wrapper redesign is admitted.
+- In `crates/config-projection/src/registry.rs`, allow ownership establishment only in the existing
+  private `open_or_create_directory`, `open_or_create_regular_file`, `write_exclusive_file`,
+  `write_immutable`, and `cas_head` helpers, with the smallest private creation-provenance,
+  descriptor-ownership, and failure-cleanup helpers needed by those operations. This includes the
+  child root and lock, fixed registry subdirectories, native-source files, immutable objects and
+  their temporaries, and head-CAS temporaries. Existing
+  `ConfigProjectionChildTransactionV1::{begin,finish,verify_scope,
+  revalidate_observed_resolution_files}`, `open_directory_raw_at`, `open_directory_at`,
+  `open_file_at`, `read_file_at`, `verify_directory`, and `verify_regular_file` may receive only
+  necessary private owner/provenance plumbing and ownership/identity readbacks for that path.
+  Their existing validation rules and every publication/recovery decision remain intact; this is
+  not permission to change registry schemas, transitions, lookup APIs, or installer-owned stores.
+
+For a new E3 object, distinguish successful exclusive creation by this attempt from an existing
+entry or an `EEXIST` race. Bind the created object through a held, descriptor-relative, no-follow
+handle, establish its required ownership with descriptor `fchown` before treating it as valid
+authority, writing authority bytes, or publishing it, and read back ownership, mode, metadata, and
+named-to-held identity before and after publication. Ownership establishment is a no-op when the
+creating identity already equals the authenticated owner. Never apply it to an existing entry,
+substituted child, or an object whose creation provenance is uncertain; reject those cases instead
+of repairing/chowning an existing user store. Do not infer creation merely from an earlier missing
+lookup or swallow `EEXIST` into a new-object ownership operation. Preserve directory `0700`, file
+and lock `0600`, applicable GID requirements, ACL/xattr rules, single-link checks, no-follow,
+beneath/no-magiclink/no-symlink/no-cross-device constraints, and all held/named identity readbacks.
+
+Retain exclusive creation, immutable no-replace publication, expected-bytes head CAS, fsyncs, exact
+retry, and existing interruption cleanup/recovery semantics. A failure or interruption before
+ownership and metadata are validated publishes no authority; cleanup may affect only the exact
+new object whose identity/provenance is still established. Ambiguous or wrong-owner residue must
+reject, never be adopted or chowned on reopen. Recognized valid E3 temporaries retain their existing
+recovery rules. All paths, including ordinary error returns and final readbacks, preserve parent
+root lock before child registry lock and child-before-parent release. Non-E3 entries and authority
+bytes remain unchanged. No process-wide UID switching, daemon identity change, new capability,
+account, helper process, or host policy change is admitted. This is not a general filesystem
+framework.
+
+Later implementation acceptance uses ordinary targeted tests in the existing HSA/facade and
+registry test modules: root enters the real UID-1000 authenticated parent callback and completes
+its final checks; root creates and reopens E3 directories, lock, native-source/immutable files and
+CAS heads with authenticated ownership; ordinary unprivileged HSA/E2 operations remain compatible.
+Negatives cover wrong-owner existing roots/directories/files/locks, substituted root or child,
+unsafe modes/ACLs/xattrs/link counts/device boundaries, exclusive-create races, and interruption
+before/after ownership establishment, write, rename, and readback. Require no repair or publication
+on rejection, retained recognized-temp recovery, existing cross-process lock order, and byte/identity
+preservation of the non-E3 tree on success and failure. Reuse the existing
+`e3_e_authenticated_preparation_response_and_cancellation` manager probe after implementation;
+neither rerun it in this documentation correction nor create a replacement proof harness. The
+separate same-subject fresh-fence/restart lookup/API and terminal-old-fence transition findings
+remain recorded and unresolved outside this allowance. Ownership acceptance alone does not prove
+the manager lifecycle, restart, or complete E3-E acceptance.
 
 For authenticated E2 re-resolution, E3-E adds one Linux-only service-callable operation on that
 existing sealed facade:
@@ -4280,7 +4390,10 @@ specifically `validate_e2_rm_authority_manifest` for the identical sole literal 
 `with_opened_config_projection_hsa_parent` bridge named above; no E2-RM authority data, read
 semantics, history, reconciliation, schema, or namespace change is owned.
 Subject to those corrections, later packet admissions may select only their applicable symbols from
-this catalog:
+this catalog. For the existing E3-E continuation, the bounded
+[authenticated-owner propagation exception](#authenticated-owner-propagation-for-the-e3-parent-and-registry)
+additionally applies to the exact HSA and registry symbols named there; it requires no admission
+restart and does not broaden any other catalog entry:
 
 1. create exactly `crates/config-projection/{Cargo.toml,src/lib.rs,src/codec.rs,src/registry.rs,
    src/service.rs,src/codex_0125.rs,src/linux_artifacts.rs}` and add only its dependency/export entries
@@ -4872,6 +4985,9 @@ The later admission must require proof using candidate Substrate binaries built 
 and the descriptor-pinned official Codex archive above for:
 
 - canonical codec/hash/reference negatives and every typed resolution class;
+- the focused authenticated-owner parent/open/create/write/readback and compatibility tests in
+  [the ownership exception](#authenticated-owner-propagation-for-the-e3-parent-and-registry), without
+  treating their success as fresh-fence/restart or complete lifecycle acceptance;
 - E3-owned Linux `CanonicalDirectoryV1` capture/reopen/device/inode/path negatives and proof that no
   config-projection or transport dependency reaches shell's private host-session authority types;
 - strict V3 inventory duplicate/alias/merge/unknown/newer/legacy cases, exact global/workspace
