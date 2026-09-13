@@ -2637,7 +2637,8 @@ coerced to `Arc<dyn ConfigProjectionHsaAuthorityV1>` together with the same conf
 `E3ConfigProjectionPreparationManagerV1::new`. No request handler, registry method, gateway, or
 member caller may construct or replace the bridge.
 
-E3-E adds exactly one Linux-only service-callable operation on that existing sealed facade:
+For authenticated E2 re-resolution, E3-E adds one Linux-only service-callable operation on that
+existing sealed facade:
 
 ```rust
 pub fn authenticate_e3_member_launch_activation_v1(
@@ -2670,18 +2671,149 @@ and world/generation values must match their applicable authenticated carrier/pr
 reconstructed typed `E2MemberLaunchActivationCarrierV1` crosses the facade; private HSA roots,
 transactions, records, keys, descriptors, snapshots, and errors do not.
 
+E3-E adds one further Linux-only service-callable operation on the same sealed facade; the
+`AgentInventorySourceMaterialV1` argument is only the expected provenance of the selected source and
+never supplies model, capability, MCP, feature, placement, or backend content:
+
+```rust
+pub fn read_e3_selected_inventory_projection_v1(
+    &self,
+    effective_config: &config_projection::EffectiveSubstrateConfigSourceV1,
+    expected_source: &config_projection::AgentInventorySourceMaterialV1,
+) -> Result<
+    config_projection::LogicalAgentConfigProjectionV1,
+    config_projection::ConfigProjectionFailureV1,
+>
+```
+
+The method derives its only filesystem authority from the facade's retained
+`HostSessionAuthority::bootstrap_home`. It exact-matches that authenticated global root to
+`effective_config.accepted_home`, independently opens and retains the exact workspace root, and
+keeps both roots live through discovery, selection, parsing, projection, and final revalidation;
+global and workspace are separate ownership domains and are never assumed to be the same root.
+Private `convert_e3_projection_directory_v1` in the facade file has the sole signature
+`fn(&config_projection::CanonicalDirectoryV1) -> Result<CanonicalDirectoryV1,
+ConfigProjectionFailureV1>` and performs only the checked Linux path/device/inode conversion into
+the existing shell HSA canonical type. The converted global value must equal the authenticated
+bootstrap identity; only the converted workspace value is accepted by
+`TrustedWorkspaceRoot::open_exact`.
+
+`crates/shell/src/execution/agent_runtime/host_session_authority/trusted_fs.rs` owns the one opaque,
+Linux-only, crate-private held-root bridge `HeldE3AgentInventoryRootV1`. It is non-cloneable and
+non-serializable and has only
+`from_global(&TrustedAuthorityRoot) -> Result<Self, ConfigProjectionFailureV1>`,
+`from_workspace(&TrustedWorkspaceRoot) -> Result<Self, ConfigProjectionFailureV1>`,
+`source_relative_paths(&self) -> Result<Vec<String>, ConfigProjectionFailureV1>`, and
+`revalidate(&self) -> Result<(), ConfigProjectionFailureV1>`.
+The two constructors clone only the already-authenticated root descriptor into the opaque value and
+fix its scope and inventory prefix to `agents/` or `.substrate/agents/`, respectively;
+`source_relative_paths` descriptor-enumerates that fixed inventory directory, rejects an unexpected
+entry kind, and returns only direct `*.yaml` candidates in bytewise filename order. No method returns
+a path authority, raw or borrowed descriptor, `TrustedDirectory`, `TrustedFile`, or caller-selectable
+root.
+
+The same trusted-filesystem file owns opaque, crate-private, non-reexported
+`HeldE3AgentInventorySourceV1<'root>` and only
+`open(root: &'root HeldE3AgentInventoryRootV1, relative_path: &str) ->
+Result<Self, ConfigProjectionFailureV1>`, `source_bytes(&self) -> &[u8]`,
+`source_material(&self) -> &AgentInventorySourceMaterialV1`, and
+`revalidate(&self) -> Result<(), ConfigProjectionFailureV1>`. `open` performs the existing no-follow,
+descriptor-relative component walk from the held root, retains the directory/name/file identities,
+reads the regular file once, and constructs the existing public source material from that held root
+and file. The other methods return only `&[u8]`, `&AgentInventorySourceMaterialV1`, or a unit
+`Result`; no descriptor or general filesystem operation crosses this boundary.
+
+The facade constructs one root bridge from each authenticated root and delegates only to new
+shell-private `resolve_e3_selected_inventory_projection_v1` in
+`crates/shell/src/execution/agent_inventory.rs`. That resolver accepts the authenticated bootstrap
+home, both opaque held-root capabilities, and the two public expected inputs above; it accepts no
+request pathname, raw descriptor, root override, parser callback, or caller-selected authority.
+
+```rust
+pub(crate) fn resolve_e3_selected_inventory_projection_v1(
+    bootstrap_home: &OpenedBootstrapHomeV1<'_>,
+    global_inventory_root: &HeldE3AgentInventoryRootV1,
+    workspace_inventory_root: &HeldE3AgentInventoryRootV1,
+    effective_config: &config_projection::EffectiveSubstrateConfigSourceV1,
+    expected_source: &config_projection::AgentInventorySourceMaterialV1,
+) -> Result<
+    config_projection::LogicalAgentConfigProjectionV1,
+    config_projection::ConfigProjectionFailureV1,
+>
+```
+
+The private resolver preserves the existing global-then-workspace discovery, bytewise filename
+order, one-ID-per-root rule, full validation of every encountered source, and whole-agent workspace
+shadow semantics before selecting exactly one enabled world placement. For each enumerated relative
+path it calls `HeldE3AgentInventorySourceV1::open` with the corresponding opaque root; the existing
+descriptor-rooted V3 source walk moves into that exact method rather than reopening either root from
+its pathname.
+The V3 arm is narrowly adapted so strict YAML/schema parsing and ordinary SHA-256 both consume the
+same `source_bytes` vector read from that held regular-file descriptor, and the root, name, file
+device/inode/length, and bytes are revalidated before the held value is dropped. No pathname reread
+may supply parsed content or a digest. The selected value must field-for-field match
+`expected_source`, including scope, relative path, accepted-root identity, file identity, length,
+raw-byte hash, `source_revision`, and `source_hash`; changing only a path, scope, root, file, or hash
+cannot substitute another source.
+
+The resolver invokes the existing strict V3 parser and policy-overlay validator with the existing
+effective policy resolved from the configured bootstrap home while the exact workspace root is
+held; that policy value is used only by the existing overlay validator and supplies no projected
+field or E2 authority. It then invokes the existing `project_inventory_v3_entry` for the selected world placement.
+That helper's otherwise unchanged private signature may be narrowed from the whole
+`&SubstrateConfig` to its sole consumed input, `effective_default_cli_mode: AgentCliMode`; the value
+is obtained by exact parsing of `effective_config.values.default_cli_mode`, not a current ambient
+config read or a hardcoded default. The selected placement must be enabled and world-scoped, and its
+derived backend must equal `effective_config.values.default_backend_id`. Model, capabilities, MCP
+servers, and features are copied only from the parsed selected V3 placement, including explicit
+empty lists, using the existing projection and bytewise ordering rules. V1/V2 loaders and behavior
+remain unchanged and cannot satisfy this operation.
+
+The sole returned value is the existing public nonsecret
+`LogicalAgentConfigProjectionV1`. Its two source refs are constructed from the exact resolved
+effective-config input and selected inventory material, in that order, and its hash uses the
+existing `ConfigProjectionCodecV1` with the already specified logical-projection domain. Shell
+parser, policy, HSA, held-root/file, descriptor, and intermediate placement types never cross the
+facade. Malformed V3 bytes/schema map to `Malformed`; a raw/revision/source/projection digest failure
+maps to `HashInvalid`; root/scope/path/file-identity/length/selection/world/backend or substitution
+mismatch maps to `WrongBinding`; duplicate or ambiguous selection maps to `Conflict`; missing,
+disabled, or non-V3 selected material maps to `UnsupportedConfiguration`; and a trusted-root,
+descriptor, policy-read, or revalidation failure maps to `UnsupportedSecurityPosture`. Every
+failure is terminal for that preparation, with no retry, fallback, repair, source mutation, or V1/V2
+down-conversion.
+
 `E3ConfigProjectionPreparationManagerV1::prepare` is the sole production consumer. It invokes this
-operation after strict request decoding but before accepting integrated auth, opening an E3
-projection transaction, publishing, or creating any preparation side effect, and thereafter uses
-only the returned reconstructed carrier. The two existing E2 reads retain their transaction,
-authentication, and failure behavior and run sequentially; neither the facade nor `prepare` calls
-them from `with_locked_parent` or while an E3 projection transaction/parent lock is live. Missing or
+operation after strict request decoding and after one
+`ConfigProjectionRegistryV1::resolve(None, Some(&request.authoring_input_ref))` has returned the
+exact effective-config and inventory-source inputs and released its complete projection transaction.
+It then calls `authenticate_e3_member_launch_activation_v1` and
+`read_e3_selected_inventory_projection_v1` sequentially, while no projection/HSA parent lock is
+live, and completes the source-ref, default-backend, request backend, resolved-runtime, and
+authenticated launch/fork joins before accepting integrated auth, locking the preparation map,
+acquiring exclusion, binding a listener, publishing, or creating any other preparation side effect.
+Only the reconstructed carrier and returned logical projection are used thereafter. The manager
+passes that exact projection as the second argument in the existing service operation's sole
+admitted E3-E signature:
+
+```rust
+pub fn publish_prepared_retained_launch(
+    &self,
+    request: &transport_api_types::E3ConfigProjectionPrepareRequestV1,
+    logical: &LogicalAgentConfigProjectionV1,
+) -> Result<transport_api_types::E3ConfigProjectionPrepareResponseV1, ConfigProjectionFailureV1>
+```
+
+`AgentConfigProjectionServiceV1::publish_prepared_retained_launch`'s existing
+authoring-input readback must equal the same effective/source inputs before it constructs or
+publishes a record. The two existing E2 reads retain their transaction, authentication, and failure
+behavior and run sequentially; neither facade operation nor `prepare` calls them from
+`with_locked_parent` or while an E3 projection transaction/parent lock is live. Missing or
 unsupported cap state and any E2 read/authentication/conversion failure map fail-closed to the
 existing `UnsupportedSecurityPosture`; a supplied-versus-authenticated or launch/fork join mismatch
 maps to `WrongBinding`. There is no retry, repair, E2 mutation, current-policy cap recomputation,
-carrier-only acceptance, or request-selected authority. This operation adds no public intermediate
-module or type, raw accessor, parser, registry, authentication algorithm, key reader, schema,
-dependency edge, or non-Linux support.
+carrier-only acceptance, request-selected authority, or projection assembled from provenance-only
+material. These operations add no public intermediate module or type, raw accessor, parser,
+registry, authentication algorithm, key reader, schema, dependency edge, or non-Linux support.
 
 The only E3 authority root is:
 
@@ -3962,6 +4094,10 @@ this catalog:
    resolver and final-descriptor validation above. The exception adds no public symbol, schema,
    registry behavior, manifest field, alternate pathname, or resolution rule for another support
    object.
+   For E3-E only, the existing `AgentConfigProjectionServiceV1::publish_prepared_retained_launch`
+   may add the exact `&LogicalAgentConfigProjectionV1` argument described above and consume it only
+   after its existing authoring-input readback equals the inputs from which that value was built; no
+   other service method signature or public config-projection surface changes.
    Colocated `mod tests` blocks
    are allowed. No other `pub`/`pub(crate)` surface is admitted. Within only the E3-B-owned
    `src/codec.rs` and `src/registry.rs`, ordinary private free functions, private inherent methods,
@@ -4010,7 +4146,12 @@ this catalog:
    existing shell-private `resolve_retained_worker_cap`, `authenticate_dispatch_policy_commitment`,
    `ResolvedPolicyCommitmentCompatibilityV1`, and authenticated carrier conversion, and add only
    `OpenedConfigProjectionHsaAuthorityV1::authenticate_e3_member_launch_activation_v1` with the exact
-   signature and behavior above. The method is available through the facade's existing direct root
+   signature and behavior above, plus
+   `OpenedConfigProjectionHsaAuthorityV1::read_e3_selected_inventory_projection_v1` with the exact
+   signature and behavior above. The latter may construct the existing `OpenedBootstrapHomeV1`, add
+   only private `convert_e3_projection_directory_v1`, call only the private inventory resolver named
+   below, and use existing `TrustedWorkspaceRoot::{open_exact,revalidate}` plus the exact opaque
+   held-root/source bridge named below. Both methods are available through the facade's existing direct root
    re-export; no intermediate module visibility changes. No other HSA type, descriptor, operation,
    facade visibility, or `dispatch_policy_commitment.rs` change is admitted. All of these bridge
    additions and the re-export are Linux-gated; other platforms retain their existing unsupported E3
@@ -4021,7 +4162,23 @@ this catalog:
    existing `ParsedAgentInventoryFile`, `parse_and_validate_agent_file_raw`, `validate_agent_file`,
    `merge_inventory_root`,
    `load_effective_agent_inventory`, `load_effective_agent_inventory_for_bootstrap_home`, and new
-   `validate_agent_schema_v3` and `project_inventory_v3_entry`. The legacy
+   `validate_agent_schema_v3` and `project_inventory_v3_entry`. E3-E may additionally add only the
+   private `resolve_e3_selected_inventory_projection_v1`, and may adapt only the V3 arm of
+   `parse_and_validate_agent_file_raw` to parse and hash the held bytes plus narrow
+   `project_inventory_v3_entry`'s effective-config argument to the existing `AgentCliMode` value as
+   specified above. The resolver may call existing
+   `policy_model::resolve_effective_policy_for_bootstrap_home`,
+   `HeldE3AgentInventoryRootV1::{source_relative_paths,revalidate}`,
+   `HeldE3AgentInventorySourceV1::{open,source_bytes,source_material,revalidate}`,
+   `validate_agent_schema_v3`, `project_inventory_v3_entry`, and `ConfigProjectionCodecV1`; no
+   named dependency gains broader visibility. In
+   `crates/shell/src/execution/agent_runtime/host_session_authority/trusted_fs.rs`, E3-E may add only
+   crate-private `HeldE3AgentInventoryRootV1::{from_global,from_workspace,source_relative_paths,
+   revalidate}` and crate-private
+   `HeldE3AgentInventorySourceV1::{open,source_bytes,source_material,revalidate}` with the exact
+   signatures and behavior above. Their fields remain private; neither type is re-exported; and they
+   add no raw/borrowed descriptor, path-authority, `TrustedDirectory`, `TrustedFile`, generic
+   resolver, write, or mutation operation. The legacy
    `validate_agent_file -> AgentFileV1` entry point adds only an exhaustive V3 arm returning
    `user_error("unsupported agent schema_version 3 in legacy validate_agent_file")`; the E3 caller
    maps that disposition to `UnsupportedLegacyState`, and no path down-converts V3. V1/V2 behavior
@@ -4155,7 +4312,12 @@ this catalog:
    `ClockBoottimeDeadline`. Its private state may retain the one concrete
    `Arc<substrate_shell::OpenedConfigProjectionHsaAuthorityV1>` passed by `WorldService::new_linux`;
    `prepare` is the sole production call site of
-   `authenticate_e3_member_launch_activation_v1` and must obey the pre-transaction ordering above.
+   `authenticate_e3_member_launch_activation_v1` and
+   `read_e3_selected_inventory_projection_v1`. It may call the existing
+   `ConfigProjectionRegistryV1::resolve` once for the pre-side-effect authoring-input read described
+   above and pass the returned logical projection only to
+   `AgentConfigProjectionServiceV1::publish_prepared_retained_launch`; it must obey the completed
+   no-overlapping-lock ordering above.
    No other world-service symbol receives or exposes that facade. Create exactly
    `crates/world-service/src/e3_codex_launch.rs` with
    `E3Codex0125LaunchAdapterV1::{new,prepare,spawn_setup_wrapper,validate_setup_ready,
@@ -4503,6 +4665,15 @@ and the descriptor-pinned official Codex archive above for:
   session/participant/backend/run/world/lineage-mismatched durable authority; every negative must
   fail before preparation side effects. These retain `Some(exact proof)` for `FreshSpawn`, `None` for
   `Fork`, and byte-equal nullable proof values across prepare/idempotency/sealed preparation/V2; and
+- ordinary colocated shell/facade and preparation-manager tests, reusing the existing V3 inventory
+  and projection fixtures, for a valid authenticated global selection and a valid workspace
+  whole-agent shadow with distinct authenticated roots; both prove that descriptor bytes supply the
+  explicit model/capability/MCP/feature values and their own hashes. Missing/disabled/non-V3 source,
+  duplicate ID, wrong scope/root/path/device/inode/length/revision/source hash, changed held bytes,
+  post-read substitution, shadow-selection mismatch, disabled or non-world placement, and derived,
+  effective, request, or resolved-runtime backend mismatch must produce the mapped typed failure
+  before preparation-map, exclusion, listener, credential-acceptance, or publication side effects;
+  the existing V1/V2 fixture results remain byte/behavior-identical; and
 - V2 emission and equality fixtures through both
   `continue_world_worker_fork_command_bootstrap_after_delivery` and
   `build_continue_world_worker_fork_command_transport_request`, plus every direct Spawn/Fork path;
