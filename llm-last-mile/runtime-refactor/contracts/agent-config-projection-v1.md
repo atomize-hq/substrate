@@ -4461,16 +4461,18 @@ or land E3-A, and does not admit or dispatch E3-B.
 ### Same-subject fresh preparation and restart readback
 
 This is a bounded E3-E interface/catalog correction to the already required immutable-series and
-cancellation/restart semantics above. The source subject is the preserved 24-file candidate over
-product `4c5cac9e721ed1de8e355fea5d96022cdfb5765c`, as bound by
-`e3e-resume-bindings.json` and the CURRENT section of `ingress-auth-scope-blocker.md` in
-`review-evidence/e3-e-standalone-4c5cac9e`. The historical semantic baseline remains
-`2b2fc6c50b40046dbeaeb5b316562fbd96480a2a`, not that product's parent. In that source,
-registry `resolve_projection_in_transaction` requires a Held lease, `recover` returns only the
-store, manager `prepare` allocates a new series and revision 1, and `validate_record_transition`
-implements only the two same-fence edges. Existing prose therefore does not supply the complete
-callable path. This correction supersedes only the conflicting interface/catalog restrictions for
-these operations; it changes no durable schema, lifecycle edge, admission, or E3-F ownership.
+cancellation/restart semantics above. The current source subject is the preserved 24-file candidate
+over product `4c5cac9e721ed1de8e355fea5d96022cdfb5765c`, bound by
+`same-subject-checkpoint-receipt.json`, `e3e-same-subject-checkpoint-bindings.json` and
+`e3e-same-subject-checkpoint-candidate.patch` (SHA-256
+`bc9f90ef6b25f55a9d559bce89d568c7fbe225163bdf12b206f09b825a32be05`) in
+`review-evidence/e3-e-standalone-4c5cac9e`. These supersede older checkpoint descriptions, including
+CURRENT in `ingress-auth-scope-blocker.md`. The historical semantic baseline remains
+`2b2fc6c50b40046dbeaeb5b316562fbd96480a2a`, not that product's parent. The current candidate has
+implemented the recovery result and subject readback below, but discards validated terminal-child
+evidence and launch-input runtime-config identity. The following additions complete that readback
+for its prescribed cleanup consumers; the other previously assigned implementation remains
+unfinished. This correction changes no durable schema, lifecycle edge, admission, or E3-F ownership.
 
 The shared durable read extends the existing registry recovery transaction, rather than weakening
 capability resolution or introducing another index. These are the exact revised/additional
@@ -4632,6 +4634,8 @@ pub struct E3KernelEffectRecoveryV1 {
     pub child_processes: Vec<E3ChildProcessRegistrationV1>,
     pub boundary: Option<GatewayAccessBoundaryV1>,
     pub projection: Option<AgentConfigProjectionRecordV1>,
+    pub terminal_child_evidence: Vec<E3TerminalChildQuiescenceEvidenceV1>,
+    pub gateway_config: Option<GatewayRuntimeConfigIdentityV1>,
 }
 
 // world-service/src/e3_config_projection_prepare.rs
@@ -4673,6 +4677,99 @@ impl ConfigProjectionRegistryV1 {
     ) -> Result<E3KernelEffectResolutionV1, ConfigProjectionFailureV1>;
 }
 ```
+
+The two added public fields are owned snapshots of existing nonsecret types, with no serialized
+readback schema. `terminal_child_evidence` contains zero or more complete retained objects, ordered
+by `(final_projection_ref.revision, evidence_id)` with no duplicate evidence identity. `gateway_config`
+is zero or one recorded identity for the effect's exact preparation/fence. `recover` and the service
+and manager signatures above stay unchanged; `recover_expired` passes these fields intact in the
+existing `Recovered.effects` slice to `gateway_runtime.rs::revoke_recovered_v1`. Store-only service
+construction discards them; `resolve_preparation_subject_v1` still returns only subject metadata.
+The Subject abandonment arm revalidates proof through the registry's existing private readers.
+
+`src/registry.rs::validate_registry_tree` owns completion of both joins before returning or applying
+the subject filter. Extend its two existing private traversal callees to these exact signatures:
+
+```rust
+fn validate_terminal_evidence_tree(
+    transaction: &ConfigProjectionChildTransactionV1,
+    verify_objects: bool,
+    effects: &mut [E3KernelEffectRecoveryV1],
+) -> Result<(), ConfigProjectionFailureV1>;
+
+fn validate_gateway_preparation_tree(
+    transaction: &ConfigProjectionChildTransactionV1,
+    verify_objects: bool,
+    effects: &mut [E3KernelEffectRecoveryV1],
+) -> Result<(), ConfigProjectionFailureV1>;
+```
+
+Recovery uses `verify_objects = true`. Collect terminal objects at the existing canonical-file read
+in `validate_terminal_evidence_tree`, after `validate_terminal_evidence_object` and path/ID equality
+succeed. Join each full object by store/series, its exact `final_projection_ref` record and world/
+generation, and the fence/preparation derived from that record's publication and Prepared handoff.
+Match every observation to its immutable process registration ID/hash, role, PID/start time,
+original service instance, boot and exact cgroup registration ID/hash/identity; join each cgroup
+registration's kernel intent ref/hash and fence to the retained effect. The existing validator's
+complete series registration-set checks remain required, including applicable retained history;
+do not truncate an evidence object's observations to a selected effect or current fence. Attach
+it to each effect of its final-record attempt and each historical effect whose registrations it
+covers, retaining the full object in every copy. The registry validates all these joins before
+`Some(subject)` filters effect entries. Historical final refs remain historical: they cannot be
+relabeled as the current projection or used as proof for registrations they do not cover.
+
+The cleanup consumer groups the existing effects by exact store/series/fence/preparation and
+compares shared evidence copies by identity and complete canonical bytes. For the required final
+projection ref and complete registration coverage, reuse the unique matching retained object;
+different evidence IDs/objects competing for that same cleanup proof are ambiguous and reject,
+even if both claim quiescence. Other validated historical objects remain available for their exact
+joins. An empty vector means validated absence of applicable published evidence, not permission to
+invent earlier observations. With proven absence only, the existing cleanup path may create its
+first object from actual observations. `publish_terminal_child_evidence` continues to accept the
+complete object and return its ref: retries pass the recovered object unchanged, preserving its
+original evidence ID, hash, timestamps, observations and original/recovery service-instance IDs.
+A later recovery process uses its fresh ID for new observations, never rewrites a prior observer.
+
+Collect `gateway_config` during `validate_gateway_preparation_tree`'s existing
+`gateway-launch-inputs` traversal. Decode canonical `ManagedGatewayLaunchInputV1`, validate filename/
+launch-input ID, store, hash and shape with `validate_gateway_recovery_candidate` and
+`validate_gateway_launch_input`, then reuse `validate_prepared_gateway_chain` and its exact readers
+against the originating Dormant record, original Deny boundary, gateway identity, activation intent
+and immutable Prepared handoff. Do not pass a later ReadyClosed/Active record or Revoked boundary
+as those original objects. Require every recorded ref/hash, identity hash, session/participant,
+backend, world/generation, preparation/fence, listener/namespace, readiness nonce and gateway
+artifact binding to agree; join all three registered child roles and their intent/process/cgroup
+bindings through the existing validators. The current/retained projection and boundary joins must
+belong to that same attempt and preserve their validated predecessor history. Only then copy the
+launch input's `gateway_config` to that attempt's effect entries. Require one exact launch input;
+competing inputs are ambiguous even if their config identities are equal. A missing input required
+by a published preparation is partial publication, never `None`. `None` is reserved for validated
+pre-publication absence with no dependent record requiring it, and supplies no config to delete.
+
+The bounded cleanup input set is thus the existing intents, resolutions, registrations, boundary,
+projection, new full evidence and recorded config identity, plus the existing fresh service ID,
+exclusion and registry arguments. `revoke_recovered_v1` owns config removal: use the recorded root
+canonical path/device/inode, `relative_path`, mode, byte length and SHA-256; require the fixed
+`/run/substrate/e3-gateway/<series>/<fence>/config.toml` binding. Obtain UID/GID from the already
+returned projection's `native.root.owner_uid/owner_gid`, cross-checking the exact accepted-home
+identity/owner used by both manager native-root construction and `listen_after_dormant_boundary`.
+Use that record's backend and the bound listener port with existing `render_integrated_config` for
+the nonsecret expected bytes. Open fresh no-symlink descriptors and repeat the existing protected
+parent, ownership/mode, exact root, named-versus-open file identity, single-link, entry-set and
+bytes/hash checks before unlink/fsync. The durable config identity contains no config-file inode
+or removal flags: do not manufacture the lost live owner's descriptors, inode, bytes or flags.
+Already-absent runtime paths require the existing durable cleanup proof and current exact absence
+checks; an unavailable owner/binding, unexpected entry, substituted object or unproved partial
+removal fails closed. Config identity remains recorded even after the runtime path is removed.
+
+Neither field establishes current cleanup or live authority. Retained evidence never replaces
+required current PID/boot/cgroup/namespace observations, complete descendant quiescence or old
+boundary revocation; perform those checks before deleting config or accepting an exact cleanup
+retry. Missing dependencies, unresolved partial temporaries, corrupt canonical bytes/hashes,
+wrong-bound or ambiguous joins fail the whole readback using existing typed failures, rather than
+becoming an empty vector/`None`. Preserve parent-before-child locks, expected-current-head checks,
+startup exclusion, Held-lease capability gating and terminal handoff/lease cleanup. This adds no
+reader API, scan, index, durable object, credential carrier or E3-F implementation authority.
 
 `require_recovering_v1` only checks the existing exclusion state under its mutex and fails unless
 it is `Recovering`; it neither changes admission nor returns a launch lease. `run_world_service`
@@ -4789,8 +4886,16 @@ series; failed cleanup, nonterminal owners, missing/partial/corrupt/retired stat
 successor and preserve evidence; exact retries and concurrent expected-head contenders must prove
 one immutable successor/lease, stable bytes and no effect replay, including handoff-commit and
 lease-release lost-return boundaries. These are later tests, not proof executed by this correction.
-Completed native-source, authenticated-owner, E2 and manager evidence is reused; the disposed
-manifest-inode finding is not reopened and the earlier candidate Clippy diagnostic remains unwaived.
+The affected additional future regressions use those same surfaces: interruption after terminal
+evidence publication but before cleanup completion; exact evidence reuse after restart with
+unchanged IDs/timestamps/observations and fresh current kernel checks; cleanup using the recorded
+runtime-config identity; and rejection of wrong-bound, partial, corrupt or ambiguous evidence/
+launch-input readback (including retained-history coverage and competing inputs). Do not run these
+tests as part of this documentation change. Completed native-source, authenticated-owner and E2
+evidence is reused; older passing manager evidence is historical, not proof of this changed
+recovery implementation. The three newly failing registry tests and unwired-field Clippy errors
+remain unfinished candidate work without weakened validation or acceptance. The disposed
+manifest-inode finding stays closed and the earlier candidate Clippy diagnostic remains unwaived.
 
 ## Admission fence and required proof
 
