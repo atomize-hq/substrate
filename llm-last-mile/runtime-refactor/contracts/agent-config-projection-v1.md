@@ -3916,8 +3916,9 @@ implemented. The service alone may set the progress fields, first writing the ex
 Dormant head and later the exact revision-1 Held lease; neither may be cleared or replaced within an
 attempt.
 
-`SealedE3ConfigProjectionPreparationV1`, `SealedCredentialSourceCapabilityV1`, and
-`ClockBoottimeDeadline` are private world-service implementation types, not wire or
+`SealedE3ConfigProjectionPreparationV1` is opaque and crate-visible only for its bounded ownership
+transfer; `SealedCredentialSourceCapabilityV1` and `ClockBoottimeDeadline` remain private. These are
+world-service implementation types, not wire or
 `config-projection` exports. Before the first publication call, the world-service preparation
 manager moves the new publication carrier into the sealed map alongside the secret owner and live
 gateway owner. The manager therefore continues to own any head/lease progress if the call returns
@@ -4135,7 +4136,8 @@ a different or already Active attempt.
 
 After a service restart no process-local credential capability or held listener/preparation
 capability is reconstructible from durable refs. Recovery therefore revokes the recorded boundary,
-kills and proves quiescent any bound remnant, terminates the old handoff, and makes the old carrier
+kills and proves quiescent any bound remnant, terminates only a nonterminal old handoff (preserving
+Consumed unchanged), and makes the old carrier
 stale. A caller must submit fresh auth under a fresh preparation ID; if the immutable subject is
 unchanged, the service publishes a new fence/root/gateway/handoff/lease revision in the same series.
 A fresh series is permitted only when an immutable subject field changed. No recovery replays a
@@ -4897,6 +4899,117 @@ recovery implementation. The three newly failing registry tests and unwired-fiel
 remain unfinished candidate work without weakened validation or acceptance. The disposed
 manifest-inode finding stays closed and the earlier candidate Clippy diagnostic remains unwaived.
 
+### E3-E activation callable boundaries
+
+The complete bounded protocol and source/caller map are in
+[managed gateway adoption](managed-gateway-adoption-v1.md#e3-e-activation-publication-and-ownership-seam).
+These exceptions supersede only conflicting E3-E signature/visibility limits in the admission
+catalog; all schemas, hash domains, storage paths and E3-D/E3-F ownership remain unchanged.
+
+In `crates/config-projection/src/service.rs`, the already admitted operations have these exact
+signatures. The observation enum is public solely across the existing world-service dependency,
+non-Serde and nonpersistent; it contains no live capability, secret, descriptor or callback.
+The existing `pub use service::*` exports it without another `lib.rs` change.
+
+```rust
+pub enum E3ManagedGatewayActivationObservationV1 {
+    Delivered { delivered_at: Timestamp },
+    Ready {
+        gateway_process_identity: GatewayProcessIdentityV1,
+        child_security_attestation: E3ChildSecurityAttestationV1,
+        observed_at: Timestamp,
+    },
+}
+
+impl AgentConfigProjectionServiceV1 {
+    pub fn resolve_activation_carrier(
+        &self,
+        publication: &E3PreparedRetainedLaunchPublicationV1,
+        carrier: &transport_api_types::ConfigProjectionActivationCarrierV1,
+    ) -> Result<ManagedGatewayLaunchInputV1, ConfigProjectionFailureV1>;
+
+    pub fn activate_managed_gateway(
+        &self,
+        publication: &mut E3PreparedRetainedLaunchPublicationV1,
+        observation: E3ManagedGatewayActivationObservationV1,
+    ) -> Result<Option<ConfigProjectionRefV1>, ConfigProjectionFailureV1>;
+}
+
+impl ConfigProjectionRegistryV1 {
+    pub fn publish_ready_closed(
+        &self,
+        expected_head: &ConfigProjectionRefV1,
+        record: &AgentConfigProjectionRecordV1,
+        ack: &ManagedGatewayActivationAckV1,
+        held_lease: &ConfigProjectionConsumerLeaseV1,
+    ) -> Result<ConfigProjectionRefV1, ConfigProjectionFailureV1>;
+}
+```
+
+`resolve_activation_carrier` is the initial Dormant readback, using the publication's original
+Held lease in the existing `resolve` and requiring exact record/head equality plus durable prepared-
+chain validation. It returns the byte-equal retained launch input only after those checks. It is not
+a ReadyClosed retry resolver. `activate_managed_gateway(Delivered)` freezes/publishes/readbacks the
+unique Delivered successor and returns `None`; only then may the parent probe. `Ready` requires
+that durable Delivered progress, constructs/freezes and publishes Consumed, then ACK/ReadyClosed,
+and returns `Some(exact_ready_ref)`. Equal same-step retries use retained objects; unequal
+observations conflict, out-of-order steps reject, and Ready never implies another secret delivery.
+Neither method imports world-service or obtains a raw transaction/descriptor accessor.
+
+`E3PreparedRetainedLaunchPublicationV1` may retain private activation progress: the Delivered and
+Consumed wrappers/refs, original observation, complete ACK/ref and ReadyClosed record/ref. The
+original prepared record, `published_head` and `held_consumer_lease` remain unchanged. Only these
+service methods and `publish_preparation_abandonment` may consume that progress. Private
+`validate_gateway_activation_publication_v1`, `build_gateway_handoff_successor_v1`, and
+`build_gateway_ready_closed_v1` own their bounded validation/construction; no public handoff getter
+or generic publication object is added.
+
+In `src/registry.rs`, `publish_ready_closed` opens one `with_transaction`, validates the expected
+Dormant/current-exact-retry and original Held lease, then calls private
+`publish_gateway_ack_in_transaction_v1` followed by existing `publish_record_in_transaction` and
+exact record/head readback. The ACK helper uses `write_immutable` and private
+`resolve_gateway_ack_in_transaction_v1` on only `gateway-acks/<ack-id>.json`; no standalone public
+or crate-public ACK writer/resolver exists. Private `validate_gateway_activation_authority_v1`
+shares the live-publication head/fence/lease checks with the activation handoff path. Private
+`validate_gateway_ack_chain_v1` owns complete immutable joins; existing
+`validate_reference_bindings` remains shape-only and cannot substitute for it. Wire that chain
+validation into `publish_record_in_transaction`, `publish_successor` (including exact retry),
+`resolve_projection_in_transaction`, `read_preparation_subject_in_transaction_v1`,
+`validate_series_tree`, and the existing record/head temporary-recovery validators. Private reads
+of the ACK's Dormant predecessor use shape/prepared-chain validation, avoiding recursive ACK
+resolution. Audit/recovery validates immutable evidence without constructing live ownership.
+
+The existing `validate_registry_tree`, `validate_gateway_preparation_tree`,
+`validate_gateway_recovery_candidate`, `recover_owned_temps`/`recover_temp`, and `parse_temp_name`
+may recognize and validate the already specified ACK directory and its bounded immutable temporary
+kind through existing recovery/write primitives. Recovery can retain/exact-readback a valid orphan
+ACK but cannot promote it to live activation or replay a spawn. No generic lookup or new storage
+layout is introduced. All ReadyClosed callers must pass ACK evidence and the original Held lease;
+existing Active/readback callers must resolve the same evidence privately, not retain a ref-only
+bypass. This admits no new Active execution caller.
+
+In `crates/world-service/src/e3_config_projection_prepare.rs`, `take_for_v2` has the exact crate-
+visible boundary `fn(&self, &transport_api_types::MemberDispatchRequestV2) ->
+Result<SealedE3ConfigProjectionPreparationV1, ConfigProjectionFailureV1>`. It alone claims, performs
+bounded gateway activation, and transfers the map-owned preparation once. The sealed type becomes
+`pub(crate)` only so the existing `MemberRuntimeLaunchAdmissionV2` can own it; only its `publication`,
+`projection`, `gateway_authority`, and new `ready_closed_ref: Option<ConfigProjectionRefV1>` fields
+are crate-visible for that ownership transfer. All other fields and construction remain private;
+there is no public export, Clone, Serde or reconstruction from refs. Private claim/consumed progress
+stays in the manager, and private `activate_prepared_gateway_v1` and
+`cleanup_prepared_gateway_v1` operate on the already borrowed entry without reacquiring its map
+lock. `prepare`, `cancel`, and `recover_expired` may make only the corresponding retention/cleanup
+call-site adaptations. `take_for_v2` joins `prepare` as a caller of the existing authenticated E2
+facade operation; the selected-inventory facade operation remains prepare-only. The concrete HSA
+facade stays in the manager and is never transferred with the preparation.
+
+The already cataloged `E3GatewayRuntimeAuthorityV1` methods own private one-spawn/probe/delivery
+progress and held OS resources, including the existing private `ManagedGatewayLaunchCapabilityV1`;
+consume its one-shot launch permission while retaining parent cleanup handles and exclusion.
+No E3-D helper signature/security change or E3-F member-runtime execution is assigned here. Later
+focused tests may change only the affected colocated service/registry/manager/runtime/gateway tests
+and existing E3 integration surfaces; the managed-gateway section specifies their minimum proof.
+
 ## Admission fence and required proof
 
 This specification is documentation authority only. The following is an ownership catalog partitioned
@@ -5054,8 +5167,9 @@ conflicting restrictions below. Neither correction restarts admission or broaden
    plus crate-private `prepared_member_dispatch_consumer_id_v1` and private
    `acquire_or_resolve_prepared_consumer_lease_v1` in `src/registry.rs`, solely for the exact
    deterministic `MemberDispatchV2` acquire-or-resolve/recovery behavior above; `None` preserves all
-   other existing callers and behavior. No public registry operation is added. No other service
-   method signature or public config-projection surface changes.
+   other existing callers and behavior. No public registry operation is added. Except for the bounded
+   [activation interfaces](#e3-e-activation-callable-boundaries), no other service method signature
+   or public config-projection surface changes.
 
    For the already admitted E3-E abandonment lifecycle, `src/service.rs` owns
    `AgentConfigProjectionServiceV1::publish_preparation_abandonment` and the private nonsecret
@@ -5073,9 +5187,20 @@ conflicting restrictions below. Neither correction restarts admission or broaden
            identity: &ConfigProjectionIdentityV1,
            fence_id: &str,
            successor: &ConfigProjectionSecretHandoffRevisionV1,
+           expected_projection_ref: Option<&ConfigProjectionRefV1>,
+           activation_consumer_lease: Option<&ConfigProjectionConsumerLeaseV1>,
        ) -> Result<SecretHandoffRefV1, ConfigProjectionFailureV1>;
    }
    ```
+
+   `expected_projection_ref` retains the candidate's current-attempt abandonment guard; terminal
+   abandonment passes `activation_consumer_lease = None` and keeps its existing cleanup checks.
+   For Delivered/Consumed only, `activate_managed_gateway` must pass both the original Dormant
+   expected ref and `Some` of its exact revision-1 Held dispatch lease. The registry repeats the
+   current Dormant/intent/fence/lease checks inside that same transaction before mutation; missing
+   guards reject. An activation guard cannot publish Failed/Expired or bypass cleanup. All existing
+   terminal callers mechanically pass `None` for the new final argument. The four-argument source
+   guard is retained rather than replaced by the former three-argument catalog declaration.
 
    `identity` supplies the exact store and immutable series subject; `fence_id` supplies the attempt
    fence that neither the identity nor the handoff ref carries. The successor carries the
@@ -5118,7 +5243,8 @@ conflicting restrictions below. Neither correction restarts admission or broaden
    future-packet behavior. It changes neither the two linked contracts nor their lifecycle.
 
    Colocated `mod tests` blocks
-   are allowed. No other `pub`/`pub(crate)` surface is admitted. Within only the E3-B-owned
+   are allowed. Apart from the exact [activation exceptions](#e3-e-activation-callable-boundaries),
+   no other `pub`/`pub(crate)` surface is admitted. Within only the E3-B-owned
    `src/codec.rs` and `src/registry.rs`, ordinary private free functions, private inherent methods,
    and private implementation types necessary to implement the admitted codec/registry operations
    are allowed without a separate authority amendment; they may not expand the public API, product
@@ -5330,7 +5456,8 @@ conflicting restrictions below. Neither correction restarts admission or broaden
    `E3GcSweepAdmissionV1` across every `Command`; GC selection and deletion semantics are frozen;
 6. create exactly `crates/world-service/src/e3_config_projection_prepare.rs` with only
    `E3ConfigProjectionPreparationManagerV1::{new,prepare,cancel,take_for_v2,recover_expired}` and
-   its private `SealedE3ConfigProjectionPreparationV1`, `SealedCredentialSourceCapabilityV1`, and
+   its sealed `SealedE3ConfigProjectionPreparationV1` (crate visibility only as fixed above),
+   private `SealedCredentialSourceCapabilityV1`, and
    `ClockBoottimeDeadline`. Its private state may retain the one concrete
    `Arc<substrate_shell::OpenedConfigProjectionHsaAuthorityV1>` passed by `WorldService::new_linux`;
    for the bounded native-construction correction it may add only
@@ -5338,8 +5465,8 @@ conflicting restrictions below. Neither correction restarts admission or broaden
    `native_source_manifest: Option<config_projection::NativeProjectionSourceManifestV1>` to
    `SealedE3ConfigProjectionPreparationV1`. Both are nonsecret retry state, neither is a new durable
    schema, and neither may be returned or treated as publication authority.
-   `prepare` is the sole production call site of
-   `authenticate_e3_member_launch_activation_v1` and
+   `prepare` and the bounded activation path in `take_for_v2` are the only production callers of
+   `authenticate_e3_member_launch_activation_v1`; `prepare` remains the sole production caller of
    `read_e3_selected_inventory_projection_v1`. It may call the existing
    `ConfigProjectionRegistryV1::resolve` once for the pre-side-effect authoring-input read described
    above; construct the admitted existing nonsecret identity, gateway, kernel-intent, registration,
@@ -5357,8 +5484,9 @@ conflicting restrictions below. Neither correction restarts admission or broaden
    `AgentConfigProjectionServiceV1::publish_prepared_retained_launch`. It stores the returned
    response/capability while retaining that carrier, gateway authority, credential owner, and
    exclusion before success. Its existing `cancel`, `take_for_v2`, and `recover_expired` may call
-   only the publication carrier's two shared-reference accessors to drive the already admitted
-   abandonment/lease-release lifecycle; no raw registry or descriptor accessor is added. It must
+   the publication carrier's two shared-reference accessors to drive the already admitted
+   abandonment/lease-release lifecycle, plus the exact service/ownership boundaries in
+   [E3-E activation callable boundaries](#e3-e-activation-callable-boundaries); no raw registry or descriptor accessor is added. It must
    obey the completed no-overlapping-lock ordering above. An error after immutable source
    publication retains the same attempt, carrier, credential/gateway/exclusion owners, plan
    coordinates, and source identity for exact retry or bounded cleanup; it cannot release exclusion,

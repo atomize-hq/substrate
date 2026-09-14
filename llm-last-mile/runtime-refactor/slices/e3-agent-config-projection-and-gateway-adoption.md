@@ -354,6 +354,15 @@ forbidden.
   boundary, publish independently valid Dormant/no-ACK authority without spawning a child, then
   descriptor-start, attest, deliver the one-time secret, probe readiness, adopt, allow, and revoke
   the exact managed gateway.
+- **Gateway activation seam:** the [complete callable/ownership plan](../contracts/managed-gateway-adoption-v1.md#e3-e-activation-publication-and-ownership-seam)
+  and [exact interface exceptions](../contracts/agent-config-projection-v1.md#e3-e-activation-callable-boundaries)
+  assign Prepared/Held -> parent startup/security/one-time delivery -> Consumed -> immutable ACK ->
+  ReadyClosed and retained ownership or cleanup as one E3-E path. ReadyClosed publication accepts
+  ACK evidence and the original Held lease; persistence/readback stays registry-private. Same-live-
+  attempt publication retry never becomes restart adoption. E3-E may implement/test `take_for_v2`
+  as the bounded ownership boundary; E3-F owns wiring its production member-dispatch caller and
+  all subsequent Codex execution/Active release. This documentation correction completes neither
+  product packet and does not reopen connected-recovery review or predecessor admission.
 - **Source owner:** the packet-admitted shell integrated-auth extraction, world-service preparation,
   authenticated local transport and gateway-runtime surfaces, and existing gateway launch/server
   adoption points cataloged by the projection and managed-gateway contracts.
@@ -371,7 +380,7 @@ forbidden.
 ### E3-F — retained V2 Codex launch/resume adoption and integrated proof
 
 - **Bounded behavior:** join the sealed preparation to the V2 carrier, advance the exact projection
-  lineage through ReadyClosed/Active, retain the non-cloneable local Codex adapter and gateway
+  lineage from E3-E's ReadyClosed through Active, retain the non-cloneable local Codex adapter and gateway
   capability, and revalidate/release/revoke them across initial and resumed turns.
 - **Source owner:** the packet-admitted world-service member-runtime and prompt-fulfillment surfaces,
   the exact shell retained-runtime startup call sites that consume E3-A's carrier and E3-C's

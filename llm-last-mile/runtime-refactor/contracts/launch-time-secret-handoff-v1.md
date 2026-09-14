@@ -201,6 +201,15 @@ sets, reads back, and attests the same posture after exec and before the secret 
 local adapter, UAA compatibility wrappers, MCP/tool children, and provider children inherit neither
 pipe end, any pointer variable, nor raw credentials.
 
+For the bounded [E3-E activation seam](managed-gateway-adoption-v1.md#e3-e-activation-publication-and-ownership-seam),
+world-service supplies validated delivery/readiness observations to the projection service, which
+alone constructs the private Delivered/Consumed revisions. ReadyClosed publication receives the
+complete ACK and original Held lease and privately persists/readbacks the ACK. A same-live-attempt
+publication retry reuses exact nonsecret successor/ACK bytes and never resends credentials. Cleanup
+or service restart after Consumed preserves that terminal revision; it does not attempt
+`Consumed -> Failed|Expired`. Revocation, quiescence and lease release remain separately required,
+and restart requires fresh auth and identities, never adoption or replay of the old ACK/FD.
+
 The E3 ACK is equality-only evidence that the exact gateway consumed the exact handoff, answered a
 fresh non-secret readiness challenge, and remains behind the exact dormant access boundary. It is not
 a digest of secret material, a reusable credential, provider-success evidence, or authorization.

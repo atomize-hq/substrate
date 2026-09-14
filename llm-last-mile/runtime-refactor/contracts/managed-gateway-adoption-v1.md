@@ -484,6 +484,125 @@ No rule permits Prepared, Delivered, and Consumed to equal one another, or Deny 
 authority is the exact unique successor chain just stated. A second successor, skipped revision, predecessor mismatch, or
 equal-state object under another ID is `Conflict` or `WrongBinding` and prevents release.
 
+## E3-E activation publication and ownership seam
+
+This section fixes the bounded callable path through `ReadyClosed`; it grants no E3-F execution.
+The source checkpoint is product `4c5cac9e721ed1de8e355fea5d96022cdfb5765c` plus the protected
+connected-recovery candidate SHA-256
+`04bdfc319ee636a5a07b696867bf7c5a27d5081127ea238da81225ff43b6d1bb`, against documentation base
+`66a233d4e10ce14bfae4b78f9816a49713b0ff5b`. The candidate has the ACK schema but its
+`publish_ready_closed(expected_head, record)` validates only ACK-reference shape/equality. Its
+`activate_managed_gateway`, `resolve_activation_carrier`, and `take_for_v2` are not implemented.
+The following is a complete implementation assignment, not a claim that those paths work today.
+
+**Publication choice.** Extend the existing ReadyClosed operation to receive the complete ACK and
+original Held dispatch lease. It privately writes/readbacks the ACK before the record/head under
+one existing registry transaction. A separate ACK writer would split the same caller's obligation
+and require another callable/readback boundary; no independent writer or resolver consumer exists
+in this path. All immutable ACK reads remain private, including later record resolution and audit.
+The exact signatures and narrow visibility exceptions are in
+[the projection contract](agent-config-projection-v1.md#e3-e-activation-callable-boundaries).
+
+**Producers, consumers, and retained values.**
+
+| Value | Exact producer and consumer |
+|---|---|
+| Prepared response, Dormant capability, private publication, credential owner and gateway owner | `E3ConfigProjectionPreparationManagerV1::prepare` retains them in its sealed map. `take_for_v2` compares every shared prepare/V2 launch field, nullable launch/fork proof, authenticated E2 carrier, preparation/key, Dormant ref, intent, gateway, fence and original revision-1 Held lease; it claims that entry once before any child side effect. |
+| Current E2 authority | `take_for_v2` calls the existing `OpenedConfigProjectionHsaAuthorityV1::authenticate_e3_member_launch_activation_v1` with V2 common fields and the retained E2 carrier, and requires the reconstructed carrier to equal it. Repeat before irreversible gates, secret write and publication; each HSA call finishes outside registry transactions. No current-policy reconstruction replaces the immutable snapshot. |
+| Exact launch input | `AgentConfigProjectionServiceV1::resolve_activation_carrier` exact-resolves the original Dormant/lease and the carrier's retained prepared chain, then returns only its existing `ManagedGatewayLaunchInputV1`. `take_for_v2` passes it to its retained `E3GatewayRuntimeAuthorityV1::spawn_descriptor_pinned`. The input was already published during preparation; do not allocate or publish another launch identity. |
+| Descriptors and enforcement input | The runtime owner opens and holds wrapper/gateway descriptors against `identity.runtime_artifacts` and the exact accepted manifest/support identities; it retains the prepared listener, config and cgroup/boundary handles. The authenticated E2 carrier supplies snapshot bytes/length/ref/hash/revision and immutable cap; the configured bootstrap supplies UID/GID, and E3-D's exclusion owner supplies boot/user-namespace bindings. The runtime builds the existing role-specific `E3WorldFsEnforcementInputV1`, uses `build_authenticated_world_fs_enforcement_input_v1`, and keeps every parent control descriptor out of the child. |
+| Pinned gateway process/security identity | `spawn_descriptor_pinned`, `validate_child_security`, `validate_listener_inventory`, and `validate_gateway_secret_ready` compose the existing E3-D namespace/security helpers, wrapper and independent pidfd/proc/cgroup checks. Child/process registrations precede the first gate. The runtime retains the exact wrapper attestation and post-exec secret-ready hash in the process identity; a gateway self-report is insufficient. |
+| One-time delivery and Delivered timestamp | The runtime creates the existing empty `create_inherited_auth_bundle_pipe` and distinct `create_e3_gateway_secret_ready_pipe`. `deliver_secret_after_privilege_drop` moves the original integrated-auth payload into the existing `GatewayAuthBundleV1` encoding only after all live/security checks, writes once, closes and scrubs. It does not call the compatibility `prepare_gateway_auth_bundle_handoff`, which writes eagerly. The manager scrubs the retained ingress buffer and any remaining auth copy, freezes the successful write/close timestamp, and calls the service's `Delivered` step before probing. |
+| Readiness observation | `spawn_readiness_probe`, `validate_readiness_probe`, and `probe_readiness` own the descriptor-pinned probe and both one-shot barriers above. `E3GatewayLaunchContractV1`, the existing one-time auth reader, and `e3_health_check` supply the exact launch/listener/consumption response. The parent validates the entire connected/result/response chain, repeats live gateway checks, and freezes one `observed_at` before passing the service's `Ready` step. |
+| Consumed, ACK and ReadyClosed | `AgentConfigProjectionServiceV1::activate_managed_gateway` constructs the unique Delivered/Consumed successors from its private handoff, then the full ACK and ReadyClosed record from the retained chain and validated observation. Only `ConfigProjectionRegistryV1::publish_ready_closed` persists the ACK. The returned ReadyClosed ref is stored beside the original capability/lease and live runtime owner. |
+| Successful transfer | `take_for_v2` moves the same sealed preparation, including publication, original projection capability, gateway owner and ReadyClosed ref, exactly once into the existing `MemberRuntimeLaunchAdmissionV2` ownership slot. E3-F owns that production caller and subsequent retained-runtime adoption; E3-E's bounded harness may consume/revoke the same result without wiring dispatch or spawning Codex. |
+
+**Identity and exact retry.** The service freezes `Delivered` before its first handoff write. On the
+first validated Ready observation it allocates one `gaa_<UUIDv7>` and one successor record ID,
+sets `gateway_ready_revision = 1`, and uses that observation's canonical timestamp for
+`Consumed.consumed_at`, `ACK.observed_at`, and the ReadyClosed record's `created_at`. All timestamps
+must satisfy existing ordering/expiry checks; wall-clock adjustment never extends `CLOCK_BOOTTIME`.
+The existing opaque publication retains the complete Delivered/Consumed wrappers and returned refs,
+ACK/ref, ReadyClosed record/ref and observation before each fallible write. It preserves the original
+Dormant head and Held lease fields. The service computes hashes with the existing codec/domains;
+the registry independently recomputes every hash and derives/exact-compares every ref. No timestamp,
+ID, nonce, hash, or payload is reallocated on publication retry, and no secret-derived value appears.
+
+The ReadyClosed transaction validates the configured store/root and subject, non-retirement, exact
+current head (original Dormant or this exact ReadyClosed retry), and the original Held lease's
+immutable revision/head, deterministic preparation consumer ID, kind and acquisition ref. The
+lease's `acquired_projection_ref` remains the Dormant ref: do not pass that lease to the existing
+`resolve` as though it had been acquired against ReadyClosed, rewrite it, or invent a second lease.
+Successful publication returns exact record readback directly. The retained Dormant capability is
+not relabeled as a newly resolved ReadyClosed capability.
+
+Private registry validation joins the intent's preparation/Dormant coordinates, E2/artifacts,
+fence/nonce/Prepared/Deny refs; the launch input's exact Dormant/intent/gateway/listener/config/HTTP
+surface/Prepared/Deny/nonce; the unique Prepared -> Delivered -> Consumed lineage and unchanged
+credential/delivery/receiver fields; the ACK's launch ref, process/artifact/cgroup registration,
+wrapper security attestation/hash, post-exec secret-ready hash, listener, nonce, revision 1 and
+Consumed ref; and all three ReadyClosed ACK refs, its exact Consumed ref, unchanged Deny ref and
+`ZeroLiveClosed` fence/native root. Resolve the registered gateway PID/start/boot/service-instance
+and cgroup bindings, rather than accepting a numerically equal PID. The live owner additionally
+revalidates held executable, pidfd, namespace, socket and boundary identities before and after
+publication. An immutable security hash does not replace those live checks.
+
+**Lock scope and arbitration.** The manager's existing preparation-map mutex serializes claim,
+cancel, expiry, duplicate take and final transfer. A bounded synchronous activation helper works on
+the already borrowed entry, retaining the claim and every partial resource through errors; it never
+calls a manager method that reacquires that mutex. Check the fixed deadline before every barrier,
+secret delivery, publication and transfer; pipe/probe waits are deadline-bounded. Cancel/expiry
+that wins the map arbitration makes the attempt terminal before spawn; a take that wins is the sole
+worker and either transfers once or leaves an owned failed attempt for cleanup. A losing duplicate
+request cannot start or retry the worker's OS effects. After transfer, preparation cancellation
+cannot reach that owner; the retained-runtime caller owns cancellation. No wait holds an HSA or
+projection filesystem lock. Service calls acquire/release parent then child transactions separately;
+private helpers reuse the already-held transaction and never call a locking registry entrypoint.
+Existing kernel-intent transactions retain their own narrow effect/readback critical sections.
+Filesystem publication and kernel liveness are not one atomic operation: any post-publication live
+failure revokes the attempt and prevents returning usable live ownership.
+
+**Interruption and resource outcomes.**
+
+| Outcome | Required action and owner |
+|---|---|
+| Delivered or Consumed write/head return lost | The same live worker retries the frozen successor through the service/registry; it does not repeat the secret write, probe or barriers. A new V2 request cannot resume that worker. |
+| ACK durable, ReadyClosed head still Dormant | Retain the exact ACK and attempt owner; the same live worker may exact-readback it and finish the expected-head CAS within its original deadline. An orphan ACK proves no activation and grants no capability. |
+| ReadyClosed head durable, reply lost | The same worker supplies the identical record/ACK and original lease. Success requires exact current head, immutable record/ACK/dependencies and Held-lease readback, then live revalidation. A different or later head rejects. |
+| Conflicting retry or stale authority | Unequal canonical bytes or attempt identities reject; stale head, Released lease, retired series, changed E2/world/generation or fence forbids publication/transfer. Clean only this worker's descriptor-identified old resources; never revoke a successor from a stale ref/name. |
+| Cancel, expiry, security failure or process death | Close all gates/pipes and scrub credentials. Kill unreleased children, revoke and verify denial, reap the exact gateway/probe groups and prove all preallocated groups empty, close the listener, release retained child namespaces through E3-D, and remove only the exact rebuildable config. Then complete legal handoff termination or preserve Consumed, release the original consumer lease/capability, and release exclusion last. |
+| Cleanup/readback failure or unwind | Keep the sealed entry and all unresolved owners/exclusion for bounded cleanup. The private cleanup helper is shared by activation failure, `cancel` and `recover_expired` without recursive map locking. Unexpected owner loss keeps admission poisoned/closed; no destructor fabricates cleanup evidence. |
+| Service restart | Recover evidence and revoke/kill/prove quiescence under existing recovery rules; never reconstruct the preparation/listener/credential or adopt the old gateway/ACK. Consumed stays terminal. Fresh auth requires new process, preparation, handoff, intent, launch input, ACK, fence/root and lease in the same eligible immutable-subject series. |
+
+A head may remain durable after cleanup; it is historical evidence, not live authorization. Cleanup
+uses the exact current attempt head when publication advanced to ReadyClosed, while the original
+carrier/lease still names its Dormant predecessor. `publish_preparation_abandonment` must reconcile
+its retained publication progress, preserve Consumed without a forbidden terminal transition, and
+release only that attempt's lease after verified cleanup. It must still reject an Active or different
+attempt. Immutable ACK/intent/launch/handoff records are retained. Successful transfer retains the
+listener duplicate, pidfd, config/artifact and namespace/cgroup/boundary owners and E3 exclusion for
+the retained caller; probe sockets/gates are closed and the probe is reaped before success. No
+credential resend, duplicate spawn, replayed gate, or stale-worker cleanup is an outcome.
+
+**All callers and minimum later proof.** At the bound source, the five ReadyClosed call expressions
+in `config-projection/src/registry.rs::tests` and the one in
+`world-service/src/e3_config_projection_prepare.rs::tests` require complete ACK and Held-lease
+fixtures. Their synthetic Active history remains synthetic. Extend the existing shared durable
+validation used by publication, resolve, record/head readback, tree validation and temporary
+recovery to resolve ACK evidence for ReadyClosed and existing Active records. Historical validation
+checks immutable dependencies without requiring a now-live process or Held lease; activation checks
+current authority separately. There is no reference-only publication, resolver, test or recovery
+bypass and no new Active execution caller.
+
+Later focused tests cover wrong/missing ACK and every join, original-lease binding, exact retry at
+both interruption points, conflicting bytes, handoff lost returns, duplicate take/cancel/expiry,
+process death, one write/no replay, failed cleanup and successor isolation. Installed Linux
+acceptance must connect actual service -> E3-D wrapper -> gateway -> readiness -> Consumed -> ACK
+-> ReadyClosed -> revocation, with privilege/namespace/listener negatives, secret canary absence,
+and restart cleanup followed by fresh authorization. Direct gateway tests are insufficient. This
+planning/landing task runs none of those product tests or probes and certifies neither E3-E as a
+whole nor E3-F. Existing schemas, domains, storage layout, E3-D security and restart semantics stand.
+
 ## Sealed launch capability and inherited inputs
 
 Only world-service may construct `ManagedGatewayLaunchCapabilityV1`. After resolving the published
