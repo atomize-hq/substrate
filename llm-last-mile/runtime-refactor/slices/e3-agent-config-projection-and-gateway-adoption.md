@@ -363,6 +363,16 @@ forbidden.
   as the bounded ownership boundary; E3-F owns wiring its production member-dispatch caller and
   all subsequent Codex execution/Active release. This documentation correction completes neither
   product packet and does not reopen connected-recovery review or predecessor admission.
+- **Terminal namespace ownership exception:** E3-E additionally owns only the
+  [exact E3-D lease/helper/private-state and caller/test adaptations](../contracts/agent-config-projection-v1.md#e3-e-terminal-child-namespace-owner-boundary)
+  needed for [release-before-cgroup-removal and exclusion-last](../contracts/managed-gateway-adoption-v1.md#terminal-namespace-release-and-exclusion-last).
+  The existing held exclusion lease releases each exact terminal gateway/probe namespace without
+  decrementing the epoch lease; final counted release is explicit and failure-safe. This is the
+  sole exception to the E3-D helper freeze, including typed setup binding and partial-progress
+  retention. All unrelated E3-D security, mappings, privilege descent, Landlock/seccomp, tracing,
+  schemas and V1 compatibility remain frozen. E3-F production caller wiring and retained Codex
+  lifecycle remain excluded. This documentation correction neither completes E3-E nor reopens
+  gateway publication, predecessor admission/proof or recovery discovery.
 - **Source owner:** the packet-admitted shell integrated-auth extraction, world-service preparation,
   authenticated local transport and gateway-runtime surfaces, and existing gateway launch/server
   adoption points cataloged by the projection and managed-gateway contracts.

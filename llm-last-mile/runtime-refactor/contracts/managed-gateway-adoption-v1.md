@@ -570,7 +570,7 @@ failure revokes the attempt and prevents returning usable live ownership.
 | ACK durable, ReadyClosed head still Dormant | Retain the exact ACK and attempt owner; the same live worker may exact-readback it and finish the expected-head CAS within its original deadline. An orphan ACK proves no activation and grants no capability. |
 | ReadyClosed head durable, reply lost | The same worker supplies the identical record/ACK and original lease. Success requires exact current head, immutable record/ACK/dependencies and Held-lease readback, then live revalidation. A different or later head rejects. |
 | Conflicting retry or stale authority | Unequal canonical bytes or attempt identities reject; stale head, Released lease, retired series, changed E2/world/generation or fence forbids publication/transfer. Clean only this worker's descriptor-identified old resources; never revoke a successor from a stale ref/name. |
-| Cancel, expiry, security failure or process death | Close all gates/pipes and scrub credentials. Kill unreleased children, revoke and verify denial, reap the exact gateway/probe groups and prove all preallocated groups empty, close the listener, release retained child namespaces through E3-D, and remove only the exact rebuildable config. Then complete legal handoff termination or preserve Consumed, release the original consumer lease/capability, and release exclusion last. |
+| Cancel, expiry, security failure or process death | Close all gates/pipes and scrub credentials. Follow [terminal namespace release and exclusion-last](#terminal-namespace-release-and-exclusion-last): verify denial, reap and prove exact groups empty, release each retained child namespace before cgroup removal, complete durable/kernel/listener/config cleanup, then handoff/consumer cleanup and explicit exclusion release last. |
 | Cleanup/readback failure or unwind | Keep the sealed entry and all unresolved owners/exclusion for bounded cleanup. The private cleanup helper is shared by activation failure, `cancel` and `recover_expired` without recursive map locking. Unexpected owner loss keeps admission poisoned/closed; no destructor fabricates cleanup evidence. |
 | Service restart | Recover evidence and revoke/kill/prove quiescence under existing recovery rules; never reconstruct the preparation/listener/credential or adopt the old gateway/ACK. Consumed stays terminal. Fresh auth requires new process, preparation, handoff, intent, launch input, ACK, fence/root and lease in the same eligible immutable-subject series. |
 
@@ -601,7 +601,128 @@ acceptance must connect actual service -> E3-D wrapper -> gateway -> readiness -
 -> ReadyClosed -> revocation, with privilege/namespace/listener negatives, secret canary absence,
 and restart cleanup followed by fresh authorization. Direct gateway tests are insufficient. This
 planning/landing task runs none of those product tests or probes and certifies neither E3-E as a
-whole nor E3-F. Existing schemas, domains, storage layout, E3-D security and restart semantics stand.
+whole nor E3-F. Existing schemas, domains, storage layout, E3-D security and restart semantics stand, subject only
+to the terminal owner-lifecycle exception below.
+
+### Terminal namespace release and exclusion-last
+
+This correction is grounded in preserved product HEAD
+`4c5cac9e721ed1de8e355fea5d96022cdfb5765c` plus candidate composite
+`sha256:f5ffa8b32508c10b36e2eb256ce21003c662132d93f974e2ff6dc9a1418c1fc0`, which historically binds
+old authority `f0fc4288f536f738f446e784d22a358b9a36f980`. In that candidate,
+`e3_child_security.rs` SHA-256 `6fd6850e10c9e942859d9696158e0144193af09d9062c2270d27e799aa853775`
+retains namespaces until `release_e3_exclusive` reopens their cgroups. The E3-E `revoke` path
+therefore stops before launched-attempt cgroup removal and retains ownership/admission closed.
+That is incomplete source, not successful cleanup or connected runtime proof. The exact new
+[lease-owned callable and implementation fence](agent-config-projection-v1.md#e3-e-terminal-child-namespace-owner-boundary)
+resolve only this owner/caller boundary; the completed publication plan and recovery review stand.
+
+**Ordered live cleanup.** The single retained preparation/runtime owner performs these steps:
+
+1. Under its existing owner arbitration, mark the attempt terminal; close every start/final/probe
+   gate and auth pipe, scrub transient credentials, install `Revoked` denial against the held exact
+   boundary and verify it. No late activation or ownership transfer may pass after that point.
+2. Kill/reap every actually started gateway/probe, including a child whose registration or setup
+   failed. Use retained original pidfds/PID/start identities; preserve wait outcomes for retry.
+   Prove every preallocated cgroup and its complete descendant tree empty twice against exact
+   held mount/directory identities. Failure keeps the remaining owners and exclusion. An unused
+   Codex group has no child namespace to release but still requires empty/removal proof.
+3. For every recorded setup call, invoke the lease's
+   `release_terminal_child_user_namespace_v1` with the exact retained child registration while
+   its original cgroup still exists. E3-D independently validates terminal pidfd and twice-empty
+   cgroup state before releasing each held namespace. A never-retained setup slot is not a
+   substitute for step 2. Do not delete any group that still has a held namespace. Release of one
+   child neither consumes an exclusion lease nor affects another child or sibling attempt.
+4. Freeze the existing `E3TerminalChildQuiescenceEvidenceV1` and each existing cleanup resolution
+   before its first fallible publication, retaining IDs, timestamps, canonical bytes and readback
+   progress. Publish/readback terminal evidence and the verified `Revoked` boundary through the
+   existing registry operations before deleting registered groups. Required absent/headless
+   evidence still follows its existing intent/registration rules; do not fabricate a registration
+   for a failed spawn. These records prove their existing kernel/process facts, not a persistent
+   live namespace capability. No schema or namespace-release record is added.
+5. Close the retained listener before deleting groups. Remove only the descriptor-identified empty
+   cgroups after step 3 and durable pre-removal evidence, retaining each successful removal before
+   a later fallible call. Complete existing per-effect resolution publication/readback and boundary
+   teardown; retain verified denial until no child can use the listener. Remove only the exact
+   rebuildable config realization, then close remaining runtime descriptors. A missing group is
+   acceptable on a same-live cleanup retry only with this owner's prior exact successful removal
+   and required durable proof; a reappearing/substituted object rejects. Cgroup absence is never
+   accepted by E3-D as the first terminal namespace validation.
+6. The manager reconciles the exact current attempt head and frozen publication progress, completes
+   legal nonterminal handoff termination or preserves terminal `Consumed`, publishes/readbacks the
+   original consumer lease's sole Released successor, and releases the original projection
+   capability. Retain the sealed runtime and frozen terminal progress if any return is lost.
+7. Only then call `release_exclusion_after_cleanup_v1`, which invokes the lease's explicit
+   `release_after_cleanup_v1`. If it fails, keep the runtime in the entry, admission closed and the
+   attempt terminal. Mark manager cleanup complete and discard the owner only after success. Last
+   counted release alone permits legacy admission; sibling leases keep the epoch exclusive.
+
+The successful readiness probe is a separate terminal child in the still-live gateway attempt:
+`probe_readiness` closes its probe sockets/gates, reaps it, proves its exact group twice empty and
+releases only its namespace through the same operation before publishing Ready/returning transferable
+ownership. Keep its non-owning completion/registration and wait result in the live launch owner;
+do not remove its preallocated group or publish whole-attempt terminal evidence at that point.
+Later final cleanup exact-retries its release without reaping again, preserves its terminal evidence
+and removes that group in the sequence above. The gateway namespace and exclusion remain held
+through successful ReadyClosed transfer. This adds no E3-F caller or Codex execution.
+
+**Partial startup, retries and locks.** Failure before a child exists uses existing child-free
+cleanup. A started child without a completed registration remains owned and must be killed/reaped;
+no namespace setup is permitted before the runtime retains its exact process registration. Setup
+records its lease-local slot before namespace work; failure before retention confirms only that no
+namespace was retained, whereas failure after retention (including a lost mapped reply or missing
+security attestation) must release the retained namespace through the same operation. Attestation
+presence is never the test for ownership. No failed setup is replayed on a fresh activation request.
+
+The preparation-map mutex remains the outer lock for activation failure, `cancel`, `recover_expired`
+and transfer; shared cleanup operates on the already borrowed entry. Once transferred, the existing
+retained owner arbitration replaces that mutex and preparation cancellation cannot reach it.
+Private lease/map transitions acquire the exclusion state mutex once underneath owner arbitration.
+They never call a public helper that locks it again, acquire HSA/registry locks, or invoke a generic
+callback. The setup thread's socket waits and capability/map work run without the exclusion state
+mutex, while the exclusively borrowed lease and recorded slot prohibit concurrent release of that
+child. The release operation may perform bounded descriptor readback and nonblocking pidfd polling
+under that mutex; it never kills, blocks waiting for exit, or waits for cgroup emptiness there.
+
+All process kill/reap/wait and E3-D release calls occur outside HSA and projection filesystem
+transactions. Drop the exclusion mutex before any registry operation. Existing parent-then-child
+transaction ordering and narrow kernel effect/readback critical sections remain unchanged; a
+registry effect callback must not call namespace release or wait for a process. Recheck exact group
+identity/emptiness at removal; earlier namespace-release success cannot bless later substitution.
+
+Same-live-attempt cleanup resumes from retained per-child release and per-object/evidence progress.
+If gateway release fails after probe release, retain the gateway ownership and keep the probe's
+completed slot; never reacquire or double-close it. If evidence publication fails after namespace
+release, keep cgroups and exclusion, exact-retry frozen evidence, then continue cleanup. If a later
+removal, config cleanup, handoff/consumer publication or final exclusion return fails, retain all
+unresolved resources and successful-step markers. The manager's early cleanup readback must accept
+only its exact already-Released consumer successor when its own frozen cleanup progress proves that
+step completed; it must not require a still-Held lease or restart activation. Unequal/stale head or
+lease evidence rejects. Final release marks the lease released atomically with count mutation, so a
+lost outer return cannot decrement twice. A completed cleanup retry checks retained completion
+before requiring a removed runtime or Held lease.
+
+Unwind preserves unresolved shared namespace ownership and closed admission; it cannot use a
+destructor as a retry worker or successful cleanup receipt. If accountable live ownership is lost,
+poison/keep admission closed until service restart. Restart follows existing evidence
+recovery/quiescence under `Recovering`, with fresh authorization afterward; it never reconstructs
+old namespace ownership, a live gateway/listener, credentials, or same-live retry markers from refs.
+Consumed stays terminal, historical evidence stays immutable, and recovery discovery is not reopened.
+
+**Minimum later proof.** A later authorized implementation must cover connected gateway and probe
+release-before-cgroup-removal followed by exclusion-last; terminal/live pidfd and populated-tree
+cases; wrong world/generation/lease/registration/role/fence/boot and substituted process/namespace/
+mount/group/descendant rejection; two sibling attempts and distinct probe/gateway ownership;
+partial startup before and after retention, including failed mapped reply; successful probe reaping;
+partial cleanup and lost evidence/removal/handoff/final-release returns; equal retry without double
+release; failed validation preserving exact owners and positive counts; and legacy admission only
+after every lease's required cleanup. Include ordinary cancel/expiry, failed activation, bounded
+ownership transfer/cleanup and restart evidence recovery followed by fresh authorization.
+Unprivileged source tests may exercise state, error and identity logic but cannot establish Linux
+namespace/cgroup effects. Connected Linux runtime proof requires its own explicit authorization and
+must exercise the actual service owner/caller path. Historical 57-config/9-world passes, eight ignored
+cases and scoped Clippy remain historical candidate evidence. This documentation task runs no product
+build, test, probe, installed acceptance or service restart, and consumes no whole-E3-E source review.
 
 ## Sealed launch capability and inherited inputs
 

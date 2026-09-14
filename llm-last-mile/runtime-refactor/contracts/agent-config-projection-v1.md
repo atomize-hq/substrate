@@ -4904,7 +4904,9 @@ manifest-inode finding stays closed and the earlier candidate Clippy diagnostic 
 The complete bounded protocol and source/caller map are in
 [managed gateway adoption](managed-gateway-adoption-v1.md#e3-e-activation-publication-and-ownership-seam).
 These exceptions supersede only conflicting E3-E signature/visibility limits in the admission
-catalog; all schemas, hash domains, storage paths and E3-D/E3-F ownership remain unchanged.
+catalog; schemas, hash domains and storage paths remain unchanged. The sole E3-D ownership
+exception is [terminal namespace release](#e3-e-terminal-child-namespace-owner-boundary); E3-F
+ownership remains unchanged.
 
 In `crates/config-projection/src/service.rs`, the already admitted operations have these exact
 signatures. The observation enum is public solely across the existing world-service dependency,
@@ -5006,9 +5008,146 @@ facade stays in the manager and is never transferred with the preparation.
 The already cataloged `E3GatewayRuntimeAuthorityV1` methods own private one-spawn/probe/delivery
 progress and held OS resources, including the existing private `ManagedGatewayLaunchCapabilityV1`;
 consume its one-shot launch permission while retaining parent cleanup handles and exclusion.
-No E3-D helper signature/security change or E3-F member-runtime execution is assigned here. Later
+Only the [terminal namespace owner boundary](#e3-e-terminal-child-namespace-owner-boundary) may
+adapt E3-D helper signatures/private lifecycle state; other E3-D security and all E3-F member-runtime
+execution remain excluded. Later
 focused tests may change only the affected colocated service/registry/manager/runtime/gateway tests
 and existing E3 integration surfaces; the managed-gateway section specifies their minimum proof.
+
+### E3-E terminal child namespace owner boundary
+
+This is the sole E3-E exception to the E3-D helper freeze. The owning file remains
+`crates/world-service/src/e3_child_security.rs`; the non-cloneable
+`HeldE3PrivilegedChildExclusionLeaseV1` is the caller's existing authority. Its shared
+`E3PrivilegedChildExclusionV1` retains the private namespace map. No caller receives that map,
+namespace descriptor, independent namespace capability, raw PID/path release API or callback.
+The [managed-gateway cleanup protocol](managed-gateway-adoption-v1.md#terminal-namespace-release-and-exclusion-last)
+owns ordering, all call paths and later proof. This section owns the callable and private-state fence.
+
+```rust
+// In e3_child_security.rs; Result is anyhow::Result.
+pub(crate) fn install_and_validate_e3_child_user_namespace_v1(
+    lease: &mut HeldE3PrivilegedChildExclusionLeaseV1,
+    parent_setup_socket: &OwnedFd,
+    identity: &config_projection::ConfigProjectionIdentityV1,
+    child: &config_projection::E3ChildProcessRegistrationV1,
+    requirement: &config_projection::E3UserNamespaceRequirementV1,
+) -> Result<()>;
+
+impl HeldE3PrivilegedChildExclusionLeaseV1 {
+    pub(crate) fn release_terminal_child_user_namespace_v1(
+        &mut self,
+        child: &config_projection::E3ChildProcessRegistrationV1,
+    ) -> Result<()>;
+
+    pub(crate) fn release_after_cleanup_v1(&mut self) -> Result<()>;
+}
+
+// In gateway_runtime.rs; this is the manager's final fallible release boundary.
+impl E3GatewayRuntimeAuthorityV1 {
+    pub(crate) fn release_exclusion_after_cleanup_v1(&mut self) -> Result<()>;
+}
+```
+
+**Lease and child binding.** Setup replaces the old exclusion/PID/start/cgroup arguments with the
+held lease, existing projection identity and complete process registration; PID/start/cgroup are
+derived from that registration. The runtime supplies its already retained gateway or probe registration, joined to the
+exact cgroup registration/intent, role, fence, store/series, boot and service instance, and to its
+launch input's world/generation and preparation. Setup exact-checks the supplied identity's
+world/generation against its private lease fields and its store/series against the registration,
+then checks the registration's cgroup/boot against the actual process before any mapped release. World/generation
+are the acquired lease binding, not values inferred from a pathname. The same registration must be
+used for terminal release; a reconstructed numerically equal PID is insufficient.
+
+The lease retains private per-child setup/completion progress, keyed by the existing PID/start pair
+and complete registration equality. A private process-local lease ownership marker binds each map
+entry to the actual acquiring lease, not merely to a same-world count; it is not a new persistent or
+stable ID. Record the exact setup invocation before fallible namespace work. A slot distinguishes
+never-retained setup, held namespace, and completed release. Capture the namespace device/inode,
+original pidfd and process start identity in the existing held entry, along with that registration
+and lease binding. A failed final `USERNS_MAPPED` send leaves the held slot intact. Failed setup
+before retention leaves its never-retained slot; an unknown child is not an already-released child.
+Duplicate registration/namespace insertion must check before mutation, never replace/drop a prior
+entry and then return an error. Allocation or unwind cannot discard the only held descriptor.
+
+`release_terminal_child_user_namespace_v1` requires an unreleased matching lease in the same
+exclusive epoch and exact private registration/lease binding. For a held entry it revalidates the
+held namespace descriptor identity and its stored service-parent/owner binding, polls the original
+pidfd terminal, then runs `verify_e3_child_process_and_cgroup_quiescent` and
+`read_empty_e3_cgroup_tree` against the original canonical cgroup while it still exists. Both
+complete-tree observations must be empty and equal, including descendant object identities; a
+renamed/replaced mount, directory or descendant, live pidfd, populated tree, wrong boot/world/
+generation/role/fence/registration or sibling lease rejects. No `/proc/<pid>` reopening after reap
+may substitute a different process for the held pidfd. Preserve all existing exact-object checks.
+
+Only after successful validation does the owner close that namespace descriptor and mark that
+exact slot released as one state transition. Keep private non-owning identity/completion data for
+same-live-lease retry; no fallible publication follows descriptor loss inside this operation.
+`Ok(())` means this slot owns no namespace: either this call released it, this exact lease already
+released it, or its recorded setup never retained one. The last case is not terminal-process or
+cgroup proof; the runtime still owes its independent kill/reap/empty checks before removal. Unknown
+slots and unequal retries error. Completed-slot retry never reopens a removed cgroup or closes a
+second descriptor. It cannot certify a reappearing replacement cgroup for later cleanup. The method
+never changes a lease count, releases another child, opens admission or publishes durable evidence.
+Any validation error leaves the held slot, descriptors, counts and closed admission unchanged.
+
+**Final release and unwind.** `release_after_cleanup_v1` is the sole counted release for this
+lease. It requires all its setup slots to be never-retained or explicitly released; an unresolved
+held namespace rejects without decrement. It calls the owner's private `release_e3_exclusive`
+under one state lock, validating the lease binding and positive count before mutation. A non-last
+release decrements exactly once and leaves all siblings' slots, descriptors and leases unchanged.
+The last release requires no held namespace anywhere, clears only completed/non-owning epoch
+bookkeeping and enters the existing `LegacyShared { live_non_e3_children: 0 }` state. It must not
+reopen cgroups for slots already released, treat missing cgroups as quiescence, or bulk-release an
+unresolved sibling. Every fallible check precedes the count/mode mutation; set the lease's released
+flag in the same critical section. An equal repeat on that released lease is a no-op. The current
+decrement-before-validation path is forbidden here: an error must not leave zero counted leases
+with live ownership. This changes no non-E3 admission or recovery algorithm.
+
+`release_exclusion_after_cleanup_v1` is called only by the preparation cleanup owner after the
+runtime's exact kernel/listener/config cleanup and the original handoff/consumer/capability cleanup
+have succeeded. It checks the runtime's retained completion state and invokes the lease method;
+errors leave the runtime in the sealed entry for retry. The manager marks `cleanup_complete` and
+takes/drops the runtime only after success. Destructors are not fallible cleanup or recovery: a
+released lease drop is inert; an unexpected unreleased E3 owner/lease drop preserves closed
+admission and unresolved shared ownership (poisoning on lost accountability), never decrements or
+claims success. A never-started, resource-free owner must also use explicit final release in normal
+cleanup. No destructor abort is used to handle an ordinary cleanup validation error.
+
+**Exact later implementation fence.** Only these adaptations are added to E3-E's existing fence:
+
+- `e3_child_security.rs`: `HeldE3PrivilegedChildExclusionLeaseV1` private child/lease progress and
+  the two methods above plus `Drop`; `E3PrivilegedChildExclusionStateV1`, `ExclusionModeV1` and
+  `HeldE3ChildUserNamespaceV1` private ownership/completion fields;
+  `E3PrivilegedChildExclusionV1::{acquire_e3_exclusive,retain_child_user_namespace,
+  release_e3_exclusive}` for binding, non-replacing retention and transactional counted release;
+  `install_and_validate_e3_child_user_namespace_v1` and its private
+  `install_and_validate_e3_child_user_namespace_on_sync_thread_v1` for the typed lease/registration
+  boundary and partial setup retention; `verify_e3_child_process_and_cgroup_quiescent` and
+  `read_empty_e3_cgroup_tree` for this per-child use and exact descendant identity comparison.
+  Private already-locked helpers may implement these operations without recursive locking.
+  `validate_child_security_attestation_v1` may only adapt its private map lookup to require a held
+  slot; its security checks, signature and attestation semantics stay frozen.
+- `gateway_runtime.rs`: `E3GatewayRuntimeAuthorityV1` and private
+  `ManagedGatewayLaunchCapabilityV1` cleanup progress, `spawn_descriptor_pinned` and
+  `spawn_readiness_probe` setup calls, `probe_readiness` successful-probe release,
+  `revoke`, `revoke_live_v1` (including private `remove_empty`), `Drop`, and
+  `release_exclusion_after_cleanup_v1`. Preserve exact process ownership before registration,
+  freeze terminal evidence before publication, and retain per-object removal progress on errors.
+- `e3_config_projection_prepare.rs`: `SealedE3ConfigProjectionPreparationV1` private terminal
+  progress and `E3ConfigProjectionPreparationManagerV1::{prepare,take_for_v2,
+  activate_prepared_gateway_v1,cleanup_prepared_gateway_v1,cancel,recover_expired}` only for these
+  owner/caller transitions and retry after handoff/consumer release. No new registry/service API.
+- Only the affected colocated tests in those three files, including all three existing E3-D setup
+  helper test calls and the gateway/probe/manager cleanup callers, plus already admitted E3-E
+  integration proof surfaces. No new generic proof harness.
+
+This exception does not alter UID/GID maps, capability parking/descent, namespace creation/handshake
+bytes, Landlock/seccomp, tracing, secret channels, schemas, hashes, storage, restart evidence recovery
+or V1 compatibility. It assigns no `e3_codex_launch.rs` or member-runtime production caller, no
+retained Codex lifecycle, and no E3-F implementation. Later E3-F integration consumes this boundary
+under its own authority. Source inspection for this documentation is not product impact analysis,
+implementation, test execution or E3-E source-review completion.
 
 ## Admission fence and required proof
 
@@ -5506,7 +5645,9 @@ conflicting restrictions below. Neither correction restarts admission or broaden
    `HeldE3ServiceUserNamespaceV1`, private `HeldE3ChildUserNamespaceV1`, and
    `E3PrivilegedChildExclusionV1::{new_recovering,register_recovered_non_e3_child,
    finish_recovery,acquire_non_e3_child,
-   acquire_e3_exclusive,release_non_e3_child,release_e3_exclusive,poison_recovering}`. In
+   acquire_e3_exclusive,release_non_e3_child,release_e3_exclusive,poison_recovering}`. E3-E may additionally make only the
+   [terminal namespace owner adaptations](#e3-e-terminal-child-namespace-owner-boundary), including
+   the lease methods, private state and affected caller/tests enumerated there. In
    `crates/world-service/src/e3_local_transport.rs`, create only
    `E3AuthenticatedLinuxUdsListenerV1::from_inherited`,
    `E3AuthenticatedLinuxUdsListenerV1::accept_peer`, and the private authenticated-listener/peer
