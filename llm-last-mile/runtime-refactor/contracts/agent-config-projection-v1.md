@@ -4458,6 +4458,340 @@ behavior, and every other applicable Linux safety requirement remain mandatory. 
 scheduling and proof-applicability correction is not a Linux safety waiver, does not itself complete
 or land E3-A, and does not admit or dispatch E3-B.
 
+### Same-subject fresh preparation and restart readback
+
+This is a bounded E3-E interface/catalog correction to the already required immutable-series and
+cancellation/restart semantics above. The source subject is the preserved 24-file candidate over
+product `4c5cac9e721ed1de8e355fea5d96022cdfb5765c`, as bound by
+`e3e-resume-bindings.json` and the CURRENT section of `ingress-auth-scope-blocker.md` in
+`review-evidence/e3-e-standalone-4c5cac9e`. The historical semantic baseline remains
+`2b2fc6c50b40046dbeaeb5b316562fbd96480a2a`, not that product's parent. In that source,
+registry `resolve_projection_in_transaction` requires a Held lease, `recover` returns only the
+store, manager `prepare` allocates a new series and revision 1, and `validate_record_transition`
+implements only the two same-fence edges. Existing prose therefore does not supply the complete
+callable path. This correction supersedes only the conflicting interface/catalog restrictions for
+these operations; it changes no durable schema, lifecycle edge, admission, or E3-F ownership.
+
+The shared durable read extends the existing registry recovery transaction, rather than weakening
+capability resolution or introducing another index. These are the exact revised/additional
+signatures (all types are config-projection-owned unless qualified):
+
+```rust
+impl ConfigProjectionRegistryV1 {
+    pub fn recover(
+        &self,
+        subject: Option<&ConfigProjectionIdentityV1>,
+    ) -> Result<ConfigProjectionRecoveryReadbackV1, ConfigProjectionFailureV1>;
+}
+
+pub enum ConfigProjectionSubjectReadbackV1 {
+    Unbound,
+    Bound(ConfigProjectionPreparationMetadataV1),
+}
+
+pub struct ConfigProjectionPreparationMetadataV1 {
+    pub(crate) record: AgentConfigProjectionRecordV1,
+    pub(crate) projection_ref: ConfigProjectionRefV1,
+    pub(crate) prepared_handoff: ConfigProjectionSecretHandoffRevisionV1,
+    pub(crate) current_handoff: ConfigProjectionSecretHandoffRevisionV1,
+    pub(crate) consumer_lease: Option<ConfigProjectionConsumerLeaseV1>,
+}
+
+impl ConfigProjectionPreparationMetadataV1 {
+    pub fn record(&self) -> &AgentConfigProjectionRecordV1;
+    pub fn projection_ref(&self) -> &ConfigProjectionRefV1;
+}
+
+impl AgentConfigProjectionServiceV1 {
+    pub fn resolve_preparation_subject_v1(
+        &self,
+        subject: &ConfigProjectionIdentityV1,
+    ) -> Result<ConfigProjectionSubjectReadbackV1, ConfigProjectionFailureV1>;
+}
+```
+
+`src/registry.rs` owns the enum, metadata type/accessors, and private
+`read_preparation_subject_in_transaction_v1`; only the registry constructs metadata after complete
+locked readback. The types have no Serde representation, public constructor, mutable accessor,
+descriptor, credential, listener, barrier, ACK owner, or launch capability. The two getters expose
+existing nonsecret record/equality material, not live authority. `src/service.rs` owns the service
+method: revalidate configured accepted home, call `recover(Some(subject))`, check the returned store
+against that home, and require the non-null subject result. Existing store-only consumers, including
+`AgentConfigProjectionServiceV1::new`, call `recover(None)` and consume its `store` field; `None`
+preserves existing store initialization/recovery and returns no subject result. Existing exports
+`pub use registry::*` and `pub use service::*` suffice; no new module or export mechanism is owned.
+
+For `Some`, the store must already exist and validate; this mode must not initialize missing
+authority. Under the existing parent-before-child locks, recover recognized temporaries by the
+existing rules, then compute the existing subject hash by omitting only `series_id` and
+`identity_hash`. Read exactly `subjects/<subject-hash>.json`, validate its canonical hash and full
+immutable subject equality, and use its first-writer-bound series ID and identity. The supplied
+identity is an authenticated candidate for lookup; its prospective series ID/hash cannot override
+an existing binding. `Unbound` means validated absence of that binding with no conflicting/partial
+subject publication or attributable retained attempt evidence in the existing validated namespace.
+Only this outcome permits first-writer series allocation. A missing store, bound series head,
+record, required handoff or dependency is a typed failure, not `Unbound`. No new scan, index, durable
+store, or public filesystem accessor is authorized; reuse the existing recovery/tree validation and
+exact intent/record joins, including failure on ambiguous pre-head effects.
+
+`Bound` returns the exact current head/record and that fence's immutable Prepared handoff plus its
+exact current handoff revision. Derive the one deterministic consumer ID from that Prepared
+handoff's preparation ID and read only its known lease path, including canonical current head and
+immutable revision/predecessor checks. `consumer_lease = None` means that exact lease path is absent;
+an incomplete or corrupt occupant is an error. A Released lease is readable metadata, never a Held
+lease or a new consumer. No lease enumeration is needed for this read. Retired subjects return
+`RetiredSeries` after exact retirement validation, even when all old records remain readable;
+malformed, newer, wrong-bound, hash-invalid, partial, and conflicting state retain their existing
+typed failures. Readback alone asserts neither cleanup nor successor eligibility. Existing
+`resolve(Some((&identity, held_lease)), None)` and its usable
+`PublishedConfigProjectionCapabilityV1` requirement remain unchanged.
+
+The existing abandonment operation accepts either retained progress or this durable snapshot, so
+restart does not need to manufacture an `E3PreparedRetainedLaunchPublicationV1` or live preparation:
+
+```rust
+pub enum E3PreparationAbandonmentTargetV1<'a> {
+    Live(&'a mut E3PreparedRetainedLaunchPublicationV1),
+    Recovered(&'a ConfigProjectionPreparationMetadataV1),
+}
+
+impl AgentConfigProjectionServiceV1 {
+    pub fn publish_preparation_abandonment(
+        &self,
+        target: E3PreparationAbandonmentTargetV1<'_>,
+        terminal_state: SecretHandoffStateV1,
+        released_at: Timestamp,
+        failure_diagnostic_ref: Option<RedactedDiagnosticRefV1>,
+    ) -> Result<Option<SecretHandoffRefV1>, ConfigProjectionFailureV1>;
+}
+
+impl ConfigProjectionRegistryV1 {
+    pub(crate) fn publish_handoff_transition_v1(
+        &self,
+        identity: &ConfigProjectionIdentityV1,
+        fence_id: &str,
+        successor: &ConfigProjectionSecretHandoffRevisionV1,
+        expected_projection_ref: Option<&ConfigProjectionRefV1>,
+    ) -> Result<SecretHandoffRefV1, ConfigProjectionFailureV1>;
+}
+
+impl E3ConfigProjectionPreparationManagerV1 {
+    pub(crate) fn recover_expired(
+        &self,
+        failed_preparation: Option<&str>,
+        recovered: Option<E3PreparationRecoveryV1<'_>>,
+    ) -> Result<(), config_projection::ConfigProjectionFailureV1>;
+}
+```
+
+`src/service.rs` owns the target enum and adapts its existing private abandonment validators and
+successor builder; `src/registry.rs` owns the optional expected-head check in the existing handoff
+transaction and its private helpers. Every abandonment caller supplies `Some(exact old head)`;
+`None` preserves other admitted handoff lifecycle callers' existing checks. Under both locks the
+transaction repeats current-head, identity, fence, preparation and non-Active checks before any
+handoff mutation, including exact retries. It must also validate the already required durable old
+boundary revocation and exact child/kernel-effect quiescence evidence before abandonment may
+release a consumer lease. Terminal handoff state alone is insufficient. No new terminal-evidence
+schema or caller-provided cleanup boolean is accepted.
+
+The Live arm retains existing partial-publication reconciliation and its exact deterministic
+acquire-or-resolve lease path. The Recovered arm re-reads the same subject/head and handoff/lease
+chain, rejects changed bindings/head or an Active attempt, and never republishes a Dormant record,
+Prepared chain, native source, or kernel effect. It constructs only the already legal terminal
+handoff successor from the actual durable predecessor. An existing terminal successor is reused
+only after full immutable/head/predecessor equality validation; Failed versus Expired and all
+retained diagnostics/timestamps remain exact. If the known lease is absent, reconcile it with
+`acquire_consumer_lease` using the old Dormant acquisition ref/time and deterministic ID before
+`release_consumer_lease`. If already Released, validate and reuse its exact durable release instead
+of reacquiring or choosing a new release timestamp. A Held lease is released only after the exact
+terminal handoff commit and cleanup proof. Any failed readback or cleanup leaves ownership or
+recovery admission closed. No Released lease is passed to capability resolution.
+
+The restart cleanup caller/callee path is also explicit; store validation is not kernel recovery.
+`ConfigProjectionRecoveryReadbackV1` and `E3KernelEffectRecoveryV1` are non-Serde readback types
+owned/exported by `src/registry.rs`, containing only the existing typed nonsecret objects below.
+The existing `validate_kernel_effect_tree`, `validate_child_cgroup_tree`,
+`validate_child_process_tree` and boundary/record readers supply these joins during their existing
+recovery traversal. There is no second scan or persistent recovery catalog. `Some(subject)` filters
+readback to its bound current fence; `None` returns all retained intent joins for startup, including
+intents with no effect registration or projection head. Optional fields mean proven absence only;
+partial, duplicate, corrupt or ambiguous joins fail closed. Terminal series remain terminal, and
+store-only callers do not treat these readbacks as authority to act.
+
+```rust
+pub struct ConfigProjectionRecoveryReadbackV1 {
+    pub store: ConfigProjectionStoreV1,
+    pub subject: Option<ConfigProjectionSubjectReadbackV1>,
+    pub kernel_effects: Vec<E3KernelEffectRecoveryV1>,
+}
+
+pub struct E3KernelEffectRecoveryV1 {
+    pub intent: E3KernelEffectIntentV1,
+    pub resolution: Option<E3KernelEffectResolutionV1>,
+    pub child_cgroup: Option<E3ChildCgroupRegistrationV1>,
+    pub child_processes: Vec<E3ChildProcessRegistrationV1>,
+    pub boundary: Option<GatewayAccessBoundaryV1>,
+    pub projection: Option<AgentConfigProjectionRecordV1>,
+}
+
+// world-service/src/e3_config_projection_prepare.rs
+pub(crate) enum E3PreparationRecoveryV1<'a> {
+    Startup { service_instance_id: &'a str },
+    Subject(&'a config_projection::ConfigProjectionPreparationMetadataV1),
+}
+
+// world-service/src/gateway_runtime.rs
+pub(crate) enum E3GatewayRevocationTargetV1<'a> {
+    Live(&'a mut E3GatewayRuntimeAuthorityV1),
+    Recovered {
+        effects: &'a [config_projection::E3KernelEffectRecoveryV1],
+        service_instance_id: &'a str,
+        exclusion: &'a crate::e3_child_security::E3PrivilegedChildExclusionV1,
+    },
+}
+
+impl E3GatewayRuntimeAuthorityV1 {
+    pub(crate) fn revoke(
+        target: E3GatewayRevocationTargetV1<'_>,
+        registry: &config_projection::ConfigProjectionRegistryV1,
+    ) -> anyhow::Result<()>;
+}
+
+// world-service/src/e3_child_security.rs
+impl E3PrivilegedChildExclusionV1 {
+    pub(crate) fn require_recovering_v1(&self) -> anyhow::Result<()>;
+}
+
+// config-projection/src/registry.rs
+impl ConfigProjectionRegistryV1 {
+    pub fn publish_kernel_effect_resolution(
+        &self,
+        resolution: &E3KernelEffectResolutionV1,
+        resolve_effect: Option<&mut dyn FnMut()
+            -> Result<Option<GatewayAccessBoundaryV1>, ConfigProjectionFailureV1>>,
+        expected_projection_ref: Option<&ConfigProjectionRefV1>,
+    ) -> Result<E3KernelEffectResolutionV1, ConfigProjectionFailureV1>;
+}
+```
+
+`require_recovering_v1` only checks the existing exclusion state under its mutex and fails unless
+it is `Recovering`; it neither changes admission nor returns a launch lease. `run_world_service`
+allocates the already required single fresh process-instance ID and, before generic GC,
+`finish_recovery` or listeners, calls its installed
+`service.e3_projection_preparations` manager's
+`recover_expired(None, Some(E3PreparationRecoveryV1::Startup { service_instance_id: &id }))`.
+The manager retains that ID in a private `OnceLock<String>`; a different/repeated startup dispatch
+cannot replace it. Startup is the sole producer of this variant. It checks `require_recovering_v1`,
+obtains `registry.recover(None)`, and passes its exact joined `kernel_effects` to
+`E3GatewayRuntimeAuthorityV1::revoke(Recovered { ... }, &registry)`. Failure poisons/retains
+`Recovering` and returns before admission opens. The existing one startup call is the owner of this
+sequence; no scheduler, supervisor or new scanner is added.
+
+`gateway_runtime.rs` owns private `revoke_live_v1` and `revoke_recovered_v1` extracted behind the
+revised `revoke` entry point. The Live arm preserves the retained-owner path; the Recovered arm
+opens only the namespace/cgroup coordinates bound by the supplied existing intents/registrations,
+revalidates them, denies/revokes the exact old boundary, kills and proves every bound remnant and
+complete descendant tree quiescent using the existing recovery observation rules, then removes
+only those exact effects. It never calls `new`, binds/adopts a listener, recreates an effect, or
+constructs a credential, gateway launch or preparation owner. A nonterminal current-process owner
+cannot be treated as restarted. Missing process identity, substituted namespace/handles/cgroups,
+unclassified descendants or failed kill/absence proof reject, including on already-resolved inputs;
+retained resolution bytes are not a substitute for required current kernel observations.
+
+Both arms call the existing `publish_kernel_effect_resolution` with the exact existing resolution
+(or one retained new resolution for an unresolved intent) and its scoped cleanup callback. Its
+optional final expected ref is required when a projection exists; the registry repeats that exact
+head/fence/intent join under both locks before invoking the callback or accepting an exact retry.
+A headless intent uses `None` and must remain exactly headless. The callback's only added result is
+an observed Revoked boundary revision when a published boundary needs its legal successor; cgroup
+cleanup returns `None`. The registry validates and writes/readbacks that revision using existing
+boundary transition/hash/write helpers and the unchanged boundary store, then the existing kernel
+resolution in the same transaction. Existing non-boundary callbacks mechanically return `Ok(None)`.
+An already committed resolution/Revoked revision is exact-resolved without replaying an effect;
+conflicting successors or lost required observations reject. No callback re-enters the registry or
+HSA. Deletion without retained/recoverable proof of a required Revoked revision is not repaired by
+fabricating rule handles or accepting absence as that revision.
+
+For registered children, `revoke_recovered_v1` constructs the existing
+`E3TerminalChildQuiescenceEvidenceV1` from its actual PID/start/boot observations and twice-empty
+complete cgroup trees, and calls `publish_terminal_child_evidence` before deleting the observed
+cgroups. It reuses complete exact existing evidence on retry; it does not invent wait status or
+use the old service-instance ID as the new observer. Unregistered/headless effects follow only the
+existing intent-resolution rules and cannot manufacture terminal projection evidence. Completed
+kernel cleanup is followed by a fresh registry read. For each non-Active complete old preparation,
+the startup arm invokes its same `Subject` abandonment path, which publishes the terminal handoff
+and releases the known lease without credentials. Partial publications, ineligible Active history
+without the already required terminal retained-runtime evidence, or any unresolved effect keep
+admission closed; this boundary grants no E3-F teardown/launch implementation. Only after this
+sequence succeeds may `run_world_service` continue its existing GC/recovery completion. Later
+fresh-auth `prepare` reads the same subject history and needs no startup reconstruction.
+
+The production callers form one path:
+
+1. `prepare` keeps its existing pre-effect authoring read and both authenticated shell reads. After
+   building the exact immutable candidate identity and before accepting a new credential owner,
+   exclusion lease, listener or effect, it calls `resolve_preparation_subject_v1`. For `Bound`, use
+   `metadata.record().identity` unchanged and retain `metadata.projection_ref()` as the expected
+   predecessor; never allocate another series to bypass it. Existing live exact preparation retries
+   keep their response/owners and scrub duplicate auth. A different live contender cannot abandon
+   that owner. A terminal or restarted attempt requires a fresh preparation ID and fresh auth; the
+   old carrier/ID remains stale and cannot reconstruct process-local state.
+2. `cancel` and `recover_expired` replace their capability-producing durable posture checks with
+   the same service read, comparing the returned exact identity/head to their retained attempt or
+   supplied recovery snapshot. Cancel, expiry timer, pre-prepare expiry and failed-attempt cleanup
+   pass `recovered = None` and use `Live`. `prepare`, after fresh authentication and a Bound read
+   with no live owner, passes `Some(E3PreparationRecoveryV1::Subject(&metadata))` for the terminal-history path. That arm uses
+   `Recovered`, retains no credential/listener/launch owner for the old attempt, and repeats the
+   read after cleanup. A same-process nonterminal attempt without its owner is ineligible, not a
+   restart inference. The Startup path above establishes kernel cleanup and drives this same
+   Subject path before opening admission. Subject processing revalidates its durable cleanup
+   proof; absent proof rejects. Live cancellation/expiry calls the revised `revoke(Live(...),
+   &registry)` before `publish_preparation_abandonment(Live(...), ...)`; startup uses
+   `revoke(Recovered { ... }, &registry)` before `publish_preparation_abandonment(Recovered(...),
+   ...)`. Neither path treats the readback itself as cleanup.
+3. After terminal handoff and lease cleanup, the fresh attempt retains only the old expected ref
+   as nonsecret predecessor state in `SealedE3ConfigProjectionPreparationV1`. `prepare` allocates
+   fresh preparation/fence/root/gateway/boundary/handoff/intent/consumer identities, constructs
+   revision `expected.revision.checked_add(1)` and `predecessor_ref = Some(expected)` (Unbound
+   remains revision 1/None), and binds the exact same revision/ref into its activation intent,
+   launch input and publication carrier. It then uses the unchanged
+   `publish_prepared_retained_launch` signature. That service publishes the new Dormant record,
+   acquires its distinct Held lease, and only then obtains the existing capability via `resolve`.
+   No secret, descriptor, listener, barrier, launch input or ACK is replayed from the old attempt.
+
+`publish_dormant` already forwards `record.predecessor_ref` to
+`publish_record_in_transaction`; its signature need not change. E3-E owns the missing fresh-fence
+implementation in `src/registry.rs::{publish_successor,validate_record_transition}` and their
+private existing evidence readers/validators, plus the manager's predecessor/revision construction
+and the service's existing publication validation call sites. Under both locks, before committing
+new dependencies/head, revalidate the exact subject binding, expected current head, monotonic
+revision/predecessor, distinct new fence/root/gateway/handoff/lease identities, old Revoked boundary,
+required terminal child/kernel evidence, terminal handoff and release of old-fence consumers. The
+already specified Dormant/ReadyClosed/Active-to-fresh-Dormant edges are the authority; this assigns
+implementation ownership without inventing edges. Active history requires the existing terminal
+retained-runtime evidence and never goes through preparation cancellation. E3-F launch, active
+runtime teardown, resumed turns and their dispatch remain outside this correction.
+
+The current-head-equals-successor retry branch in `publish_successor` must validate the exact record,
+head, predecessor and complete old/new dependencies before success, not bypass fresh-fence checks.
+An unchanged expected head admits only one successor; a different contender rejects as
+`StaleRevision`/`Conflict`. Recognized immutable-before-head interruption may complete only its exact
+existing CAS; failed/partial recovery cannot select a new series or new retry identities. Later
+head movement also rejects stale cancellation/expiry snapshots. These checks and the existing
+handoff/lease transactions reuse parent/child locking, canonical bytes, no-replace writes, fsync and
+readbacks; they introduce no generic transaction framework or orchestration machinery.
+
+Future implementation proof uses existing registry/service tests, the colocated preparation-manager
+probe and gateway-owner fixtures, plus `tests/agent_config_projection_v1.rs`: cancel then fresh-auth
+prepare must retain the series and increment the revision with fresh identities; restart after
+kernel cleanup must reject stale old refs and require fresh authentication while reusing that
+series; failed cleanup, nonterminal owners, missing/partial/corrupt/retired state must block a
+successor and preserve evidence; exact retries and concurrent expected-head contenders must prove
+one immutable successor/lease, stable bytes and no effect replay, including handoff-commit and
+lease-release lost-return boundaries. These are later tests, not proof executed by this correction.
+Completed native-source, authenticated-owner, E2 and manager evidence is reused; the disposed
+manifest-inode finding is not reopened and the earlier candidate Clippy diagnostic remains unwaived.
+
 ## Admission fence and required proof
 
 This specification is documentation authority only. The following is an ownership catalog partitioned
@@ -4480,8 +4814,10 @@ semantics, history, reconciliation, schema, or namespace change is owned.
 Subject to those corrections, later packet admissions may select only their applicable symbols from
 this catalog. For the existing E3-E continuation, the bounded
 [authenticated-owner propagation exception](#authenticated-owner-propagation-for-the-e3-parent-and-registry)
-additionally applies to the exact HSA and registry symbols named there; it requires no admission
-restart and does not broaden any other catalog entry:
+additionally applies to the exact HSA and registry symbols named there; the bounded
+[same-subject fresh preparation correction](#same-subject-fresh-preparation-and-restart-readback)
+also applies only to its exact types, signatures, owning symbols and production callers, overriding
+conflicting restrictions below. Neither correction restarts admission or broadens another entry:
 
 1. create exactly `crates/config-projection/{Cargo.toml,src/lib.rs,src/codec.rs,src/registry.rs,
    src/service.rs,src/codex_0125.rs,src/linux_artifacts.rs}` and add only its dependency/export entries
