@@ -66,7 +66,18 @@ impl IntegratedGatewayAuthContext {
     }
 
     fn from_auth_bundle_env() -> anyhow::Result<Self> {
-        let bundle = read_gateway_auth_bundle_from_env()?;
+        #[cfg(target_os = "linux")]
+        anyhow::ensure!(
+            ![
+                "SUBSTRATE_E3_GATEWAY_LAUNCH_FD",
+                "SUBSTRATE_E3_GATEWAY_LISTENER_FD",
+                "SUBSTRATE_E3_GATEWAY_SECRET_READY_FD"
+            ]
+            .iter()
+            .any(|name| env::var_os(name).is_some()),
+            "E3 auth must wait for descriptor adoption and secret-ready attestation"
+        );
+        let bundle = read_gateway_auth_bundle_from_env(None)?;
         match bundle.backend_id.as_str() {
             GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX => Ok(Self::CliCodex(
                 CodexIntegratedAuthHandoff::from_fields(&bundle.fields)?,
@@ -275,9 +286,26 @@ fn take_auth_bundle_fd_env() -> anyhow::Result<String> {
 }
 
 #[cfg(unix)]
-fn read_gateway_auth_bundle_from_env() -> anyhow::Result<GatewayAuthBundleV1> {
+fn read_gateway_auth_bundle_from_env(
+    e3_reader: Option<std::fs::File>,
+) -> anyhow::Result<GatewayAuthBundleV1> {
     use std::fs::File;
     use std::os::fd::{FromRawFd, OwnedFd, RawFd};
+
+    if let Some(reader) = e3_reader {
+        let mut body = secrecy::zeroize::Zeroizing::new(Vec::new());
+        reader
+            .take(65_537)
+            .read_to_end(&mut body)
+            .map_err(|_| anyhow::anyhow!("E3 auth bundle read failed"))?;
+        anyhow::ensure!(body.len() <= 65_536, "E3 auth bundle exceeds its bound");
+        let bundle: GatewayAuthBundleV1 = serde_json::from_slice(&body)
+            .map_err(|_| anyhow::anyhow!("E3 auth bundle is malformed"))?;
+        bundle
+            .validate()
+            .map_err(|_| anyhow::anyhow!("E3 auth bundle is invalid"))?;
+        return Ok(bundle);
+    }
 
     let raw_fd = take_auth_bundle_fd_env()?;
     let fd = raw_fd.trim().parse::<RawFd>().map_err(|err| {
@@ -319,7 +347,9 @@ fn read_gateway_auth_bundle_from_env() -> anyhow::Result<GatewayAuthBundleV1> {
 }
 
 #[cfg(not(unix))]
-fn read_gateway_auth_bundle_from_env() -> anyhow::Result<GatewayAuthBundleV1> {
+fn read_gateway_auth_bundle_from_env(
+    _e3_reader: Option<std::fs::File>,
+) -> anyhow::Result<GatewayAuthBundleV1> {
     let _ = take_auth_bundle_fd_env();
     anyhow::bail!(
         "Integrated gateway startup via {} is unsupported on this platform",
@@ -478,6 +508,16 @@ pub async fn start_server(
     launch: GatewayLaunchContract,
     integrated_auth: Option<IntegratedGatewayAuthContext>,
 ) -> anyhow::Result<()> {
+    #[cfg(target_os = "linux")]
+    if let Some(mut e3) = crate::launch::E3GatewayLaunchContractV1::from_environment()? {
+        anyhow::ensure!(
+            integrated_auth.is_none(),
+            "E3 auth was supplied outside the one-time descriptor consumer"
+        );
+        e3.consume_launch_input(&launch.config_path)?;
+        return serve_e3_inherited_listener(config, e3).await;
+    }
+
     let GatewayLaunchContract {
         mode, token_store, ..
     } = launch;
@@ -3002,3 +3042,233 @@ impl std::fmt::Display for AppError {
 }
 
 impl std::error::Error for AppError {}
+
+#[cfg(target_os = "linux")]
+fn build_e3_in_world_app(
+    state: Arc<AppState>,
+    input: Arc<config_projection::ManagedGatewayLaunchInputV1>,
+    secret_ready_attestation_hash: String,
+    readiness_consumed: Arc<std::sync::atomic::AtomicBool>,
+) -> AxumRouter {
+    AxumRouter::new()
+        .route(
+            "/v1/responses",
+            post(openai_responses::handle_openai_responses).route_layer(
+                axum::middleware::from_fn_with_state(
+                    Arc::clone(&input),
+                    e3_validate_member_identity,
+                ),
+            ),
+        )
+        .route(
+            "/health",
+            get(e3_health_check).head(|| async { StatusCode::METHOD_NOT_ALLOWED }),
+        )
+        .layer(axum::Extension((
+            input,
+            secret_ready_attestation_hash,
+            readiness_consumed,
+        )))
+        .with_state(state)
+}
+
+#[cfg(target_os = "linux")]
+async fn e3_validate_member_identity(
+    State(input): State<Arc<config_projection::ManagedGatewayLaunchInputV1>>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    use nix::libc;
+    let mut limits = libc::rlimit {
+        rlim_cur: 1,
+        rlim_max: 1,
+    };
+    if unsafe { libc::getrlimit(libc::RLIMIT_CORE, &mut limits) } != 0
+        || limits.rlim_cur != 0
+        || limits.rlim_max != 0
+        || unsafe { libc::prctl(libc::PR_GET_DUMPABLE, 0, 0, 0, 0) } != 0
+    {
+        std::process::exit(78);
+    }
+    for (name, expected) in [
+        (
+            "X-Substrate-Orchestration-Session",
+            input.orchestration_session_id.as_str(),
+        ),
+        (
+            "X-Substrate-Participant",
+            input.retained_participant_id.as_str(),
+        ),
+        (
+            "X-Substrate-Projection",
+            input.config_projection_identity_hash.as_str(),
+        ),
+    ] {
+        let mut values = request.headers().get_all(name).iter();
+        if values.next().map(|v| v.as_bytes()) != Some(expected.as_bytes())
+            || values.next().is_some()
+        {
+            return StatusCode::FORBIDDEN.into_response();
+        }
+    }
+    next.run(request).await
+}
+
+#[cfg(target_os = "linux")]
+async fn e3_health_check(
+    axum::Extension((input, secret_ready_attestation_hash, consumed)): axum::Extension<(
+        Arc<config_projection::ManagedGatewayLaunchInputV1>,
+        String,
+        Arc<std::sync::atomic::AtomicBool>,
+    )>,
+    headers: HeaderMap,
+) -> Response {
+    use config_projection::ConfigProjectionCodecV1 as Codec;
+    use nix::libc;
+    let mut limits = libc::rlimit {
+        rlim_cur: 1,
+        rlim_max: 1,
+    };
+    if unsafe { libc::getrlimit(libc::RLIMIT_CORE, &mut limits) } != 0
+        || limits.rlim_cur != 0
+        || limits.rlim_max != 0
+        || unsafe { libc::prctl(libc::PR_GET_DUMPABLE, 0, 0, 0, 0) } != 0
+    {
+        std::process::exit(78);
+    }
+    let mut nonces = headers.get_all("X-Substrate-E3-Readiness-Nonce").iter();
+    if nonces.next().map(|v| v.as_bytes()) != Some(input.readiness_nonce.as_bytes())
+        || nonces.next().is_some()
+        || consumed
+            .compare_exchange(
+                false,
+                true,
+                std::sync::atomic::Ordering::AcqRel,
+                std::sync::atomic::Ordering::Acquire,
+            )
+            .is_err()
+    {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let body = Codec::encode_canonical_json(&serde_json::json!({
+        "schema_version":1, "readiness_nonce":input.readiness_nonce,
+        "launch_input_hash":input.launch_input_hash, "gateway_ref":input.gateway_ref,
+        "config_projection_identity_hash":input.config_projection_identity_hash,
+        "orchestration_session_id":input.orchestration_session_id,
+        "retained_participant_id":input.retained_participant_id, "backend_id":input.backend_id,
+        "world_id":input.world_id, "world_generation":input.world_generation,
+        "listener_identity":input.listener_identity,
+        "secret_handoff_prepared_ref":input.secret_handoff_prepared_ref,
+        "secret_handoff_consumed":true, "secret_ready_attestation_hash":secret_ready_attestation_hash,
+    }));
+    match body {
+        Ok(body) => (
+            [(axum::http::header::CONTENT_TYPE, "application/json")],
+            body,
+        )
+            .into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) async fn serve_e3_inherited_listener(
+    mut config: AppConfig,
+    mut launch: crate::launch::E3GatewayLaunchContractV1,
+) -> anyhow::Result<()> {
+    use secrecy::Zeroize;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = launch.adopt_listener()?;
+    let attestation_hash = launch.lock_and_attest_secret_ready()?;
+    let input = Arc::new(
+        launch
+            .input
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("E3 launch input absent"))?,
+    );
+    let mut bundle = read_gateway_auth_bundle_from_env(Some(
+        launch
+            .auth_reader
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("E3 auth descriptor was already consumed"))?,
+    ))?;
+    let context = if bundle.backend_id == GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX {
+        CodexIntegratedAuthHandoff::from_fields(&bundle.fields)
+            .map(IntegratedGatewayAuthContext::CliCodex)
+            .map_err(|_| anyhow::anyhow!("E3 Codex auth bundle is invalid"))
+    } else {
+        Err(anyhow::anyhow!("E3 auth backend binding mismatch"))
+    };
+    for field in bundle.fields.values_mut() {
+        field.zeroize();
+    }
+    let context = context?;
+    prepare_startup_config(&mut config, GatewayMode::InWorld, Some(&context))?;
+    let token_store = TokenStore::disabled();
+    let provider_registry = Arc::new(ProviderRegistry::from_configs_with_models_and_mode(
+        &config.providers,
+        Some(token_store.clone()),
+        &config.models,
+        GatewayMode::InWorld,
+    )?);
+    let state = Arc::new(AppState {
+        inner: std::sync::RwLock::new(Arc::new(ReloadableState {
+            router: Router::new(config.clone()),
+            config: config.clone(),
+            provider_registry,
+        })),
+        token_store,
+        message_tracer: Arc::new(MessageTracer::new(config.server.tracing.clone())),
+    });
+    let readiness_consumed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let app = build_e3_in_world_app(
+        state,
+        Arc::clone(&input),
+        attestation_hash.clone(),
+        Arc::clone(&readiness_consumed),
+    );
+    // Only the separately confined readiness probe can connect through the
+    // ReadyClosed boundary. Its successful response has a fixed wire grammar;
+    // after it closes, the same socket serves ordinary Axum Responses streams.
+    let (mut probe, _) = listener.accept().await?;
+    let expected=format!("GET /health HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nX-Substrate-E3-Readiness-Nonce: {}\r\nAccept: application/json\r\nConnection: close\r\n\r\n",input.listener_identity.port,input.readiness_nonce);
+    anyhow::ensure!(
+        expected.len() <= 4096,
+        "E3 readiness request exceeds its bound"
+    );
+    let mut request = vec![0; expected.len()];
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        probe.read_exact(&mut request),
+    )
+    .await??;
+    anyhow::ensure!(
+        request == expected.as_bytes(),
+        "E3 readiness request mismatch"
+    );
+    let mut extra = [0; 1];
+    match probe.try_read(&mut extra) {
+        Ok(0) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
+        _ => anyhow::bail!("E3 readiness request contains trailing bytes"),
+    }
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        "X-Substrate-E3-Readiness-Nonce",
+        input.readiness_nonce.parse()?,
+    );
+    let response = e3_health_check(
+        axum::Extension((input, attestation_hash, readiness_consumed)),
+        headers,
+    )
+    .await;
+    anyhow::ensure!(response.status() == StatusCode::OK, "E3 readiness rejected");
+    let body = axum::body::to_bytes(response.into_body(), 65_536).await?;
+    let response_head=format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",body.len());
+    probe.write_all(response_head.as_bytes()).await?;
+    probe.write_all(&body).await?;
+    probe.shutdown().await?;
+    drop(probe);
+    axum::serve(listener, app).await?;
+    Ok(())
+}

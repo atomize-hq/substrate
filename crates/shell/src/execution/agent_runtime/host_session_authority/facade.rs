@@ -41,11 +41,41 @@ pub(crate) struct HostSessionAuthority {
     root: TrustedAuthorityRoot,
 }
 
+#[cfg(target_os = "linux")]
+fn convert_e3_projection_directory_v1(
+    directory: &config_projection::CanonicalDirectoryV1,
+) -> Result<CanonicalDirectoryV1, config_projection::ConfigProjectionFailureV1> {
+    use config_projection::ConfigProjectionFailureV1::WrongBinding;
+    let (device_id, inode) = match directory.physical_identity {
+        config_projection::DirectoryPhysicalIdentityV1::Linux { device_id, inode } => {
+            (device_id, inode)
+        }
+    };
+    if !Path::new(&directory.physical_path).is_absolute()
+        || directory.physical_path.as_bytes().contains(&0)
+        || Path::new(&directory.physical_path)
+            .components()
+            .any(|part| {
+                matches!(
+                    part,
+                    std::path::Component::ParentDir | std::path::Component::CurDir
+                )
+            })
+        || inode == 0
+    {
+        return Err(WrongBinding);
+    }
+    Ok(CanonicalDirectoryV1 {
+        physical_path: directory.physical_path.clone(),
+        physical_identity: super::schema::DirectoryPhysicalIdentityV1::Linux { device_id, inode },
+    })
+}
+
 /// Shell-owned, sealed implementation of the E3 projection HSA bridge.
 #[cfg(target_os = "linux")]
 #[derive(Debug)]
 pub struct OpenedConfigProjectionHsaAuthorityV1 {
-    root: TrustedAuthorityRoot,
+    authority: HostSessionAuthority,
 }
 
 #[cfg(target_os = "linux")]
@@ -86,7 +116,195 @@ impl OpenedConfigProjectionHsaAuthorityV1 {
         root.revalidate().map_err(|_| {
             config_projection::ConfigProjectionFailureV1::UnsupportedSecurityPosture
         })?;
-        Ok(Self { root })
+        Ok(Self {
+            authority: HostSessionAuthority { root },
+        })
+    }
+
+    /// Resolve the selected V3 placement from separately authenticated global and workspace roots.
+    pub fn read_e3_selected_inventory_projection_v1(
+        &self,
+        effective_config: &config_projection::EffectiveSubstrateConfigSourceV1,
+        expected_source: &config_projection::AgentInventorySourceMaterialV1,
+    ) -> Result<
+        config_projection::LogicalAgentConfigProjectionV1,
+        config_projection::ConfigProjectionFailureV1,
+    > {
+        use super::trusted_fs::{HeldE3AgentInventoryRootV1, TrustedWorkspaceRoot};
+        use config_projection::ConfigProjectionFailureV1::{
+            UnsupportedSecurityPosture, WrongBinding,
+        };
+        let bootstrap = self.authority.bootstrap_home();
+        let global = convert_e3_projection_directory_v1(&effective_config.accepted_home)?;
+        if bootstrap
+            .identity()
+            .map_err(|_| UnsupportedSecurityPosture)?
+            != &global
+        {
+            return Err(WrongBinding);
+        }
+        let workspace = TrustedWorkspaceRoot::open_exact(&convert_e3_projection_directory_v1(
+            &effective_config.workspace_root,
+        )?)
+        .map_err(|_| UnsupportedSecurityPosture)?;
+        let global_inventory = HeldE3AgentInventoryRootV1::from_global(&self.authority.root)?;
+        let workspace_inventory = HeldE3AgentInventoryRootV1::from_workspace(&workspace)?;
+        let logical =
+            crate::execution::agent_inventory::resolve_e3_selected_inventory_projection_v1(
+                &bootstrap,
+                &global_inventory,
+                &workspace_inventory,
+                effective_config,
+                expected_source,
+            )?;
+        bootstrap
+            .revalidate()
+            .map_err(|_| UnsupportedSecurityPosture)?;
+        workspace
+            .revalidate()
+            .map_err(|_| UnsupportedSecurityPosture)?;
+        Ok(logical)
+    }
+
+    /// Reconstruct the retained launch carrier from the configured E2 authority.
+    ///
+    /// Call before opening a projection transaction: each E2 read acquires and
+    /// releases its own authority transaction, in this order.
+    pub fn authenticate_e3_member_launch_activation_v1(
+        &self,
+        common: transport_api_types::MemberDispatchCommonFieldsV1<'_>,
+        supplied: &transport_api_types::E2MemberLaunchActivationCarrierV1,
+    ) -> Result<
+        transport_api_types::E2MemberLaunchActivationCarrierV1,
+        config_projection::ConfigProjectionFailureV1,
+    > {
+        use super::super::dispatch_policy_commitment::{
+            authenticate_dispatch_policy_commitment, resolve_retained_worker_cap,
+            ResolvedPolicyCommitmentCompatibilityV1,
+        };
+        use config_projection::ConfigProjectionFailureV1::{
+            UnsupportedSecurityPosture, WrongBinding,
+        };
+        use transport_api_types::E2MemberLaunchKindV1;
+
+        let resolved = resolve_retained_worker_cap(
+            &self.authority,
+            common.orchestration_session_id,
+            common.participant_id,
+        )
+        .map_err(|_| UnsupportedSecurityPosture)?;
+        let ResolvedPolicyCommitmentCompatibilityV1::Compatible { cap } = resolved else {
+            return Err(UnsupportedSecurityPosture);
+        };
+        let authenticated =
+            authenticate_dispatch_policy_commitment(&self.authority, cap.commitment_ref())
+                .map_err(|_| UnsupportedSecurityPosture)?;
+        let reconstructed = authenticated
+            .member_launch_activation_carrier()
+            .map_err(|_| UnsupportedSecurityPosture)?;
+        let descriptor_parent = cap.launch_parent_policy_ref();
+        let authenticated_parent = &reconstructed.parent_policy_ref;
+        let parent_commitment_matches = match (
+            &descriptor_parent.commitment,
+            &authenticated_parent.commitment,
+        ) {
+            (
+                AuthorityObjectCommitmentV1::CanonicalSha256 { digest_hex: left },
+                transport_api_types::OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                    digest_hex: right,
+                },
+            ) => left == right,
+            (
+                AuthorityObjectCommitmentV1::StoreHmacSha256 {
+                    key_id: left_key,
+                    domain: left_domain,
+                    digest_hex: left,
+                },
+                transport_api_types::OpaqueAuthorityCommitmentV1::StoreHmacSha256 {
+                    key_id: right_key,
+                    domain: right_domain,
+                    digest_hex: right,
+                },
+            ) => left_key == right_key && left_domain == right_domain && left == right,
+            _ => false,
+        };
+        if cap.authority_store_id() != authenticated.authority_store_id()
+            || *cap.commitment_ref() != authenticated.commitment_ref()
+            || cap.orchestration_session_id() != authenticated.orchestration_session_id()
+            || Some(cap.retained_participant_id()) != authenticated.retained_participant_id()
+            || descriptor_parent.ref_id != authenticated_parent.ref_id
+            || descriptor_parent.schema_version != authenticated_parent.schema_version
+            || descriptor_parent.object_kind != super::schema::AuthorityObjectKindV1::Policy
+            || authenticated_parent.object_kind
+                != transport_api_types::AuthorityObjectKindV1::Policy
+            || !parent_commitment_matches
+            || cap.launch_parent_policy_revision() != reconstructed.parent_policy_revision
+            || reconstructed != *supplied
+        {
+            return Err(WrongBinding);
+        }
+        if common.resolved_runtime.validate().is_err()
+            || [
+                common.orchestration_session_id,
+                common.participant_id,
+                common.orchestrator_participant_id,
+                common.backend_id,
+                common.protocol,
+                common.run_id,
+                common.world_id,
+            ]
+            .iter()
+            .any(|value| value.trim().is_empty())
+            || common
+                .initial_prompt
+                .is_some_and(|value| value.trim().is_empty())
+            || common.orchestrator_participant_id == common.participant_id
+            || common.parent_participant_id == Some(common.participant_id)
+            || common.resumed_from_participant_id.is_some()
+            || reconstructed.orchestration_session_id != common.orchestration_session_id
+            || reconstructed.caller_participant_id != common.orchestrator_participant_id
+            || reconstructed.target_backend_id != common.backend_id
+            || reconstructed.retained_participant_id != common.participant_id
+            || reconstructed.bootstrap_run_id != common.run_id
+            || reconstructed.target_world.world_id != common.world_id
+            || reconstructed.target_world.world_generation != common.world_generation
+        {
+            return Err(WrongBinding);
+        }
+        match reconstructed.launch_kind {
+            E2MemberLaunchKindV1::FreshSpawn => {
+                let proof = common
+                    .retained_worker_launch_authority
+                    .ok_or(WrongBinding)?;
+                proof.validate().map_err(|_| WrongBinding)?;
+                if common.parent_participant_id.is_some()
+                    || proof.authority_store_id != authenticated.authority_store_id()
+                    || proof.issuer_request_id != reconstructed.request_id
+                    || proof.orchestration_session_id != common.orchestration_session_id
+                    || proof.caller_participant_id != common.orchestrator_participant_id
+                    || proof.retained_participant_id != common.participant_id
+                    || proof.bootstrap_run_id != common.run_id
+                    || proof.backend_id != common.backend_id
+                    || proof.protocol != common.protocol
+                    || proof.world_binding.world_id != common.world_id
+                    || proof.world_binding.world_generation != common.world_generation
+                    || proof.current_policy_ref_id != reconstructed.parent_policy_ref.ref_id
+                    || proof.current_policy_revision != reconstructed.parent_policy_revision
+                {
+                    return Err(WrongBinding);
+                }
+            }
+            E2MemberLaunchKindV1::Fork => {
+                if common.retained_worker_launch_authority.is_some()
+                    || common.parent_participant_id
+                        != reconstructed.source_participant_id.as_deref()
+                    || common.protocol != "substrate.agent.session"
+                {
+                    return Err(WrongBinding);
+                }
+            }
+        }
+        Ok(reconstructed)
     }
 }
 
@@ -101,7 +319,7 @@ impl config_projection::ConfigProjectionHsaAuthorityV1 for OpenedConfigProjectio
             config_projection::ConfigProjectionFailureV1,
         >,
     ) -> Result<(), config_projection::ConfigProjectionFailureV1> {
-        store::with_config_projection_hsa_parent(&self.root, operation)
+        store::with_config_projection_hsa_parent(&self.authority.root, operation)
     }
 }
 
@@ -407,6 +625,115 @@ mod e3_b_hsa_bridge_tests {
     }
 
     #[test]
+    #[ignore = "explicit root with the existing authenticated UID-1000 manager fixture"]
+    fn test_e3_ownership_authenticated_parent_completes_and_rejects_changes() {
+        use std::os::fd::AsRawFd;
+        use std::os::unix::fs::MetadataExt;
+        assert_eq!(unsafe { libc::geteuid() }, 0);
+        let fixture: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(std::env::var_os("E3_E_AUTHENTICATED_MANAGER_FIXTURE").unwrap())
+                .unwrap(),
+        )
+        .unwrap();
+        let home = std::path::Path::new(fixture["accepted_home_path"].as_str().unwrap());
+        let descriptor = File::open(home).unwrap();
+        let metadata = descriptor.metadata().unwrap();
+        assert_eq!(metadata.uid(), 1000);
+        let accepted_home =
+            ProjectionDirectoryV1::capture_linux_from_fd(descriptor.as_fd()).unwrap();
+        let account = unsafe {
+            let pwd = libc::getpwuid(1000);
+            assert!(!pwd.is_null());
+            std::ffi::CStr::from_ptr((*pwd).pw_name)
+                .to_str()
+                .unwrap()
+                .to_owned()
+        };
+        let carrier = InstallBootstrapContextCarrierV1::from_context(
+            InstallBootstrapContextV1::new_unix(&accepted_home.physical_path, &account, 1000)
+                .unwrap(),
+        )
+        .unwrap();
+        let mut record = InstalledAcceptedHomeBootstrapRecordV1 {
+            schema_version: 1,
+            install_bootstrap_carrier: carrier.encode().unwrap(),
+            host_context_commitment: carrier.host_context_commitment,
+            intended_account: account,
+            intended_uid: 1000,
+            intended_gid: u64::from(metadata.gid()),
+            accepted_home,
+            installed_at: Timestamp("2026-09-10T00:00:00.000000Z".into()),
+            record_hash: String::new(),
+        };
+        let mut value = serde_json::to_value(&record).unwrap();
+        value.as_object_mut().unwrap().remove("record_hash");
+        record.record_hash = ConfigProjectionCodecV1::domain_sha256(
+            "substrate.e3.installed-accepted-home-bootstrap.v1",
+            &serde_json::json!({"record": value}),
+        )
+        .unwrap();
+        let configured = ConfiguredAcceptedHomeAuthorityV1::from_record_for_test(record).unwrap();
+        let bridge =
+            OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home(&configured)
+                .unwrap();
+        let calls = AtomicUsize::new(0);
+        bridge
+            .with_locked_parent(&mut |_| {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            })
+            .expect("root must complete the authenticated parent, including finish");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert!(
+            HostSessionAuthority::open(home).is_err(),
+            "ordinary root open must still expect root ownership"
+        );
+
+        for relative in [
+            "",
+            "authority-v1",
+            "authority-v1/lock",
+            "authority-v1/lock/root.lock",
+        ] {
+            let file = File::open(home.join(relative)).unwrap();
+            let before = file.metadata().unwrap();
+            assert_eq!(unsafe { libc::fchown(file.as_raw_fd(), 0, !0) }, 0);
+            let changed = file.metadata().unwrap();
+            let result = bridge.with_locked_parent(&mut |_| panic!("wrong-owner callback"));
+            let after = file.metadata().unwrap();
+            assert_eq!(
+                unsafe { libc::fchown(file.as_raw_fd(), before.uid(), !0) },
+                0
+            );
+            assert!(result.is_err(), "{relative}");
+            assert_eq!(
+                (after.uid(), after.ino(), after.ctime(), after.ctime_nsec()),
+                (
+                    changed.uid(),
+                    changed.ino(),
+                    changed.ctime(),
+                    changed.ctime_nsec()
+                )
+            );
+        }
+        let lock = File::open(home.join("authority-v1/lock/root.lock")).unwrap();
+        let result = bridge.with_locked_parent(&mut |_| {
+            lock.set_permissions(std::fs::Permissions::from_mode(0o640))
+                .unwrap();
+            Ok(())
+        });
+        let mode_after = lock.metadata().unwrap().mode() & 0o7777;
+        lock.set_permissions(std::fs::Permissions::from_mode(0o600))
+            .unwrap();
+        assert!(
+            result.is_err(),
+            "final checks must reject mutation after callback entry"
+        );
+        assert_eq!(mode_after, 0o640, "validator must not repair metadata");
+        bridge.with_locked_parent(&mut |_| Ok(())).unwrap();
+    }
+
+    #[test]
     fn e3_b_hsa_bridge_callback_is_exactly_once_and_e2_rm_reads_after_creation() {
         let (home, authority) = activated_home();
         let configured = configured(home.path());
@@ -424,7 +751,10 @@ mod e3_b_hsa_bridge_tests {
         assert_eq!(calls.load(Ordering::SeqCst), 1);
 
         let registry = ConfigProjectionRegistryV1::open(bridge).unwrap();
-        registry.recover().unwrap();
+        registry
+            .recover(None)
+            .map(|readback| readback.store)
+            .unwrap();
         let snapshot = store::read_existing_accepted_work_authority_snapshot(&authority).unwrap();
         assert!(!snapshot.hsa_state_root_bytes().is_empty());
     }
@@ -3451,5 +3781,1178 @@ config:
             .is_err()
         );
         assert!(!accepted_home.join("agents").exists());
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod e3_e_authenticated_read_tests {
+    use config_projection::{
+        CanonicalDirectoryV1 as ProjectionDirectoryV1, ConfigProjectionCodecV1,
+        ConfiguredAcceptedHomeAuthorityV1, InstalledAcceptedHomeBootstrapRecordV1, Timestamp,
+    };
+    use std::collections::BTreeMap;
+    use std::fs::File;
+    use std::os::fd::AsFd;
+    use transport_api_types::{InstallBootstrapContextCarrierV1, InstallBootstrapContextV1};
+    fn current_account() -> String {
+        let uid = unsafe { libc::geteuid() };
+        let mut pwd = std::mem::MaybeUninit::<libc::passwd>::uninit();
+        let mut result = std::ptr::null_mut();
+        let mut buffer = vec![0_u8; 16 * 1024];
+        assert_eq!(
+            unsafe {
+                libc::getpwuid_r(
+                    uid,
+                    pwd.as_mut_ptr(),
+                    buffer.as_mut_ptr().cast(),
+                    buffer.len(),
+                    &mut result,
+                )
+            },
+            0
+        );
+        assert!(!result.is_null());
+        unsafe { std::ffi::CStr::from_ptr((*result).pw_name) }
+            .to_str()
+            .unwrap()
+            .to_string()
+    }
+
+    fn configured(home: &std::path::Path) -> ConfiguredAcceptedHomeAuthorityV1 {
+        let descriptor = File::open(home).unwrap();
+        let accepted_home =
+            ProjectionDirectoryV1::capture_linux_from_fd(descriptor.as_fd()).unwrap();
+        let uid = unsafe { libc::geteuid() };
+        let gid = unsafe { libc::getegid() };
+        let carrier = InstallBootstrapContextCarrierV1::from_context(
+            InstallBootstrapContextV1::new_unix(
+                accepted_home.physical_path.as_str(),
+                &current_account(),
+                uid,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let mut record = InstalledAcceptedHomeBootstrapRecordV1 {
+            schema_version: 1,
+            install_bootstrap_carrier: carrier.encode().unwrap(),
+            host_context_commitment: carrier.host_context_commitment,
+            intended_account: current_account(),
+            intended_uid: u64::from(uid),
+            intended_gid: u64::from(gid),
+            accepted_home,
+            installed_at: Timestamp("2026-09-10T00:00:00.000000Z".to_string()),
+            record_hash: String::new(),
+        };
+        let mut value = serde_json::to_value(&record).unwrap();
+        value.as_object_mut().unwrap().remove("record_hash");
+        let mut payload = BTreeMap::new();
+        payload.insert("record", value);
+        record.record_hash = ConfigProjectionCodecV1::domain_sha256(
+            "substrate.e3.installed-accepted-home-bootstrap.v1",
+            &payload,
+        )
+        .unwrap();
+        ConfiguredAcceptedHomeAuthorityV1::from_record_for_test(record).unwrap()
+    }
+
+    use super::{HostSessionAuthority, OpenedConfigProjectionHsaAuthorityV1};
+    use crate::execution::agent_runtime::dispatch_policy_commitment::*;
+    use crate::execution::agent_runtime::host_session_authority::schema::{
+        AgentDescriptorV1, AgentExecutionScopeV1, AuthorityObjectCommitmentV1,
+        AuthorityObjectKindV1, AuthorityObjectRefV1, HostAttachCapabilitiesV1,
+        HostAttachExecutionClientStartV1, HostAttachLaunchKnobsV1, HostAttachModePreferenceV1,
+        HostSessionAuthorityPreconditionV1, HostSessionTransitionCallerKindV1,
+        HostSessionTransitionCallerV1, HostSessionTransitionModeV1, PolicyObjectHashInputV1,
+        RuntimeBackendKindV1, TimestampV1, WorkspaceBindingV1, WorldBindingV1,
+    };
+    use crate::execution::agent_runtime::host_session_authority::store_schema::HostSessionTransitionIntentStateV2;
+    use crate::execution::agent_runtime::host_session_authority::transition::{
+        ApplyHostSessionTransitionRequestV1, ClaimHostSessionTransitionRequestV1,
+        IssueHostSessionTransitionRequestV1, StartContractMaterialV1,
+        TransitionApplicationOutcomeV1, TransitionClaimOutcomeV1, TransitionIssueOutcomeV1,
+    };
+    use crate::execution::agent_runtime::retained_worker_runtime::{
+        CanonicalValidatedSpawnRequestV1, RetainedWorkerAdmissionCommitmentV1,
+        RetainedWorkerAdmissionRecordV1, RetainedWorkerAdmissionRegistrationV1,
+        RetainedWorkerAdmissionStateV1,
+    };
+    use config_projection::ConfigProjectionFailureV1;
+    use sha2::{Digest, Sha256};
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use transport_api_types::{
+        E2MemberLaunchActivationCarrierV1, MemberDispatchCommonFieldsV1, PolicySnapshotV3,
+        PolicySnapshotWorldFsDimensionV3, PolicySnapshotWorldFsWriteV3,
+        ResolvedMemberRuntimeDescriptorV1, RetainedWorkerLaunchAuthorityProofV1,
+        WorldFsDenyEnforcementV3,
+    };
+    #[test]
+    fn e3_e_selected_inventory_uses_distinct_roots_and_exact_shadow() {
+        use super::super::trusted_fs::{
+            HeldE3AgentInventoryRootV1, HeldE3AgentInventorySourceV1, TrustedWorkspaceRoot,
+        };
+        let (_temp, authority) = started_authority();
+        let home = std::path::Path::new(&authority.root.identity().physical_path);
+        let workspace = home.parent().unwrap().join("workspace");
+        fs::create_dir(&workspace).unwrap();
+        fs::create_dir_all(home.join("agents")).unwrap();
+        fs::create_dir_all(workspace.join(".substrate/agents")).unwrap();
+        let yaml = "version: 3\nid: codex\nconfig:\n  enabled: true\n  kind: cli\n  protocol: substrate.agent.session\n  placements:\n    world:\n      enabled: true\n      cli:\n        binary: /var/lib/substrate/world-deps/codex-runtime/bin/codex\n        mode: persistent\n        runtime_family: codex\n      capabilities:\n        session_start: true\n        llm: true\n      runtime_projection:\n        model: codex\n        mcp_servers: []\n        features: []\n";
+        fs::write(home.join("agents/codex.yaml"), yaml).unwrap();
+        let configured = configured(home);
+        let facade =
+            OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home(&configured)
+                .unwrap();
+        let workspace_identity =
+            ProjectionDirectoryV1::capture_linux_from_fd(File::open(&workspace).unwrap().as_fd())
+                .unwrap();
+        let effective = config_projection::EffectiveSubstrateConfigSourceV1 {
+            schema_version: 1,
+            authority_store_id: "cpa_01900000-0000-7000-8000-000000000001".into(),
+            accepted_home: configured.accepted_home().clone(),
+            workspace_root: workspace_identity,
+            values: config_projection::E3EffectiveConfigInputV1 {
+                llm_enabled: true,
+                agents_enabled: true,
+                world_enabled: true,
+                default_execution_scope: "world".into(),
+                default_cli_mode: "persistent".into(),
+                managed_gateway_enabled: true,
+                managed_gateway_mode: "in_world".into(),
+                default_backend_id: "cli:codex-world".into(),
+            },
+            ordered_explain_origins: Vec::new(),
+            source_revision: "effective-fixture".into(),
+            source_hash: "12".repeat(32),
+        };
+        let root = HeldE3AgentInventoryRootV1::from_global(&authority.root).unwrap();
+        let source = HeldE3AgentInventorySourceV1::open(&root, "agents/codex.yaml").unwrap();
+        let global_material = source.source_material().clone();
+        let global = facade
+            .read_e3_selected_inventory_projection_v1(&effective, &global_material)
+            .unwrap();
+        assert_eq!(global.requested_model, "codex");
+        assert_eq!(global.capabilities, ["llm", "session_start"]);
+        assert!(global.requested_mcp_servers.is_empty() && global.requested_features.is_empty());
+        let shadow_yaml = yaml.replace("session_start: true", "session_start: false");
+        fs::write(workspace.join(".substrate/agents/codex.yaml"), &shadow_yaml).unwrap();
+        let workspace_root = TrustedWorkspaceRoot::open_exact(
+            &super::convert_e3_projection_directory_v1(&effective.workspace_root).unwrap(),
+        )
+        .unwrap();
+        let held_workspace = HeldE3AgentInventoryRootV1::from_workspace(&workspace_root).unwrap();
+        let shadow =
+            HeldE3AgentInventorySourceV1::open(&held_workspace, ".substrate/agents/codex.yaml")
+                .unwrap();
+        assert_eq!(shadow.source_bytes(), shadow_yaml.as_bytes());
+        let material = shadow.source_material().clone();
+        let projected = facade
+            .read_e3_selected_inventory_projection_v1(&effective, &material)
+            .unwrap();
+        assert_eq!(projected.capabilities, ["llm"]);
+        assert_eq!(
+            facade.read_e3_selected_inventory_projection_v1(&effective, &global_material),
+            Err(ConfigProjectionFailureV1::WrongBinding)
+        );
+        for mutate in 0..8 {
+            let mut wrong = material.clone();
+            match mutate {
+                0 => wrong.inventory_scope = "global".into(),
+                1 => wrong.relative_path = ".substrate/agents/other.yaml".into(),
+                2 => wrong.file_inode += 1,
+                3 => wrong.file_device_id += 1,
+                4 => wrong.byte_length += 1,
+                5 => wrong.raw_bytes_sha256 = "ab".repeat(32),
+                6 => wrong.source_revision.push('x'),
+                _ => wrong.source_hash = "cd".repeat(32),
+            }
+            assert_eq!(
+                facade.read_e3_selected_inventory_projection_v1(&effective, &wrong),
+                Err(if mutate >= 5 {
+                    ConfigProjectionFailureV1::HashInvalid
+                } else {
+                    ConfigProjectionFailureV1::WrongBinding
+                })
+            );
+        }
+        let mut wrong_root = material.clone();
+        wrong_root.accepted_root = effective.accepted_home.clone();
+        assert_eq!(
+            facade.read_e3_selected_inventory_projection_v1(&effective, &wrong_root),
+            Err(ConfigProjectionFailureV1::WrongBinding)
+        );
+        let mut wrong_home = effective.clone();
+        wrong_home.accepted_home = effective.workspace_root.clone();
+        assert_eq!(
+            facade.read_e3_selected_inventory_projection_v1(&wrong_home, &material),
+            Err(ConfigProjectionFailureV1::WrongBinding)
+        );
+        let mut wrong_backend = effective.clone();
+        wrong_backend.values.default_backend_id = "cli:other-world".into();
+        assert_eq!(
+            facade.read_e3_selected_inventory_projection_v1(&wrong_backend, &material),
+            Err(ConfigProjectionFailureV1::WrongBinding)
+        );
+        let mut wrong_mode = effective.clone();
+        wrong_mode.values.default_cli_mode = "Persistent".into();
+        assert_eq!(
+            facade.read_e3_selected_inventory_projection_v1(&wrong_mode, &material),
+            Err(ConfigProjectionFailureV1::WrongBinding)
+        );
+        for bytes in [
+            shadow_yaml.replace("version: 3", "version: 4").into_bytes(),
+            shadow_yaml
+                .replace("model: codex", "model: !custom codex")
+                .into_bytes(),
+            shadow_yaml
+                .replace("model: codex", "model: codex\n        unknown: true")
+                .into_bytes(),
+            vec![0xff, 0xfe],
+        ] {
+            fs::write(workspace.join(".substrate/agents/codex.yaml"), bytes).unwrap();
+            assert_eq!(
+                facade.read_e3_selected_inventory_projection_v1(&effective, &material),
+                Err(ConfigProjectionFailureV1::Malformed)
+            );
+        }
+        fs::write(
+            workspace.join(".substrate/agents/codex.yaml"),
+            shadow_yaml.replacen("enabled: true", "enabled: false", 1),
+        )
+        .unwrap();
+        assert_eq!(
+            facade.read_e3_selected_inventory_projection_v1(&effective, &material),
+            Err(ConfigProjectionFailureV1::UnsupportedConfiguration)
+        );
+        fs::write(workspace.join(".substrate/agents/codex.yaml"), &shadow_yaml).unwrap();
+        // Full discovery must reject even an invalid global file shadowed by a valid workspace.
+        fs::write(
+            home.join("agents/codex.yaml"),
+            format!("{yaml}version: 3\n"),
+        )
+        .unwrap();
+        assert_eq!(
+            facade.read_e3_selected_inventory_projection_v1(&effective, &material),
+            Err(ConfigProjectionFailureV1::Malformed)
+        );
+        fs::write(home.join("agents/codex.yaml"), yaml).unwrap();
+        fs::write(
+            workspace.join(".substrate/agents/duplicate.yaml"),
+            &shadow_yaml,
+        )
+        .unwrap();
+        assert_eq!(
+            facade.read_e3_selected_inventory_projection_v1(&effective, &material),
+            Err(ConfigProjectionFailureV1::Conflict)
+        );
+        fs::remove_file(workspace.join(".substrate/agents/duplicate.yaml")).unwrap();
+        fs::rename(
+            workspace.join(".substrate/agents/codex.yaml"),
+            workspace.join(".substrate/agents/old.yaml"),
+        )
+        .unwrap();
+        fs::write(workspace.join(".substrate/agents/codex.yaml"), &shadow_yaml).unwrap();
+        assert_eq!(
+            shadow.revalidate(),
+            Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture)
+        );
+        fs::rename(
+            workspace.join(".substrate/agents"),
+            workspace.join(".substrate/retained-agents"),
+        )
+        .unwrap();
+        fs::create_dir(workspace.join(".substrate/agents")).unwrap();
+        assert_eq!(
+            held_workspace.revalidate(),
+            Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture)
+        );
+        fs::remove_dir(workspace.join(".substrate/agents")).unwrap();
+        std::os::unix::fs::symlink("retained-agents", workspace.join(".substrate/agents")).unwrap();
+        assert_eq!(
+            facade.read_e3_selected_inventory_projection_v1(&effective, &material),
+            Err(ConfigProjectionFailureV1::WrongBinding)
+        );
+    }
+
+    fn timestamp(value: &str) -> TimestampV1 {
+        TimestampV1::parse(value).expect("test timestamp")
+    }
+
+    fn started_authority() -> (tempfile::TempDir, HostSessionAuthority) {
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| {
+                std::path::PathBuf::from(
+                    std::env::var_os("HOME").expect("tests require a private parent"),
+                )
+                .join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create test parent");
+        let parent = tempfile::tempdir_in(safe_parent).expect("private tempdir");
+        fs::set_permissions(parent.path(), fs::Permissions::from_mode(0o700))
+            .expect("private test parent permissions");
+        let home = parent.path().join("home");
+        fs::create_dir(&home).expect("create authority home");
+        fs::set_permissions(&home, fs::Permissions::from_mode(0o700))
+            .expect("private authority home permissions");
+        let authority = HostSessionAuthority::open(&home).expect("open authority");
+        let root = authority.bootstrap().expect("bootstrap authority");
+        let binding = WorkspaceBindingV1 {
+            workspace_root: root.bootstrap_home.clone(),
+            authority_store_root: root.bootstrap_home,
+            authority_store_id: root.authority_store_id,
+        };
+        let request = IssueHostSessionTransitionRequestV1 {
+            intent_id: "e2-start-intent".into(),
+            issuer_request_id: "dispatch-policy-commitment:transition-start".into(),
+            mode: HostSessionTransitionModeV1::Start,
+            authority_precondition: HostSessionAuthorityPreconditionV1::ExpectedAbsent,
+            orchestration_session_id: "e2-session".into(),
+            shell_trace_session_id: "e2-trace".into(),
+            caller: HostSessionTransitionCallerV1 {
+                kind: HostSessionTransitionCallerKindV1::PublicCli,
+                caller_participant_id: None,
+                auto_attach_obligation_id: None,
+                auto_attach_claim_owner: None,
+            },
+            source_authoritative_participant_id: None,
+            target_authoritative_participant_id: "e2-orchestrator".into(),
+            target_participant_lease_token: b"e2-start-lease".to_vec(),
+            run_id: "e2-start-run".into(),
+            resulting_authoritative_lineage: vec!["e2-orchestrator".into()],
+            workspace_binding: binding,
+            world_binding: Some(WorldBindingV1 {
+                world_id: "e2-world".into(),
+                world_generation: 7,
+            }),
+            start_contract: StartContractMaterialV1 {
+                descriptor: AgentDescriptorV1 {
+                    schema_version: 1,
+                    agent_id: "codex".into(),
+                    backend_id: "cli:codex".into(),
+                    backend_kind: RuntimeBackendKindV1::Codex,
+                    protocol: "substrate.agent.session".into(),
+                    execution_scope: AgentExecutionScopeV1::Host,
+                    binary_path: "/usr/bin/codex".into(),
+                },
+                policy: PolicyObjectHashInputV1 {
+                    schema_version: 1,
+                    policy_revision: "e2-policy".into(),
+                    canonical_policy_snapshot_sha256: "aa".repeat(32),
+                },
+                capabilities: HostAttachCapabilitiesV1 {
+                    session_resume: true,
+                    session_fork: true,
+                    session_stop: true,
+                    status_snapshot: true,
+                    event_stream: true,
+                },
+                launch_knobs: HostAttachLaunchKnobsV1 {
+                    requested_execution_scope: AgentExecutionScopeV1::Host,
+                    host_execution_client_start: HostAttachExecutionClientStartV1::StartNow,
+                    attach_mode_preference: HostAttachModePreferenceV1::ContinuityPreferred,
+                },
+            },
+            transition_input: None,
+        };
+        let TransitionIssueOutcomeV1::Issued(issued) = authority
+            .issue_start_at(&request, timestamp("2026-08-31T12:00:00.000000000Z"), 300)
+            .expect("issue start")
+        else {
+            panic!("start issuance must commit")
+        };
+        let claim_request = ClaimHostSessionTransitionRequestV1 {
+            intent_id: issued.intent_id.clone(),
+            issuer_request_id: issued.issuer_request_id.clone(),
+            payload_commitment: issued.payload_commitment.clone(),
+            expected_intent_revision: issued.intent_revision,
+            claim_id: "e2-start-claim".into(),
+            claimant_attempt_id: "e2-start-attempt".into(),
+        };
+        let TransitionClaimOutcomeV1::Claimed(claimed) = authority
+            .claim_start_at(
+                &claim_request,
+                timestamp("2026-08-31T12:01:00.000000000Z"),
+                30,
+            )
+            .expect("claim start")
+        else {
+            panic!("start claim must commit")
+        };
+        let HostSessionTransitionIntentStateV2::Claimed { claim_revision, .. } = claimed.state
+        else {
+            panic!("start must remain claimed")
+        };
+        let application = ApplyHostSessionTransitionRequestV1 {
+            intent_id: claimed.intent_id,
+            issuer_request_id: claimed.issuer_request_id,
+            payload_commitment: claimed.payload_commitment,
+            expected_intent_revision: claimed.intent_revision,
+            claim_id: claim_request.claim_id,
+            expected_claim_revision: claim_revision,
+        };
+        assert!(matches!(
+            authority
+                .apply_start_at(&application, timestamp("2026-08-31T12:01:10.000000000Z"))
+                .expect("apply start"),
+            TransitionApplicationOutcomeV1::Applied(_)
+        ));
+        (parent, authority)
+    }
+
+    fn policy_snapshot(
+        read_allow: &[&str],
+        write_allow: &[&str],
+        net_allowed: &[&str],
+    ) -> PolicySnapshotV3 {
+        PolicySnapshotV3 {
+            schema_version: 3,
+            net_allowed: net_allowed.iter().map(|value| (*value).into()).collect(),
+            world_fs: transport_api_types::PolicySnapshotWorldFsV3 {
+                host_visible: true,
+                fail_closed: transport_api_types::PolicySnapshotWorldFsFailClosedV3 {
+                    routing: false,
+                },
+                deny_enforcement: Some(WorldFsDenyEnforcementV3::Weak),
+                caged_required: false,
+                discover: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: read_allow.iter().map(|value| (*value).into()).collect(),
+                    deny_list: Vec::new(),
+                }),
+                read: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: read_allow.iter().map(|value| (*value).into()).collect(),
+                    deny_list: Vec::new(),
+                }),
+                write: PolicySnapshotWorldFsWriteV3 {
+                    enabled: true,
+                    allow_list: write_allow.iter().map(|value| (*value).into()).collect(),
+                    deny_list: Vec::new(),
+                },
+            },
+        }
+        .canonicalize()
+        .expect("canonical test policy")
+    }
+
+    fn policy_ref() -> AuthorityObjectRefV1 {
+        AuthorityObjectRefV1 {
+            ref_id: "ao_0123456789abcdef0123456789abcdef".into(),
+            object_kind: AuthorityObjectKindV1::Policy,
+            schema_version: 1,
+            commitment: AuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: "ab".repeat(32),
+            },
+        }
+    }
+
+    fn fresh_spawn_input(prompt: &str) -> FreshSpawnReservationInputV1 {
+        let snapshot = policy_snapshot(&["src/lib.rs"], &["src/lib.rs"], &["api.example"]);
+        let bytes = serde_json::to_vec(&snapshot).expect("snapshot bytes");
+        let reference = policy_ref();
+        FreshSpawnReservationInputV1 {
+            spawn_request: CanonicalValidatedSpawnRequestV1 {
+                schema_version: 1,
+                request_id: "request-e2-spawn".into(),
+                idempotency_key: "idempotency-e2-spawn".into(),
+                orchestration_session_id: "e2-session".into(),
+                caller_participant_id: "e2-orchestrator".into(),
+                action: "spawn_world_worker".into(),
+                mode: "retained".into(),
+                target_backend_id: "cli:codex".into(),
+                task_run_id: None,
+                target_participant_id: None,
+                world_id: "e2-world".into(),
+                world_generation: 7,
+                payload: crate::execution::agent_runtime::retained_worker_runtime::CanonicalWorkerSpawnPayloadV1 {
+                    prompt: prompt.into(),
+                },
+            },
+            caller_backend_id: "cli:codex".into(),
+            parent_policy_ref: reference.clone(),
+            parent_policy_revision: "e2-policy".into(),
+            applied_patch: AppliedDispatchPolicyPatchIdentityV1::UnchangedParent,
+            policy_snapshot: validate_policy_snapshot_material(
+                &snapshot,
+                &bytes,
+                &reference,
+                &format!("{:x}", Sha256::digest(&bytes)),
+                "e2-policy",
+            )
+            .expect("validated snapshot"),
+            reason: None,
+        }
+    }
+
+    fn publish_test_source_worker_cap(
+        authority: &HostSessionAuthority,
+    ) -> (String, PersistedDispatchPolicyCommitmentV1) {
+        let reservation = reserve_fresh_spawn(authority, fresh_spawn_input("source worker"))
+            .expect("reserve source worker");
+        let participant_id = reservation.retained_participant_id.clone();
+        let admission = test_admission_for_reservation(&reservation);
+        let commitment = publish_fresh_spawn_commitment(authority, &reservation.proof, &admission)
+            .expect("publish source worker cap");
+        (participant_id, commitment)
+    }
+
+    fn test_admission_for_reservation(
+        reservation: &FreshSpawnReservationOutcomeV1,
+    ) -> RetainedWorkerAdmissionRecordV1 {
+        RetainedWorkerAdmissionRecordV1 {
+            schema_version: 1,
+            authority_store_id: reservation.reservation_ref.authority_store_id.clone(),
+            issuer_request_id: "request-e2-spawn".into(),
+            canonical_spawn_fingerprint: RetainedWorkerAdmissionCommitmentV1 {
+                schema_version: 1,
+                algorithm: crate::execution::agent_runtime::retained_worker_runtime::RetainedWorkerAdmissionCommitmentAlgorithmV1::HmacSha256,
+                key_id: "test-admission-key".into(),
+                digest_hex: "33".repeat(32),
+            },
+            orchestration_session_id: "e2-session".into(),
+            admission_authority_revision: 1,
+            admission_authority_record_commitment:
+                AuthorityObjectCommitmentV1::CanonicalSha256 {
+                    digest_hex: "44".repeat(32),
+                },
+            retained_participant_id: reservation.retained_participant_id.clone(),
+            bootstrap_run_id: reservation.bootstrap_run_id.clone(),
+            backend_id: "cli:codex".into(),
+            protocol: "substrate.agent.session".into(),
+            world_binding: WorldBindingV1 {
+                world_id: "e2-world".into(),
+                world_generation: 7,
+            },
+            current_policy_ref: policy_ref(),
+            current_policy_revision: "e2-policy".into(),
+            max_live_retained_workers: 8,
+            state: RetainedWorkerAdmissionStateV1::PreTransportNonterminal {
+                registration: RetainedWorkerAdmissionRegistrationV1 {
+                    registration_id: "registration-e2-source".into(),
+                    retained_worker_ref: AuthorityObjectRefV1 {
+                        ref_id: "retained-worker-e2-source".into(),
+                        object_kind: AuthorityObjectKindV1::RetainedWorker,
+                        schema_version: 1,
+                        commitment: AuthorityObjectCommitmentV1::CanonicalSha256 {
+                            digest_hex: "55".repeat(32),
+                        },
+                    },
+                },
+            },
+            record_revision: 1,
+        }
+    }
+
+    fn bridge(parent: &tempfile::TempDir) -> OpenedConfigProjectionHsaAuthorityV1 {
+        OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home(&configured(
+            &parent.path().join("home"),
+        ))
+        .unwrap()
+    }
+
+    fn fresh_carrier(authority: &HostSessionAuthority) -> E2MemberLaunchActivationCarrierV1 {
+        let (participant, _) = publish_test_source_worker_cap(authority);
+        let ResolvedPolicyCommitmentCompatibilityV1::Compatible { cap } =
+            resolve_retained_worker_cap(authority, "e2-session", &participant).unwrap()
+        else {
+            panic!("compatible cap")
+        };
+        authenticate_dispatch_policy_commitment(authority, cap.commitment_ref())
+            .unwrap()
+            .member_launch_activation_carrier()
+            .unwrap()
+    }
+
+    #[test]
+    fn e3_e_manager_fixture_producer() {
+        let Some(fixture_dir) = std::env::var_os("E3_E_MANAGER_FIXTURE_DIR") else {
+            return;
+        };
+        let fixture_dir = std::path::PathBuf::from(fixture_dir);
+        fs::create_dir_all(&fixture_dir).expect("create explicit fixture directory");
+        fs::set_permissions(&fixture_dir, fs::Permissions::from_mode(0o700))
+            .expect("secure explicit fixture directory");
+
+        let (fixture_parent, authority) = started_authority();
+        let world_id = format!("e3-manager-{}", uuid::Uuid::now_v7());
+        let world_generation = 1;
+        let mut input = fresh_spawn_input("manager fixture");
+        input.spawn_request.target_backend_id = "cli:codex-world".into();
+        input.spawn_request.world_id = world_id.clone();
+        input.spawn_request.world_generation = world_generation;
+        let reservation = reserve_fresh_spawn(&authority, input).expect("reserve manager fixture");
+        let mut admission = test_admission_for_reservation(&reservation);
+        admission.backend_id = "cli:codex-world".into();
+        admission.world_binding = WorldBindingV1 {
+            world_id: world_id.clone(),
+            world_generation,
+        };
+        publish_fresh_spawn_commitment(&authority, &reservation.proof, &admission)
+            .expect("publish manager fixture cap");
+        let ResolvedPolicyCommitmentCompatibilityV1::Compatible { cap } =
+            resolve_retained_worker_cap(
+                &authority,
+                "e2-session",
+                &reservation.retained_participant_id,
+            )
+            .expect("resolve manager fixture cap")
+        else {
+            panic!("manager fixture cap must be compatible")
+        };
+        let carrier = authenticate_dispatch_policy_commitment(&authority, cap.commitment_ref())
+            .expect("authenticate manager fixture cap")
+            .member_launch_activation_carrier()
+            .expect("construct manager fixture carrier");
+        let proof = proof(&carrier);
+        let accepted_home = std::path::PathBuf::from(&authority.root.identity().physical_path);
+        let workspace = accepted_home
+            .parent()
+            .expect("fixture home has a parent")
+            .join("workspace");
+        fs::create_dir_all(accepted_home.join("agents")).expect("create fixture agents directory");
+        fs::create_dir_all(&workspace).expect("create fixture workspace");
+        fs::set_permissions(&workspace, fs::Permissions::from_mode(0o700))
+            .expect("secure fixture workspace");
+        fs::write(
+            accepted_home.join("agents/codex.yaml"),
+            "version: 3\nid: codex\nconfig:\n  enabled: true\n  kind: cli\n  protocol: substrate.agent.session\n  placements:\n    world:\n      enabled: true\n      cli:\n        binary: /var/lib/substrate/world-deps/codex-runtime/bin/codex\n        mode: persistent\n        runtime_family: codex\n      capabilities:\n        session_start: true\n        llm: true\n      runtime_projection:\n        model: codex\n        mcp_servers: []\n        features: []\n",
+        )
+        .expect("write fixture inventory");
+        fs::set_permissions(
+            accepted_home.join("agents/codex.yaml"),
+            fs::Permissions::from_mode(0o600),
+        )
+        .expect("secure fixture inventory");
+        let metadata = serde_json::json!({
+            "schema_version": 1,
+            "accepted_home_path": accepted_home,
+            "workspace_root_path": workspace,
+            "world_id": world_id,
+            "world_generation": world_generation,
+            "e2_launch_activation": carrier,
+            "retained_worker_launch_authority": proof,
+        });
+        fs::write(
+            fixture_dir.join("e3-e-manager-fixture.json"),
+            serde_json::to_vec_pretty(&metadata).expect("serialize manager fixture metadata"),
+        )
+        .expect("write manager fixture metadata");
+        fs::set_permissions(
+            fixture_dir.join("e3-e-manager-fixture.json"),
+            fs::Permissions::from_mode(0o600),
+        )
+        .expect("secure manager fixture metadata");
+        let _ = fixture_parent.keep();
+    }
+
+    fn proof(carrier: &E2MemberLaunchActivationCarrierV1) -> RetainedWorkerLaunchAuthorityProofV1 {
+        let commitment = serde_json::to_value(
+            transport_api_types::RetainedWorkerAuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: "55".repeat(32),
+            },
+        )
+        .unwrap();
+        // Synthetic launch proof: durable E2 policy bytes are produced by the
+        // existing publisher, while proof joins are varied independently below.
+        serde_json::from_value(serde_json::json!({
+            "schema_version":1, "authority_store_id":carrier.commitment_ref.authority_store_id,
+            "issuer_request_id":carrier.request_id,
+            "canonical_spawn_fingerprint":{"schema_version":1, "algorithm":"hmac-sha-256",
+                "key_id":"test-admission-key", "digest_hex":"33".repeat(32)},
+            "registration_id":"registration-e2-source", "registration_commitment":commitment,
+            "authority_revision_after":1, "authority_record_commitment_after":commitment,
+            "orchestration_session_id":carrier.orchestration_session_id,
+            "caller_participant_id":carrier.caller_participant_id,
+            "retained_participant_id":carrier.retained_participant_id,
+            "bootstrap_run_id":carrier.bootstrap_run_id, "transport_claim_id":"transport-e3-test",
+            "backend_id":carrier.target_backend_id, "protocol":"substrate.agent.session",
+            "world_binding":carrier.target_world, "current_policy_ref_id":carrier.parent_policy_ref.ref_id,
+            "current_policy_revision":carrier.parent_policy_revision,
+            "retained_worker_ref_id":"retained-worker-e2-source", "retained_worker_commitment":commitment
+        })).unwrap()
+    }
+
+    fn common<'a>(
+        carrier: &'a E2MemberLaunchActivationCarrierV1,
+        proof: Option<&'a RetainedWorkerLaunchAuthorityProofV1>,
+        runtime: &'a ResolvedMemberRuntimeDescriptorV1,
+    ) -> MemberDispatchCommonFieldsV1<'a> {
+        MemberDispatchCommonFieldsV1 {
+            orchestration_session_id: &carrier.orchestration_session_id,
+            participant_id: &carrier.retained_participant_id,
+            orchestrator_participant_id: &carrier.caller_participant_id,
+            parent_participant_id: carrier.source_participant_id.as_deref(),
+            resumed_from_participant_id: None,
+            backend_id: &carrier.target_backend_id,
+            protocol: "substrate.agent.session",
+            run_id: &carrier.bootstrap_run_id,
+            world_id: &carrier.target_world.world_id,
+            world_generation: carrier.target_world.world_generation,
+            initial_prompt: None,
+            resolved_runtime: runtime,
+            retained_worker_launch_authority: proof,
+        }
+    }
+
+    fn runtime() -> ResolvedMemberRuntimeDescriptorV1 {
+        ResolvedMemberRuntimeDescriptorV1 {
+            backend_kind: transport_api_types::MemberRuntimeBackendKindV1::Codex,
+            binary_path: "/usr/bin/codex".into(),
+        }
+    }
+
+    fn storage_reopen_authority_bytes(
+        home: &std::path::Path,
+    ) -> BTreeMap<std::path::PathBuf, Vec<u8>> {
+        fn collect(path: &std::path::Path, files: &mut BTreeMap<std::path::PathBuf, Vec<u8>>) {
+            for entry in fs::read_dir(path).unwrap() {
+                let entry = entry.unwrap();
+                if entry.file_name() == "agent-config-projection-v1" {
+                    continue;
+                }
+                let kind = entry.file_type().unwrap();
+                if kind.is_dir() {
+                    collect(&entry.path(), files);
+                } else {
+                    assert!(kind.is_file());
+                    files.insert(entry.path(), fs::read(entry.path()).unwrap());
+                }
+            }
+        }
+        let mut files = BTreeMap::new();
+        collect(&home.join("authority-v1"), &mut files);
+        assert!(!files.is_empty());
+        files
+    }
+
+    #[test]
+    #[ignore = "explicit root with the existing authenticated non-root manager fixture"]
+    fn test_e3_storage_reopen_authenticated_fixture_exact_and_read_only() {
+        use std::os::fd::AsRawFd;
+        use std::os::unix::fs::MetadataExt;
+        assert_eq!(unsafe { libc::geteuid() }, 0);
+        let fixture: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(std::env::var_os("E3_E_AUTHENTICATED_MANAGER_FIXTURE").unwrap())
+                .unwrap(),
+        )
+        .unwrap();
+        let home = std::path::Path::new(fixture["accepted_home_path"].as_str().unwrap());
+        let descriptor = File::open(home).unwrap();
+        let metadata = descriptor.metadata().unwrap();
+        assert_eq!(metadata.uid(), 1000);
+        let accepted_home =
+            ProjectionDirectoryV1::capture_linux_from_fd(descriptor.as_fd()).unwrap();
+        let account = unsafe {
+            let pwd = libc::getpwuid(1000);
+            assert!(!pwd.is_null());
+            std::ffi::CStr::from_ptr((*pwd).pw_name)
+                .to_str()
+                .unwrap()
+                .to_owned()
+        };
+        let carrier = InstallBootstrapContextCarrierV1::from_context(
+            InstallBootstrapContextV1::new_unix(&accepted_home.physical_path, &account, 1000)
+                .unwrap(),
+        )
+        .unwrap();
+        let mut record = InstalledAcceptedHomeBootstrapRecordV1 {
+            schema_version: 1,
+            install_bootstrap_carrier: carrier.encode().unwrap(),
+            host_context_commitment: carrier.host_context_commitment,
+            intended_account: account,
+            intended_uid: 1000,
+            intended_gid: u64::from(metadata.gid()),
+            accepted_home,
+            installed_at: Timestamp("2026-09-10T00:00:00.000000Z".into()),
+            record_hash: String::new(),
+        };
+        let mut value = serde_json::to_value(&record).unwrap();
+        value.as_object_mut().unwrap().remove("record_hash");
+        record.record_hash = ConfigProjectionCodecV1::domain_sha256(
+            "substrate.e3.installed-accepted-home-bootstrap.v1",
+            &serde_json::json!({"record": value}),
+        )
+        .unwrap();
+        let configured = ConfiguredAcceptedHomeAuthorityV1::from_record_for_test(record).unwrap();
+        let bridge =
+            OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home(&configured)
+                .unwrap();
+        let expected: E2MemberLaunchActivationCarrierV1 =
+            serde_json::from_value(fixture["e2_launch_activation"].clone()).unwrap();
+        let proof: RetainedWorkerLaunchAuthorityProofV1 =
+            serde_json::from_value(fixture["retained_worker_launch_authority"].clone()).unwrap();
+        let runtime = runtime();
+        let before = storage_reopen_authority_bytes(home);
+        assert!(HostSessionAuthority::open(home).is_err());
+        let read = || {
+            bridge.authenticate_e3_member_launch_activation_v1(
+                common(&expected, Some(&proof), &runtime),
+                &expected,
+            )
+        };
+        assert_eq!(
+            read().expect("both authenticated E2 reads must complete"),
+            expected
+        );
+        assert_eq!(storage_reopen_authority_bytes(home), before);
+
+        // Fault injection is confined to this explicit fixture; the reader must not repair it.
+        assert_eq!(unsafe { libc::fchown(descriptor.as_raw_fd(), 0, !0) }, 0);
+        let rejected = read();
+        let after_owner = descriptor.metadata().unwrap().uid();
+        assert_eq!(
+            unsafe { libc::fchown(descriptor.as_raw_fd(), metadata.uid(), !0) },
+            0
+        );
+        assert!(rejected.is_err());
+        assert_eq!(after_owner, 0);
+        assert_eq!(storage_reopen_authority_bytes(home), before);
+
+        let moved = home.with_file_name("storage-reopen-held-home");
+        assert!(!moved.exists());
+        fs::rename(home, &moved).unwrap();
+        fs::create_dir(home).unwrap();
+        fs::set_permissions(home, fs::Permissions::from_mode(0o700)).unwrap();
+        std::os::unix::fs::chown(home, Some(metadata.uid()), Some(metadata.gid())).unwrap();
+        let rejected = read();
+        let empty = fs::read_dir(home).unwrap().next().is_none();
+        fs::remove_dir(home).unwrap();
+        fs::rename(&moved, home).unwrap();
+        assert!(rejected.is_err());
+        assert!(empty, "substituted root must not be repaired");
+        assert_eq!(storage_reopen_authority_bytes(home), before);
+        let replacement = tempfile::tempdir_in(home.parent().unwrap()).unwrap();
+        fs::set_permissions(replacement.path(), fs::Permissions::from_mode(0o700)).unwrap();
+        std::os::unix::fs::chown(
+            replacement.path(),
+            Some(metadata.uid()),
+            Some(metadata.gid()),
+        )
+        .unwrap();
+        let replacement_fd = File::open(replacement.path()).unwrap();
+        let held_fd = bridge.authority.root.directory().borrow_fd().as_raw_fd();
+        // Test-only descriptor substitution; the independent original descriptor restores it.
+        assert_eq!(
+            unsafe { libc::dup2(replacement_fd.as_raw_fd(), held_fd) },
+            held_fd
+        );
+        let rejected = read();
+        assert_eq!(
+            unsafe { libc::dup2(descriptor.as_raw_fd(), held_fd) },
+            held_fd
+        );
+        assert!(rejected.is_err());
+        assert!(fs::read_dir(replacement.path()).unwrap().next().is_none());
+        assert_eq!(storage_reopen_authority_bytes(home), before);
+        assert_eq!(read().unwrap(), expected);
+        assert_eq!(storage_reopen_authority_bytes(home), before);
+    }
+
+    #[test]
+    fn test_e3_storage_reopen_same_user_exact_and_read_only() {
+        let (home, authority) = started_authority();
+        let expected = fresh_carrier(&authority);
+        let bridge = bridge(&home);
+        let proof = proof(&expected);
+        let runtime = runtime();
+        let home = home.path().join("home");
+        let before = storage_reopen_authority_bytes(&home);
+        assert_eq!(
+            bridge
+                .authenticate_e3_member_launch_activation_v1(
+                    common(&expected, Some(&proof), &runtime),
+                    &expected,
+                )
+                .unwrap(),
+            expected
+        );
+        let mut substituted = expected.clone();
+        substituted.request_id = "substituted-request".into();
+        assert!(bridge
+            .authenticate_e3_member_launch_activation_v1(
+                common(&expected, Some(&proof), &runtime),
+                &substituted,
+            )
+            .is_err());
+        assert_eq!(storage_reopen_authority_bytes(&home), before);
+    }
+
+    #[test]
+    fn e3_e_authenticated_read_fresh_reconstructs_and_rejects_substitution() {
+        let (home, authority) = started_authority();
+        let carrier = fresh_carrier(&authority);
+        let bridge = bridge(&home);
+        let proof = proof(&carrier);
+        let runtime = runtime();
+        let common = common(&carrier, Some(&proof), &runtime);
+        assert_eq!(
+            bridge
+                .authenticate_e3_member_launch_activation_v1(common, &carrier)
+                .unwrap(),
+            carrier
+        );
+        for field in [
+            "request_id",
+            "idempotency_key",
+            "policy_snapshot_revision",
+            "parent_policy_revision",
+            "caller_backend_id",
+            "target_backend_id",
+            "bootstrap_run_id",
+        ] {
+            let mut supplied = serde_json::to_value(&carrier).unwrap();
+            supplied[field] = serde_json::Value::String(
+                if field.ends_with("backend_id") {
+                    "cli:substituted"
+                } else {
+                    "substituted"
+                }
+                .into(),
+            );
+            let supplied: E2MemberLaunchActivationCarrierV1 =
+                serde_json::from_value(supplied).unwrap();
+            assert_eq!(
+                bridge.authenticate_e3_member_launch_activation_v1(common, &supplied),
+                Err(ConfigProjectionFailureV1::WrongBinding),
+                "{field}"
+            );
+        }
+        for wrong in [
+            MemberDispatchCommonFieldsV1 {
+                protocol: "wrong",
+                ..common
+            },
+            MemberDispatchCommonFieldsV1 {
+                parent_participant_id: Some("other"),
+                ..common
+            },
+            MemberDispatchCommonFieldsV1 {
+                resumed_from_participant_id: Some("other"),
+                ..common
+            },
+            MemberDispatchCommonFieldsV1 {
+                retained_worker_launch_authority: None,
+                ..common
+            },
+            MemberDispatchCommonFieldsV1 {
+                world_generation: 8,
+                ..common
+            },
+        ] {
+            assert_eq!(
+                bridge.authenticate_e3_member_launch_activation_v1(wrong, &carrier),
+                Err(ConfigProjectionFailureV1::WrongBinding)
+            );
+        }
+        let missing = MemberDispatchCommonFieldsV1 {
+            participant_id: "absent-member",
+            ..common
+        };
+        assert_eq!(
+            bridge.authenticate_e3_member_launch_activation_v1(missing, &carrier),
+            Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture)
+        );
+        let moved = home.path().join("original-home");
+        fs::rename(home.path().join("home"), &moved).unwrap();
+        fs::create_dir(home.path().join("home")).unwrap();
+        assert_eq!(
+            bridge.authenticate_e3_member_launch_activation_v1(common, &carrier),
+            Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture)
+        );
+    }
+
+    #[test]
+    fn e3_e_authenticated_read_rejects_durable_key_and_registry_corruption_without_repair() {
+        for defect in [
+            "missing-key",
+            "malformed-registry",
+            "newer-registry",
+            "invalid-cap-hash",
+        ] {
+            let (home, authority) = started_authority();
+            let carrier = fresh_carrier(&authority);
+            let bridge = bridge(&home);
+            let proof = proof(&carrier);
+            let runtime = runtime();
+            let common = common(&carrier, Some(&proof), &runtime);
+            assert_eq!(
+                bridge
+                    .authenticate_e3_member_launch_activation_v1(common, &carrier)
+                    .unwrap(),
+                carrier
+            );
+            let root = home
+                .path()
+                .join("home/authority-v1/dispatch-policy-commitment-v1");
+            let registry = root.join("registry-v1.json");
+            let key = fs::read_dir(root.join("keys"))
+                .unwrap()
+                .next()
+                .unwrap()
+                .unwrap()
+                .path();
+            match defect {
+                "missing-key" => fs::remove_file(&key).unwrap(),
+                "malformed-registry" => fs::write(&registry, b"{").unwrap(),
+                "newer-registry" => {
+                    let mut value: serde_json::Value =
+                        serde_json::from_slice(&fs::read(&registry).unwrap()).unwrap();
+                    value["schema_version"] = serde_json::Value::from(2);
+                    fs::write(&registry, super::canonical_json::to_vec(&value).unwrap()).unwrap();
+                }
+                "invalid-cap-hash" => test_corrupt_retained_worker_cap_hash(
+                    &authority,
+                    &carrier.retained_participant_id,
+                )
+                .unwrap(),
+                _ => unreachable!(),
+            }
+            let registry_before = fs::read(&registry).unwrap();
+            let key_before = fs::read(&key).ok();
+            assert_eq!(
+                bridge.authenticate_e3_member_launch_activation_v1(common, &carrier),
+                Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture),
+                "{defect}",
+            );
+            assert_eq!(
+                fs::read(&registry).unwrap(),
+                registry_before,
+                "no registry repair: {defect}"
+            );
+            assert_eq!(fs::read(&key).ok(), key_before, "no key repair: {defect}");
+        }
+    }
+
+    #[test]
+    fn e3_e_authenticated_read_rejects_durable_key_envelope_identity_mismatch() {
+        let (home, authority) = started_authority();
+        let carrier = fresh_carrier(&authority);
+        let bridge = bridge(&home);
+        let proof = proof(&carrier);
+        let runtime = runtime();
+        let common = common(&carrier, Some(&proof), &runtime);
+        assert_eq!(
+            bridge
+                .authenticate_e3_member_launch_activation_v1(common, &carrier)
+                .unwrap(),
+            carrier
+        );
+        let root = home
+            .path()
+            .join("home/authority-v1/dispatch-policy-commitment-v1");
+        let registry = root.join("registry-v1.json");
+        let registry_before = fs::read(&registry).unwrap();
+        let key = fs::read_dir(root.join("keys"))
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&fs::read(&key).unwrap()).unwrap();
+        value["key_id"] = serde_json::Value::from("dpk_substituted-envelope-identity");
+        let changed_key = super::canonical_json::to_vec(&value).unwrap();
+        fs::write(&key, &changed_key).unwrap();
+        let result = bridge.authenticate_e3_member_launch_activation_v1(common, &carrier);
+        assert_eq!(fs::read(&registry).unwrap(), registry_before);
+        assert_eq!(fs::read(&key).unwrap(), changed_key);
+        assert!(
+            matches!(
+                result,
+                Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture)
+            ),
+            "durable E2 key envelope identity mismatch was accepted"
+        );
+    }
+
+    #[test]
+    fn e3_e_authenticated_read_fork_reconstructs_and_checks_lineage() {
+        let (home, authority) = started_authority();
+        let source = fresh_carrier(&authority);
+        let ResolvedPolicyCommitmentCompatibilityV1::Compatible { cap: source_cap } =
+            resolve_retained_worker_cap(&authority, "e2-session", &source.retained_participant_id)
+                .unwrap()
+        else {
+            panic!("source cap")
+        };
+        let material = fresh_spawn_input("fork source");
+        let authenticated_policy = resolve_fork_policy_material(
+            &authority,
+            ForkPolicyResolutionInputV1 {
+                source_cap,
+                current_parent_and_fork_patch: material.policy_snapshot,
+                request_id: "fork-e3".into(),
+                orchestration_session_id: "e2-session".into(),
+                caller_participant_id: "e2-orchestrator".into(),
+                caller_backend_id: "cli:codex".into(),
+                target_backend_id: "cli:codex".into(),
+                world_id: "e2-world".into(),
+                world_generation: 7,
+                source_participant_id: source.retained_participant_id.clone(),
+                fork_patch: None,
+            },
+        )
+        .unwrap();
+        let outcome = publish_fork_commitment(
+            &authority,
+            ForkPolicyCommitmentInputV1 {
+                request_id: "fork-e3".into(),
+                idempotency_key: "fork-e3-idempotency".into(),
+                orchestration_session_id: "e2-session".into(),
+                caller_participant_id: "e2-orchestrator".into(),
+                caller_backend_id: "cli:codex".into(),
+                target_backend_id: "cli:codex".into(),
+                world_id: "e2-world".into(),
+                world_generation: 7,
+                source_participant_id: source.retained_participant_id.clone(),
+                canonical_validated_dispatch_request: br#"{"request_id":"fork-e3"}"#.to_vec(),
+                parent_policy_ref: policy_ref(),
+                parent_policy_revision: "e2-policy".into(),
+                applied_patch: AppliedDispatchPolicyPatchIdentityV1::UnchangedParent,
+                authenticated_policy,
+                reason: None,
+            },
+        )
+        .unwrap();
+        let authenticated =
+            authenticate_dispatch_policy_commitment(&authority, &outcome.commitment_ref()).unwrap();
+        let carrier = authenticated.member_launch_activation_carrier().unwrap();
+        let bridge = bridge(&home);
+        let runtime = runtime();
+        let common = common(&carrier, None, &runtime);
+        assert_eq!(
+            bridge
+                .authenticate_e3_member_launch_activation_v1(common, &carrier)
+                .unwrap(),
+            carrier
+        );
+        let proof = proof(&source);
+        for wrong in [
+            MemberDispatchCommonFieldsV1 {
+                parent_participant_id: None,
+                ..common
+            },
+            MemberDispatchCommonFieldsV1 {
+                protocol: "wrong",
+                ..common
+            },
+            MemberDispatchCommonFieldsV1 {
+                parent_participant_id: Some("wrong"),
+                ..common
+            },
+            MemberDispatchCommonFieldsV1 {
+                retained_worker_launch_authority: Some(&proof),
+                ..common
+            },
+            MemberDispatchCommonFieldsV1 {
+                resumed_from_participant_id: Some("other"),
+                ..common
+            },
+        ] {
+            assert_eq!(
+                bridge.authenticate_e3_member_launch_activation_v1(wrong, &carrier),
+                Err(ConfigProjectionFailureV1::WrongBinding)
+            );
+        }
     }
 }

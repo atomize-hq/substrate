@@ -56,6 +56,27 @@ struct HeldE3ServiceUserNamespaceV1 {
     trusted_service_uid: u64,
 }
 
+struct E3ChildNamespaceSlotV1 {
+    owner: Arc<()>,
+    registration: config_projection::E3ChildProcessRegistrationV1,
+    progress: E3ChildNamespaceProgressV1,
+}
+
+enum E3ChildNamespaceProgressV1 {
+    NeverRetained,
+    Held(HeldE3ChildUserNamespaceV1),
+    Released,
+}
+
+impl E3ChildNamespaceSlotV1 {
+    fn held(&self) -> Option<&HeldE3ChildUserNamespaceV1> {
+        match &self.progress {
+            E3ChildNamespaceProgressV1::Held(held) => Some(held),
+            _ => None,
+        }
+    }
+}
+
 struct HeldE3ChildUserNamespaceV1 {
     namespace_fd: OwnedFd,
     pidfd: OwnedFd,
@@ -117,7 +138,7 @@ enum ExclusionModeV1 {
 
 struct E3PrivilegedChildExclusionStateV1 {
     mode: ExclusionModeV1,
-    child_user_namespaces: BTreeMap<(u32, u64), HeldE3ChildUserNamespaceV1>,
+    child_user_namespaces: BTreeMap<(u32, u64), E3ChildNamespaceSlotV1>,
 }
 
 pub(crate) struct E3PrivilegedChildExclusionV1 {
@@ -136,6 +157,8 @@ pub(crate) struct HeldE3PrivilegedChildExclusionLeaseV1 {
     world_id: String,
     world_generation: u64,
     released: bool,
+    owner: Arc<()>,
+    children: BTreeMap<(u32, u64), config_projection::E3ChildProcessRegistrationV1>,
 }
 
 impl std::fmt::Debug for HeldNonE3PrivilegedChildLeaseV1 {
@@ -149,6 +172,14 @@ impl std::fmt::Debug for HeldNonE3PrivilegedChildLeaseV1 {
 }
 
 impl E3PrivilegedChildExclusionV1 {
+    pub(crate) fn require_recovering_v1(&self) -> Result<()> {
+        let state = self.lock_state()?;
+        if !matches!(state.mode, ExclusionModeV1::Recovering { .. }) {
+            bail!("E3 preparation recovery requires Recovering admission");
+        }
+        Ok(())
+    }
+
     pub(crate) fn new_recovering() -> Result<Arc<Self>> {
         let service_user_namespace = hold_service_user_namespace()?;
         Ok(Arc::new(Self {
@@ -235,6 +266,14 @@ impl E3PrivilegedChildExclusionV1 {
         if world_id.is_empty() || world_generation == 0 {
             bail!("invalid E3 world binding");
         }
+        let mut lease = HeldE3PrivilegedChildExclusionLeaseV1 {
+            exclusion: Arc::clone(self),
+            world_id: world_id.to_string(),
+            world_generation,
+            released: true,
+            owner: Arc::new(()),
+            children: BTreeMap::new(),
+        };
         let mut state = self.lock_state()?;
         match &mut state.mode {
             ExclusionModeV1::LegacyShared {
@@ -258,13 +297,9 @@ impl E3PrivilegedChildExclusionV1 {
             }
             _ => bail!("UnsupportedSecurityPosture: E3-exclusive admission is closed"),
         }
+        lease.released = false;
         drop(state);
-        Ok(HeldE3PrivilegedChildExclusionLeaseV1 {
-            exclusion: Arc::clone(self),
-            world_id: world_id.to_string(),
-            world_generation,
-            released: false,
-        })
+        Ok(lease)
     }
 
     fn release_non_e3_child(
@@ -292,31 +327,51 @@ impl E3PrivilegedChildExclusionV1 {
         Ok(())
     }
 
-    pub(crate) fn release_e3_exclusive(&self, world_id: &str, world_generation: u64) -> Result<()> {
-        let mut state = self.lock_state()?;
-        let ExclusionModeV1::E3Exclusive {
-            world_id: active_world,
-            world_generation: active_generation,
-            live_e3_leases,
-        } = &mut state.mode
-        else {
-            bail!("E3 child release outside exclusive mode");
-        };
-        if active_world != world_id || *active_generation != world_generation {
-            bail!("E3 child release has the wrong world binding");
+    fn release_e3_exclusive(
+        &self,
+        lease: &mut HeldE3PrivilegedChildExclusionLeaseV1,
+    ) -> Result<()> {
+        if lease.released {
+            return Ok(());
         }
-        *live_e3_leases = live_e3_leases
-            .checked_sub(1)
-            .context("E3 child lease count underflow")?;
-        if *live_e3_leases == 0 {
-            for namespace in state.child_user_namespaces.values() {
-                verify_e3_child_process_and_cgroup_quiescent(namespace)?;
+        let mut state = self.lock_state()?;
+        lease.validate_locked(&state)?;
+        for (key, registration) in &lease.children {
+            let slot = state
+                .child_user_namespaces
+                .get(key)
+                .context("lost E3 setup slot")?;
+            if !Arc::ptr_eq(&slot.owner, &lease.owner)
+                || &slot.registration != registration
+                || slot.held().is_some()
+            {
+                bail!("E3 lease retains unresolved child namespace ownership");
             }
+        }
+        let ExclusionModeV1::E3Exclusive { live_e3_leases, .. } = &state.mode else {
+            bail!("E3 exclusive epoch disappeared");
+        };
+        let remaining = live_e3_leases
+            .checked_sub(1)
+            .context("E3 lease count underflow")?;
+        if remaining == 0
+            && state
+                .child_user_namespaces
+                .values()
+                .any(|slot| slot.held().is_some())
+        {
+            bail!("last E3 lease cannot release sibling namespace ownership");
+        }
+        // All fallible validation precedes this single counted transition.
+        if remaining == 0 {
             state.child_user_namespaces.clear();
             state.mode = ExclusionModeV1::LegacyShared {
                 live_non_e3_children: 0,
             };
+        } else if let ExclusionModeV1::E3Exclusive { live_e3_leases, .. } = &mut state.mode {
+            *live_e3_leases = remaining;
         }
+        lease.released = true;
         Ok(())
     }
 
@@ -329,19 +384,25 @@ impl E3PrivilegedChildExclusionV1 {
         Ok(())
     }
 
-    fn retain_child_user_namespace(&self, namespace: HeldE3ChildUserNamespaceV1) -> Result<()> {
+    fn retain_child_user_namespace(
+        &self,
+        lease: &HeldE3PrivilegedChildExclusionLeaseV1,
+        child: &config_projection::E3ChildProcessRegistrationV1,
+        namespace: HeldE3ChildUserNamespaceV1,
+    ) -> Result<()> {
         let mut state = self.lock_state()?;
-        if !matches!(state.mode, ExclusionModeV1::E3Exclusive { .. }) {
-            bail!("child user namespace cannot be retained outside an E3 epoch");
-        }
-        let identity = (namespace.pid, namespace.pid_start_time_ticks);
-        if state
+        lease.validate_locked(&state)?;
+        let slot = state
             .child_user_namespaces
-            .insert(identity, namespace)
-            .is_some()
+            .get_mut(&(child.pid, child.pid_start_time_ticks))
+            .context("missing recorded E3 setup")?;
+        if !Arc::ptr_eq(&slot.owner, &lease.owner)
+            || &slot.registration != child
+            || !matches!(slot.progress, E3ChildNamespaceProgressV1::NeverRetained)
         {
-            bail!("duplicate E3 child process identity");
+            bail!("duplicate or substituted E3 namespace retention");
         }
+        slot.progress = E3ChildNamespaceProgressV1::Held(namespace);
         Ok(())
     }
 
@@ -547,17 +608,70 @@ impl Drop for HeldNonE3PrivilegedChildLeaseV1 {
     }
 }
 
+impl HeldE3PrivilegedChildExclusionLeaseV1 {
+    fn validate_locked(&self, state: &E3PrivilegedChildExclusionStateV1) -> Result<()> {
+        if self.released
+            || !matches!(&state.mode, ExclusionModeV1::E3Exclusive {
+            world_id, world_generation, live_e3_leases,
+        } if world_id == &self.world_id && *world_generation == self.world_generation && *live_e3_leases > 0)
+        {
+            bail!("E3 lease is not held in its original exclusive epoch");
+        }
+        Ok(())
+    }
+
+    pub(crate) fn release_terminal_child_user_namespace_v1(
+        &mut self,
+        child: &config_projection::E3ChildProcessRegistrationV1,
+    ) -> Result<()> {
+        let mut state = self.exclusion.lock_state()?;
+        self.validate_locked(&state)?;
+        let key = (child.pid, child.pid_start_time_ticks);
+        if self.children.get(&key) != Some(child) {
+            bail!("unknown or unequal E3 child release");
+        }
+        let slot = state
+            .child_user_namespaces
+            .get_mut(&key)
+            .context("lost E3 child slot")?;
+        if !Arc::ptr_eq(&slot.owner, &self.owner) || &slot.registration != child {
+            bail!("E3 child belongs to another lease");
+        }
+        if let Some(held) = slot.held() {
+            if std::fs::read_to_string("/proc/sys/kernel/random/boot_id")?.trim()
+                != child.kernel_boot_id
+                || descriptor_identity(held.namespace_fd.as_raw_fd())?
+                    != (held.device_id, held.inode)
+                || held.pid != child.pid
+                || held.pid_start_time_ticks != child.pid_start_time_ticks
+                || held.cgroup != child.process_cgroup
+            {
+                bail!("E3 terminal namespace binding changed");
+            }
+            validate_child_namespace_descriptor(
+                &held.namespace_fd,
+                &self.exclusion.service_user_namespace,
+                self.exclusion.service_user_namespace.trusted_service_uid,
+            )?;
+            verify_e3_child_process_and_cgroup_quiescent(held)?;
+            // No fallible work follows losing the namespace descriptor.
+            slot.progress = E3ChildNamespaceProgressV1::Released;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn release_after_cleanup_v1(&mut self) -> Result<()> {
+        Arc::clone(&self.exclusion).release_e3_exclusive(self)
+    }
+}
+
 impl Drop for HeldE3PrivilegedChildExclusionLeaseV1 {
     fn drop(&mut self) {
         if !self.released {
-            if self
-                .exclusion
-                .release_e3_exclusive(&self.world_id, self.world_generation)
-                .is_err()
-            {
-                std::process::abort();
+            // Never decrement or drop shared namespaces when accountability is lost.
+            if let Ok(mut state) = self.exclusion.state.lock() {
+                state.mode = ExclusionModeV1::Poisoned;
             }
-            self.released = true;
         }
     }
 }
@@ -627,23 +741,45 @@ pub(crate) fn create_e3_child_user_namespace_channel_v1() -> Result<(OwnedFd, Ow
 }
 
 pub(crate) fn install_and_validate_e3_child_user_namespace_v1(
-    exclusion: &E3PrivilegedChildExclusionV1,
+    lease: &mut HeldE3PrivilegedChildExclusionLeaseV1,
     parent_setup_socket: &OwnedFd,
-    child_pid: u32,
-    child_pid_start_time_ticks: u64,
+    identity: &config_projection::ConfigProjectionIdentityV1,
+    child: &config_projection::E3ChildProcessRegistrationV1,
     requirement: &E3UserNamespaceRequirementV1,
-    child_cgroup: &CanonicalCgroupIdentityV1,
 ) -> Result<()> {
+    {
+        let mut state = lease.exclusion.lock_state()?;
+        lease.validate_locked(&state)?;
+        if identity.world_id != lease.world_id
+            || identity.world_generation != lease.world_generation
+            || identity.authority_store_id != child.authority_store_id
+            || identity.series_id != child.series_id
+        {
+            bail!("wrong E3 setup lease/projection binding");
+        }
+        let key = (child.pid, child.pid_start_time_ticks);
+        if lease.children.contains_key(&key) || state.child_user_namespaces.contains_key(&key) {
+            bail!("duplicate E3 setup invocation");
+        }
+        lease.children.insert(key, child.clone());
+        state.child_user_namespaces.insert(
+            key,
+            E3ChildNamespaceSlotV1 {
+                owner: Arc::clone(&lease.owner),
+                registration: child.clone(),
+                progress: E3ChildNamespaceProgressV1::NeverRetained,
+            },
+        );
+    }
+    // Socket waits and capability/map work never hold the exclusion state mutex.
     std::thread::scope(|scope| {
         scope
             .spawn(|| {
                 install_and_validate_e3_child_user_namespace_on_sync_thread_v1(
-                    exclusion,
+                    lease,
                     parent_setup_socket,
-                    child_pid,
-                    child_pid_start_time_ticks,
+                    child,
                     requirement,
-                    child_cgroup,
                 )
             })
             .join()
@@ -652,13 +788,31 @@ pub(crate) fn install_and_validate_e3_child_user_namespace_v1(
 }
 
 fn install_and_validate_e3_child_user_namespace_on_sync_thread_v1(
-    exclusion: &E3PrivilegedChildExclusionV1,
+    lease: &HeldE3PrivilegedChildExclusionLeaseV1,
     parent_setup_socket: &OwnedFd,
-    child_pid: u32,
-    child_pid_start_time_ticks: u64,
+    child: &config_projection::E3ChildProcessRegistrationV1,
     requirement: &E3UserNamespaceRequirementV1,
-    child_cgroup: &CanonicalCgroupIdentityV1,
 ) -> Result<()> {
+    let exclusion = &lease.exclusion;
+    let child_pid = child.pid;
+    let child_pid_start_time_ticks = child.pid_start_time_ticks;
+    let child_cgroup = &child.process_cgroup;
+    if child.schema_version != 1
+        || child.pid == 0
+        || child.pid_start_time_ticks == 0
+        || child.parent_service_instance_id.is_empty()
+        || child.fence_id.is_empty()
+        || std::fs::read_to_string("/proc/sys/kernel/random/boot_id")?.trim()
+            != child.kernel_boot_id
+        || canonical_hash_omitting_v1(
+            "substrate.e3.child-process-registration.v1",
+            "registration",
+            child,
+            "registration_hash",
+        )? != child.registration_hash
+    {
+        bail!("invalid exact E3 child registration");
+    }
     if requirement.trusted_service_uid != exclusion.service_user_namespace.trusted_service_uid
         || requirement.parent_namespace_device_id != exclusion.service_user_namespace.device_id
         || requirement.parent_namespace_inode != exclusion.service_user_namespace.inode
@@ -692,15 +846,19 @@ fn install_and_validate_e3_child_user_namespace_on_sync_thread_v1(
         &exclusion.service_user_namespace,
         requirement.trusted_service_uid,
     )?;
-    exclusion.retain_child_user_namespace(HeldE3ChildUserNamespaceV1 {
-        namespace_fd,
-        pidfd,
-        pid: child_pid,
-        pid_start_time_ticks: child_pid_start_time_ticks,
-        device_id,
-        inode,
-        cgroup: child_cgroup.clone(),
-    })?;
+    exclusion.retain_child_user_namespace(
+        lease,
+        child,
+        HeldE3ChildUserNamespaceV1 {
+            namespace_fd,
+            pidfd,
+            pid: child_pid,
+            pid_start_time_ticks: child_pid_start_time_ticks,
+            device_id,
+            inode,
+            cgroup: child_cgroup.clone(),
+        },
+    )?;
     send_exact_setup_byte(parent_setup_socket.as_raw_fd(), USERNS_MAPPED)
 }
 
@@ -784,6 +942,7 @@ pub(crate) fn validate_child_security_attestation_v1(
     let held = state
         .child_user_namespaces
         .get(&(attestation.pid, attestation.pid_start_time_ticks))
+        .and_then(E3ChildNamespaceSlotV1::held)
         .context("E3-D child attestation lacks a retained user namespace")?;
     let mut pidfd_poll = libc::pollfd {
         fd: held.pidfd.as_raw_fd(),
@@ -1425,9 +1584,11 @@ fn verify_e3_child_process_and_cgroup_quiescent(child: &HeldE3ChildUserNamespace
     Ok(())
 }
 
+type E3EmptyCgroupObservationV1 = (String, u64, u64, String, String, String);
+
 fn read_empty_e3_cgroup_tree(
     identity: &CanonicalCgroupIdentityV1,
-) -> Result<Vec<(String, String, String)>> {
+) -> Result<Vec<E3EmptyCgroupObservationV1>> {
     use std::os::unix::fs::MetadataExt;
     use std::path::Path;
 
@@ -1454,7 +1615,7 @@ fn read_empty_e3_cgroup_tree(
         directory: &File,
         relative: &str,
         expected_device: u64,
-        observations: &mut Vec<(String, String, String)>,
+        observations: &mut Vec<E3EmptyCgroupObservationV1>,
     ) -> Result<()> {
         let metadata = directory
             .metadata()
@@ -1464,14 +1625,22 @@ fn read_empty_e3_cgroup_tree(
         }
         let events = read_file_at(directory.as_raw_fd(), "cgroup.events")?;
         let procs = read_file_at(directory.as_raw_fd(), "cgroup.procs")?;
+        let threads = read_file_at(directory.as_raw_fd(), "cgroup.threads")?;
         let populated = events
             .lines()
             .find_map(|line| line.strip_prefix("populated "))
             .context("E3 cgroup.events lacks populated state")?;
-        if populated != "0" || !procs.trim().is_empty() {
+        if populated != "0" || !procs.trim().is_empty() || !threads.trim().is_empty() {
             bail!("E3 child cgroup is not empty at exclusion release");
         }
-        observations.push((relative.to_string(), events, procs));
+        observations.push((
+            relative.to_string(),
+            metadata.dev(),
+            metadata.ino(),
+            events,
+            procs,
+            threads,
+        ));
 
         let duplicate = unsafe { libc::fcntl(directory.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 3) };
         if duplicate < 0 {
@@ -1508,14 +1677,14 @@ fn read_empty_e3_cgroup_tree(
                 return Err(std::io::Error::last_os_error()).context("inspect E3 cgroup entry");
             }
             if stat.st_mode & libc::S_IFMT == libc::S_IFDIR {
-                children.push(name.to_string());
+                children.push((name.to_string(), stat.st_dev, stat.st_ino));
             }
         }
         if unsafe { libc::closedir(stream) } != 0 {
             return Err(std::io::Error::last_os_error()).context("close E3 cgroup enumeration");
         }
         children.sort();
-        for child in children {
+        for (child, device, inode) in children {
             let child_c = std::ffi::CString::new(child.as_str()).unwrap();
             let fd = unsafe {
                 libc::openat(
@@ -1528,6 +1697,9 @@ fn read_empty_e3_cgroup_tree(
                 return Err(std::io::Error::last_os_error()).context("open child E3 cgroup");
             }
             let child_directory = unsafe { File::from_raw_fd(fd) };
+            if descriptor_identity(child_directory.as_raw_fd())? != (device, inode) {
+                bail!("E3 descendant cgroup was substituted");
+            }
             scan(
                 &child_directory,
                 &format!("{relative}/{child}"),
@@ -1934,6 +2106,149 @@ mod tests {
         }
     }
 
+    fn setup_test_identity(world_id: &str) -> config_projection::ConfigProjectionIdentityV1 {
+        let digest = "11".repeat(32);
+        let commitment = serde_json::json!({
+            "authority_store_id": "hsa_store",
+            "commitment_id": "dpc_01890f3e-7b8c-7a11-8c55-0242ac120002",
+            "exact_linkage_hash": digest,
+        });
+        let policy = serde_json::json!({
+            "ref_id": format!("ao_{}", "22".repeat(16)),
+            "object_kind": "policy",
+            "schema_version": 1,
+            "commitment": {"kind": "CanonicalSha256", "value": {"digest_hex": digest}},
+        });
+        let cap = serde_json::json!({
+            "e2_activation_id": "e2a_test",
+            "e2_launch_kind": "fresh_spawn",
+            "commitment_ref": commitment,
+            "commitment_subject": {"RetainedWorkerLaunch": {
+                "retained_participant_id": "participant",
+                "bootstrap_run_id": "bootstrap"
+            }},
+            "immutable_worker_cap_ref": commitment,
+            "immutable_worker_cap_created_revision": 1,
+            "immutable_worker_cap_application_revision": 1,
+            "policy_snapshot_ref": policy,
+            "policy_snapshot_hash": digest,
+            "policy_snapshot_revision": "1",
+            "request_id": "request",
+            "idempotency_key": "idempotency",
+            "caller_participant_id": "caller",
+            "caller_backend_id": "cli:codex-world",
+            "target_backend_id": "cli:codex-world",
+            "target_world": {"world_id": world_id, "world_generation": 1},
+            "registry_publication_revision": 1
+        });
+        let support = serde_json::json!({
+            "schema_version": 1,
+            "support_policy_version": 1,
+            "elf_execution_model": "StaticExec",
+            "elf_interpreter": null,
+            "dynamic_loader_cache": null,
+            "ordered_elf_dependencies": [],
+            "ordered_present_common_files": [],
+            "system_config_mount_target": {
+                "absolute_path": "/etc/codex", "device_id": 1, "inode": 2,
+                "mode": 0o755, "owner_uid": 0, "owner_gid": 0,
+                "ordered_entry_names": []
+            },
+            "manifest_hash": digest,
+        });
+        let artifact = |role: &str| {
+            serde_json::json!({
+                "role": role,
+                "configured_absolute_path": "/artifact",
+                "device_id": 1,
+                "inode": 2,
+                "file_type": "regular",
+                "mode": 0o755,
+                "owner_uid": 0,
+                "byte_length": 1,
+                "sha256": digest,
+                "authority_ref": {
+                    "authority_store_id": "test-store", "manifest_id": "ram_test",
+                    "manifest_revision": 1, "manifest_entry_id": "rae_test",
+                    "manifest_hash": digest, "entry_hash": digest
+                },
+                "provenance": {"OfficialCodexRelease": {
+                    "version": "0.125.0", "target_triple": "x86_64-unknown-linux-musl",
+                    "archive_name": "codex.tar.gz", "archive_url": "https://example.invalid/codex",
+                    "archive_sha256": digest, "archive_entry_path": "codex",
+                    "extracted_executable_sha256": digest
+                }},
+                "runtime_support": support,
+            })
+        };
+        let canonical_directory = serde_json::to_value(
+            config_projection::CanonicalDirectoryV1::capture_linux_from_fd(
+                std::os::fd::AsFd::as_fd(&File::open("/tmp").unwrap()),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let identity: config_projection::ConfigProjectionIdentityV1 =
+            serde_json::from_value(serde_json::json!({
+                "schema_version": 1,
+                "authority_store_id": "test-store",
+                "series_id": "test-series",
+                "accepted_home": canonical_directory,
+                "workspace_root": canonical_directory,
+                "orchestration_session_id": "session",
+                "retained_participant_id": "participant",
+                "bootstrap_run_id": "bootstrap",
+                "backend_id": "cli:codex-world",
+                "runtime_family": "codex",
+                "world_id": world_id,
+                "world_generation": 1,
+                "immutable_launch_cap": cap,
+                "runtime_artifacts": {
+                    "codex": artifact("Codex0125"),
+                    "world_entry_wrapper": artifact("WorldEntryWrapper"),
+                    "managed_gateway": artifact("ManagedGateway")
+                },
+                "identity_hash": "identity"
+            }))
+            .unwrap();
+        identity
+    }
+
+    fn setup_test_registration(
+        pid: u32,
+        start: u64,
+        cgroup: &CanonicalCgroupIdentityV1,
+    ) -> config_projection::E3ChildProcessRegistrationV1 {
+        let mut child = config_projection::E3ChildProcessRegistrationV1 {
+            schema_version: 1,
+            authority_store_id: "test-store".into(),
+            series_id: "test-series".into(),
+            registration_id: id("epr_"),
+            cgroup_registration_id: id("ecg_"),
+            cgroup_registration_hash: "1".repeat(64),
+            fence_id: id("cpf_"),
+            role: config_projection::E3TerminalProcessRoleV1::ManagedGateway,
+            pid,
+            pid_start_time_ticks: start,
+            process_cgroup: cgroup.clone(),
+            kernel_boot_id: std::fs::read_to_string("/proc/sys/kernel/random/boot_id")
+                .unwrap()
+                .trim()
+                .into(),
+            parent_service_instance_id: id("service_"),
+            registered_at: config_projection::Timestamp("2026-09-14T00:00:00.000000Z".into()),
+            registration_hash: String::new(),
+        };
+        child.registration_hash = canonical_hash_omitting_v1(
+            "substrate.e3.child-process-registration.v1",
+            "registration",
+            &child,
+            "registration_hash",
+        )
+        .unwrap();
+        child
+    }
+
     #[test]
     fn process_wide_exclusion_is_recovering_legacy_or_one_exact_e3_epoch() {
         let exclusion = E3PrivilegedChildExclusionV1::new_recovering().unwrap();
@@ -1960,15 +2275,296 @@ mod tests {
         assert!(exclusion.acquire_e3_exclusive("world-a", 1).is_err());
         drop(ordinary);
 
-        let e3 = exclusion.acquire_e3_exclusive("world-a", 1).unwrap();
+        let mut e3 = exclusion.acquire_e3_exclusive("world-a", 1).unwrap();
         assert!(exclusion.acquire_non_e3_child().is_err());
-        let sibling = exclusion.acquire_e3_exclusive("world-a", 1).unwrap();
+        let mut sibling = exclusion.acquire_e3_exclusive("world-a", 1).unwrap();
         assert!(exclusion.acquire_e3_exclusive("world-b", 1).is_err());
         assert!(exclusion.acquire_e3_exclusive("world-a", 2).is_err());
+        sibling.release_after_cleanup_v1().unwrap();
+        sibling.release_after_cleanup_v1().unwrap();
+        assert!(exclusion.acquire_non_e3_child().is_err());
         drop(sibling);
+        e3.release_after_cleanup_v1().unwrap();
+        e3.release_after_cleanup_v1().unwrap();
         drop(e3);
 
         assert!(exclusion.acquire_non_e3_child().is_ok());
+    }
+
+    #[test]
+    fn test_e3_e_setup_binding_never_retained_and_unknown_release() {
+        let exclusion = E3PrivilegedChildExclusionV1::new_recovering().unwrap();
+        exclusion.finish_recovery().unwrap();
+        let mut lease = exclusion.acquire_e3_exclusive("world-a", 1).unwrap();
+        let mut sibling = exclusion.acquire_e3_exclusive("world-a", 1).unwrap();
+        let group = CanonicalCgroupIdentityV1 {
+            cgroup_v2_mount_device_id: 1,
+            cgroup_v2_mount_inode: 2,
+            cgroup_directory_inode: 3,
+            cgroup_relative_path: "never-created".into(),
+        };
+        let child = setup_test_registration(42, 7, &group);
+        let identity = setup_test_identity("world-a");
+        let mut requirement = bind_e3_service_user_namespace_v1(&exclusion, 1000, 1000).unwrap();
+        requirement.uid_map.inside_id = 0; // Fails before waiting for a namespace packet.
+        let (parent, _child_socket) = create_e3_child_user_namespace_channel_v1().unwrap();
+        assert!(lease
+            .release_terminal_child_user_namespace_v1(&child)
+            .is_err());
+        for wrong in 0..4 {
+            let mut changed = identity.clone();
+            match wrong {
+                0 => changed.world_id.push('x'),
+                1 => changed.world_generation += 1,
+                2 => changed.authority_store_id.push('x'),
+                _ => changed.series_id.push('x'),
+            }
+            assert!(install_and_validate_e3_child_user_namespace_v1(
+                &mut lease,
+                &parent,
+                &changed,
+                &child,
+                &requirement
+            )
+            .is_err());
+            assert!(lease.children.is_empty());
+        }
+        assert!(install_and_validate_e3_child_user_namespace_v1(
+            &mut lease,
+            &parent,
+            &identity,
+            &child,
+            &requirement
+        )
+        .is_err());
+        assert_eq!(lease.children.get(&(42, 7)), Some(&child));
+        assert!(matches!(
+            exclusion.lock_state().unwrap().child_user_namespaces[&(42, 7)].progress,
+            E3ChildNamespaceProgressV1::NeverRetained
+        ));
+        assert!(install_and_validate_e3_child_user_namespace_v1(
+            &mut lease,
+            &parent,
+            &identity,
+            &child,
+            &requirement
+        )
+        .is_err());
+        assert!(sibling
+            .release_terminal_child_user_namespace_v1(&child)
+            .is_err());
+        for wrong in 0..6 {
+            let mut changed = child.clone();
+            match wrong {
+                0 => changed.role = config_projection::E3TerminalProcessRoleV1::ReadinessProbe,
+                1 => changed.fence_id.push('x'),
+                2 => changed.kernel_boot_id.push('x'),
+                3 => changed.parent_service_instance_id.push('x'),
+                4 => changed.registration_id.push('x'),
+                _ => changed.process_cgroup.cgroup_directory_inode += 1,
+            }
+            assert!(lease
+                .release_terminal_child_user_namespace_v1(&changed)
+                .is_err());
+        }
+        lease
+            .release_terminal_child_user_namespace_v1(&child)
+            .unwrap();
+        lease
+            .release_terminal_child_user_namespace_v1(&child)
+            .unwrap();
+        lease.release_after_cleanup_v1().unwrap();
+        assert!(exclusion.acquire_non_e3_child().is_err());
+        sibling.release_after_cleanup_v1().unwrap();
+        assert!(exclusion.acquire_non_e3_child().is_ok());
+    }
+
+    #[test]
+    fn test_e3_e_retention_failure_preserves_owner_and_positive_count() {
+        let exclusion = E3PrivilegedChildExclusionV1::new_recovering().unwrap();
+        exclusion.finish_recovery().unwrap();
+        let mut lease = exclusion.acquire_e3_exclusive("world-a", 1).unwrap();
+        let mut sibling = exclusion.acquire_e3_exclusive("world-a", 1).unwrap();
+        let group = CanonicalCgroupIdentityV1 {
+            cgroup_v2_mount_device_id: 1,
+            cgroup_v2_mount_inode: 2,
+            cgroup_directory_inode: 3,
+            cgroup_relative_path: "never-created".into(),
+        };
+        let child = setup_test_registration(42, 7, &group);
+        lease.children.insert((42, 7), child.clone());
+        exclusion
+            .lock_state()
+            .unwrap()
+            .child_user_namespaces
+            .insert(
+                (42, 7),
+                E3ChildNamespaceSlotV1 {
+                    owner: Arc::clone(&lease.owner),
+                    registration: child.clone(),
+                    progress: E3ChildNamespaceProgressV1::NeverRetained,
+                },
+            );
+        let fake = || {
+            let namespace_fd: OwnedFd = File::open("/dev/null").unwrap().into();
+            let (device_id, inode) = descriptor_identity(namespace_fd.as_raw_fd()).unwrap();
+            HeldE3ChildUserNamespaceV1 {
+                namespace_fd,
+                pidfd: pidfd_open(std::process::id()).unwrap(),
+                pid: 42,
+                pid_start_time_ticks: 7,
+                device_id,
+                inode,
+                cgroup: group.clone(),
+            }
+        };
+        // Synthetic invalid namespace exercises ownership on failed validation, not kernel acceptance.
+        exclusion
+            .retain_child_user_namespace(&lease, &child, fake())
+            .unwrap();
+        let fd = exclusion.lock_state().unwrap().child_user_namespaces[&(42, 7)]
+            .held()
+            .unwrap()
+            .namespace_fd
+            .as_raw_fd();
+        let (parent, peer) = create_e3_child_user_namespace_channel_v1().unwrap();
+        drop(peer);
+        assert!(send_exact_setup_byte(parent.as_raw_fd(), USERNS_MAPPED).is_err());
+        assert!(exclusion
+            .retain_child_user_namespace(&lease, &child, fake())
+            .is_err());
+        assert!(exclusion
+            .retain_child_user_namespace(&sibling, &child, fake())
+            .is_err());
+        assert!(lease
+            .release_terminal_child_user_namespace_v1(&child)
+            .is_err());
+        assert!(lease.release_after_cleanup_v1().is_err());
+        let state = exclusion.lock_state().unwrap();
+        assert_eq!(
+            state.child_user_namespaces[&(42, 7)]
+                .held()
+                .unwrap()
+                .namespace_fd
+                .as_raw_fd(),
+            fd
+        );
+        assert!(unsafe { libc::fcntl(fd, libc::F_GETFD) } >= 0);
+        assert!(matches!(
+            state.mode,
+            ExclusionModeV1::E3Exclusive {
+                live_e3_leases: 2,
+                ..
+            }
+        ));
+        drop(state);
+        sibling.release_after_cleanup_v1().unwrap();
+        assert!(lease.release_after_cleanup_v1().is_err());
+        assert!(matches!(
+            exclusion.lock_state().unwrap().mode,
+            ExclusionModeV1::E3Exclusive {
+                live_e3_leases: 1,
+                ..
+            }
+        ));
+        drop(lease);
+        assert!(exclusion.acquire_non_e3_child().is_err());
+        assert!(
+            exclusion.lock_state().unwrap().child_user_namespaces[&(42, 7)]
+                .held()
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn test_e3_e_completed_child_retry_does_not_reopen_missing_cgroup() {
+        let exclusion = E3PrivilegedChildExclusionV1::new_recovering().unwrap();
+        exclusion.finish_recovery().unwrap();
+        let mut lease = exclusion.acquire_e3_exclusive("world-a", 1).unwrap();
+        let group = CanonicalCgroupIdentityV1 {
+            cgroup_v2_mount_device_id: 1,
+            cgroup_v2_mount_inode: 2,
+            cgroup_directory_inode: 3,
+            cgroup_relative_path: "never-created".into(),
+        };
+        let child = setup_test_registration(42, 7, &group);
+        lease.children.insert((42, 7), child.clone());
+        // Synthetic completed slot tests only the same-live retry state machine.
+        exclusion
+            .lock_state()
+            .unwrap()
+            .child_user_namespaces
+            .insert(
+                (42, 7),
+                E3ChildNamespaceSlotV1 {
+                    owner: Arc::clone(&lease.owner),
+                    registration: child.clone(),
+                    progress: E3ChildNamespaceProgressV1::Released,
+                },
+            );
+        lease
+            .release_terminal_child_user_namespace_v1(&child)
+            .unwrap();
+        lease
+            .release_terminal_child_user_namespace_v1(&child)
+            .unwrap();
+        let mut wrong = child.clone();
+        wrong.registration_hash.push('0');
+        assert!(lease
+            .release_terminal_child_user_namespace_v1(&wrong)
+            .is_err());
+        lease.release_after_cleanup_v1().unwrap();
+        lease.release_after_cleanup_v1().unwrap();
+        assert!(lease
+            .release_terminal_child_user_namespace_v1(&child)
+            .is_err());
+        assert!(exclusion.acquire_non_e3_child().is_ok());
+    }
+
+    #[test]
+    fn test_e3_e_original_pidfd_distinguishes_live_and_terminal_before_tree_validation() {
+        let mut process = std::process::Command::new("/bin/sleep")
+            .arg("30")
+            .spawn()
+            .unwrap();
+        let pid = process.id();
+        let pidfd = pidfd_open(pid).unwrap();
+        let start = read_process_start_time(pid).unwrap();
+        let namespace_fd: OwnedFd = File::open("/dev/null").unwrap().into();
+        let held = HeldE3ChildUserNamespaceV1 {
+            namespace_fd,
+            pidfd,
+            pid,
+            pid_start_time_ticks: start,
+            device_id: 1,
+            inode: 2,
+            cgroup: CanonicalCgroupIdentityV1 {
+                cgroup_v2_mount_device_id: 1,
+                cgroup_v2_mount_inode: 2,
+                cgroup_directory_inode: 3,
+                cgroup_relative_path: "never-created".into(),
+            },
+        };
+        let live = verify_e3_child_process_and_cgroup_quiescent(&held)
+            .unwrap_err()
+            .to_string();
+        process.kill().unwrap();
+        process.wait().unwrap();
+        assert!(live.contains("not terminal"));
+        let terminal = verify_e3_child_process_and_cgroup_quiescent(&held)
+            .unwrap_err()
+            .to_string();
+        assert!(terminal.contains("mount identity drifted"));
+    }
+
+    #[test]
+    fn test_e3_e_unreleased_lease_drop_keeps_admission_closed() {
+        let exclusion = E3PrivilegedChildExclusionV1::new_recovering().unwrap();
+        exclusion.finish_recovery().unwrap();
+        let lease = exclusion.acquire_e3_exclusive("world-a", 1).unwrap();
+        drop(lease);
+        assert!(exclusion.acquire_non_e3_child().is_err());
+        assert!(exclusion.acquire_e3_exclusive("world-a", 1).is_err());
     }
 
     #[test]
@@ -2043,7 +2639,7 @@ mod tests {
 
         let exclusion = E3PrivilegedChildExclusionV1::new_recovering().unwrap();
         exclusion.finish_recovery().unwrap();
-        let e3 = exclusion
+        let mut e3 = exclusion
             .acquire_e3_exclusive("world-privileged-test", 1)
             .unwrap();
         let cgroup_relative = format!("substrate-e3d-test-{}", std::process::id());
@@ -2111,13 +2707,13 @@ mod tests {
         }
         let child_pid = child_pid as u32;
         let child_start = read_process_start_time(child_pid).unwrap();
+        let registration = setup_test_registration(child_pid, child_start, &child_cgroup);
         install_and_validate_e3_child_user_namespace_v1(
-            &exclusion,
+            &mut e3,
             &parent_setup,
-            child_pid,
-            child_start,
+            &setup_test_identity("world-privileged-test"),
+            &registration,
             &requirement,
-            &child_cgroup,
         )
         .unwrap();
         assert_eq!(read_capabilities().unwrap(), parked);
@@ -2132,6 +2728,7 @@ mod tests {
             let held = state
                 .child_user_namespaces
                 .get(&(child_pid, child_start))
+                .and_then(E3ChildNamespaceSlotV1::held)
                 .expect("retained child namespace and pidfd");
             assert_ne!(
                 (held.device_id, held.inode),
@@ -2183,21 +2780,25 @@ mod tests {
         let mut invalid_requirement = requirement.clone();
         invalid_requirement.uid_map.inside_id = u64::MAX;
         invalid_requirement.uid_map.outside_id = u64::MAX;
+        let failure_registration =
+            setup_test_registration(failure_pid, failure_start, &child_cgroup);
         assert!(install_and_validate_e3_child_user_namespace_v1(
-            &exclusion,
+            &mut e3,
             &failure_parent,
-            failure_pid,
-            failure_start,
+            &setup_test_identity("world-privileged-test"),
+            &failure_registration,
             &invalid_requirement,
-            &child_cgroup,
         )
         .is_err());
         assert_eq!(read_capabilities().unwrap(), parked);
-        assert!(!exclusion
+        assert!(exclusion
             .lock_state()
             .unwrap()
             .child_user_namespaces
-            .contains_key(&(failure_pid, failure_start)));
+            .get(&(failure_pid, failure_start))
+            .unwrap()
+            .held()
+            .is_none());
         drop(failure_parent);
         let mut failure_status = 0;
         assert_eq!(
@@ -2205,8 +2806,15 @@ mod tests {
             failure_pid as i32
         );
         assert!(libc::WIFEXITED(failure_status));
-        drop(e3);
+        e3.release_terminal_child_user_namespace_v1(&registration)
+            .unwrap();
+        e3.release_terminal_child_user_namespace_v1(&failure_registration)
+            .unwrap();
         std::fs::remove_dir(&cgroup_path).unwrap();
+        e3.release_terminal_child_user_namespace_v1(&registration)
+            .unwrap();
+        e3.release_after_cleanup_v1().unwrap();
+        drop(e3);
         assert!(exclusion.acquire_non_e3_child().is_ok());
     }
 
@@ -2343,7 +2951,7 @@ mod tests {
 
         let exclusion = E3PrivilegedChildExclusionV1::new_recovering().unwrap();
         exclusion.finish_recovery().unwrap();
-        let e3 = exclusion
+        let mut e3 = exclusion
             .acquire_e3_exclusive("world-static-wrapper-test", 1)
             .unwrap();
         let requirement =
@@ -2735,13 +3343,22 @@ mod tests {
         drop(wrapper_file);
 
         let child_start = read_process_start_time(child_pid).unwrap();
+        let mut registration =
+            setup_test_registration(child_pid, child_start, &enforcement.expected_process_cgroup);
+        registration.role = config_projection::E3TerminalProcessRoleV1::ReadinessProbe;
+        registration.registration_hash = canonical_hash_omitting_v1(
+            "substrate.e3.child-process-registration.v1",
+            "registration",
+            &registration,
+            "registration_hash",
+        )
+        .unwrap();
         install_and_validate_e3_child_user_namespace_v1(
-            &exclusion,
+            &mut e3,
             &parent_setup,
-            child_pid,
-            child_start,
+            &setup_test_identity("world-static-wrapper-test"),
+            &registration,
             &requirement,
-            &enforcement.expected_process_cgroup,
         )
         .unwrap();
         assert_eq!(read_capabilities().unwrap(), parked);
@@ -2871,12 +3488,17 @@ mod tests {
             status.success(),
             "static readiness wrapper failed: {status}"
         );
+        e3.release_terminal_child_user_namespace_v1(&registration)
+            .unwrap();
+        std::fs::remove_dir(&cgroup_path).unwrap();
+        e3.release_terminal_child_user_namespace_v1(&registration)
+            .unwrap();
+        e3.release_after_cleanup_v1().unwrap();
         drop(e3);
         assert!(exclusion
             .lock_state()
             .unwrap()
             .child_user_namespaces
             .is_empty());
-        std::fs::remove_dir(&cgroup_path).unwrap();
     }
 }

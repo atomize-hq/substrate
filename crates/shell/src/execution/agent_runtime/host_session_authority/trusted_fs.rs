@@ -425,6 +425,7 @@ mod platform {
     pub(crate) struct TrustedDirectory {
         file: File,
         device_id: u64,
+        owner_uid: libc::uid_t,
     }
 
     #[derive(Debug)]
@@ -705,7 +706,380 @@ mod platform {
         }
     }
 
+    /// Opaque descriptor-rooted inventory discovery; never exports filesystem authority.
+    #[cfg(target_os = "linux")]
+    pub(crate) struct HeldE3AgentInventoryRootV1 {
+        directory: TrustedDirectory,
+        identity: config_projection::CanonicalDirectoryV1,
+        scope: &'static str,
+        prefix: &'static str,
+        owner_uid: Option<libc::uid_t>,
+        discovered: std::sync::Mutex<Option<Vec<(String, DirectoryEntry)>>>,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl HeldE3AgentInventoryRootV1 {
+        pub(crate) fn from_global(
+            root: &TrustedAuthorityRoot,
+        ) -> Result<Self, config_projection::ConfigProjectionFailureV1> {
+            use config_projection::ConfigProjectionFailureV1::UnsupportedSecurityPosture as Security;
+            root.revalidate().map_err(|_| Security)?;
+            let file = root.directory.file.try_clone().map_err(|_| Security)?;
+            let identity =
+                config_projection::CanonicalDirectoryV1::capture_linux_from_fd(file.as_fd())?;
+            Ok(Self {
+                directory: TrustedDirectory {
+                    file,
+                    device_id: root.directory.device_id,
+                    owner_uid: root.directory.owner_uid,
+                },
+                identity,
+                scope: "global",
+                prefix: "agents",
+                owner_uid: Some(root.owner_uid),
+                discovered: std::sync::Mutex::new(None),
+            })
+        }
+
+        pub(crate) fn from_workspace(
+            root: &TrustedWorkspaceRoot,
+        ) -> Result<Self, config_projection::ConfigProjectionFailureV1> {
+            use config_projection::ConfigProjectionFailureV1::UnsupportedSecurityPosture as Security;
+            root.revalidate().map_err(|_| Security)?;
+            let file = root.file.try_clone().map_err(|_| Security)?;
+            let stat = fstat(file.as_raw_fd()).map_err(|_| Security)?;
+            let identity =
+                config_projection::CanonicalDirectoryV1::capture_linux_from_fd(file.as_fd())?;
+            Ok(Self {
+                directory: TrustedDirectory {
+                    file,
+                    device_id: stat.st_dev,
+                    owner_uid: effective_uid(),
+                },
+                identity,
+                scope: "workspace",
+                prefix: ".substrate/agents",
+                owner_uid: None,
+                discovered: std::sync::Mutex::new(None),
+            })
+        }
+
+        pub(crate) fn source_relative_paths(
+            &self,
+        ) -> Result<Vec<String>, config_projection::ConfigProjectionFailureV1> {
+            use config_projection::ConfigProjectionFailureV1::{
+                UnsupportedSecurityPosture as Security, WrongBinding,
+            };
+            self.identity
+                .revalidate_linux_from_fd(self.directory.file.as_fd())
+                .map_err(|_| Security)?;
+            let mut directory = TrustedDirectory {
+                file: self.directory.file.try_clone().map_err(|_| Security)?,
+                device_id: self.directory.device_id,
+                owner_uid: self.directory.owner_uid,
+            };
+            let mut snapshot = Vec::new();
+            let mut missing = false;
+            for name in self.prefix.split('/') {
+                let entries = directory.entries().map_err(|_| Security)?;
+                let Some(entry) = entries.into_iter().find(|entry| entry.name == name) else {
+                    missing = true;
+                    break;
+                };
+                if entry.kind != EntryKind::Directory {
+                    return Err(WrongBinding);
+                }
+                let file = openat_file(
+                    directory.file.as_raw_fd(),
+                    &component(name).map_err(|_| WrongBinding)?,
+                    libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+                    0,
+                )
+                .map_err(|_| Security)?;
+                let stat = fstat(file.as_raw_fd()).map_err(|_| Security)?;
+                if stat.st_dev != self.directory.device_id || stat.st_ino != entry.inode {
+                    return Err(WrongBinding);
+                }
+                snapshot.push((name.to_string(), entry));
+                directory = TrustedDirectory {
+                    file,
+                    device_id: stat.st_dev,
+                    owner_uid: directory.owner_uid,
+                };
+            }
+            let mut paths = Vec::new();
+            if !missing {
+                for entry in directory.entries().map_err(|_| Security)? {
+                    if entry.kind != EntryKind::RegularFile {
+                        return Err(WrongBinding);
+                    }
+                    if entry.name.ends_with(".yaml") {
+                        paths.push(format!("{}/{}", self.prefix, entry.name));
+                    }
+                    snapshot.push((self.prefix.to_string(), entry));
+                }
+            }
+            paths.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
+            snapshot.sort_by(|a, b| {
+                (a.0.as_bytes(), a.1.name.as_bytes()).cmp(&(b.0.as_bytes(), b.1.name.as_bytes()))
+            });
+            let mut discovered = self.discovered.lock().map_err(|_| Security)?;
+            if let Some(expected) = &*discovered {
+                if expected != &snapshot {
+                    return Err(Security);
+                }
+            } else {
+                *discovered = Some(snapshot);
+            }
+            Ok(paths)
+        }
+
+        pub(crate) fn revalidate(
+            &self,
+        ) -> Result<(), config_projection::ConfigProjectionFailureV1> {
+            use config_projection::ConfigProjectionFailureV1::UnsupportedSecurityPosture as Security;
+            self.identity
+                .revalidate_linux_from_fd(self.directory.file.as_fd())
+                .map_err(|_| Security)?;
+            if let Some(owner) = self.owner_uid {
+                let stat = fstat(self.directory.file.as_raw_fd()).map_err(|_| Security)?;
+                validate_private_home_stat(&stat, owner).map_err(|_| Security)?;
+                validate_final_private_home_acl(self.directory.file.as_raw_fd(), &stat, owner)
+                    .map_err(|_| Security)?;
+            }
+            self.source_relative_paths().map_err(|_| Security)?;
+            Ok(())
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) struct HeldE3AgentInventorySourceV1<'root> {
+        root: &'root HeldE3AgentInventoryRootV1,
+        directories: Vec<(File, String, TrustedEntryMetadataV1)>,
+        file: File,
+        name: String,
+        metadata: TrustedEntryMetadataV1,
+        bytes: Vec<u8>,
+        material: config_projection::AgentInventorySourceMaterialV1,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl<'root> HeldE3AgentInventorySourceV1<'root> {
+        pub(crate) fn open(
+            root: &'root HeldE3AgentInventoryRootV1,
+            relative_path: &str,
+        ) -> Result<Self, config_projection::ConfigProjectionFailureV1> {
+            use config_projection::ConfigProjectionFailureV1::{
+                UnsupportedSecurityPosture as Security, WrongBinding,
+            };
+            use sha2::{Digest, Sha256};
+            use std::io::Read;
+            let name = relative_path
+                .strip_prefix(&format!("{}/", root.prefix))
+                .filter(|name| !name.is_empty() && !name.contains('/') && name.ends_with(".yaml"))
+                .ok_or(WrongBinding)?;
+            if !root
+                .source_relative_paths()?
+                .iter()
+                .any(|path| path == relative_path)
+            {
+                return Err(WrongBinding);
+            }
+            let mut directory = root.directory.file.try_clone().map_err(|_| Security)?;
+            let mut directories = Vec::new();
+            for part in root.prefix.split('/') {
+                let file = openat_file(
+                    directory.as_raw_fd(),
+                    &component(part).map_err(|_| WrongBinding)?,
+                    libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+                    0,
+                )
+                .map_err(|_| Security)?;
+                let stat = fstat(file.as_raw_fd()).map_err(|_| Security)?;
+                if stat.st_dev != root.directory.device_id
+                    || stat.st_mode & libc::S_IFMT != libc::S_IFDIR
+                {
+                    return Err(WrongBinding);
+                }
+                let metadata = trusted_entry_metadata(&stat).map_err(|_| Security)?;
+                directories.push((directory, part.to_string(), metadata));
+                directory = file;
+            }
+            let mut file = openat_file(
+                directory.as_raw_fd(),
+                &component(name).map_err(|_| WrongBinding)?,
+                libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
+                0,
+            )
+            .map_err(|_| Security)?;
+            let stat = fstat(file.as_raw_fd()).map_err(|_| Security)?;
+            let metadata = trusted_entry_metadata(&stat).map_err(|_| Security)?;
+            if stat.st_mode & libc::S_IFMT != libc::S_IFREG
+                || stat.st_dev != root.directory.device_id
+                || stat.st_nlink != 1
+            {
+                return Err(WrongBinding);
+            }
+            {
+                let discovered = root.discovered.lock().map_err(|_| Security)?;
+                let entry = discovered
+                    .as_ref()
+                    .and_then(|entries| {
+                        entries
+                            .iter()
+                            .find(|(prefix, entry)| prefix == root.prefix && entry.name == name)
+                    })
+                    .ok_or(WrongBinding)?;
+                if entry.1.device_id != stat.st_dev || entry.1.inode != stat.st_ino {
+                    return Err(WrongBinding);
+                }
+            }
+            let mut bytes = Vec::new();
+            file.read_to_end(&mut bytes).map_err(|_| Security)?;
+            let raw_bytes_sha256 = format!("{:x}", Sha256::digest(&bytes));
+            let mut material = config_projection::AgentInventorySourceMaterialV1 {
+                inventory_scope: root.scope.to_string(),
+                accepted_root: root.identity.clone(),
+                relative_path: relative_path.to_string(),
+                file_device_id: stat.st_dev,
+                file_inode: stat.st_ino,
+                byte_length: bytes.len() as u64,
+                source_revision: format!("aisr1_{raw_bytes_sha256}"),
+                raw_bytes_sha256,
+                source_hash: String::new(),
+            };
+            let mut value = serde_json::to_value(&material).map_err(|_| WrongBinding)?;
+            value
+                .as_object_mut()
+                .ok_or(WrongBinding)?
+                .remove("source_hash");
+            material.source_hash = config_projection::ConfigProjectionCodecV1::domain_sha256(
+                "substrate.e3.agent-inventory-source.v1",
+                &serde_json::json!({"source": value}),
+            )?;
+            // The last retained directory is the exact file-name parent.
+            directories.push((directory, String::new(), metadata));
+            let held = Self {
+                root,
+                directories,
+                file,
+                name: name.to_string(),
+                metadata,
+                bytes,
+                material,
+            };
+            held.revalidate()?;
+            Ok(held)
+        }
+
+        pub(crate) fn source_bytes(&self) -> &[u8] {
+            &self.bytes
+        }
+        pub(crate) fn source_material(&self) -> &config_projection::AgentInventorySourceMaterialV1 {
+            &self.material
+        }
+
+        pub(crate) fn revalidate(
+            &self,
+        ) -> Result<(), config_projection::ConfigProjectionFailureV1> {
+            use config_projection::ConfigProjectionFailureV1::UnsupportedSecurityPosture as Security;
+            use std::os::unix::fs::FileExt;
+            self.root.revalidate()?;
+            for (parent, name, expected) in &self.directories {
+                if name.is_empty() {
+                    continue;
+                }
+                let file = openat_file(
+                    parent.as_raw_fd(),
+                    &component(name).map_err(|_| Security)?,
+                    libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+                    0,
+                )
+                .map_err(|_| Security)?;
+                let observed =
+                    trusted_entry_metadata(&fstat(file.as_raw_fd()).map_err(|_| Security)?)
+                        .map_err(|_| Security)?;
+                if observed.device_id != expected.device_id
+                    || observed.inode != expected.inode
+                    || observed.mode != expected.mode
+                    || observed.owner_uid != expected.owner_uid
+                {
+                    return Err(Security);
+                }
+            }
+            let parent = &self.directories.last().ok_or(Security)?.0;
+            let named = openat_file(
+                parent.as_raw_fd(),
+                &component(&self.name).map_err(|_| Security)?,
+                libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
+                0,
+            )
+            .map_err(|_| Security)?;
+            for file in [&self.file, &named] {
+                let current =
+                    trusted_entry_metadata(&fstat(file.as_raw_fd()).map_err(|_| Security)?)
+                        .map_err(|_| Security)?;
+                if current != self.metadata || current.size != self.bytes.len() as u64 {
+                    return Err(Security);
+                }
+            }
+            let mut bytes = vec![0; self.bytes.len()];
+            self.file
+                .read_exact_at(&mut bytes, 0)
+                .map_err(|_| Security)?;
+            if bytes != self.bytes {
+                return Err(Security);
+            }
+            if trusted_entry_metadata(&fstat(self.file.as_raw_fd()).map_err(|_| Security)?)
+                .map_err(|_| Security)?
+                != self.metadata
+            {
+                return Err(Security);
+            }
+            Ok(())
+        }
+    }
+
+    #[cfg(all(test, target_os = "linux"))]
+    type StorageReopenTestHook = Box<dyn FnOnce(&TrustedAuthorityRoot)>;
+
+    #[cfg(all(test, target_os = "linux"))]
+    thread_local! {
+        static STORAGE_REOPEN_BEFORE_OPEN: std::cell::RefCell<Option<StorageReopenTestHook>> =
+            const { std::cell::RefCell::new(None) };
+        static STORAGE_REOPEN_AFTER_OPEN: std::cell::RefCell<Option<StorageReopenTestHook>> =
+            const { std::cell::RefCell::new(None) };
+    }
+
     impl TrustedAuthorityRoot {
+        pub(in crate::execution::agent_runtime::host_session_authority) fn reopen_for_dispatch_policy_commitment_storage(
+            &self,
+        ) -> Result<Self, TrustedFsError> {
+            self.revalidate()?;
+            #[cfg(all(test, target_os = "linux"))]
+            STORAGE_REOPEN_BEFORE_OPEN.with(|hook| {
+                if let Some(hook) = hook.borrow_mut().take() {
+                    hook(self);
+                }
+            });
+            let reopened =
+                Self::open_for_owner(Path::new(&self.identity.physical_path), self.owner_uid)?;
+            #[cfg(all(test, target_os = "linux"))]
+            STORAGE_REOPEN_AFTER_OPEN.with(|hook| {
+                if let Some(hook) = hook.borrow_mut().take() {
+                    hook(&reopened);
+                }
+            });
+            if reopened.identity != self.identity {
+                return Err(TrustedFsError::new(
+                    "trusted root physical identity changed",
+                ));
+            }
+            self.revalidate()?;
+            reopened.revalidate()?;
+            Ok(reopened)
+        }
+
         pub(crate) fn open(raw_path: &Path) -> Result<Self, TrustedFsError> {
             Self::open_for_owner(raw_path, effective_uid())
         }
@@ -785,6 +1159,7 @@ mod platform {
                 directory: TrustedDirectory {
                     file,
                     device_id: stat.st_dev as u64,
+                    owner_uid,
                 },
                 identity,
                 owner_uid,
@@ -1580,6 +1955,7 @@ mod platform {
                 .try_clone()
                 .map_err(|_| PrivateHomeCandidateRollback::PreservedValidationUnavailable)?,
             device_id,
+            owner_uid: effective_uid(),
         };
         directory
             .entries()
@@ -1814,10 +2190,11 @@ mod platform {
                 libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
                 0,
             )?;
-            validate_open_directory(&file, self.device_id, false)?;
+            validate_open_directory(&file, self.device_id, self.owner_uid, false)?;
             Ok(Self {
                 file,
                 device_id: self.device_id,
+                owner_uid: self.owner_uid,
             })
         }
 
@@ -1867,10 +2244,11 @@ mod platform {
                 libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
                 0,
             )?;
-            validate_open_directory(&file, self.device_id, true)?;
+            validate_open_directory(&file, self.device_id, self.owner_uid, true)?;
             Ok(Self {
                 file,
                 device_id: self.device_id,
+                owner_uid: self.owner_uid,
             })
         }
 
@@ -1881,7 +2259,7 @@ mod platform {
                 libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_CLOEXEC | libc::O_NOFOLLOW,
                 FILE_MODE,
             )?;
-            validate_open_file(&file, self.device_id)?;
+            validate_open_file(&file, self.device_id, self.owner_uid)?;
             let stat = fstat(file.as_raw_fd())?;
             Ok(TrustedFile {
                 file,
@@ -1897,7 +2275,7 @@ mod platform {
                 libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
                 0,
             )?;
-            validate_open_file(&file, self.device_id)?;
+            validate_open_file(&file, self.device_id, self.owner_uid)?;
             let stat = fstat(file.as_raw_fd())?;
             Ok(TrustedFile {
                 file,
@@ -1926,7 +2304,7 @@ mod platform {
 
         #[cfg(target_os = "linux")]
         pub(crate) fn metadata(&self) -> Result<TrustedEntryMetadataV1, TrustedFsError> {
-            let stat = validate_open_directory(&self.file, self.device_id, false)?;
+            let stat = validate_open_directory(&self.file, self.device_id, self.owner_uid, false)?;
             trusted_entry_metadata(&stat)
         }
 
@@ -2562,11 +2940,12 @@ mod platform {
     fn validate_open_directory(
         file: &File,
         expected_device: u64,
+        owner_uid: libc::uid_t,
         exact_mode: bool,
     ) -> Result<libc::stat, TrustedFsError> {
         let stat = fstat(file.as_raw_fd())?;
         if kind_from_mode(stat.st_mode) != EntryKind::Directory
-            || stat.st_uid != effective_uid()
+            || stat.st_uid != owner_uid
             || stat.st_dev as u64 != expected_device
             || (exact_mode && stat.st_mode & 0o7777 != DIRECTORY_MODE)
             || (!exact_mode && stat.st_mode & 0o022 != 0)
@@ -3099,10 +3478,14 @@ mod platform {
         ))
     }
 
-    fn validate_open_file(file: &File, expected_device: u64) -> Result<(), TrustedFsError> {
+    fn validate_open_file(
+        file: &File,
+        expected_device: u64,
+        owner_uid: libc::uid_t,
+    ) -> Result<(), TrustedFsError> {
         let stat = fstat(file.as_raw_fd())?;
         if kind_from_mode(stat.st_mode) != EntryKind::RegularFile
-            || stat.st_uid != effective_uid()
+            || stat.st_uid != owner_uid
             || stat.st_dev as u64 != expected_device
             || stat.st_mode & 0o7777 != FILE_MODE
         {
@@ -5248,6 +5631,147 @@ mod platform {
             assert!(authority.open_file("link").is_err());
             assert!(authority.open_directory("../authority-v1").is_err());
             assert!(authority.create_file("nested/file").is_err());
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn test_e3_storage_reopen_preserves_identity_and_independent_lifetime() {
+            let (temp, original) = root();
+            fs::write(temp.path().join("sentinel"), b"unchanged authority bytes").unwrap();
+            let reopened = original
+                .reopen_for_dispatch_policy_commitment_storage()
+                .unwrap();
+            assert_eq!(original.identity(), reopened.identity());
+            assert_ne!(
+                original.directory.file.as_raw_fd(),
+                reopened.directory.file.as_raw_fd()
+            );
+            drop(original);
+            reopened.revalidate().unwrap();
+            assert_eq!(
+                fs::read(temp.path().join("sentinel")).unwrap(),
+                b"unchanged authority bytes"
+            );
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn test_e3_storage_reopen_rejects_substitution_during_open_without_repair() {
+            for fault in [
+                "path",
+                "symlink",
+                "ancestor",
+                "held-descriptor",
+                "reopened-descriptor",
+                "mode",
+            ] {
+                let parent = tempfile::tempdir_in(safe_test_parent()).unwrap();
+                fs::set_permissions(parent.path(), fs::Permissions::from_mode(0o700)).unwrap();
+                let home = parent.path().join("home");
+                let moved = parent.path().join("moved");
+                let replacement = parent.path().join("replacement");
+                for path in [&home, &replacement] {
+                    fs::create_dir(path).unwrap();
+                    fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+                }
+                fs::write(home.join("sentinel"), b"original authority bytes").unwrap();
+                fs::write(replacement.join("sentinel"), b"replacement bytes").unwrap();
+                let original = TrustedAuthorityRoot::open(&home).unwrap();
+                let saved = original.directory.file.try_clone().unwrap();
+                let original_fd = original.directory.file.as_raw_fd();
+                let other = File::open(&replacement).unwrap();
+                let before_open = matches!(fault, "path" | "symlink" | "ancestor");
+                let home_at_hook = home.clone();
+                let moved_at_hook = moved.clone();
+                let replacement_at_hook = replacement.clone();
+                let parent_at_hook = parent.path().to_path_buf();
+                let hook: StorageReopenTestHook = Box::new(move |opened| {
+                    match fault {
+                        "path" | "symlink" => {
+                            fs::rename(&home_at_hook, &moved_at_hook).unwrap();
+                            if fault == "path" {
+                                fs::rename(&replacement_at_hook, &home_at_hook).unwrap();
+                            } else {
+                                symlink(&replacement_at_hook, &home_at_hook).unwrap();
+                            }
+                        }
+                        "ancestor" => {
+                            fs::set_permissions(&parent_at_hook, fs::Permissions::from_mode(0o777))
+                                .unwrap();
+                            // Held-root validation alone does not check ancestor traversal.
+                            opened.revalidate().unwrap();
+                        }
+                        "held-descriptor" | "reopened-descriptor" => {
+                            let target = if fault == "held-descriptor" {
+                                original_fd
+                            } else {
+                                opened.directory.file.as_raw_fd()
+                            };
+                            assert_eq!(unsafe { libc::dup2(other.as_raw_fd(), target) }, target);
+                        }
+                        "mode" => opened
+                            .directory
+                            .file
+                            .set_permissions(fs::Permissions::from_mode(0o755))
+                            .unwrap(),
+                        _ => unreachable!(),
+                    }
+                });
+                if before_open {
+                    STORAGE_REOPEN_BEFORE_OPEN.with(|slot| *slot.borrow_mut() = Some(hook));
+                } else {
+                    STORAGE_REOPEN_AFTER_OPEN.with(|slot| *slot.borrow_mut() = Some(hook));
+                }
+                let outcome = original.reopen_for_dispatch_policy_commitment_storage();
+                assert!(STORAGE_REOPEN_BEFORE_OPEN.with(|slot| slot.borrow().is_none()));
+                assert!(STORAGE_REOPEN_AFTER_OPEN.with(|slot| slot.borrow().is_none()));
+                // Record unrepaired state before test-owned restoration.
+                match fault {
+                    "path" => {
+                        assert_eq!(
+                            fs::read(home.join("sentinel")).unwrap(),
+                            b"replacement bytes"
+                        );
+                        fs::rename(&home, &replacement).unwrap();
+                        fs::rename(&moved, &home).unwrap();
+                    }
+                    "symlink" => {
+                        assert!(fs::symlink_metadata(&home)
+                            .unwrap()
+                            .file_type()
+                            .is_symlink());
+                        fs::remove_file(&home).unwrap();
+                        fs::rename(&moved, &home).unwrap();
+                    }
+                    "ancestor" => {
+                        assert_eq!(fs::metadata(parent.path()).unwrap().mode() & 0o777, 0o777);
+                        fs::set_permissions(parent.path(), fs::Permissions::from_mode(0o700))
+                            .unwrap();
+                    }
+                    "held-descriptor" => {
+                        assert_eq!(
+                            unsafe { libc::dup2(saved.as_raw_fd(), original_fd) },
+                            original_fd
+                        );
+                    }
+                    "mode" => {
+                        assert_eq!(fs::metadata(&home).unwrap().mode() & 0o777, 0o755);
+                        fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).unwrap();
+                    }
+                    _ => {}
+                }
+                assert!(outcome.is_err(), "{fault}");
+                assert_eq!(
+                    fs::read(home.join("sentinel")).unwrap(),
+                    b"original authority bytes",
+                    "{fault}"
+                );
+                assert_eq!(
+                    fs::read(replacement.join("sentinel")).unwrap(),
+                    b"replacement bytes",
+                    "{fault}"
+                );
+            }
         }
 
         #[test]

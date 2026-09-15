@@ -466,9 +466,9 @@ pub(crate) fn dispatch_policy_commitment_storage_opened(
     opened
         .revalidate()
         .map_err(|_| BootstrapError("revalidate dispatch policy commitment authority root"))?;
-    let rebound =
-        TrustedAuthorityRoot::open(std::path::Path::new(&opened.identity().physical_path))
-            .map_err(|_| BootstrapError("open dispatch policy commitment authority root"))?;
+    let rebound = opened
+        .reopen_for_dispatch_policy_commitment_storage()
+        .map_err(|_| BootstrapError("open dispatch policy commitment authority root"))?;
     if rebound.identity() != opened.identity() {
         return Err(BootstrapError(
             "dispatch policy commitment authority root identity mismatch",

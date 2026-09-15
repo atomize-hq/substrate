@@ -678,3 +678,162 @@ mod tests {
         );
     }
 }
+
+/// E3 admission requires the acceptor's kernel-authenticated connection before body polling.
+#[cfg(target_os = "linux")]
+pub(crate) async fn e3_config_projection_prepare(
+    State(service): State<WorldService>,
+    request: axum::http::Request<hyper::Body>,
+) -> Response {
+    use crate::e3_local_transport::{
+        E3AuthenticatedLinuxUdsListenerV1, E3AuthenticatedLinuxUdsPeerV1,
+    };
+    use crate::socket_activation::InheritedUnixListener;
+    use std::sync::Arc;
+    let authenticated = (|| {
+        let peer = request
+            .extensions()
+            .get::<E3AuthenticatedLinuxUdsPeerV1>()?;
+        let inherited = request.extensions().get::<Arc<InheritedUnixListener>>()?;
+        let configured = service.accepted_home_authority.as_ref()?;
+        let listener =
+            E3AuthenticatedLinuxUdsListenerV1::from_inherited(inherited, 1, Arc::clone(configured))
+                .ok()?;
+        if peer.peer_uid != listener.expected_peer_uid
+            || peer.kernel_boot_id != listener.kernel_boot_id
+            || peer.listener_descriptor_device_id != listener.descriptor_device_id
+            || peer.listener_descriptor_inode != listener.descriptor_inode
+            || peer.peer_pid == 0
+            || peer.peer_pid_start_time_ticks == 0
+            || libc::gid_t::try_from(peer.peer_gid).is_err()
+        {
+            return None;
+        }
+        Some(())
+    })();
+    if authenticated.is_none() {
+        return (
+            StatusCode::FORBIDDEN,
+            ResponseJson(json!({"error":"WrongBinding"})),
+        )
+            .into_response();
+    }
+    let result = service
+        .e3_config_projection_prepare(request.into_body())
+        .await;
+    match result {
+        Ok(response) => ResponseJson(response).into_response(),
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            ResponseJson(json!({"error":error.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+/// E3 admission requires the acceptor's kernel-authenticated connection before body polling.
+#[cfg(target_os = "linux")]
+pub(crate) async fn e3_config_projection_cancel(
+    State(service): State<WorldService>,
+    request: axum::http::Request<hyper::Body>,
+) -> Response {
+    use crate::e3_local_transport::{
+        E3AuthenticatedLinuxUdsListenerV1, E3AuthenticatedLinuxUdsPeerV1,
+    };
+    use crate::socket_activation::InheritedUnixListener;
+    use std::sync::Arc;
+    let authenticated = (|| {
+        let peer = request
+            .extensions()
+            .get::<E3AuthenticatedLinuxUdsPeerV1>()?;
+        let inherited = request.extensions().get::<Arc<InheritedUnixListener>>()?;
+        let configured = service.accepted_home_authority.as_ref()?;
+        let listener =
+            E3AuthenticatedLinuxUdsListenerV1::from_inherited(inherited, 1, Arc::clone(configured))
+                .ok()?;
+        if peer.peer_uid != listener.expected_peer_uid
+            || peer.kernel_boot_id != listener.kernel_boot_id
+            || peer.listener_descriptor_device_id != listener.descriptor_device_id
+            || peer.listener_descriptor_inode != listener.descriptor_inode
+            || peer.peer_pid == 0
+            || peer.peer_pid_start_time_ticks == 0
+            || libc::gid_t::try_from(peer.peer_gid).is_err()
+        {
+            return None;
+        }
+        Some(())
+    })();
+    if authenticated.is_none() {
+        return (
+            StatusCode::FORBIDDEN,
+            ResponseJson(json!({"error":"WrongBinding"})),
+        )
+            .into_response();
+    }
+    use hyper::body::HttpBody;
+    let mut body = request.into_body();
+    let mut bytes = Vec::with_capacity(65_536);
+    while let Some(chunk) = body.data().await {
+        let Ok(chunk) = chunk else {
+            return (
+                StatusCode::BAD_REQUEST,
+                ResponseJson(json!({"error":"Malformed"})),
+            )
+                .into_response();
+        };
+        if chunk.len() > 65_536 - bytes.len() {
+            return (
+                StatusCode::PAYLOAD_TOO_LARGE,
+                ResponseJson(json!({"error":"Malformed"})),
+            )
+                .into_response();
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    let result = serde_json::from_slice(&bytes)
+        .map_err(|_| config_projection::ConfigProjectionFailureV1::Malformed)
+        .and_then(|request| service.e3_config_projection_cancel(request));
+    match result {
+        Ok(response) => ResponseJson(response).into_response(),
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            ResponseJson(json!({"error":error.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod e3_ingress_tests {
+    use super::*;
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    };
+
+    #[tokio::test]
+    async fn e3_handlers_reject_absent_peer_without_polling_secret_body() {
+        let root = tempfile::tempdir().unwrap();
+        let service = WorldService::new_with_member_turn_state_root_for_test(root.path()).unwrap();
+        for prepare in [true, false] {
+            let polled = Arc::new(AtomicBool::new(false));
+            let observed = Arc::clone(&polled);
+            let stream = futures_util::stream::once(async move {
+                observed.store(true, Ordering::SeqCst);
+                Ok::<_, std::io::Error>(Bytes::from_static(b"synthetic-secret-invalid-json"))
+            });
+            let request = axum::http::Request::new(hyper::Body::wrap_stream(stream));
+            let response = if prepare {
+                e3_config_projection_prepare(State(service.clone()), request).await
+            } else {
+                e3_config_projection_cancel(State(service.clone()), request).await
+            };
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+            assert!(!polled.load(Ordering::SeqCst));
+            assert_eq!(
+                hyper::body::to_bytes(response.into_body()).await.unwrap(),
+                r#"{"error":"WrongBinding"}"#
+            );
+        }
+    }
+}

@@ -213,7 +213,9 @@ pub(crate) struct AgentInventoryEntryV1 {
 enum ParsedAgentInventoryFile {
     V1(AgentFileV1),
     V2(AgentFileV2),
-    V3(AgentFileV3, AgentInventorySourceMaterialV1),
+    // Legacy consumers validate V3 schema and reject it at their existing boundary.
+    // Only the held-descriptor path can attach authenticated source material.
+    V3(AgentFileV3, Option<AgentInventorySourceMaterialV1>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -557,7 +559,7 @@ pub(crate) fn project_inventory_v3_entry(
     cwd: &Path,
     path: &Path,
     file: &AgentFileV3,
-    effective_config: &crate::execution::config_model::SubstrateConfig,
+    effective_default_cli_mode: crate::execution::config_model::AgentCliMode,
     source: &AgentInventorySourceMaterialV1,
 ) -> Vec<PlacementProjectedInventoryEntryV3> {
     if !file.config.enabled {
@@ -589,7 +591,7 @@ pub(crate) fn project_inventory_v3_entry(
             .cli
             .as_ref()
             .and_then(|cli| cli.mode)
-            .unwrap_or(effective_config.agents.defaults.cli.mode);
+            .unwrap_or(effective_default_cli_mode);
         let cli_binary = placement_config.cli.as_ref().map(|cli| {
             let trimmed = cli.binary.trim();
             if trimmed.is_empty() {
@@ -625,6 +627,196 @@ pub(crate) fn project_inventory_v3_entry(
         });
     }
     projected
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn resolve_e3_selected_inventory_projection_v1(
+    bootstrap_home: &crate::execution::agent_runtime::OpenedBootstrapHomeV1<'_>,
+    global_inventory_root: &crate::execution::agent_runtime::host_session_authority::trusted_fs::HeldE3AgentInventoryRootV1,
+    workspace_inventory_root: &crate::execution::agent_runtime::host_session_authority::trusted_fs::HeldE3AgentInventoryRootV1,
+    effective_config: &config_projection::EffectiveSubstrateConfigSourceV1,
+    expected_source: &AgentInventorySourceMaterialV1,
+) -> Result<
+    config_projection::LogicalAgentConfigProjectionV1,
+    config_projection::ConfigProjectionFailureV1,
+> {
+    use crate::execution::agent_runtime::host_session_authority::trusted_fs::HeldE3AgentInventorySourceV1;
+    use crate::execution::config_model::AgentCliMode;
+    use config_projection::{ConfigProjectionFailureV1::*, LogicalConfigSourceRefV1};
+    let cwd = Path::new(&effective_config.workspace_root.physical_path);
+    let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
+        cwd,
+        bootstrap_home,
+    )
+    .map_err(|_| UnsupportedSecurityPosture)?;
+    let mode = match effective_config.values.default_cli_mode.as_str() {
+        "persistent" => AgentCliMode::Persistent,
+        "per_request" => AgentCliMode::PerRequest,
+        _ => return Err(WrongBinding),
+    };
+    let mut effective = BTreeMap::new();
+    let mut held_sources = Vec::new();
+    for root in [global_inventory_root, workspace_inventory_root] {
+        let mut ids = BTreeSet::new();
+        for relative in root.source_relative_paths()? {
+            let held = HeldE3AgentInventorySourceV1::open(root, &relative)?;
+            let raw = std::str::from_utf8(held.source_bytes()).map_err(|_| Malformed)?;
+            let value: serde_yaml::Value = serde_yaml::from_str(raw).map_err(|_| Malformed)?;
+            let id = value
+                .get("id")
+                .and_then(serde_yaml::Value::as_str)
+                .ok_or(Malformed)?;
+            if !ids.insert(id.to_string()) {
+                return Err(Conflict);
+            }
+            let source = held.source_material();
+            let path = Path::new(&source.accepted_root.physical_path).join(&relative);
+            let parsed = parse_and_validate_agent_file_raw(
+                &path,
+                raw,
+                &policy,
+                Some(cwd),
+                &source.inventory_scope,
+                Path::new(&source.accepted_root.physical_path),
+                Some((held.source_bytes(), source)),
+            )
+            .map_err(|_| Malformed)?;
+            effective.insert(id.to_string(), (path, parsed));
+            held_sources.push(held);
+        }
+    }
+    let mut selected = None;
+    let mut source_selected_but_ineligible = false;
+    for (path, parsed) in effective.values() {
+        let ParsedAgentInventoryFile::V3(file, Some(source)) = parsed else {
+            continue;
+        };
+        let same_source = source.inventory_scope == expected_source.inventory_scope
+            && source.relative_path == expected_source.relative_path;
+        if same_source
+            && file.config.enabled
+            && file
+                .config
+                .placements
+                .world
+                .as_ref()
+                .is_some_and(|world| world.enabled)
+        {
+            source_selected_but_ineligible = true;
+        }
+        for entry in project_inventory_v3_entry(cwd, path, file, mode, source) {
+            if entry.placement == AgentPlacement::World
+                && entry.backend_id == effective_config.values.default_backend_id
+                && selected.replace(entry).is_some()
+            {
+                return Err(Conflict);
+            }
+        }
+    }
+    let selected = selected.ok_or(if source_selected_but_ineligible {
+        WrongBinding
+    } else {
+        UnsupportedConfiguration
+    })?;
+    let source = &selected.source;
+    if source.inventory_scope != expected_source.inventory_scope
+        || source.accepted_root != expected_source.accepted_root
+        || source.relative_path != expected_source.relative_path
+        || source.file_device_id != expected_source.file_device_id
+        || source.file_inode != expected_source.file_inode
+        || source.byte_length != expected_source.byte_length
+    {
+        return Err(WrongBinding);
+    }
+    if source.raw_bytes_sha256 != expected_source.raw_bytes_sha256
+        || source.source_revision != expected_source.source_revision
+        || source.source_hash != expected_source.source_hash
+    {
+        return Err(HashInvalid);
+    }
+    let runtime = selected
+        .runtime_projection
+        .as_ref()
+        .ok_or(UnsupportedConfiguration)?;
+    let runtime_family = match selected
+        .cli_runtime_family
+        .ok_or(UnsupportedConfiguration)?
+    {
+        AgentCliRuntimeFamily::Codex => "codex",
+        AgentCliRuntimeFamily::ClaudeCode => "claude_code",
+    };
+    let caps = &selected.capabilities;
+    let mut capabilities = [
+        ("session_start", caps.session_start),
+        ("session_resume", caps.session_resume),
+        ("session_fork", caps.session_fork),
+        ("session_stop", caps.session_stop),
+        ("status_snapshot", caps.status_snapshot),
+        ("event_stream", caps.event_stream),
+        ("llm", caps.llm),
+        ("mcp_client", caps.mcp_client),
+    ]
+    .into_iter()
+    .filter(|(_, enabled)| *enabled)
+    .map(|(name, _)| name.to_string())
+    .collect::<Vec<_>>();
+    capabilities.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
+    let mut logical = config_projection::LogicalAgentConfigProjectionV1 {
+        projection_hash: String::new(),
+        sources: vec![
+            LogicalConfigSourceRefV1::EffectiveSubstrateConfig {
+                authority_store_id: effective_config.authority_store_id.clone(),
+                source_revision: effective_config.source_revision.clone(),
+                source_hash: effective_config.source_hash.clone(),
+            },
+            LogicalConfigSourceRefV1::AgentInventory {
+                authority_store_id: effective_config.authority_store_id.clone(),
+                inventory_scope: source.inventory_scope.clone(),
+                source_revision: source.source_revision.clone(),
+                source_hash: source.source_hash.clone(),
+            },
+        ],
+        logical_agent_id: selected.logical_agent_id,
+        placement: selected.placement.as_str().into(),
+        realized_agent_id: selected.realized_agent_id,
+        backend_id: selected.backend_id,
+        kind: selected.kind.as_str().into(),
+        protocol: selected.protocol.ok_or(WrongBinding)?,
+        execution_scope: match selected.execution_scope {
+            config_model::AgentExecutionScope::Host => "host",
+            config_model::AgentExecutionScope::World => "world",
+        }
+        .into(),
+        cli_mode: match selected.cli_mode {
+            AgentCliMode::Persistent => "persistent",
+            AgentCliMode::PerRequest => "per_request",
+        }
+        .into(),
+        runtime_family: runtime_family.into(),
+        capabilities,
+        requested_model: runtime.model.clone(),
+        requested_mcp_servers: runtime.mcp_servers.clone(),
+        requested_features: runtime.features.clone(),
+    };
+    let mut value = serde_json::to_value(&logical).map_err(|_| HashInvalid)?;
+    value
+        .as_object_mut()
+        .ok_or(HashInvalid)?
+        .remove("projection_hash");
+    logical.projection_hash = config_projection::ConfigProjectionCodecV1::domain_sha256(
+        "substrate.e3.logical-config-projection.v1",
+        &serde_json::json!({"projection": value}),
+    )
+    .map_err(|_| HashInvalid)?;
+    for held in &held_sources {
+        held.revalidate()?;
+    }
+    global_inventory_root.revalidate()?;
+    workspace_inventory_root.revalidate()?;
+    bootstrap_home
+        .revalidate()
+        .map_err(|_| UnsupportedSecurityPosture)?;
+    Ok(logical)
 }
 
 fn default_true() -> bool {
@@ -758,33 +950,36 @@ pub(crate) fn load_effective_agent_inventory_for_bootstrap_home(
             Some(&world_root),
             "global",
             Path::new(&bootstrap_identity.physical_path),
+            None,
         )?;
         if let ParsedAgentInventoryFile::V2(parsed) = &file {
             global_shadowed.extend(legacy_shadowed_agent_ids_from_v2(parsed));
         }
         if let ParsedAgentInventoryFile::V3(parsed, source) = &file {
-            let root_matches = source.accepted_root.physical_path
-                == bootstrap_identity.physical_path
-                && matches!(
-                    (
-                        &source.accepted_root.physical_identity,
-                        &bootstrap_identity.physical_identity,
-                    ),
-                    (
-                        config_projection::DirectoryPhysicalIdentityV1::Linux {
-                            device_id: source_device,
-                            inode: source_inode,
-                        },
-                        crate::execution::agent_runtime::host_session_authority::schema::DirectoryPhysicalIdentityV1::Linux {
-                            device_id: bootstrap_device,
-                            inode: bootstrap_inode,
-                        },
-                    ) if source_device == bootstrap_device && source_inode == bootstrap_inode
-                );
-            if !root_matches {
-                return Err(config_model::user_error(
-                    "authenticated bootstrap inventory root identity changed",
-                ));
+            if let Some(source) = source {
+                let root_matches = source.accepted_root.physical_path
+                    == bootstrap_identity.physical_path
+                    && matches!(
+                        (
+                            &source.accepted_root.physical_identity,
+                            &bootstrap_identity.physical_identity,
+                        ),
+                        (
+                            config_projection::DirectoryPhysicalIdentityV1::Linux {
+                                device_id: source_device,
+                                inode: source_inode,
+                            },
+                            crate::execution::agent_runtime::host_session_authority::schema::DirectoryPhysicalIdentityV1::Linux {
+                                device_id: bootstrap_device,
+                                inode: bootstrap_inode,
+                            },
+                        ) if source_device == bootstrap_device && source_inode == bootstrap_inode
+                    );
+                if !root_matches {
+                    return Err(config_model::user_error(
+                        "authenticated bootstrap inventory root identity changed",
+                    ));
+                }
             }
             global_shadowed.extend([
                 parsed.id.clone(),
@@ -1084,6 +1279,7 @@ fn parse_and_validate_agent_file(
         world_root,
         source_scope,
         accepted_root,
+        None,
     )
 }
 
@@ -1092,8 +1288,9 @@ fn parse_and_validate_agent_file_raw(
     raw: &str,
     base_policy: &Policy,
     world_root: Option<&Path>,
-    source_scope: &str,
-    accepted_root: &Path,
+    _source_scope: &str,
+    _accepted_root: &Path,
+    held_source: Option<(&[u8], &AgentInventorySourceMaterialV1)>,
 ) -> Result<ParsedAgentInventoryFile> {
     match detect_agent_inventory_version(path, raw)? {
         1 => {
@@ -1231,250 +1428,6 @@ fn parse_and_validate_agent_file_raw(
                 validate_value(path, &value)
             }
 
-            fn source_material(
-                path: &Path,
-                raw: &str,
-                scope: &str,
-                root: &Path,
-            ) -> Result<AgentInventorySourceMaterialV1> {
-                #[cfg(target_os = "linux")]
-                {
-                    use std::ffi::CString;
-                    use std::fs::OpenOptions;
-                    use std::io::Read;
-                    use std::mem::MaybeUninit;
-                    use std::os::fd::{AsFd, AsRawFd, FromRawFd};
-                    use std::os::unix::ffi::OsStrExt;
-                    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
-
-                    if !matches!(scope, "global" | "workspace") || !root.is_absolute() {
-                        return Err(config_model::user_error(
-                            "invalid authenticated inventory source context",
-                        ));
-                    }
-                    let relative_path = path
-                        .strip_prefix(root)
-                        .map_err(|_| {
-                            config_model::user_error(
-                                "inventory source is outside its authenticated root",
-                            )
-                        })?
-                        .to_str()
-                        .ok_or_else(|| {
-                            config_model::user_error("invalid inventory source relative path")
-                        })?
-                        .to_string();
-                    let root_file = OpenOptions::new()
-                        .read(true)
-                        .custom_flags(libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW)
-                        .open(root)
-                        .map_err(|err| {
-                            config_model::user_error(format!(
-                                "failed to open inventory root {}: {err}",
-                                root.display()
-                            ))
-                        })?;
-                    let accepted_root =
-                        config_projection::CanonicalDirectoryV1::capture_linux_from_fd(
-                            root_file.as_fd(),
-                        )
-                        .map_err(|error| config_model::user_error(error.to_string()))?;
-
-                    let relative = Path::new(&relative_path);
-                    let relative_components = relative.components().collect::<Vec<_>>();
-                    if relative_components.len() < 2
-                        || relative_components
-                            .iter()
-                            .any(|component| !matches!(component, std::path::Component::Normal(_)))
-                    {
-                        return Err(config_model::user_error(
-                            "invalid inventory source relative path",
-                        ));
-                    }
-                    let mut directory = root_file;
-                    for component in &relative_components[..relative_components.len() - 1] {
-                        let std::path::Component::Normal(name) = component else {
-                            unreachable!("relative components were validated")
-                        };
-                        let name = CString::new(name.as_bytes()).map_err(|_| {
-                            config_model::user_error("invalid inventory directory component")
-                        })?;
-                        // SAFETY: `directory` is live, `name` is NUL-terminated, and the
-                        // returned descriptor is immediately placed under `File` ownership.
-                        let fd = unsafe {
-                            libc::openat(
-                                directory.as_raw_fd(),
-                                name.as_ptr(),
-                                libc::O_RDONLY
-                                    | libc::O_DIRECTORY
-                                    | libc::O_CLOEXEC
-                                    | libc::O_NOFOLLOW,
-                            )
-                        };
-                        if fd < 0 {
-                            return Err(config_model::user_error(format!(
-                                "failed to open inventory directory component: {}",
-                                std::io::Error::last_os_error()
-                            )));
-                        }
-                        // SAFETY: `openat` returned this uniquely owned descriptor.
-                        let opened = unsafe { std::fs::File::from_raw_fd(fd) };
-                        let metadata = opened.metadata().map_err(|error| {
-                            config_model::user_error(format!(
-                                "failed to inspect inventory directory: {error}"
-                            ))
-                        })?;
-                        if !metadata.is_dir() || metadata.dev() != directory.metadata()?.dev() {
-                            return Err(config_model::user_error(
-                                "inventory directory traversal changed filesystem",
-                            ));
-                        }
-                        directory = opened;
-                    }
-                    let std::path::Component::Normal(file_name) =
-                        relative_components[relative_components.len() - 1]
-                    else {
-                        unreachable!("relative components were validated")
-                    };
-                    let file_name = CString::new(file_name.as_bytes())
-                        .map_err(|_| config_model::user_error("invalid inventory filename"))?;
-                    // SAFETY: the retained parent descriptor and C string are valid for
-                    // this call; ownership transfers to `source_file` on success.
-                    let source_fd = unsafe {
-                        libc::openat(
-                            directory.as_raw_fd(),
-                            file_name.as_ptr(),
-                            libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
-                        )
-                    };
-                    if source_fd < 0 {
-                        return Err(config_model::user_error(format!(
-                            "failed to open inventory source {}: {}",
-                            path.display(),
-                            std::io::Error::last_os_error()
-                        )));
-                    }
-                    // SAFETY: `openat` returned this uniquely owned descriptor.
-                    let mut source_file = unsafe { std::fs::File::from_raw_fd(source_fd) };
-                    let before = source_file.metadata().map_err(|error| {
-                        config_model::user_error(format!(
-                            "failed to inspect inventory source {}: {error}",
-                            path.display()
-                        ))
-                    })?;
-                    if !before.is_file()
-                        || before.nlink() != 1
-                        || before.dev() != directory.metadata()?.dev()
-                    {
-                        return Err(config_model::user_error(format!(
-                            "invalid inventory source {}: expected one regular same-filesystem file",
-                            path.display()
-                        )));
-                    }
-                    let mut descriptor_bytes = Vec::new();
-                    source_file
-                        .read_to_end(&mut descriptor_bytes)
-                        .map_err(|error| {
-                            config_model::user_error(format!(
-                                "failed to read inventory source {}: {error}",
-                                path.display()
-                            ))
-                        })?;
-                    let after = source_file.metadata().map_err(|error| {
-                        config_model::user_error(format!(
-                            "failed to revalidate inventory source {}: {error}",
-                            path.display()
-                        ))
-                    })?;
-                    let stable_metadata = |metadata: &std::fs::Metadata| {
-                        (
-                            metadata.dev(),
-                            metadata.ino(),
-                            metadata.mode(),
-                            metadata.nlink(),
-                            metadata.len(),
-                            metadata.uid(),
-                            metadata.mtime(),
-                            metadata.mtime_nsec(),
-                            metadata.ctime(),
-                            metadata.ctime_nsec(),
-                        )
-                    };
-                    if stable_metadata(&before) != stable_metadata(&after)
-                        || descriptor_bytes != raw.as_bytes()
-                    {
-                        return Err(config_model::user_error(format!(
-                            "inventory source {} changed during authenticated read",
-                            path.display()
-                        )));
-                    }
-                    let mut named = MaybeUninit::<libc::stat>::uninit();
-                    // SAFETY: `named` points to writable storage and `file_name` is valid;
-                    // `AT_SYMLINK_NOFOLLOW` binds the named entry rather than its target.
-                    let named_result = unsafe {
-                        libc::fstatat(
-                            directory.as_raw_fd(),
-                            file_name.as_ptr(),
-                            named.as_mut_ptr(),
-                            libc::AT_SYMLINK_NOFOLLOW,
-                        )
-                    };
-                    if named_result != 0 {
-                        return Err(config_model::user_error(format!(
-                            "failed to revalidate inventory source {}: {}",
-                            path.display(),
-                            std::io::Error::last_os_error()
-                        )));
-                    }
-                    // SAFETY: successful `fstatat` initialized the structure.
-                    let named = unsafe { named.assume_init() };
-                    if named.st_dev != before.dev()
-                        || named.st_ino != before.ino()
-                        || named.st_mode != before.mode()
-                        || named.st_nlink != before.nlink()
-                        || named.st_size as u64 != before.len()
-                        || named.st_uid != before.uid()
-                        || named.st_mtime != before.mtime()
-                        || named.st_mtime_nsec != before.mtime_nsec()
-                        || named.st_ctime != before.ctime()
-                        || named.st_ctime_nsec != before.ctime_nsec()
-                    {
-                        return Err(config_model::user_error(format!(
-                            "inventory source {} was replaced after authenticated read",
-                            path.display()
-                        )));
-                    }
-                    let raw_bytes_sha256 = format!("{:x}", Sha256::digest(&descriptor_bytes));
-                    let mut source = AgentInventorySourceMaterialV1 {
-                        inventory_scope: scope.to_string(),
-                        accepted_root,
-                        relative_path,
-                        file_device_id: before.dev(),
-                        file_inode: before.ino(),
-                        byte_length: descriptor_bytes.len() as u64,
-                        raw_bytes_sha256: raw_bytes_sha256.clone(),
-                        source_revision: format!("aisr1_{raw_bytes_sha256}"),
-                        source_hash: String::new(),
-                    };
-                    let mut value = serde_json::to_value(&source)
-                        .map_err(|_| config_model::user_error("invalid inventory source"))?;
-                    value.as_object_mut().unwrap().remove("source_hash");
-                    source.source_hash = config_projection::ConfigProjectionCodecV1::domain_sha256(
-                        "substrate.e3.agent-inventory-source.v1",
-                        &serde_json::json!({"source": value}),
-                    )
-                    .map_err(|error| config_model::user_error(error.to_string()))?;
-                    Ok(source)
-                }
-                #[cfg(not(target_os = "linux"))]
-                {
-                    let _ = (path, raw);
-                    Err(config_model::user_error(
-                        "agent inventory schema_version 3 is unsupported on this platform",
-                    ))
-                }
-            }
-
             validate_strict_v3_yaml(path, raw)?;
             let parsed: AgentFileV3 = serde_yaml::from_str(raw).map_err(|err| {
                 config_model::user_error(format!(
@@ -1484,9 +1437,25 @@ fn parse_and_validate_agent_file_raw(
                 ))
             })?;
             validate_agent_schema_v3(path, &parsed, base_policy, world_root)?;
+            #[cfg(not(target_os = "linux"))]
+            return Err(config_model::user_error(
+                "agent inventory schema_version 3 is unsupported on this platform",
+            ));
+            #[cfg(target_os = "linux")]
             Ok(ParsedAgentInventoryFile::V3(
                 parsed,
-                source_material(path, raw, source_scope, accepted_root)?,
+                held_source
+                    .map(|(bytes, material)| {
+                        if bytes != raw.as_bytes()
+                            || material.raw_bytes_sha256 != format!("{:x}", Sha256::digest(bytes))
+                        {
+                            return Err(config_model::user_error(
+                                "invalid held inventory source digest",
+                            ));
+                        }
+                        Ok(material.clone())
+                    })
+                    .transpose()?,
             ))
         }
         version => Err(config_model::user_error(format!(
@@ -3380,22 +3349,77 @@ config:
         assert_eq!(entry.derived_backend_id(), "cli:selected");
     }
 
+    #[cfg(target_os = "linux")]
+    fn e3_v3_parse_held_test_source(
+        path: &Path,
+        raw: &str,
+        policy: &Policy,
+        world: Option<&Path>,
+        scope: &str,
+        root: &Path,
+        _: Option<()>,
+    ) -> anyhow::Result<ParsedAgentInventoryFile> {
+        use crate::execution::agent_runtime::host_session_authority::{
+            schema::{CanonicalDirectoryV1, DirectoryPhysicalIdentityV1},
+            trusted_fs::{
+                HeldE3AgentInventoryRootV1, HeldE3AgentInventorySourceV1, TrustedAuthorityRoot,
+                TrustedWorkspaceRoot,
+            },
+        };
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        let held_root = if scope == "global" {
+            fs::set_permissions(root, fs::Permissions::from_mode(0o700))?;
+            HeldE3AgentInventoryRootV1::from_global(&TrustedAuthorityRoot::open(root).unwrap())?
+        } else {
+            let metadata = fs::metadata(root)?;
+            let identity = CanonicalDirectoryV1 {
+                physical_path: root.to_str().unwrap().into(),
+                physical_identity: DirectoryPhysicalIdentityV1::Linux {
+                    device_id: metadata.dev(),
+                    inode: metadata.ino(),
+                },
+            };
+            HeldE3AgentInventoryRootV1::from_workspace(
+                &TrustedWorkspaceRoot::open_exact(&identity).unwrap(),
+            )?
+        };
+        let held = HeldE3AgentInventorySourceV1::open(
+            &held_root,
+            path.strip_prefix(root)?.to_str().unwrap(),
+        )?;
+        assert_eq!(held.source_bytes(), raw.as_bytes());
+        let parsed = parse_and_validate_agent_file_raw(
+            path,
+            std::str::from_utf8(held.source_bytes())?,
+            policy,
+            world,
+            scope,
+            root,
+            Some((held.source_bytes(), held.source_material())),
+        );
+        held.revalidate()?;
+        parsed
+    }
+
     #[test]
     fn e3c_v3_strict_yaml_rejects_ambiguous_yaml_features() {
-        let temp = tempfile::tempdir().unwrap();
+        let temp =
+            tempfile::tempdir_in(Path::new(&std::env::var_os("HOME").unwrap()).join(".cache"))
+                .unwrap();
         let root = temp.path().join("home");
         let agents = root.join("agents");
         fs::create_dir_all(&agents).unwrap();
         let path = agents.join("codex.yaml");
         let valid = e3c_v3_codex_yaml();
         fs::write(&path, valid).unwrap();
-        parse_and_validate_agent_file_raw(
+        e3_v3_parse_held_test_source(
             &path,
             valid,
             &Policy::default(),
             Some(temp.path()),
             "global",
             &root,
+            None,
         )
         .expect("strict V3 fixture");
 
@@ -3408,13 +3432,14 @@ config:
             valid.replace("  protocol:", "  7: rejected\n  protocol:"),
         ] {
             fs::write(&path, &invalid).unwrap();
-            assert!(parse_and_validate_agent_file_raw(
+            assert!(e3_v3_parse_held_test_source(
                 &path,
                 &invalid,
                 &Policy::default(),
                 Some(temp.path()),
                 "global",
                 &root,
+                None,
             )
             .is_err());
         }
@@ -3447,7 +3472,9 @@ config:
 
     #[test]
     fn e3c_v3_projection_retains_only_the_selected_source() {
-        let temp = tempfile::tempdir().unwrap();
+        let temp =
+            tempfile::tempdir_in(Path::new(&std::env::var_os("HOME").unwrap()).join(".cache"))
+                .unwrap();
         let global_root = temp.path().join("global");
         let workspace_root = temp.path().join("workspace");
         fs::create_dir_all(global_root.join("agents")).unwrap();
@@ -3458,33 +3485,35 @@ config:
         let workspace = global.replace("session_start: true", "session_start: false");
         fs::write(&global_path, global).unwrap();
         fs::write(&workspace_path, &workspace).unwrap();
-        let global = parse_and_validate_agent_file_raw(
+        let global = e3_v3_parse_held_test_source(
             &global_path,
             global,
             &Policy::default(),
             Some(&workspace_root),
             "global",
             &global_root,
+            None,
         )
         .unwrap();
-        let workspace = parse_and_validate_agent_file_raw(
+        let workspace = e3_v3_parse_held_test_source(
             &workspace_path,
             &workspace,
             &Policy::default(),
             Some(&workspace_root),
             "workspace",
             &workspace_root,
+            None,
         )
         .unwrap();
         let (workspace_file, workspace_source) = match &workspace {
-            ParsedAgentInventoryFile::V3(file, source) => (file, source),
+            ParsedAgentInventoryFile::V3(file, Some(source)) => (file, source),
             _ => panic!("expected V3"),
         };
         let projected = project_inventory_v3_entry(
             &workspace_root,
             &workspace_path,
             workspace_file,
-            &SubstrateConfig::default(),
+            SubstrateConfig::default().agents.defaults.cli.mode,
             workspace_source,
         );
         assert_eq!(projected.len(), 2);
@@ -3492,7 +3521,7 @@ config:
             .iter()
             .all(|entry| entry.source.source_hash == workspace_source.source_hash));
         let global_source_hash = match global {
-            ParsedAgentInventoryFile::V3(_, source) => source.source_hash,
+            ParsedAgentInventoryFile::V3(_, Some(source)) => source.source_hash,
             _ => unreachable!(),
         };
         assert_ne!(global_source_hash, workspace_source.source_hash);

@@ -200,6 +200,15 @@ fn resolve_landlock_helper_src() -> Option<String> {
 /// Main service running inside the world.
 #[derive(Clone)]
 pub struct WorldService {
+    #[cfg(target_os = "linux")]
+    pub(crate) accepted_home_authority:
+        Option<Arc<config_projection::ConfiguredAcceptedHomeAuthorityV1>>,
+    #[cfg(target_os = "linux")]
+    pub(crate) config_projection_service:
+        Option<Arc<config_projection::AgentConfigProjectionServiceV1>>,
+    #[cfg(target_os = "linux")]
+    pub(crate) e3_projection_preparations:
+        Option<Arc<crate::e3_config_projection_prepare::E3ConfigProjectionPreparationManagerV1>>,
     backend: Arc<dyn WorldBackend>,
     #[cfg(target_os = "linux")]
     linux_backend: Arc<world::LinuxLocalBackend>,
@@ -345,8 +354,48 @@ impl WorldService {
         let linux_backend = Arc::new(world::LinuxLocalBackend::new());
         let backend: Arc<dyn WorldBackend> = linux_backend.clone();
         let runtime_replay = RuntimeReplayRegistry::with_durable_e2(member_turn_join.clone());
+        let e3_authority = (|| -> Result<_> {
+            let configured = Arc::new(
+                config_projection::ConfiguredAcceptedHomeAuthorityV1::from_installed_bootstrap_authority()?,
+            );
+            let parent = Arc::new(
+                substrate_shell::OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home(&configured)?,
+            );
+            let registry = Arc::new(config_projection::ConfigProjectionRegistryV1::open(
+                parent.clone(),
+            )?);
+            let projection_service =
+                Arc::new(config_projection::AgentConfigProjectionServiceV1::new(
+                    Arc::clone(&registry),
+                    Arc::clone(&configured),
+                )?);
+            let preparations = Arc::new(
+                crate::e3_config_projection_prepare::E3ConfigProjectionPreparationManagerV1::new(
+                    parent,
+                    Arc::clone(&projection_service),
+                    registry,
+                    Arc::clone(&privileged_child_exclusion),
+                ),
+            );
+            Ok((configured, projection_service, preparations))
+        })();
+        let (accepted_home_authority, config_projection_service, e3_projection_preparations) =
+            match e3_authority {
+                Ok((configured, projection_service, preparations)) => (
+                    Some(configured),
+                    Some(projection_service),
+                    Some(preparations),
+                ),
+                Err(_) => {
+                    tracing::warn!("E3 configured projection authority unavailable; E3 preparation remains unsupported");
+                    (None, None, None)
+                }
+            };
 
         Ok(Self {
+            accepted_home_authority,
+            config_projection_service,
+            e3_projection_preparations,
             backend,
             linux_backend,
             gateway_runtime: Arc::new(GatewayRuntimeManager::new(Arc::clone(
@@ -367,6 +416,42 @@ impl WorldService {
             last_netfilter_requested: Arc::new(AtomicU8::new(0)),
             last_netfilter_failure_reason: Arc::new(RwLock::new(None)),
         })
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) async fn e3_config_projection_prepare(
+        &self,
+        body: hyper::Body,
+    ) -> Result<
+        transport_api_types::E3ConfigProjectionPrepareResponseV1,
+        config_projection::ConfigProjectionFailureV1,
+    > {
+        use config_projection::ConfigProjectionFailureV1::UnsupportedConfiguration;
+        self.config_projection_service
+            .as_ref()
+            .ok_or(UnsupportedConfiguration)?;
+        self.e3_projection_preparations
+            .as_ref()
+            .ok_or(UnsupportedConfiguration)?
+            .prepare(body)
+            .await
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn e3_config_projection_cancel(
+        &self,
+        request: transport_api_types::E3ConfigProjectionCancelRequestV1,
+    ) -> Result<
+        transport_api_types::E3ConfigProjectionCancelResponseV1,
+        config_projection::ConfigProjectionFailureV1,
+    > {
+        request
+            .validate()
+            .map_err(|_| config_projection::ConfigProjectionFailureV1::Malformed)?;
+        self.e3_projection_preparations
+            .as_ref()
+            .ok_or(config_projection::ConfigProjectionFailureV1::UnsupportedConfiguration)?
+            .cancel(request)
     }
 
     #[cfg(target_os = "linux")]

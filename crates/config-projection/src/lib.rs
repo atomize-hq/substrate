@@ -984,6 +984,168 @@ pub struct E3ChildCgroupRegistrationV1 {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
+pub struct InWorldGatewayIdentityV1 {
+    pub schema_version: u32, // exactly 1
+    pub authority_store_id: String,
+    pub gateway_instance_id: String,
+    pub config_projection_identity_hash: String,
+    pub orchestration_session_id: String,
+    pub retained_participant_id: String,
+    pub backend_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub gateway_artifact_sha256: String,
+    pub access_boundary_id: String,
+    pub gateway_identity_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct GatewayProcessIdentityV1 {
+    pub pid: u32,
+    pub pid_start_time_ticks: u64,
+    pub pidfd_inode: u64,
+    pub executable_device_id: u64,
+    pub executable_inode: u64,
+    pub executable_sha256: String,
+    pub process_cgroup: CanonicalCgroupIdentityV1,
+    pub child_security_attestation_hash: String,
+    pub secret_ready_attestation_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct GatewayRuntimeConfigIdentityV1 {
+    pub root: CanonicalDirectoryV1,
+    pub relative_path: String, // exactly "config.toml"
+    pub mode: u32,             // exactly 0o600
+    pub byte_length: u64,
+    pub sha256: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct GatewayHttpSurfaceV1 {
+    pub inherited_listener_only: bool, // exactly true
+    pub readiness_method: String,      // exactly "GET"
+    pub readiness_path: String,        // exactly "/health"
+    pub member_method: String,         // exactly "POST"
+    pub member_path: String,           // exactly "/v1/responses"
+    pub auxiliary_listener_count: u32, // exactly 0
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ManagedGatewayActivationIntentV1 {
+    pub schema_version: u32, // exactly 1
+    pub authority_store_id: String,
+    pub preparation_id: String,
+    pub activation_intent_id: String,
+    pub config_projection_identity_hash: String,
+    pub dormant_record_id: String,
+    pub dormant_revision: u64,
+    pub expected_gateway_artifact: DescriptorPinnedArtifactV1,
+    pub expected_gateway_ref: InWorldGatewayRefV1,
+    pub expected_access_boundary_ref: GatewayAccessBoundaryRefV1,
+    pub secret_handoff_ref: SecretHandoffRefV1,
+    pub fence_id: String,
+    pub readiness_nonce: String,
+    pub created_at: Timestamp,
+    pub intent_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ManagedGatewayLaunchInputV1 {
+    pub schema_version: u32, // exactly 1
+    pub authority_store_id: String,
+    pub launch_input_id: String,
+    pub activation_intent_ref: ManagedGatewayActivationIntentRefV1,
+    pub dormant_projection_ref: ConfigProjectionRefV1,
+    pub gateway_ref: InWorldGatewayRefV1,
+    pub config_projection_identity_hash: String,
+    pub orchestration_session_id: String,
+    pub retained_participant_id: String,
+    pub backend_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub listener_identity: GatewayListenerIdentityV1,
+    pub gateway_config: GatewayRuntimeConfigIdentityV1,
+    pub http_surface: GatewayHttpSurfaceV1,
+    pub access_boundary_ref: GatewayAccessBoundaryRefV1,
+    pub secret_handoff_prepared_ref: SecretHandoffRefV1,
+    pub readiness_nonce: String,
+    pub launch_input_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ManagedGatewayLaunchInputRefV1 {
+    pub authority_store_id: String,
+    pub launch_input_id: String,
+    pub launch_input_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConfigProjectionSecretHandoffRevisionV1 {
+    pub schema_version: u32, // exactly 1
+    pub authority_store_id: String,
+    handoff: LaunchTimeSecretHandoffV1,
+    pub predecessor_ref: Option<SecretHandoffRefV1>,
+    pub revision_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ManagedGatewayActivationAckV1 {
+    pub schema_version: u32, // exactly 1
+    pub authority_store_id: String,
+    pub activation_ack_id: String,
+    pub activation_intent_ref: ManagedGatewayActivationIntentRefV1,
+    pub config_projection_identity_hash: String,
+    pub dormant_projection_ref: ConfigProjectionRefV1,
+    pub gateway_ref: InWorldGatewayRefV1,
+    pub gateway_process_identity: GatewayProcessIdentityV1,
+    pub child_security_attestation: E3ChildSecurityAttestationV1,
+    pub listener_identity: GatewayListenerIdentityV1,
+    pub access_boundary_ref: GatewayAccessBoundaryRefV1,
+    pub secret_handoff_ref: SecretHandoffRefV1,
+    pub secret_handoff_terminal_state: SecretHandoffStateV1, // exactly Consumed
+    pub gateway_ready_revision: u64,
+    pub readiness_nonce: String,
+    pub launch_input_ref: ManagedGatewayLaunchInputRefV1,
+    pub observed_at: Timestamp,
+    pub ack_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct LaunchTimeSecretHandoffV1 {
+    schema_version: u32, // exactly 1
+    handoff_id: String,
+    orchestration_session_id: String,
+    world_id: String,
+    world_generation: u64,
+    retained_participant_id: Option<String>,
+    runtime_family: String,
+
+    // Non-secret authority references only.
+    credential_source_ref: CredentialSourceRefV1,
+    receiving_gateway_ref: InWorldGatewayRefV1,
+    delivery: SecretDeliveryMechanismV1,
+
+    created_at: Timestamp,
+    delivered_at: Option<Timestamp>,
+    consumed_at: Option<Timestamp>,
+    expires_at: Timestamp,
+    state_revision: u64,
+    state: SecretHandoffStateV1,
+    failure_diagnostic_ref: Option<RedactedDiagnosticRefV1>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct GatewayListenerIdentityV1 {
     pub transport: String,
     pub network_namespace_inode: u64,
@@ -1429,3 +1591,122 @@ impl std::fmt::Display for ConfigProjectionFailureV1 {
 }
 
 impl std::error::Error for ConfigProjectionFailureV1 {}
+
+#[cfg(test)]
+mod e3e_schema_tests {
+    use super::*;
+
+    fn prepared_handoff() -> ConfigProjectionSecretHandoffRevisionV1 {
+        let uuid = "01900000-0000-7000-8000-000000000001";
+        let created_at = Timestamp("2026-09-12T12:00:00Z".into());
+        let expires_at = Timestamp("2026-09-12T12:02:00Z".into());
+        ConfigProjectionSecretHandoffRevisionV1 {
+            schema_version: 1,
+            authority_store_id: format!("cpa_{uuid}"),
+            handoff: LaunchTimeSecretHandoffV1 {
+                schema_version: 1,
+                handoff_id: format!("gsh_{uuid}"),
+                orchestration_session_id: "session".into(),
+                world_id: "world".into(),
+                world_generation: 1,
+                retained_participant_id: Some("member".into()),
+                runtime_family: "codex".into(),
+                credential_source_ref: CredentialSourceRefV1 {
+                    schema_version: 1,
+                    credential_source_id: format!("gcs_{uuid}"),
+                    preparation_id: format!("e3p_{uuid}"),
+                    selected_backend_id: "cli:codex-world".into(),
+                    bundle_backend_id: "cli:codex".into(),
+                    ordered_field_names: vec![
+                        "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN".into()
+                    ],
+                    optional_account_id_present: false,
+                    issued_at: created_at.clone(),
+                    expires_at: expires_at.clone(),
+                    ref_hash: "0".repeat(64),
+                },
+                receiving_gateway_ref: InWorldGatewayRefV1 {
+                    authority_store_id: format!("cpa_{uuid}"),
+                    gateway_instance_id: format!("cgi_{uuid}"),
+                    gateway_identity_hash: "0".repeat(64),
+                },
+                delivery: SecretDeliveryMechanismV1::SecureFd {
+                    fd_name: "SUBSTRATE_LLM_AUTH_BUNDLE_FD".into(),
+                    one_time: true,
+                    gateway_receiver_only: true,
+                    deny_child_inheritance: true,
+                    close_after_consume: true,
+                },
+                created_at,
+                delivered_at: None,
+                consumed_at: None,
+                expires_at,
+                state_revision: 1,
+                state: SecretHandoffStateV1::Prepared,
+                failure_diagnostic_ref: None,
+            },
+            predecessor_ref: None,
+            revision_hash: "0".repeat(64),
+        }
+    }
+
+    #[test]
+    fn e3e_handoff_preserves_the_nested_canonical_schema_and_explicit_nulls() {
+        let revision = prepared_handoff();
+        let bytes = ConfigProjectionCodecV1::encode_canonical_json(&revision).unwrap();
+        let decoded: ConfigProjectionSecretHandoffRevisionV1 =
+            ConfigProjectionCodecV1::decode_canonical_json(&bytes).unwrap();
+        assert_eq!(decoded, revision);
+        let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(value.as_object().unwrap().len(), 5);
+        assert_eq!(value["handoff"].as_object().unwrap().len(), 17);
+        for name in ["delivered_at", "consumed_at", "failure_diagnostic_ref"] {
+            assert_eq!(value["handoff"].get(name), Some(&serde_json::Value::Null));
+        }
+        assert_eq!(value.get("predecessor_ref"), Some(&serde_json::Value::Null));
+        assert_eq!(value["handoff"]["state"], "Prepared");
+    }
+
+    #[test]
+    fn e3e_handoff_rejects_unknown_duplicate_and_omitted_nullable_fields() {
+        let value = serde_json::to_value(prepared_handoff()).unwrap();
+        for parent in ["", "handoff", "handoff/credential_source_ref"] {
+            let mut changed = value.clone();
+            let mut object = &mut changed;
+            for key in parent.split('/').filter(|key| !key.is_empty()) {
+                object = &mut object[key];
+            }
+            object["unknown"] = serde_json::json!(true);
+            let bytes = ConfigProjectionCodecV1::encode_canonical_json(&changed).unwrap();
+            assert_eq!(
+                ConfigProjectionCodecV1::decode_canonical_json::<
+                    ConfigProjectionSecretHandoffRevisionV1,
+                >(&bytes),
+                Err(ConfigProjectionFailureV1::Malformed)
+            );
+        }
+        let canonical = ConfigProjectionCodecV1::encode_canonical_json(&value).unwrap();
+        let duplicate = String::from_utf8(canonical).unwrap().replace(
+            "\"state_revision\":1",
+            "\"state_revision\":1,\"state_revision\":1",
+        );
+        assert_eq!(
+            ConfigProjectionCodecV1::decode_canonical_json::<ConfigProjectionSecretHandoffRevisionV1>(
+                duplicate.as_bytes()
+            ),
+            Err(ConfigProjectionFailureV1::Malformed)
+        );
+        let mut omitted = value;
+        omitted["handoff"]
+            .as_object_mut()
+            .unwrap()
+            .remove("consumed_at");
+        let bytes = ConfigProjectionCodecV1::encode_canonical_json(&omitted).unwrap();
+        assert_eq!(
+            ConfigProjectionCodecV1::decode_canonical_json::<ConfigProjectionSecretHandoffRevisionV1>(
+                &bytes
+            ),
+            Err(ConfigProjectionFailureV1::Malformed)
+        );
+    }
+}

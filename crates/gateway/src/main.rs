@@ -49,6 +49,12 @@ async fn start_foreground(
     config: cli::AppConfig,
     launch: GatewayLaunchContract,
 ) -> anyhow::Result<()> {
+    #[cfg(target_os = "linux")]
+    if let Some(mut e3) = launch::E3GatewayLaunchContractV1::from_environment()? {
+        e3.consume_launch_input(&launch.config_path)?;
+        return server::serve_e3_inherited_listener(config, e3).await;
+    }
+
     let integrated_auth = server::IntegratedGatewayAuthContext::from_launch_mode(launch.mode)?;
 
     // Write PID file
@@ -118,6 +124,30 @@ fn spawn_background_service(port: Option<u16>, config_path: Option<PathBuf>) -> 
 fn resolve_launch_and_config(
     cli_config: Option<PathBuf>,
 ) -> anyhow::Result<(GatewayLaunchContract, cli::AppConfig)> {
+    #[cfg(target_os = "linux")]
+    if [
+        "SUBSTRATE_E3_GATEWAY_LAUNCH_FD",
+        "SUBSTRATE_E3_GATEWAY_LISTENER_FD",
+        "SUBSTRATE_E3_GATEWAY_SECRET_READY_FD",
+    ]
+    .iter()
+    .any(|name| std::env::var_os(name).is_some())
+    {
+        let path = cli_config
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("E3 gateway requires its exact config argument"))?;
+        let supplied = std::env::var_os(launch::SUBSTRATE_LLM_GATEWAY_CONFIG_PATH);
+        let args = std::env::args_os().collect::<Vec<_>>();
+        anyhow::ensure!(
+            supplied.as_deref() == Some(path.as_os_str())
+                && path.starts_with("/run/substrate/e3-gateway")
+                && args.len() == 4
+                && args[1] == "--config"
+                && args[2] == path.as_os_str()
+                && args[3] == "start",
+            "E3 gateway arguments do not match the sealed launch"
+        );
+    }
     let launch = GatewayLaunchContract::resolve(
         cli_config,
         cli::AppConfig::default_path,

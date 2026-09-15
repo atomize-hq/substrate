@@ -3386,6 +3386,540 @@ impl TryFrom<ManagedGatewayActivationIntentRefV1Def> for ManagedGatewayActivatio
     }
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(try_from = "E3ConfigProjectionPrepareRequestV1Def")]
+pub struct E3ConfigProjectionPrepareRequestV1 {
+    pub schema_version: u32,
+    pub preparation_id: String,
+    pub preparation_idempotency_key: String,
+    pub orchestration_session_id: String,
+    pub participant_id: String,
+    pub orchestrator_participant_id: String,
+    pub parent_participant_id: Option<String>,
+    pub resumed_from_participant_id: Option<String>,
+    pub backend_id: String,
+    pub protocol: String,
+    pub run_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub resolved_runtime: ResolvedMemberRuntimeDescriptorV1,
+    pub retained_worker_launch_authority: Option<RetainedWorkerLaunchAuthorityProofV1>,
+    pub e2_launch_activation: E2MemberLaunchActivationCarrierV1,
+    pub authoring_input_ref: ConfigProjectionAuthoringInputRefV1,
+    pub integrated_auth: GatewayIntegratedAuthPayloadV1,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct E3ConfigProjectionPrepareRequestV1Def {
+    schema_version: u32,
+    preparation_id: String,
+    preparation_idempotency_key: String,
+    orchestration_session_id: String,
+    participant_id: String,
+    orchestrator_participant_id: String,
+    #[serde(deserialize_with = "Option::deserialize")]
+    parent_participant_id: Option<String>,
+    #[serde(deserialize_with = "Option::deserialize")]
+    resumed_from_participant_id: Option<String>,
+    backend_id: String,
+    protocol: String,
+    run_id: String,
+    world_id: String,
+    world_generation: u64,
+    resolved_runtime: ResolvedMemberRuntimeDescriptorV1,
+    #[serde(deserialize_with = "Option::deserialize")]
+    retained_worker_launch_authority: Option<RetainedWorkerLaunchAuthorityProofV1>,
+    e2_launch_activation: E2MemberLaunchActivationCarrierV1,
+    authoring_input_ref: ConfigProjectionAuthoringInputRefV1,
+    integrated_auth: GatewayIntegratedAuthPayloadV1,
+}
+
+impl TryFrom<E3ConfigProjectionPrepareRequestV1Def> for E3ConfigProjectionPrepareRequestV1 {
+    type Error = String;
+    fn try_from(value: E3ConfigProjectionPrepareRequestV1Def) -> Result<Self, Self::Error> {
+        let request = Self {
+            schema_version: value.schema_version,
+            preparation_id: value.preparation_id,
+            preparation_idempotency_key: value.preparation_idempotency_key,
+            orchestration_session_id: value.orchestration_session_id,
+            participant_id: value.participant_id,
+            orchestrator_participant_id: value.orchestrator_participant_id,
+            parent_participant_id: value.parent_participant_id,
+            resumed_from_participant_id: value.resumed_from_participant_id,
+            backend_id: value.backend_id,
+            protocol: value.protocol,
+            run_id: value.run_id,
+            world_id: value.world_id,
+            world_generation: value.world_generation,
+            resolved_runtime: value.resolved_runtime,
+            retained_worker_launch_authority: value.retained_worker_launch_authority,
+            e2_launch_activation: value.e2_launch_activation,
+            authoring_input_ref: value.authoring_input_ref,
+            integrated_auth: value.integrated_auth,
+        };
+        request.validate()?;
+        Ok(request)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "E3ConfigProjectionPrepareResponseV1Def")]
+pub struct E3ConfigProjectionPrepareResponseV1 {
+    pub schema_version: u32,
+    pub preparation_id: String,
+    pub preparation_idempotency_key: String,
+    pub config_projection: ConfigProjectionActivationCarrierV1,
+    pub prepared_at: String,
+    pub expires_at: String,
+    pub response_hash: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct E3ConfigProjectionPrepareResponseV1Def {
+    schema_version: u32,
+    preparation_id: String,
+    preparation_idempotency_key: String,
+    config_projection: ConfigProjectionActivationCarrierV1,
+    prepared_at: String,
+    expires_at: String,
+    response_hash: String,
+}
+
+impl TryFrom<E3ConfigProjectionPrepareResponseV1Def> for E3ConfigProjectionPrepareResponseV1 {
+    type Error = String;
+    fn try_from(value: E3ConfigProjectionPrepareResponseV1Def) -> Result<Self, Self::Error> {
+        let request = Self {
+            schema_version: value.schema_version,
+            preparation_id: value.preparation_id,
+            preparation_idempotency_key: value.preparation_idempotency_key,
+            config_projection: value.config_projection,
+            prepared_at: value.prepared_at,
+            expires_at: value.expires_at,
+            response_hash: value.response_hash,
+        };
+        request.validate()?;
+        Ok(request)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "E3ConfigProjectionCancelRequestV1Def")]
+pub struct E3ConfigProjectionCancelRequestV1 {
+    pub schema_version: u32,
+    pub preparation_id: String,
+    pub preparation_idempotency_key: String,
+    pub config_projection: ConfigProjectionActivationCarrierV1,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct E3ConfigProjectionCancelRequestV1Def {
+    schema_version: u32,
+    preparation_id: String,
+    preparation_idempotency_key: String,
+    config_projection: ConfigProjectionActivationCarrierV1,
+}
+
+impl TryFrom<E3ConfigProjectionCancelRequestV1Def> for E3ConfigProjectionCancelRequestV1 {
+    type Error = String;
+    fn try_from(value: E3ConfigProjectionCancelRequestV1Def) -> Result<Self, Self::Error> {
+        let request = Self {
+            schema_version: value.schema_version,
+            preparation_id: value.preparation_id,
+            preparation_idempotency_key: value.preparation_idempotency_key,
+            config_projection: value.config_projection,
+        };
+        request.validate()?;
+        Ok(request)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "E3ConfigProjectionCancelResponseV1Def")]
+pub struct E3ConfigProjectionCancelResponseV1 {
+    pub schema_version: u32,
+    pub preparation_id: String,
+    pub disposition: E3ConfigProjectionCancelDispositionV1,
+    pub cancelled_dormant_projection_ref: ConfigProjectionRefV1,
+    pub response_hash: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct E3ConfigProjectionCancelResponseV1Def {
+    schema_version: u32,
+    preparation_id: String,
+    disposition: E3ConfigProjectionCancelDispositionV1,
+    cancelled_dormant_projection_ref: ConfigProjectionRefV1,
+    response_hash: String,
+}
+
+impl TryFrom<E3ConfigProjectionCancelResponseV1Def> for E3ConfigProjectionCancelResponseV1 {
+    type Error = String;
+    fn try_from(value: E3ConfigProjectionCancelResponseV1Def) -> Result<Self, Self::Error> {
+        let request = Self {
+            schema_version: value.schema_version,
+            preparation_id: value.preparation_id,
+            disposition: value.disposition,
+            cancelled_dormant_projection_ref: value.cancelled_dormant_projection_ref,
+            response_hash: value.response_hash,
+        };
+        request.validate()?;
+        Ok(request)
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum E3ConfigProjectionCancelDispositionV1 {
+    Cancelled,
+    AlreadyTerminal,
+}
+
+impl E3ConfigProjectionPrepareRequestV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 1 {
+            return Err(format!(
+                "unsupported member_dispatch.schema_version: {} (expected 1)",
+                self.schema_version
+            ));
+        }
+        validate_non_empty_request_field(
+            "member_dispatch.orchestration_session_id",
+            &self.orchestration_session_id,
+        )?;
+        validate_non_empty_request_field("member_dispatch.participant_id", &self.participant_id)?;
+        validate_non_empty_request_field(
+            "member_dispatch.orchestrator_participant_id",
+            &self.orchestrator_participant_id,
+        )?;
+        validate_optional_non_empty_request_field(
+            "member_dispatch.parent_participant_id",
+            self.parent_participant_id.as_deref(),
+        )?;
+        validate_optional_non_empty_request_field(
+            "member_dispatch.resumed_from_participant_id",
+            self.resumed_from_participant_id.as_deref(),
+        )?;
+        validate_non_empty_request_field("member_dispatch.backend_id", &self.backend_id)?;
+        validate_non_empty_request_field("member_dispatch.protocol", &self.protocol)?;
+        validate_non_empty_request_field("member_dispatch.run_id", &self.run_id)?;
+        validate_non_empty_request_field("member_dispatch.world_id", &self.world_id)?;
+        self.resolved_runtime.validate()?;
+        if let Some(proof) = self.retained_worker_launch_authority.as_ref() {
+            proof.validate()?;
+        }
+        let activation = &self.e2_launch_activation;
+        activation.validate()?;
+        self.authoring_input_ref.validate()?;
+        validate_prefixed_uuid_v7("preparation_id", &self.preparation_id, "e3p_")?;
+        if self.backend_id != "cli:codex-world"
+            || self.resolved_runtime.backend_kind != MemberRuntimeBackendKindV1::Codex
+            || self.integrated_auth.backend_id != self.backend_id
+            || self.integrated_auth.cli_codex.is_none()
+            || self.integrated_auth.api_env.is_some()
+        {
+            return Err("UnsupportedConfiguration".into());
+        }
+        self.integrated_auth
+            .validate()
+            .map_err(|_| "Malformed integrated auth".to_string())?;
+        if self.preparation_idempotency_key != self.canonical_idempotency_key()? {
+            return Err("WrongBinding preparation idempotency key".into());
+        }
+
+        if self.orchestrator_participant_id == self.participant_id {
+            return Err(
+                "member_dispatch.orchestrator_participant_id must not equal participant_id"
+                    .to_string(),
+            );
+        }
+        if self.parent_participant_id.as_deref() == Some(self.participant_id.as_str()) {
+            return Err(
+                "member_dispatch.parent_participant_id must not point to participant_id"
+                    .to_string(),
+            );
+        }
+        if self.resumed_from_participant_id.as_deref() == Some(self.participant_id.as_str()) {
+            return Err(
+                "member_dispatch.resumed_from_participant_id must not point to participant_id"
+                    .to_string(),
+            );
+        }
+
+        let expected_lineage = match activation.launch_kind {
+            E2MemberLaunchKindV1::FreshSpawn => {
+                self.retained_worker_launch_authority.is_some()
+                    && self.parent_participant_id.is_none()
+                    && self.resumed_from_participant_id.is_none()
+            }
+            E2MemberLaunchKindV1::Fork => {
+                self.retained_worker_launch_authority.is_none()
+                    && self.parent_participant_id.as_deref()
+                        == activation.source_participant_id.as_deref()
+                    && self.resumed_from_participant_id.is_none()
+            }
+        };
+        let expected_activation_id = format!(
+            "e2a_{}",
+            activation
+                .commitment_ref
+                .exact_linkage_hash
+                .get(..32)
+                .ok_or_else(|| {
+                    "member_dispatch V2 E2 commitment linkage hash is malformed".to_string()
+                })?
+        );
+        if !expected_lineage
+            || activation.activation_id != expected_activation_id
+            || activation.commitment_ref != activation.immutable_worker_cap_ref
+            || activation.orchestration_session_id != self.orchestration_session_id
+            || activation.caller_participant_id != self.orchestrator_participant_id
+            || activation.target_backend_id != self.backend_id
+            || activation.retained_participant_id != self.participant_id
+            || activation.bootstrap_run_id != self.run_id
+            || activation.target_world.world_id != self.world_id
+            || activation.target_world.world_generation != self.world_generation
+        {
+            return Err(
+                "member_dispatch V2 E2 activation conflicts with dispatch identity, lineage, or world binding"
+                    .to_string(),
+            );
+        }
+        if let Some(proof) = self.retained_worker_launch_authority.as_ref() {
+            if proof.orchestration_session_id != self.orchestration_session_id
+                || proof.caller_participant_id != self.orchestrator_participant_id
+                || proof.retained_participant_id != self.participant_id
+                || proof.bootstrap_run_id != self.run_id
+                || proof.backend_id != self.backend_id
+                || proof.protocol != self.protocol
+                || proof.world_binding.world_id != self.world_id
+                || proof.world_binding.world_generation != self.world_generation
+            {
+                return Err(
+                    "member_dispatch V2 launch authority conflicts with dispatch identity or world binding"
+                        .to_string(),
+                );
+            }
+        }
+        Ok(())
+    }
+    fn canonical_idempotency_key(&self) -> Result<String, String> {
+        let mut names = vec!["SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN"];
+        if self
+            .integrated_auth
+            .cli_codex
+            .as_ref()
+            .is_some_and(|auth| auth.account_id.is_some())
+        {
+            names.push("SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID");
+        }
+        let preimage = serde_json::json!({
+            "domain": "substrate.e3.config-projection-prepare-idempotency.v1",
+            "credential_shape": {"backend_id": &self.integrated_auth.backend_id, "ordered_field_names": names},
+            "request": {
+                "schema_version": &self.schema_version,
+                "preparation_id": &self.preparation_id,
+                "orchestration_session_id": &self.orchestration_session_id,
+                "participant_id": &self.participant_id,
+                "orchestrator_participant_id": &self.orchestrator_participant_id,
+                "parent_participant_id": &self.parent_participant_id,
+                "resumed_from_participant_id": &self.resumed_from_participant_id,
+                "backend_id": &self.backend_id,
+                "protocol": &self.protocol,
+                "run_id": &self.run_id,
+                "world_id": &self.world_id,
+                "world_generation": &self.world_generation,
+                "resolved_runtime": &self.resolved_runtime,
+                "retained_worker_launch_authority": &self.retained_worker_launch_authority,
+                "e2_launch_activation": &self.e2_launch_activation,
+                "authoring_input_ref": &self.authoring_input_ref,
+            }
+        });
+        Ok(format!("e3pik_{}", e3_projection_wire_hash(preimage)?))
+    }
+}
+
+impl E3ConfigProjectionPrepareResponseV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 1 {
+            return Err("Malformed preparation schema".into());
+        }
+        validate_prefixed_uuid_v7("preparation_id", &self.preparation_id, "e3p_")?;
+        let key = self
+            .preparation_idempotency_key
+            .strip_prefix("e3pik_")
+            .ok_or("Malformed idempotency key")?;
+        validate_lowercase_sha256_digest("preparation_idempotency_key", key)?;
+        self.config_projection.validate()?;
+        let (prepared, prepared_nanos) = e3_projection_wire_timestamp(&self.prepared_at)?;
+        let (expires, expires_nanos) = e3_projection_wire_timestamp(&self.expires_at)?;
+        if expires.checked_sub(prepared) != Some(120) || prepared_nanos != expires_nanos {
+            return Err("WrongBinding preparation expiry".into());
+        }
+        let mut response = serde_json::to_value(self).map_err(|_| "Malformed response")?;
+        response
+            .as_object_mut()
+            .ok_or("Malformed response")?
+            .remove("response_hash");
+        if self.response_hash
+            != e3_projection_wire_hash(serde_json::json!({
+                "domain": "substrate.e3.config-projection-prepare-response.v1", "response": response
+            }))?
+        {
+            return Err("HashInvalid preparation response".into());
+        }
+        Ok(())
+    }
+}
+impl E3ConfigProjectionCancelRequestV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 1 {
+            return Err("Malformed cancellation schema".into());
+        }
+        validate_prefixed_uuid_v7("preparation_id", &self.preparation_id, "e3p_")?;
+        let key = self
+            .preparation_idempotency_key
+            .strip_prefix("e3pik_")
+            .ok_or("Malformed idempotency key")?;
+        validate_lowercase_sha256_digest("preparation_idempotency_key", key)?;
+        self.config_projection.validate()
+    }
+}
+impl E3ConfigProjectionCancelResponseV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 1 {
+            return Err("Malformed cancellation schema".into());
+        }
+        validate_prefixed_uuid_v7("preparation_id", &self.preparation_id, "e3p_")?;
+        self.cancelled_dormant_projection_ref.validate()?;
+        let mut response = serde_json::to_value(self).map_err(|_| "Malformed response")?;
+        response
+            .as_object_mut()
+            .ok_or("Malformed response")?
+            .remove("response_hash");
+        if self.response_hash
+            != e3_projection_wire_hash(serde_json::json!({
+                "domain": "substrate.e3.config-projection-cancel-response.v1", "response": response
+            }))?
+        {
+            return Err("HashInvalid cancellation response".into());
+        }
+        Ok(())
+    }
+}
+
+// Transport stays below config-projection. These wire preimages contain no secret values.
+fn e3_projection_wire_hash(mut value: serde_json::Value) -> Result<String, String> {
+    fn sort(value: &mut serde_json::Value) -> Result<(), String> {
+        match value {
+            serde_json::Value::Object(map) => {
+                let entries = std::mem::take(map)
+                    .into_iter()
+                    .collect::<std::collections::BTreeMap<_, _>>();
+                for (key, mut value) in entries {
+                    sort(&mut value)?;
+                    map.insert(key, value);
+                }
+            }
+            serde_json::Value::Array(items) => {
+                for item in items {
+                    sort(item)?;
+                }
+            }
+            serde_json::Value::Number(n) if !n.is_i64() && !n.is_u64() => {
+                return Err("Malformed canonical number".into())
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+    sort(&mut value)?;
+    let bytes = serde_json::to_string(&value)
+        .map_err(|_| "Malformed canonical object")?
+        .replace('\u{7f}', "\\u007f");
+    Ok(format!("{:x}", Sha256::digest(bytes.as_bytes())))
+}
+
+fn e3_projection_wire_timestamp(value: &str) -> Result<(i64, u32), String> {
+    let invalid = || "Malformed canonical UTC timestamp".to_string();
+    let bytes = value.as_bytes();
+    if bytes.len() < 20
+        || !value.is_ascii()
+        || bytes[4] != b'-'
+        || bytes[7] != b'-'
+        || bytes[10] != b'T'
+        || bytes[13] != b':'
+        || bytes[16] != b':'
+        || bytes.last() != Some(&b'Z')
+    {
+        return Err(invalid());
+    }
+    let number = |range: std::ops::Range<usize>| -> Result<i64, String> {
+        let part = &value[range];
+        if !part.bytes().all(|b| b.is_ascii_digit()) {
+            return Err(invalid());
+        }
+        part.parse().map_err(|_| invalid())
+    };
+    let year = number(0..4)?;
+    let month = number(5..7)?;
+    let day = number(8..10)?;
+    let hour = number(11..13)?;
+    let minute = number(14..16)?;
+    let second = number(17..19)?;
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let days = [
+        31,
+        if leap { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
+    if !(1..=12).contains(&month)
+        || day < 1
+        || day > days[(month - 1) as usize]
+        || hour > 23
+        || minute > 59
+        || second > 59
+    {
+        return Err(invalid());
+    }
+    let nanos = if bytes.len() == 20 {
+        0
+    } else {
+        if bytes[19] != b'.' {
+            return Err(invalid());
+        }
+        let count = bytes.len() - 21;
+        if ![3, 6, 9].contains(&count) {
+            return Err(invalid());
+        }
+        let fraction = number(20..bytes.len() - 1)? as u32;
+        if fraction == 0 || (count > 3 && fraction % 1000 == 0) {
+            return Err(invalid());
+        }
+        fraction * 10u32.pow((9 - count) as u32)
+    };
+    let previous = year - 1;
+    let mut epoch_days = (year - 1970) * 365 + (previous.div_euclid(4) - 1969 / 4)
+        - (previous.div_euclid(100) - 1969 / 100)
+        + (previous.div_euclid(400) - 1969 / 400);
+    epoch_days += days[..(month - 1) as usize].iter().sum::<i64>() + day - 1;
+    Ok((
+        epoch_days * 86400 + hour * 3600 + minute * 60 + second,
+        nanos,
+    ))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(try_from = "ConfigProjectionActivationCarrierV1Def")]
 pub struct ConfigProjectionActivationCarrierV1 {
@@ -8491,5 +9025,163 @@ pipe_path=XFwuXHBpcGVcc3Vic3RyYXRlLWFnZW50\n";
         ] {
             assert!(invalid.validate().is_err());
         }
+    }
+
+    fn e3e_preparation_fixture() -> E3ConfigProjectionPrepareRequestV1 {
+        let mut dispatch = e3a_sample_member_dispatch_v2();
+        dispatch.backend_id = "cli:codex-world".into();
+        dispatch
+            .e2_launch_activation
+            .as_mut()
+            .unwrap()
+            .target_backend_id = dispatch.backend_id.clone();
+        dispatch
+            .retained_worker_launch_authority
+            .as_mut()
+            .unwrap()
+            .backend_id = dispatch.backend_id.clone();
+        let mut input = ConfigProjectionAuthoringInputRefV1 {
+            authority_store_id: dispatch.config_projection.authority_store_id.clone(),
+            effective_config_source_hash: "a".repeat(64),
+            agent_inventory_source_hash: "b".repeat(64),
+            runtime_artifact_manifest_id: "ram_01900000-0000-7000-8000-000000000001".into(),
+            runtime_artifact_manifest_revision: 1,
+            runtime_artifact_manifest_hash: "c".repeat(64),
+            input_ref_hash: String::new(),
+        };
+        input.input_ref_hash = input.canonical_hash().unwrap();
+        let mut request = E3ConfigProjectionPrepareRequestV1 {
+            schema_version: 1,
+            preparation_id: "e3p_01900000-0000-7000-8000-000000000001".into(),
+            preparation_idempotency_key: String::new(),
+            orchestration_session_id: dispatch.orchestration_session_id,
+            participant_id: dispatch.participant_id,
+            orchestrator_participant_id: dispatch.orchestrator_participant_id,
+            parent_participant_id: dispatch.parent_participant_id,
+            resumed_from_participant_id: dispatch.resumed_from_participant_id,
+            backend_id: dispatch.backend_id,
+            protocol: dispatch.protocol,
+            run_id: dispatch.run_id,
+            world_id: dispatch.world_id,
+            world_generation: dispatch.world_generation,
+            resolved_runtime: dispatch.resolved_runtime,
+            retained_worker_launch_authority: dispatch.retained_worker_launch_authority,
+            e2_launch_activation: dispatch.e2_launch_activation.unwrap(),
+            authoring_input_ref: input,
+            integrated_auth: GatewayIntegratedAuthPayloadV1 {
+                backend_id: "cli:codex-world".into(),
+                cli_codex: Some(GatewayCliCodexIntegratedAuthV1 {
+                    access_token: "synthetic-first-value".into(),
+                    account_id: None,
+                }),
+                api_env: None,
+            },
+        };
+        request.preparation_idempotency_key = request.canonical_idempotency_key().unwrap();
+        request
+    }
+
+    #[test]
+    fn e3e_prepare_round_trip_binds_e2_without_hashing_secret_values() {
+        let mut request = e3e_preparation_fixture();
+        request.validate().unwrap();
+        let key = request.preparation_idempotency_key.clone();
+        request
+            .integrated_auth
+            .cli_codex
+            .as_mut()
+            .unwrap()
+            .access_token = "synthetic-retry-value".into();
+        assert_eq!(request.canonical_idempotency_key().unwrap(), key);
+        request.validate().unwrap();
+        let encoded = serde_json::to_vec(&request).unwrap();
+        let decoded: E3ConfigProjectionPrepareRequestV1 = serde_json::from_slice(&encoded).unwrap();
+        assert_eq!(decoded.preparation_idempotency_key, key);
+        request
+            .integrated_auth
+            .cli_codex
+            .as_mut()
+            .unwrap()
+            .account_id = Some("synthetic-account".into());
+        assert_ne!(request.canonical_idempotency_key().unwrap(), key);
+        assert!(request.validate().is_err());
+    }
+
+    #[test]
+    fn e3e_prepare_rejects_unknown_duplicate_and_wrong_lineage() {
+        let request = e3e_preparation_fixture();
+        let original = serde_json::to_value(&request).unwrap();
+        for (field, value) in [
+            ("unknown", serde_json::json!(true)),
+            ("schema_version", serde_json::json!(2)),
+            ("parent_participant_id", serde_json::json!("wrong-parent")),
+            ("retained_worker_launch_authority", serde_json::Value::Null),
+            ("world_generation", serde_json::json!(999)),
+        ] {
+            let mut changed = original.clone();
+            changed[field] = value;
+            assert!(serde_json::from_value::<E3ConfigProjectionPrepareRequestV1>(changed).is_err());
+        }
+        for field in [
+            "parent_participant_id",
+            "resumed_from_participant_id",
+            "retained_worker_launch_authority",
+        ] {
+            let mut missing = original.clone();
+            missing.as_object_mut().unwrap().remove(field);
+            assert!(serde_json::from_value::<E3ConfigProjectionPrepareRequestV1>(missing).is_err());
+        }
+        let encoded = serde_json::to_string(&request).unwrap();
+        let duplicate = encoded.replacen(
+            "\"schema_version\":1",
+            "\"schema_version\":1,\"schema_version\":1",
+            1,
+        );
+        assert!(serde_json::from_str::<E3ConfigProjectionPrepareRequestV1>(&duplicate).is_err());
+    }
+
+    #[test]
+    fn e3e_prepare_response_requires_exact_expiry_and_integrity() {
+        let request = e3e_preparation_fixture();
+        let mut response = E3ConfigProjectionPrepareResponseV1 {
+            schema_version: 1,
+            preparation_id: request.preparation_id,
+            preparation_idempotency_key: request.preparation_idempotency_key,
+            config_projection: e3a_sample_projection_carrier(),
+            prepared_at: "2026-09-12T12:00:00Z".into(),
+            expires_at: "2026-09-12T12:02:00Z".into(),
+            response_hash: String::new(),
+        };
+        let mut value = serde_json::to_value(&response).unwrap();
+        value.as_object_mut().unwrap().remove("response_hash");
+        response.response_hash = e3_projection_wire_hash(serde_json::json!({
+            "domain":"substrate.e3.config-projection-prepare-response.v1", "response":value
+        }))
+        .unwrap();
+        response.validate().unwrap();
+        let encoded = serde_json::to_vec(&response).unwrap();
+        assert_eq!(
+            serde_json::from_slice::<E3ConfigProjectionPrepareResponseV1>(&encoded).unwrap(),
+            response
+        );
+        response.expires_at = "2026-09-12T12:02:01Z".into();
+        assert!(response.validate().is_err());
+        for date in [
+            "2026-02-29T12:00:00Z",
+            "2026-01-01T24:00:00Z",
+            "2026-01-01T00:00:00.000Z",
+            "2026-01-01T00:00:00+00:00",
+        ] {
+            assert!(e3_projection_wire_timestamp(date).is_err());
+        }
+        assert_eq!(
+            e3_projection_wire_timestamp("2024-02-29T00:00:00Z")
+                .unwrap()
+                .0
+                + 86400,
+            e3_projection_wire_timestamp("2024-03-01T00:00:00Z")
+                .unwrap()
+                .0
+        );
     }
 }

@@ -30,6 +30,100 @@ pub struct AgentClient {
 }
 
 impl AgentClient {
+    /// Prepare one E3 gateway attempt on the authenticated inherited Linux socket.
+    pub async fn e3_config_projection_prepare(
+        &self,
+        request: transport_api_types::E3ConfigProjectionPrepareRequestV1,
+    ) -> Result<transport_api_types::E3ConfigProjectionPrepareResponseV1> {
+        if !matches!(&self.transport, Transport::UnixSocket { path } if path == Path::new("/run/substrate.sock"))
+        {
+            return Err(anyhow!("UnsupportedConfiguration"));
+        }
+        request
+            .validate()
+            .map_err(|_| anyhow!("Malformed E3 preparation"))?;
+        let bytes =
+            serde_json::to_vec(&request).map_err(|_| anyhow!("Malformed E3 preparation"))?;
+        if bytes.len() > 64 * 1024 {
+            return Err(anyhow!("Malformed E3 preparation"));
+        }
+        let uri = self
+            .connector
+            .build_uri("/v1/e3/config-projection/prepare")
+            .map_err(|_| anyhow!("UnsupportedConfiguration"))?;
+        let mut http_request = Request::builder()
+            .method(Method::POST)
+            .uri(uri)
+            .header("content-type", "application/json")
+            .body(Full::new(Bytes::from(bytes)))
+            .map_err(|_| anyhow!("Malformed E3 preparation"))?;
+        self.connector.prepare_request(&mut http_request);
+        let response = self
+            .connector
+            .execute(http_request)
+            .await
+            .map_err(|_| anyhow!("E3 preparation transport failed"))?;
+        if response.status() == StatusCode::NOT_FOUND {
+            return Err(anyhow!("UnsupportedConfiguration"));
+        }
+        if !response.status().is_success() {
+            return Err(anyhow!("E3 preparation rejected"));
+        }
+        let bytes = http_body_util::Limited::new(response.into_body(), 64 * 1024)
+            .collect()
+            .await
+            .map_err(|_| anyhow!("Malformed E3 preparation response"))?
+            .to_bytes();
+        let response: transport_api_types::E3ConfigProjectionPrepareResponseV1 =
+            serde_json::from_slice(&bytes)
+                .map_err(|_| anyhow!("Malformed E3 preparation response"))?;
+        if response.preparation_id != request.preparation_id
+            || response.preparation_idempotency_key != request.preparation_idempotency_key
+        {
+            return Err(anyhow!("WrongBinding E3 preparation response"));
+        }
+        Ok(response)
+    }
+
+    /// Cancel the exact prepared carrier without retrying on another transport.
+    pub async fn e3_config_projection_cancel(
+        &self,
+        request: transport_api_types::E3ConfigProjectionCancelRequestV1,
+    ) -> Result<transport_api_types::E3ConfigProjectionCancelResponseV1> {
+        if !matches!(&self.transport, Transport::UnixSocket { path } if path == Path::new("/run/substrate.sock"))
+        {
+            return Err(anyhow!("UnsupportedConfiguration"));
+        }
+        request
+            .validate()
+            .map_err(|_| anyhow!("Malformed E3 cancellation"))?;
+        let response = self
+            .post("/v1/e3/config-projection/cancel", &request)
+            .await
+            .map_err(|_| anyhow!("E3 cancellation transport failed"))?;
+        if response.status() == StatusCode::NOT_FOUND {
+            return Err(anyhow!("UnsupportedConfiguration"));
+        }
+        if !response.status().is_success() {
+            return Err(anyhow!("E3 cancellation rejected"));
+        }
+        let bytes = http_body_util::Limited::new(response.into_body(), 64 * 1024)
+            .collect()
+            .await
+            .map_err(|_| anyhow!("Malformed E3 cancellation response"))?
+            .to_bytes();
+        let response: transport_api_types::E3ConfigProjectionCancelResponseV1 =
+            serde_json::from_slice(&bytes)
+                .map_err(|_| anyhow!("Malformed E3 cancellation response"))?;
+        if response.preparation_id != request.preparation_id
+            || response.cancelled_dormant_projection_ref
+                != request.config_projection.dormant_projection_ref
+        {
+            return Err(anyhow!("WrongBinding E3 cancellation response"));
+        }
+        Ok(response)
+    }
+
     /// Create a new client with the given transport.
     pub fn new(transport: Transport) -> Result<Self> {
         let connector = build_connector(&transport)
@@ -626,6 +720,183 @@ mod tests {
         assert_eq!(captured, expected);
         assert_eq!(captured["member_dispatch"]["schema_version"], 2);
         assert!(captured["member_dispatch"]["config_projection"].is_object());
+    }
+
+    #[tokio::test]
+    async fn e3e_cancel_404_is_unsupported_without_retry_or_body_disclosure() {
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            loop {
+                let mut chunk = [0u8; 4096];
+                let count = stream.read(&mut chunk).await.unwrap();
+                assert_ne!(count, 0);
+                request.extend_from_slice(&chunk[..count]);
+                if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            assert!(request.starts_with(b"POST /v1/e3/config-projection/cancel HTTP/1.1\r\n"));
+            stream.write_all(b"HTTP/1.1 404 Not Found\r\ncontent-length: 1000000000\r\nconnection: close\r\n\r\nsynthetic-response-secret").await.unwrap();
+            // Keep the misleading response body incomplete: 404 must not wait for or expose it.
+            assert!(
+                tokio::time::timeout(std::time::Duration::from_millis(200), listener.accept())
+                    .await
+                    .is_err()
+            );
+        });
+        let transport = Transport::Tcp {
+            host: "127.0.0.1".into(),
+            port,
+        };
+        // Exercise HTTP behavior with a local test connector while preserving the production
+        // metadata check. No privileged service socket is replaced for this unit test.
+        let client = AgentClient {
+            transport: Transport::UnixSocket {
+                path: "/run/substrate.sock".into(),
+            },
+            connector: Arc::from(build_connector(&transport).unwrap()),
+        };
+        let dispatch = e3a_passthrough_request().member_dispatch.unwrap();
+        let carrier = dispatch.config_projection().unwrap().clone();
+        let request = transport_api_types::E3ConfigProjectionCancelRequestV1 {
+            schema_version: 1,
+            preparation_id: "e3p_018f0f2e-7b4c-7aa1-8c22-123456789ab0".into(),
+            preparation_idempotency_key: format!("e3pik_{}", "a".repeat(64)),
+            config_projection: carrier,
+        };
+        let error = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            client.e3_config_projection_cancel(request),
+        )
+        .await
+        .unwrap()
+        .unwrap_err();
+        assert_eq!(error.to_string(), "UnsupportedConfiguration");
+        server.await.unwrap();
+    }
+
+    fn e3e_prepare_request() -> transport_api_types::E3ConfigProjectionPrepareRequestV1 {
+        let dispatch = e3a_passthrough_request().member_dispatch.unwrap();
+        let mut value = serde_json::to_value(dispatch).unwrap();
+        let request = value.as_object_mut().unwrap();
+        request.remove("initial_prompt");
+        request.remove("config_projection");
+        request.insert("schema_version".into(), serde_json::json!(1));
+        request.insert("backend_id".into(), serde_json::json!("cli:codex-world"));
+        request.get_mut("e2_launch_activation").unwrap()["target_backend_id"] =
+            serde_json::json!("cli:codex-world");
+        request.insert(
+            "preparation_id".into(),
+            serde_json::json!("e3p_01900000-0000-7000-8000-000000000001"),
+        );
+        request.insert("authoring_input_ref".into(), serde_json::from_str(r#"{"authority_store_id":"cpa_018f0f2e-7b4c-7aa1-8c22-123456789ab0","effective_config_source_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","agent_inventory_source_hash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","runtime_artifact_manifest_id":"ram_01900000-0000-7000-8000-000000000001","runtime_artifact_manifest_revision":1,"runtime_artifact_manifest_hash":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","input_ref_hash":"ebb25473d73a319cbf2842b7970aa85b0783e1b160d071cce677a920cc457227"}"#).unwrap());
+        request.insert(
+            "resumed_from_participant_id".into(),
+            serde_json::Value::Null,
+        );
+        request.insert(
+            "retained_worker_launch_authority".into(),
+            serde_json::Value::Null,
+        );
+        // Fixed canonical nonsecret fixture digest; strict decoding validates this binding.
+        request.insert(
+            "preparation_idempotency_key".into(),
+            serde_json::json!(
+                "e3pik_e5b6672d2eb535be6ffbe78e1f6a6979d2333700009931e5cc4632cf5f581f6d"
+            ),
+        );
+        request.insert("integrated_auth".into(), serde_json::json!({
+            "backend_id":"cli:codex-world", "cli_codex":{"access_token":"synthetic-e3-prepare-token", "account_id":null}
+        }));
+        serde_json::from_value(value).unwrap()
+    }
+
+    #[tokio::test]
+    async fn e3e_prepare_404_is_unsupported_without_retry_or_response_body_read() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let request = e3e_prepare_request();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut bytes = Vec::new();
+            let mut chunk = [0; 4096];
+            loop {
+                let n = stream.read(&mut chunk).await.unwrap();
+                assert_ne!(n, 0);
+                bytes.extend_from_slice(&chunk[..n]);
+                let Some(header_end) = bytes.windows(4).position(|part| part == b"\r\n\r\n") else {
+                    continue;
+                };
+                let header = std::str::from_utf8(&bytes[..header_end]).unwrap();
+                assert!(header.starts_with("POST /v1/e3/config-projection/prepare HTTP/1.1\r\n"));
+                let length: usize = header
+                    .lines()
+                    .find_map(|line| {
+                        line.to_ascii_lowercase()
+                            .strip_prefix("content-length:")
+                            .map(|n| n.trim().parse().unwrap())
+                    })
+                    .unwrap();
+                if bytes.len() >= header_end + 4 + length {
+                    break;
+                }
+            }
+            stream.write_all(b"HTTP/1.1 404 Not Found\r\ncontent-length: 1000000000\r\nconnection: close\r\n\r\nsynthetic-response-secret").await.unwrap();
+            // Deliberately incomplete response: the client must return before reading it or retrying.
+            assert!(
+                tokio::time::timeout(std::time::Duration::from_millis(200), listener.accept())
+                    .await
+                    .is_err()
+            );
+        });
+        let connector_transport = Transport::Tcp {
+            host: "127.0.0.1".into(),
+            port,
+        };
+        let client = AgentClient {
+            transport: Transport::UnixSocket {
+                path: "/run/substrate.sock".into(),
+            },
+            connector: Arc::from(build_connector(&connector_transport).unwrap()),
+        };
+        let error = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            client.e3_config_projection_prepare(request),
+        )
+        .await
+        .unwrap()
+        .unwrap_err();
+        assert_eq!(error.to_string(), "UnsupportedConfiguration");
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn e3e_cancel_rejects_tcp_and_alternate_uds_before_connecting() {
+        let dispatch = e3a_passthrough_request().member_dispatch.unwrap();
+        let request = transport_api_types::E3ConfigProjectionCancelRequestV1 {
+            schema_version: 1,
+            preparation_id: "e3p_018f0f2e-7b4c-7aa1-8c22-123456789ab0".into(),
+            preparation_idempotency_key: format!("e3pik_{}", "a".repeat(64)),
+            config_projection: dispatch.config_projection().unwrap().clone(),
+        };
+        for client in [
+            AgentClient::tcp("127.0.0.1", 1).unwrap(),
+            AgentClient::unix_socket("/not-an-e3-socket").unwrap(),
+        ] {
+            assert_eq!(
+                client
+                    .e3_config_projection_cancel(request.clone())
+                    .await
+                    .unwrap_err()
+                    .to_string(),
+                "UnsupportedConfiguration"
+            );
+        }
     }
 
     #[cfg(unix)]

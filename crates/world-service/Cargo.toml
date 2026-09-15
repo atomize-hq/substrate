@@ -58,8 +58,10 @@ toml = "0.8"
 
 # Platform-specific world backends
 [target.'cfg(target_os = "linux")'.dependencies]
+shell = { path = "../shell" }
 world = { path = "../world" }
 agent_api = { package = "unified-agent-api", version = "=0.3.7", default-features = false, features = ["codex", "claude_code"] }
 
 [dev-dependencies]
+config-projection = { path = "../config-projection", features = ["test-support"] }
 tempfile = "3"

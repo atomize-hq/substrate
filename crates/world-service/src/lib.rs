@@ -2,6 +2,10 @@
 
 #[cfg(target_os = "linux")]
 mod e3_child_security;
+#[cfg(target_os = "linux")]
+mod e3_config_projection_prepare;
+#[cfg(target_os = "linux")]
+mod e3_local_transport;
 mod enforcement_plan;
 #[cfg(target_os = "linux")]
 mod gateway_runtime;
@@ -77,6 +81,23 @@ pub async fn run_world_service() -> Result<()> {
     let service =
         WorldService::new_with_privileged_child_exclusion(Arc::clone(&privileged_child_exclusion))?;
 
+    #[cfg(target_os = "linux")]
+    if let Some(manager) = &service.e3_projection_preparations {
+        let service_instance_id = format!("wsi_{}", uuid::Uuid::now_v7());
+        if let Err(error) = manager.recover_expired(
+            None,
+            Some(
+                e3_config_projection_prepare::E3PreparationRecoveryV1::Startup {
+                    service_instance_id: &service_instance_id,
+                },
+            ),
+        ) {
+            privileged_child_exclusion.poison_recovering()?;
+            return Err(error)
+                .context("E3 preparation recovery failed before startup GC/admission");
+        }
+    }
+
     let socket_path = std::env::var_os(SOCKET_ENV_VAR)
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(SOCKET_PATH));
@@ -94,6 +115,11 @@ pub async fn run_world_service() -> Result<()> {
         tcp_inherited = 0,
         "Socket activation is unavailable; binding listeners directly"
     );
+
+    #[cfg(target_os = "linux")]
+    let inherited_uds_count = socket_activation
+        .as_ref()
+        .map_or(0, |activation| activation.unix_listeners.len());
 
     #[cfg(unix)]
     let inherited_uds = socket_activation
@@ -240,6 +266,8 @@ pub async fn run_world_service() -> Result<()> {
             router.clone(),
             socket_path.clone(),
             inherited_uds,
+            #[cfg(target_os = "linux")]
+            Some((service.clone(), inherited_uds_count)),
             shutdown.clone(),
         );
         server_tasks.push(uds_future.boxed());
@@ -313,6 +341,48 @@ fn prepare_socket_path(path: &Path) -> Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
+fn build_e3_authenticated_uds_router(
+    service: WorldService,
+    inherited: &InheritedUnixListener,
+    inherited_uds_count: usize,
+) -> Option<(
+    Router,
+    e3_local_transport::E3AuthenticatedLinuxUdsListenerV1,
+)> {
+    let configured = service.accepted_home_authority.as_ref()?;
+    service.e3_projection_preparations.as_ref()?;
+    let mut core = libc::rlimit {
+        rlim_cur: libc::RLIM_INFINITY,
+        rlim_max: libc::RLIM_INFINITY,
+    };
+    // Registration is an observation only: service startup owns the irreversible hardening.
+    if unsafe { libc::prctl(libc::PR_GET_DUMPABLE) } != 0
+        || unsafe { libc::getrlimit(libc::RLIMIT_CORE, &mut core) } != 0
+        || core.rlim_cur != 0
+        || core.rlim_max != 0
+    {
+        return None;
+    }
+    let authentication = e3_local_transport::E3AuthenticatedLinuxUdsListenerV1::from_inherited(
+        inherited,
+        inherited_uds_count,
+        Arc::clone(configured),
+    )
+    .ok()?;
+    let routes = Router::new()
+        .route(
+            "/v1/e3/config-projection/prepare",
+            post(handlers::e3_config_projection_prepare),
+        )
+        .route(
+            "/v1/e3/config-projection/cancel",
+            post(handlers::e3_config_projection_cancel),
+        )
+        .with_state(service.clone());
+    Some((build_router(service).merge(routes), authentication))
+}
+
 fn build_router(service: WorldService) -> Router {
     Router::new()
         .route("/v1/capabilities", get(handlers::capabilities))
@@ -372,8 +442,63 @@ async fn run_uds_server(
     router: Router,
     socket_path: PathBuf,
     inherited: Option<InheritedUnixListener>,
+    #[cfg(target_os = "linux")] e3: Option<(WorldService, usize)>,
     shutdown: CancellationToken,
 ) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    let mut inherited = inherited;
+    #[cfg(target_os = "linux")]
+    if let Some((service, count)) = e3 {
+        if let Some(listener) = inherited.as_ref() {
+            if let Some((authenticated_router, authentication)) =
+                build_e3_authenticated_uds_router(service, listener, count)
+            {
+                let listener = Arc::new(
+                    inherited
+                        .take()
+                        .context("E3 inherited listener disappeared")?,
+                );
+                let mut connections = tokio::task::JoinSet::new();
+                loop {
+                    tokio::select! {
+                        _ = shutdown.cancelled() => break,
+                        Some(result) = connections.join_next(), if !connections.is_empty() => {
+                            if result.is_err() {
+                                warn!("E3 UDS connection task failed");
+                            }
+                        }
+                        accepted = listener.listener.accept() => {
+                            let (stream, _) = accepted.context("E3 UDS accept failed")?;
+                            // No Hyper task, HTTP parser, or body reader exists before SO_PEERCRED
+                            // and the descriptor-bound installed account/process checks succeed.
+                            let Ok(peer) = authentication.accept_peer(&listener, &stream) else {
+                                drop(stream);
+                                continue;
+                            };
+                            let connection_router = authenticated_router.clone()
+                                .layer(axum::Extension(peer))
+                                .layer(axum::Extension(Arc::clone(&listener)));
+                            let connection_shutdown = shutdown.clone();
+                            connections.spawn(async move {
+                                let connection = hyper::server::conn::Http::new()
+                                    .serve_connection(stream, connection_router).with_upgrades();
+                                tokio::pin!(connection);
+                                tokio::select! {
+                                    result = &mut connection => { let _ = result; }
+                                    _ = connection_shutdown.cancelled() => {
+                                        connection.as_mut().graceful_shutdown();
+                                        let _ = connection.await;
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }
+                while connections.join_next().await.is_some() {}
+                return Ok(());
+            }
+        }
+    }
     let (listener, mode, fd, name) = match inherited {
         Some(inherited) => (
             inherited.listener,
@@ -675,6 +800,36 @@ mod tests {
         let err = read_tcp_port().unwrap_err();
         assert!(err.to_string().contains("Failed to parse"));
         reset_env();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn e3_routes_are_absent_from_baseline_router_before_body_read() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use tower::ServiceExt;
+        let state = tempfile::tempdir().unwrap();
+        let service = WorldService::new_with_member_turn_state_root_for_test(state.path()).unwrap();
+        for route in [
+            "/v1/e3/config-projection/prepare",
+            "/v1/e3/config-projection/cancel",
+        ] {
+            let polled = Arc::new(AtomicBool::new(false));
+            let observed = Arc::clone(&polled);
+            let stream = futures_util::stream::once(async move {
+                observed.store(true, Ordering::SeqCst);
+                Ok::<_, std::io::Error>(hyper::body::Bytes::from_static(b"synthetic-secret"))
+            });
+            let response = build_router(service.clone())
+                .oneshot(
+                    hyper::Request::post(route)
+                        .body(hyper::Body::wrap_stream(stream))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), hyper::StatusCode::NOT_FOUND);
+            assert!(!polled.load(Ordering::SeqCst));
+        }
     }
 
     #[cfg(target_os = "linux")]

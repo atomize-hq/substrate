@@ -852,6 +852,39 @@ fn config_key_is_explicit(
         .is_some_and(|layer| layer != "default")
 }
 
+/// Resolve fresh integrated auth for the E3 preparation endpoint.
+#[cfg(target_os = "linux")]
+#[allow(dead_code)] // The retained dispatch caller is admitted separately in E3-F.
+pub(crate) fn resolve_e3_integrated_auth_payload(
+    effective_config: &config_model::SubstrateConfig,
+    effective_policy: &substrate_broker::Policy,
+    backend_entry: &agent_inventory::AgentInventoryEntryV1,
+    account_home: &Path,
+) -> anyhow::Result<GatewayIntegratedAuthPayloadV1> {
+    if !effective_config.llm.gateway.enabled
+        || effective_config.llm.gateway.mode != LlmGatewayMode::InWorld
+        || effective_config.llm.routing.default_backend != CLI_CODEX_WORLD_BACKEND
+        || !matches!(
+            backend_entry.file.config.kind,
+            agent_inventory::AgentConfigKind::Cli
+        )
+    {
+        anyhow::bail!("UnsupportedConfiguration");
+    }
+    let payload = resolve_integrated_auth_payload(
+        effective_config,
+        effective_policy,
+        backend_entry,
+        &codex_auth_state_path(account_home),
+    )
+    .map_err(|_| anyhow::anyhow!("E3 integrated authentication unavailable"))?
+    .ok_or_else(|| anyhow::anyhow!("UnsupportedConfiguration"))?;
+    payload
+        .validate()
+        .map_err(|_| anyhow::anyhow!("Malformed E3 integrated authentication"))?;
+    Ok(payload)
+}
+
 fn resolve_integrated_auth_payload(
     effective_config: &config_model::SubstrateConfig,
     effective_policy: &substrate_broker::Policy,

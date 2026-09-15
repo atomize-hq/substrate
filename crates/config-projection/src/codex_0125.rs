@@ -15,6 +15,276 @@ use crate::{
 
 pub struct Codex0125ProjectionV1;
 
+/// Process-local pre-publication material for one Codex native projection.
+///
+/// The accepted-home source does not exist when this is constructed, so this
+/// carries no identity or layer attestation for that future source.
+pub struct Codex0125ProjectionPlanV1 {
+    identity: ConfigProjectionIdentityV1,
+    effective: EffectiveAgentConfigProjectionV1,
+    managed_gateway: ManagedGatewayProjectionV1,
+    root: NativeProjectionRootV1,
+    fence_id: String,
+    project_loader_inputs: Vec<CodexLoaderInputAttestationV1>,
+    config_bytes: Vec<u8>,
+    config_byte_length: u64,
+    config_sha256: String,
+    renderer: NativeRendererIdentityV1,
+    environment: EffectiveEnvironmentV1,
+    invocation: CodexNativeInvocationV1,
+}
+
+impl Codex0125ProjectionPlanV1 {
+    pub(crate) fn config_bytes_v1(&self) -> &[u8] {
+        &self.config_bytes
+    }
+}
+
+/// Descriptor-backed observations of the just-created accepted-home source.
+pub(crate) struct Codex0125NativeSourceObservationV1 {
+    source_root: crate::CanonicalDirectoryV1,
+    codex_home: crate::CanonicalDirectoryV1,
+    system_empty: crate::CanonicalDirectoryV1,
+    config_device_id: u64,
+    config_inode: u64,
+    config_mode: u32,
+    config_owner_uid: u64,
+    config_owner_gid: u64,
+    config_link_count: u64,
+    config_byte_length: u64,
+    config_sha256: String,
+}
+
+impl Codex0125NativeSourceObservationV1 {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        source_root: crate::CanonicalDirectoryV1,
+        codex_home: crate::CanonicalDirectoryV1,
+        system_empty: crate::CanonicalDirectoryV1,
+        config_device_id: u64,
+        config_inode: u64,
+        config_mode: u32,
+        config_owner_uid: u64,
+        config_owner_gid: u64,
+        config_link_count: u64,
+        config_byte_length: u64,
+        config_sha256: String,
+    ) -> Self {
+        Self {
+            source_root,
+            codex_home,
+            system_empty,
+            config_device_id,
+            config_inode,
+            config_mode,
+            config_owner_uid,
+            config_owner_gid,
+            config_link_count,
+            config_byte_length,
+            config_sha256,
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_config_toml_v1(
+    model: &str,
+    mcp_servers: &[crate::EffectiveMcpServerV1],
+    features: &[LogicalFeatureV1],
+    codex_base_url: &str,
+    root_guest_absolute_path: &str,
+    workspace_physical_path: &str,
+    orchestration_session_id: &str,
+    retained_participant_id: &str,
+    identity_hash: &str,
+) -> Result<Vec<u8>, ConfigProjectionFailureV1> {
+    fn toml_string(value: &str) -> String {
+        let mut rendered = String::from("\"");
+        for character in value.chars() {
+            match character {
+                '"' => rendered.push_str("\\\""),
+                '\\' => rendered.push_str("\\\\"),
+                '\u{0008}' => rendered.push_str("\\b"),
+                '\t' => rendered.push_str("\\t"),
+                '\n' => rendered.push_str("\\n"),
+                '\u{000c}' => rendered.push_str("\\f"),
+                '\r' => rendered.push_str("\\r"),
+                character if character <= '\u{001f}' || character == '\u{007f}' => {
+                    rendered.push_str(&format!("\\u{:04x}", character as u32));
+                }
+                character => rendered.push(character),
+            }
+        }
+        rendered.push('"');
+        rendered
+    }
+    fn ensure_sorted_unique<'a>(
+        values: impl Iterator<Item = &'a str>,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        let mut previous: Option<&[u8]> = None;
+        for value in values {
+            if value.is_empty() || previous.is_some_and(|item| value.as_bytes() <= item) {
+                return Err(ConfigProjectionFailureV1::Conflict);
+            }
+            previous = Some(value.as_bytes());
+        }
+        Ok(())
+    }
+    fn validate_named_values(values: &[NamedValueV1]) -> Result<(), ConfigProjectionFailureV1> {
+        ensure_sorted_unique(values.iter().map(|value| value.name.as_str()))?;
+        for value in values {
+            let upper = value.name.to_ascii_uppercase();
+            if upper.contains("AUTHORIZATION")
+                || upper.contains("COOKIE")
+                || upper.ends_with("_TOKEN")
+                || upper.ends_with("_SECRET")
+                || upper.ends_with("_KEY")
+            {
+                return Err(ConfigProjectionFailureV1::Malformed);
+            }
+        }
+        Ok(())
+    }
+    fn toml_array(values: &[String]) -> String {
+        format!(
+            "[{}]",
+            values
+                .iter()
+                .map(|value| toml_string(value))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    }
+    fn toml_table(values: &[NamedValueV1]) -> String {
+        format!(
+            "{{ {} }}",
+            values
+                .iter()
+                .map(|value| format!(
+                    "{} = {}",
+                    toml_string(&value.name),
+                    toml_string(&value.value)
+                ))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    }
+    fn known_feature(name: &str) -> bool {
+        matches!(
+            name,
+            "apps"
+                | "apply_patch_freeform"
+                | "artifact"
+                | "browser_use"
+                | "code_mode"
+                | "codex_hooks"
+                | "computer_use"
+                | "enable_request_compression"
+                | "fast_mode"
+                | "guardian_approval"
+                | "image_generation"
+                | "js_repl"
+                | "memories"
+                | "multi_agent"
+                | "personality"
+                | "request_permissions_tool"
+                | "runtime_metrics"
+                | "shell_snapshot"
+                | "shell_tool"
+                | "tool_call_mcp_elicitation"
+                | "tool_search"
+                | "tool_suggest"
+                | "unified_exec"
+                | "undo"
+                | "workspace_dependencies"
+        )
+    }
+
+    if codex_base_url.contains('#')
+        || codex_base_url.contains('@')
+        || !(codex_base_url.starts_with("http://127.0.0.1:")
+            || codex_base_url.starts_with("http://[::1]:"))
+    {
+        return Err(ConfigProjectionFailureV1::UnsupportedConfiguration);
+    }
+    ensure_sorted_unique(mcp_servers.iter().map(|server| server.server_id.as_str()))?;
+    ensure_sorted_unique(features.iter().map(|feature| feature.name.as_str()))?;
+
+    let mut output = String::new();
+    output.push_str(&format!("model = {}\n", toml_string(model)));
+    output.push_str("model_provider = \"substrate-managed-gateway\"\n");
+    output.push_str("check_for_update_on_startup = false\n");
+    output.push_str("cli_auth_credentials_store = \"ephemeral\"\n");
+    output.push_str(&format!(
+        "log_dir = {}\n\n",
+        toml_string(&format!("{root_guest_absolute_path}/state/log"))
+    ));
+    output.push_str("[model_providers.substrate-managed-gateway]\n");
+    output.push_str("name = \"Substrate managed gateway\"\n");
+    output.push_str(&format!("base_url = {}\n", toml_string(codex_base_url)));
+    output.push_str("wire_api = \"responses\"\n");
+    output.push_str("requires_openai_auth = false\n");
+    output.push_str("supports_websockets = false\n");
+    output.push_str(&format!(
+        "http_headers = {{ \"X-Substrate-Orchestration-Session\" = {}, \"X-Substrate-Participant\" = {}, \"X-Substrate-Projection\" = {} }}\n\n",
+        toml_string(orchestration_session_id),
+        toml_string(retained_participant_id),
+        toml_string(identity_hash),
+    ));
+    output.push_str(&format!(
+        "[projects.{}]\ntrust_level = \"untrusted\"\n",
+        toml_string(workspace_physical_path)
+    ));
+
+    for server in mcp_servers {
+        output.push_str(&format!(
+            "\n[mcp_servers.{}]\nenabled = {}\n",
+            toml_string(&server.server_id),
+            server.enabled
+        ));
+        match &server.transport {
+            LogicalMcpTransportV1::Stdio {
+                command,
+                args,
+                nonsecret_env,
+            } => {
+                validate_named_values(nonsecret_env)?;
+                output.push_str(&format!("command = {}\n", toml_string(command)));
+                output.push_str(&format!("args = {}\n", toml_array(args)));
+                if !nonsecret_env.is_empty() {
+                    output.push_str(&format!("env = {}\n", toml_table(nonsecret_env)));
+                }
+            }
+            LogicalMcpTransportV1::StreamableHttp {
+                url,
+                nonsecret_headers,
+            } => {
+                if url.contains('#') || url.contains('@') {
+                    return Err(ConfigProjectionFailureV1::Malformed);
+                }
+                validate_named_values(nonsecret_headers)?;
+                output.push_str(&format!("url = {}\n", toml_string(url)));
+                if !nonsecret_headers.is_empty() {
+                    output.push_str(&format!(
+                        "http_headers = {}\n",
+                        toml_table(nonsecret_headers)
+                    ));
+                }
+            }
+        }
+    }
+    if !features.is_empty() {
+        output.push_str("\n[features]\n");
+        for LogicalFeatureV1 { name, enabled } in features {
+            if !known_feature(name) {
+                return Err(ConfigProjectionFailureV1::Malformed);
+            }
+            output.push_str(&format!("{} = {}\n", toml_string(name), enabled));
+        }
+    }
+    Ok(output.into_bytes())
+}
+
 impl Codex0125ProjectionV1 {
     pub fn render(
         identity: &ConfigProjectionIdentityV1,
@@ -22,224 +292,8 @@ impl Codex0125ProjectionV1 {
         managed_gateway: &ManagedGatewayProjectionV1,
         root: NativeProjectionRootV1,
         fence_id: &str,
-        loader_inputs: Vec<CodexLoaderInputAttestationV1>,
-    ) -> Result<NativeAgentConfigProjectionV1, ConfigProjectionFailureV1> {
-        struct RenderConfigTomlInput<'a> {
-            model: &'a str,
-            mcp_servers: &'a [crate::EffectiveMcpServerV1],
-            features: &'a [LogicalFeatureV1],
-            codex_base_url: &'a str,
-            root_guest_absolute_path: &'a str,
-            workspace_physical_path: &'a str,
-            orchestration_session_id: &'a str,
-            retained_participant_id: &'a str,
-            identity_hash: &'a str,
-        }
-
-        fn render_config_toml(
-            input: RenderConfigTomlInput<'_>,
-        ) -> Result<Vec<u8>, ConfigProjectionFailureV1> {
-            fn toml_string(value: &str) -> String {
-                let mut rendered = String::from("\"");
-                for character in value.chars() {
-                    match character {
-                        '"' => rendered.push_str("\\\""),
-                        '\\' => rendered.push_str("\\\\"),
-                        '\u{0008}' => rendered.push_str("\\b"),
-                        '\t' => rendered.push_str("\\t"),
-                        '\n' => rendered.push_str("\\n"),
-                        '\u{000c}' => rendered.push_str("\\f"),
-                        '\r' => rendered.push_str("\\r"),
-                        character if character <= '\u{001f}' || character == '\u{007f}' => {
-                            rendered.push_str(&format!("\\u{:04x}", character as u32));
-                        }
-                        character => rendered.push(character),
-                    }
-                }
-                rendered.push('"');
-                rendered
-            }
-            fn ensure_sorted_unique<'a>(
-                values: impl Iterator<Item = &'a str>,
-            ) -> Result<(), ConfigProjectionFailureV1> {
-                let mut previous: Option<&[u8]> = None;
-                for value in values {
-                    if value.is_empty() || previous.is_some_and(|item| value.as_bytes() <= item) {
-                        return Err(ConfigProjectionFailureV1::Conflict);
-                    }
-                    previous = Some(value.as_bytes());
-                }
-                Ok(())
-            }
-            fn validate_named_values(
-                values: &[NamedValueV1],
-            ) -> Result<(), ConfigProjectionFailureV1> {
-                ensure_sorted_unique(values.iter().map(|value| value.name.as_str()))?;
-                for value in values {
-                    let upper = value.name.to_ascii_uppercase();
-                    if upper.contains("AUTHORIZATION")
-                        || upper.contains("COOKIE")
-                        || upper.ends_with("_TOKEN")
-                        || upper.ends_with("_SECRET")
-                        || upper.ends_with("_KEY")
-                    {
-                        return Err(ConfigProjectionFailureV1::Malformed);
-                    }
-                }
-                Ok(())
-            }
-            fn toml_array(values: &[String]) -> String {
-                format!(
-                    "[{}]",
-                    values
-                        .iter()
-                        .map(|value| toml_string(value))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            }
-            fn toml_table(values: &[NamedValueV1]) -> String {
-                format!(
-                    "{{ {} }}",
-                    values
-                        .iter()
-                        .map(|value| format!(
-                            "{} = {}",
-                            toml_string(&value.name),
-                            toml_string(&value.value)
-                        ))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            }
-            fn known_feature(name: &str) -> bool {
-                matches!(
-                    name,
-                    "apps"
-                        | "apply_patch_freeform"
-                        | "artifact"
-                        | "browser_use"
-                        | "code_mode"
-                        | "codex_hooks"
-                        | "computer_use"
-                        | "enable_request_compression"
-                        | "fast_mode"
-                        | "guardian_approval"
-                        | "image_generation"
-                        | "js_repl"
-                        | "memories"
-                        | "multi_agent"
-                        | "personality"
-                        | "request_permissions_tool"
-                        | "runtime_metrics"
-                        | "shell_snapshot"
-                        | "shell_tool"
-                        | "tool_call_mcp_elicitation"
-                        | "tool_search"
-                        | "tool_suggest"
-                        | "unified_exec"
-                        | "undo"
-                        | "workspace_dependencies"
-                )
-            }
-
-            let RenderConfigTomlInput {
-                model,
-                mcp_servers,
-                features,
-                codex_base_url,
-                root_guest_absolute_path,
-                workspace_physical_path,
-                orchestration_session_id,
-                retained_participant_id,
-                identity_hash,
-            } = input;
-
-            if codex_base_url.contains('#')
-                || codex_base_url.contains('@')
-                || !(codex_base_url.starts_with("http://127.0.0.1:")
-                    || codex_base_url.starts_with("http://[::1]:"))
-            {
-                return Err(ConfigProjectionFailureV1::UnsupportedConfiguration);
-            }
-            ensure_sorted_unique(mcp_servers.iter().map(|server| server.server_id.as_str()))?;
-            ensure_sorted_unique(features.iter().map(|feature| feature.name.as_str()))?;
-
-            let mut output = String::new();
-            output.push_str(&format!("model = {}\n", toml_string(model)));
-            output.push_str("model_provider = \"substrate-managed-gateway\"\n");
-            output.push_str("check_for_update_on_startup = false\n");
-            output.push_str("cli_auth_credentials_store = \"ephemeral\"\n");
-            output.push_str(&format!(
-                "log_dir = {}\n\n",
-                toml_string(&format!("{root_guest_absolute_path}/state/log"))
-            ));
-            output.push_str("[model_providers.substrate-managed-gateway]\n");
-            output.push_str("name = \"Substrate managed gateway\"\n");
-            output.push_str(&format!("base_url = {}\n", toml_string(codex_base_url)));
-            output.push_str("wire_api = \"responses\"\n");
-            output.push_str("requires_openai_auth = false\n");
-            output.push_str("supports_websockets = false\n");
-            output.push_str(&format!(
-                "http_headers = {{ \"X-Substrate-Orchestration-Session\" = {}, \"X-Substrate-Participant\" = {}, \"X-Substrate-Projection\" = {} }}\n\n",
-                toml_string(orchestration_session_id),
-                toml_string(retained_participant_id),
-                toml_string(identity_hash),
-            ));
-            output.push_str(&format!(
-                "[projects.{}]\ntrust_level = \"untrusted\"\n",
-                toml_string(workspace_physical_path)
-            ));
-
-            for server in mcp_servers {
-                output.push_str(&format!(
-                    "\n[mcp_servers.{}]\nenabled = {}\n",
-                    toml_string(&server.server_id),
-                    server.enabled
-                ));
-                match &server.transport {
-                    LogicalMcpTransportV1::Stdio {
-                        command,
-                        args,
-                        nonsecret_env,
-                    } => {
-                        validate_named_values(nonsecret_env)?;
-                        output.push_str(&format!("command = {}\n", toml_string(command)));
-                        output.push_str(&format!("args = {}\n", toml_array(args)));
-                        if !nonsecret_env.is_empty() {
-                            output.push_str(&format!("env = {}\n", toml_table(nonsecret_env)));
-                        }
-                    }
-                    LogicalMcpTransportV1::StreamableHttp {
-                        url,
-                        nonsecret_headers,
-                    } => {
-                        if url.contains('#') || url.contains('@') {
-                            return Err(ConfigProjectionFailureV1::Malformed);
-                        }
-                        validate_named_values(nonsecret_headers)?;
-                        output.push_str(&format!("url = {}\n", toml_string(url)));
-                        if !nonsecret_headers.is_empty() {
-                            output.push_str(&format!(
-                                "http_headers = {}\n",
-                                toml_table(nonsecret_headers)
-                            ));
-                        }
-                    }
-                }
-            }
-            if !features.is_empty() {
-                output.push_str("\n[features]\n");
-                for LogicalFeatureV1 { name, enabled } in features {
-                    if !known_feature(name) {
-                        return Err(ConfigProjectionFailureV1::Malformed);
-                    }
-                    output.push_str(&format!("{} = {}\n", toml_string(name), enabled));
-                }
-            }
-            Ok(output.into_bytes())
-        }
-
+        project_loader_inputs: Vec<CodexLoaderInputAttestationV1>,
+    ) -> Result<Codex0125ProjectionPlanV1, ConfigProjectionFailureV1> {
         if effective.model != "codex"
             || effective.provider.provider_id != "substrate-managed-gateway"
             || effective.provider.wire_api != "responses"
@@ -333,84 +387,63 @@ impl Codex0125ProjectionV1 {
         if effective.environment != environment {
             return Err(ConfigProjectionFailureV1::UnsupportedConfiguration);
         }
-        let config_bytes = render_config_toml(RenderConfigTomlInput {
-            model: &effective.model,
-            mcp_servers: &effective.mcp_servers,
-            features: &effective.features,
-            codex_base_url: &managed_gateway.codex_base_url,
-            root_guest_absolute_path: &root.guest_absolute_path,
-            workspace_physical_path: &identity.workspace_root.physical_path,
-            orchestration_session_id: &identity.orchestration_session_id,
-            retained_participant_id: &identity.retained_participant_id,
-            identity_hash: &identity.identity_hash,
-        })?;
+        let config_bytes = render_config_toml_v1(
+            &effective.model,
+            &effective.mcp_servers,
+            &effective.features,
+            &managed_gateway.codex_base_url,
+            &root.guest_absolute_path,
+            &identity.workspace_root.physical_path,
+            &identity.orchestration_session_id,
+            &identity.retained_participant_id,
+            &identity.identity_hash,
+        )?;
         let config_hash = format!("{:x}", Sha256::digest(&config_bytes));
-        let projected_config = loader_inputs
-            .iter()
-            .filter(|input| {
-                input.layer == "User"
-                    && input.relative_path == "config.toml"
-                    && input.disposition == CodexLoaderInputDispositionV1::Projected
-            })
-            .collect::<Vec<_>>();
-        if projected_config.len() != 1
-            || projected_config[0].directory.physical_path
-                != format!("{}/codex-home", root.guest_absolute_path)
-            || projected_config[0].byte_length != Some(config_bytes.len() as u64)
-            || projected_config[0].sha256.as_deref() != Some(config_hash.as_str())
+        if project_loader_inputs.len() != 3
+            || !identity.workspace_root.physical_path.starts_with('/')
+            || !matches!(
+                identity.workspace_root.physical_identity,
+                crate::DirectoryPhysicalIdentityV1::Linux {
+                    device_id: 1..,
+                    inode: 1..
+                }
+            )
+            || project_loader_inputs
+                .iter()
+                .any(|input| input.layer != "Project" || input.directory != identity.workspace_root)
         {
             return Err(ConfigProjectionFailureV1::WrongBinding);
         }
-        let loader_source = CodexLoaderSourceIdentityV1 {
-            codex_version: "0.125.0".to_string(),
-            upstream_tag: "rust-v0.125.0".to_string(),
-            config_loader_source_sha256:
-                "f8e2eff1db4d4cc004dff849682e81e224acca742b5d38d94e2db4a713b560bc".to_string(),
-            layer_io_source_sha256:
-                "5b8aa76b0776370cc6db86b679efbb6bab361d2d474dc59768724f8a4c80a52a".to_string(),
-            loader_model_source_sha256:
-                "8c6573bc83f53396a31bae92371790997c30521e46d29c0662c44d58d570ea81".to_string(),
-            exec_source_sha256: "b113fd23d8a0d264556b234fb067a4233ab8c3d5491dd393c0bc39b53c3170bd"
-                .to_string(),
-            cloud_requirements_source_sha256:
-                "f43176f2889c54d19b65b0a669e98e22effc52712ca38710b9265ee22c804c77".to_string(),
-            auth_storage_source_sha256:
-                "31c05505d2ed91f852a225e154929db3083ae61ef8a662fb6aad09442c33650c".to_string(),
-            config_types_source_sha256:
-                "927c2a72b29136a5d8f627450a1f85a91173bc76e863351fd7233664b5ee32e4".to_string(),
-            validator_schema_version: 1,
-        };
-        let fingerprint = ConfigProjectionCodecV1::domain_sha256(
-            "substrate.e3.codex-0.125-loader-inputs.v1",
-            &json!({"inputs": loader_inputs, "loader_source": loader_source}),
-        )?;
-        let ambient_closure = CodexAmbientConfigClosureV1 {
-            loader_source,
-            allowed_enabled_layers: vec!["System".to_string(), "User".to_string()],
-            inputs: loader_inputs,
-            forbidden_cli_overrides: vec![
-                "--config".to_string(),
-                "--ignore-rules".to_string(),
-                "--ignore-user-config".to_string(),
-                "--model".to_string(),
-                "--oss".to_string(),
-                "--profile".to_string(),
-                "-c".to_string(),
-            ],
-            validated_loader_input_fingerprint: fingerprint,
-        };
-        Self::validate_loader_inputs(&ambient_closure)?;
-        let project_inputs = ambient_closure
-            .inputs
-            .iter()
-            .filter(|input| input.layer == "Project")
-            .collect::<Vec<_>>();
-        if project_inputs.len() != 3
-            || project_inputs
-                .iter()
-                .any(|input| input.directory != identity.workspace_root)
-        {
-            return Err(ConfigProjectionFailureV1::WrongBinding);
+        for (input, relative_path) in project_loader_inputs.iter().zip([
+            ".codex/config.toml",
+            ".codex/rules",
+            ".codex/skills",
+        ]) {
+            let present = [
+                input.device_id.is_some(),
+                input.inode.is_some(),
+                input.byte_length.is_some(),
+                input.sha256.is_some(),
+            ];
+            if input.relative_path != relative_path
+                || input.locator
+                    != format!(
+                        "{}/{}",
+                        identity.workspace_root.physical_path, relative_path
+                    )
+                || input.disposition != CodexLoaderInputDispositionV1::DisabledByTrust
+                || (present != [false; 4] && present != [true; 4])
+                || input.device_id == Some(0)
+                || input.inode == Some(0)
+                || input.sha256.as_ref().is_some_and(|hash| {
+                    hash.len() != 64
+                        || !hash
+                            .bytes()
+                            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+                })
+            {
+                return Err(ConfigProjectionFailureV1::WrongBinding);
+            }
         }
 
         let output_name_hash = ConfigProjectionCodecV1::domain_sha256(
@@ -436,21 +469,214 @@ impl Codex0125ProjectionV1 {
         let mut initial_argv = fixed_prefix.clone();
         initial_argv.push(output_path);
 
+        let renderer = NativeRendererIdentityV1 {
+            renderer_id: "substrate.codex.config-renderer".to_string(),
+            renderer_schema_version: 1,
+            codex_version: "0.125.0".to_string(),
+        };
+        let invocation = CodexNativeInvocationV1 {
+            wrapper_argv: vec!["substrate-world-entry".to_string()],
+            initial_codex_argv: initial_argv,
+            resume_codex_argv_prefix: fixed_prefix,
+            prompt_delivery: "stdin-lf-eof".to_string(),
+            output_last_message_directory: output_directory,
+            output_last_message_name_domain: "substrate.e3.codex-output-last-message-name.v1"
+                .to_string(),
+            forbidden_arguments: vec![
+                "--config".to_string(),
+                "--ignore-rules".to_string(),
+                "--ignore-user-config".to_string(),
+                "--model".to_string(),
+                "--oss".to_string(),
+                "--profile".to_string(),
+                "-c".to_string(),
+            ],
+        };
+        Ok(Codex0125ProjectionPlanV1 {
+            identity: identity.clone(),
+            effective: effective.clone(),
+            managed_gateway: managed_gateway.clone(),
+            root,
+            fence_id: fence_id.to_string(),
+            project_loader_inputs,
+            config_byte_length: config_bytes.len() as u64,
+            config_sha256: config_hash,
+            config_bytes,
+            renderer,
+            environment,
+            invocation,
+        })
+    }
+
+    pub(crate) fn finalize_from_native_source_v1(
+        plan: &Codex0125ProjectionPlanV1,
+        observation: &Codex0125NativeSourceObservationV1,
+    ) -> Result<NativeAgentConfigProjectionV1, ConfigProjectionFailureV1> {
+        if plan.effective.environment != plan.environment
+            || plan.effective.provider.gateway_intent_ref
+                != plan.managed_gateway.activation_intent_ref
+            || plan.root.authority_relative_path
+                != format!(
+                    "authority-v1/agent-config-projection-v1/native-sources/{}/{}",
+                    plan.identity.series_id, plan.fence_id
+                )
+            || observation.source_root.physical_path
+                != format!(
+                    "{}/{}",
+                    plan.identity.accepted_home.physical_path, plan.root.authority_relative_path
+                )
+            || observation.config_device_id == 0
+            || observation.config_inode == 0
+            || observation.config_mode != 0o600
+            || observation.config_link_count != 1
+            || observation.config_owner_uid != plan.root.owner_uid
+            || observation.config_owner_gid != plan.root.owner_gid
+            || observation.config_byte_length != plan.config_byte_length
+            || observation.config_sha256 != plan.config_sha256
+            || observation.codex_home.physical_path
+                != format!("{}/codex-home", observation.source_root.physical_path)
+            || observation.system_empty.physical_path
+                != format!("{}/system-empty", observation.source_root.physical_path)
+        {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        let absent = |layer: &str,
+                      directory: &crate::CanonicalDirectoryV1,
+                      relative_path: &str,
+                      disposition: CodexLoaderInputDispositionV1| {
+            CodexLoaderInputAttestationV1 {
+                layer: layer.to_string(),
+                locator: format!(
+                    "{}/{}",
+                    directory.physical_path.trim_end_matches('/'),
+                    relative_path
+                ),
+                disposition,
+                directory: directory.clone(),
+                relative_path: relative_path.to_string(),
+                device_id: None,
+                inode: None,
+                byte_length: None,
+                sha256: None,
+            }
+        };
+        let mut inputs = Vec::new();
+        for relative_path in [
+            "config.toml",
+            "managed_config.toml",
+            "requirements.toml",
+            "rules",
+            "skills",
+        ] {
+            inputs.push(absent(
+                "System",
+                &observation.system_empty,
+                relative_path,
+                CodexLoaderInputDispositionV1::ProvenAbsent,
+            ));
+        }
+        inputs.push(CodexLoaderInputAttestationV1 {
+            layer: "User".to_string(),
+            locator: format!("{}/config.toml", observation.codex_home.physical_path),
+            disposition: CodexLoaderInputDispositionV1::Projected,
+            directory: observation.codex_home.clone(),
+            relative_path: "config.toml".to_string(),
+            device_id: Some(observation.config_device_id),
+            inode: Some(observation.config_inode),
+            byte_length: Some(observation.config_byte_length),
+            sha256: Some(observation.config_sha256.clone()),
+        });
+        for relative_path in [
+            "managed_config.toml",
+            "requirements.toml",
+            "rules",
+            "skills",
+        ] {
+            inputs.push(absent(
+                "User",
+                &observation.codex_home,
+                relative_path,
+                CodexLoaderInputDispositionV1::ProvenAbsent,
+            ));
+        }
+        inputs.extend(plan.project_loader_inputs.iter().cloned());
+        for (layer, relative_path, disposition) in [
+            (
+                "McpCredentials",
+                ".credentials.json",
+                CodexLoaderInputDispositionV1::DisabledByEmptyMcpSetAndProvenAbsent,
+            ),
+            (
+                "Auth",
+                "auth.json",
+                CodexLoaderInputDispositionV1::DisabledByEphemeralCredentialStoreAndProvenAbsent,
+            ),
+            (
+                "CloudRequirements",
+                "cloud-requirements-cache.json",
+                CodexLoaderInputDispositionV1::DisabledByNoEphemeralAuthAndProvenAbsent,
+            ),
+        ] {
+            inputs.push(absent(
+                layer,
+                &observation.codex_home,
+                relative_path,
+                disposition,
+            ));
+        }
+        let loader_source = CodexLoaderSourceIdentityV1 {
+            codex_version: "0.125.0".to_string(),
+            upstream_tag: "rust-v0.125.0".to_string(),
+            config_loader_source_sha256:
+                "f8e2eff1db4d4cc004dff849682e81e224acca742b5d38d94e2db4a713b560bc".to_string(),
+            layer_io_source_sha256:
+                "5b8aa76b0776370cc6db86b679efbb6bab361d2d474dc59768724f8a4c80a52a".to_string(),
+            loader_model_source_sha256:
+                "8c6573bc83f53396a31bae92371790997c30521e46d29c0662c44d58d570ea81".to_string(),
+            exec_source_sha256: "b113fd23d8a0d264556b234fb067a4233ab8c3d5491dd393c0bc39b53c3170bd"
+                .to_string(),
+            cloud_requirements_source_sha256:
+                "f43176f2889c54d19b65b0a669e98e22effc52712ca38710b9265ee22c804c77".to_string(),
+            auth_storage_source_sha256:
+                "31c05505d2ed91f852a225e154929db3083ae61ef8a662fb6aad09442c33650c".to_string(),
+            config_types_source_sha256:
+                "927c2a72b29136a5d8f627450a1f85a91173bc76e863351fd7233664b5ee32e4".to_string(),
+            validator_schema_version: 1,
+        };
+        let fingerprint = ConfigProjectionCodecV1::domain_sha256(
+            "substrate.e3.codex-0.125-loader-inputs.v1",
+            &json!({"inputs": inputs, "loader_source": loader_source}),
+        )?;
+        let ambient_closure = CodexAmbientConfigClosureV1 {
+            loader_source,
+            allowed_enabled_layers: vec!["System".to_string(), "User".to_string()],
+            inputs,
+            forbidden_cli_overrides: vec![
+                "--config".to_string(),
+                "--ignore-rules".to_string(),
+                "--ignore-user-config".to_string(),
+                "--model".to_string(),
+                "--oss".to_string(),
+                "--profile".to_string(),
+                "-c".to_string(),
+            ],
+            validated_loader_input_fingerprint: fingerprint,
+        };
+        // Every source-dependent entry above is constructed from the single validated
+        // observation; render already validated the only caller-provided Project entries.
+        // The preserved public loader validator describes the separate /etc/codex runtime
+        // mount, so source identities must not be relabelled as that runtime observation.
         let mut native = NativeAgentConfigProjectionV1 {
             projection_hash: String::new(),
-            renderer: NativeRendererIdentityV1 {
-                renderer_id: "substrate.codex.config-renderer".to_string(),
-                renderer_schema_version: 1,
-                codex_version: "0.125.0".to_string(),
-            },
-            root,
+            renderer: plan.renderer.clone(),
+            root: plan.root.clone(),
             files: vec![NativeProjectedFileV1 {
                 role: NativeProjectedFileRoleV1::CodexConfigToml,
                 relative_path: "codex-home/config.toml".to_string(),
                 mode: 0o600,
-                bytes_base64: STANDARD.encode(&config_bytes),
-                byte_length: config_bytes.len() as u64,
-                sha256: config_hash,
+                bytes_base64: STANDARD.encode(&plan.config_bytes),
+                byte_length: plan.config_byte_length,
+                sha256: plan.config_sha256.clone(),
             }],
             directories: [
                 ".",
@@ -469,26 +695,9 @@ impl Codex0125ProjectionV1 {
                 mode: 0o700,
             })
             .collect(),
-            environment,
-            invocation: CodexNativeInvocationV1 {
-                wrapper_argv: vec!["substrate-world-entry".to_string()],
-                initial_codex_argv: initial_argv,
-                resume_codex_argv_prefix: fixed_prefix,
-                prompt_delivery: "stdin-lf-eof".to_string(),
-                output_last_message_directory: output_directory,
-                output_last_message_name_domain: "substrate.e3.codex-output-last-message-name.v1"
-                    .to_string(),
-                forbidden_arguments: vec![
-                    "--config".to_string(),
-                    "--ignore-rules".to_string(),
-                    "--ignore-user-config".to_string(),
-                    "--model".to_string(),
-                    "--oss".to_string(),
-                    "--profile".to_string(),
-                    "-c".to_string(),
-                ],
-            },
-            cwd: identity.workspace_root.clone(),
+            environment: plan.environment.clone(),
+            invocation: plan.invocation.clone(),
+            cwd: plan.identity.workspace_root.clone(),
             ambient_closure,
         };
         let mut value =
@@ -779,208 +988,6 @@ mod tests {
         bytes.iter().map(|byte| format!("{byte:02x}")).collect()
     }
 
-    #[allow(
-        clippy::too_many_arguments,
-        reason = "the independent golden renderer keeps every contract input explicit"
-    )]
-    fn render_config_toml(
-        model: &str,
-        mcp_servers: &[crate::EffectiveMcpServerV1],
-        features: &[LogicalFeatureV1],
-        codex_base_url: &str,
-        root_guest_absolute_path: &str,
-        workspace_physical_path: &str,
-        orchestration_session_id: &str,
-        retained_participant_id: &str,
-        identity_hash: &str,
-    ) -> Result<Vec<u8>, ConfigProjectionFailureV1> {
-        fn toml_string(value: &str) -> String {
-            let mut rendered = String::from("\"");
-            for character in value.chars() {
-                match character {
-                    '"' => rendered.push_str("\\\""),
-                    '\\' => rendered.push_str("\\\\"),
-                    '\u{0008}' => rendered.push_str("\\b"),
-                    '\t' => rendered.push_str("\\t"),
-                    '\n' => rendered.push_str("\\n"),
-                    '\u{000c}' => rendered.push_str("\\f"),
-                    '\r' => rendered.push_str("\\r"),
-                    character if character <= '\u{001f}' || character == '\u{007f}' => {
-                        rendered.push_str(&format!("\\u{:04x}", character as u32));
-                    }
-                    character => rendered.push(character),
-                }
-            }
-            rendered.push('"');
-            rendered
-        }
-        fn ensure_sorted_unique<'a>(
-            values: impl Iterator<Item = &'a str>,
-        ) -> Result<(), ConfigProjectionFailureV1> {
-            let mut previous: Option<&[u8]> = None;
-            for value in values {
-                if value.is_empty() || previous.is_some_and(|item| value.as_bytes() <= item) {
-                    return Err(ConfigProjectionFailureV1::Conflict);
-                }
-                previous = Some(value.as_bytes());
-            }
-            Ok(())
-        }
-        fn validate_named_values(values: &[NamedValueV1]) -> Result<(), ConfigProjectionFailureV1> {
-            ensure_sorted_unique(values.iter().map(|value| value.name.as_str()))?;
-            for value in values {
-                let upper = value.name.to_ascii_uppercase();
-                if upper.contains("AUTHORIZATION")
-                    || upper.contains("COOKIE")
-                    || upper.ends_with("_TOKEN")
-                    || upper.ends_with("_SECRET")
-                    || upper.ends_with("_KEY")
-                {
-                    return Err(ConfigProjectionFailureV1::Malformed);
-                }
-            }
-            Ok(())
-        }
-        fn toml_array(values: &[String]) -> String {
-            format!(
-                "[{}]",
-                values
-                    .iter()
-                    .map(|value| toml_string(value))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        }
-        fn toml_table(values: &[NamedValueV1]) -> String {
-            format!(
-                "{{ {} }}",
-                values
-                    .iter()
-                    .map(|value| format!(
-                        "{} = {}",
-                        toml_string(&value.name),
-                        toml_string(&value.value)
-                    ))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        }
-        fn known_feature(name: &str) -> bool {
-            matches!(
-                name,
-                "apps"
-                    | "apply_patch_freeform"
-                    | "artifact"
-                    | "browser_use"
-                    | "code_mode"
-                    | "codex_hooks"
-                    | "computer_use"
-                    | "enable_request_compression"
-                    | "fast_mode"
-                    | "guardian_approval"
-                    | "image_generation"
-                    | "js_repl"
-                    | "memories"
-                    | "multi_agent"
-                    | "personality"
-                    | "request_permissions_tool"
-                    | "runtime_metrics"
-                    | "shell_snapshot"
-                    | "shell_tool"
-                    | "tool_call_mcp_elicitation"
-                    | "tool_search"
-                    | "tool_suggest"
-                    | "unified_exec"
-                    | "undo"
-                    | "workspace_dependencies"
-            )
-        }
-
-        if codex_base_url.contains('#')
-            || codex_base_url.contains('@')
-            || !(codex_base_url.starts_with("http://127.0.0.1:")
-                || codex_base_url.starts_with("http://[::1]:"))
-        {
-            return Err(ConfigProjectionFailureV1::UnsupportedConfiguration);
-        }
-        ensure_sorted_unique(mcp_servers.iter().map(|server| server.server_id.as_str()))?;
-        ensure_sorted_unique(features.iter().map(|feature| feature.name.as_str()))?;
-
-        let mut output = String::new();
-        output.push_str(&format!("model = {}\n", toml_string(model)));
-        output.push_str("model_provider = \"substrate-managed-gateway\"\n");
-        output.push_str("check_for_update_on_startup = false\n");
-        output.push_str("cli_auth_credentials_store = \"ephemeral\"\n");
-        output.push_str(&format!(
-            "log_dir = {}\n\n",
-            toml_string(&format!("{root_guest_absolute_path}/state/log"))
-        ));
-        output.push_str("[model_providers.substrate-managed-gateway]\n");
-        output.push_str("name = \"Substrate managed gateway\"\n");
-        output.push_str(&format!("base_url = {}\n", toml_string(codex_base_url)));
-        output.push_str("wire_api = \"responses\"\n");
-        output.push_str("requires_openai_auth = false\n");
-        output.push_str("supports_websockets = false\n");
-        output.push_str(&format!(
-            "http_headers = {{ \"X-Substrate-Orchestration-Session\" = {}, \"X-Substrate-Participant\" = {}, \"X-Substrate-Projection\" = {} }}\n\n",
-            toml_string(orchestration_session_id),
-            toml_string(retained_participant_id),
-            toml_string(identity_hash),
-        ));
-        output.push_str(&format!(
-            "[projects.{}]\ntrust_level = \"untrusted\"\n",
-            toml_string(workspace_physical_path)
-        ));
-
-        for server in mcp_servers {
-            output.push_str(&format!(
-                "\n[mcp_servers.{}]\nenabled = {}\n",
-                toml_string(&server.server_id),
-                server.enabled
-            ));
-            match &server.transport {
-                LogicalMcpTransportV1::Stdio {
-                    command,
-                    args,
-                    nonsecret_env,
-                } => {
-                    validate_named_values(nonsecret_env)?;
-                    output.push_str(&format!("command = {}\n", toml_string(command)));
-                    output.push_str(&format!("args = {}\n", toml_array(args)));
-                    if !nonsecret_env.is_empty() {
-                        output.push_str(&format!("env = {}\n", toml_table(nonsecret_env)));
-                    }
-                }
-                LogicalMcpTransportV1::StreamableHttp {
-                    url,
-                    nonsecret_headers,
-                } => {
-                    if url.contains('#') || url.contains('@') {
-                        return Err(ConfigProjectionFailureV1::Malformed);
-                    }
-                    validate_named_values(nonsecret_headers)?;
-                    output.push_str(&format!("url = {}\n", toml_string(url)));
-                    if !nonsecret_headers.is_empty() {
-                        output.push_str(&format!(
-                            "http_headers = {}\n",
-                            toml_table(nonsecret_headers)
-                        ));
-                    }
-                }
-            }
-        }
-        if !features.is_empty() {
-            output.push_str("\n[features]\n");
-            for LogicalFeatureV1 { name, enabled } in features {
-                if !known_feature(name) {
-                    return Err(ConfigProjectionFailureV1::Malformed);
-                }
-                output.push_str(&format!("{} = {}\n", toml_string(name), enabled));
-            }
-        }
-        Ok(output.into_bytes())
-    }
-
     fn pinned_loader_source() -> CodexLoaderSourceIdentityV1 {
         CodexLoaderSourceIdentityV1 {
             codex_version: "0.125.0".to_string(),
@@ -1168,7 +1175,7 @@ mod tests {
             "[projects.\"/workspace\"]\n",
             "trust_level = \"untrusted\"\n",
         );
-        let first = render_config_toml(
+        let first = render_config_toml_v1(
             "codex",
             &[],
             &[],
@@ -1180,7 +1187,7 @@ mod tests {
             "identity",
         )
         .unwrap();
-        let second = render_config_toml(
+        let second = render_config_toml_v1(
             "codex",
             &[],
             &[],
@@ -1277,7 +1284,7 @@ mod tests {
             "\"apps\" = false\n",
             "\"undo\" = true\n",
         );
-        let bytes = render_config_toml(
+        let bytes = render_config_toml_v1(
             "codex",
             &servers,
             &features,
@@ -1412,7 +1419,7 @@ mod tests {
             owner_gid: 1000,
             directory_mode: 0o700,
         };
-        let expected = render_config_toml(
+        let expected = render_config_toml_v1(
             "codex",
             &[],
             &[],
@@ -1486,7 +1493,10 @@ mod tests {
         let inputs = minimal_loader_inputs(
             expected.len() as u64,
             format!("{:x}", Sha256::digest(&expected)),
-        );
+        )
+        .into_iter()
+        .filter(|input| input.layer == "Project")
+        .collect::<Vec<_>>();
         let first = Codex0125ProjectionV1::render(
             &identity,
             &effective,
@@ -1496,21 +1506,62 @@ mod tests {
             inputs.clone(),
         )
         .unwrap();
-        let second =
-            Codex0125ProjectionV1::render(&identity, &effective, &gateway, root, "fence", inputs)
-                .unwrap();
-        assert_eq!(first, second);
-        assert_eq!(
-            STANDARD.decode(&first.files[0].bytes_base64).unwrap(),
-            expected
-        );
-        assert!(first
-            .ambient_closure
-            .inputs
-            .iter()
-            .all(|input| !input.locator.ends_with("/auth.json")
-                || input.disposition
-                    == CodexLoaderInputDispositionV1::DisabledByEphemeralCredentialStoreAndProvenAbsent));
+        let second = Codex0125ProjectionV1::render(
+            &identity,
+            &effective,
+            &gateway,
+            root.clone(),
+            "fence",
+            inputs.clone(),
+        )
+        .unwrap();
+        assert_eq!(first.config_bytes_v1(), second.config_bytes_v1());
+        assert_eq!(first.config_bytes_v1(), expected);
+        for layer in [
+            "System",
+            "User",
+            "McpCredentials",
+            "Auth",
+            "CloudRequirements",
+        ] {
+            let mut invalid = inputs.clone();
+            invalid[0].layer = layer.into();
+            assert!(matches!(
+                Codex0125ProjectionV1::render(
+                    &identity,
+                    &effective,
+                    &gateway,
+                    root.clone(),
+                    "fence",
+                    invalid,
+                ),
+                Err(ConfigProjectionFailureV1::WrongBinding)
+            ));
+        }
+        let mut invalid = inputs.clone();
+        invalid[0].inode = Some(42);
+        assert!(matches!(
+            Codex0125ProjectionV1::render(
+                &identity,
+                &effective,
+                &gateway,
+                root.clone(),
+                "fence",
+                invalid,
+            ),
+            Err(ConfigProjectionFailureV1::WrongBinding)
+        ));
+        assert!(matches!(
+            Codex0125ProjectionV1::render(
+                &identity,
+                &effective,
+                &gateway,
+                root,
+                "fence",
+                Vec::new(),
+            ),
+            Err(ConfigProjectionFailureV1::WrongBinding)
+        ));
     }
 
     #[test]
