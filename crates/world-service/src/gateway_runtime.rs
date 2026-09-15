@@ -2853,7 +2853,8 @@ impl E3GatewayRuntimeAuthorityV1 {
         );
         let final_name = std::ffi::CString::new(fence_id)?;
         if unsafe {
-            libc::renameat2(
+            libc::syscall(
+                libc::SYS_renameat2,
                 parent.as_raw_fd(),
                 component.as_ptr(),
                 parent.as_raw_fd(),
@@ -3617,7 +3618,7 @@ impl E3GatewayRuntimeAuthorityV1 {
                         let mut procfs: libc::statfs = unsafe { std::mem::zeroed() };
                         anyhow::ensure!(
                             unsafe { libc::fstatfs(proc_root.as_raw_fd(), &mut procfs) } == 0
-                                && procfs.f_type == libc::PROC_SUPER_MAGIC,
+                                && procfs.f_type as i128 == libc::PROC_SUPER_MAGIC as i128,
                             "live remnant procfs changed"
                         );
                         let directory = open_directory(&format!("/proc/{}", process.pid))?;
@@ -3642,14 +3643,10 @@ impl E3GatewayRuntimeAuthorityV1 {
                         let service_meta = service_user.metadata()?;
                         let mut namespace_owner: libc::uid_t = u32::MAX;
                         anyhow::ensure!(
-                            unsafe { libc::ioctl(user.as_raw_fd(), 0xb703 as libc::c_ulong) }
+                            unsafe { libc::ioctl(user.as_raw_fd(), 0xb703 as _) }
                                 == libc::CLONE_NEWUSER
                                 && unsafe {
-                                    libc::ioctl(
-                                        user.as_raw_fd(),
-                                        0xb704 as libc::c_ulong,
-                                        &mut namespace_owner,
-                                    )
+                                    libc::ioctl(user.as_raw_fd(), 0xb704 as _, &mut namespace_owner)
                                 } == 0
                                 && namespace_owner == unsafe { libc::geteuid() }
                                 && (user_meta.dev(), user_meta.ino())
@@ -3658,8 +3655,7 @@ impl E3GatewayRuntimeAuthorityV1 {
                                     == boundary.gateway_listener.network_namespace_inode,
                             "live remnant namespace type, owner or network identity changed"
                         );
-                        let parent_raw =
-                            unsafe { libc::ioctl(user.as_raw_fd(), 0xb702 as libc::c_ulong) };
+                        let parent_raw = unsafe { libc::ioctl(user.as_raw_fd(), 0xb702 as _) };
                         if parent_raw < 0 {
                             return Err(std::io::Error::last_os_error())
                                 .context("read remnant namespace parent");
@@ -3699,7 +3695,7 @@ impl E3GatewayRuntimeAuthorityV1 {
                         let mut cgroupfs: libc::statfs = unsafe { std::mem::zeroed() };
                         anyhow::ensure!(
                             unsafe { libc::fstatfs(mount.as_raw_fd(), &mut cgroupfs) } == 0
-                                && cgroupfs.f_type == libc::CGROUP2_SUPER_MAGIC
+                                && cgroupfs.f_type as i128 == libc::CGROUP2_SUPER_MAGIC as i128
                                 && mount.metadata()?.dev()
                                     == process.process_cgroup.cgroup_v2_mount_device_id
                                 && mount.metadata()?.ino()
@@ -3869,7 +3865,7 @@ impl E3GatewayRuntimeAuthorityV1 {
                 let mut filesystem: libc::statfs = unsafe { std::mem::zeroed() };
                 anyhow::ensure!(
                     unsafe { libc::fstatfs(mount.as_raw_fd(), &mut filesystem) } == 0
-                        && filesystem.f_type == libc::CGROUP2_SUPER_MAGIC
+                        && filesystem.f_type as i128 == libc::CGROUP2_SUPER_MAGIC as i128
                         && mount_meta.dev() == parent_cgroup.cgroup_v2_mount_device_id
                         && mount_meta.ino() == parent_cgroup.cgroup_v2_mount_inode,
                     "recovered cgroup mount identity changed"
@@ -8011,6 +8007,7 @@ mod tests {
             ConfigProjectionFailureV1, ConfigProjectionHsaAuthorityV1, ConfigProjectionRegistryV1,
         };
         use std::os::fd::{AsFd, BorrowedFd};
+        use std::os::unix::fs::MetadataExt;
         struct Parent(PathBuf);
         impl ConfigProjectionHsaAuthorityV1 for Parent {
             fn with_locked_parent(
@@ -8040,6 +8037,30 @@ mod tests {
             root_path.join("config.toml"),
             fs::Permissions::from_mode(0o600),
         )?;
+        // Exercise the Linux no-replace ABI without the privileged preparation path.
+        let parent = fs::File::open(temp.path())?;
+        let source = fs::File::open(&root_path)?;
+        assert_eq!(
+            unsafe {
+                libc::syscall(
+                    libc::SYS_renameat2,
+                    parent.as_raw_fd(),
+                    c"attempt".as_ptr(),
+                    parent.as_raw_fd(),
+                    c"published".as_ptr(),
+                    libc::RENAME_NOREPLACE,
+                )
+            },
+            0
+        );
+        assert!(!root_path.exists());
+        let root_path = temp.path().join("published");
+        parent.sync_all()?;
+        assert_eq!(fs::metadata(&root_path)?.ino(), source.metadata()?.ino());
+        assert_eq!(
+            fs::read(root_path.join("config.toml"))?,
+            b"nonsecret test configuration\n"
+        );
         let exclusion = finished_child_exclusion();
         let lease = exclusion.acquire_e3_exclusive("config-cleanup-test", 1)?;
         let mut owner = E3GatewayRuntimeAuthorityV1::new(lease);
@@ -8057,13 +8078,40 @@ mod tests {
         };
         owner.gateway_config = Some((
             fs::File::open(temp.path())?,
-            std::ffi::CString::new("attempt")?,
+            std::ffi::CString::new("published")?,
             Some(fs::File::open(&root_path)?),
             Some(fs::File::open(root_path.join("config.toml"))?),
             Some(identity),
         ));
         owner.gateway_config_owner = Some((unsafe { libc::geteuid() }, unsafe { libc::getegid() }));
         owner.gateway_config_bytes = b"nonsecret test configuration\n".to_vec();
+        let occupied = temp.path().join("occupied");
+        fs::create_dir(&occupied)?;
+        fs::write(occupied.join("sentinel"), b"existing destination")?;
+        let occupied_inode = fs::metadata(&occupied)?.ino();
+        let (parent, component, _, _, _) = owner.gateway_config.as_ref().unwrap();
+        let result = unsafe {
+            libc::syscall(
+                libc::SYS_renameat2,
+                parent.as_raw_fd(),
+                component.as_ptr(),
+                parent.as_raw_fd(),
+                c"occupied".as_ptr(),
+                libc::RENAME_NOREPLACE,
+            )
+        };
+        let error = std::io::Error::last_os_error();
+        assert_eq!(result, -1);
+        assert_eq!(error.raw_os_error(), Some(libc::EEXIST));
+        assert_eq!(fs::metadata(&occupied)?.ino(), occupied_inode);
+        assert_eq!(
+            fs::read(occupied.join("sentinel"))?,
+            b"existing destination"
+        );
+        assert_eq!(fs::metadata(&root_path)?.ino(), source.metadata()?.ino());
+        assert_eq!(component.as_c_str(), c"published");
+        assert!(owner.gateway_config.is_some());
+        assert!(exclusion.acquire_non_e3_child().is_err());
         fs::write(root_path.join("unexpected"), b"must remain")?;
         assert!(E3GatewayRuntimeAuthorityV1::revoke(
             E3GatewayRevocationTargetV1::Live(&mut owner),
