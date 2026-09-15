@@ -381,6 +381,15 @@ forbidden.
   focused later proof and historical evidence bindings govern; this correction establishes no
   product repair, build/runtime success, E3-E completion or E3-F admission and does not resume
   implementation.
+- **Installer gateway-smoke deferral exception:** the
+  [canonical narrow allowance](../contracts/agent-config-projection-v1.md#e3-e-installer-gateway-smoke-deferral-exception)
+  permits only a later, separately authorized native-Linux maintainer `--skip-gateway-smoke` path
+  through the exact dev-installer/provisioner/test fence. It defers the optional smoke before
+  eligibility/auth/gateway activity while retaining mandatory installation checks and failure
+  propagation; it rejects unsupported-host and `--no-world` combinations before side effects.
+  Deferral does not mean `--no-world` or skipped gateway installation, creates no persistent or
+  credential workaround, and never establishes runtime acceptance. This correction implements none
+  of that path, leaves E3-E open, and does not admit E3-F.
 - **Source owner:** the packet-admitted shell integrated-auth extraction, world-service preparation,
   authenticated local transport and gateway-runtime surfaces, and existing gateway launch/server
   adoption points cataloged by the projection and managed-gateway contracts.

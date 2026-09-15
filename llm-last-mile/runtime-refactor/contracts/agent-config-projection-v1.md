@@ -5833,6 +5833,56 @@ conflicting restrictions below. Neither correction restarts admission or broaden
     adaptation. No baseline fixture value, V1 assertion, test skip condition, or product behavior may
     change to accommodate E3.
 
+### E3-E installer gateway-smoke deferral exception
+
+This is a narrow future implementation allowance only. A later, separately authorized E3-E maintainer
+change may add a maintainer-facing, invocation-local `--skip-gateway-smoke` option to the development
+installer and Linux provisioner; this correction neither implements nor validates that option, grants
+no installation or runtime-acceptance claim, leaves E3-E open, and does not admit E3-F.
+
+The future source fence is exact: in `scripts/substrate/dev-install-substrate.sh`, only option
+state/help/parsing, narrowly necessary pre-side-effect applicability validation, and forwarding in the
+existing Linux `provision_args` invocation; in `scripts/linux/world-provision.sh`, only option
+state/help/parsing and an early deferral branch in existing `maybe_run_gateway_lifecycle_proof`; in
+`tests/installers/world_provision_smoke.sh`, only focused default/explicit-deferral and mandatory-path
+preservation cases; and create only
+`tests/installers/dev_install_gateway_smoke_deferral.sh` for isolated-stub parsing, applicability, and
+exact-forwarding regression coverage. This does not grant file-wide authority. In particular,
+`world-lifecycle.sh`, authentication-helper bodies, release installers, public Substrate CLI, gateway
+installation optionality, host policy, runtime security, artifact schemas, cleanup/rollback, and
+non-Linux behavior remain frozen.
+
+Absent the option, eligible and ineligible gateway-smoke behavior remains byte/behavior equivalent.
+When present on a native Linux world-enabled dev install or direct native-Linux maintainer provision,
+the dev installer forwards the option alongside the exact existing bootstrap context, and the provisioner
+returns from the optional smoke path before eligibility evaluation, authentication inspection or
+creation, gateway sync/restart, or gateway health requests. It emits a clear non-secret result such as
+`gateway smoke deferred/skipped by request`; it never reports smoke success, installed E3 runtime
+acceptance, or E3 completion. The dev installer must reject the option with `--no-world` and on an
+unsupported platform (macOS, Windows, WSL, or another non-native-Linux host) before build or
+installation side effects. The direct Linux provisioner must reject `--no-world`, and must reject
+`--skip-gateway-smoke` on an unsupported host, during argument parsing before installation side
+effects. Deferral is not `--no-world`, which skips provisioning, and it does not skip gateway
+installation, which remains required. Because the existing synthetic-auth mode may preserve and use
+an already-present account `auth.json`, deferral must precede eligibility and auth handling. This
+documentation correction reads no credential contents.
+The option creates no persisted configuration or policy, ambient environment switch, bootstrap-carrier
+schema change, or credential workaround. It does not waive mandatory builds, installed
+descriptor/ELF/support validation, provenance publication, service/socket lifecycle, or failure
+propagation, including the existing non-dry-run `--skip-build` rejection.
+
+The later focused tests must prove that absence preserves both eligible and ineligible defaults; the dev
+installer forwards this option with the exact existing bootstrap context; explicit deferral occurs in an
+otherwise eligible stubbed configuration before every auth or gateway command; and injected mandatory
+path failure still fails after build/install/readback/publication/service operations are exercised.
+They must also cover help/parsing and each unsupported combination. Tests are bounded, unprivileged,
+isolated stubs with synthetic sentinels only, never real credentials. A deferred smoke is never counted
+as installed E3 runtime acceptance. Unchanged causal inputs may reuse valid evidence, while new
+in-scope regressions or required-path failures block; a future clean-commit installation must bind its
+actual commit and scripts and cannot relabel current build receipts as its proof.
+Existing Clippy/test baseline failures remain separately classified, are not green, require no
+unrelated remediation, and cannot support a whole-workspace-green claim.
+
 No file-wide authority is granted. D1 envelope code, receipt/manifest/StateStore/E2/E2-RM/B2.2,
 broker, D2, E4, unrelated gateway providers, public UX, and all new non-Linux product changes are
 excluded. The already-present byte-preserving Lima V1 wrapper conversion named in item 3 remains
