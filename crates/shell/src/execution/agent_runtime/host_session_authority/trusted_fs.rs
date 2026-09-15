@@ -2727,13 +2727,65 @@ mod platform {
     }
 
     fn random_component(prefix: &str) -> Result<CString, PrivateHomeError> {
-        let mut bytes = [0_u8; 12];
-        // SAFETY: bytes points to writable memory and getentropy accepts <= 256 bytes.
-        if unsafe { libc::getentropy(bytes.as_mut_ptr().cast(), bytes.len()) } != 0 {
-            return Err(PrivateHomeError::new(
-                PrivateHomeReason::ValidationUnavailable,
-            ));
+        #[cfg(target_os = "linux")]
+        {
+            linux_random_component_with_entropy(prefix, |buffer| {
+                // SAFETY: buffer points to writable memory for the requested length.
+                let read = unsafe { libc::getrandom(buffer.as_mut_ptr().cast(), buffer.len(), 0) };
+                if read < 0 {
+                    Err(io::Error::last_os_error())
+                } else {
+                    Ok(read as usize)
+                }
+            })
         }
+
+        #[cfg(target_os = "macos")]
+        {
+            let mut bytes = [0_u8; 12];
+            // SAFETY: bytes points to writable memory and getentropy accepts <= 256 bytes.
+            if unsafe { libc::getentropy(bytes.as_mut_ptr().cast(), bytes.len()) } != 0 {
+                return Err(PrivateHomeError::new(
+                    PrivateHomeReason::ValidationUnavailable,
+                ));
+            }
+            const HEX: &[u8; 16] = b"0123456789abcdef";
+            let mut value = String::with_capacity(prefix.len() + bytes.len() * 2);
+            value.push_str(prefix);
+            for byte in bytes {
+                value.push(HEX[(byte >> 4) as usize] as char);
+                value.push(HEX[(byte & 0x0f) as usize] as char);
+            }
+            component(&value)
+                .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn linux_random_component_with_entropy(
+        prefix: &str,
+        mut entropy: impl FnMut(&mut [u8]) -> io::Result<usize>,
+    ) -> Result<CString, PrivateHomeError> {
+        let mut bytes = [0_u8; 12];
+        let mut filled = 0;
+        while filled < bytes.len() {
+            let remaining = bytes.len() - filled;
+            match entropy(&mut bytes[filled..]) {
+                Ok(read) if read == 0 || read > remaining => {
+                    return Err(PrivateHomeError::new(
+                        PrivateHomeReason::ValidationUnavailable,
+                    ));
+                }
+                Ok(read) => filled += read,
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                Err(_) => {
+                    return Err(PrivateHomeError::new(
+                        PrivateHomeReason::ValidationUnavailable,
+                    ));
+                }
+            }
+        }
+
         const HEX: &[u8; 16] = b"0123456789abcdef";
         let mut value = String::with_capacity(prefix.len() + bytes.len() * 2);
         value.push_str(prefix);
@@ -4000,6 +4052,136 @@ mod platform {
                 io::Error::from(io::ErrorKind::PermissionDenied),
             )
             .is_already_exists());
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn e3_e_entropy_complete_acquisition_formats_exact_component() {
+            let component = linux_random_component_with_entropy("candidate-", |buffer| {
+                buffer.copy_from_slice(&[
+                    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b,
+                ]);
+                Ok(buffer.len())
+            })
+            .unwrap();
+
+            assert_eq!(component.to_bytes(), b"candidate-000102030405060708090a0b");
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn e3_e_entropy_interrupted_acquisition_retries_then_succeeds() {
+            let mut calls = 0;
+            let component = linux_random_component_with_entropy("candidate-", |buffer| {
+                calls += 1;
+                if calls == 1 {
+                    return Err(io::Error::from(io::ErrorKind::Interrupted));
+                }
+                buffer.fill(0xab);
+                Ok(buffer.len())
+            })
+            .unwrap();
+
+            assert_eq!(calls, 2);
+            assert_eq!(component.to_bytes(), b"candidate-abababababababababababab");
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn e3_e_entropy_partial_acquisition_completes() {
+            let mut filled = 0;
+            let component = linux_random_component_with_entropy("candidate-", |buffer| {
+                let read = if filled == 0 { 5 } else { buffer.len() };
+                for (offset, byte) in buffer.iter_mut().take(read).enumerate() {
+                    *byte = (filled + offset) as u8;
+                }
+                filled += read;
+                Ok(read)
+            })
+            .unwrap();
+
+            assert_eq!(filled, 12);
+            assert_eq!(component.to_bytes(), b"candidate-000102030405060708090a0b");
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn e3_e_entropy_zero_progress_fails_closed() {
+            let error = linux_random_component_with_entropy("candidate-", |_| Ok(0)).unwrap_err();
+
+            assert_eq!(error.reason(), PrivateHomeReason::ValidationUnavailable);
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn e3_e_entropy_zero_progress_after_partial_acquisition_fails_closed() {
+            let mut calls = 0;
+            let error = linux_random_component_with_entropy("candidate-", |buffer| {
+                calls += 1;
+                if calls == 1 {
+                    buffer[..5].fill(0xcd);
+                    return Ok(5);
+                }
+                Ok(0)
+            })
+            .unwrap_err();
+
+            assert_eq!(calls, 2);
+            assert_eq!(error.reason(), PrivateHomeReason::ValidationUnavailable);
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn e3_e_entropy_immediate_terminal_error_fails_closed() {
+            let error = linux_random_component_with_entropy("candidate-", |_| {
+                Err(io::Error::from(io::ErrorKind::PermissionDenied))
+            })
+            .unwrap_err();
+
+            assert_eq!(error.reason(), PrivateHomeReason::ValidationUnavailable);
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn e3_e_entropy_terminal_error_after_partial_progress_fails_closed() {
+            let mut calls = 0;
+            let error = linux_random_component_with_entropy("candidate-", |buffer| {
+                calls += 1;
+                if calls == 1 {
+                    buffer[..5].fill(0xcd);
+                    return Ok(5);
+                }
+                Err(io::Error::from(io::ErrorKind::PermissionDenied))
+            })
+            .unwrap_err();
+
+            assert_eq!(calls, 2);
+            assert_eq!(error.reason(), PrivateHomeReason::ValidationUnavailable);
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn e3_e_entropy_invalid_resulting_component_fails_closed() {
+            let error = linux_random_component_with_entropy("candidate/", |buffer| {
+                buffer.fill(0xef);
+                Ok(buffer.len())
+            })
+            .unwrap_err();
+
+            assert_eq!(error.reason(), PrivateHomeReason::ValidationUnavailable);
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn e3_e_entropy_actual_linux_success_path_formats_component() {
+            let component = random_component("candidate-").unwrap();
+            let value = component.to_str().unwrap();
+            let suffix = value.strip_prefix("candidate-").unwrap();
+
+            assert_eq!(suffix.len(), 24);
+            assert!(suffix
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)));
         }
 
         fn safe_test_parent() -> std::path::PathBuf {
