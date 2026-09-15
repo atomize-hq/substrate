@@ -373,6 +373,14 @@ forbidden.
   schemas and V1 compatibility remain frozen. E3-F production caller wiring and retained Codex
   lifecycle remain excluded. This documentation correction neither completes E3-E nor reopens
   gateway publication, predecessor admission/proof or recovery discovery.
+- **Linux private-home entropy portability exception:** the
+  [canonical narrow allowance](../contracts/agent-config-projection-v1.md#e3-e-linux-private-home-entropy-portability)
+  permits a later, separately authorized Linux repair of private `random_component` entropy
+  acquisition in `trusted_fs.rs`, minimal file-private support/test seams, and focused colocated
+  regressions for the observed musl compiler boundary. Its security/platform invariants, exclusions,
+  focused later proof and historical evidence bindings govern; this correction establishes no
+  product repair, build/runtime success, E3-E completion or E3-F admission and does not resume
+  implementation.
 - **Source owner:** the packet-admitted shell integrated-auth extraction, world-service preparation,
   authenticated local transport and gateway-runtime surfaces, and existing gateway launch/server
   adoption points cataloged by the projection and managed-gateway contracts.

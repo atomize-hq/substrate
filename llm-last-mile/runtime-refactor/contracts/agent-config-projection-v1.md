@@ -2864,7 +2864,9 @@ Only the following additional implementation is authorized:
   Ordinary `TrustedAuthorityRoot::open` continues to use effective UID; ordinary same-user E2
   callers acquire no different ownership authority.
 
-This is the sole added exception to this document's E2/file-symbol exclusions. No changes to E2
+This is the sole added storage-reopen exception to this document's E2/file-symbol exclusions; the
+separate [Linux entropy portability exception](#e3-e-linux-private-home-entropy-portability) does
+not widen this reopen. No changes to E2
 HMAC, cap or commitment authentication, key/registry/schema/history, reconciliation, transaction or
 error semantics are authorized beyond the validation necessary for this reopen. No ownership
 repair, permissions change, process UID/capability change, or fresh-fence/restart API or transition
@@ -5440,7 +5442,8 @@ conflicting restrictions below. Neither correction restarts admission or broaden
    re-export; no intermediate module visibility changes. No other HSA type, descriptor, operation,
    facade visibility, or `dispatch_policy_commitment.rs` change is admitted, except the exact
    internal storage reopen and helper substitution in
-   [Authenticated-owner storage reopen](#authenticated-owner-storage-reopen). All of these bridge
+   [Authenticated-owner storage reopen](#authenticated-owner-storage-reopen) and the separate
+   [Linux entropy portability exception](#e3-e-linux-private-home-entropy-portability). All of these bridge
    additions and the re-export are Linux-gated; other platforms retain their existing unsupported E3
    posture. In
    `crates/shell/src/execution/agent_inventory.rs`, only additive `AgentFileV3`, `AgentConfigV3`,
@@ -5459,13 +5462,69 @@ conflicting restrictions below. Neither correction restarts admission or broaden
    `HeldE3AgentInventorySourceV1::{open,source_bytes,source_material,revalidate}`,
    `validate_agent_schema_v3`, `project_inventory_v3_entry`, and `ConfigProjectionCodecV1`; no
    named dependency gains broader visibility. In
-   `crates/shell/src/execution/agent_runtime/host_session_authority/trusted_fs.rs`, E3-E may add only
+   `crates/shell/src/execution/agent_runtime/host_session_authority/trusted_fs.rs`, apart from the
+   narrow Linux entropy portability exception below, E3-E may add only
    crate-private `HeldE3AgentInventoryRootV1::{from_global,from_workspace,source_relative_paths,
    revalidate}` and crate-private
    `HeldE3AgentInventorySourceV1::{open,source_bytes,source_material,revalidate}` with the exact
    signatures and behavior above. Their fields remain private; neither type is re-exported; and they
    add no raw/borrowed descriptor, path-authority, `TrustedDirectory`, `TrustedFile`, generic
-   resolver, write, or mutation operation. The legacy
+   resolver, write, or mutation operation.
+
+   <a id="e3-e-linux-private-home-entropy-portability"></a>
+
+   **E3-E Linux private-home entropy portability exception.** Later, separately authorized
+   implementation may repair only the Linux entropy-acquisition portion of the existing private
+   `random_component` in this `trusted_fs.rs`, with minimal file-private support, colocated
+   deterministic test seams strictly needed for the repair and its failure cases, and focused
+   regression tests in the same existing test area. This is the sole additional portability
+   exception to the file/symbol and HSA exclusions; it does not broaden authenticated-owner
+   storage reopen or grant file-wide authority.
+
+   The bound product is `d3d13cfe4f3a67314f43142cc547683e13007606`, tree
+   `a0d17f5034a07786de2438bed58ba17e918cd757`. Its required musl build failed with E0425 at
+   `trusted_fs.rs:2732`: pinned `libc 0.2.186` does not declare Linux-musl `getentropy`. The helper
+   is unchanged from product parent `4c5cac9e721ed1de8e355fea5d96022cdfb5765c`; E3-E's Linux shell
+   dependency in world-service exposes it to this compilation path. The compiler, musl target and
+   linker exist; missing packages, kernel entropy, linker failure and resource exhaustion are not
+   established causes. No matched baseline build establishes historical failure or baseline green.
+   The source review and four retained native binaries keep their exact historical identities and
+   limitations; neither required musl binary was produced, and native binaries are not substitutes.
+   The retained blocker records are `build-receipt.json`, `musl-failure-read-only-diagnosis.json`
+   and `musl-failure-disposition.json` under
+   `/home/spenser/__Active_code/review-evidence/e3-e-standalone-4c5cac9e/build-d3d13cfe`.
+
+   Accept a name only after acquiring all 12 cryptographically secure random bytes. Preserve the
+   existing prefix, 24 lowercase-hex-character suffix, path-component validation, caller behavior
+   and error mapping. Unsuccessful acquisition must fail closed with `ValidationUnavailable`;
+   predictable fallback and partially initialized output are forbidden. Follow the chosen API's
+   actual return contract, correctly handling interruption, partial progress, zero progress and
+   terminal errors; a blind `getentropy`-to-`getrandom` rename is not sufficient. Preserve existing
+   macOS and all unrelated platform behavior: this adds no macOS parity lane. Private-home
+   ownership, descriptor validation, rollback, collision handling, authentication, permissions
+   and filesystem security semantics remain unchanged.
+
+   This exception permits no Cargo dependency/version or lockfile change, public entropy API,
+   cross-crate abstraction, generic randomness subsystem or HSA refactor. It permits neither
+   dependency removal nor target changes to evade compilation, helper disabling, timestamp/PID
+   entropy, permissions changes or relaxed security checks. Installer package workarounds,
+   production publication, installation, restart, host changes, unrelated E2/E3 behavior and E3-F
+   remain outside this allowance.
+
+   Later focused verification must cover complete output, retry/partial progress where applicable,
+   zero-progress/error rejection, and unchanged name format/error mapping. The exact required
+   `x86_64-unknown-linux-musl` release build for `substrate-world-entry` and `substrate-gateway`
+   must proceed beyond this compiler boundary and report its actual next result; relevant native
+   regression proof must cover changed causal inputs. Retain the original failed build and all
+   valid prior evidence, reuse unaffected proof, and do not restart complete E3-E source discovery.
+   The later source delta requires its own bounded review and commit binding; old artifacts remain
+   evidence of their old commit, not automatically artifacts of the repaired commit. This separate
+   documentation lineage is no replacement product baseline; historical
+   `2b2fc6c50b40046dbeaeb5b316562fbd96480a2a` is neither parent nor new build subject here. This
+   correction establishes no repair, successful musl build, runtime proof, installation, E3-E
+   completion or E3-F admission, and does not automatically resume implementation.
+
+   The legacy
    `validate_agent_file -> AgentFileV1` entry point adds only an exhaustive V3 arm returning
    `user_error("unsupported agent schema_version 3 in legacy validate_agent_file")`; the E3 caller
    maps that disposition to `UnsupportedLegacyState`, and no path down-converts V3. V1/V2 behavior
