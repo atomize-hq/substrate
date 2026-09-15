@@ -1,6 +1,358 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Select these cases before the legacy fixture creates target/<profile> stubs.
+# The legacy non-dry-run --skip-build scenarios are intentionally unchanged.
+if [[ "${1:-}" == "--gateway-smoke-deferral" ]]; then
+  [[ $# -eq 1 ]] || { echo "--gateway-smoke-deferral takes no other options" >&2; exit 2; }
+  python3 - "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)" <<'PY_DEFERRAL'
+import ctypes
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+assert sys.platform == 'linux' and os.geteuid() != 0, 'requires unprivileged Linux'
+repo = Path(sys.argv[1])
+provision = (repo / 'scripts/linux/world-provision.sh').read_text()
+lifecycle = (repo / 'scripts/linux/world-lifecycle.sh').read_text()
+parent = Path(os.environ.get('SUBSTRATE_TEST_TMPDIR', repo.parent)).resolve()
+assert subprocess.check_output(['stat', '-f', '-c', '%T', str(parent)], text=True).strip() != 'tmpfs'
+python = shutil.which('python3')
+bash = shutil.which('bash')
+assert python and bash
+
+def payload(text, function):
+    body = text.split(function + '() {\n', 1)[1]
+    return body.split("<<'PY'\n", 1)[1].split('\nPY\n', 1)[0] + '\n'
+
+with tempfile.TemporaryDirectory(prefix='world-gateway-deferral-', dir=parent) as temporary:
+    root = Path(temporary)
+    fixture = root / 'repo'
+    scripts = fixture / 'scripts/linux'
+    scripts.mkdir(parents=True)
+    stub = root / 'bin'
+    stub.mkdir()
+    (root / 'tmp').mkdir()
+    account_home = root / 'account-home'
+    (account_home / '.codex').mkdir(parents=True)
+    auth = account_home / '.codex/auth.json'
+    auth.write_text('{"account_id":"fixture-only","access_token":"synthetic-sentinel"}\n')
+    auth.chmod(0o400)
+    sentinel_hash = hashlib.sha256(auth.read_bytes()).hexdigest()
+    script = scripts / 'world-provision.sh'
+    script.write_text(provision)
+    # Only snapshot/rollback discovery is stubbed in the copied helper. Actual
+    # install/main, publication call sites, eligibility and auth bodies execute.
+    hooks = '''
+record_linux_managed_state() {
+    LINUX_MANAGED_STATE_SNAPSHOT_ROOT="$(mktemp -d)"
+}
+restore_linux_managed_state() {
+    printf 'restore\\n' >> "${TEST_AUTH_CALLS}"
+}
+set -T
+trap 'case "${BASH_COMMAND}" in evaluate_gateway_lifecycle_proof_eligibility*|prepare_gateway_smoke_auth*|cleanup_gateway_smoke_auth*|run_gateway_lifecycle_proof*) printf "%s\\n" "${BASH_COMMAND}" >> "${TEST_AUTH_CALLS}" ;; esac' DEBUG
+'''
+    (scripts / 'world-lifecycle.sh').write_text(lifecycle + hooks)
+    (scripts / 'substrate-apply-socket-acl.sh').write_text('# fixture only\n')
+    for name in ('substrate-lifecycle-publisher-v1.service', 'substrate-lifecycle-publisher-v1.socket'):
+        (scripts / name).write_text('# fixture unit\n')
+    (fixture / 'Cargo.lock').write_text('# fixture lock\n')
+    # No production binary is loaded. Every executable is a tiny fixture stub.
+    native = fixture / 'target/release'
+    static = fixture / 'target/x86_64-unknown-linux-musl/release'
+    native.mkdir(parents=True)
+    static.mkdir(parents=True)
+    events = root / 'events.jsonl'
+    auth_calls = root / 'auth-calls'
+    installed = root / 'installed.json'
+    allow_python = {
+        hashlib.sha256(payload(provision, 'resolve_install_bootstrap_context').encode()).hexdigest(): 'context',
+        hashlib.sha256(payload(provision, 'systemd_escape_unit_value').encode()).hexdigest(): 'escape',
+    }
+    privileged_python = {
+        hashlib.sha256(payload(lifecycle, function).encode()).hexdigest(): label
+        for function, label in (
+            ('provision_e3_system_config_mount_target_v1', 'system-config'),
+            ('publish_installed_home_bootstrap_v1', 'bootstrap-publication'),
+            ('publish_substrate_artifact_source_v1', 'artifact-publication'))
+    }
+    dispatcher = stub / 'dispatch'
+    dispatcher.write_text('#!' + python + '\n' + r'''
+import hashlib, json, os, subprocess, sys
+from pathlib import Path
+name = Path(sys.argv[0]).name
+args = sys.argv[1:]
+def record(stage, args=args, **extra):
+    with open(os.environ['TEST_EVENTS'], 'a') as stream:
+        stream.write(json.dumps(dict(stage=stage, args=args, **extra))+'\n')
+    if os.environ.get('TEST_FAIL') == stage:
+        print('injected '+stage, file=sys.stderr)
+        sys.exit(77)
+def blocked():
+    record('UNEXPECTED:'+name)
+    sys.exit(98)
+def normalized(path):
+    prefix = os.environ['FAKE_ROOT']
+    return path[len(prefix):] if path.startswith(prefix + '/') else path
+if name == 'uname':
+    print(os.environ['TEST_HOST'])
+elif name == 'grep':
+    if args == ['-qi', 'microsoft', '/proc/version']:
+        sys.exit(0 if os.environ['TEST_WSL'] == '1' else 1)
+    os.execv(os.environ['TEST_GREP'], [os.environ['TEST_GREP'], *args])
+elif name == 'python3':
+    body = sys.stdin.read()
+    digest = hashlib.sha256(body.encode()).hexdigest()
+    kind = json.loads(os.environ['TEST_ALLOW_PYTHON']).get(digest)
+    if kind == 'context':
+        record('context')
+        for value in [os.environ['TEST_PREFIX'], 'fixture-carrier', 'a'*64,
+                      'fixture-user', '12345', '12345', os.environ['TEST_ACCOUNT_HOME']]:
+            sys.stdout.buffer.write(value.encode()+b'\0')
+    elif kind == 'escape':
+        sys.exit(subprocess.run([os.environ['TEST_PYTHON'], *args], input=body, text=True).returncode)
+    else:
+        blocked()
+elif name == 'cargo':
+    record('build-native')
+elif name == 'rustup':
+    if args == ['run', '1.89.0', 'rustc', '--version']:
+        print('rustc 1.89.0 (fixture)')
+    elif args[:4] == ['run', '1.89.0', 'cargo', 'build']:
+        record('build-static')
+    else:
+        blocked()
+elif name == 'git':
+    if args[2:3] == ['status']:
+        pass
+    elif args[2:4] == ['rev-parse', '--verify']:
+        print('b'*40 if args[-1] == 'HEAD^{commit}' else 'c'*40)
+    else:
+        blocked()
+elif name == 'sudo':
+    # Decode the actual sudo_cmd scrubbed absolute-tool invocation. Never exec
+    # its env or tool path, even when it points to a real privileged binary.
+    while args and args[0] in ('-n', '--'):
+        args.pop(0)
+    assert Path(args.pop(0)).name == 'env' and args.pop(0) == '-i', args
+    while args and '=' in args[0]:
+        args.pop(0)
+    tool = args.pop(0)
+    assert tool.startswith('/'), tool
+    name = Path(tool).name
+    if name == 'python3':
+        body = sys.stdin.read()
+        digest = hashlib.sha256(body.encode()).hexdigest()
+        label = json.loads(os.environ['TEST_PRIVILEGED_PYTHON']).get(digest)
+        assert label, 'unexpected privileged Python payload'
+        record(label, args, payload_sha256=digest)
+    elif name == 'install':
+        destination = normalized(args[-1])
+        record('install-gateway' if destination == '/usr/local/lib/substrate/e3/substrate-gateway'
+               else 'install', args)
+        state = json.loads(Path(os.environ['TEST_INSTALLED']).read_text())
+        state.append(destination)
+        Path(os.environ['TEST_INSTALLED']).write_text(json.dumps(state))
+    elif name == 'test':
+        if args[0] == '-f':
+            record('installed-readback', args)
+            sys.exit(0 if normalized(args[-1]) in json.loads(Path(os.environ['TEST_INSTALLED']).read_text()) else 1)
+        sys.exit(1)
+    elif name == 'systemctl':
+        if args[0] == 'cat':
+            sys.exit(1)
+        record('service-'+args[0], args)
+    elif name in ('rm', 'ls', 'getfacl', 'substrate-apply-socket-acl'):
+        record('privileged-'+name, args)
+    else:
+        blocked()
+elif name == 'getent':
+    assert args == ['group', 'substrate'], args
+    print('substrate:x:12345:fixture-user')
+elif name == 'id':
+    print('fixture-user substrate')
+elif name == 'loginctl':
+    print('Linger=yes')
+elif name == 'substrate':
+    assert args[:2] == ['--install-bootstrap-context-v1', 'fixture-carrier'], args
+    args = args[2:]
+    if args == ['--install-bootstrap-home-v1']:
+        record('private-home', args)
+    elif args == ['config', 'current', 'show', '--json']:
+        record('eligibility-config', args)
+        enabled = os.environ['TEST_ELIGIBLE'] == '1'
+        print(json.dumps({'llm': {'gateway': {'enabled': enabled, 'mode': 'in_world'},
+                        'routing': {'default_backend': 'cli:codex-host'}}, 'agents': {}}, separators=(',', ':')))
+    elif args == ['policy', 'current', 'show', '--json']:
+        record('eligibility-policy', args)
+        print('{"llm":{"allowed_backends":["cli:codex-host"],"secrets":{"env_allowed":[]}},"agents":{"host_credentials":{"read":{"allowed_backends":["cli:codex-host"]}}},"workflow":{}}')
+    elif args[:2] == ['world', 'gateway']:
+        record('gateway-'+args[2], args)
+        if args[2] in ('sync', 'restart'):
+            Path(os.environ['TEST_AUTH']).read_bytes()
+        elif args[2:] == ['status', '--json']:
+            print('{"status":"available","openai_base_url":"http://127.0.0.1:19432"}')
+        else:
+            blocked()
+    else:
+        blocked()
+elif name == 'curl':
+    assert args == ['--fail', '--silent', 'http://127.0.0.1:19432/health'], args
+    record('gateway-health')
+    print('{"status":"ok","service":"substrate-gateway"}')
+else:
+    blocked()
+''')
+    dispatcher.chmod(0o755)
+    for tool in ('uname', 'grep', 'python3', 'cargo', 'rustup', 'git', 'sudo', 'getent',
+                 'id', 'loginctl', 'curl', 'systemctl', 'install', 'wget', 'apt-get',
+                 'dnf', 'yum', 'pacman', 'zypper', 'groupadd', 'usermod'):
+        (stub / tool).symlink_to(dispatcher)
+    # Real utilities below only process fixture paths or supplied text. All
+    # privileged uses are consumed by sudo; no absolute tool is executed there.
+    for tool in ('bash', 'cat', 'dirname', 'basename', 'mktemp', 'rm', 'rmdir',
+                 'sed', 'awk', 'sha256sum', 'cut', 'env'):
+        (stub / tool).symlink_to(shutil.which(tool))
+    for directory, names in ((native, ('substrate', 'world-service', 'substrate-gateway', 'substrate-lifecycle-linux')),
+                             (static, ('substrate-gateway', 'substrate-world-entry'))):
+        for name in names:
+            (directory / name).symlink_to(dispatcher)
+
+    def run(args=(), eligible=True, failure='', host='Linux', wsl='0'):
+        events.write_text('')
+        auth_calls.write_text('')
+        installed.write_text('[]')
+        env = {'PATH': str(stub), 'HOME': str(root / 'ambient-home'),
+               'TMPDIR': str(root / 'tmp'), 'LANG': 'C', 'LC_ALL': 'C',
+               'FAKE_ROOT': str(root / 'system'), 'TEST_PREFIX': str(root / 'prefix'),
+               'TEST_ACCOUNT_HOME': str(account_home), 'TEST_AUTH': str(auth),
+               'TEST_EVENTS': str(events), 'TEST_AUTH_CALLS': str(auth_calls),
+               'TEST_INSTALLED': str(installed), 'TEST_HOST': host, 'TEST_WSL': wsl,
+               'TEST_ELIGIBLE': '1' if eligible else '0', 'TEST_FAIL': failure,
+               'TEST_PYTHON': python, 'TEST_GREP': shutil.which('grep'),
+               'TEST_ALLOW_PYTHON': json.dumps(allow_python),
+               'TEST_PRIVILEGED_PYTHON': json.dumps(privileged_python)}
+        libc = ctypes.CDLL(None, use_errno=True)
+        fd = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
+        assert fd >= 0
+        # Access/open/write/attribute/deletion watches detect reads independently
+        # of filesystem atime policy. Only this synthetic sentinel is watched.
+        assert libc.inotify_add_watch(fd, os.fsencode(auth), 0x00000FFF) >= 0
+        try:
+            result = subprocess.run([bash, str(script), '--home', env['TEST_PREFIX'], *args],
+                                    env=env, text=True, capture_output=True, timeout=15)
+            try:
+                activity = os.read(fd, 65536)
+            except BlockingIOError:
+                activity = b''
+        finally:
+            os.close(fd)
+        assert hashlib.sha256(auth.read_bytes()).hexdigest() == sentinel_hash
+        assert auth.stat().st_mode & 0o777 == 0o400
+        calls = [json.loads(line) for line in events.read_text().splitlines()]
+        assert not any(c['stage'].startswith('UNEXPECTED:') for c in calls), (result, calls)
+        print('CASE ' + json.dumps({'args': list(args), 'eligible': eligible, 'failure': failure,
+                                   'host': host, 'wsl': wsl, 'exit_code': result.returncode,
+                                   'calls': calls, 'auth_trace': auth_calls.read_text(),
+                                   'auth_event_bytes': len(activity), 'stdout': result.stdout,
+                                   'stderr': result.stderr}, sort_keys=True))
+        return result, calls, auth_calls.read_text(), activity
+
+    for option in ('--help', '-h'):
+        result, calls, trace, activity = run([option])
+        assert result.returncode == 0 and '--skip-gateway-smoke' in result.stdout, result
+        assert 'maintainer' in result.stdout.lower() and not calls and not activity
+    print('PASS direct help')
+    for args in (['--no-world'], ['--skip-gateway-smoke', '--no-world'],
+                 ['--no-world', '--skip-gateway-smoke'], ['--unknown-deferral-option'],
+                 ['--skip-gateway-smoke=yes']):
+        result, calls, trace, activity = run(args)
+        assert result.returncode == 1 and 'Unknown option:' in result.stderr, result
+        assert not calls and not trace and not activity
+    print('PASS direct unknown/no-world rejection before context/build/install')
+    for host, wsl in [('Darwin', '0'), ('MINGW64_NT-10.0', '0'), ('MSYS_NT-10.0', '0'),
+                      ('CYGWIN_NT-10.0', '0'), ('Windows_NT', '0'), ('FreeBSD', '0'), ('Linux', '1')]:
+        result, calls, trace, activity = run(['--skip-gateway-smoke'], host=host, wsl=wsl)
+        assert result.returncode != 0 and 'native Linux' in result.stderr, result
+        assert not calls and not trace and not activity
+        print('PASS direct unsupported host before context/build/install:', host, wsl)
+
+    for eligible, skip in ((True, False), (False, False), (True, True)):
+        result, calls, trace, activity = run(['--skip-gateway-smoke'] if skip else [], eligible)
+        assert result.returncode == 0, result
+        stages = [call['stage'] for call in calls]
+        required = ['build-native', 'build-static', 'private-home', 'install-gateway',
+                    'bootstrap-publication', 'installed-readback', 'artifact-publication',
+                    'service-daemon-reload', 'service-enable', 'service-stop', 'service-start']
+        for stage in required:
+            assert stage in stages, (stage, calls)
+        installs = [c['args'][-1] for c in calls if c['stage'] in ('install', 'install-gateway')]
+        for destination in ('/usr/local/bin/substrate-world-service', '/usr/local/bin/substrate-gateway',
+                            '/usr/local/lib/substrate/e3/substrate-gateway',
+                            '/usr/local/lib/substrate/e3/substrate-world-entry',
+                            '/usr/libexec/substrate/substrate-lifecycle-linux'):
+            assert destination in installs, (destination, calls)
+        for unit in ('substrate-world-service.service', 'substrate-world-service.socket',
+                     'substrate-lifecycle-publisher-v1.socket'):
+            for action in ('enable', 'start'):
+                assert any(c['stage'] == 'service-' + action and c['args'] == [action, unit]
+                           for c in calls), (action, unit, calls)
+        native_args = next(c['args'] for c in calls if c['stage'] == 'build-native')
+        assert native_args == ['build', '--locked', '-p', 'substrate', '--bin', 'substrate',
+                               '--bin', 'substrate-lifecycle-linux', '-p', 'world-service',
+                               '--bin', 'world-service', '-p', 'substrate-gateway', '--bin',
+                               'substrate-gateway', '--release', '--manifest-path', str(fixture / 'Cargo.toml')]
+        static_args = next(c['args'] for c in calls if c['stage'] == 'build-static')
+        assert static_args == ['run', '1.89.0', 'cargo', 'build', '--locked', '--release',
+                               '--target', 'x86_64-unknown-linux-musl', '-p', 'world-service',
+                               '--bin', 'substrate-world-entry', '-p', 'substrate-gateway',
+                               '--bin', 'substrate-gateway', '--manifest-path', str(fixture / 'Cargo.toml')]
+        assert stages.index('build-native') < stages.index('install-gateway') < stages.index('installed-readback') < stages.index('artifact-publication') < stages.index('service-start')
+        if skip:
+            assert not any(s.startswith(('eligibility-', 'gateway-')) for s in stages), calls
+            assert not trace and not activity, (trace, activity)
+            assert 'gateway smoke deferred by request' in result.stdout.lower(), result
+            assert not re.search(r'smoke.*pass|runtime acceptance|E3.*complete', result.stdout, re.I), result
+            print('PASS explicit deferral: zero eligibility/auth/gateway operations; sentinel unopened/unmodified')
+        else:
+            assert 'eligibility-config' in stages and 'eligibility-policy' in stages
+            if eligible:
+                for stage in ('gateway-sync', 'gateway-status', 'gateway-restart', 'gateway-health'):
+                    assert stage in stages, calls
+                assert 'prepare_gateway_smoke_auth' in trace and activity
+                assert 'Running gateway lifecycle proof (auth: synthetic_auth_file)' in result.stdout
+                print('PASS default eligible: actual smoke/auth path and stubbed sync/restart/health')
+            else:
+                assert not any(s.startswith('gateway-') for s in stages)
+                assert 'Skipping gateway lifecycle proof' in result.stdout and not activity
+                assert 'prepare_gateway_smoke_auth' not in trace
+                print('PASS default ineligible: existing skip path')
+        print('PASS mandatory build/install/readback/publication/service call path')
+
+    for failure in ('build-native', 'build-static', 'private-home', 'install-gateway',
+                    'installed-readback', 'bootstrap-publication', 'artifact-publication',
+                    'service-enable', 'service-start'):
+        result, calls, trace, activity = run(['--skip-gateway-smoke'], failure=failure)
+        assert result.returncode != 0 and any(c['stage'] == failure for c in calls), (failure, result, calls)
+        assert not any(c['stage'].startswith(('eligibility-', 'gateway-')) for c in calls)
+        assert not activity and 'Provisioning complete' not in result.stdout, result
+        print('PASS injected mandatory failure remains failure:', failure, result.returncode)
+    result, calls, trace, activity = run(['--skip-gateway-smoke', '--skip-build'])
+    assert result.returncode == 1 and '--skip-build is unavailable' in result.stderr, result
+    assert [c['stage'] for c in calls] == ['context'] and not activity
+    print('PASS existing non-dry --skip-build rejection preserved')
+print('PASS world provisioner gateway smoke deferral focused tests; privileged validation/publication are stubs, not installed acceptance')
+PY_DEFERRAL
+  exit $?
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 

@@ -211,7 +211,7 @@ freshly built binaries. This is intended for local iteration after removing any
 production installation.
 
 Usage:
-  dev-install-substrate.sh [--prefix <path>] [--profile <debug|release>] [--version-label <name>] [--no-world] [--anchor-mode <mode>] [--anchor-path <path>] [--caged|--uncaged] [--no-shims] [--provision-agent-runtime <runtime_family>]
+  dev-install-substrate.sh [--prefix <path>] [--profile <debug|release>] [--version-label <name>] [--no-world] [--skip-gateway-smoke] [--anchor-mode <mode>] [--anchor-path <path>] [--caged|--uncaged] [--no-shims] [--provision-agent-runtime <runtime_family>]
   dev-install-substrate.sh --help
 
 Options:
@@ -219,6 +219,7 @@ Options:
   --profile <name>          Cargo profile to build (debug or release; default: debug)
   --version-label <name>    Version directory label under <prefix>/versions (default: dev)
   --no-world                Mark install metadata as world_disabled (skips provisioning entirely)
+  --skip-gateway-smoke      Maintainer: defer optional gateway smoke (native Linux with world enabled only)
   --world-netfilter         Enable Linux nftables egress scoping (sets WORLD_NETFILTER_ENABLE=1 for substrate-world-service.service)
   --provision-agent-runtime <runtime_family>
                             Enable a world runtime globally (codex only in this slice), then run
@@ -2525,6 +2526,7 @@ INSTALL_BOOTSTRAP_CONTEXT_V1=""
 PROFILE="debug"
 DEPLOY_SHIMS=1
 WORLD_ENABLED=1
+SKIP_GATEWAY_SMOKE=0
 ANCHOR_MODE="workspace"
 ANCHOR_PATH=""
 WORLD_CAGED=1
@@ -2582,6 +2584,10 @@ while [[ $# -gt 0 ]]; do
       WORLD_ENABLED=0
       shift
       ;;
+    --skip-gateway-smoke)
+      SKIP_GATEWAY_SMOKE=1
+      shift
+      ;;
     --world-netfilter)
       ENABLE_WORLD_NETFILTER=1
       shift
@@ -2628,6 +2634,15 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "${SKIP_GATEWAY_SMOKE}" -eq 1 ]]; then
+  if [[ "${WORLD_ENABLED}" -eq 0 ]]; then
+    fatal "--skip-gateway-smoke cannot be used with --no-world"
+  fi
+  if [[ "${IS_LINUX}" -ne 1 || "${IS_WSL}" -eq 1 ]]; then
+    fatal "--skip-gateway-smoke requires a native Linux host"
+  fi
+fi
 
 if [[ "${IS_MAC}" -eq 1 && "${ENABLE_WORLD_NETFILTER}" -eq 1 ]]; then
   fatal "macOS --world-netfilter is not authorized for the fixed R3 install path"
@@ -2850,6 +2865,9 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
           --profile "${PROFILE}"
           --skip-build
         )
+	    if [[ "${SKIP_GATEWAY_SMOKE}" -eq 1 ]]; then
+	      provision_args+=(--skip-gateway-smoke)
+	    fi
 	    if [[ "${ENABLE_WORLD_NETFILTER}" -eq 1 ]]; then
 	      provision_args+=(--world-netfilter)
 	    fi

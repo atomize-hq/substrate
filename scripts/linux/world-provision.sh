@@ -16,6 +16,7 @@ set -euo pipefail
 
 PROFILE=release
 SKIP_BUILD=0
+SKIP_GATEWAY_SMOKE=0
 DRY_RUN=0
 SUDO_NONINTERACTIVE=0
 ENABLE_WORLD_NETFILTER=0
@@ -615,6 +616,11 @@ run_gateway_lifecycle_proof() {
 maybe_run_gateway_lifecycle_proof() {
     local substrate_cli="$1"
 
+    if [[ ${SKIP_GATEWAY_SMOKE} -eq 1 ]]; then
+        echo "==> Gateway smoke deferred by request (--skip-gateway-smoke)"
+        return 0
+    fi
+
     evaluate_gateway_lifecycle_proof_eligibility "${substrate_cli}"
     if [[ ${GATEWAY_PROOF_ELIGIBLE} -eq 0 ]]; then
         print_gateway_lifecycle_proof_skip
@@ -844,6 +850,7 @@ Options:
   --home <path>      Select the installed Substrate host prefix
   --profile <name>   Cargo profile to build (default: release)
   --skip-build       Assume target/<profile>/world-service already exists
+  --skip-gateway-smoke  Maintainer: defer optional gateway smoke (native Linux only)
   --dry-run          Print the provisioning steps without executing them
   --world-netfilter  Enable Linux nftables egress scoping (sets WORLD_NETFILTER_ENABLE=1 for substrate-world-service.service)
   --sudo-noninteractive  Use sudo -n (fail fast if password required)
@@ -885,6 +892,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-build)
             SKIP_BUILD=1
+            shift
+            ;;
+        --skip-gateway-smoke)
+            if [[ "$(uname -s)" != "Linux" ]] || is_wsl_host; then
+                echo "--skip-gateway-smoke requires a native Linux host" >&2
+                exit 2
+            fi
+            SKIP_GATEWAY_SMOKE=1
             shift
             ;;
         --dry-run)
