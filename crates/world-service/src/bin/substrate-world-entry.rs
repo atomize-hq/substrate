@@ -577,6 +577,31 @@ fn validate_numeric_self_proc_identity(
     Ok(())
 }
 
+fn decode_e2_policy_snapshot(
+    snapshot_bytes: &[u8],
+    byte_length: u64,
+    snapshot_hash: &str,
+) -> Result<transport_api_types::PolicySnapshotV3> {
+    if snapshot_bytes.len() as u64 != byte_length
+        || format!("{:x}", Sha256::digest(snapshot_bytes)) != snapshot_hash
+    {
+        bail!("E3-D policy snapshot bytes do not match the authenticated input");
+    }
+    // E2 authenticates exact typed serialization, not E3's sorted-key JSON codec.
+    let snapshot: transport_api_types::PolicySnapshotV3 =
+        serde_json::from_slice(snapshot_bytes).context("decode E2 PolicySnapshotV3")?;
+    if serde_json::to_vec(&snapshot)? != snapshot_bytes
+        || serde_json::to_vec(&snapshot.canonicalize().map_err(anyhow::Error::msg)?)?
+            != snapshot_bytes
+    {
+        bail!("E3-D policy snapshot is not exact canonical E2 material");
+    }
+    if snapshot.world_fs.host_visible {
+        bail!("E3-D requires full filesystem isolation");
+    }
+    Ok(snapshot)
+}
+
 fn apply_authenticated_world_fs_enforcement(
     descriptors: &LaunchDescriptorsV1,
     input: &E3WorldFsEnforcementInputV1,
@@ -595,16 +620,11 @@ fn apply_authenticated_world_fs_enforcement(
     let snapshot_bytes = BASE64
         .decode(input.policy_snapshot_bytes_base64.as_bytes())
         .context("decode E3-D policy snapshot bytes")?;
-    if snapshot_bytes.len() as u64 != input.policy_snapshot_byte_length
-        || format!("{:x}", Sha256::digest(&snapshot_bytes)) != input.policy_snapshot_hash
-    {
-        bail!("E3-D policy snapshot bytes do not match the authenticated input");
-    }
-    let snapshot: transport_api_types::PolicySnapshotV3 = decode_exact_canonical(&snapshot_bytes)?;
-    let snapshot = snapshot.canonicalize().map_err(anyhow::Error::msg)?;
-    if snapshot.world_fs.host_visible {
-        bail!("E3-D requires full filesystem isolation");
-    }
+    let snapshot = decode_e2_policy_snapshot(
+        &snapshot_bytes,
+        input.policy_snapshot_byte_length,
+        &input.policy_snapshot_hash,
+    )?;
     let (mut e2_discover_paths, mut e2_execute_paths, mut e2_read_paths, mut e2_write_paths) =
         if let Some(workspace) = workspace.as_deref() {
             let read_patterns = snapshot
@@ -4036,6 +4056,107 @@ fn close_wrapper_descriptors_before_final_exec(descriptors: &LaunchDescriptorsV1
 mod tests {
     use super::*;
     use std::os::fd::IntoRawFd;
+
+    fn full_isolation_snapshot() -> transport_api_types::PolicySnapshotV3 {
+        serde_json::from_value::<transport_api_types::PolicySnapshotV3>(serde_json::json!({
+            "schema_version": 3,
+            "net_allowed": ["api.example"],
+            "world_fs": {
+                "host_visible": false,
+                "fail_closed": {"routing": true},
+                "deny_enforcement": "strict",
+                "caged_required": true
+            }
+        }))
+        .unwrap()
+        .canonicalize()
+        .unwrap()
+    }
+
+    #[test]
+    fn test_e2_snapshot_accepts_exact_typed_canonical_bytes_unchanged() {
+        let snapshot = full_isolation_snapshot();
+        let bytes = serde_json::to_vec(&snapshot).unwrap();
+        let original = bytes.clone();
+        let hash = format!("{:x}", Sha256::digest(&bytes));
+        assert_ne!(
+            ConfigProjectionCodecV1::encode_canonical_json(&snapshot).unwrap(),
+            bytes
+        );
+        let decoded = decode_e2_policy_snapshot(&bytes, bytes.len() as u64, &hash).unwrap();
+        assert_eq!(serde_json::to_vec(&decoded).unwrap(), original);
+        assert_eq!(bytes, original);
+    }
+
+    #[test]
+    fn test_e2_snapshot_rejects_noncanonical_material() {
+        let snapshot = full_isolation_snapshot();
+        let bytes = serde_json::to_vec(&snapshot).unwrap();
+        let mut noncanonical = snapshot.clone();
+        noncanonical.net_allowed = vec![
+            "z.example".into(),
+            "api.example".into(),
+            "api.example".into(),
+        ];
+        let mut invalid_version = snapshot.clone();
+        invalid_version.schema_version = 2;
+        let mut missing_dimensions = snapshot.clone();
+        missing_dimensions.world_fs.read = None;
+        missing_dimensions.world_fs.discover = None;
+        let json = String::from_utf8(bytes.clone()).unwrap();
+        let cases = [
+            ConfigProjectionCodecV1::encode_canonical_json(&snapshot).unwrap(),
+            serde_json::to_vec_pretty(&snapshot).unwrap(),
+            serde_json::to_vec(&noncanonical).unwrap(),
+            serde_json::to_vec(&invalid_version).unwrap(),
+            serde_json::to_vec(&missing_dimensions).unwrap(),
+            json.replacen("{", "{\"unknown\":true,", 1).into_bytes(),
+            json.replacen("{", "{\"schema_version\":3,", 1).into_bytes(),
+            [bytes.as_slice(), b"{}"].concat(),
+        ];
+        for candidate in cases {
+            let hash = format!("{:x}", Sha256::digest(&candidate));
+            assert!(decode_e2_policy_snapshot(&candidate, candidate.len() as u64, &hash).is_err());
+        }
+    }
+
+    #[test]
+    fn test_e2_snapshot_rejects_changed_authenticated_length_or_hash() {
+        let bytes = serde_json::to_vec(&full_isolation_snapshot()).unwrap();
+        let hash = format!("{:x}", Sha256::digest(&bytes));
+        assert!(decode_e2_policy_snapshot(&bytes, bytes.len() as u64 + 1, &hash).is_err());
+        let tampered = String::from_utf8(bytes.clone())
+            .unwrap()
+            .replace("api.example", "bad.example")
+            .into_bytes();
+        assert_eq!(tampered.len(), bytes.len());
+        assert!(decode_e2_policy_snapshot(&tampered, bytes.len() as u64, &hash).is_err());
+    }
+
+    #[test]
+    fn test_e2_snapshot_rejects_host_visible_policy() {
+        let mut snapshot = full_isolation_snapshot();
+        snapshot.world_fs.host_visible = true;
+        let bytes = serde_json::to_vec(&snapshot.canonicalize().unwrap()).unwrap();
+        let hash = format!("{:x}", Sha256::digest(&bytes));
+        let error = decode_e2_policy_snapshot(&bytes, bytes.len() as u64, &hash).unwrap_err();
+        assert_eq!(error.to_string(), "E3-D requires full filesystem isolation");
+    }
+
+    #[test]
+    fn test_outer_e3_canonical_decoder_remains_strict() {
+        let snapshot = full_isolation_snapshot();
+        let e2_bytes = serde_json::to_vec(&snapshot).unwrap();
+        assert!(
+            decode_exact_canonical::<transport_api_types::PolicySnapshotV3>(&e2_bytes).is_err()
+        );
+        let e3_bytes = ConfigProjectionCodecV1::encode_canonical_json(&snapshot).unwrap();
+        assert!(decode_exact_canonical::<transport_api_types::PolicySnapshotV3>(&e3_bytes).is_ok());
+        let trailing = [e3_bytes.as_slice(), b" "].concat();
+        assert!(
+            decode_exact_canonical::<transport_api_types::PolicySnapshotV3>(&trailing).is_err()
+        );
+    }
 
     #[test]
     fn exact_e3_ca_resolver_accepts_the_supported_host_layout() {

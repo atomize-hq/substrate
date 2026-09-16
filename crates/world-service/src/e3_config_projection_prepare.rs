@@ -1816,6 +1816,54 @@ mod tests {
             .to_string()
     }
 
+    fn e3_e_park_e3d_transition_caps_for_connected_activation() -> anyhow::Result<()> {
+        if std::env::var_os("E3_E_CONNECTED_ACTIVATION").is_none() {
+            return Ok(());
+        }
+        #[repr(C)]
+        struct CapabilityHeader {
+            version: u32,
+            pid: i32,
+        }
+        #[repr(C)]
+        #[derive(Clone, Copy, Default)]
+        struct CapabilityData {
+            effective: u32,
+            permitted: u32,
+            inheritable: u32,
+        }
+        const VERSION_3: u32 = 0x2008_0522;
+        const TRANSITION: u32 = (1 << 6) | (1 << 7);
+        let mut header = CapabilityHeader {
+            version: VERSION_3,
+            pid: 0,
+        };
+        let mut capabilities = [CapabilityData::default(); 2];
+        anyhow::ensure!(
+            unsafe { libc::syscall(libc::SYS_capget, &mut header, capabilities.as_mut_ptr()) } == 0,
+            "read E3-D transition capability state: {}",
+            std::io::Error::last_os_error()
+        );
+        anyhow::ensure!(
+            capabilities[0].permitted & TRANSITION == TRANSITION,
+            "E3-D transition capabilities are not permitted"
+        );
+        capabilities[0].effective &= !TRANSITION;
+        anyhow::ensure!(
+            unsafe { libc::syscall(libc::SYS_capset, &mut header, capabilities.as_ptr()) } == 0,
+            "park E3-D transition capabilities: {}",
+            std::io::Error::last_os_error()
+        );
+        let mut parked = [CapabilityData::default(); 2];
+        anyhow::ensure!(
+            unsafe { libc::syscall(libc::SYS_capget, &mut header, parked.as_mut_ptr()) } == 0
+                && parked[0].effective & TRANSITION == 0
+                && parked[0].permitted & TRANSITION == TRANSITION,
+            "E3-D transition capabilities were not parked"
+        );
+        Ok(())
+    }
+
     fn configured(home: &std::path::Path) -> ConfiguredAcceptedHomeAuthorityV1 {
         use std::os::unix::fs::MetadataExt;
         let descriptor = File::open(home).unwrap();
@@ -2199,10 +2247,30 @@ mod tests {
             "isolated manager fixture requires root"
         );
         let recovery_phase = std::env::var("E3_E_RECOVERY_PHASE").ok();
+        let connected_activation = std::env::var_os("E3_E_CONNECTED_ACTIVATION").is_some();
+        let activation_series = std::env::var_os("E3_E_CONNECTED_ACTIVATION_SERIES").is_some();
         let live_registered_restart =
             std::env::var_os("E3_E_LIVE_REGISTERED_RESTART_FIXTURE").is_some();
         let registered_restart = live_registered_restart
             || std::env::var_os("E3_E_REGISTERED_RESTART_FIXTURE").is_some();
+        if recovery_phase.is_none() && activation_series {
+            for (phase, expected) in [("activation-writer", 80), ("activation-recovered", 0)] {
+                let status = std::process::Command::new(std::env::current_exe()?)
+                    .args([
+                        "e3_e_authenticated_preparation_response_and_cancellation",
+                        "--ignored",
+                        "--nocapture",
+                        "--test-threads=1",
+                    ])
+                    .env("E3_E_RECOVERY_PHASE", phase)
+                    .env("E3_E_CONNECTED_ACTIVATION", "1")
+                    .env("E3_E_CONNECTED_ACTIVATION_SERIES", "1")
+                    .status()?;
+                anyhow::ensure!(status.code() == Some(expected), "{phase} failed: {status}");
+            }
+            eprintln!("E3_CONNECTED_READY_CLOSED_CRASH_RECOVERY_THEN_FRESH_AUTH_PASSED");
+            return Ok(());
+        }
         if recovery_phase.as_deref() == Some("active-series") {
             for (phase, expected) in [("active-writer", 79), ("active-recovered", 0)] {
                 let status = std::process::Command::new(std::env::current_exe()?)
@@ -2219,7 +2287,7 @@ mod tests {
             eprintln!("E3_SYNTHETIC_TERMINAL_ACTIVE_ACTUAL_PROCESS_REOPEN_PASSED");
             return Ok(());
         }
-        if recovery_phase.is_none() {
+        if recovery_phase.is_none() && !connected_activation {
             for (phase, expected) in [
                 (
                     "writer",
@@ -2251,6 +2319,7 @@ mod tests {
             eprintln!("E3_RECOVERED_SEPARATE_PROCESS_INTERRUPTION_AND_RETRY_PASSED");
             return Ok(());
         }
+        e3_e_park_e3d_transition_caps_for_connected_activation()?;
         let fixture_path = std::env::var_os("E3_E_AUTHENTICATED_MANAGER_FIXTURE")
             .ok_or_else(|| anyhow::anyhow!("explicit authenticated fixture required"))?;
         let artifact_path = std::env::var_os("E3_E_MANAGER_ARTIFACT_FIXTURE_READ")
@@ -2815,11 +2884,75 @@ mod tests {
             "source_hash",
             serde_json::to_value(&inventory)?,
         )?;
-        // The installer boundary is an explicit synthetic input. HSA/source authentication,
-        // native publication, listener/cgroup/config identities and lifecycle below are real.
-        // No artifact is executed and this fixture never becomes installed provenance.
+        // Dormant/recovery keeps the existing synthetic installer input. The connected branch
+        // substitutes only the installed, descriptor-pinned gateway and wrapper records; its
+        // activation is real and still never starts Codex (an E3-F concern).
         let mut manifest: TrustedRuntimeArtifactManifestV1 =
             serde_json::from_slice(&fs::read(artifact_path)?)?;
+        if connected_activation {
+            let source: InstallerArtifactSourceRecordV1 = serde_json::from_slice(&fs::read(
+                "/var/lib/substrate/runtime-artifacts-v1/records/substrate-source-build/00000000000000000002-iar_01a0a692-4dba-73a7-9b3e-5348188deb4a.json",
+            )?)?;
+            let InstallerArtifactBuildInputV1::SubstrateSourceBuild {
+                source_commit,
+                source_tree,
+                cargo_lock_sha256,
+                ..
+            } = &source.build_input
+            else {
+                anyhow::bail!("installed source-build record has the wrong build input");
+            };
+            for (role, component) in [
+                (
+                    RuntimeArtifactAuthorityRoleV1::ManagedGateway,
+                    "substrate-gateway",
+                ),
+                (
+                    RuntimeArtifactAuthorityRoleV1::WorldEntryWrapper,
+                    "substrate-world-entry",
+                ),
+            ] {
+                let installed = source
+                    .entries
+                    .iter()
+                    .find(|entry| entry.component == component && entry.file_type == "regular")
+                    .with_context(|| format!("installed {component} descriptor is missing"))?;
+                let entry = manifest
+                    .entries
+                    .iter_mut()
+                    .find(|entry| entry.authority_role == role)
+                    .with_context(|| format!("fixture {component} manifest role is missing"))?;
+                entry.configured_absolute_path = installed.installed_absolute_path.clone();
+                entry.device_id = installed.device_id;
+                entry.inode = installed.inode;
+                entry.mode = installed.mode;
+                entry.owner_uid = installed.owner_uid;
+                entry.byte_length = installed.byte_length;
+                entry.sha256 = installed.sha256.clone();
+                entry.installer_source_ref = InstallerArtifactSourceRefV1 {
+                    source_store_id: source.source_store_id.clone(),
+                    source_record_id: source.source_record_id.clone(),
+                    revision: source.revision,
+                    record_hash: source.record_hash.clone(),
+                };
+                entry.provenance = RuntimeArtifactProvenanceV1::SubstrateSourceBuild {
+                    component: component.to_string(),
+                    source_commit: source_commit.clone(),
+                    source_tree: source_tree.clone(),
+                    cargo_lock_sha256: cargo_lock_sha256.clone(),
+                    target_triple: "x86_64-unknown-linux-musl".to_string(),
+                    profile: "release".to_string(),
+                    executable_sha256: installed.sha256.clone(),
+                };
+                entry.runtime_support = installed.runtime_support.clone();
+                entry.entry_hash = seal(
+                    "substrate.e3.runtime-artifact-entry.v1",
+                    "entry",
+                    "entry_hash",
+                    serde_json::to_value(&*entry)?,
+                )?;
+            }
+        }
         manifest.authority_store_id = store.authority_store_id.clone();
         manifest.manifest_hash = seal(
             "substrate.e3.runtime-artifact-manifest.v1",
@@ -2830,7 +2963,10 @@ mod tests {
         let child = home.join("authority-v1/agent-config-projection-v1");
         let owner = fs::metadata(&home)?;
         let manifest_dir = child.join("runtime-artifacts").join(&manifest.manifest_id);
-        if recovery_phase.as_deref() != Some("resume-fresh") {
+        if !matches!(
+            recovery_phase.as_deref(),
+            Some("resume-fresh" | "activation-recovered")
+        ) {
             fs::create_dir(&manifest_dir)?;
             std::os::unix::fs::chown(&manifest_dir, Some(owner.uid()), Some(owner.gid()))?;
             fs::set_permissions(&manifest_dir, fs::Permissions::from_mode(0o700))?;
@@ -2853,7 +2989,10 @@ mod tests {
                 ConfigProjectionCodecV1::encode_canonical_json(&manifest)?,
             ),
         ] {
-            if recovery_phase.as_deref() == Some("resume-fresh") {
+            if matches!(
+                recovery_phase.as_deref(),
+                Some("resume-fresh" | "activation-recovered")
+            ) {
                 anyhow::ensure!(
                     fs::read(&path)? == bytes,
                     "restart changed immutable authoring fixture bytes"
@@ -2915,11 +3054,17 @@ mod tests {
         );
         request.validate().map_err(anyhow::Error::msg)?;
         let world_parent = PathBuf::from("/sys/fs/cgroup/substrate").join(&request.world_id);
-        if recovery_phase.as_deref() != Some("resume-fresh") {
+        if !matches!(
+            recovery_phase.as_deref(),
+            Some("resume-fresh" | "activation-recovered")
+        ) {
             fs::create_dir(&world_parent)?;
         }
         eprintln!("E3_MANAGER_TEST_WORLD {}", request.world_id);
-        let prior_head = if recovery_phase.as_deref() == Some("resume-fresh") {
+        let prior_head = if matches!(
+            recovery_phase.as_deref(),
+            Some("resume-fresh" | "activation-recovered")
+        ) {
             let readback = registry.recover(None)?;
             let record = readback
                 .kernel_effects
@@ -3524,6 +3669,79 @@ os.execv('/bin/sleep', ['/bin/sleep', '600'])
                     paths,
                 )
             };
+            if connected_activation && recovery_phase.as_deref() != Some("activation-recovered") {
+                let dispatch = MemberDispatchRequestV2 {
+                    schema_version: 2,
+                    orchestration_session_id: request.orchestration_session_id.clone(),
+                    participant_id: request.participant_id.clone(),
+                    orchestrator_participant_id: request.orchestrator_participant_id.clone(),
+                    parent_participant_id: request.parent_participant_id.clone(),
+                    resumed_from_participant_id: request.resumed_from_participant_id.clone(),
+                    backend_id: request.backend_id.clone(),
+                    protocol: request.protocol.clone(),
+                    run_id: request.run_id.clone(),
+                    world_id: request.world_id.clone(),
+                    world_generation: request.world_generation,
+                    initial_prompt: None,
+                    resolved_runtime: request.resolved_runtime.clone(),
+                    retained_worker_launch_authority: request
+                        .retained_worker_launch_authority
+                        .clone(),
+                    e2_launch_activation: Some(request.e2_launch_activation.clone()),
+                    config_projection: response.config_projection.clone(),
+                };
+                let mut transferred = manager.take_for_v2(&dispatch)?;
+                anyhow::ensure!(
+                    transferred.ready_closed_ref.is_some() && transferred.credential_source.is_none(),
+                    "successful activation retained credential material or missed ReadyClosed"
+                );
+                let ConfigProjectionSubjectReadbackV1::Bound(ready) =
+                    manager.projection_service.resolve_preparation_subject_v1(&identity)?
+                else {
+                    anyhow::bail!("ReadyClosed subject is absent");
+                };
+                anyhow::ensure!(
+                    ready.record().managed_gateway.posture
+                        == ManagedGatewayProjectionPostureV1::ReadyClosed
+                        && ready.record().managed_gateway.activation_ack_ref.is_some()
+                        && ready.record().nonsecret_handoff.observed_state
+                            == SecretHandoffStateV1::Consumed,
+                    "activation did not publish its real Consumed ACK and ReadyClosed record"
+                );
+                anyhow::ensure!(
+                    matches!(
+                        manager.take_for_v2(&dispatch),
+                        Err(ConfigProjectionFailureV1::MissingPreparation)
+                    ),
+                    "claimed preparation replayed the activation path"
+                );
+                if recovery_phase.as_deref() == Some("activation-writer") {
+                    eprintln!("E3_CONNECTED_READY_CLOSED_ACTUAL_OWNER_CRASH_POINT");
+                    unsafe { libc::_exit(80) };
+                }
+                manager.cleanup_prepared_gateway_v1(&mut transferred, false)?;
+                let ConfigProjectionSubjectReadbackV1::Bound(after_cleanup) =
+                    manager.projection_service.resolve_preparation_subject_v1(&identity)?
+                else {
+                    anyhow::bail!("ReadyClosed subject disappeared during cleanup");
+                };
+                anyhow::ensure!(
+                    after_cleanup.record().managed_gateway.posture
+                        == ManagedGatewayProjectionPostureV1::ReadyClosed
+                        && after_cleanup.record().nonsecret_handoff.observed_state
+                            == SecretHandoffStateV1::Consumed
+                        && transferred.cleanup_complete
+                        && transferred.gateway_authority.is_none()
+                        && transferred.credential_source.is_none()
+                        && transferred.projection.is_none()
+                        && !config_root.exists()
+                        && cgroup_paths.iter().all(|path| !path.exists())
+                        && exclusion.acquire_non_e3_child().is_ok(),
+                    "transferred owner cleanup did not preserve Consumed or release exact resources"
+                );
+                eprintln!("E3_CONNECTED_TAKE_READY_CLOSED_AND_TRANSFERRED_OWNER_CLEANUP_PASSED");
+                return Ok(());
+            }
             let cancel = E3ConfigProjectionCancelRequestV1 {
                 schema_version: 1,
                 preparation_id: request.preparation_id.clone(),

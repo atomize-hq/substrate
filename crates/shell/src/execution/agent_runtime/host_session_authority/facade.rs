@@ -4363,6 +4363,53 @@ mod e3_e_authenticated_read_tests {
             .unwrap()
     }
 
+    fn e3_e_manager_spawn_input() -> FreshSpawnReservationInputV1 {
+        let mut snapshot = policy_snapshot(&["src/lib.rs"], &["src/lib.rs"], &["api.example"]);
+        snapshot.world_fs.host_visible = false;
+        snapshot.world_fs.fail_closed.routing = true;
+        snapshot.world_fs.deny_enforcement = Some(WorldFsDenyEnforcementV3::Strict);
+        snapshot.world_fs.caged_required = true;
+        let snapshot = snapshot.canonicalize().expect("canonical manager policy");
+        let bytes = serde_json::to_vec(&snapshot).expect("manager snapshot bytes");
+        let mut input = fresh_spawn_input("manager fixture");
+        input.policy_snapshot = validate_policy_snapshot_material(
+            &snapshot,
+            &bytes,
+            &input.parent_policy_ref,
+            &format!("{:x}", Sha256::digest(&bytes)),
+            &input.parent_policy_revision,
+        )
+        .expect("validated full-isolation manager snapshot");
+        input
+    }
+
+    #[test]
+    fn test_e3_e_manager_policy_specialization_preserves_shared_defaults() {
+        let baseline = fresh_spawn_input("baseline");
+        let manager = e3_e_manager_spawn_input();
+        let full = manager.policy_snapshot.snapshot();
+        assert!(!full.world_fs.host_visible);
+        assert!(full.world_fs.fail_closed.routing);
+        assert!(full.world_fs.caged_required);
+        assert_eq!(
+            full.world_fs.deny_enforcement,
+            Some(WorldFsDenyEnforcementV3::Strict)
+        );
+        let shared = fresh_spawn_input("after manager");
+        assert_eq!(
+            shared.policy_snapshot.bytes(),
+            baseline.policy_snapshot.bytes()
+        );
+        let shared_fs = &shared.policy_snapshot.snapshot().world_fs;
+        assert!(shared_fs.host_visible);
+        assert!(!shared_fs.fail_closed.routing);
+        assert!(!shared_fs.caged_required);
+        assert_eq!(
+            shared_fs.deny_enforcement,
+            Some(WorldFsDenyEnforcementV3::Weak)
+        );
+    }
+
     #[test]
     fn e3_e_manager_fixture_producer() {
         let Some(fixture_dir) = std::env::var_os("E3_E_MANAGER_FIXTURE_DIR") else {
@@ -4376,10 +4423,11 @@ mod e3_e_authenticated_read_tests {
         let (fixture_parent, authority) = started_authority();
         let world_id = format!("e3-manager-{}", uuid::Uuid::now_v7());
         let world_generation = 1;
-        let mut input = fresh_spawn_input("manager fixture");
+        let mut input = e3_e_manager_spawn_input();
         input.spawn_request.target_backend_id = "cli:codex-world".into();
         input.spawn_request.world_id = world_id.clone();
         input.spawn_request.world_generation = world_generation;
+        let expected_policy = input.policy_snapshot.clone();
         let reservation = reserve_fresh_spawn(&authority, input).expect("reserve manager fixture");
         let mut admission = test_admission_for_reservation(&reservation);
         admission.backend_id = "cli:codex-world".into();
@@ -4403,6 +4451,33 @@ mod e3_e_authenticated_read_tests {
             .expect("authenticate manager fixture cap")
             .member_launch_activation_carrier()
             .expect("construct manager fixture carrier");
+        let snapshot = carrier
+            .policy_snapshot()
+            .expect("decode authenticated manager policy");
+        assert_eq!(
+            serde_json::to_vec(&snapshot).unwrap(),
+            expected_policy.bytes()
+        );
+        assert_eq!(
+            carrier.policy_snapshot_byte_length,
+            expected_policy.bytes().len() as u64
+        );
+        assert_eq!(carrier.policy_snapshot_hash, expected_policy.hash());
+        assert_eq!(carrier.policy_snapshot_revision, expected_policy.revision());
+        assert_eq!(
+            carrier.policy_snapshot_ref.ref_id,
+            expected_policy.snapshot_ref().ref_id
+        );
+        assert!(
+            !snapshot.world_fs.host_visible,
+            "manager fixture requires full isolation"
+        );
+        assert!(snapshot.world_fs.fail_closed.routing);
+        assert!(snapshot.world_fs.caged_required);
+        assert_eq!(
+            snapshot.world_fs.deny_enforcement,
+            Some(WorldFsDenyEnforcementV3::Strict)
+        );
         let proof = proof(&carrier);
         let accepted_home = std::path::PathBuf::from(&authority.root.identity().physical_path);
         let workspace = accepted_home
