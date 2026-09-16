@@ -331,7 +331,7 @@ fn main() -> Result<()> {
         &namespace,
     )?;
     await_final_exec(&descriptors)?;
-    exec_pinned_child(&descriptors, codex_plan.as_ref())
+    exec_pinned_child(&descriptors, &input, codex_plan.as_ref())
 }
 
 fn collect_exact_environment() -> Result<BTreeMap<String, String>> {
@@ -1235,8 +1235,50 @@ fn await_final_exec(descriptors: &LaunchDescriptorsV1) -> Result<()> {
     Ok(())
 }
 
+fn managed_gateway_final_exec(
+    descriptors: &LaunchDescriptorsV1,
+    input: &E3WorldFsEnforcementInputV1,
+) -> Result<(Vec<String>, Vec<String>)> {
+    if descriptors.role != WrapperRoleV1::ManagedGateway {
+        bail!("wrong wrapper role for managed-gateway final exec");
+    }
+    validate_role_binding(descriptors.role, input.child_role)?;
+    let root = &input
+        .private_realization
+        .as_ref()
+        .context("missing authenticated gateway realization")?
+        .physical_path;
+    let config = format!("{root}/config.toml");
+    let argv = vec![
+        "substrate-gateway".to_string(),
+        "--config".to_string(),
+        config.clone(),
+        "start".to_string(),
+    ];
+    let mut environment = vec![
+        format!("HOME={root}"),
+        "LANG=C.UTF-8".to_string(),
+        "LC_ALL=C.UTF-8".to_string(),
+        "PATH=/var/lib/substrate/world-deps/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_string(),
+        "RUST_LOG=error".to_string(),
+        "SUBSTRATE_LLM_GATEWAY_MODE=in_world".to_string(),
+        format!("SUBSTRATE_LLM_GATEWAY_CONFIG_PATH={config}"),
+        "SUBSTRATE_LLM_GATEWAY_DISABLE_TOKEN_PERSISTENCE=1".to_string(),
+    ];
+    for key in [
+        "SUBSTRATE_E3_GATEWAY_LAUNCH_FD",
+        "SUBSTRATE_E3_GATEWAY_LISTENER_FD",
+        "SUBSTRATE_E3_GATEWAY_SECRET_READY_FD",
+        "SUBSTRATE_LLM_AUTH_BUNDLE_FD",
+    ] {
+        environment.push(format!("{key}={}", descriptors.fd(key)?));
+    }
+    Ok((argv, environment))
+}
+
 fn exec_pinned_child(
     descriptors: &LaunchDescriptorsV1,
+    input: &E3WorldFsEnforcementInputV1,
     codex_plan: Option<&E3CodexLaunchPlanV1>,
 ) -> Result<()> {
     if descriptors.role == WrapperRoleV1::Codex
@@ -1255,18 +1297,7 @@ fn exec_pinned_child(
                 .map(|entry| format!("{}={}", entry.name, entry.value))
                 .collect::<Vec<_>>(),
         ),
-        (WrapperRoleV1::ManagedGateway, None) => (
-            vec!["substrate-gateway".to_string()],
-            [
-                "SUBSTRATE_E3_GATEWAY_LAUNCH_FD",
-                "SUBSTRATE_E3_GATEWAY_LISTENER_FD",
-                "SUBSTRATE_E3_GATEWAY_SECRET_READY_FD",
-                "SUBSTRATE_LLM_AUTH_BUNDLE_FD",
-            ]
-            .into_iter()
-            .map(|key| Ok(format!("{key}={}", descriptors.fd(key)?)))
-            .collect::<Result<Vec<_>>>()?,
-        ),
+        (WrapperRoleV1::ManagedGateway, None) => managed_gateway_final_exec(descriptors, input)?,
         _ => bail!("wrong final-exec plan for wrapper role"),
     };
     if descriptors.role != WrapperRoleV1::ManagedGatewayReadinessProbe {
@@ -4056,6 +4087,115 @@ fn close_wrapper_descriptors_before_final_exec(descriptors: &LaunchDescriptorsV1
 mod tests {
     use super::*;
     use std::os::fd::{AsFd as _, IntoRawFd};
+
+    fn gateway_final_exec_fixture() -> (LaunchDescriptorsV1, E3WorldFsEnforcementInputV1, Vec<File>)
+    {
+        let root = CanonicalDirectoryV1 {
+            physical_path: "/run/substrate/e3-gateway/series-bound/fence-bound".into(),
+            physical_identity: config_projection::DirectoryPhysicalIdentityV1::Linux {
+                device_id: 1,
+                inode: 2,
+            },
+        };
+        let input = synthetic_wrapper_input(E3IsolatedChildRoleV1::ManagedGateway, &root);
+        validate_enforcement_input_hash(&input).unwrap();
+        let mut environment = BTreeMap::from([(
+            "SUBSTRATE_WORLD_ENTRY_ROLE".to_string(),
+            "managed_gateway".to_string(),
+        )]);
+        let mut files = Vec::new();
+        for key in &GATEWAY_KEYS[1..] {
+            let file = File::open("/dev/null").unwrap();
+            environment.insert((*key).to_string(), file.as_raw_fd().to_string());
+            files.push(file);
+        }
+        (
+            parse_launch_descriptors(&environment).unwrap(),
+            input,
+            files,
+        )
+    }
+
+    #[test]
+    fn test_managed_gateway_final_exec_contract() {
+        let (descriptors, input, _files) = gateway_final_exec_fixture();
+        let (argv, environment) = managed_gateway_final_exec(&descriptors, &input).unwrap();
+        let root = "/run/substrate/e3-gateway/series-bound/fence-bound";
+        let config = format!("{root}/config.toml");
+        assert_eq!(argv, ["substrate-gateway", "--config", &config, "start"]);
+        let expected = [
+            format!("HOME={root}"),
+            "LANG=C.UTF-8".into(),
+            "LC_ALL=C.UTF-8".into(),
+            "PATH=/var/lib/substrate/world-deps/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".into(),
+            "RUST_LOG=error".into(),
+            "SUBSTRATE_LLM_GATEWAY_MODE=in_world".into(),
+            format!("SUBSTRATE_LLM_GATEWAY_CONFIG_PATH={config}"),
+            "SUBSTRATE_LLM_GATEWAY_DISABLE_TOKEN_PERSISTENCE=1".into(),
+            format!("SUBSTRATE_E3_GATEWAY_LAUNCH_FD={}", descriptors.fd("SUBSTRATE_E3_GATEWAY_LAUNCH_FD").unwrap()),
+            format!("SUBSTRATE_E3_GATEWAY_LISTENER_FD={}", descriptors.fd("SUBSTRATE_E3_GATEWAY_LISTENER_FD").unwrap()),
+            format!("SUBSTRATE_E3_GATEWAY_SECRET_READY_FD={}", descriptors.fd("SUBSTRATE_E3_GATEWAY_SECRET_READY_FD").unwrap()),
+            format!("SUBSTRATE_LLM_AUTH_BUNDLE_FD={}", descriptors.fd("SUBSTRATE_LLM_AUTH_BUNDLE_FD").unwrap()),
+        ];
+        assert_eq!(environment, expected);
+        assert_eq!(environment.len(), 12);
+        let config_entry = environment
+            .iter()
+            .find_map(|entry| entry.strip_prefix("SUBSTRATE_LLM_GATEWAY_CONFIG_PATH="))
+            .unwrap();
+        assert_eq!(argv[2], config_entry);
+    }
+
+    #[test]
+    fn test_managed_gateway_final_exec_ignores_ambient_environment() {
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "tests::test_managed_gateway_final_exec_contract",
+                "--exact",
+                "--nocapture",
+            ])
+            .env("HOME", "/untrusted")
+            .env("PATH", "/untrusted/bin")
+            .env(
+                "SUBSTRATE_LLM_GATEWAY_CONFIG_PATH",
+                "/untrusted/config.toml",
+            )
+            .env(
+                "SUBSTRATE_LLM_GATEWAY_TOKEN_STORE_PATH",
+                "/untrusted/tokens.json",
+            )
+            .env(
+                "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN",
+                "synthetic-forbidden",
+            )
+            .env("SUBSTRATE_WORLD_ENTRY_FINAL_EXEC_FD", "999")
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+
+    #[test]
+    fn test_managed_gateway_final_exec_requires_gateway_binding() {
+        let (mut descriptors, mut input, _files) = gateway_final_exec_fixture();
+        for role in [
+            WrapperRoleV1::Codex,
+            WrapperRoleV1::ManagedGatewayReadinessProbe,
+        ] {
+            descriptors.role = role;
+            assert!(managed_gateway_final_exec(&descriptors, &input).is_err());
+        }
+        descriptors.role = WrapperRoleV1::ManagedGateway;
+        for role in [
+            E3IsolatedChildRoleV1::Codex,
+            E3IsolatedChildRoleV1::ManagedGatewayReadinessProbe,
+        ] {
+            input.child_role = role;
+            assert!(managed_gateway_final_exec(&descriptors, &input).is_err());
+        }
+        input.child_role = E3IsolatedChildRoleV1::ManagedGateway;
+        input.private_realization = None;
+        assert!(managed_gateway_final_exec(&descriptors, &input).is_err());
+    }
 
     fn full_isolation_snapshot() -> transport_api_types::PolicySnapshotV3 {
         serde_json::from_value::<transport_api_types::PolicySnapshotV3>(serde_json::json!({
