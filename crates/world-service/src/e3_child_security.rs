@@ -1227,10 +1227,10 @@ fn validate_denied_control_probe_target_identities_v1(
                 cgroup,
                 control_file,
             } => {
-                if control_file != "cgroup.procs" || cgroup != &input.expected_process_cgroup {
-                    bail!("E3-D cgroup denial target is not the held child cgroup");
+                if control_file != "cgroup.procs" {
+                    bail!("E3-D cgroup denial target control is not cgroup.procs");
                 }
-                validate_child_cgroup_membership(child_pid, cgroup)?;
+                validate_cgroup_identity_v1(cgroup)?;
             }
             E3DeniedControlProbeTargetBindingV1::NftablesControl {
                 network_namespace_inode,
@@ -1789,13 +1789,17 @@ fn read_process_start_time(pid: u32) -> Result<u64> {
 }
 
 fn validate_child_cgroup_membership(pid: u32, identity: &CanonicalCgroupIdentityV1) -> Result<()> {
-    use std::os::unix::fs::MetadataExt;
-
     let membership = std::fs::read_to_string(format!("/proc/{pid}/cgroup"))
         .context("read E3 child cgroup membership")?;
     if membership != format!("0::/{}\n", identity.cgroup_relative_path) {
         bail!("E3 child is not in its registered cgroup");
     }
+    validate_cgroup_identity_v1(identity)
+}
+
+fn validate_cgroup_identity_v1(identity: &CanonicalCgroupIdentityV1) -> Result<()> {
+    use std::os::unix::fs::MetadataExt;
+
     let mount = std::fs::metadata("/sys/fs/cgroup").context("stat cgroup v2 mount")?;
     let directory = std::fs::metadata(format!("/sys/fs/cgroup/{}", identity.cgroup_relative_path))
         .context("stat registered E3 child cgroup")?;
@@ -2247,6 +2251,249 @@ mod tests {
         )
         .unwrap();
         child
+    }
+
+    #[test]
+    #[ignore = "requires root and a writable cgroup v2 mount"]
+    fn test_cgroup_denial_targets_validate_each_identity_without_sibling_membership() {
+        use std::os::unix::fs::MetadataExt;
+
+        // Only this fixture's child is moved. Cleanup also runs on assertion failure.
+        struct Fixture {
+            child: std::process::Child,
+            groups: Vec<std::path::PathBuf>,
+        }
+        impl Drop for Fixture {
+            fn drop(&mut self) {
+                let _ = self.child.kill();
+                self.child.wait().unwrap();
+                for path in self.groups.iter().rev() {
+                    std::fs::remove_dir(path).unwrap();
+                }
+            }
+        }
+        assert_eq!(unsafe { libc::geteuid() }, 0);
+        let mut fixture = Fixture {
+            child: Command::new("sleep").arg("120").spawn().unwrap(),
+            groups: Vec::new(),
+        };
+        let mount = std::fs::metadata("/sys/fs/cgroup").unwrap();
+        let prefix = format!("substrate-e3d-denial-test-{}", uuid::Uuid::now_v7());
+        let groups: Vec<_> = ["gateway", "codex", "readiness"]
+            .into_iter()
+            .map(|role| {
+                let relative = format!("{prefix}-{role}");
+                let path = std::path::Path::new("/sys/fs/cgroup").join(&relative);
+                std::fs::create_dir(&path).unwrap();
+                fixture.groups.push(path.clone());
+                CanonicalCgroupIdentityV1 {
+                    cgroup_v2_mount_device_id: mount.dev(),
+                    cgroup_v2_mount_inode: mount.ino(),
+                    cgroup_directory_inode: std::fs::metadata(path).unwrap().ino(),
+                    cgroup_relative_path: relative,
+                }
+            })
+            .collect();
+        let pid = fixture.child.id();
+        std::fs::write(fixture.groups[0].join("cgroup.procs"), format!("{pid}\n")).unwrap();
+        validate_child_cgroup_membership(pid, &groups[0]).unwrap();
+        for sibling in &groups[1..] {
+            assert_eq!(
+                validate_child_cgroup_membership(pid, sibling)
+                    .unwrap_err()
+                    .to_string(),
+                "E3 child is not in its registered cgroup"
+            );
+        }
+
+        let identity = setup_test_identity("world-cgroup-denial");
+        let cap = identity
+            .immutable_launch_cap
+            .immutable_worker_cap_ref
+            .clone();
+        let exclusion = E3PrivilegedChildExclusionV1::new_recovering().unwrap();
+        let mut input = E3WorldFsEnforcementInputV1 {
+            schema_version: 1,
+            child_role: E3IsolatedChildRoleV1::ManagedGateway,
+            projection_identity_hash: identity.identity_hash,
+            policy_authority: E3PolicyAuthoritySourceV1::InitialLaunch {
+                e2_activation_id: id("e2a_"),
+                commitment_ref: cap.clone(),
+            },
+            immutable_worker_cap_ref: cap,
+            policy_snapshot_bytes_base64: String::new(),
+            policy_snapshot_byte_length: 0,
+            policy_snapshot_ref: AuthorityObjectRefV1 {
+                ref_id: "ao_0123456789abcdef0123456789abcdef".into(),
+                object_kind: AuthorityObjectKindV1::Policy,
+                schema_version: 1,
+                commitment: OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                    digest_hex: "9".repeat(64),
+                },
+            },
+            policy_snapshot_hash: String::new(),
+            policy_snapshot_revision: String::new(),
+            expected_process_cgroup: groups[0].clone(),
+            kernel_boot_id: String::new(),
+            user_namespace_requirement: bind_e3_service_user_namespace_v1(&exclusion, 1000, 1000)
+                .unwrap(),
+            target_uid: 1000,
+            target_gid: 1000,
+            immutable_config_source: None,
+            private_realization: None,
+            codex_launch_plan_hash: None,
+            executable_artifact: identity.runtime_artifacts.managed_gateway,
+            denied_control_probe_targets: Vec::new(),
+            support_policy_version: 1,
+            enforcement_input_hash: String::new(),
+        };
+        // This exercises the private identity layer; codec/target-set checks have separate tests.
+        input.denied_control_probe_targets = groups
+            .iter()
+            .map(|cgroup| {
+                let mut target = E3DeniedControlProbeTargetV1 {
+                    binding: E3DeniedControlProbeTargetBindingV1::CgroupControl {
+                        cgroup: cgroup.clone(),
+                        control_file: "cgroup.procs".into(),
+                    },
+                    target_hash: String::new(),
+                };
+                target.target_hash = hash_omitting(
+                    "substrate.e3.denied-control-probe-target.v1",
+                    "target",
+                    &target,
+                    "target_hash",
+                );
+                target
+            })
+            .collect();
+        let process = File::open(format!("/proc/{pid}")).unwrap();
+        validate_denied_control_probe_target_identities_v1(process.as_raw_fd(), &input, pid)
+            .expect("valid gateway/Codex/readiness identities must not require sibling membership");
+
+        for case in 0..7 {
+            let mut changed = input.clone();
+            let E3DeniedControlProbeTargetBindingV1::CgroupControl {
+                cgroup,
+                control_file,
+            } = &mut changed.denied_control_probe_targets[1].binding
+            else {
+                unreachable!()
+            };
+            match case {
+                0 => cgroup.cgroup_relative_path = format!("{prefix}-missing"),
+                1 => cgroup.cgroup_relative_path = groups[2].cgroup_relative_path.clone(),
+                2 => cgroup.cgroup_v2_mount_device_id += 1,
+                3 => cgroup.cgroup_v2_mount_inode += 1,
+                4 => cgroup.cgroup_directory_inode += 1,
+                5 => *control_file = "cgroup.threads".into(),
+                _ => *control_file = "./cgroup.procs".into(),
+            }
+            assert!(
+                validate_denied_control_probe_target_identities_v1(
+                    process.as_raw_fd(),
+                    &changed,
+                    pid
+                )
+                .is_err(),
+                "invalid target case {case} was accepted"
+            );
+        }
+        // Isolate directory-device checking from mount and directory-inode checking.
+        let other_fs = tempfile::tempdir().unwrap();
+        let metadata = other_fs.path().metadata().unwrap();
+        assert_ne!(metadata.dev(), mount.dev());
+        let mut changed = input.clone();
+        let E3DeniedControlProbeTargetBindingV1::CgroupControl { cgroup, .. } =
+            &mut changed.denied_control_probe_targets[1].binding
+        else {
+            unreachable!()
+        };
+        cgroup.cgroup_relative_path = format!("../../..{}", other_fs.path().display());
+        cgroup.cgroup_directory_inode = metadata.ino();
+        assert!(validate_denied_control_probe_target_identities_v1(
+            process.as_raw_fd(),
+            &changed,
+            pid
+        )
+        .is_err());
+
+        // Actual membership must still reject after the child moves to another valid group.
+        std::fs::write(fixture.groups[1].join("cgroup.procs"), format!("{pid}\n")).unwrap();
+        assert_eq!(
+            validate_child_cgroup_membership(pid, &input.expected_process_cgroup)
+                .unwrap_err()
+                .to_string(),
+            "E3 child is not in its registered cgroup"
+        );
+        validate_child_cgroup_membership(pid, &groups[1]).unwrap();
+    }
+
+    #[test]
+    fn test_cgroup_denial_results_preserve_exact_target_set_and_operations() {
+        let probes: Vec<_> = ["codex", "gateway", "readiness"]
+            .into_iter()
+            .map(|role| {
+                let mut target = E3DeniedControlProbeTargetV1 {
+                    binding: E3DeniedControlProbeTargetBindingV1::CgroupControl {
+                        cgroup: CanonicalCgroupIdentityV1 {
+                            cgroup_v2_mount_device_id: 1,
+                            cgroup_v2_mount_inode: 2,
+                            cgroup_directory_inode: 3,
+                            cgroup_relative_path: format!("retained/{role}"),
+                        },
+                        control_file: "cgroup.procs".into(),
+                    },
+                    target_hash: String::new(),
+                };
+                target.target_hash = hash_omitting(
+                    "substrate.e3.denied-control-probe-target.v1",
+                    "target",
+                    &target,
+                    "target_hash",
+                );
+                E3DeniedControlProbeV1 {
+                    target,
+                    operation: "open_write_cgroup_procs".into(),
+                    result_errno: libc::EACCES,
+                }
+            })
+            .collect();
+        let expected = probe_child_control_path_denials_v1(&probes).unwrap();
+        // The attestation validator compares this digest to the complete held target set.
+        for case in 0..8 {
+            let mut changed = probes.clone();
+            match case {
+                0 => {
+                    changed.remove(0);
+                }
+                1 => changed.push(probes[0].clone()),
+                2 => changed.swap(0, 1),
+                3 => changed[1] = changed[0].clone(),
+                4 => changed[0].operation = "open_read_directory".into(),
+                5 => changed[0].result_errno = libc::EPERM,
+                _ => {
+                    let E3DeniedControlProbeTargetBindingV1::CgroupControl { cgroup, .. } =
+                        &mut changed[0].target.binding
+                    else {
+                        unreachable!()
+                    };
+                    cgroup.cgroup_directory_inode += 1;
+                    if case == 7 {
+                        changed[0].target.target_hash = hash_omitting(
+                            "substrate.e3.denied-control-probe-target.v1",
+                            "target",
+                            &changed[0].target,
+                            "target_hash",
+                        );
+                    }
+                }
+            }
+            match probe_child_control_path_denials_v1(&changed) {
+                Ok(actual) => assert_ne!(actual, expected, "changed result case {case} matched"),
+                Err(_) => assert!(matches!(case, 1..=6)),
+            }
+        }
     }
 
     #[test]
