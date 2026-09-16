@@ -316,8 +316,12 @@ forbidden.
   support-validation exception; and
   `crates/world-service/src/bin/substrate-world-entry.rs::{validate_runtime_support_manifest,
   prepare_private_child_namespace}` plus private `resolve_exact_e3_ca_bundle_v1` and
-  `install_exact_e3_ca_bundle_mount_v1`. No `crates/world/src/landlock.rs`, schema, registry,
-  lifecycle-order, alternate trust-store, or other product surface is owned.
+  `install_exact_e3_ca_bundle_mount_v1`. That CA delta owns no `crates/world/src/landlock.rs`, schema,
+  registry, lifecycle-order, alternate trust-store, or other product surface. The separately
+  authorized [fixed-device consumer correction](../contracts/agent-config-projection-v1.md#e3-d-shared-landlock-fixed-device-correction)
+  has its complete normative allowance, exact source/test fence and later proof at that single owner.
+  Existing E3-D helpers consume the corrected shared implementation within that fence; it grants
+  no Codex execution or E3-F ownership.
 - **Direct predecessor:** independently landed and proof-clean E3-C.
 - **Consumes:** E3-C source-store schemas, validators, import and publication/recovery helpers, pinned
   artifact/native-root behavior, and enforcement inputs, plus the landed E2 filesystem plan without
@@ -368,8 +372,10 @@ forbidden.
   needed for [release-before-cgroup-removal and exclusion-last](../contracts/managed-gateway-adoption-v1.md#terminal-namespace-release-and-exclusion-last).
   The existing held exclusion lease releases each exact terminal gateway/probe namespace without
   decrementing the epoch lease; final counted release is explicit and failure-safe. This is the
-  sole exception to the E3-D helper freeze, including typed setup binding and partial-progress
-  retention. All unrelated E3-D security, mappings, privilege descent, Landlock/seccomp, tracing,
+  sole lifecycle exception to the E3-D helper freeze, including typed setup binding and partial-progress
+  retention. The separate [fixed-device consumer correction](../contracts/agent-config-projection-v1.md#e3-d-shared-landlock-fixed-device-correction)
+  qualifies only the shared-Landlock freeze within its own fence and leaves this lifecycle unchanged.
+  All unrelated E3-D security, mappings, privilege descent, Landlock/seccomp, tracing,
   schemas and V1 compatibility remain frozen. E3-F production caller wiring and retained Codex
   lifecycle remain excluded. This documentation correction neither completes E3-E nor reopens
   gateway publication, predecessor admission/proof or recovery discovery.

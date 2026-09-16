@@ -1491,7 +1491,9 @@ rights. Neither layer contains a rule for the accepted-home registry/source path
 series/fence realization, `/sys/fs/cgroup`, nftables/netlink control, `/proc/<other-pid>`, the other
 role's private root, installer stores, or world-service state. The attestation separately binds the
 exact E2 plan hash, dependency/support closure, derived-support layer hash, role-narrowing layer hash,
-and effective intersection hash.
+and effective intersection hash. The separately authorized
+[fixed-device consumer correction](#e3-d-shared-landlock-fixed-device-correction) owns the narrow
+shared-consumer allowance needed to represent the two required device subjects.
 
 The numeric proc subject is not resolved through the `/proc/self` magic link. Before applying
 Landlock, the child opens a trusted procfs root descriptor, formats `getpid()` as the shortest decimal
@@ -4901,14 +4903,123 @@ recovery implementation. The three newly failing registry tests and unwired-fiel
 remain unfinished candidate work without weakened validation or acceptance. The disposed
 manifest-inode finding stays closed and the earlier candidate Clippy diagnostic remains unwaived.
 
+### E3-D shared-Landlock fixed-device correction
+
+This section is the single normative owner of the narrow, separately implementable correction for
+the diagnosed E3-D/shared-Landlock fixed-device mismatch blocking E3-E. The retained diagnostic
+establishes userspace classifier rejection of required `/dev/null` before rule installation and
+setup attestation; `/dev/urandom` was not reached. Kernel rule application and subsequent startup
+remain unproved. A later bounded source implementation requires separate authorization.
+
+The existing shared Linux path-rule consumer may recognize exactly `/dev/null`, character device
+major/minor `1:3`, for read/write opens, and `/dev/urandom`, character device `1:9`, for read-only
+opens. These are two closed private target kinds, not a general character-device class or regular
+files. Recognize the fixed names before generic regular-file/directory classification so a
+substituted regular file or directory cannot pass. Validate `S_IFCHR` and `st_rdev` by `fstat` on
+the actual `O_PATH` rule descriptor submitted to `landlock_add_rule`, not on an earlier pathname
+check or the wrapper's already-closed support-validation descriptor.
+
+Open and hold `/dev` with `O_PATH|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC`; resolve only the fixed leaf
+beneath it with `openat2` and `RESOLVE_BENEATH|RESOLVE_NO_MAGICLINKS|RESOLVE_NO_SYMLINKS|
+RESOLVE_NO_XDEV`, using `O_PATH|O_NOFOLLOW|O_CLOEXEC`. Reject a returned link descriptor as well
+as link traversal, escape, or a mount crossing below that held directory. `/dev` is resolution
+machinery, never an allowed hierarchy or ancestor rule under this correction. A required missing
+device, wrong type/rdev, unsupported selection, or resolution failure fails closed; do not silently
+omit a required rule. Literal path/type/rdev validation is required independently in each consumer
+open; no cross-layer inode-persistence promise or serialized device identity is introduced.
+
+Use the existing four-vector interface and distinguish explicit vector selections before broad
+category masks lose their origin. An explicit device `exec_paths` selection is rejected, as is any
+`/dev/urandom` `write_paths` selection. A device selected only for discovery/directory access is
+rejected; existing convenience discovery accompanying read remains accepted without a device
+`READ_DIR` grant. Incidental `EXECUTE`, `READ_DIR`, and other non-device bits contributed by the
+existing read/write category masks are filtered, not mistaken for explicit requests. Emit only
+`READ_FILE` and/or `WRITE_FILE` selected for `/dev/null`, and only `READ_FILE` for `/dev/urandom`;
+never emit device execute, truncate, enumeration, creation, removal or reparenting rights. Empty or
+unsupported device grants fail closed. Arbitrary character devices and alternate names are not
+admitted by this exception.
+
+Full policies selecting either fixed device must handle both `READ_FILE` and `WRITE_FILE`, even
+for a read-only selection, so omitted write grants deny fresh write opens. Do not derive
+`handled_access_fs` solely from filtered positive grants: unhandled rights are generally allowed.
+Preserve write-only mode's existing semantics, including unhandled reads, with only `WRITE_FILE`
+for a selected `/dev/null` and rejection of `/dev/urandom` writing. Policies without a fixed-device
+subject and all non-device regular-file/directory classification, masks, missing-path handling and
+ABI behavior retain their existing semantics; the legacy write-only `/dev` directory policy is
+outside this correction. The intentional compatibility extension is exact-device handling through
+existing shared callers, with no public opt-in, descriptor-carrying API or new dependency.
+
+The existing derived-support and role-narrowing layers both consume this correction for the
+`Codex` and `ManagedGateway` wrapper roles. `ManagedGatewayReadinessProbe` gains no common-device
+rule. Producer vectors and their support/role/intersection hashes, E2 authority and governed rules,
+public policy shape, schemas, namespace/exclusion/privilege/seccomp controls, tracing, lifecycle and
+unrelated security behavior remain frozen. This does not authorize Codex execution or E3-F.
+
+These permissions mediate fresh opens for reading/writing, not every subsequent device operation.
+They add no ioctl mediation or retroactive restriction of inherited descriptors, and no higher
+Landlock ABI requirement; existing unsupported-ABI/error rejection still applies. The semantics
+follow the [Linux Landlock access and handled-rights documentation](https://docs.kernel.org/6.6/userspace-api/landlock.html),
+[kernel non-directory rule handling](https://github.com/torvalds/linux/blob/v6.16/security/landlock/fs.c#L295-L336),
+[device/ioctl limits](https://docs.kernel.org/6.12/userspace-api/landlock.html#ioctl-support), and
+[openat2 resolution rules](https://man7.org/linux/man-pages/man2/openat2.2.html).
+
+**Exact later source fence.** Only these existing files and surfaces are eligible under separate
+implementation authorization:
+
+| File | Permitted correction |
+|---|---|
+| `crates/world/src/landlock.rs` | Linux-private `PathRuleTargetKind`, `classify_path_rule_target`, `compatible_path_rule_access`, `open_path_rule`, `apply_filesystem_policy`, and `apply_write_only_allowlist`: only fixed-device recognition/resolution/selection/rights branches, minimal file-private helpers for those branches, and colocated tests. |
+| `crates/world/tests/landlock.rs` | Focused exact-device cases using the existing subprocess test structure. |
+| `crates/world-service/src/bin/substrate-world-entry.rs` | Colocated tests and minimal test-only fixtures for existing support-device validation, both enforcement layers/common-set roles and readiness exclusion. No production-body change is proposed here. |
+
+Public signatures, `LandlockFilesystemPolicy`, generic `open_opath`, unrelated mask helpers,
+`internal_exec` forwarding/resolution, wrapper production vectors/validators, and gateway/manager
+production code remain outside this fence. No new source file, dependency, environment setting,
+serialized field, descriptor channel or persistent identity is admitted. This documentation change
+edits none of these source files.
+
+**Discriminating later proof.** Reuse existing test structures and unaffected evidence; this
+correction does not require redundant installations, full historical walls or a new proof harness
+merely for orchestration. Keep the following evidence classes separate:
+
+- Unprivileged regressions cover exact name/type/rdev, swapped device descriptors, wrong identity,
+  regular/directory substitution, arbitrary character targets/aliases, missing targets, links,
+  escape and resolution rejection through private test seams without mutating host `/dev`.
+  Cover exact masks, explicit execute/urandom-write/discover-only rejection, incidental category
+  bits and discovery-plus-read compatibility, empty/unsupported requests, ABI-compatible masks,
+  full read-only device policies handling writes, and existing non-device/empty-policy compatibility.
+- Real-kernel consumer checks run in disposable unprivileged subprocesses with `no_new_privs` on
+  an enabled Landlock kernel, using fresh opens after restriction. Apply the real consumer twice
+  for the exact null read/write and urandom read closure; require both reports applied, null
+  read/write success, urandom read success, and `EACCES` for urandom write, `/dev` enumeration and
+  an otherwise DAC-readable sibling such as `/dev/zero`. Separately require a urandom-only read
+  policy to deny write opens, exposing accidentally unhandled writes; verify write-only mode
+  leaves reads unrestricted and retain existing exact-file/directory compatibility checks.
+  An inherited device FD is not a positive open result. Missing kernel support is an explicit
+  skip/inconclusive result, never success or acceptance.
+- Separately authorized privileged wrapper integration covers existing support-device validation,
+  actual enforcement in both layers for Codex/ManagedGateway role fixtures, unchanged vectors and
+  hashes, readiness exclusion, and failure before attestation for invalid devices. Use private
+  namespace fixtures for missing/substituted subjects and forbidden mount crossings without
+  changing host `/dev`; do not launch Codex.
+- Installed connected acceptance requires a later, separately authorized activation with corrected
+  installed provenance establishing actual setup attestation and passage beyond the former
+  failure. Neither the retained failed diagnostic nor successful classification substitutes for it;
+  later startup success is not presumed.
+
+Documentation landing establishes no source repair, successful rule application, installed
+acceptance, E3-E closure or E3-F admission. The next eligible operation is separately authorized
+bounded source implementation, not automatic runtime acceptance.
+
 ### E3-E activation callable boundaries
 
 The complete bounded protocol and source/caller map are in
 [managed gateway adoption](managed-gateway-adoption-v1.md#e3-e-activation-publication-and-ownership-seam).
 These exceptions supersede only conflicting E3-E signature/visibility limits in the admission
-catalog; schemas, hash domains and storage paths remain unchanged. The sole E3-D ownership
-exception is [terminal namespace release](#e3-e-terminal-child-namespace-owner-boundary); E3-F
-ownership remains unchanged.
+catalog; schemas, hash domains and storage paths remain unchanged. The E3-D lifecycle ownership
+exception is [terminal namespace release](#e3-e-terminal-child-namespace-owner-boundary). The
+separately authorized [fixed-device consumer correction](#e3-d-shared-landlock-fixed-device-correction)
+has its own exact fence; E3-F ownership remains unchanged.
 
 In `crates/config-projection/src/service.rs`, the already admitted operations have these exact
 signatures. The observation enum is public solely across the existing world-service dependency,
@@ -5011,14 +5122,17 @@ The already cataloged `E3GatewayRuntimeAuthorityV1` methods own private one-spaw
 progress and held OS resources, including the existing private `ManagedGatewayLaunchCapabilityV1`;
 consume its one-shot launch permission while retaining parent cleanup handles and exclusion.
 Only the [terminal namespace owner boundary](#e3-e-terminal-child-namespace-owner-boundary) may
-adapt E3-D helper signatures/private lifecycle state; other E3-D security and all E3-F member-runtime
-execution remain excluded. Later
+adapt E3-D helper signatures/private lifecycle state; the separate
+[fixed-device consumer correction](#e3-d-shared-landlock-fixed-device-correction) changes no such
+interface or state. Other E3-D security and all E3-F member-runtime execution remain excluded. Later
 focused tests may change only the affected colocated service/registry/manager/runtime/gateway tests
 and existing E3 integration surfaces; the managed-gateway section specifies their minimum proof.
 
 ### E3-E terminal child namespace owner boundary
 
-This is the sole E3-E exception to the E3-D helper freeze. The owning file remains
+This is the sole E3-E lifecycle exception to the E3-D helper freeze; the separately authorized
+[fixed-device consumer correction](#e3-d-shared-landlock-fixed-device-correction) has its own fence
+and leaves this lifecycle unchanged. The owning file remains
 `crates/world-service/src/e3_child_security.rs`; the non-cloneable
 `HeldE3PrivilegedChildExclusionLeaseV1` is the caller's existing authority. Its shared
 `E3PrivilegedChildExclusionV1` retains the private namespace map. No caller receives that map,
@@ -5729,8 +5843,10 @@ conflicting restrictions below. Neither correction restarts admission or broaden
    `prepare_private_child_namespace` may add and call private
    `install_exact_e3_ca_bundle_mount_v1`, solely for the exact descriptor validation and private
    single-file realization above before `apply_authenticated_world_fs_enforcement`. The existing
-   Landlock implementation and path-policy model are unchanged; no generic resolver, directory rule,
-   or symlink-capable Landlock surface is owned. In
+   Landlock implementation and path-policy model are unchanged by that CA delta; no generic resolver,
+   directory rule, or symlink-capable Landlock surface is owned. The separately authorized
+   [fixed-device consumer correction](#e3-d-shared-landlock-fixed-device-correction) owns only its
+   enumerated shared-consumer branches and tests, with the policy model unchanged. In
    `crates/world-service/src/gateway_runtime.rs`, only existing `GatewayRuntimeManager`,
    `GatewayRuntimeManager::{new,status,sync,sync_with_timeout,sync_with_timeout_locked,restart}`,
    `start_runtime`, `stop_runtime`, `recover_runtime`, `runtime_for_world_or_manifest`,
