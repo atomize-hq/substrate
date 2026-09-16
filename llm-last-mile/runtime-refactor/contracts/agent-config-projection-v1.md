@@ -5949,6 +5949,87 @@ conflicting restrictions below. Neither correction restarts admission or broaden
     adaptation. No baseline fixture value, V1 assertion, test skip condition, or product behavior may
     change to accommodate E3.
 
+### E3-E native-Linux runtime-directory DAC correction
+
+This narrow ownership allowance permits a later, separately authorized native-Linux correction of
+the runtime-directory DAC blocker. It does not reopen E3 or authorize implementation, installation,
+host permission changes, service restart, or connected acceptance in this documentation packet.
+E3-E remains open; E3-F is not admitted. Documentation success is neither implementation nor
+runtime proof.
+
+The retained deployment receipt at
+`/home/spenser/__Active_code/review-evidence/e3-e-deploy-accept-490d061a/receipt.md` and its
+`attempt-20260916T151639Z/` evidence bind successful installation to product
+`490d061a0d6b377549559ac220b2fc58d3eedd14`, tree `cc6036975215807e6b54e003b27bea9911fecdd3`,
+and installed revision 4, `iar_01a0aad7-561e-7f3e-9e81-c9e6cdd2c140`. Connected activation failed
+before delivery/readiness: the private child could not traverse `root:substrate` mode `0750`
+`/run/substrate` to open its gateway realization while constructing Landlock rules. Its exact target
+UID/GID mapping and zero supplementary groups provide no `substrate` group access; the retained
+no-supplementary-groups probe reproduced `EACCES`. Failure cleanup completed, but successful
+activation remains unproved. Preserve the raw review's P1 classification as historical evidence.
+For this selected correction the demonstrated fail-closed functional blockage is P2 under the
+[development-review contract](development-review-and-remediation-contract.md#review-priority),
+unless additional evidence establishes a severe security or authority failure; do not rewrite the
+old evidence.
+
+The later correction must satisfy all of the following:
+
+1. Preserve `/run/substrate` ownership `root:substrate` and mode `0750`. Grant only the
+   authenticated installed bootstrap UID an effective named-user **access** ACL of `r-x` on that
+   exact directory, with an ACL mask consistent with that mode and effective grant. Read permission
+   preserves the user's existing host group-derived access because a matching named-user ACL is
+   checked before group matching. This grants no write permission, world traversal, recursive or
+   default ACL, or permission to enumerate ancestors under child Landlock. See
+   [acl(5)](https://man7.org/linux/man-pages/man5/acl.5.html).
+2. Both existing native-Linux world-service unit generators must apply the ACL using existing
+   `setfacl` tooling through a mandatory `ExecStartPre`, after systemd prepares `RuntimeDirectory`
+   and before world-service starts. Bind the existing validated `INSTALL_BOOTSTRAP_UID`, never a
+   hardcoded UID, ambient login identity, or every `substrate` group member. ACL setup failure must
+   prevent daemon startup: no ignored-failure `-` prefix or best-effort bypass. Reapply on service
+   starts so directory recreation or reboot cannot lose the grant. Preserve RuntimeDirectory
+   lifetime, namespace mappings, capabilities, and all unit security settings. See
+   [systemd.exec(5)](https://man.archlinux.org/man/systemd.exec.5.en) and
+   [systemd.service(5)](https://man.archlinux.org/man/systemd.service.5.en).
+3. Add `/run/substrate`'s nonrecursive ACL state to the existing Linux managed-state snapshot and
+   restoration path. Reuse `linux_snapshot_acl_state` and `linux_restore_acl_state`, retaining
+   existing absent-path semantics and restoration of the prior ACL on rollback. No new rollback
+   framework is authorized.
+4. Preserve private-realization ownership/modes, accepted-home and artifact-store boundaries,
+   socket ACL behavior, and every existing Landlock policy. No ancestor `READ_DIR` rule or
+   supplementary-group workaround is allowed. The shared socket-ACL helper API remains unchanged.
+
+The later product fence is limited to these symbols and behaviors, not file-wide ownership:
+
+| Existing path | Sole permitted correction |
+|---|---|
+| `scripts/linux/world-provision.sh` | `SERVICE_UNIT_CONTENT`'s mandatory runtime-directory ACL hook. |
+| `scripts/substrate/install-substrate.sh` | The native-Linux unit generator in `provision_linux_world`, for the equivalent hook only. |
+| `scripts/linux/world-lifecycle.sh` | `record_linux_managed_state` and only directly necessary existing ACL snapshot/restoration/readback handling for `/run/substrate`. |
+| `tests/installers/world_provision_smoke.sh` | Focused unit-generation, setup-failure, and ACL rollback coverage. |
+| `tests/installers/prefix_propagation_r2_2.sh` | Focused native-Linux release-unit/bootstrap-UID coverage and compatibility with existing dev unit alignment. |
+
+The dev installer's existing alignment preserves other unit directives; test that compatibility
+without editing it needlessly. No macOS/Windows change or release-installer security refactor is
+authorized. This is the sole additional runtime-directory ACL exception to the existing installer/
+lifecycle freezes; the gateway-smoke exception retains its separate fence. Unrelated publication,
+cleanup, rollback, security, and predecessor ownership remain frozen.
+
+Minimum later verification must establish:
+
+- both generated units bind the exact authenticated UID and make ACL setup mandatory; setup
+  failure cannot start the daemon, and recreation/start reapplies the effective grant;
+- rollback restores the prior ACL, with existing absent-path semantics retained;
+- the target with no supplementary groups can traverse to its realization without ancestor write,
+  other-UID access to the private realization, or a new Landlock ancestor-listing grant; and
+- exact installed readback and the existing connected E3-E acceptance path establish whether this
+  actual blocker is fixed. Installation alone, a stubbed unit test, or this documentation cannot
+  prove successful activation.
+
+Reuse unchanged security tests and valid prior evidence. Do not add a second acceptance framework
+or require an unrelated full test wall. Product implementation, installation, and connected
+acceptance each require separate authorization; preserve the installed revision-4 test binding and
+historical evidence until such authority explicitly permits a later change.
+
 ### E3-E installer gateway-smoke deferral exception
 
 This is a narrow future implementation allowance only. A later, separately authorized E3-E maintainer
@@ -5966,7 +6047,10 @@ preservation cases; and create only
 exact-forwarding regression coverage. This does not grant file-wide authority. In particular,
 `world-lifecycle.sh`, authentication-helper bodies, release installers, public Substrate CLI, gateway
 installation optionality, host policy, runtime security, artifact schemas, cleanup/rollback, and
-non-Linux behavior remain frozen.
+non-Linux behavior remain frozen, except for the separately authorized
+[runtime-directory DAC correction](#e3-e-native-linux-runtime-directory-dac-correction)'s exact
+unit-hook and ACL snapshot/restoration fence; that exception grants no other release-installer or
+lifecycle change.
 
 Absent the option, eligible and ineligible gateway-smoke behavior remains byte/behavior equivalent.
 When present on a native Linux world-enabled dev install or direct native-Linux maintainer provision,

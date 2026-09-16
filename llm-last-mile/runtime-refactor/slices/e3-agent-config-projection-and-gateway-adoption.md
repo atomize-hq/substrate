@@ -396,6 +396,16 @@ forbidden.
   Deferral does not mean `--no-world` or skipped gateway installation, creates no persistent or
   credential workaround, and never establishes runtime acceptance. This correction implements none
   of that path, leaves E3-E open, and does not admit E3-F.
+- **Runtime-directory DAC correction:** the projection contract's
+  [canonical native-Linux allowance](../contracts/agent-config-projection-v1.md#e3-e-native-linux-runtime-directory-dac-correction)
+  alone owns the later mandatory runtime-directory ACL hooks in both existing unit generators,
+  existing ACL snapshot/rollback handling, exact source/test fence, preserved security boundaries,
+  and minimum verification. It narrowly qualifies the installer/lifecycle freezes without reopening
+  E3. The retained revision-4 installation succeeded but activation failed before delivery/readiness;
+  preserve the raw historical P1 review while treating the demonstrated fail-closed functional
+  blockage as P2 for this correction absent additional severe security/authority evidence.
+  This packet lands documentation authority only. Product implementation, installation, and
+  connected acceptance require separate authorization; E3-E remains open and E3-F is not admitted.
 - **Source owner:** the packet-admitted shell integrated-auth extraction, world-service preparation,
   authenticated local transport and gateway-runtime surfaces, and existing gateway launch/server
   adoption points cataloged by the projection and managed-gateway contracts.

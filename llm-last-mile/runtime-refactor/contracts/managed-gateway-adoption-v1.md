@@ -495,6 +495,14 @@ connected-recovery candidate SHA-256
 `activate_managed_gateway`, `resolve_activation_carrier`, and `take_for_v2` are not implemented.
 The following is a complete implementation assignment, not a claim that those paths work today.
 
+The installed E3-E runtime-directory traversal blocker is governed solely by the projection
+contract's [native-Linux runtime-directory DAC correction](agent-config-projection-v1.md#e3-e-native-linux-runtime-directory-dac-correction).
+That later, separately authorized unit-hook and ACL rollback allowance preserves this contract's
+private realizations, exact child mappings, privilege descent, socket behavior, and Landlock policy.
+The retained failure occurred before delivery/readiness; installation and failure cleanup do not
+prove successful activation. This documentation grants no implementation or connected-acceptance
+claim, leaves E3-E open, and does not admit E3-F.
+
 **Publication choice.** Extend the existing ReadyClosed operation to receive the complete ACK and
 original Held dispatch lease. It privately writes/readbacks the ACK before the record/head under
 one existing registry transaction. A separate ACK writer would split the same caller's obligation
