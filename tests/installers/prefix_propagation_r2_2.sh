@@ -1,6 +1,46 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "${1:-}" == "--runtime-directory-dac" ]]; then
+  [[ $# -eq 1 ]] || exit 2
+  python3 - "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)" <<'PY_DAC'
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+
+repo = Path(sys.argv[1])
+release = (repo / 'scripts/substrate/install-substrate.sh').read_text()
+provision = (repo / 'scripts/linux/world-provision.sh').read_text()
+dev = (repo / 'scripts/substrate/dev-install-substrate.sh').read_text()
+release_unit = release.split('provision_linux_world() {', 1)[1].split('<<UNIT\n', 1)[1].split('\nUNIT\n', 1)[0]
+provision_unit = provision.split('SERVICE_UNIT_CONTENT <<UNIT || true\n', 1)[1].split('\nUNIT\n', 1)[0]
+alignment = dev.split('ensure_socket_group_alignment() {', 1)[1].split("<<'PY'\n", 1)[1].split('\nPY\n', 1)[0]
+with tempfile.TemporaryDirectory(prefix='runtime-unit-', dir=os.environ.get('SUBSTRATE_TEST_TMPDIR')) as root:
+    path = Path(root) / 'service'
+    for uid in ('12345', '23456'):
+        for name, unit in [('release', release_unit), ('provisioner', provision_unit)]:
+            rendered = subprocess.check_output(['bash', '-c', 'cat <<UNIT\n' + unit + '\nUNIT\n'],
+                                               env=dict(os.environ, INSTALL_BOOTSTRAP_UID=uid), text=True)
+            hook = f'ExecStartPre=/usr/bin/setfacl -m u:{uid}:r-x,m::r-x /run/substrate'
+            assert [line for line in rendered.splitlines() if line.startswith('ExecStartPre=')] == [hook]
+            for altered in (rendered, rendered.replace('Group=substrate\n', 'Group=old\n').replace('UMask=0027\n', ''),
+                            rendered.replace('Group=substrate\n', '').replace('UMask=0027\n', 'UMask=0077\n')):
+                path.write_text(altered)
+                subprocess.run([sys.executable, '-', str(path)], input=alignment, text=True, check=True)
+                aligned = path.read_text()
+                assert 'Group=substrate\n' in aligned and 'UMask=0027\n' in aligned
+                # Alignment may reposition these two directives when absent.
+                def preserved(text):
+                    return [line for line in text.splitlines() if not line.startswith(('Group=', 'UMask='))]
+                assert preserved(aligned) == preserved(rendered)
+            print('PASS exact bootstrap UID and unchanged dev alignment:', name, uid)
+print('PASS release/provisioner unit compatibility; no host operations')
+PY_DAC
+  exit $?
+fi
+
 SCRIPT_NAME="prefix-propagation-r2-2"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 INSTALL_WRAPPER="${REPO_ROOT}/scripts/substrate/install.sh"

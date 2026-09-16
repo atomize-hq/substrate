@@ -1,6 +1,130 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "${1:-}" == "--runtime-directory-dac" || "${1:-}" == "--runtime-directory-dac-systemd" ]]; then
+  [[ $# -eq 1 ]] || exit 2
+  repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+  python3 - "${repo}" "$1" <<'PY_DAC'
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import uuid
+
+repo = Path(sys.argv[1])
+source = (repo / 'scripts/linux/world-provision.sh').read_text()
+unit = source.split("SERVICE_UNIT_CONTENT <<UNIT || true\n", 1)[1].split('\nUNIT\n', 1)[0]
+for uid in ('12345', '23456'):
+    rendered = subprocess.check_output(['bash', '-c', 'cat <<UNIT\n' + unit + '\nUNIT\n'],
+                                       env=dict(os.environ, INSTALL_BOOTSTRAP_UID=uid), text=True)
+    assert [line for line in rendered.splitlines() if line.startswith('ExecStartPre=')] == [
+        f'ExecStartPre=/usr/bin/setfacl -m u:{uid}:r-x,m::r-x /run/substrate']
+    assert 'RuntimeDirectoryMode=0750\n' in rendered and 'Group=substrate\n' in rendered
+    print('PASS provisioner mandatory exact bootstrap UID:', uid)
+
+if sys.argv[2] == '--runtime-directory-dac-systemd':
+    # Explicit opt-in: isolated test units, no managed service restart. Reuse the
+    # exact generated hook, changing only its fixture runtime-directory path.
+    subprocess.run(['sudo', '-n', 'true'], check=True)
+    uid, gid = str(os.getuid()), str(os.getgid())
+    rendered = subprocess.check_output(['bash', '-c', 'cat <<UNIT\n' + unit + '\nUNIT\n'],
+                                       env=dict(os.environ, INSTALL_BOOTSTRAP_UID=uid), text=True)
+    hook = next(line.split('=', 1)[1] for line in rendered.splitlines() if line.startswith('ExecStartPre='))
+    name = 'substrate-dac-test-' + uuid.uuid4().hex
+    runtime = '/run/' + name
+    unit_path = '/run/systemd/system/' + name + '.service'
+    def privileged(*args, **kwargs):
+        return subprocess.run(['sudo', '-n', *args], check=True, text=True, **kwargs)
+    try:
+        for failure in (True, False, False):
+            fixture_hook = hook.replace('/run/substrate', runtime + ('/missing' if failure else ''))
+            content = '\n'.join(['[Service]', 'Type=oneshot', 'RemainAfterExit=yes',
+                                  'Group=substrate', 'UMask=0027', 'NoNewPrivileges=yes',
+                                  'RuntimeDirectory=' + name, 'RuntimeDirectoryMode=0750',
+                                  'ExecStartPre=' + fixture_hook, 'ExecStart=/usr/bin/touch ' + runtime + '/started', ''])
+            privileged('tee', unit_path, input=content, stdout=subprocess.DEVNULL)
+            privileged('systemctl', 'daemon-reload')
+            started = subprocess.run(['sudo', '-n', 'systemctl', 'start', name], text=True)
+            if failure:
+                assert started.returncode != 0
+                state = subprocess.check_output(['systemctl', 'show', name, '-p', 'ExecMainStartTimestampMonotonic'], text=True)
+                assert state.strip() == 'ExecMainStartTimestampMonotonic=0', state
+                print('PASS mandatory setfacl failure prevents daemon startup')
+                privileged('systemctl', 'reset-failed', name)
+            else:
+                assert started.returncode == 0
+                privileged('test', '-f', runtime + '/started')
+                privileged('install', '-d', '-m0700', '-o', uid, '-g', gid, runtime + '/private')
+                acl = subprocess.check_output(['sudo', '-n', 'getfacl', '-cpn', runtime], text=True)
+                assert f'user:{uid}:r-x\n' in acl and 'mask::r-x\n' in acl and 'default:' not in acl
+                assert subprocess.check_output(['stat', '-c', '%U:%G:%a', runtime], text=True).strip() == 'root:substrate:750'
+                privileged('setpriv', '--reuid', uid, '--regid', gid, '--clear-groups', 'test', '-r', runtime + '/private')
+                assert subprocess.run(['sudo', '-n', 'setpriv', '--reuid', uid, '--regid', gid, '--clear-groups',
+                                       'test', '-w', runtime]).returncode == 1
+                assert subprocess.run(['sudo', '-n', 'setpriv', '--reuid', '65534', '--regid', '65534', '--clear-groups',
+                                       'test', '-x', runtime + '/private']).returncode == 1
+                print('PASS real start/recreation: exact ACL, zero-group traversal, no ancestor write or other-UID private access')
+                privileged('systemctl', 'stop', name)
+                assert not Path(runtime).exists()
+    finally:
+        subprocess.run(['sudo', '-n', 'systemctl', 'stop', name], check=False)
+        privileged('rm', '-f', unit_path)
+        privileged('systemctl', 'daemon-reload')
+    assert not Path(runtime).exists() and not Path(unit_path).exists()
+    print('PASS isolated systemd fixture cleanup')
+
+# Exercise the existing record/restore entry points. Only unrelated host state
+# and service operations are stubbed; getfacl/setfacl use the real filesystem.
+with tempfile.TemporaryDirectory(prefix='runtime-dac-', dir=os.environ.get('SUBSTRATE_TEST_TMPDIR')) as root:
+    script = r'''
+set -Eeuo pipefail
+source "$1/scripts/linux/world-lifecycle.sh"
+fixture="$2"
+TMPDIR="$fixture"
+runtime="$fixture/runtime"
+ACL_HELPER_INSTALL_PATH=unused SERVICE_PATH=unused SOCKET_PATH=unused ACL_DROPIN_PATH=unused
+SOCKET_FS_PATH=unused SUBSTRATE_STATE_PATH=unused WORLD_DEPS_ROOT_PATH=unused WORLD_DEPS_BIN_PATH=unused
+linux_require_world_context() { :; }
+linux_snapshot_path() { :; }
+linux_snapshot_service_state() { :; }
+linux_snapshot_account_state() { :; }
+# Keep actual ACL snapshot behavior for the exact managed runtime target only.
+eval "$(declare -f linux_snapshot_acl_state | sed '1s/linux_snapshot_acl_state/snapshot_acl/')"
+linux_snapshot_acl_state() {
+    [[ "$2" == /run/substrate ]] || return 0
+    [[ "$3" == 0 ]]
+    snapshot_acl "$1" "$runtime" "$3"
+}
+sudo_cmd() {
+    if [[ "$1" == systemctl ]]; then return 0; fi
+    command "$@"
+}
+mkdir -m0750 "$runtime"
+setfacl -m u:23456:--x,m::r-x "$runtime"
+getfacl -cp "$runtime" > "$fixture/before"
+record_linux_managed_state
+[[ "$(wc -l < "$(linux_snapshot_acl_state_path)")" == 1 ]]
+grep -F "$runtime" "$(linux_snapshot_acl_state_path)"
+setfacl -m u:12345:r-x,m::r-x "$runtime"
+restore_linux_managed_state
+getfacl -cp "$runtime" > "$fixture/after"
+cmp "$fixture/before" "$fixture/after"
+echo 'PASS actual kernel ACL restored through managed rollback'
+rmdir "$runtime"
+record_linux_managed_state
+[[ "$(wc -l < "$(linux_snapshot_acl_state_path)")" == 1 ]]
+[[ ! -e "${LINUX_MANAGED_STATE_SNAPSHOT_ROOT}/run-substrate-acl.acl" ]]
+restore_linux_managed_state
+[[ ! -e "$runtime" ]]
+echo 'PASS absent runtime ACL retains no-op restoration'
+'''
+    subprocess.run(['bash', '-c', script, 'dac', str(repo), root], check=True)
+print('PASS runtime-directory DAC focused tests; service start and child DAC require installed proof')
+PY_DAC
+  exit $?
+fi
+
 # Select these cases before the legacy fixture creates target/<profile> stubs.
 # The legacy non-dry-run --skip-build scenarios are intentionally unchanged.
 if [[ "${1:-}" == "--gateway-smoke-deferral" ]]; then

@@ -1574,6 +1574,7 @@ record_linux_managed_state() {
     linux_snapshot_service_state "substrate-lifecycle-publisher-v1.service"
     linux_snapshot_service_state "substrate-lifecycle-publisher-v1.socket"
     linux_snapshot_account_state
+    linux_snapshot_acl_state "run-substrate-acl" "/run/substrate" "0"
     linux_snapshot_acl_state "world-socket-acl" "${SOCKET_FS_PATH}" "0"
     linux_snapshot_acl_state "state-root-acl" "${SUBSTRATE_STATE_PATH}" "0"
     linux_snapshot_acl_state "world-deps-acl" "${WORLD_DEPS_ROOT_PATH}" "1"

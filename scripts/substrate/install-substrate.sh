@@ -2792,6 +2792,7 @@ Group=substrate
 UMask=0027
 RuntimeDirectory=substrate
 RuntimeDirectoryMode=0750
+ExecStartPre=/usr/bin/setfacl -m u:${INSTALL_BOOTSTRAP_UID}:r-x,m::r-x /run/substrate
 StateDirectory=substrate
 StateDirectoryMode=0750
 WorkingDirectory=/var/lib/substrate
