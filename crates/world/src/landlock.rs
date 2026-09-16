@@ -201,6 +201,69 @@ mod linux {
     enum PathRuleTargetKind {
         RegularFile,
         Directory,
+        NullDevice,
+        UrandomDevice,
+    }
+
+    impl PathRuleTargetKind {
+        fn fixed_support_device(path: &str) -> Option<Self> {
+            match path {
+                "/dev/null" => Some(Self::NullDevice),
+                "/dev/urandom" => Some(Self::UrandomDevice),
+                _ => None,
+            }
+        }
+
+        fn fixed_support_device_component(self) -> Option<&'static str> {
+            match self {
+                Self::NullDevice => Some("null"),
+                Self::UrandomDevice => Some("urandom"),
+                Self::RegularFile | Self::Directory => None,
+            }
+        }
+    }
+
+    fn fixed_support_device_selection(
+        policy: &LandlockFilesystemPolicy,
+    ) -> Result<BTreeMap<&'static str, u64>, String> {
+        let selected =
+            |path: &str, paths: &[String]| paths.iter().any(|candidate| candidate.trim() == path);
+        let mut devices = BTreeMap::new();
+        for (path, kind) in [
+            ("/dev/null", PathRuleTargetKind::NullDevice),
+            ("/dev/urandom", PathRuleTargetKind::UrandomDevice),
+        ] {
+            let exec = selected(path, &policy.exec_paths);
+            let discover = selected(path, &policy.discover_paths);
+            let read = selected(path, &policy.read_paths);
+            let write = selected(path, &policy.write_paths);
+            if !exec && !discover && !read && !write {
+                continue;
+            }
+            if exec {
+                return Err(format!("fixed support device {path:?} cannot be executed"));
+            }
+            if kind == PathRuleTargetKind::UrandomDevice && write {
+                return Err("fixed support device \"/dev/urandom\" cannot be written".to_string());
+            }
+            let mut access = 0;
+            if read {
+                access |= landlock::LANDLOCK_ACCESS_FS_READ_FILE as u64;
+            }
+            if write {
+                access |= landlock::LANDLOCK_ACCESS_FS_WRITE_FILE as u64;
+            }
+            if access == 0 {
+                let reason = if discover {
+                    "discovery-only selection"
+                } else {
+                    "unsupported selection"
+                };
+                return Err(format!("fixed support device {path:?} has {reason}"));
+            }
+            devices.insert(path, access);
+        }
+        Ok(devices)
     }
 
     fn classify_path_rule_target(fd: RawFd, path: &str) -> Result<PathRuleTargetKind, String> {
@@ -210,6 +273,23 @@ mod linux {
                 "failed to inspect {path:?} for landlock: {}",
                 std::io::Error::last_os_error()
             ));
+        }
+
+        if let Some(kind) = PathRuleTargetKind::fixed_support_device(path) {
+            let (major, minor) = match kind {
+                PathRuleTargetKind::NullDevice => (1, 3),
+                PathRuleTargetKind::UrandomDevice => (1, 9),
+                PathRuleTargetKind::RegularFile | PathRuleTargetKind::Directory => unreachable!(),
+            };
+            if stat.st_mode & libc::S_IFMT != libc::S_IFCHR
+                || libc::major(stat.st_rdev) != major
+                || libc::minor(stat.st_rdev) != minor
+            {
+                return Err(format!(
+                    "fixed support device identity mismatch for landlock rule target {path:?}"
+                ));
+            }
+            return Ok(kind);
         }
 
         match stat.st_mode & libc::S_IFMT {
@@ -238,8 +318,22 @@ mod linux {
                 abi_supported_request & regular_file_access_mask(abi)
             }
             PathRuleTargetKind::Directory => abi_supported_request,
+            PathRuleTargetKind::NullDevice => {
+                abi_supported_request
+                    & (landlock::LANDLOCK_ACCESS_FS_READ_FILE as u64
+                        | landlock::LANDLOCK_ACCESS_FS_WRITE_FILE as u64)
+            }
+            PathRuleTargetKind::UrandomDevice => {
+                abi_supported_request & landlock::LANDLOCK_ACCESS_FS_READ_FILE as u64
+            }
         };
-        if abi_supported_request != 0 && compatible_access == 0 {
+        if (abi_supported_request != 0
+            || matches!(
+                kind,
+                PathRuleTargetKind::NullDevice | PathRuleTargetKind::UrandomDevice
+            ))
+            && compatible_access == 0
+        {
             return Err(match kind {
                 PathRuleTargetKind::RegularFile => {
                     "regular-file landlock rule requested only directory-compatible access"
@@ -247,6 +341,9 @@ mod linux {
                 }
                 PathRuleTargetKind::Directory => {
                     "directory landlock rule has no ABI-supported access".to_string()
+                }
+                PathRuleTargetKind::NullDevice | PathRuleTargetKind::UrandomDevice => {
+                    "fixed support device landlock rule requested no compatible access".to_string()
                 }
             });
         }
@@ -258,10 +355,13 @@ mod linux {
         requested_access: u64,
         abi: u32,
     ) -> Result<Option<(RawFd, u64)>, String> {
-        let fd = match open_opath(path) {
-            Ok(fd) => fd,
-            Err(OpenError::NotFound) => return Ok(None),
-            Err(OpenError::Other(error)) => return Err(error),
+        let fd = match PathRuleTargetKind::fixed_support_device(path) {
+            Some(kind) => open_fixed_support_device_rule(kind)?,
+            None => match open_opath(path) {
+                Ok(fd) => fd,
+                Err(OpenError::NotFound) => return Ok(None),
+                Err(OpenError::Other(error)) => return Err(error),
+            },
         };
         let access = classify_path_rule_target(fd, path)
             .and_then(|kind| compatible_path_rule_access(kind, requested_access, abi));
@@ -344,6 +444,18 @@ mod linux {
         let read_mask = read_access_mask(abi);
         let write_mask = write_access_mask(abi);
 
+        let fixed_devices = match fixed_support_device_selection(policy) {
+            Ok(devices) => devices,
+            Err(reason) => {
+                return LandlockApplyReport {
+                    support,
+                    attempted: true,
+                    applied: false,
+                    rules_added: 0,
+                    reason: Some(reason),
+                };
+            }
+        };
         let mut allowlist: BTreeMap<&str, u64> = BTreeMap::new();
         for path in &policy.exec_paths {
             let trimmed = path.trim();
@@ -374,8 +486,16 @@ mod linux {
             *allowlist.entry(trimmed).or_default() |= write_mask;
         }
 
-        let handled_access_fs =
+        let mut handled_access_fs =
             allowlist.values().fold(0u64, |acc, mask| acc | *mask) & abi_supported_access_fs(abi);
+        if !fixed_devices.is_empty() {
+            handled_access_fs |= landlock::LANDLOCK_ACCESS_FS_READ_FILE as u64
+                | landlock::LANDLOCK_ACCESS_FS_WRITE_FILE as u64;
+        }
+
+        for (path, access) in &fixed_devices {
+            allowlist.insert(path, *access);
+        }
 
         let ruleset_attr = landlock::landlock_ruleset_attr { handled_access_fs };
         let ruleset_fd = match unsafe { landlock_create_ruleset(&ruleset_attr) } {
@@ -511,6 +631,24 @@ mod linux {
         }
 
         let write_mask = write_only_access_mask(abi);
+        let policy = LandlockFilesystemPolicy {
+            exec_paths: Vec::new(),
+            discover_paths: Vec::new(),
+            read_paths: Vec::new(),
+            write_paths: write_paths.to_vec(),
+        };
+        let fixed_devices = match fixed_support_device_selection(&policy) {
+            Ok(devices) => devices,
+            Err(reason) => {
+                return LandlockApplyReport {
+                    support,
+                    attempted: true,
+                    applied: false,
+                    rules_added: 0,
+                    reason: Some(reason),
+                };
+            }
+        };
         let mut allowlist: BTreeMap<&str, u64> = BTreeMap::new();
         for path in write_paths {
             let trimmed = path.trim();
@@ -519,9 +657,12 @@ mod linux {
             }
             *allowlist.entry(trimmed).or_default() |= write_mask;
         }
-
         let handled_access_fs =
             allowlist.values().fold(0u64, |acc, mask| acc | *mask) & abi_supported_access_fs(abi);
+
+        for (path, access) in fixed_devices {
+            allowlist.insert(path, access);
+        }
 
         let ruleset_attr = landlock::landlock_ruleset_attr { handled_access_fs };
         let ruleset_fd = match unsafe { landlock_create_ruleset(&ruleset_attr) } {
@@ -680,6 +821,80 @@ mod linux {
         Other(String),
     }
 
+    fn open_fixed_support_device_rule(kind: PathRuleTargetKind) -> Result<RawFd, String> {
+        open_fixed_support_device_rule_at("/dev", kind)
+    }
+
+    fn open_fixed_support_device_rule_at(
+        root: &str,
+        kind: PathRuleTargetKind,
+    ) -> Result<RawFd, String> {
+        let component = kind
+            .fixed_support_device_component()
+            .ok_or_else(|| "not a fixed support device rule target".to_string())?;
+        let root = CString::new(root)
+            .map_err(|error| format!("invalid fixed support device root: {error}"))?;
+        let root_fd = unsafe {
+            libc::open(
+                root.as_ptr(),
+                libc::O_PATH | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+            )
+        };
+        if root_fd < 0 {
+            return Err(format!(
+                "failed to open fixed support device root without following symlinks: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        let component = CString::new(component).expect("fixed device component has no NUL");
+        let how = general::open_how {
+            flags: (libc::O_PATH | libc::O_CLOEXEC | libc::O_NOFOLLOW) as u64,
+            mode: 0,
+            resolve: (general::RESOLVE_BENEATH
+                | general::RESOLVE_NO_MAGICLINKS
+                | general::RESOLVE_NO_SYMLINKS
+                | general::RESOLVE_NO_XDEV) as u64,
+        };
+        let fd = unsafe {
+            libc::syscall(
+                general::__NR_openat2 as libc::c_long,
+                root_fd,
+                component.as_ptr(),
+                &how as *const general::open_how,
+                mem::size_of::<general::open_how>(),
+            )
+        };
+        unsafe {
+            libc::close(root_fd);
+        }
+        if fd < 0 {
+            return Err(format!(
+                "failed to resolve fixed support device {component:?}: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        let fd = fd as RawFd;
+        let mut stat = unsafe { mem::zeroed::<libc::stat>() };
+        if unsafe { libc::fstat(fd, &mut stat) } < 0 {
+            unsafe {
+                libc::close(fd);
+            }
+            return Err(format!(
+                "failed to inspect resolved fixed support device {component:?}: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        if stat.st_mode & libc::S_IFMT == libc::S_IFLNK {
+            unsafe {
+                libc::close(fd);
+            }
+            return Err(format!(
+                "refusing symlink fixed support device {component:?}"
+            ));
+        }
+        Ok(fd)
+    }
+
     fn open_opath(path: &str) -> Result<RawFd, OpenError> {
         let cstr = CString::new(path)
             .map_err(|e| OpenError::Other(format!("invalid path {path:?}: {e}")))?;
@@ -713,6 +928,7 @@ mod linux {
     mod tests {
         use super::*;
         use std::fs;
+        use std::os::fd::AsRawFd;
         use std::os::unix::fs::symlink;
 
         #[test]
@@ -843,6 +1059,222 @@ mod linux {
 
             let escaped = root.path().join("escape/secret");
             assert!(open_opath(&escaped.display().to_string()).is_err());
+        }
+
+        #[test]
+        fn fixed_support_device_selection_keeps_explicit_rights() {
+            let policy = LandlockFilesystemPolicy {
+                exec_paths: Vec::new(),
+                discover_paths: vec!["/dev/null".to_string(), "/dev/urandom".to_string()],
+                read_paths: vec!["/dev/null".to_string(), "/dev/urandom".to_string()],
+                write_paths: vec!["/dev/null".to_string()],
+            };
+            let selected = fixed_support_device_selection(&policy).unwrap();
+            assert_eq!(
+                selected["/dev/null"],
+                landlock::LANDLOCK_ACCESS_FS_READ_FILE as u64
+                    | landlock::LANDLOCK_ACCESS_FS_WRITE_FILE as u64
+            );
+            assert_eq!(
+                selected["/dev/urandom"],
+                landlock::LANDLOCK_ACCESS_FS_READ_FILE as u64
+            );
+            for abi in [1, 2, 3, 7] {
+                assert_eq!(
+                    compatible_path_rule_access(
+                        PathRuleTargetKind::NullDevice,
+                        landlock::LANDLOCK_ACCESS_FS_READ_FILE as u64
+                            | landlock::LANDLOCK_ACCESS_FS_WRITE_FILE as u64,
+                        abi,
+                    )
+                    .unwrap(),
+                    landlock::LANDLOCK_ACCESS_FS_READ_FILE as u64
+                        | landlock::LANDLOCK_ACCESS_FS_WRITE_FILE as u64
+                );
+                assert_eq!(
+                    compatible_path_rule_access(
+                        PathRuleTargetKind::UrandomDevice,
+                        landlock::LANDLOCK_ACCESS_FS_READ_FILE as u64,
+                        abi,
+                    )
+                    .unwrap(),
+                    landlock::LANDLOCK_ACCESS_FS_READ_FILE as u64
+                );
+            }
+            assert!(selected.values().all(|access| {
+                access
+                    & !(landlock::LANDLOCK_ACCESS_FS_READ_FILE as u64
+                        | landlock::LANDLOCK_ACCESS_FS_WRITE_FILE as u64)
+                    == 0
+            }));
+            assert_eq!(
+                compatible_path_rule_access(
+                    PathRuleTargetKind::NullDevice,
+                    read_access_mask(7),
+                    7,
+                )
+                .unwrap(),
+                landlock::LANDLOCK_ACCESS_FS_READ_FILE as u64
+            );
+            assert_eq!(
+                compatible_path_rule_access(
+                    PathRuleTargetKind::UrandomDevice,
+                    write_access_mask(7),
+                    7,
+                )
+                .unwrap(),
+                landlock::LANDLOCK_ACCESS_FS_READ_FILE as u64
+            );
+
+            for policy in [
+                LandlockFilesystemPolicy {
+                    exec_paths: vec!["/dev/null".to_string()],
+                    discover_paths: Vec::new(),
+                    read_paths: Vec::new(),
+                    write_paths: Vec::new(),
+                },
+                LandlockFilesystemPolicy {
+                    exec_paths: Vec::new(),
+                    discover_paths: Vec::new(),
+                    read_paths: Vec::new(),
+                    write_paths: vec!["/dev/urandom".to_string()],
+                },
+                LandlockFilesystemPolicy {
+                    exec_paths: Vec::new(),
+                    discover_paths: vec!["/dev/null".to_string()],
+                    read_paths: Vec::new(),
+                    write_paths: Vec::new(),
+                },
+                LandlockFilesystemPolicy {
+                    exec_paths: vec!["/dev/null".to_string()],
+                    discover_paths: Vec::new(),
+                    read_paths: vec!["/dev/null".to_string()],
+                    write_paths: Vec::new(),
+                },
+                LandlockFilesystemPolicy {
+                    exec_paths: Vec::new(),
+                    discover_paths: vec!["/dev/urandom".to_string()],
+                    read_paths: Vec::new(),
+                    write_paths: Vec::new(),
+                },
+                LandlockFilesystemPolicy {
+                    exec_paths: Vec::new(),
+                    discover_paths: Vec::new(),
+                    read_paths: vec!["/dev/urandom".to_string()],
+                    write_paths: vec!["/dev/urandom".to_string()],
+                },
+            ] {
+                assert!(fixed_support_device_selection(&policy).is_err());
+            }
+            assert!(compatible_path_rule_access(
+                PathRuleTargetKind::NullDevice,
+                landlock::LANDLOCK_ACCESS_FS_READ_DIR as u64,
+                7,
+            )
+            .is_err());
+            assert!(compatible_path_rule_access(
+                PathRuleTargetKind::UrandomDevice,
+                landlock::LANDLOCK_ACCESS_FS_WRITE_FILE as u64,
+                7,
+            )
+            .is_err());
+            assert!(
+                compatible_path_rule_access(PathRuleTargetKind::NullDevice, 1u64 << 63, 7,)
+                    .is_err()
+            );
+            assert!(compatible_path_rule_access(PathRuleTargetKind::NullDevice, 0, 7).is_err());
+        }
+
+        #[test]
+        fn fixed_support_devices_require_the_exact_rule_descriptor_identity() {
+            for (path, expected) in [
+                ("/dev/null", PathRuleTargetKind::NullDevice),
+                ("/dev/urandom", PathRuleTargetKind::UrandomDevice),
+            ] {
+                let fd = open_fixed_support_device_rule(expected).unwrap();
+                assert_eq!(classify_path_rule_target(fd, path).unwrap(), expected);
+                unsafe { libc::close(fd) };
+            }
+
+            let null = open_fixed_support_device_rule(PathRuleTargetKind::NullDevice).unwrap();
+            assert!(classify_path_rule_target(null, "/dev/urandom").is_err());
+            unsafe { libc::close(null) };
+
+            let urandom =
+                open_fixed_support_device_rule(PathRuleTargetKind::UrandomDevice).unwrap();
+            assert!(classify_path_rule_target(urandom, "/dev/null").is_err());
+            unsafe { libc::close(urandom) };
+
+            let zero = match open_opath("/dev/zero") {
+                Ok(fd) => fd,
+                Err(_) => panic!("open /dev/zero"),
+            };
+            assert!(classify_path_rule_target(zero, "/dev/null").is_err());
+            assert!(classify_path_rule_target(zero, "/dev/zero").is_err());
+            unsafe { libc::close(zero) };
+
+            let (fd, access) = open_path_rule("/dev/null", read_access_mask(7), 7)
+                .unwrap()
+                .unwrap();
+            assert_eq!(access, landlock::LANDLOCK_ACCESS_FS_READ_FILE as u64);
+            assert_eq!(
+                classify_path_rule_target(fd, "/dev/null").unwrap(),
+                PathRuleTargetKind::NullDevice
+            );
+            unsafe { libc::close(fd) };
+            assert!(open_path_rule(
+                "/dev/urandom",
+                landlock::LANDLOCK_ACCESS_FS_WRITE_FILE as u64,
+                7,
+            )
+            .is_err());
+        }
+
+        #[test]
+        fn fixed_support_device_resolver_rejects_substitution_and_links() {
+            let root = tempfile::tempdir().unwrap();
+            fs::write(root.path().join("null"), "not a device").unwrap();
+            fs::create_dir(root.path().join("urandom")).unwrap();
+            let fd = open_fixed_support_device_rule_at(
+                &root.path().display().to_string(),
+                PathRuleTargetKind::NullDevice,
+            )
+            .unwrap();
+            assert!(classify_path_rule_target(fd, "/dev/null").is_err());
+            unsafe { libc::close(fd) };
+            let fd = open_fixed_support_device_rule_at(
+                &root.path().display().to_string(),
+                PathRuleTargetKind::UrandomDevice,
+            )
+            .unwrap();
+            assert!(classify_path_rule_target(fd, "/dev/urandom").is_err());
+            unsafe { libc::close(fd) };
+            fs::remove_file(root.path().join("null")).unwrap();
+            symlink("/dev/null", root.path().join("null")).unwrap();
+            assert!(open_fixed_support_device_rule_at(
+                &root.path().display().to_string(),
+                PathRuleTargetKind::NullDevice,
+            )
+            .is_err());
+            fs::remove_dir(root.path().join("urandom")).unwrap();
+            assert!(open_fixed_support_device_rule_at(
+                &root.path().display().to_string(),
+                PathRuleTargetKind::UrandomDevice,
+            )
+            .is_err());
+            let linked_root = root.path().with_extension("link");
+            symlink(root.path(), &linked_root).unwrap();
+            assert!(open_fixed_support_device_rule_at(
+                &linked_root.display().to_string(),
+                PathRuleTargetKind::NullDevice,
+            )
+            .is_err());
+            let held_root = fs::File::open(root.path()).unwrap();
+            let magic_root = format!("/proc/self/fd/{}", held_root.as_raw_fd());
+            assert!(
+                open_fixed_support_device_rule_at(&magic_root, PathRuleTargetKind::NullDevice,)
+                    .is_err()
+            );
         }
     }
 }

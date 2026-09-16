@@ -4250,6 +4250,38 @@ mod tests {
     }
 
     #[test]
+    fn fixed_support_devices_are_validated_and_remain_in_both_non_readiness_layers() {
+        validate_fixed_support_device("/dev/null", 1, 3).unwrap();
+        validate_fixed_support_device("/dev/urandom", 1, 9).unwrap();
+        assert!(validate_fixed_support_device("/dev/zero", 1, 3).is_err());
+        assert!(validate_fixed_support_device("/dev/null", 1, 9).is_err());
+
+        let source = include_str!("substrate-world-entry.rs");
+        let body = source
+            .split_once("fn apply_authenticated_world_fs_enforcement")
+            .unwrap()
+            .1
+            .split_once("\nfn resolve_project_allowlist")
+            .unwrap()
+            .0;
+        let common_set = body
+            .split_once("if descriptors.role != WrapperRoleV1::ManagedGatewayReadinessProbe {")
+            .unwrap()
+            .1
+            .split_once("\n    if let Some(directory)")
+            .unwrap()
+            .0;
+        assert!(common_set.contains("\"/dev/null\""));
+        assert!(common_set.contains("\"/dev/urandom\""));
+        assert!(common_set.contains("support_write_paths.push(\"/dev/null\".to_string())"));
+        assert_eq!(
+            body.matches("apply_authenticated_world_fs_enforcement_plan_v1(")
+                .count(),
+            2
+        );
+    }
+
+    #[test]
     #[ignore = "requires the explicit privileged E3-D CA mount acceptance environment"]
     fn privileged_private_ca_realization_preserves_the_host_link_and_exact_file_rule() {
         use std::os::unix::fs::MetadataExt;

@@ -6,6 +6,7 @@ use world::landlock::{
 
 const EXACT_FILE_CHILD_ENV: &str = "SUBSTRATE_LANDLOCK_EXACT_FILE_CHILD";
 const EXACT_FILE_ROOT_ENV: &str = "SUBSTRATE_LANDLOCK_EXACT_FILE_ROOT";
+const FIXED_DEVICE_CHILD_ENV: &str = "SUBSTRATE_LANDLOCK_FIXED_DEVICE_CHILD";
 
 fn run_exact_file_child(scenario: &str, root: &std::path::Path) -> ExitStatus {
     Command::new(std::env::current_exe().expect("current test executable"))
@@ -16,6 +17,16 @@ fn run_exact_file_child(scenario: &str, root: &std::path::Path) -> ExitStatus {
         .env(EXACT_FILE_ROOT_ENV, root)
         .status()
         .expect("run exact-file Landlock child")
+}
+
+fn run_fixed_device_child(scenario: &str) -> ExitStatus {
+    Command::new(std::env::current_exe().expect("current test executable"))
+        .arg("--exact")
+        .arg("landlock_fixed_device_child")
+        .arg("--nocapture")
+        .env(FIXED_DEVICE_CHILD_ENV, scenario)
+        .status()
+        .expect("run fixed-device Landlock child")
 }
 
 #[test]
@@ -140,6 +151,137 @@ fn landlock_exact_file_child() {
         assert!(Command::new(&allowed).status().unwrap().success());
         assert!(Command::new(&sibling).status().is_err());
     }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn landlock_fixed_device_child() {
+    let Ok(scenario) = std::env::var(FIXED_DEVICE_CHILD_ENV) else {
+        return;
+    };
+    let apply = |policy: LandlockFilesystemPolicy| {
+        let report = apply_filesystem_policy(&policy);
+        if !report.support.supported {
+            std::process::exit(77);
+        }
+        assert!(report.applied, "fixed-device rule failed: {report:?}");
+        eprintln!(
+            "fixed-device Landlock report: abi={:?} applied={} rules_added={}",
+            report.support.abi, report.applied, report.rules_added
+        );
+        report
+    };
+
+    match scenario.as_str() {
+        "combined" => {
+            assert!(
+                fs::File::open("/dev/zero").is_ok(),
+                "/dev/zero must be DAC-readable"
+            );
+            let policy = LandlockFilesystemPolicy {
+                exec_paths: Vec::new(),
+                discover_paths: vec!["/dev/null".to_string(), "/dev/urandom".to_string()],
+                read_paths: vec!["/dev/null".to_string(), "/dev/urandom".to_string()],
+                write_paths: vec!["/dev/null".to_string()],
+            };
+            let first = apply(policy.clone());
+            let second = apply(policy);
+            assert!(
+                first.applied && second.applied,
+                "both Landlock layers must apply"
+            );
+            assert!(fs::File::open("/dev/null").is_ok());
+            assert!(fs::OpenOptions::new().write(true).open("/dev/null").is_ok());
+            assert!(fs::File::open("/dev/urandom").is_ok());
+            assert_eq!(
+                fs::OpenOptions::new()
+                    .write(true)
+                    .open("/dev/urandom")
+                    .unwrap_err()
+                    .raw_os_error(),
+                Some(libc::EACCES)
+            );
+            assert_eq!(
+                fs::read_dir("/dev").unwrap_err().raw_os_error(),
+                Some(libc::EACCES)
+            );
+            assert_eq!(
+                fs::File::open("/dev/zero").unwrap_err().raw_os_error(),
+                Some(libc::EACCES)
+            );
+        }
+        "urandom_read" => {
+            apply(LandlockFilesystemPolicy {
+                exec_paths: Vec::new(),
+                discover_paths: vec!["/dev/urandom".to_string()],
+                read_paths: vec!["/dev/urandom".to_string()],
+                write_paths: Vec::new(),
+            });
+            assert!(fs::File::open("/dev/urandom").is_ok());
+            assert_eq!(
+                fs::OpenOptions::new()
+                    .write(true)
+                    .open("/dev/urandom")
+                    .unwrap_err()
+                    .raw_os_error(),
+                Some(libc::EACCES)
+            );
+        }
+        "write_only" => {
+            let report = apply_write_only_allowlist(&["/dev/null".to_string()]);
+            if !report.support.supported {
+                std::process::exit(77);
+            }
+            assert!(
+                report.applied,
+                "fixed-device write-only rule failed: {report:?}"
+            );
+            eprintln!(
+                "fixed-device write-only Landlock report: abi={:?} applied={} rules_added={}",
+                report.support.abi, report.applied, report.rules_added
+            );
+            assert!(fs::OpenOptions::new().write(true).open("/dev/null").is_ok());
+            assert!(fs::File::open("/dev/zero").is_ok());
+            assert!(fs::OpenOptions::new()
+                .write(true)
+                .open("/dev/zero")
+                .is_err());
+        }
+        other => panic!("unknown fixed-device Landlock scenario {other}"),
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn landlock_fixed_devices_allow_exact_fresh_opens() {
+    let status = run_fixed_device_child("combined");
+    if status.code() == Some(77) {
+        eprintln!("Landlock unavailable; fixed-device enforcement test skipped");
+        return;
+    }
+    assert!(status.success(), "fixed-device child failed: {status}");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn landlock_urandom_read_policy_handles_and_denies_write() {
+    let status = run_fixed_device_child("urandom_read");
+    if status.code() == Some(77) {
+        eprintln!("Landlock unavailable; urandom enforcement test skipped");
+        return;
+    }
+    assert!(status.success(), "urandom child failed: {status}");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn landlock_write_only_null_policy_leaves_reads_unhandled() {
+    let status = run_fixed_device_child("write_only");
+    if status.code() == Some(77) {
+        eprintln!("Landlock unavailable; write-only device enforcement test skipped");
+        return;
+    }
+    assert!(status.success(), "write-only device child failed: {status}");
 }
 
 #[cfg(target_os = "linux")]
