@@ -4055,7 +4055,7 @@ fn close_wrapper_descriptors_before_final_exec(descriptors: &LaunchDescriptorsV1
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::os::fd::IntoRawFd;
+    use std::os::fd::{AsFd as _, IntoRawFd};
 
     fn full_isolation_snapshot() -> transport_api_types::PolicySnapshotV3 {
         serde_json::from_value::<transport_api_types::PolicySnapshotV3>(serde_json::json!({
@@ -4279,6 +4279,617 @@ mod tests {
                 .count(),
             2
         );
+    }
+
+    #[derive(Clone, Copy)]
+    enum PrivateDeviceFixtureV1 {
+        Exact,
+        MissingUrandom,
+        SubstitutedNull,
+        NullMountCrossing,
+    }
+
+    fn require_privileged_wrapper_fixture_opt_in() {
+        assert_eq!(
+            std::env::var_os("SUBSTRATE_E3D_PRIVILEGED_TEST").as_deref(),
+            Some(std::ffi::OsStr::new("1")),
+            "privileged E3-D wrapper integration must be explicitly enabled"
+        );
+    }
+
+    fn enter_private_mount_namespace() -> Result<()> {
+        let outside_uid = unsafe { libc::getuid() };
+        let outside_gid = unsafe { libc::getgid() };
+        if unsafe { libc::unshare(libc::CLONE_NEWUSER) } != 0 {
+            return Err(std::io::Error::last_os_error()).context("create fixture user namespace");
+        }
+        std::fs::write("/proc/self/setgroups", "deny\n").context("deny fixture setgroups")?;
+        std::fs::write("/proc/self/uid_map", format!("0 {outside_uid} 1\n"))
+            .context("map fixture root uid")?;
+        std::fs::write("/proc/self/gid_map", format!("0 {outside_gid} 1\n"))
+            .context("map fixture root gid")?;
+        if unsafe { libc::unshare(libc::CLONE_NEWNS) } != 0 {
+            return Err(std::io::Error::last_os_error()).context("create fixture mount namespace");
+        }
+        let root = CString::new("/").unwrap();
+        if unsafe {
+            libc::mount(
+                std::ptr::null(),
+                root.as_ptr(),
+                std::ptr::null(),
+                libc::MS_REC | libc::MS_PRIVATE,
+                std::ptr::null(),
+            )
+        } != 0
+        {
+            return Err(std::io::Error::last_os_error()).context("make fixture mounts private");
+        }
+        Ok(())
+    }
+
+    fn mount_private_device_fixture(
+        kind: PrivateDeviceFixtureV1,
+        source_root: &std::path::Path,
+    ) -> Result<()> {
+        if matches!(kind, PrivateDeviceFixtureV1::Exact) {
+            return Ok(());
+        }
+        for name in ["null", "urandom", "zero"] {
+            let source = CString::new(format!("/dev/{name}")).unwrap();
+            let target =
+                CString::new(source_root.join(name).as_os_str().as_encoded_bytes()).unwrap();
+            if unsafe {
+                libc::mount(
+                    source.as_ptr(),
+                    target.as_ptr(),
+                    std::ptr::null(),
+                    libc::MS_BIND,
+                    std::ptr::null(),
+                )
+            } != 0
+            {
+                return Err(std::io::Error::last_os_error()).with_context(|| {
+                    format!("bind permitted host device into private fixture source /dev/{name}")
+                });
+            }
+        }
+        let source = CString::new("tmpfs").unwrap();
+        let target = CString::new("/dev").unwrap();
+        let filesystem = CString::new("tmpfs").unwrap();
+        let data = CString::new("mode=0755").unwrap();
+        if unsafe {
+            libc::mount(
+                source.as_ptr(),
+                target.as_ptr(),
+                filesystem.as_ptr(),
+                0,
+                data.as_ptr().cast(),
+            )
+        } != 0
+        {
+            return Err(std::io::Error::last_os_error()).context("mount private fixture /dev");
+        }
+        let bind_fixture_device = |name: &str| -> Result<()> {
+            let path = CString::new(format!("/dev/{name}")).unwrap();
+            std::fs::File::create(format!("/dev/{name}"))
+                .with_context(|| format!("create private bind target /dev/{name}"))?;
+            let source =
+                CString::new(source_root.join(name).as_os_str().as_encoded_bytes()).unwrap();
+            if unsafe {
+                libc::mount(
+                    source.as_ptr(),
+                    path.as_ptr(),
+                    std::ptr::null(),
+                    libc::MS_BIND,
+                    std::ptr::null(),
+                )
+            } != 0
+            {
+                return Err(std::io::Error::last_os_error())
+                    .with_context(|| format!("bind permitted fixture /dev/{name}"));
+            }
+            Ok(())
+        };
+        match kind {
+            PrivateDeviceFixtureV1::SubstitutedNull => {
+                std::fs::write("/dev/null", b"fixture substitution")
+                    .context("create substituted private /dev/null")?;
+                bind_fixture_device("urandom")?;
+                bind_fixture_device("zero")?;
+            }
+            PrivateDeviceFixtureV1::MissingUrandom => {
+                bind_fixture_device("null")?;
+                bind_fixture_device("zero")?;
+            }
+            PrivateDeviceFixtureV1::Exact | PrivateDeviceFixtureV1::NullMountCrossing => {
+                bind_fixture_device("null")?;
+                bind_fixture_device("urandom")?;
+                bind_fixture_device("zero")?;
+            }
+        }
+        if matches!(kind, PrivateDeviceFixtureV1::NullMountCrossing) {
+            let zero = CString::new("/dev/zero").unwrap();
+            let null = CString::new("/dev/null").unwrap();
+            if unsafe {
+                libc::mount(
+                    zero.as_ptr(),
+                    null.as_ptr(),
+                    std::ptr::null(),
+                    libc::MS_BIND,
+                    std::ptr::null(),
+                )
+            } != 0
+            {
+                return Err(std::io::Error::last_os_error())
+                    .context("create private /dev/null mount-crossing fixture");
+            }
+        }
+        Ok(())
+    }
+
+    fn run_private_device_fixture(
+        label: &str,
+        kind: PrivateDeviceFixtureV1,
+        action: impl FnOnce() -> Result<()>,
+    ) {
+        let fixture_sources =
+            tempfile::tempdir().expect("create attempt-owned fixture source directory");
+        if !matches!(kind, PrivateDeviceFixtureV1::Exact) {
+            for name in ["null", "urandom", "zero"] {
+                let target = fixture_sources.path().join(name);
+                std::fs::File::create(&target).expect("create attempt-owned fixture bind target");
+            }
+        }
+        let child = unsafe { libc::fork() };
+        assert!(child >= 0, "fork {label}");
+        if child == 0 {
+            let result =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<()> {
+                    enter_private_mount_namespace()?;
+                    anyhow::ensure!(
+                        unsafe { libc::geteuid() } == 0,
+                        "fixture must be root only inside its user namespace"
+                    );
+                    mount_private_device_fixture(kind, fixture_sources.path())?;
+                    action()
+                }));
+            match result {
+                Ok(Ok(())) => unsafe { libc::_exit(0) },
+                Ok(Err(error)) => {
+                    eprintln!("{label}: {error:#}");
+                    unsafe { libc::_exit(120) };
+                }
+                Err(_) => {
+                    eprintln!("{label}: fixture assertion panicked");
+                    unsafe { libc::_exit(121) };
+                }
+            }
+        }
+        let mut status = 0;
+        assert_eq!(
+            unsafe { libc::waitpid(child, &mut status, 0) },
+            child,
+            "reap {label}"
+        );
+        assert!(libc::WIFEXITED(status), "{label} terminated by signal");
+        assert_eq!(libc::WEXITSTATUS(status), 0, "{label} child exit status");
+    }
+
+    fn synthetic_wrapper_input(
+        role: E3IsolatedChildRoleV1,
+        directory: &CanonicalDirectoryV1,
+    ) -> E3WorldFsEnforcementInputV1 {
+        let snapshot = full_isolation_snapshot();
+        let snapshot_bytes = serde_json::to_vec(&snapshot).unwrap();
+        let commitment = config_projection::DispatchPolicyCommitmentRefCarrierV1 {
+            authority_store_id: "fixture-authority".to_string(),
+            commitment_id: "fixture-commitment".to_string(),
+            exact_linkage_hash: "a".repeat(64),
+        };
+        let policy_snapshot_ref: config_projection::PolicyRefV1 =
+            serde_json::from_value(serde_json::json!({
+                "ref_id": "ao_0123456789abcdef0123456789abcdef",
+                "object_kind": "policy",
+                "schema_version": 1,
+                "commitment": {"kind": "CanonicalSha256", "value": {"digest_hex": "b".repeat(64)}},
+            }))
+            .unwrap();
+        let artifact = DescriptorPinnedArtifactV1 {
+            role: match role {
+                E3IsolatedChildRoleV1::Codex => ConfigProjectionArtifactRoleV1::Codex0125,
+                E3IsolatedChildRoleV1::ManagedGateway
+                | E3IsolatedChildRoleV1::ManagedGatewayReadinessProbe => {
+                    ConfigProjectionArtifactRoleV1::ManagedGateway
+                }
+            },
+            configured_absolute_path: "/fixture/pinned-artifact".to_string(),
+            device_id: 0,
+            inode: 0,
+            file_type: "regular".to_string(),
+            mode: 0o755,
+            owner_uid: 0,
+            byte_length: 0,
+            sha256: "c".repeat(64),
+            authority_ref: config_projection::RuntimeArtifactAuthorityRefV1 {
+                authority_store_id: "fixture-authority".to_string(),
+                manifest_id: "fixture-manifest".to_string(),
+                manifest_revision: 1,
+                manifest_entry_id: "fixture-entry".to_string(),
+                manifest_hash: "d".repeat(64),
+                entry_hash: "e".repeat(64),
+            },
+            provenance: RuntimeArtifactProvenanceV1::SubstrateSourceBuild {
+                component: "fixture".to_string(),
+                source_commit: "f".repeat(40),
+                source_tree: "0".repeat(40),
+                cargo_lock_sha256: "1".repeat(64),
+                target_triple: "x86_64-unknown-linux-musl".to_string(),
+                profile: "release".to_string(),
+                executable_sha256: "c".repeat(64),
+            },
+            runtime_support: config_projection::E3RuntimeSupportManifestV1 {
+                schema_version: 1,
+                support_policy_version: 1,
+                elf_execution_model: E3ElfExecutionModelV1::StaticExec,
+                elf_interpreter: None,
+                dynamic_loader_cache: None,
+                ordered_elf_dependencies: Vec::new(),
+                ordered_present_common_files: Vec::new(),
+                system_config_mount_target: config_projection::RuntimeSupportDirectoryV1 {
+                    absolute_path: "/etc/codex".to_string(),
+                    device_id: 0,
+                    inode: 0,
+                    mode: 0o755,
+                    owner_uid: 0,
+                    owner_gid: 0,
+                    ordered_entry_names: Vec::new(),
+                },
+                manifest_hash: "2".repeat(64),
+            },
+        };
+        let mut input = E3WorldFsEnforcementInputV1 {
+            schema_version: 1,
+            child_role: role,
+            projection_identity_hash: "3".repeat(64),
+            policy_authority: config_projection::E3PolicyAuthoritySourceV1::InitialLaunch {
+                e2_activation_id: "fixture-activation".to_string(),
+                commitment_ref: commitment.clone(),
+            },
+            immutable_worker_cap_ref: commitment,
+            policy_snapshot_bytes_base64: BASE64.encode(&snapshot_bytes),
+            policy_snapshot_byte_length: snapshot_bytes.len() as u64,
+            policy_snapshot_ref,
+            policy_snapshot_hash: format!("{:x}", Sha256::digest(&snapshot_bytes)),
+            policy_snapshot_revision: "fixture-revision".to_string(),
+            expected_process_cgroup: CanonicalCgroupIdentityV1 {
+                cgroup_v2_mount_device_id: 0,
+                cgroup_v2_mount_inode: 0,
+                cgroup_directory_inode: 0,
+                cgroup_relative_path: "fixture".to_string(),
+            },
+            kernel_boot_id: "fixture".to_string(),
+            user_namespace_requirement: config_projection::E3UserNamespaceRequirementV1 {
+                trusted_service_uid: 0,
+                parent_namespace_device_id: 0,
+                parent_namespace_inode: 0,
+                uid_map: E3LinuxIdMapExtentV1 {
+                    inside_id: 1000,
+                    outside_id: 1000,
+                    length: 1,
+                },
+                gid_map: E3LinuxIdMapExtentV1 {
+                    inside_id: 1000,
+                    outside_id: 1000,
+                    length: 1,
+                },
+            },
+            target_uid: 1000,
+            target_gid: 1000,
+            immutable_config_source: matches!(role, E3IsolatedChildRoleV1::Codex)
+                .then(|| directory.clone()),
+            private_realization: (!matches!(
+                role,
+                E3IsolatedChildRoleV1::ManagedGatewayReadinessProbe
+            ))
+            .then(|| directory.clone()),
+            codex_launch_plan_hash: matches!(role, E3IsolatedChildRoleV1::Codex)
+                .then(|| "4".repeat(64)),
+            executable_artifact: artifact,
+            denied_control_probe_targets: Vec::new(),
+            support_policy_version: 1,
+            enforcement_input_hash: String::new(),
+        };
+        input.enforcement_input_hash = hash_omitting(
+            "substrate.e3.world-fs-enforcement-input.v1",
+            "input",
+            &input,
+            "enforcement_input_hash",
+        )
+        .unwrap();
+        input
+    }
+
+    fn synthetic_descriptors(role: WrapperRoleV1, workspace: RawFd) -> LaunchDescriptorsV1 {
+        let mut descriptors = BTreeMap::new();
+        if role == WrapperRoleV1::Codex {
+            descriptors.insert(
+                "SUBSTRATE_WORLD_ENTRY_WORKING_DIR_FD".to_string(),
+                workspace,
+            );
+        }
+        LaunchDescriptorsV1 { role, descriptors }
+    }
+
+    fn realize_private_ca_fixture() -> Result<()> {
+        use std::os::unix::fs::MetadataExt;
+
+        let root = File::open("/").context("open fixture filesystem root")?;
+        let root_owner_uid_view = std::fs::metadata("/etc")?.uid();
+        let held = resolve_exact_e3_ca_bundle_v1(root.as_raw_fd(), root_owner_uid_view)?;
+        let mut metadata: libc::stat = unsafe { zeroed() };
+        if unsafe { libc::fstat(held.as_raw_fd(), &mut metadata) } != 0 {
+            return Err(std::io::Error::last_os_error()).context("stat held fixture CA descriptor");
+        }
+        let expected = RuntimeSupportFileV1 {
+            absolute_path: "/etc/ssl/certs/ca-certificates.crt".to_string(),
+            device_id: metadata.st_dev,
+            inode: metadata.st_ino,
+            mode: metadata.st_mode & 0o7777,
+            byte_length: metadata
+                .st_size
+                .try_into()
+                .context("fixture CA length is negative")?,
+            sha256: hash_descriptor(held.as_raw_fd())?,
+        };
+        install_exact_e3_ca_bundle_mount_v1(held.as_raw_fd(), &expected, 0, 0)
+    }
+
+    fn assert_fresh_open(
+        path: &str,
+        flags: libc::c_int,
+        expected_errno: Option<libc::c_int>,
+    ) -> Result<()> {
+        let path = CString::new(path).unwrap();
+        let fd = unsafe { libc::open(path.as_ptr(), flags | libc::O_CLOEXEC) };
+        match expected_errno {
+            None if fd >= 0 => {
+                unsafe { libc::close(fd) };
+                Ok(())
+            }
+            None => {
+                Err(std::io::Error::last_os_error()).with_context(|| format!("fresh open {path:?}"))
+            }
+            Some(expected)
+                if fd < 0 && std::io::Error::last_os_error().raw_os_error() == Some(expected) =>
+            {
+                Ok(())
+            }
+            Some(expected) => bail!("fresh open {path:?} did not fail with errno {expected}"),
+        }
+    }
+
+    fn assert_expected_wrapper_hashes(
+        derived: &E3DerivedWorldFsEnforcementPlanV1,
+        input: &E3WorldFsEnforcementInputV1,
+        workspace: &str,
+    ) -> Result<()> {
+        let role = input.child_role;
+        let proc = format!("/proc/{}", std::process::id());
+        let mut e2_paths = if role == E3IsolatedChildRoleV1::Codex {
+            vec!["/project".to_string(), workspace.to_string()]
+        } else {
+            Vec::new()
+        };
+        e2_paths.sort();
+        let mut support_read = vec![
+            proc.clone(),
+            "/dev/null".to_string(),
+            "/dev/urandom".to_string(),
+            "/etc/hosts".to_string(),
+            "/etc/nsswitch.conf".to_string(),
+            "/etc/passwd".to_string(),
+            "/etc/group".to_string(),
+            "/etc/resolv.conf".to_string(),
+            "/etc/ssl/certs/ca-certificates.crt".to_string(),
+            "/fixture/pinned-artifact".to_string(),
+        ];
+        if let Some(directory) = &input.private_realization {
+            if role == E3IsolatedChildRoleV1::Codex {
+                for child in ["home", "codex-home", "state", "tmp"] {
+                    support_read.push(format!("{}/{child}", directory.physical_path));
+                }
+            } else {
+                support_read.push(directory.physical_path.clone());
+            }
+        }
+        if role == E3IsolatedChildRoleV1::Codex {
+            support_read.push("/etc/codex/config.toml".to_string());
+        }
+        support_read.sort();
+        support_read.dedup();
+        let support_discover = vec![proc];
+        let support_execute = vec!["/fixture/pinned-artifact".to_string()];
+        let mut support_write = vec!["/dev/null".to_string()];
+        if let Some(directory) = &input.private_realization {
+            if role == E3IsolatedChildRoleV1::Codex {
+                for child in ["home", "codex-home", "state", "tmp"] {
+                    support_write.push(format!("{}/{child}", directory.physical_path));
+                }
+            } else {
+                support_write.push(directory.physical_path.clone());
+            }
+        }
+        support_write.sort();
+        support_write.dedup();
+        assert_eq!(derived.e2_discover_paths, e2_paths);
+        assert_eq!(derived.e2_execute_paths, e2_paths);
+        assert_eq!(derived.e2_read_paths, e2_paths);
+        assert_eq!(derived.e2_write_paths, e2_paths);
+        assert_eq!(derived.e3_support_discover_paths, support_discover);
+        assert_eq!(derived.e3_support_execute_paths, support_execute);
+        assert_eq!(derived.e3_support_read_paths, support_read);
+        assert_eq!(derived.e3_support_write_paths, support_write);
+        let expected_e2 = canonical_value_hash(&serde_json::json!({
+            "domain": "substrate.e3.e2-enforcement-plan.v1", "discover": e2_paths, "execute": e2_paths,
+            "policy_snapshot_hash": input.policy_snapshot_hash, "read": e2_paths, "write": e2_paths,
+        }))?;
+        let expected_support = canonical_value_hash(&serde_json::json!({
+            "domain": "substrate.e3.derived-support-landlock-layer.v1",
+            "e2_enforcement_plan_hash": expected_e2,
+            "support_discover": support_discover,
+            "support_execute": support_execute,
+            "support_read": support_read,
+            "support_write": support_write,
+        }))?;
+        let mut expected_discover = derived.e2_discover_paths.clone();
+        expected_discover.extend(derived.e3_support_discover_paths.clone());
+        expected_discover.sort();
+        expected_discover.dedup();
+        let mut expected_execute = derived.e2_execute_paths.clone();
+        expected_execute.extend(derived.e3_support_execute_paths.clone());
+        expected_execute.sort();
+        expected_execute.dedup();
+        let mut expected_read = derived.e2_read_paths.clone();
+        expected_read.extend(derived.e3_support_read_paths.clone());
+        expected_read.sort();
+        expected_read.dedup();
+        let mut expected_write = derived.e2_write_paths.clone();
+        expected_write.extend(derived.e3_support_write_paths.clone());
+        expected_write.sort();
+        expected_write.dedup();
+        let expected_role = canonical_value_hash(&serde_json::json!({
+            "child_role": role, "discover": expected_discover,
+            "domain": "substrate.e3.role-narrowing-landlock-layer.v1",
+            "execute": expected_execute, "read": expected_read,
+            "write": expected_write,
+        }))?;
+        assert_eq!(derived.e2_plan_hash, expected_e2);
+        assert_eq!(derived.derived_support_ruleset_hash, expected_support);
+        assert_eq!(derived.role_narrowing_ruleset_hash, expected_role);
+        assert_eq!(
+            derived.effective_landlock_hash,
+            canonical_value_hash(&serde_json::json!({
+                "derived_support_ruleset_hash": expected_support,
+                "domain": "substrate.e3.effective-landlock-intersection.v1",
+                "role_narrowing_ruleset_hash": expected_role,
+            }))?
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "requires the explicit privileged E3-D wrapper integration environment"]
+    fn privileged_wrapper_fixed_devices_apply_real_codex_and_gateway_layers() {
+        require_privileged_wrapper_fixture_opt_in();
+        for (wrapper_role, input_role) in [
+            (WrapperRoleV1::Codex, E3IsolatedChildRoleV1::Codex),
+            (
+                WrapperRoleV1::ManagedGateway,
+                E3IsolatedChildRoleV1::ManagedGateway,
+            ),
+        ] {
+            let workspace = tempfile::tempdir().expect("create attempt-owned workspace");
+            let workspace_fd = File::open(workspace.path()).expect("open attempt-owned workspace");
+            let directory =
+                CanonicalDirectoryV1::capture_linux_from_fd(workspace_fd.as_fd()).unwrap();
+            let input = synthetic_wrapper_input(input_role, &directory);
+            run_private_device_fixture("exact-role-fixture", PrivateDeviceFixtureV1::Exact, || {
+                realize_private_ca_fixture()?;
+                validate_fixed_support_device("/dev/null", 1, 3)?;
+                validate_fixed_support_device("/dev/urandom", 1, 9)?;
+                validate_enforcement_input_hash(&input)?;
+                let descriptors = synthetic_descriptors(wrapper_role, workspace_fd.as_raw_fd());
+                let derived = apply_authenticated_world_fs_enforcement(&descriptors, &input, None)?;
+                assert_expected_wrapper_hashes(&derived, &input, &directory.physical_path)?;
+                assert_fresh_open("/dev/null", libc::O_RDWR, None)?;
+                assert_fresh_open("/dev/urandom", libc::O_RDONLY, None)?;
+                assert_fresh_open("/dev/urandom", libc::O_WRONLY, Some(libc::EACCES))?;
+                assert_fresh_open("/dev/zero", libc::O_RDONLY, Some(libc::EACCES))?;
+                let enumerate = std::fs::read_dir("/dev")
+                    .expect_err("Landlock must deny fixture /dev enumeration");
+                assert_eq!(enumerate.raw_os_error(), Some(libc::EACCES));
+                Ok(())
+            });
+        }
+    }
+
+    #[test]
+    #[ignore = "requires the explicit privileged E3-D wrapper integration environment"]
+    fn privileged_wrapper_fixed_devices_exclude_readiness_and_reject_private_substitution() {
+        require_privileged_wrapper_fixture_opt_in();
+        let readiness_workspace =
+            tempfile::tempdir().expect("create attempt-owned readiness workspace");
+        let readiness_workspace_fd =
+            File::open(readiness_workspace.path()).expect("open readiness workspace");
+        let readiness_directory =
+            CanonicalDirectoryV1::capture_linux_from_fd(readiness_workspace_fd.as_fd()).unwrap();
+        let readiness_input = synthetic_wrapper_input(
+            E3IsolatedChildRoleV1::ManagedGatewayReadinessProbe,
+            &readiness_directory,
+        );
+        run_private_device_fixture("readiness-exclusion", PrivateDeviceFixtureV1::Exact, || {
+            realize_private_ca_fixture()?;
+            validate_enforcement_input_hash(&readiness_input)?;
+            let derived = apply_authenticated_world_fs_enforcement(
+                &synthetic_descriptors(
+                    WrapperRoleV1::ManagedGatewayReadinessProbe,
+                    readiness_workspace_fd.as_raw_fd(),
+                ),
+                &readiness_input,
+                None,
+            )?;
+            assert!(!derived
+                .e3_support_read_paths
+                .iter()
+                .any(|path| path == "/dev/null" || path == "/dev/urandom"));
+            assert!(!derived
+                .e3_support_write_paths
+                .iter()
+                .any(|path| path == "/dev/null" || path == "/dev/urandom"));
+            assert_fresh_open("/dev/null", libc::O_RDONLY, Some(libc::EACCES))?;
+            assert_fresh_open("/dev/urandom", libc::O_RDONLY, Some(libc::EACCES))?;
+            Ok(())
+        });
+        for (label, fixture) in [
+            ("missing-urandom", PrivateDeviceFixtureV1::MissingUrandom),
+            ("substituted-null", PrivateDeviceFixtureV1::SubstitutedNull),
+            (
+                "null-mount-crossing",
+                PrivateDeviceFixtureV1::NullMountCrossing,
+            ),
+        ] {
+            let workspace = tempfile::tempdir().expect("create attempt-owned rejection workspace");
+            let workspace_fd = File::open(workspace.path()).expect("open rejection workspace");
+            let directory =
+                CanonicalDirectoryV1::capture_linux_from_fd(workspace_fd.as_fd()).unwrap();
+            let input = synthetic_wrapper_input(E3IsolatedChildRoleV1::ManagedGateway, &directory);
+            run_private_device_fixture(label, fixture, || {
+                validate_enforcement_input_hash(&input)?;
+                let validation_errors = [
+                    validate_fixed_support_device("/dev/null", 1, 3).err(),
+                    validate_fixed_support_device("/dev/urandom", 1, 9).err(),
+                ];
+                assert!(
+                    validation_errors.iter().flatten().any(|error| {
+                        format!("{error:#}").contains("fixed E3-D support device")
+                    }),
+                    "fixture must fail the real support validator at its device boundary"
+                );
+                let enforcement_error = apply_authenticated_world_fs_enforcement(
+                    &synthetic_descriptors(WrapperRoleV1::ManagedGateway, workspace_fd.as_raw_fd()),
+                    &input,
+                    None,
+                )
+                .expect_err(
+                    "corrected consumer must fail rather than skip a rejected fixed device",
+                );
+                assert!(
+                    format!("{enforcement_error:#}").contains("fixed support device"),
+                    "consumer rejection must come from the corrected device boundary, not unavailable enforcement"
+                );
+                Ok(())
+            });
+        }
     }
 
     #[test]
