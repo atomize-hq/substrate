@@ -321,7 +321,10 @@ forbidden.
   authorized [fixed-device consumer correction](../contracts/agent-config-projection-v1.md#e3-d-shared-landlock-fixed-device-correction)
   has its complete normative allowance, exact source/test fence and later proof at that single owner.
   Existing E3-D helpers consume the corrected shared implementation within that fence; it grants
-  no Codex execution or E3-F ownership.
+  no Codex execution or E3-F ownership. The separately authorized
+  [cgroup denial-target identity correction](../contracts/agent-config-projection-v1.md#e3-d-cgroup-denial-target-identity-correction)
+  alone adds its exact parent-validator/private-helper/colocated-test allowance to this E3-D source
+  boundary for the later E3-E continuation; it grants no broader child-security ownership.
 - **Direct predecessor:** independently landed and proof-clean E3-C.
 - **Consumes:** E3-C source-store schemas, validators, import and publication/recovery helpers, pinned
   artifact/native-root behavior, and enforcement inputs, plus the landed E2 filesystem plan without
@@ -375,7 +378,9 @@ forbidden.
   sole lifecycle exception to the E3-D helper freeze, including typed setup binding and partial-progress
   retention. The separate [fixed-device consumer correction](../contracts/agent-config-projection-v1.md#e3-d-shared-landlock-fixed-device-correction)
   qualifies only the shared-Landlock freeze within its own fence and leaves this lifecycle unchanged.
-  All unrelated E3-D security, mappings, privilege descent, Landlock/seccomp, tracing,
+  The separate [cgroup denial-target identity correction](../contracts/agent-config-projection-v1.md#e3-d-cgroup-denial-target-identity-correction)
+  qualifies only its named validator/private-helper/test freeze and also leaves this lifecycle
+  unchanged. All unrelated E3-D security, mappings, privilege descent, Landlock/seccomp, tracing,
   schemas and V1 compatibility remain frozen. E3-F production caller wiring and retained Codex
   lifecycle remain excluded. This documentation correction neither completes E3-E nor reopens
   gateway publication, predecessor admission/proof or recovery discovery.
@@ -406,9 +411,16 @@ forbidden.
   blockage as P2 for this correction absent additional severe security/authority evidence.
   This packet lands documentation authority only. Product implementation, installation, and
   connected acceptance require separate authorization; E3-E remains open and E3-F is not admitted.
+- **Cgroup denial-target validator correction:** the projection contract's
+  [single normative allowance](../contracts/agent-config-projection-v1.md#e3-d-cgroup-denial-target-identity-correction)
+  owns the later separately authorized correction, exact source/test fence, preserved invariants
+  and focused proof obligations. It preserves the full retained target set and actual child
+  membership validation. Documentation landing implements no correction or installed activation;
+  prior valid proof remains retained, E3-E remains open and E3-F is not admitted.
 - **Source owner:** the packet-admitted shell integrated-auth extraction, world-service preparation,
   authenticated local transport and gateway-runtime surfaces, and existing gateway launch/server
-  adoption points cataloged by the projection and managed-gateway contracts.
+  adoption points cataloged by the projection and managed-gateway contracts, plus only the linked
+  cgroup denial-target validator exception for its separately authorized continuation.
 - **Direct predecessor:** independently landed and proof-clean E3-D.
 - **Consumes:** E3-B durable authority, E3-C artifact machinery/rendered inputs, E3-D's valid
   production-published pinned gateway artifact plus child security and exclusion, and the already-

@@ -612,7 +612,13 @@ planning/landing task runs none of those product tests or probes and certifies n
 whole nor E3-F. Existing schemas, domains, storage layout, E3-D security and restart semantics stand,
 subject to the terminal owner-lifecycle exception below and the separately authorized
 [fixed-device consumer correction](agent-config-projection-v1.md#e3-d-shared-landlock-fixed-device-correction).
-That correction changes no activation protocol or terminal namespace ownership.
+The separately authorized
+[cgroup denial-target identity correction](agent-config-projection-v1.md#e3-d-cgroup-denial-target-identity-correction)
+also qualifies only its exact frozen E3-D validator/private-helper/colocated-test boundary. That
+single normative owner defines the correction, preserved security checks and later focused proof;
+gateway target construction and wrapper probes remain unchanged. Neither correction changes the
+activation protocol or terminal namespace ownership. This documentation allowance does not prove
+installed activation, complete E3-E or admit E3-F.
 
 ### Terminal namespace release and exclusion-last
 
@@ -832,7 +838,10 @@ capabilities, drops to the installed UID/GID with no supplementary groups, insta
 no-new-privileges/dumpability/protected-user-namespace/seccomp posture, and emits the strict
 `E3ChildSecurityAttestationV1`. It cannot read the still-empty secret pipe. World-service
 exact-validates the attestation and independent `/proc`/pidfd/cgroup/FD/negative-access probes before
-writing the one final-exec byte.
+writing the one final-exec byte. The projection contract's
+[cgroup denial-target identity correction](agent-config-projection-v1.md#e3-d-cgroup-denial-target-identity-correction)
+governs the narrow later parent-validator repair on this path; this producer, final-exec gate,
+one-time secret delivery and failure cleanup retain their existing semantics and ownership.
 
 The user-namespace boundary protects memory and file descriptors across the validated namespace
 edge; it does not block same-UID signals or changes to intentionally shared user files. Existing

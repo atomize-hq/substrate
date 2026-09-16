@@ -5011,6 +5011,86 @@ Documentation landing establishes no source repair, successful rule application,
 acceptance, E3-E closure or E3-F admission. The next eligible operation is separately authorized
 bounded source implementation, not automatic runtime acceptance.
 
+### E3-D cgroup denial-target identity correction
+
+This section is the single normative owner of a later, separately authorized correction to the
+frozen E3-D parent validator blocking E3-E. It is grounded in preserved product commit
+`0f82096c5cc197c9ded0b4e52d13095abff76569`, tree
+`f7a6b60369a7e8d5ad497ac60d2dcd575afa5e6a`, and the 2026-09-16 startup diagnostic retained under
+`review-evidence/e3-e-runtime-directory-dac-20260916/diagnostic-20260916T190729Z/diagnostic-note.md`
+outside the repository. Installed revision 5 is `iar_01a0ab5f-4080-7edf-9045-602f3551ac95`;
+that failed activation is not successful installed acceptance.
+
+At that source, `gateway_runtime.rs::spawn_descriptor_pinned` constructs authenticated, canonically
+ordered denial targets for all three retained role cgroups (ManagedGateway, Codex and readiness),
+while `expected_process_cgroup` correctly names ManagedGateway. The `CgroupControl` branch of
+`validate_denied_control_probe_target_identities_v1` instead requires every target to equal that
+one cgroup and calls `validate_child_cgroup_membership` for each. The parent rejects the Codex
+target before final-exec release. The wrapper's captured empty/oversized-pipe error is secondary:
+source ordering attributes it to cleanup closing the unreleased final gate, not a new codec, DAC
+or Landlock-device defect.
+
+**Required correction and preserved invariants.** Independently revalidate every authenticated,
+retained `CgroupControl` target against its own `CanonicalCgroupIdentityV1` and require the literal
+control name `cgroup.procs`. Preserve the existing cgroup-v2 mount device/inode and target-directory
+device/inode checks and fail on absent, substituted or mismatched identities. Target validation
+must not compare every target with `expected_process_cgroup` or require the current child to be a
+member of sibling denial-target cgroups. A child remains required to belong to its own expected,
+retained cgroup; this correction permits neither membership in every denial-target cgroup nor
+moving the child among those cgroups to satisfy validation.
+
+The retained-namespace equality check in `validate_child_security_attestation_v1` and live
+`/proc` membership readback in `validate_live_child_security_readback_v1` continue to bind the
+running child to its own retained cgroup. Preserve their identity readback, setup membership
+validation, retained ownership and fail-closed behavior. Reuse the identity checks already in
+`validate_child_cgroup_membership`, with a minimal file-private extraction separating identity
+validation from process membership if needed. Merely deleting checks, skipping sibling probes,
+reducing the target list to the gateway cgroup, or accepting ambient/caller-selected targets is not
+a correction. The complete held target set, canonical ordering, target/input/result hashes,
+exact wrapper-result matching, fixed operation/errno checks and independent parent revalidation
+before release and after results remain required. No wire semantics or wrapper probe behavior changes.
+
+**Exact later implementation fence.** Production edits are confined to
+`crates/world-service/src/e3_child_security.rs` and only:
+
+- the `CgroupControl` branch of `validate_denied_control_probe_target_identities_v1`;
+- `validate_child_cgroup_membership` only as needed to share its unchanged identity checks while
+  preserving its process-membership behavior;
+- a minimal file-private cgroup identity-validation helper, if necessary; and
+- directly affected colocated regression tests.
+
+The existing parent attestation/live-readback callers and namespace-setup membership caller are
+context, not authority for unrelated edits. Gateway target construction, wrapper production code,
+schemas, hash domains, descriptor ownership, privilege descent, namespace lifecycle, Landlock,
+seccomp, credentials and E3-F remain unchanged. No new resolver, registry, public API or descriptor
+ownership model is admitted. This fence is reconciled against the exact producer, validator,
+membership and wrapper paths above; if implementation requires a wider production boundary,
+report the exact conflict and stop rather than infer file-wide authority.
+
+**Focused later regressions and acceptance.** Within that fence:
+
+- accept distinct valid retained gateway/Codex/readiness target identities without requiring
+  gateway membership in the sibling cgroups; require a regression that reaches and fails for the
+  diagnosed baseline equality/membership reason, not an unrelated fixture or setup failure;
+- continue rejecting incorrect actual child membership in its own expected/retained cgroup;
+- reject absent/substituted target identities, mismatched cgroup mount device/inode or directory
+  device/inode, and any control name other than `cgroup.procs`; and
+- reuse the unchanged target-set integrity and denial-result validators and relevant existing
+  checks for missing/extra/reordered/duplicate/substituted or rehashed targets and wrong fixed
+  operation/errno; add tests only where affected coverage is missing.
+
+Focused tests do not establish installed activation. Later separately authorized exact-commit
+installation and the existing connected acceptance must prove progress through the actual
+service -> wrapper -> parent target/security validation -> final-exec path and the already-required
+gateway/readiness/publication/cleanup path. Preserve prior valid proof; do not restart whole-E3-E
+review/planning, create a second acceptance framework or impose an unrelated test wall. The
+canonical [development review contract](development-review-and-remediation-contract.md) governs
+the later consolidated implementation, focused regression, review, installation and acceptance
+session under its separate authorization.
+
+This documentation allowance implements none of the correction and establishes no new runtime
+proof. E3-E remains open; E3-F is not admitted.
+
 ### E3-E activation callable boundaries
 
 The complete bounded protocol and source/caller map are in
@@ -5019,7 +5099,8 @@ These exceptions supersede only conflicting E3-E signature/visibility limits in 
 catalog; schemas, hash domains and storage paths remain unchanged. The E3-D lifecycle ownership
 exception is [terminal namespace release](#e3-e-terminal-child-namespace-owner-boundary). The
 separately authorized [fixed-device consumer correction](#e3-d-shared-landlock-fixed-device-correction)
-has its own exact fence; E3-F ownership remains unchanged.
+has its own exact fence. The [cgroup denial-target identity correction](#e3-d-cgroup-denial-target-identity-correction)
+qualifies only its named E3-D validator/helper/test freeze; E3-F ownership remains unchanged.
 
 In `crates/config-projection/src/service.rs`, the already admitted operations have these exact
 signatures. The observation enum is public solely across the existing world-service dependency,
@@ -5124,7 +5205,9 @@ consume its one-shot launch permission while retaining parent cleanup handles an
 Only the [terminal namespace owner boundary](#e3-e-terminal-child-namespace-owner-boundary) may
 adapt E3-D helper signatures/private lifecycle state; the separate
 [fixed-device consumer correction](#e3-d-shared-landlock-fixed-device-correction) changes no such
-interface or state. Other E3-D security and all E3-F member-runtime execution remain excluded. Later
+interface or state. The [cgroup denial-target identity correction](#e3-d-cgroup-denial-target-identity-correction)
+separately permits only its exact validator/private-helper/test edits. Other E3-D security and all
+E3-F member-runtime execution remain excluded. Later
 focused tests may change only the affected colocated service/registry/manager/runtime/gateway tests
 and existing E3 integration surfaces; the managed-gateway section specifies their minimum proof.
 
@@ -5132,7 +5215,9 @@ and existing E3 integration surfaces; the managed-gateway section specifies thei
 
 This is the sole E3-E lifecycle exception to the E3-D helper freeze; the separately authorized
 [fixed-device consumer correction](#e3-d-shared-landlock-fixed-device-correction) has its own fence
-and leaves this lifecycle unchanged. The owning file remains
+and leaves this lifecycle unchanged, as does the separate
+[cgroup denial-target identity correction](#e3-d-cgroup-denial-target-identity-correction).
+The owning file remains
 `crates/world-service/src/e3_child_security.rs`; the non-cloneable
 `HeldE3PrivilegedChildExclusionLeaseV1` is the caller's existing authority. Its shared
 `E3PrivilegedChildExclusionV1` retains the private namespace map. No caller receives that map,
@@ -5820,7 +5905,9 @@ conflicting restrictions below. Neither correction restarts admission or broaden
    finish_recovery,acquire_non_e3_child,
    acquire_e3_exclusive,release_non_e3_child,release_e3_exclusive,poison_recovering}`. E3-E may additionally make only the
    [terminal namespace owner adaptations](#e3-e-terminal-child-namespace-owner-boundary), including
-   the lease methods, private state and affected caller/tests enumerated there. In
+   the lease methods, private state and affected caller/tests enumerated there, and the separately
+   authorized [cgroup denial-target identity correction](#e3-d-cgroup-denial-target-identity-correction)
+   within only its exact validator/private-helper/colocated-test fence. In
    `crates/world-service/src/e3_local_transport.rs`, create only
    `E3AuthenticatedLinuxUdsListenerV1::from_inherited`,
    `E3AuthenticatedLinuxUdsListenerV1::accept_peer`, and the private authenticated-listener/peer
