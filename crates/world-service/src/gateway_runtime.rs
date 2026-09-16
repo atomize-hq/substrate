@@ -838,10 +838,11 @@ impl E3GatewayRuntimeAuthorityV1 {
                 .context("E3 setup lacks retained registration")?,
             &owned.enforcement.user_namespace_requirement,
         )?;
-        drop(userns_parent);
         let bytes = Launch::e3_read_bounded(setup_reader.as_raw_fd(), &deadline)?;
         drop(setup_reader);
         owned.security = Some(ConfigProjectionCodecV1::decode_canonical_json(&bytes)?);
+        // Setup-ready proves the child has passed the mapped-release trailing-data check.
+        drop(userns_parent);
         self.validate_child_security()?;
         authenticate()?;
         Launch::e3_remaining_ms(&deadline)?;
@@ -1427,10 +1428,11 @@ impl E3GatewayRuntimeAuthorityV1 {
                 .context("E3 setup lacks retained registration")?,
             &probe.enforcement.user_namespace_requirement,
         )?;
-        drop(userns_parent);
         let bytes = Launch::e3_read_bounded(setup_reader.as_raw_fd(), &deadline)?;
         drop(setup_reader);
         probe.security = Some(ConfigProjectionCodecV1::decode_canonical_json(&bytes)?);
+        // Setup-ready proves the child has passed the mapped-release trailing-data check.
+        drop(userns_parent);
         self.validate_readiness_probe()
     }
 
@@ -10325,6 +10327,115 @@ fn compare(value: &[u8]) -> Vec<u8> {
 mod e3_e_secret_ready_pipe_tests {
     use super::*;
     use std::io::Read;
+
+    #[test]
+    fn e3_e_namespace_parent_lifetime_covers_both_setup_ready_decodes() {
+        let source = include_str!("gateway_runtime.rs");
+        for (start, end, owner, validation) in [
+            (
+                "pub(crate) fn spawn_descriptor_pinned(",
+                "pub(crate) fn validate_child_security(",
+                "owned",
+                "self.validate_child_security()?;",
+            ),
+            (
+                "pub(crate) fn spawn_readiness_probe(",
+                "pub(crate) fn validate_readiness_probe(",
+                "probe",
+                "self.validate_readiness_probe()",
+            ),
+        ] {
+            let body = source
+                .split_once(start)
+                .unwrap()
+                .1
+                .split_once(end)
+                .unwrap()
+                .0;
+            // Bind the socket-level receiver/ownership regressions to both real parents.
+            // A close before the read or decode must fail even without privileged startup.
+            let mapped = body
+                .find("install_and_validate_e3_child_user_namespace_v1(")
+                .unwrap();
+            let read = body.find("let bytes = Launch::e3_read_bounded(").unwrap();
+            let decode = body
+                .find(&format!(
+                "{owner}.security = Some(ConfigProjectionCodecV1::decode_canonical_json(&bytes)?);"
+            ))
+                .unwrap();
+            let close = body.find("drop(userns_parent);").unwrap();
+            let validate = body.rfind(validation).unwrap();
+            assert!(
+                mapped < read && read < decode && decode < close && close < validate,
+                "{start}: namespace parent must span bounded setup-ready read/decode"
+            );
+            assert_eq!(body.matches("drop(userns_parent);").count(), 1);
+            assert!(!body.contains("userns_parent.into_raw_fd"));
+            assert!(!body.contains("forget(userns_parent)"));
+        }
+    }
+
+    #[test]
+    fn e3_e_namespace_parent_closes_after_setup_ready_or_failure() {
+        use config_projection::ConfigProjectionCodecV1;
+        use std::io::Write;
+        type Launch = ManagedGatewayLaunchCapabilityV1;
+        for outcome in ["success", "decode_failure", "deadline", "unwind"] {
+            let (parent, child) =
+                crate::e3_child_security::create_e3_child_user_namespace_channel_v1().unwrap();
+            let (reader, mut writer) = create_inherited_auth_bundle_pipe().unwrap();
+            let mut deadline = libc::timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            };
+            if outcome != "deadline" {
+                assert_eq!(
+                    unsafe { libc::clock_gettime(libc::CLOCK_BOOTTIME, &mut deadline) },
+                    0
+                );
+                deadline.tv_sec += 2;
+            }
+            writer
+                .write_all(if outcome == "decode_failure" {
+                    b"{"
+                } else {
+                    b"{}"
+                })
+                .unwrap();
+            drop(writer);
+            let result = std::panic::catch_unwind(move || -> Result<()> {
+                let userns_parent = parent;
+                let setup_reader = reader;
+                if outcome == "unwind" {
+                    panic!("synthetic setup unwind");
+                }
+                let bytes = Launch::e3_read_bounded(setup_reader.as_raw_fd(), &deadline)?;
+                drop(setup_reader);
+                let _: serde_json::Value = ConfigProjectionCodecV1::decode_canonical_json(&bytes)?;
+                drop(userns_parent);
+                Ok(())
+            });
+            match outcome {
+                "success" => assert!(result.unwrap().is_ok()),
+                "unwind" => assert!(result.is_err()),
+                _ => assert!(result.unwrap().is_err()),
+            }
+            let mut byte = 0u8;
+            // Peer EOF proves closure without a raw-fd reuse race with parallel tests.
+            assert_eq!(
+                unsafe {
+                    libc::recv(
+                        child.as_raw_fd(),
+                        (&mut byte as *mut u8).cast(),
+                        1,
+                        libc::MSG_DONTWAIT,
+                    )
+                },
+                0,
+                "{outcome}: namespace parent leaked"
+            );
+        }
+    }
 
     #[test]
     fn e3_e_deadline_pipe_protocol() {

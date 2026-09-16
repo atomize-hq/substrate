@@ -5261,6 +5261,94 @@ mod tests {
     }
 
     #[test]
+    fn namespace_mapped_release_requires_parent_until_setup_ready() {
+        for close_before_check in [true, false] {
+            let mut sockets = [-1; 2];
+            assert_eq!(
+                unsafe {
+                    libc::socketpair(
+                        libc::AF_UNIX,
+                        libc::SOCK_SEQPACKET | libc::SOCK_CLOEXEC,
+                        0,
+                        sockets.as_mut_ptr(),
+                    )
+                },
+                0
+            );
+            let parent = unsafe { OwnedFd::from_raw_fd(sockets[0]) };
+            let child = unsafe { OwnedFd::from_raw_fd(sockets[1]) };
+            let (release, released) = std::sync::mpsc::sync_channel(0);
+            let (ready, setup_ready) = std::sync::mpsc::sync_channel(0);
+            std::thread::scope(|scope| {
+                let receiver = scope.spawn(move || {
+                    // Parent completion of send/optional close happens before the actual receiver.
+                    released.recv().unwrap();
+                    let result = receive_namespace_setup_byte(child.as_raw_fd(), USERNS_MAPPED);
+                    ready
+                        .send(result.as_ref().map(|_| ()).map_err(ToString::to_string))
+                        .unwrap();
+                    child
+                });
+                send_namespace_setup_byte(parent.as_raw_fd(), USERNS_MAPPED).unwrap();
+                let mut parent = Some(parent);
+                if close_before_check {
+                    drop(parent.take());
+                }
+                release.send(()).unwrap();
+                let result = setup_ready.recv().unwrap();
+                if close_before_check {
+                    assert_eq!(
+                        result.unwrap_err(),
+                        "duplicate, trailing, or closed wrapper release channel"
+                    );
+                } else {
+                    result.unwrap();
+                }
+                drop(parent);
+                let child = receiver.join().unwrap();
+                let mut byte = 0u8;
+                assert_eq!(
+                    unsafe {
+                        libc::recv(
+                            child.as_raw_fd(),
+                            (&mut byte as *mut u8).cast(),
+                            1,
+                            libc::MSG_DONTWAIT,
+                        )
+                    },
+                    0
+                );
+            });
+        }
+    }
+
+    #[test]
+    fn namespace_mapped_release_rejects_duplicate_packets() {
+        let mut sockets = [-1; 2];
+        assert_eq!(
+            unsafe {
+                libc::socketpair(
+                    libc::AF_UNIX,
+                    libc::SOCK_SEQPACKET | libc::SOCK_CLOEXEC,
+                    0,
+                    sockets.as_mut_ptr(),
+                )
+            },
+            0
+        );
+        let parent = unsafe { OwnedFd::from_raw_fd(sockets[0]) };
+        let child = unsafe { OwnedFd::from_raw_fd(sockets[1]) };
+        send_namespace_setup_byte(parent.as_raw_fd(), USERNS_MAPPED).unwrap();
+        send_namespace_setup_byte(parent.as_raw_fd(), USERNS_MAPPED).unwrap();
+        assert_eq!(
+            receive_namespace_setup_byte(child.as_raw_fd(), USERNS_MAPPED)
+                .unwrap_err()
+                .to_string(),
+            "duplicate, trailing, or closed wrapper release channel"
+        );
+    }
+
+    #[test]
     fn setup_release_parser_rejects_wrong_trailing_and_eof_messages() {
         for malformed in [vec![0x00], vec![USERNS_MAPPED, 0xff], Vec::new()] {
             let mut sockets = [-1; 2];
