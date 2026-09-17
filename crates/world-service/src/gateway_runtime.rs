@@ -10343,7 +10343,7 @@ fn validate_gateway_proc_owner(
     let mut procfs: libc::statfs = unsafe { std::mem::zeroed() };
     anyhow::ensure!(
         unsafe { libc::fstatfs(proc_root.as_raw_fd(), &mut procfs) } == 0
-            && procfs.f_type == libc::PROC_SUPER_MAGIC,
+            && procfs.f_type as i128 == libc::PROC_SUPER_MAGIC as i128,
         "E3 secret-ready observation root is not procfs"
     );
     // Same no-mount/no-link/beneath resolution as E3-D's private proc opener. Its
