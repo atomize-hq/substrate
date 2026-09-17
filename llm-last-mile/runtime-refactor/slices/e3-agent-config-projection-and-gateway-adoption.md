@@ -1,8 +1,9 @@
 **Kind:** controlling numbered specification and preserved slice row
 **Stable ID:** `e3-agent-config-projection-and-gateway-adoption`
 **Canonical for:** controlling E3 authority correction, contract/file/symbol fence, dependency and gate disposition, and preserved historical row
-**Status:** canonical specification; E3-A has a preserved incomplete and unlanded candidate under bounded Linux proof recovery; E3-B through E3-F are not admitted, dispatched, or implemented
-**Authority scope:** documentation-only E3-A proof-recovery authority; no product/test change, proof execution, completion, landing, or successor admission/dispatch
+**Status:** E3-A through E3-D landed; E3-E terminally complete; enclosing E3 incomplete; E3-F not admitted or dispatched
+**Historical E3-A proof-recovery status:** canonical specification; E3-A has a preserved incomplete and unlanded candidate under bounded Linux proof recovery; E3-B through E3-F are not admitted, dispatched, or implemented
+**Historical E3-A proof-recovery authority scope:** documentation-only E3-A proof-recovery authority; no product/test change, proof execution, completion, landing, or successor admission/dispatch
 **Source span:** [`../03-phase-slice-map.md`](../03-phase-slice-map.md) line 222
 **Correction source baseline:** commit `81cfd33d4c5d16c31c837eeddff769995c566570`, tree `d40f6663a2aa01996ce8b4957f4aae0d30830961`, parent `138864a26dbc4721366c6cc8934d464d1929a189`
 **Landed prerequisite fact:** `E2-RM` is landed at `2012bb8b5562a73ed0ee45238c19252c16b25065`; that landing permits this documentation correction but is not an E3 runtime dependency
@@ -14,9 +15,10 @@
 
 > **Authority boundary:** This file is the controlling numbered E3 specification. It consumes the
 > landed E2-RM read behavior as serialization context without reopening E2, E2-RM, or B2.2. It
-> preserves the exact historical Track E row below and grants documentation authority only. E3
-> remains incomplete: the preserved E3-A candidate is unlanded, its Linux proof recovery requires a
-> later explicit dispatch, and E3-B through E3-F remain unadmitted and undispatched.
+> preserves the exact historical Track E row and the earlier correction chronology below. The
+> E3-A proof-recovery header fields describe that historical correction, not current packet status.
+> E3-E is terminally complete under its closure record below. Enclosing E3 remains incomplete:
+> E3-F is not admitted or dispatched, and this closure grants no successor execution authority.
 
 ## Controlling authority correction
 
@@ -357,6 +359,10 @@ forbidden.
 
 ### E3-E — dormant managed-gateway preparation and adoption
 
+**Current status:** terminally complete; product landed on 2026-09-17. The correction bullets
+below preserve their original documentation-only scope and historical noncompletion statements;
+current completion is recorded in [E3-E terminal closure](#e3-e-terminal-closure-2026-09-17).
+
 - **Bounded behavior:** accept authenticated local preparation, reserve one listener and deny-all
   boundary, publish independently valid Dormant/no-ACK authority without spawning a child, then
   descriptor-start, attest, deliver the one-time secret, probe readiness, adopt, allow, and revoke
@@ -431,6 +437,72 @@ forbidden.
   publication and retry/restart/crash proof; exact listener/boundary/readiness cgroup proof; secret
   canary absence; gateway privilege and zero-core attestation; one-time FD consumption; and complete
   revocation with V1 compatibility unchanged. Only then may E3-F seek admission.
+
+#### E3-E terminal closure (2026-09-17)
+
+E3-E is terminally complete after verified product landing. Controlling authority is baseline
+`92e87a0092b091f2cef5cf8ccfdc1431e7895b8f`, tree
+`45ed61535207d33c9b0f22df0eef03400d717f8e`; this record changes status, not its acceptance rules.
+
+- **Product landing:** commit `15e94d53b20cefc24f05ea1548ea3aa8ddabcca9`, tree
+  `c51934b58ae322cc514fe21a82bc3783cce10d52`, parent
+  `caee81a1e9ec90c80cb373fa38c9ae553e08e8d8`, was pushed non-force to
+  `origin refs/heads/feat/runtime-refactor-b2-2-foreground-receipt-return`
+  (`git@github.com:atomize-hq/substrate.git`) and read back at that exact commit.
+- **Review and required proof:** the [original whole-E3-E source review](</home/spenser/__Active_code/review-evidence/e3-e-standalone-4c5cac9e/namespace-final-receipt.json>)
+  closed CLEAN at fingerprint `9489c6f46b673e283e110354e80241602b738cb359bbad0d90f937d86b6cb2f3`;
+  its source-only scope is preserved. The [requirement reconciliation](</home/spenser/__Active_code/review-evidence/e3e-landing-reconciliation-20260917.md>)
+  and linked bounded correction reviews cover the subsequent portability, Landlock/device, DAC,
+  cgroup identity, descriptor/final-exec/proc, readiness deadline/base-path, and test-harness deltas.
+  Existing authenticated preparation/peer/input negatives, Dormant/no-ACK and retry proof,
+  cancellation/expiry/revocation, immutable publication and ownership, and compatibility evidence
+  remain applicable. Ignored tests are not credited as executed proof. The reconciliation's sole
+  remaining secret-canary gap is resolved by the final canary evidence below; no accepted blocking
+  finding remains. Historical failed attempts and their original limitations remain retained.
+- **Installed production and activation:** publication revision **12**, record
+  `iar_01a0ad98-9c6f-7266-88c7-bd8cc6d953c0`, remains sourced from
+  `755f15b8a579b370099630bb71072a3cae7fec69`, tree
+  `b8e143e6324a456666ca90bba647c3db1902e4ff`, with protocol hash
+  `8c08bff816a670ac59a9c6ddf4ea96fbbf426cea9ac35407a680b8a47ee9c2c4`.
+  The [installation and activation receipt](</home/spenser/__Active_code/review-evidence/e3e-readiness-base-path-20260917/receipt.md>)
+  records mandatory artifact/provenance, ELF/support, running-daemon, socket, ACL and unit-security
+  readback, and one uninstrumented connected test: **1 passed, 0 failed, 0 ignored**. It reached
+  real Consumed, immutable ACK, ReadyClosed, single ownership transfer and cleanup. Later product
+  commits `caee81a1` and `15e94d53` are test-only, not a replacement installed provenance record.
+  Optional gateway smoke remains DEFERRED; no real credential/provider request was used.
+- **Recovery:** the [corrected recovery harness and CLEAN review](</home/spenser/__Active_code/review-evidence/e3e-recovery-harness-20260917/receipt.md>)
+  preserve the earlier failed series. Fresh acceptance reached the intended writer crash point
+  (expected exit **80**); recovered child and enclosing series each passed **1 test, 0 failed,
+  0 ignored**. History recovery required fresh authorization; current and historical terminal/
+  Revoked bytes stayed immutable across exact retries without extra publications. Exit 80 is
+  recovery evidence, not a core-generating crash test.
+- **Synthetic secret-canary acceptance:** the [final lifecycle receipt](</home/spenser/__Active_code/review-evidence/e3e-secret-canary-lifecycle-20260917/receipt.md>)
+  and terminal CLEAN closure fingerprint
+  `dfa8f770b8290f71f64cd4584c302999d9801b66f4568587e2dd96660f4477e2` resolve accepted
+  P2-001 and the E3-E portion of P2-002. Fresh gateway acceptance passed **1 test, 0 failed,
+  0 ignored**, including identity/direction-bound probe and secret-channel observations at the
+  setup-ready barrier, real consumption/ACK/ReadyClosed, and identity-safe gateway SIGABRT
+  (signal 6, CLD_KILLED, no core). Gateway secret-ready attestation bound zero dumpability and
+  both core limits; live core-limit readbacks were zero. Attributable collector readback after
+  synchronization found no gateway dump. Applicable live service/gateway/probe argv/environment and bounded retained-output
+  scans found zero canary matches; intentional private synthetic input storage was excluded, not
+  product outputs. Reused proof supplies an effective SIGABRT/readable-core collection control
+  under unchanged relevant policy and real service hardening/authenticated acceptance with zero
+  dumpability/core limits, SIGABRT/no core and recovery. The service crash exercised the production
+  service component in an attempt-owned harness, **not the persistent systemd daemon**. These are
+  bounded E3-E observations, not universal noninterference or Codex/UAA execution proof.
+- **Cleanup and exclusions:** retained acceptance evidence confirms exact owned children, cgroups,
+  nftables, sockets and runtime realizations absent/quiescent, durable effects
+  `RevertedAndQuiescent`, leases `Released` and boundaries `Revoked`. Historical/synthetic
+  authority and required series parents remain preserved. Frozen `AGENTS.md`/`CLAUDE.md` changes
+  and the machine-local revision-12 manager test-record path remain unchanged, unstaged and
+  excluded from landed product provenance. [Landing reconciliation and readback](</home/spenser/__Active_code/review-evidence/e3e-landing-closure-20260917/reconciliation.md>)
+  bind this closure to the verified product history and preserved installation.
+
+E3-F's independently landed, proof-clean E3-E prerequisite is satisfied. **E3-F remains not
+admitted and not dispatched**; retained V2 Codex execution/Active release and integrated successor
+proof still belong to E3-F. Enclosing E3 is not complete. This record grants no E3-F admission,
+worker dispatch, D1/E4 work or successor planning.
 
 ### E3-F — retained V2 Codex launch/resume adoption and integrated proof
 
