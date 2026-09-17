@@ -140,6 +140,26 @@ impl ManagedGatewayLaunchCapabilityV1 {
         Ok(((ns + 999_999) / 1_000_000).min(i128::from(i32::MAX)) as i32)
     }
 
+    fn e3_finish_readiness_probe_input(
+        mut input: serde_json::Value,
+        remaining_ms: Result<i32>,
+    ) -> Result<serde_json::Value> {
+        // The overall activation budget gates construction; each child protocol
+        // interval starts at its own barrier and has a fixed wire duration.
+        remaining_ms?;
+        input["connect_deadline_ms"] = 1_000.into();
+        input["request_release_deadline_ms"] = 1_000.into();
+        input["response_deadline_ms"] = 1_000.into();
+        input["input_hash"] = Self::e3_seal(
+            "substrate.e3.managed-gateway-readiness-probe-input.v1",
+            "input",
+            &input,
+            "input_hash",
+        )?
+        .into();
+        Ok(input)
+    }
+
     fn e3_read_bounded(fd: i32, deadline: &libc::timespec) -> Result<Vec<u8>> {
         let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
         anyhow::ensure!(
@@ -1166,21 +1186,15 @@ impl E3GatewayRuntimeAuthorityV1 {
                 &enforcement,
             )?;
         let input = &main.launch_input;
-        let millis = Launch::e3_remaining_ms(&deadline)?.min(5000);
-        let mut probe_input = serde_json::json!({
+        let remaining_ms = Launch::e3_remaining_ms(&deadline);
+        let probe_input = serde_json::json!({
             "schema_version":1,"launch_input_ref":{"authority_store_id": input.authority_store_id,
                 "launch_input_id":input.launch_input_id,"launch_input_hash":input.launch_input_hash},
             "gateway_ref":input.gateway_ref,"listener_identity":input.listener_identity,"readiness_nonce":input.readiness_nonce,
             "readiness_probe_cgroup":group.cgroup,"target_uid":enforcement.target_uid,"target_gid":enforcement.target_gid,
-            "enforcement_input":enforcement,"connect_deadline_ms":millis,"request_release_deadline_ms":millis,
-            "response_deadline_ms":millis,"maximum_response_bytes":65536,"input_hash":""
+            "enforcement_input":enforcement,"maximum_response_bytes":65536,"input_hash":""
         });
-        probe_input["input_hash"] = serde_json::Value::String(Launch::e3_seal(
-            "substrate.e3.managed-gateway-readiness-probe-input.v1",
-            "input",
-            &probe_input,
-            "input_hash",
-        )?);
+        let probe_input = Launch::e3_finish_readiness_probe_input(probe_input, remaining_ms)?;
         let wrapper = Launch::e3_open_pinned(
             &enforcement.executable_artifact.configured_absolute_path,
             false,
@@ -7956,6 +7970,64 @@ mod tests {
         GatewayApiEnvIntegratedAuthV1, GatewayCliCodexIntegratedAuthV1,
         GatewayIntegratedAuthPayloadV1,
     };
+
+    #[test]
+    fn test_e3_readiness_wire_deadlines_are_fixed_with_ample_budget() -> Result<()> {
+        assert_e3_readiness_wire_deadlines(120_000)
+    }
+
+    #[test]
+    fn test_e3_readiness_wire_deadlines_are_fixed_with_small_budget() -> Result<()> {
+        assert_e3_readiness_wire_deadlines(17)
+    }
+
+    fn assert_e3_readiness_wire_deadlines(remaining_ms: i32) -> Result<()> {
+        type Launch = ManagedGatewayLaunchCapabilityV1;
+        // The producer passes its non-deadline fields to this same finishing step.
+        let fields = serde_json::json!({"schema_version": 1, "input_hash": ""});
+        let input = Launch::e3_finish_readiness_probe_input(fields, Ok(remaining_ms))?;
+        let bytes = config_projection::ConfigProjectionCodecV1::encode_canonical_json(&input)?;
+        let wire: serde_json::Value =
+            config_projection::ConfigProjectionCodecV1::decode_canonical_json(&bytes)?;
+        for field in [
+            "connect_deadline_ms",
+            "request_release_deadline_ms",
+            "response_deadline_ms",
+        ] {
+            assert_eq!(
+                wire[field], 1_000,
+                "{field}, remaining budget {remaining_ms}"
+            );
+        }
+        assert_eq!(wire["schema_version"], 1);
+        assert_eq!(
+            wire["input_hash"],
+            Launch::e3_seal(
+                "substrate.e3.managed-gateway-readiness-probe-input.v1",
+                "input",
+                &wire,
+                "input_hash",
+            )?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_e3_readiness_wire_input_rejects_expired_activation() {
+        type Launch = ManagedGatewayLaunchCapabilityV1;
+        let expired = libc::timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        };
+        let result = Launch::e3_finish_readiness_probe_input(
+            serde_json::json!({"schema_version": 1, "input_hash": ""}),
+            Launch::e3_remaining_ms(&expired),
+        );
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "E3 activation deadline elapsed"
+        );
+    }
 
     static ENV_LOCK: Lazy<AsyncMutex<()>> = Lazy::new(|| AsyncMutex::new(()));
     const MISSING_CAPABILITY_BINDING: GatewayBackendBinding = GatewayBackendBinding {
