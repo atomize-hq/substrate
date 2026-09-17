@@ -1318,6 +1318,18 @@ fn exec_pinned_child(
     close_wrapper_descriptors_before_final_exec(descriptors)?;
     let empty = CString::new("").unwrap();
     let binary = descriptors.fd("SUBSTRATE_WORLD_ENTRY_BINARY_FD")?;
+    if descriptors.role == WrapperRoleV1::ManagedGateway {
+        // The validated ELF stays pinned until execveat, then closes in the new image.
+        let flags = unsafe { libc::fcntl(binary, libc::F_GETFD) };
+        if flags < 0 {
+            return Err(std::io::Error::last_os_error())
+                .context("inspect pinned gateway executable descriptor flags");
+        }
+        if unsafe { libc::fcntl(binary, libc::F_SETFD, flags | libc::FD_CLOEXEC) } != 0 {
+            return Err(std::io::Error::last_os_error())
+                .context("mark pinned gateway executable close-on-exec");
+        }
+    }
     let rc = unsafe {
         libc::syscall(
             libc::SYS_execveat,
@@ -4114,6 +4126,161 @@ mod tests {
             input,
             files,
         )
+    }
+
+    fn run_gateway_exec_boundary_case(case: &str) {
+        let temp = tempfile::tempdir().unwrap();
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "tests::gateway_exec_boundary_child",
+                "--exact",
+                "--ignored",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env("E3_TEST_EXEC_DIRECTORY", temp.path())
+            .env("E3_TEST_EXEC_CASE", case)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{case}: {:?}\n{}\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let marker = if case == "elf" {
+            "pinned ELF ran; four launch objects retained; wrapper objects excluded"
+        } else {
+            "binary flag read failed before exec"
+        };
+        assert!(String::from_utf8_lossy(&output.stdout).contains(marker));
+    }
+
+    #[test]
+    fn test_managed_gateway_final_exec_elf_boundary() {
+        run_gateway_exec_boundary_case("elf");
+    }
+
+    #[test]
+    fn test_managed_gateway_final_exec_flag_read_failure() {
+        run_gateway_exec_boundary_case("bad-fd");
+    }
+
+    #[test]
+    #[ignore = "subprocess fixture invoked by final-exec boundary tests"]
+    fn gateway_exec_boundary_child() {
+        use std::os::unix::fs::MetadataExt;
+
+        let directory =
+            std::path::PathBuf::from(std::env::var_os("E3_TEST_EXEC_DIRECTORY").unwrap());
+        let case = std::env::var("E3_TEST_EXEC_CASE").unwrap();
+        let (mut descriptors, input, original_files) = gateway_final_exec_fixture();
+        drop(original_files);
+        let launch_keys = [
+            "SUBSTRATE_E3_GATEWAY_LAUNCH_FD",
+            "SUBSTRATE_E3_GATEWAY_LISTENER_FD",
+            "SUBSTRATE_E3_GATEWAY_SECRET_READY_FD",
+            "SUBSTRATE_LLM_AUTH_BUNDLE_FD",
+        ];
+        let mut files = Vec::new();
+        let mut launch_objects = Vec::new();
+        let mut wrapper_objects = Vec::new();
+        for (key, fd) in &mut descriptors.descriptors {
+            if key == "SUBSTRATE_WORLD_ENTRY_BINARY_FD" {
+                continue;
+            }
+            let file = if key == "SUBSTRATE_WORLD_ENTRY_WORKING_DIR_FD" {
+                File::open(&directory).unwrap()
+            } else {
+                File::create(directory.join(key)).unwrap()
+            };
+            *fd = file.as_raw_fd();
+            let metadata = file.metadata().unwrap();
+            let object = (*fd, metadata.dev(), metadata.ino());
+            if launch_keys.contains(&key.as_str()) {
+                launch_objects.push(object);
+            } else {
+                wrapper_objects.push(object);
+            }
+            files.push(file);
+        }
+        // A small ELF inspects object identities, including any reused FD numbers.
+        // No ambient environment or extra argv is needed by the final image.
+        let source = format!(
+            r#"
+use std::os::unix::fs::MetadataExt;
+fn main() {{
+    let launch: &[(i32, u64, u64)] = &{launch_objects:?};
+    let wrapper: &[(i32, u64, u64)] = &{wrapper_objects:?};
+    for (fd, dev, ino) in launch {{
+        let object = std::fs::metadata(format!("/proc/self/fd/{{fd}}")).unwrap();
+        assert_eq!((object.dev(), object.ino()), (*dev, *ino), "launch object changed");
+    }}
+    let executable = std::fs::metadata("/proc/self/exe").unwrap();
+    for entry in std::fs::read_dir("/proc/self/fd").unwrap() {{
+        let entry = entry.unwrap();
+        let fd: i32 = entry.file_name().to_str().unwrap().parse().unwrap();
+        if fd <= 2 {{ continue; }}
+        let Ok(object) = std::fs::metadata(entry.path()) else {{ continue; }};
+        let identity = (object.dev(), object.ino());
+        assert_ne!(identity, (executable.dev(), executable.ino()),
+            "pinned executable object leaked through final exec on fd {{fd}}");
+        assert!(!wrapper.iter().any(|(_, dev, ino)| identity == (*dev, *ino)),
+            "wrapper-only object survived final exec on fd {{fd}}");
+    }}
+    println!("pinned ELF ran; four launch objects retained; wrapper objects excluded");
+}}
+"#
+        );
+        let source_path = directory.join("boundary.rs");
+        let binary_path = directory.join("boundary");
+        std::fs::write(&source_path, source).unwrap();
+        let compile = std::process::Command::new("rustc")
+            .args(["--edition=2021", "--crate-name", "gateway_exec_boundary"])
+            .arg(&source_path)
+            .arg("-o")
+            .arg(&binary_path)
+            .output()
+            .unwrap();
+        assert!(
+            compile.status.success(),
+            "{}",
+            String::from_utf8_lossy(&compile.stderr)
+        );
+        assert_eq!(&std::fs::read(&binary_path).unwrap()[..4], b"\x7fELF");
+        let binary = File::open(&binary_path).unwrap();
+        descriptors
+            .descriptors
+            .insert("SUBSTRATE_WORLD_ENTRY_BINARY_FD".into(), binary.as_raw_fd());
+        // Match the first wrapper exec: each admitted descriptor is inheritable.
+        for fd in descriptors.descriptors.values() {
+            let flags = unsafe { libc::fcntl(*fd, libc::F_GETFD) };
+            assert!(flags >= 0);
+            assert_eq!(
+                unsafe { libc::fcntl(*fd, libc::F_SETFD, flags & !libc::FD_CLOEXEC) },
+                0
+            );
+        }
+        // Execution must use the held ELF, even after its pathname disappears.
+        std::fs::remove_file(&binary_path).unwrap();
+        if case == "bad-fd" {
+            drop(binary);
+            let error = exec_pinned_child(&descriptors, &input, None).unwrap_err();
+            if !error
+                .to_string()
+                .contains("inspect pinned gateway executable descriptor flags")
+            {
+                eprintln!("{error:#}");
+                std::process::exit(1);
+            }
+            println!("binary flag read failed before exec");
+            // Final-exec preparation closed wrapper FDs; do not run their owners' destructors.
+            std::process::exit(0);
+        }
+        let error = exec_pinned_child(&descriptors, &input, None).unwrap_err();
+        eprintln!("{error:#}");
+        std::process::exit(1);
     }
 
     #[test]
