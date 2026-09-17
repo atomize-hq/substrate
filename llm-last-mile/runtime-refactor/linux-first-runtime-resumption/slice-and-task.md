@@ -15,7 +15,11 @@ Current disposition: A1.3-P1 is terminally complete under the exact closure iden
 [`A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md).
 A1.4 and the enclosing A1 slice are also terminally complete under their separate closure
 identities. A2, A3, Track A, E1, and E2 are terminally complete under their separate closure
-identities. B2.2 and E3 are separate future-admission candidates and receive no authority here.
+identities. Later product chronology is distinct: [`E2-RM`](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite) and [B2.2](../slices/b2-2-foreground-receipt-return.md#current-admission-disposition) are
+implemented/review-clean/landed, with separate canonical terminal closure not located. E3-A through
+E3-D are landed; [E3-E closure](../slices/e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17) records terminal completion/product landing, with closure on the
+separate authority branch. Enclosing E3 remains incomplete; E3-F is not admitted or dispatched.
+No successor receives authority here.
 
 | Packet | Goal and authority boundary | Exact code and test areas | Contract fields or transitions | Explicit non-goals | Test-first or test-alongside proof and packet exit | Slice gates not yet claimable |
 |---|---|---|---|---|---|---|

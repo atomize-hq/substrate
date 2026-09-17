@@ -36,7 +36,10 @@ exact Linux cgroup/nftables boundary rather than identity headers. Copied host a
 separately granted, logged, non-promotable compatibility.
 
 No D1 envelope, receipt, retained manifest, E2/E2-RM record, broker policy, or E4 workspace-sync
-authority moves. E3 remains unadmitted and no gate is green.
+authority moves. E3-A through E3-D are landed; the [E3-E closure](../slices/e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17) records E3-E terminal
+completion and product landing, with canonical closure on the separate authority branch. Enclosing
+E3 remains incomplete and E3-F unadmitted/undispatched. This bounded evidence does not promote the
+whole seam: direct Codex/Active/resume and integrated successor proof remain outstanding.
 
 ## AgentConfigProjectionService
 

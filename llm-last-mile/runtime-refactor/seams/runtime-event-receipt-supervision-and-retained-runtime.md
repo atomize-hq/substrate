@@ -52,8 +52,8 @@ ReceiptRegistry and Supervisor do not become policy owners. B2.2/B3.2 later cons
 the full manifest also waits for D1/E3 identities. No routing, supervisor, cancellation, receipt,
 manifest, or lifecycle behavior is authorized by this correction.
 
-The later B2.2 admission finding adds no ReceiptRegistry or Supervisor authority to E2. It identifies
-only the specified-but-unadmitted
+The historical B2.2 admission finding adds no ReceiptRegistry or Supervisor authority to E2. It identified
+the now implemented/review-clean/landed
 [`E2-RM` projection](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite):
 an E2-owned read-only lookup from exact request/subject identity plus expected B1 acceptance to the
 already-stored immutable E2 record, preserved historical B2.1 claim preimage/hash, E1 snapshot
@@ -63,11 +63,21 @@ policy, and cannot mutate, reconcile, or reinterpret any source owner.
 
 `E2-RM` preserves the seam split: B1 owns acceptance, B2.1 owns observation/journal/replay/terminal
 truth, E2 owns commitment/cap material, and B2.2 later owns foreground receipt construction and
-return. B3.2, B4, C2/C3, D1, and E3 retain their existing scopes. Both `E2-RM` and B2.2 require
-later fresh admission and explicit dispatch; this seam correction admits neither and promotes no
-seam.
+return. B3.2, B4, C2/C3, D1, and E3 retain their existing scopes. [B2.2](../slices/b2-2-foreground-receipt-return.md#current-admission-disposition) records its separate
+implemented/review-clean/landed status. Separate canonical terminal closure was not located for
+E2-RM or B2.2; the earlier admission correction remains historical. This status correction admits
+neither packet and promotes no whole seam.
 
 ### Second `E2-RM` seam correction (2026-09-03; controlling)
+
+**Integration status qualification (2026-09-17):** The second correction below remains
+controlling for read semantics, ownership, and the bounded implementation/proof fence. Its
+“future”, “unadmitted”, “unimplemented”, and B2.2-blocked statements record 2026-09-03
+scheduling and proof status, not current blockers. E2-RM and B2.2 are now
+implemented/review-clean/landed as recorded above; separate canonical terminal closures
+were not located. E3-A–D landed; [E3-E is closed](../slices/e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17);
+enclosing E3 remains incomplete, and E3-F remains unadmitted and undispatched. This
+qualification creates no proof result, closure, admission, or new implementation authority.
 
 The read boundary spans existing physical owners without transferring their semantics. HSA owns a
 new future non-reconciling read transaction over the already-existing accepted-home layout and

@@ -64,21 +64,21 @@ is also terminally complete at exact closure commit
 `18f719898ce2a48f65e95b3b23f3b2cfd685c4af` over implementation commit
 `6194788d45267d91b4428a42e24c02dfcaae3c1e`. [E2](e2-policy-commitments-on-work-and-workers.md#terminal-closure)
 is terminally complete over implementation commit
-`96e102d9f5690e0d63957f6e9db56d632b7cdd17`. The later B2.2 admission review exposed the
-separately bounded E2-owned
-[`E2-RM`](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite)
-read-only accepted-work receipt-material prerequisite. `E2-RM` must be freshly admitted,
-implemented, independently reviewed `CLEAN`, and landed before B2.2 receives a fresh re-admission.
-`E2-RM`, B2.2, and E3 are separate future-admission candidates; none is admitted or dispatched by
-this navigation projection.
+`96e102d9f5690e0d63957f6e9db56d632b7cdd17`. Later product chronology is separate from
+that recorded slice closure: [`E2-RM`](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite) and
+[B2.2](b2-2-foreground-receipt-return.md#current-admission-disposition) are implemented/review-clean/
+landed; separate canonical terminal closure was not located for either. Their earlier admission
+corrections remain history, with immutable-material and ownership rules preserved.
+[B3.2](b3-2-retained-receipt-messaging-and-lifecycle.md#landed-source-status-2026-09-17) and
+[B4](b4-receipt-targeted-cancel-inspect-stop.md#landed-source-status-2026-09-17) have landed source;
+exact terminal proof/final CLEAN/closure receipts were not located. B4 closure is therefore
+unverified for C2 eligibility; C3 follows C2. Neither is an E3-F prerequisite.
 
-E3 now has a controlling documentation-only
-[`AgentConfigProjectionRecordV1`](../contracts/agent-config-projection-v1.md) and
-[`managed-gateway-adoption-v1`](../contracts/managed-gateway-adoption-v1.md) specification. Its
-projection is independently valid before D1; D1 later consumes the opaque capability and owns V3
-plus `WorldRuntimeAdapterExecutionEnvelopeV1`. E4 becomes eligible for later admission only after an
-E3 implementation lands review-clean. The E3 specification changes no current gate, and E3 remains
-unadmitted, undispatched, and unimplemented.
+E3-A through E3-D are landed. [E3-E is terminally complete and product landed](e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17),
+with canonical closure on the separate authority branch. Enclosing E3 remains incomplete;
+E3-F is not admitted or dispatched. Its projection is independently valid before D1; D1 retains
+V3/envelope, D2 side-effect brokerage, D3 final joined proof, and E4 write/sync after its existing
+E3 prerequisite. No whole-seam promotion or successor admission follows from this navigation.
 
 `E2-RM` changes only the dependency edge, not owner semantics. B1/B2.1 retain acceptance,
 observation, journal, replay, and terminal truth; E2 retains immutable policy commitments/caps;

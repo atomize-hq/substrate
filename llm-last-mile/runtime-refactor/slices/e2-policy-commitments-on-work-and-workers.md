@@ -1,7 +1,7 @@
 **Kind:** slice row
 **Stable ID:** `e2-policy-commitments-on-work-and-workers`
 **Canonical for:** extracted E2 slice row, the controlling E2 authority correction, the terminal implementation closure, the first post-closure `E2-RM` prerequisite history, and the second documentation-only `E2-RM` authority correction below
-**Status:** E2 terminally complete; `E2-RM` specified but not admitted, dispatched, or implemented
+**Status:** E2 terminally complete; `E2-RM` implemented/review-clean/landed; separate `E2-RM` canonical terminal closure not located
 **Authority scope:** exact extracted source table header and row, the controlling correction, the terminal closure, and the documentation-only `E2-RM` prerequisite disposition below; no B2.2, E3, receipt, full-manifest, cancel, observation, lifecycle, or non-Linux implementation authority
 **Source span:** [`../03-phase-slice-map.md`](../03-phase-slice-map.md) line 221
 **Supersedes:** canonical ownership of the extracted `E2 — Policy commitments on work and workers` row and only the stale E2 clauses identified in the correction below
@@ -338,7 +338,21 @@ non-Linux proof remains unclaimed. B2.2 and E3 are only separate successor candi
 their own future admission and dispatch; neither is admitted or dispatched by this closure. E2 is
 terminally complete.
 
+<a id="post-closure-e2-rm-prerequisite-disposition-2026-09-02-controlling"></a>
+
 ## Post-closure `E2-RM` prerequisite disposition (2026-09-02; preserved history)
+
+**Current status (2026-09-17):** [`E2-RM` owner](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite) records implementation and landing at
+`2012bb8b5562a73ed0ee45238c19252c16b25065`, with its landed patch matched to retained
+`CLEAN` review. Separate canonical terminal closure was not located; the push receipt excludes it.
+[B2.2](b2-2-foreground-receipt-return.md#current-admission-disposition) has its own later landing
+and the same separate-closure uncertainty. E2's recorded slice closure is distinct from that later
+product chronology. [E3-E](e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17)
+is closed; enclosing E3 remains incomplete and E3-F unadmitted/undispatched.
+
+**Historical admission correction:** The following 2026-09-02 diagnosis and future-admission
+wording are preserved history. Their immutable-material and ownership rules still apply; they do
+not describe current implementation status or reopen terminal E2.
 
 The E2 implementation and closure above remain terminally complete and unchanged. A later B2.2
 admission review identified one smaller missing E2-owned read boundary: after a foreground response
@@ -356,6 +370,15 @@ admits neither. E3 remains a separate future candidate, and all preserved termin
 gate dispositions, and non-Linux limits remain unchanged.
 
 ## Second `E2-RM` authority correction (2026-09-03; controlling)
+
+**Integration status qualification (2026-09-17):** The second correction below remains
+controlling for read semantics, ownership, and the bounded implementation/proof fence. Its
+“future”, “unadmitted”, “unimplemented”, and B2.2-blocked statements record 2026-09-03
+scheduling and proof status, not current blockers. E2-RM and B2.2 are now
+implemented/review-clean/landed as recorded above; separate canonical terminal closures
+were not located. E3-A–D landed; [E3-E is closed](e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17);
+enclosing E3 remains incomplete, and E3-F remains unadmitted and undispatched. This
+qualification creates no proof result, closure, admission, or new implementation authority.
 
 The first specified-prerequisite disposition above remains part of the chronology, but its
 single-module lookup assumption was insufficient: existing E2 and B1 read paths enter transactions

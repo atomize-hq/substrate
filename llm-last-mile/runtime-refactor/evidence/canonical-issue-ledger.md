@@ -57,6 +57,17 @@ registration, and publishes the commitment before success. Retained Continue/For
 from immutable cap and never requires launch policy to equal current parent. Snapshot bytes/hash are
 exactly E1/B1 `serde_json::to_vec(PolicySnapshotV3)` identity, not a second key-sorted preimage.
 
+The earlier B2.2 admission review identified the historic-material lookup gap beyond an already-known
+commitment ref. [`E2-RM`](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite) now records its landed read-only authenticated projection;
+[B2.2](../slices/b2-2-foreground-receipt-return.md#current-admission-disposition) separately records landed foreground receipt return/retry. The audit matched both landed
+patches to retained `CLEAN` review; separate canonical terminal closures were not located, and
+E2-RM's push receipt excludes closure. These are bounded implementation/review/landing facts, not
+new terminal closure. E2's terminal implementation and closed gate clauses remain unchanged.
+
+**Preserved 2026-09-03 correction:** The following paragraph retains the corrected read
+semantics and its dated scheduling/proof claims. Those claims describe the correction date;
+the current landing and closure disposition is the paragraph above.
+
 The later B2.2 admission review found that existing E2 authentication starts from an already-known
 commitment ref and cannot recover the complete immutable accepted-work material from exact
 request/subject identity plus expected B1 acceptance after response loss, restart, B2.1 observer
@@ -81,39 +92,44 @@ The terminal E2 implementation and its closed gate clauses remain unchanged.
 |---|---|---|
 | `RG-POLICY-01` | E2 consumes the exact E1 patch identity and exact E1/B1 snapshot bytes/ref/hash; it does not alter E1 serialization, schema 3, or stored B1 hashes. | E2's immutable linkage is complete; E1 stays terminally closed. Receipt/manifest exposure remains later-owned, so the ledger-wide row is not globally closed. |
 | `RG-POLICY-03` | Continue = current parent now ∧ immutable worker cap ∧ turn patch; Fork = current parent now ∧ immutable source-worker cap ∧ fork patch. Fresh Spawn stores and indexes the immutable exact full-request commitment/patch/snapshot/proposed-cap/subject/bindings reservation before B3.2a, privately verifies the request commitment, injects only an opaque authenticated reservation capability/ref plus preallocated identities, permits the exact `allow_capability_narrowing` validation exception only with a distinct attestation for authenticated nonempty `RestrictedWorldFs` narrowing, leaves plan/fingerprint/schema unchanged, and commits the retained reservation ref, exact request commitment, plus stable source admission/registration link after admission. Every crash/retry boundary exact-joins; changed request/material conflicts before B3.2a; unverifiable legacy caps return typed `UnsupportedLegacyState`. | Wholly E2-owned and complete for the admitted Linux scope. No routing, lifecycle, supervisor, receipt, full-manifest, or non-Linux authority moves. |
-| `RG-RECEIPT-02` | `E2-RM` must use a non-reconciling descriptor-relative read to capture E2+B1 under one existing HSA root lock, prove stability from exact HSA state-root bytes and the store-wide root revision without a per-session current-authority lookup, authenticate B1 from a private durable witness keyed by exact store/acceptance ID, type every complete expected-record field mismatch, and exact-join the E2 request/subject index, immutable record/ref/linkage, B1 record/runtime evidence, preserved B2.1 claim preimage/hash/key, E1 snapshot bytes/ref/hash/revision/reason, and retained cap record/ref/hash without caller- or current-state reconstruction. Clean E2 absence may be legacy; missing B1 evidence and partial/corrupt/unsupported/malformed material retain their distinct fail-closed classes. | The E2 immutable component remains complete, but `E2-RM` is an unadmitted and unimplemented prerequisite and this receipt-material read clause is open. Its future no-mutation, provenance, schema, stability, concurrency, substitution, and replay tests are prescribed but not passed. B2.2 remains blocked and unadmitted and retains foreground receipt construction/return; B3.2 retains remaining receipt/manifest work. |
+| `RG-RECEIPT-02` | `E2-RM` must use a non-reconciling descriptor-relative read to capture E2+B1 under one existing HSA root lock, prove stability from exact HSA state-root bytes and the store-wide root revision without a per-session current-authority lookup, authenticate B1 from a private durable witness keyed by exact store/acceptance ID, type every complete expected-record field mismatch, and exact-join the E2 request/subject index, immutable record/ref/linkage, B1 record/runtime evidence, preserved B2.1 claim preimage/hash/key, E1 snapshot bytes/ref/hash/revision/reason, and retained cap record/ref/hash without caller- or current-state reconstruction. Clean E2 absence may be legacy; missing B1 evidence and partial/corrupt/unsupported/malformed material retain their distinct fail-closed classes. | The E2 immutable component remains complete; E2-RM lookup and B2.2 foreground return are implemented/review-clean/landed with separate canonical closure unverified. B3.2 retains remaining receipt/manifest work; the ledger-wide gate is not closed. |
 | `RG-OBS-01` | E2 links exact source-owned `WorldWorkExecutionClaimV1` identity/hash/preimage and durable claim key. No invented `resumable` field, cursor ownership, observation mutation, or acceptance creation. | The E2 policy-link clause is complete; B2.1 remains observation owner and other ledger-wide owners remain open. |
 
-`RG-RECEIPT-02` remains B2.2/B3.2-owned except for E2's immutable component and the unadmitted
-E2-owned `E2-RM` read projection; only E2 policy clauses flow into `RG-CANCEL-01` and `RG-OBS-01`;
-those E2 clauses are complete while later receipt, cancel, and observation owners remain open. E2
-does not construct receipts or a full retained manifest.
-`RG-BASE-03` remains under C2, D1/E3 are not prerequisites, and `RG-DIFF-01` remains mandatory.
-`E2-RM`, B2.2, and E3 are separate candidates requiring future admission and explicit dispatch;
-`E2-RM` must land review-clean before B2.2 receives a fresh re-admission. This correction admits or
-dispatches none of them.
+`RG-RECEIPT-02` remains B2.2/B3.2-owned except for E2's immutable component and E2-RM read
+projection. Only E2 policy clauses flow into `RG-CANCEL-01` and `RG-OBS-01`; those clauses remain
+complete without globally closing receipt, cancel, or observation gates. E2 does not construct
+receipts or a full retained manifest. `RG-BASE-03` remains under C2; D1/E3 are not prerequisites, and `RG-DIFF-01` remains mandatory.
+
+Current qualification of the preserved receipt/control rows:
+[B3.2](../slices/b3-2-retained-receipt-messaging-and-lifecycle.md#landed-source-status-2026-09-17)
+and [B4](../slices/b4-receipt-targeted-cancel-inspect-stop.md#landed-source-status-2026-09-17)
+have landed source, but exact terminal proof/final `CLEAN`/closure receipts were not located by the
+audit. That is neither evidence of failure nor proof that receipts never existed. B4 closure remains
+unverified for C2 eligibility; C3 follows C2. Neither is an E3-F prerequisite. No ledger-wide gate
+or full retained manifest is promoted by these status overlays.
 
 ## E3 specification gate disposition (2026-09-02)
 
-The controlling E3 specification is
-[`e3-agent-config-projection-and-gateway-adoption`](../slices/e3-agent-config-projection-and-gateway-adoption.md),
-with exact schemas in [`agent-config-projection-v1`](../contracts/agent-config-projection-v1.md) and
-[`managed-gateway-adoption-v1`](../contracts/managed-gateway-adoption-v1.md). It fixes future
-acceptance criteria and ownership only. It supplies no product/test implementation or evidence and
-does not change the byte-preserved ledger body below.
+The controlling [E3 owner](../slices/e3-agent-config-projection-and-gateway-adoption.md) and
+[E3-E closure](../slices/e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17) supersede the earlier specification-only disposition: E3-A through E3-D are landed;
+E3-E is terminally complete/product landed, with closure on the separate authority branch. Its
+linked retained evidence covers activation, recovery and bounded synthetic secret-canary proof.
+Enclosing E3 is incomplete; E3-F is unadmitted/undispatched. This overlay preserves the exact
+extracted ledger body and does not equate packet evidence with whole-seam promotion.
 
 | Gate ID | Controlling E3 disposition | Current result |
 |---|---|---|
-| `RG-CONFIG-01` | Immutable per-worker series binds accepted root/workspace/session/participant/bootstrap/backend/artifacts/world generation/E2 cap; sibling roots and gateway grants must be physically isolated. | Open; specified only. |
-| `RG-CONFIG-02` | Logical/effective/native records and deterministic Codex 0.125 rendering make native files rebuildable output; workspace overlay is disabled; copied files are compatibility only. | Open; specified only. |
-| `RG-CONFIG-03` | Preserve the landed one-time FD carrier and add exact receiver/handoff/ACK/access-boundary joins without secret persistence or descendant inheritance. | The reusable carrier baseline stays resolved; the E3 adoption clause is open. |
-| `RG-CONFIG-04` | Strict V2 carries the accepted-home projection; direct Codex uses the exact managed gateway after zero-live fence, final revalidation, and exact-member boundary release. D1 later carries the envelope on V3. | Open; specified only. |
-| `RG-UAA-02` / `RG-OBS-01` | E3 owns only credentialed gateway adoption and non-secret handoff/ACK observability. D2 retains per-operation brokerage and D3 retains final joined proof. | E3 clauses open; ledger-wide gates remain unresolved. |
+| `RG-CONFIG-01` | Immutable per-worker series binds accepted root/workspace/session/participant/bootstrap/backend/artifacts/world generation/E2 cap; sibling roots and gateway grants must be physically isolated. | Open as a whole; E3-A–D landed and E3-E closed. Retained Codex/Active/resume and integrated sibling proof remain outstanding. |
+| `RG-CONFIG-02` | Logical/effective/native records and deterministic Codex 0.125 rendering make native files rebuildable output; workspace overlay is disabled; copied files are compatibility only. | Open as a whole; landed authoring/rendering evidence does not establish integrated Codex ambient-layer closure. |
+| `RG-CONFIG-03` | Preserve the landed one-time FD carrier and add exact receiver/handoff/ACK/access-boundary joins without secret persistence or descendant inheritance. | Reusable carrier baseline preserved; E3-E handoff/ACK/readiness and bounded synthetic canary evidence closed. Codex/Active/resume adoption remains open. |
+| `RG-CONFIG-04` | Strict V2 carries the accepted-home projection; direct Codex uses the exact managed gateway after zero-live fence, final revalidation, and exact-member boundary release. D1 later carries the envelope on V3. | Open as a whole; strict V2 codec and E3-E preparation/ReadyClosed evidence are retained, not direct Codex adoption proof. |
+| `RG-UAA-02` / `RG-OBS-01` | E3 owns only credentialed gateway adoption and non-secret handoff/ACK observability. D2 retains per-operation brokerage and D3 retains final joined proof. | E3-E bounded evidence retained; integrated E3-F, D2 brokerage and D3 joined proof remain outstanding. Ledger-wide gates unresolved. |
 
-No E3, E4, D1, or D3 gate is green. E3 requires later fresh admission and explicit dispatch. E4 is
-eligible only after a clean E3 implementation; D1 later consumes the opaque projection capability;
-D3 remains final integration. E2-RM/B2.2 coordination is independent and neither is an E3
-prerequisite.
+No whole E3 seam or unresolved ledger-wide gate is promoted here. E3-F requires its own admission;
+D1 retains V3/envelope, D2 side-effect brokerage, D3 final joined proof, and E4 write/sync after its
+existing E3 prerequisite. E2-RM/B2.2 coordination remains independent; neither is an E3 prerequisite.
+Retained installed
+revision 12 is not fresh host-liveness proof; E3-E synthetic evidence is not Codex/provider proof.
 
 <!-- exact-extracted-body:start -->
 ## Canonical issue ledger

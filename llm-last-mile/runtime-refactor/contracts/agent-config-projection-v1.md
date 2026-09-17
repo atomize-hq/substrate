@@ -1,8 +1,9 @@
 **Kind:** contract
 **Stable ID:** `agent-config-projection-v1`
-**Status:** canonical specification; E3 is not admitted, dispatched, or implemented
+**Status:** canonical specification; E3-A through E3-D landed; E3-E terminally complete and product landed; enclosing E3 incomplete; E3-F not admitted or dispatched
 **Canonical for:** E3 config-projection identity, record, reference, versioned member-dispatch carrier, persistence, validation, Codex 0.125 native rendering, compatibility, and D1 handoff boundaries
-**Authority baseline:** source commit `138864a26dbc4721366c6cc8934d464d1929a189`, tree `881393e8fc6db7d4422f97cceadfa550d076a14f`, including the completed documentation-only `E2-RM` authority correction
+**Correction source baseline:** commit `81cfd33d4c5d16c31c837eeddff769995c566570`, tree `d40f6663a2aa01996ce8b4957f4aae0d30830961`, parent `138864a26dbc4721366c6cc8934d464d1929a189`
+**Landed prerequisite fact:** `E2-RM` is landed at `2012bb8b5562a73ed0ee45238c19252c16b25065`; that landing permits this documentation correction but is not an E3 runtime dependency
 **Supersedes:** only E3 planning statements that leave projection schema, persistence, versioning, Codex ambient-config closure, or the absent local `crates/codex` unresolved
 **Superseded by:** none
 **Projection consumers:** [`../slices/e3-agent-config-projection-and-gateway-adoption.md`](../slices/e3-agent-config-projection-and-gateway-adoption.md), [`managed-gateway-adoption-v1.md`](managed-gateway-adoption-v1.md), [`world-runtime-adapter-execution-envelope-v1.md`](world-runtime-adapter-execution-envelope-v1.md), [`retained-worker-manifest-v1.md`](retained-worker-manifest-v1.md)
@@ -14,6 +15,15 @@
 > fork cap without mutating, reconstructing, or re-owning E2. D1 later consumes the opaque published
 > capability and owns `WorldRuntimeAdapterExecutionEnvelopeV1`; E3 does not construct that envelope,
 > receipts, retained manifests, broker policy, or E4 workspace synchronization.
+
+**Historical E3-A recovery context (not current dispatch authority):** The preserved E3-A wire candidate is not complete or landed. This documentation correction
+authorizes only a later bounded Linux proof-recovery dispatch; it changes no product/test bytes,
+executes no missing proof, and grants no E3-B admission or successor dispatch.
+
+Current packet status follows the
+[E3-E terminal closure](../slices/e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17)
+on the separate authority branch; E3-E's product landing does not integrate those branches or prove
+retained Codex/Active/resume. The historical recovery prose does not renew recovery dispatch.
 
 ## Source-grounded correction
 
@@ -45,8 +55,10 @@ At the authority baseline:
    validation requires `schema_version == 1`. E3 adds V2 beside it; it does not add an optional field
    to V1 or weaken V1 parsing.
 6. The completed E2 baseline already pins the immutable launch/fork cap before member registration.
-   E3 consumes that exact ref and revisions. The separately specified `E2-RM` historic accepted-work
-   read projection is coordination context for B2.2, not an E3 prerequisite or an E3 write surface.
+   E3 consumes that exact ref and revisions. `E2-RM` is already landed at
+   `2012bb8b5562a73ed0ee45238c19252c16b25065`; its landed historic accepted-work read behavior made
+   shared HSA root-lock serialization a prerequisite for this authority correction, but it is not
+   an E3 runtime dependency, E3 prerequisite, or E3 write surface.
 7. `ExecuteRequest.member_dispatch`, `WorldService::execute_stream`,
    `resolve_authoritative_member_placement_context`, `requested_shared_world_owner_spec`,
    `exact_bound_world_ownership_adoption`, `convert_member_dispatch_request`, and
@@ -101,9 +113,10 @@ At the authority baseline:
     E3 `Dormant` record bound to a process-local credential source before a V2 execute merely by
     extending the execute carrier. E3 requires the bounded preparation route specified below.
 21. Baseline gateway `codex_auth_context.rs` retains the access token in process-lifetime static
-    state, while the Linux service unit has no core-dump exclusion. Yama 3 blocks ptrace but does not
-    prevent a dumpable process from writing a core. Both world-service before E3 body acceptance and
-    the gateway before secret delivery therefore require the non-dumpable/zero-core barriers below.
+    state, while the Linux service unit has no core-dump exclusion. A process-scoped user-namespace
+    boundary does not prevent a dumpable process from writing a core. Both world-service before E3
+    body acceptance and the gateway before secret delivery therefore require the independent
+    non-dumpable/zero-core barriers below.
 22. The landed E2 launch validator requires `retained_worker_launch_authority = Some(exact proof)`
     only for `FreshSpawn` and requires it to be `None` for `Fork`. The E3 prepare request and sealed
     equality join must preserve that exact nullable value.
@@ -115,6 +128,17 @@ At the authority baseline:
     both E3 installer source stores are root-published. Their lock and authority-object modes must
     therefore permit read/shared-lock access to the existing `substrate` group without granting any
     group write authority.
+25. `crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/layout.rs`,
+    specifically `StoreLayout::validate_closed_layout`, currently recognizes only `lock`, `tmp`,
+    `objects`, `keys`, `retained-worker-admission-v1`, and `dispatch-policy-commitment-v1` as
+    top-level directories in the closed `authority-v1` layout. The landed E2-RM read path at commit
+    `2012bb8b5562a73ed0ee45238c19252c16b25065` independently repeats that exact manifest in
+    `crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs`,
+    specifically `validate_e2_rm_authority_manifest`, and returns `UnsafeNamespaceEntry` for any
+    other entry. The E3 registry is therefore an intentional new namespace member whose later E3-B
+    storage admission
+    must bind both validators for the same one literal accepted directory name; leaving either
+    unchanged would make ordinary HSA or landed E2-RM reads reject the registry.
 
 The three draft design documents under `llm-last-mile/` remain reviewed inputs, not authority. This
 numbered contract is the controlling E3 specification.
@@ -270,6 +294,12 @@ struct RuntimeSupportFileV1 {
     sha256: String,
 }
 
+For the sole CA entry, `absolute_path` remains the logical
+`/etc/ssl/certs/ca-certificates.crt` name while `device_id`, `inode`, `mode`, `byte_length`, and
+`sha256` describe the opened final regular file after the bounded resolution below. The existing
+struct and `runtime-support` canonical hash already bind both facts; this correction adds no field,
+schema version, manifest family, alternate trust-source name, or registry object.
+
 struct RuntimeSupportDirectoryV1 {
     absolute_path: String, // exactly "/etc/codex"
     device_id: u64,
@@ -328,7 +358,11 @@ converts shell's private type. `authority_store_id` is `cpa_<lowercase UUIDv7>`,
 `cps_<lowercase UUIDv7>`, `record_id` is `cpr_<lowercase UUIDv7>`, and a projection consumer ID is
 `cpc_<lowercase UUIDv7>`. Artifact manifest and entry IDs are `ram_<lowercase UUIDv7>` and
 `rae_<lowercase UUIDv7>`. Revision begins at 1. IDs are allocated once by the accepted-home authority
-store and reused only by exact retry.
+store and reused only by exact retry. The one E3-E `MemberDispatchV2` preparation lease narrows that
+rule: its consumer ID is preallocated before effects as `cpc_` plus the exact UUIDv7 suffix of the
+already authenticated `e3p_` preparation ID. It remains store-validated rather than caller-selected;
+the same durable preparation UUID therefore recovers the same consumer path after an ambiguous
+lease write without a new index or lookup key.
 Installer source-store and source-record IDs are `ias_<lowercase UUIDv7>` and
 `iar_<lowercase UUIDv7>`; each installer stream starts at revision 1 and advances only by exact
 prior revision plus one.
@@ -368,10 +402,14 @@ wrapper, and Codex descriptors and every unrelated descriptor remain close-on-ex
 their own immediate `execveat`.
 
 The expected bytes do not come from running or hashing a caller-selected executable during
-projection construction. The Linux provisioner installs root-owned source-build manifest entries for
-the exact installed `substrate-world-entry` helper and `substrate-gateway`, including
-source commit, tree, `Cargo.lock` hash, exact `x86_64-unknown-linux-musl` target, profile,
-installed-path digest, and physical file identity. Source-build record creation requires a clean tracked tree whose computed commit/tree and
+projection construction. E3-C implements the admitted installer source-store schemas, strict
+validation and import, publication/recovery helpers, and rendering/native-source behavior. E3-D
+consumes that landed machinery: its Linux provisioning integration builds and installs the actual
+`substrate-world-entry` helper and E3-eligible `substrate-gateway`, descriptor-readback-validates both,
+and only then invokes the Substrate publication helper to create the root-owned source-build record
+and head. That record includes source commit, tree, `Cargo.lock` hash, exact
+`x86_64-unknown-linux-musl` target, profile, installed-path digest, and physical file identity.
+Source-build record creation requires a clean tracked tree whose computed commit/tree and
 `Cargo.lock` digest equal the recorded build inputs; an uncommitted product build is not E3-eligible.
 The world-deps Codex installer publishes a separate root-owned entry only after verifying
 the official archive, extracting the uniquely named executable, hashing that extracted executable,
@@ -491,6 +529,17 @@ names whose values are `true`; false fields are absent. The baseline `config/age
 so later E3 implementation must atomically migrate that one descriptor to V3 and supply explicit
 `model: codex` plus explicit empty MCP/feature lists unless the later admission authorizes literal
 nonempty values. E3 does not infer a changing upstream model name.
+
+E3 V1 authenticates and persists provenance only for the selected contributing inventory source. A
+valid workspace descriptor that shadows a global descriptor replaces it before projection
+construction, so the shadowed global descriptor is not a contributor. Its bytes are not copied into
+the projection record, any hash preimage, the selected source revision or identity, or the retention
+set, and V1 makes no durable shadow-history reconstruction promise. Discovery still validates all
+encountered source material before selection: malformed or ambiguous global or workspace input fails
+closed even if a later valid descriptor would otherwise shadow it. “Not retained after valid shadow
+selection” is never permission to ignore invalid input. Any future durable shadow-history feature
+requires separate versioned authority and cannot be inferred into V1; no shadow-provenance field or
+schema is part of this contract.
 
 The parser opens each root through its already authenticated directory descriptor and opens each
 relative single-component `*.yaml` name with no-follow semantics. `raw_bytes_sha256` is ordinary
@@ -643,7 +692,9 @@ removals are sorted bytewise by their identifier and contain no duplicates.
 For E3, `sources` is exactly the one `EffectiveSubstrateConfig` ref followed by exactly one
 `AgentInventory` ref for the selected world placement: `workspace` when a same-ID workspace V3 file
 shadows global, otherwise `global`. A shadowed global file is not a contributor and is not hashed into
-the logical projection. Missing either required source, or two candidates in the selected scope, is
+the logical projection, record, revision, source identity, or retention set. All discovered material
+must nevertheless pass the strict ambiguity and malformed-input checks before this selected-only
+provenance decision. Missing either required source, or two candidates in the selected scope, is
 `Missing` or `Conflict` before subject publication.
 
 The effective projection is deterministic and is not a new policy-composition surface.
@@ -700,7 +751,7 @@ SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME,SUBSTRATE_LLM_AUTH_BUNDLE_FD,
 SUBSTRATE_WORLD_ENTRY_BINARY,SUBSTRATE_WORLD_ENTRY_BINARY_FD,
 SUBSTRATE_WORLD_ENTRY_CGROUP_PROCS_FD,SUBSTRATE_WORLD_ENTRY_CGROUP_PROCS_PATH,
 SUBSTRATE_WORLD_ENTRY_FINAL_EXEC_FD,SUBSTRATE_WORLD_ENTRY_REQUIRE_CGROUP_ATTACH,
-SUBSTRATE_WORLD_ENTRY_ROLE,SUBSTRATE_WORLD_ENTRY_SETUP_READY_FD,SUBSTRATE_WORLD_ENTRY_WORKING_DIR,
+SUBSTRATE_WORLD_ENTRY_ROLE,SUBSTRATE_WORLD_ENTRY_SETUP_READY_FD,SUBSTRATE_WORLD_ENTRY_USERNS_FD,
 SUBSTRATE_WORLD_ENTRY_WORKING_DIR_FD]`. The FD-named keys are numeric nonsecret descriptor pointers
 that exist only in the wrapper launch environment described below.
 Unknown inherited environment is absent because inheritance is empty, not because the denylist is
@@ -869,7 +920,7 @@ struct E3WorldFsEnforcementInputV1 {
     policy_snapshot_revision: String,
     expected_process_cgroup: CanonicalCgroupIdentityV1,
     kernel_boot_id: String,
-    required_yama_ptrace_scope: u32, // exactly 3
+    user_namespace_requirement: E3UserNamespaceRequirementV1,
     target_uid: u64,
     target_gid: u64,
     immutable_config_source: Option<CanonicalDirectoryV1>,
@@ -882,6 +933,30 @@ struct E3WorldFsEnforcementInputV1 {
 }
 
 enum E3IsolatedChildRoleV1 { Codex, ManagedGateway, ManagedGatewayReadinessProbe }
+
+struct E3LinuxIdMapExtentV1 {
+    inside_id: u64,
+    outside_id: u64,
+    length: u64, // exactly 1
+}
+
+struct E3UserNamespaceRequirementV1 {
+    trusted_service_uid: u64, // exactly the installed primary service UID, currently 0
+    parent_namespace_device_id: u64,
+    parent_namespace_inode: u64,
+    uid_map: E3LinuxIdMapExtentV1,
+    gid_map: E3LinuxIdMapExtentV1,
+}
+
+struct E3UserNamespaceAttestationV1 {
+    namespace_device_id: u64,
+    namespace_inode: u64,
+    owner_uid: u64,
+    parent_namespace_device_id: u64,
+    parent_namespace_inode: u64,
+    uid_map: E3LinuxIdMapExtentV1,
+    gid_map: E3LinuxIdMapExtentV1,
+}
 
 enum E3PolicyAuthoritySourceV1 {
     InitialLaunch { e2_activation_id: String, commitment_ref: DispatchPolicyCommitmentRefCarrierV1 },
@@ -950,9 +1025,9 @@ struct E3ChildSecurityAttestationV1 {
     cap_last_cap: u32, // must be at most 63 and every value through it was dropped
     no_new_privs: bool, // exactly true
     dumpable: u32, // exactly 0 in the pre-final-exec wrapper/probe
-    ptracer_pid: u32, // exactly 0 in the pre-final-exec wrapper/probe
+    tracer_pid: u32, // 0 for an untraced role; otherwise the exact trusted service tracer PID
     kernel_boot_id: String,
-    yama_ptrace_scope: u32, // exactly 3
+    user_namespace: E3UserNamespaceAttestationV1,
     seccomp_mode: u32, // exactly 2, filter
     landlock_abi: u32,
     e2_enforcement_plan_hash: String,
@@ -1022,10 +1097,18 @@ The new `config-projection` crate depends downward on `transport-api-types`, own
 projection/gateway persistence schemas and operational services, and consumes the wire refs. Shell,
 world-service, and gateway depend on both crates as needed. `transport-api-types` never depends on or
 re-exports `config-projection`, so no Cargo edge points back upward.
-The service's operational methods accept and validate only its own typed nonsecret observations and
-held generic descriptors; they publish/resolve projection authority but never instantiate a
-world-service manager, spawn a process, read a transport body, or own a secret/listener capability.
-World-service composes those downward calls with its gateway and child lifecycle.
+For the E3-B HSA transaction bridge specifically, `config-projection` also owns the object-safe
+`ConfigProjectionHsaAuthorityV1` consumer trait described below, shell depends on and implements that
+trait, and world-service later depends on shell only to construct the implementation from the sealed
+installed accepted-home authority. `config-projection` does not depend on shell. Thus the normal
+edges are `config-projection -> transport-api-types`, `shell -> config-projection`, and
+`world-service -> {shell, config-projection}`; gateway's later edge remains
+`gateway -> config-projection`. The existing shell-to-world-service test-only dev dependency remains
+test-only and creates no reverse normal edge. The service's operational methods accept and validate
+only their own typed nonsecret observations and this one narrow capability; they publish/resolve
+projection authority but never instantiate a world-service manager, spawn a process, read a
+transport body, or own a secret/listener capability. World-service composes those downward calls
+with its gateway and child lifecycle.
 
 `root_id` is `cnr_<lowercase UUIDv7>`. `authority_relative_path` is exactly
 `authority-v1/agent-config-projection-v1/native-sources/<series-id>/<fence-id>` beneath accepted
@@ -1043,9 +1126,40 @@ below must also remain absent at every per-exec and post-turn wall. `directories
 `files` contains its sole entry; no filesystem enumeration order is hashed. `cwd` equals
 `identity.workspace_root`.
 
-The record's embedded native bytes are the semantic authority. Before the dormant record is
-published, the registry also realizes those bytes once into the immutable accepted-home source
-directory named by `authority_relative_path`. That directory contains exactly
+The record's embedded native bytes are the semantic authority. Their first construction is an
+explicit acyclic two-phase operation. `Codex0125ProjectionV1::render` first returns one opaque
+`Codex0125ProjectionPlanV1`; it runs the one canonical TOML generator and fixes the renderer,
+identity/effective/gateway/root/fence inputs, exact config bytes/length/SHA-256, environment,
+invocation, and the already observed source-independent `Project` loader inputs, but contains no
+source, realization, or per-exec device/inode claim. The plan is process-local, non-serializable,
+non-cloneable, has private fields, and is neither authority nor a completed security attestation.
+It cannot be fabricated or used to publish a projection head.
+
+`ConfigProjectionRegistryV1::publish_native_source` consumes that plan under the existing accepted-
+home parent/child transaction. It creates or exact-resolves the fixed temporary source tree, writes
+the planned config bytes once, then descriptor-reopens the temp root, `codex-home`, `config.toml`,
+and `system-empty` with the existing no-follow/beneath rules. The same held config descriptor supplies
+both metadata and bytes: owner, mode, link count, device, inode, length, and SHA-256 are validated,
+the bytes are required to equal the plan, and a second `fstat` must reproduce the identity and
+metadata. Only those actual accepted-home observations may complete the source-rooted `System` and
+`User` entries and allow private `Codex0125ProjectionV1::finalize_from_native_source_v1` to construct
+`NativeAgentConfigProjectionV1` and its hash. The source manifest then binds that completed native
+hash, the same observed source-root identity, and the same config digest; it is written, synced,
+installed by no-replace rename, and exact-read back before the operation returns the pair
+`(NativeAgentConfigProjectionV1, NativeProjectionSourceManifestV1)`. The source root's descriptor
+identity is known before its same-filesystem rename and is required to remain identical through the
+final reopen; no object's hash depends on its own future hash.
+
+The registry's `publish_dormant` path never creates a source tree from record bytes. It requires the
+already published final source, descriptor-reconstructs and validates the same native/source pair,
+and rejects a missing, incomplete, substituted, or unequal source before any record or head
+publication. Exact retry of `publish_native_source` reopens the same final source and must reproduce
+the same plan finalization and manifest; recovery may promote only a complete, exactly revalidated
+temporary with its finalized manifest. A pre-finalization plan or incomplete temporary remains
+non-authoritative and fails closed under the existing recovery rules.
+
+The resulting immutable accepted-home source directory is named by `authority_relative_path`. It
+contains exactly
 `source-manifest.json`, `codex-home/config.toml`, and an empty `system-empty/`; it contains no
 `home`, `state`, `tmp`, log, socket, or process-created file. The source directory and its children
 are descriptor-created beneath the accepted-home root, owned by the authenticated UID/GID, mode
@@ -1143,7 +1257,9 @@ validated recorded session ID, then `-` for the stdin prompt; `resume_codex_argv
 flags through `--output-last-message` and is renderer-hash input. Any argv change requires a new
 renderer version and projection revision before use.
 
-This is an E3-only local launch seam, not a capability attributed to UAA 0.3.7. Exact source shows
+This is an E3-only local launch seam, not a capability attributed to UAA 0.3.7. External
+`unified-agent-api-codex` 0.3.7 remains unchanged and is not claimed to provide descriptor-pinned
+execution or confined output-path construction. Exact source shows
 that `unified-agent-api-codex` 0.3.7 calls `std::env::temp_dir()` when
 `ExecStreamRequest.output_last_message` is absent and uses `Command::new(binary_path)`; the higher
 level `unified-agent-api` 0.3.7 Codex adapter supplies `output_last_message: None`. Those behaviors
@@ -1154,6 +1270,8 @@ non-Codex dispatch continue through the existing `PromptFulfillmentBridge::for_m
 `GatewayAdapterRuntime`/UAA path unchanged. The local adapter preserves the existing
 `AgentWrapperRunControl` event/cancel surface and Codex JSONL normalization but owns argv assembly,
 preopened output-file injection, stdin/stdout/stderr pipes, pidfd, cancellation, and exec.
+E3 neither creates nor patches a local `crates/codex` replacement; this division is clarification of
+existing ownership, not a new product primitive.
 
 The adapter uses a two-stage wrapper protocol plus a pre-exec fork gate. Before `fork`, the parent
 constructs immutable `argv`/`envp` storage from the empty environment, creates every pipe, prepares all
@@ -1172,31 +1290,34 @@ member cgroup through a control descriptor retained only by world-service. One g
 the descriptor-pinned wrapper `execveat(AT_EMPTY_PATH)`. No cgroup, nftables, accepted-home registry,
 installer-store, or other enforcement-control descriptor is inherited by the child.
 
-For that wrapper exec, the already-built environment contains exactly nine pairwise-distinct decimal
+For that wrapper exec, the already-built environment contains exactly ten pairwise-distinct decimal
 descriptor pointers: `SUBSTRATE_E3_CODEX_LAUNCH_PLAN_FD`,
 `SUBSTRATE_E3_NATIVE_REALIZATION_FD`, `SUBSTRATE_E3_NATIVE_SOURCE_FD`,
 `SUBSTRATE_E3_SYSTEM_EMPTY_FD`, `SUBSTRATE_E3_WORLD_FS_INPUT_FD`,
 `SUBSTRATE_WORLD_ENTRY_BINARY_FD`, `SUBSTRATE_WORLD_ENTRY_FINAL_EXEC_FD`,
-`SUBSTRATE_WORLD_ENTRY_SETUP_READY_FD`, and `SUBSTRATE_WORLD_ENTRY_WORKING_DIR_FD`, plus the literal
+`SUBSTRATE_WORLD_ENTRY_SETUP_READY_FD`, `SUBSTRATE_WORLD_ENTRY_USERNS_FD`, and
+`SUBSTRATE_WORLD_ENTRY_WORKING_DIR_FD`, plus the literal
 child role `SUBSTRATE_WORLD_ENTRY_ROLE=codex`. They name the bounded launch-plan reader, native
 realization/source/system-empty directories, bounded enforcement-input reader, exact manifest-pinned
-Codex ELF, final-exec reader, setup-ready writer, and pinned workspace directory. File descriptors
+Codex ELF, final-exec reader, setup-ready writer, user-namespace setup socket, and pinned workspace
+directory. File descriptors
 0, 1, and 2 are respectively the already-created prompt reader, event stdout writer, and stderr
 writer; the plan fixes those numbers and the wrapper validates their pipe types and directions. The
 wrapper-exec gate and its parent end are closed before wrapper exec. `CODEX_BINARY`, every cgroup
 control pointer, pathname-valued V1 wrapper key, and every other environment entry are absent.
 
-The descriptor-pinned ELF wrapper strictly parses and removes those ten variables, verifies all
+The descriptor-pinned ELF wrapper strictly parses and removes those eleven variables, verifies all
 descriptor types and non-aliasing, reads the launch plan and enforcement input once each to separate
 64-KiB bounded EOF, closes both pipe FDs, strictly decodes/re-encodes them, reproduces both hashes,
 requires the plan hash to equal the enforcement input, exact-matches every plan directory to its held
 descriptor, validates the plan's internal argv/environment/output/turn rules, reproduces the E2
 snapshot bytes/hash, and verifies its PID is
-already in `expected_process_cgroup`. It creates its private mount namespace, bind-mounts the accepted
+already in `expected_process_cgroup`. It completes the protected-user-namespace setup handshake, then
+creates its private mount namespace, bind-mounts the accepted
 immutable config and `system-empty` mounts as specified above, applies the exact authenticated E2
 filesystem policy plus only the role-specific execution-support paths below, and performs the
 complete source-matched loader-input validation inside that namespace. It then completes the
-irreversible security transition below and writes exactly one bounded canonical
+one-way security transition below and writes exactly one bounded canonical
 `CodexSetupReadyAttestationV1` to the setup-ready pipe, closes that pipe, and blocks on the
 close-on-exec final-exec pipe. The parent exact-validates the attestation, pinned PID/cgroup, native
 root, `/proc/<pinned-pid>/ns/mnt`, and `/proc/<pinned-pid>/root/etc/codex` against its retained
@@ -1289,10 +1410,10 @@ entry bytes including the terminal `DT_NULL`. This form matches the pinned Codex
 artifact without treating its relocation metadata as a loader dependency.
 
 Any dynamically linked, malformed, or architecture-mismatched artifact is
-`UnsupportedRuntimeVersion` before publication or child creation. The wrapper resolves every
-remaining support object component-by-
-component from held `/` and realization descriptors, rejects magic links and escapes, opens the final
-object with `O_NOFOLLOW`, and computes this exact closure:
+`UnsupportedRuntimeVersion` before publication or child creation. Except for the exact CA rule
+below, the wrapper resolves every remaining support object component-by-component from held `/` and
+realization descriptors, rejects every symbolic or magic link and escape, opens the final object
+with `O_NOFOLLOW`, and computes this exact closure:
 
 1. `validate_e3_static_elf_v1` reproduces the static-ELF checks above on the same target descriptor
    used for final execution. No library root, loader, loader cache, or shared object enters either
@@ -1302,9 +1423,42 @@ object with `O_NOFOLLOW`, and computes this exact closure:
    `/etc/hosts`, `/etc/nsswitch.conf`, `/etc/passwd`, `/etc/group`, `/etc/resolv.conf`, and
    `/etc/ssl/certs/ca-certificates.crt` (read). Every named regular file is mandatory, and its
    device/inode/SHA-256 is in the trusted installed artifact support manifest and projection
-   identity. An absence, alternate CA directory, symlink, special file where a regular file is
-   required, or identity/hash drift is
-   `UnsupportedSecurityPosture`. No other `/etc`, `/usr`, `/lib*`, `/dev`, or CA object is admitted.
+   identity. Ordinary direct regular-file installation of the logical CA path remains valid. As the
+   sole symlink exception in support policy V1, that exact logical CA path may instead be one
+   root-owned symbolic link whose raw `readlinkat` bytes are exactly
+   `../../ca-certificates/extracted/tls-ca-bundle.pem` and whose final object remains beneath the held
+   `/etc` resolution boundary. The publisher, importer, and wrapper each open and validate the same way:
+   they descriptor-open `/etc`, require it and every traversed directory to be root-owned and not
+   group/other-writable, walk without directory enumeration, require the logical CA leaf to be the
+   only encountered symlink, and compare its owner and raw target before expansion. `..` in that
+   target pops one already-held
+   descendant descriptor and is valid only while the stack remains at or below the held `/etc`;
+   an absolute target or a pop above that boundary is an escape. A different relative target is not
+   accepted even if it would remain beneath `/etc`. Resolution rejects a mount crossing, magic link,
+   second symlink or cycle, NUL or malformed component, and any substituted, untrusted-owned, or
+   group/other-writable component.
+
+   The final open is `O_RDONLY|O_CLOEXEC|O_NOFOLLOW` from the resolved parent descriptor. Its object
+   must be a root-owned, non-group/other-writable regular file with link count one and the existing
+   support-file size bound. Metadata is captured by `fstat` on that descriptor; SHA-256 is read from
+   the same descriptor; a second `fstat` must reproduce device/inode/type/mode/owner/link-count/length.
+   Re-resolving the exact logical name before publication/import completion or private realization
+   must select the same final device/inode and bytes. The manifest continues to store the logical CA
+   pathname plus that final object's identity and digest, so link or endpoint substitution, endpoint
+   drift, a nonregular endpoint, absence, or hash mismatch is `UnsupportedSecurityPosture`.
+
+   Before either artifact's Landlock layers are installed, `substrate-world-entry` performs the final
+   re-resolution while unrestricted setup authority exists, retains the validated endpoint
+   descriptor, and uses only its already-private mount namespace to mount an empty
+   `nodev,nosuid,noexec` filesystem over `/etc/ssl/certs`, create its single non-writable
+   `ca-certificates.crt` mountpoint, and bind/remount the held endpoint there read-only. It then
+   reopens the logical path without following links and requires the mounted file's
+   device/inode/type/mode/length/digest to equal the manifest and held descriptor before applying the
+   existing exact-file Landlock rule. The host symlink and endpoint are never changed. No Landlock
+   rule or runtime access is added for `/etc`, `/etc/ssl`, `/etc/ssl/certs`, the resolved endpoint
+   pathname, or another trust source; directory enumeration remains denied, and the descriptor is
+   closed after the rule is installed. All other support-file symlinks remain forbidden. No other
+   `/etc`, `/usr`, `/lib*`, `/dev`, or CA object is admitted.
    The separately represented `/etc/codex` mount target is the sole additional `/etc` directory: it
    is descriptor-resolved and covered by the private bind mount before Landlock restriction, receives
    no E3 rule for `/`, `/etc`, or another ancestor, and grants no read or enumeration of the underlying
@@ -1342,7 +1496,9 @@ rights. Neither layer contains a rule for the accepted-home registry/source path
 series/fence realization, `/sys/fs/cgroup`, nftables/netlink control, `/proc/<other-pid>`, the other
 role's private root, installer stores, or world-service state. The attestation separately binds the
 exact E2 plan hash, dependency/support closure, derived-support layer hash, role-narrowing layer hash,
-and effective intersection hash.
+and effective intersection hash. The separately authorized
+[fixed-device consumer correction](#e3-d-shared-landlock-fixed-device-correction) owns the narrow
+shared-consumer allowance needed to represent the two required device subjects.
 
 The numeric proc subject is not resolved through the `/proc/self` magic link. Before applying
 Landlock, the child opens a trusted procfs root descriptor, formats `getpid()` as the shortest decimal
@@ -1354,27 +1510,79 @@ link, a non-procfs mount, a PID/start-time mismatch, another numeric PID, or any
 or sibling is `UnsupportedSecurityPosture`; `/proc/self` is never an admitted or opened E3 support
 path.
 
-E3 V1 additionally requires Linux Yama `ptrace_scope=3`, whose kernel-defined posture is no attach
-at all and cannot be lowered until reboot ([Linux Yama documentation](https://docs.kernel.org/admin-guide/LSM/Yama.html)).
-Before creating the process-wide exclusive gate, world-service descriptor-opens the procfs
-`/proc/sys/kernel/yama/ptrace_scope` object no-follow, requires root ownership, a procfs mount, and
-exact bytes `3\n`, and records the lowercase canonical `/proc/sys/kernel/random/boot_id` UUID. The
-same boot ID and required value are bound into every enforcement input/attestation and re-read
-immediately before secret write, readiness start, boundary allowance, every final-exec release, and
-post-exec prompt release. Missing Yama, another value, another boot ID, or any inability to prove the
-same procfs authority is `UnsupportedSecurityPosture` before E3 effects. E3 does not write a sysctl;
-the administrator/provisioning environment must have entered this irreversible-for-the-boot posture.
+E3 V1 does not use host-wide Yama policy as authority. Substrate must not write or temporarily toggle
+`/proc/sys/kernel/yama/ptrace_scope`, require an administrator to change it, or encode any observed
+value as an enforcement input, attestation, or canonical hash. The existing host value may be read
+only as diagnostic and acceptance evidence that it stayed byte-identical before, during, and after
+E3 operation; no particular value, including the feasibility probe's observed `1`, is required. If
+the unchanged host policy prevents an operation whose existing Substrate semantics require trusted
+tracing, that exact operation fails with its real compatibility error before release; E3 may not
+silently disable tracing or claim a weaker execution result. The boot ID remains required because it
+binds process and namespace identities across PID/inode reuse, not because it attests Yama.
 
-Before emitting setup-ready, the wrapper uses its provisioned parent-only `CAP_SETUID`, `CAP_SETGID`,
-and `CAP_SETPCAP` to perform this exact one-way order: install all mount/Landlock/E2 deny controls;
-clear supplementary groups; clear ambient capabilities; set and lock securebits `NOROOT` and
-`NO_SETUID_FIXUP` with `KEEP_CAPS` clear; drop every capability from the bounding set through the
-kernel's authenticated `cap_last_cap`, including those three last; set real/effective/saved/fs GID and
-UID to the bootstrap-authenticated target; zero both capability data words for effective, permitted,
-and inheritable sets; set `PR_SET_NO_NEW_PRIVS=1`, `PR_SET_DUMPABLE=0`, and
-`PR_SET_PTRACER=0`; and install a seccomp filter returning `EPERM` for `ptrace`,
+The primary world-service process remains in the inherited host user namespace for its complete
+lifetime. Before registering E3 routes it descriptor-opens its own user namespace and binds that
+descriptor's device/inode plus the installed trusted service UID and boot-bound service PID/start
+identity. It never calls `unshare(CLONE_NEWUSER)` or enters a child user namespace. Each Codex,
+managed-gateway, and managed-gateway-readiness wrapper instead creates a fresh user namespace for
+that one descriptor-pinned wrapper/final-exec process tree. The namespace must be distinct from the
+service namespace and every sibling or other-role namespace; descendants may inherit only their
+exact parent's namespace. A shared user namespace is not isolation among members, so no gateway,
+separate participant, sibling, readiness probe, non-E3 child, or unclassified helper may join that
+unit. The existing cgroup, role-specific Landlock, seccomp, gateway non-dumpability, and process-wide
+exclusion requirements remain independently mandatory.
+
+World-service creates one parent-owned `SOCK_SEQPACKET|SOCK_CLOEXEC` user-namespace setup socketpair
+for the exact child and clears close-on-exec only on the child endpoint for the single pinned wrapper
+exec. Only that endpoint and the nonsecret decimal pointer
+`SUBSTRATE_WORLD_ENTRY_USERNS_FD` cross the pinned wrapper exec. After strictly parsing its trusted
+launch descriptors, and before a mount, policy effect, target executable, secret byte, listener
+allowance, or prompt can be exposed, `prepare_private_child_namespace` calls
+`unshare(CLONE_NEWUSER)`, sends the sole one-byte namespace-created message `0x01`, and blocks. The trusted wrapper
+exec before this call is intentionally inside the parent namespace but is descriptor-pinned, receives
+no secret, and cannot pass either release gate; the gateway and authorized agent executable never run
+there. World-service binds the notification to the held pidfd/PID/start tuple, opens
+`/proc/<pid>/ns/user` itself, and validates `NS_GET_NSTYPE`, `NS_GET_OWNER_UID`, `NS_GET_PARENT`, and
+descriptor identity. The owner is exactly the installed trusted service UID, currently host UID 0;
+it is never the ordinary developer UID. The parent is byte-identical to the service's held host-user-
+namespace descriptor. The parent accepts only one `0x01` packet and no ancillary descriptor.
+
+While the wrapper remains blocked, the same synchronous service thread raises only its already-
+parked `CAP_SETUID` and `CAP_SETGID` into its effective set, writes one UID-map extent and one GID-map
+extent, and immediately clears and reads back both effective bits before sending the fixed mapped
+release `0x02`. There is no await, callback, fork, or unrelated work while those bits are raised. Each extent
+is exactly `<target-id> <same-host-target-id> 1`, where the nonzero UID and GID come from the installed
+bootstrap identity; no inside or outside host-root mapping, subordinate range, supplementary identity,
+caller-selected map, new account, or additional host capability is allowed. The parent rereads both
+map files exactly, validates the held namespace descriptor again, and retains that descriptor and its
+bound pidfd/process identity until the exact child cgroup is empty. The wrapper independently verifies
+its actual namespace membership and exact maps after receiving the sole one-byte mapped release
+`0x02`, then closes the setup socket. EOF, duplicate/trailing bytes, or a substituted
+notification, descriptor, owner, parent, map, member PID, or reused namespace identity fails closed.
+Every error or unwind after a parent capability is raised must clear and read it back; inability to do
+so aborts the service while the child remains unreleased.
+
+This per-child direct-creation lifecycle uses no later user-namespace `setns`: precreating one shared
+namespace and entering it later is neither required nor authorized. Any already-required network-
+namespace entry happens in the existing trusted post-fork setup before wrapper exec and before the
+user-namespace boundary using the already-effective service `CAP_SYS_ADMIN`. The trusted wrapper uses
+that same existing bit only for direct user-namespace creation; afterward its setup capabilities are
+scoped to the new namespace and cannot administer the parent namespace. After mapped release it uses
+namespace-local `CAP_SYS_ADMIN` to create its private mount namespace, fixes its filesystem UID/GID to
+the configured identity, and performs the existing descriptor-rooted mount and Landlock setup. It
+then clears supplementary groups, uses only namespace-local `CAP_SETGID`/`CAP_SETUID` for final ID
+descent and `CAP_SETPCAP` for the securebits/bounding-set transition, descends all
+real/effective/saved/filesystem IDs to the configured UID/GID, and removes every capability. It then
+sets `PR_SET_NO_NEW_PRIVS=1`, establishes `PTRACE_TRACEME` before filtering only
+when the existing execution path requires the trusted service parent to trace it, applies the role's
+dumpability/core posture, and installs the existing seccomp filter returning `EPERM` for `ptrace`,
 `process_vm_readv`, `process_vm_writev`, `kcmp`, `pidfd_getfd`, `bpf`, `perf_event_open`, all
-mount-family calls, and namespace creation/setns. Failure of any syscall or readback aborts.
+mount-family calls, and namespace creation/setns. Final exec cannot change namespace membership.
+Failure of namespace creation/mapping, filesystem setup, ID descent, capability removal, required
+trusted tracing, or any readback aborts before secret delivery or final-exec/prompt release. The
+forked-child feasibility probe did not exercise this wrapper/world-service integration, a precreated
+namespace, or later `setns`; E3-D must prove the selected ordering against the actual static wrapper.
+
 Provisioning adds those three transition capabilities to both `CapabilityBoundingSet` and
 `AmbientCapabilities` so primary service exec initially places them in
 bounding/permitted/inheritable/effective sets, and sets `SecureBits=noroot-locked`. The installed
@@ -1387,9 +1595,10 @@ and call `run_world_service`. Every runtime worker is therefore created from the
 `on_thread_start` readback aborts the process if any worker differs, and later blocking/helper threads
 inherit from an already-verified thread. Existing baseline service capabilities remain explicitly
 ambient/effective as at the baseline. A non-E3 fork never raises the three parked transition bits,
-and locked `NOROOT` prevents UID-0 exec semantics from regaining them; only the E3 post-fork syscall
-stub raises exactly those three for the manifest-pinned wrapper. They are absent again before either
-released E3 child exec.
+and locked `NOROOT` prevents UID-0 exec semantics from regaining them. Only the E3 post-fork syscall
+stub raises all three for the manifest-pinned wrapper, and only the bounded parent map-installation
+scope above raises `CAP_SETUID`/`CAP_SETGID` on its one service thread. They are parked again before
+mapped release and absent from every released E3 child exec.
 
 The baseline capabilities that remain effective in trusted world-service include
 `CAP_SYS_PTRACE`, `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`, and `CAP_DAC_OVERRIDE`. Baseline V1/UAA,
@@ -1433,8 +1642,9 @@ control descriptor is inherited: the wrapper derives the one probe pathname or n
 solely from this authenticated, hash-bound input, and a caller or ambient path cannot select it.
 
 The trusted wrapper reads back its own UID/GID tuples, zero supplementary groups, all five zero
-capability masks, `NoNewPrivs: 1`, seccomp-filter mode, dumpability and ptracer posture, Landlock ABI
-and ruleset hash, and exact E2/input hashes into `E3ChildSecurityAttestationV1`. A kernel
+capability masks, `NoNewPrivs: 1`, seccomp-filter mode, role-appropriate dumpability and tracer
+posture, Landlock ABI and ruleset hash, the exact user-namespace owner/parent/maps/membership, and
+exact E2/input hashes into `E3ChildSecurityAttestationV1`. A kernel
 `cap_last_cap > 63` is unsupported by V1 rather than truncated. It also performs negative
 probes in that exact target order: operation `open_read_directory` returns `EACCES` for the registry,
 sibling root, world-service state, and other-role private root; `open_write_cgroup_procs` returns
@@ -1448,23 +1658,43 @@ is omission, never a successful probe; before a later sibling's first child rele
 runs reciprocal same-UID probes against both existing runtimes. The canonical ordered results form
 `denied_control_probe_hash`. The parent treats the wrapper-emitted pipe bytes only
 as evidence from the manifest-pinned trusted wrapper, independently checks `/proc/<pinned-pid>/status`,
-UID/GID maps, groups, cgroup, seccomp, namespace, open-FD inventory, and the descriptor identities
-bound into the wrapper's negative target set, revalidating every held target after the results return.
-It checks pre-exec dumpability/ptracer state and Yama denial through a fresh
-same-target-UID probe child with zero capabilities,
-no shared namespace handles, and the pinned target PID/start-time tuple; the privileged parent itself
-cannot substitute its `CAP_SYS_PTRACE` result. Every exact zero/value/hash is required before release. Same host UID does not
-permit Codex to inspect the credential-bearing gateway: pre-exec dumpability/ptracer posture plus the
-syscall filter, boot-bound Yama-3 posture, and inaccessible `/proc/<gateway-pid>` rule are mandatory,
-and a failed cross-process canary
-probe aborts activation.
+UID/GID maps, groups, cgroup, seccomp, user/mount namespace membership, open-FD inventory, and the
+descriptor identities bound into the wrapper's negative target set, revalidating every held target
+after the results return. The namespace fields in the enforcement input and child attestation are
+covered by their existing canonical hashes; a matching hash never substitutes for the parent-held
+namespace descriptor and live membership readback.
+
+The same-UID denial canary must isolate the user-namespace effect from ambient host policy. A fresh
+same-target-UID, zero-capability inspector outside the target namespace first exercises the identical
+operations against a `Dumpable=1` same-host-user-namespace control that explicitly authorizes that
+inspector; ptrace attach, `process_vm_readv`, `/proc/<pid>/mem`, and `pidfd_getfd` must all succeed.
+Using the same inspector and authorization shape against the post-exec protected target, ptrace and
+`process_vm_readv` must fail with `EPERM`, `/proc/<pid>/mem` must fail with `EACCES` or `EPERM`, and
+`pidfd_open` may succeed but `pidfd_getfd` must fail with `EPERM`. The inspector receives no namespace
+descriptor. A failed positive control is inconclusive and cannot be reported as namespace protection;
+the exact compatibility/security failure is surfaced without changing host policy. The privileged
+parent's own `CAP_SYS_PTRACE` result cannot substitute. Every exact identity/value/hash and conclusive
+canary is required before release. Separate fresh namespaces, the syscall filter, Landlock's
+inaccessible `/proc/<gateway-pid>` rule, and the gateway's non-dumpability together keep same-host-UID
+Codex and sibling/other-role processes from inspecting the credential-bearing gateway.
 
 Gateway exec is the one stricter post-exec case because that process retains the credential. Before
 world-service writes the auth bundle, the pinned gateway must complete the managed-gateway
 secret-ready barrier proving `PR_GET_DUMPABLE=0`, both `RLIMIT_CORE` values zero, and `TracerPid=0`;
 those values remain zero for the gateway lifetime. A non-secret Codex exec may have `Dumpable=1`
-only because it receives no gateway credential, while the same boot-stable Yama-3 and cross-process
-denial checks still gate its prompt release.
+only because it receives no gateway credential, while its exact protected-user-namespace membership
+and the conclusive cross-process denial checks still gate its prompt release. When an existing
+Substrate path requires trusted tracing, `TracerPid` instead must identify the boot-bound trusted
+service tracer and the expected exec/exit stops and readbacks must succeed; an untraced role still
+requires `TracerPid=0`.
+
+This boundary protects process memory and file descriptors across its validated namespace edge. It
+does not prevent same-UID signals or modification of intentionally shared user files, and it does not
+make every same-UID process trusted. Descriptor-pinned executables, installed configuration, policy
+inputs, accepted-home/native-source authority, and control objects retain all existing integrity,
+Landlock, mode, ownership, and hash requirements. E3 claims no resistance to a hostile host
+administrator, kernel compromise, or another process already admitted inside the same protected
+process tree.
 
 Only after the `Active/Released` record and allowed boundary are durable and exact-revalidated does
 the parent write one final-exec byte for this initial or resumed turn. The wrapper consumes it,
@@ -1486,8 +1716,8 @@ launch/join uncertainty rules and is never retried merely from the E3 record.
 
 The parent retains the prompt pipe write end until the pinned PID's `/proc/<pid>/exe` matches the
 no-setid/no-file-capability Codex artifact and post-exec checks reproduce target UID/GID, zero
-capability masks, no-new-privileges, `Dumpable=1`, `TracerPid=0`, the same boot ID and irreversible
-Yama-3 denial, seccomp mode, Landlock/cgroup
+capability masks, no-new-privileges, `Dumpable=1`, role-appropriate trusted-tracer identity, the same
+boot ID, exact membership in the still-held protected user namespace, seccomp mode, Landlock/cgroup
 identity, and absence of every wrapper/gateway/secret/control descriptor. Only then does it write the prompt plus LF and close the
 pipe. Failure kills the cgroup and follows the same E2 uncertainty path; a Codex event or session ID
 cannot substitute for this check.
@@ -1576,8 +1806,14 @@ Any upstream-source mismatch is `UnsupportedRuntimeVersion`, not best-effort val
 
 `allowed_enabled_layers` is exactly `["System","User"]`, in Codex precedence order. Before record
 publication, the authority creates and descriptor-validates the empty owner-only `system-empty`
-directory beneath the native root. Before each initial or resumed exec, the wrapper creates a private
-mount namespace and bind-mounts that exact directory read-only over `/etc/codex`; the validator descriptor-opens that mount and
+directory beneath the immutable accepted-home source root. The durable closure's `System` and `User`
+entries are truthful source observations: their directories are respectively that held
+`system-empty` and held `codex-home`, and the projected config device/inode/length/hash come from the
+same held accepted-home config descriptor whose bytes were finalized into the native projection.
+They are expected-source evidence, not observations of a `/run` file or a future mount. Before each
+initial or resumed exec, the wrapper creates a private
+mount namespace and bind-mounts the exact held `system-empty` directory read-only over `/etc/codex`;
+the validator descriptor-opens that mount and
 records `ProvenAbsent` attestations for `config.toml`, `managed_config.toml`, `requirements.toml`,
 `rules/`, and `skills/`. The `System` layer consequently exists only as Codex's required empty layer.
 The `User` attestation is the exact projected `codex-home/config.toml`; `codex-home/rules/`,
@@ -1585,7 +1821,14 @@ The `User` attestation is the exact projected `codex-home/config.toml`; `codex-h
 `ProvenAbsent`. The immutable projection records the expected source-directory and loader-input
 closure. The wrapper's setup-ready attestation proves the per-exec mount realization; both wrapper and
 parent revalidate the mount and native-root descriptors after namespace setup and immediately before
-the final-exec barrier release.
+the final-exec barrier release. The `/run` realization and mounted loader objects have their own real
+descriptor identities and are never copied into or represented as the accepted-home source
+attestations. The wrapper instead proves the exact source-manifest -> realization-manifest -> mounted
+object chain, exact-matches layer/relative-path/disposition and bytes to the durable closure, and only
+then reports that durable closure's unchanged `validated_loader_input_fingerprint`. The parent
+independently repeats the descriptor and byte joins. Thus a source descriptor is never presented as
+a runtime observation, and a logical runtime path or planned value is never accepted as completed
+setup evidence.
 
 The validator implements the pinned loader's default project-root-marker and trust-key algorithms.
 With `cwd` exactly the recorded workspace root and no CLI overrides, it enumerates and attests the
@@ -1634,11 +1877,14 @@ carry Codex session data but cannot carry authentication or cloud-requirements i
 
 Thread-config layers must be empty and session/CLI overrides are exactly empty; the forbidden
 argument check is repeated on the final argv. `validated_loader_input_fingerprint` is the canonical domain hash of
-`{"domain":"substrate.e3.codex-0.125-loader-inputs.v1","inputs":<ordered complete attestations>,"loader_source":<loader source>}`.
-The input list is ordered by Codex precedence, then locator bytes. Activation recomputes the entire
-list after all mounts and requires byte-equal attestations and fingerprint. Missing evidence, an
-extra locator, a newly enabled layer, an unrepresented cloud/thread/runtime input, or any effective
-value difference fails closed. Differential fixtures execute the pinned official binary against
+`{"domain":"substrate.e3.codex-0.125-loader-inputs.v1","inputs":<ordered complete accepted-home source closure>,"loader_source":<loader source>}`.
+The input list is ordered by Codex precedence, then locator bytes. After all mounts, activation
+enumerates the complete runtime loader set and validates its actual descriptors, absences, and bytes
+against the held source and realization manifests; it does not demand or fabricate device/inode
+equality between distinct accepted-home, `/run`, and per-exec mount objects. Only a successful exact
+join authorizes the setup attestation to carry the durable source-closure fingerprint. Missing
+evidence, an extra locator, a newly enabled layer, an unrepresented cloud/thread/runtime input, an
+identity or byte substitution, or any effective-value difference fails closed. Differential fixtures execute the pinned official binary against
 each layer permutation and must match the validator's enabled/disabled and effective-value result;
 merely setting `CODEX_HOME` or writing `trust_level = "untrusted"` is not proof of closure.
 
@@ -1793,14 +2039,14 @@ Lowercase SHA-256 domains and preimages are:
 | `managed_gateway.projection_hash` | `{"domain":"substrate.e3.managed-gateway-projection.v1","projection":<managed_gateway with projection_hash omitted>}` |
 | `nonsecret_handoff.projection_hash` | `{"domain":"substrate.e3.nonsecret-handoff-projection.v1","projection":<nonsecret_handoff with projection_hash omitted>}` |
 | runtime-support `manifest_hash` | `{"domain":"substrate.e3.runtime-support-manifest.v1","manifest":<runtime support manifest with manifest_hash omitted>}` |
-| enforcement-input `enforcement_input_hash` | `{"domain":"substrate.e3.world-fs-enforcement-input.v1","input":<input with enforcement_input_hash omitted>}` |
+| enforcement-input `enforcement_input_hash` | `{"domain":"substrate.e3.world-fs-enforcement-input.v1","input":<complete input, including user_namespace_requirement, with enforcement_input_hash omitted>}` |
 | `e2_enforcement_plan_hash` | `{"discover":<exact ordered E2 paths>,"domain":"substrate.e3.e2-enforcement-plan.v1","execute":<exact ordered E2 paths>,"policy_snapshot_hash":<hash>,"read":<exact ordered E2 paths>,"write":<exact ordered E2 paths>}` |
 | `derived_support_ruleset_hash` | `{"domain":"substrate.e3.derived-support-landlock-layer.v1","e2_enforcement_plan_hash":<hash>,"support_discover":<ordered explicitly enumerable E3 subtree paths; no synthetic ancestors>,"support_execute":<ordered paths>,"support_read":<ordered paths>,"support_write":<ordered paths>}` |
 | `role_narrowing_ruleset_hash` | `{"child_role":<role>,"discover":<ordered final explicitly enumerable subtree paths; no synthetic ancestors>,"domain":"substrate.e3.role-narrowing-landlock-layer.v1","execute":<ordered final role paths>,"read":<ordered final role paths>,"write":<ordered final role paths>}` |
 | `effective_landlock_hash` | `{"derived_support_ruleset_hash":<hash>,"domain":"substrate.e3.effective-landlock-intersection.v1","role_narrowing_ruleset_hash":<hash>}` |
 | denied-control target `target_hash` | `{"domain":"substrate.e3.denied-control-probe-target.v1","target":<target with target_hash omitted>}` |
 | `denied_control_probe_hash` | `{"domain":"substrate.e3.denied-control-probes.v1","probes":<the ordered complete E3DeniedControlProbeV1 array>}` |
-| child-security `attestation_hash` | `{"attestation":<child security attestation with attestation_hash omitted>,"domain":"substrate.e3.child-security-attestation.v1"}` |
+| child-security `attestation_hash` | `{"attestation":<complete child security attestation, including user_namespace, with attestation_hash omitted>,"domain":"substrate.e3.child-security-attestation.v1"}` |
 | setup-ready `attestation_hash` | `{"attestation":<setup attestation with attestation_hash omitted>,"domain":"substrate.e3.codex-setup-ready.v1"}` |
 | native-source `manifest_hash` | `{"domain":"substrate.e3.native-projection-source-manifest.v1","manifest":<manifest with manifest_hash omitted>}` |
 | native-realization `manifest_hash` | `{"domain":"substrate.e3.native-projection-realization-manifest.v1","manifest":<manifest with manifest_hash omitted>}` |
@@ -1814,7 +2060,10 @@ equal the ref and whose recomputed `record_hash` equals the ref. A caller-suppli
 never part of reference resolution.
 
 Validation recomputes all nested hashes, decodes every native file, checks length/hash/mode/path,
-re-renders native bytes from the effective/gateway values and requires byte equality, validates the
+re-runs the one renderer from the effective/gateway values to reproduce the plan bytes, reopens the
+bound immutable accepted-home source, and requires descriptor-backed finalization to reproduce the
+native projection and source manifest byte-for-byte. It separately validates the later realization
+and per-exec observations through the manifest chain described above. It validates the
 E2 record/ref/cap/snapshot through E2's existing authenticated read capability, and compares every
 overlapping session/participant/bootstrap/backend/world/generation/policy field. It does not write,
 repair, migrate, or synthesize E2 state. Equal hashes do not permit object substitution: every ID,
@@ -2337,7 +2586,536 @@ is current. The additional lowercase SHA-256 preimages are:
 | terminal-child `evidence_hash` | `{"domain":"substrate.e3.terminal-child-quiescence.v1","evidence":<terminal-child evidence with evidence_hash omitted>}` |
 | `retirement_hash` | `{"domain":"substrate.e3.config-projection-retirement.v1","retirement":<retirement with retirement_hash omitted>}` |
 
-The only authority root is:
+### HSA projection namespace and cross-process lock protocol
+
+The projection registry remains at
+`<accepted-home>/authority-v1/agent-config-projection-v1/`. This is an intentional new member of the
+existing closed `authority-v1` namespace, not a second authority hierarchy. A later E3-B storage
+implementation must extend exactly
+`crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/layout.rs`,
+specifically `StoreLayout::validate_closed_layout`, to recognize only the literal top-level directory
+`agent-config-projection-v1`. It must preserve rejection of every other unknown entry: weakening the
+closed-layout check, accepting arbitrary entries, or adding a wildcard is forbidden. That product
+path is not changed or admitted here. The same fresh E3-B admission must also bind only
+`crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs`,
+specifically `validate_e2_rm_authority_manifest`, for the identical literal recognition so the
+landed read-only snapshot remains compatible with the expanded closed HSA namespace. This is HSA
+namespace-layout compatibility, not ownership of or permission to change E2-RM authority data, read
+semantics, history, reconciliation, schema, or namespace. Every other product path required by this
+corrected ownership must likewise be bound before implementation begins.
+
+Every E3 read, publication, CAS, recovery, retirement, and GC transaction uses this mandatory
+cross-process order:
+
+1. Open and validate the accepted HSA authority root through the existing trusted-root capability.
+2. Acquire the existing exclusive `authority-v1/lock/root.lock`.
+3. While holding that parent lock, revalidate the accepted HSA root identity and the exact closed
+   `authority-v1` layout.
+4. Only then open and exclusively acquire the child registry lock at
+   `authority-v1/agent-config-projection-v1/lock`.
+5. Perform the complete E3 transaction while retaining both locks and the trusted-root capability.
+6. Before release, revalidate the HSA root, the exact closed layout, all applicable namespace
+   manifests, and every affected E3 object; then release the child lock before the parent lock.
+
+The order is always parent root lock before E3 child lock. Reverse acquisition, child-only mutation,
+lock upgrading, and releasing the parent lock during an E3 transaction are forbidden. E2-RM reads
+and ordinary HSA operations that acquire the existing parent root lock are thereby serialized
+against E3 publication and recovery. E3 does not modify E2, E2-RM, B1, B2.1, retained-worker, or any
+other namespace authority, and reconciliation may never mutate another owner's namespace. Process
+death releases kernel locks but cannot make incomplete E3 state authoritative; the next E3
+transaction must acquire both locks in this order and either recover its own namespace completely or
+fail closed. Later E3-B proof must include every publication/recovery crash boundary and concurrent
+HSA/E2-RM/E3 transactions, including successful landed E2-RM reads after E3 namespace creation plus
+deadlock, partial-state, unknown-entry, and cross-owner mutation negatives.
+
+The exact E3-B cross-crate bridge is fixed rather than left to implementation choice:
+
+- On `#[cfg(target_os = "linux")]`, `crates/config-projection/src/registry.rs` owns public trait
+  `ConfigProjectionHsaAuthorityV1: Send + Sync`. Its sole operation is object-safe
+  `with_locked_parent`, taking one
+  `&mut dyn for<'fd> FnMut(BorrowedFd<'fd>) -> Result<(), ConfigProjectionFailureV1>` and returning
+  `Result<(), ConfigProjectionFailureV1>`. It must invoke that callback exactly once while the shell
+  parent transaction is live. `ConfigProjectionRegistryV1::open` accepts an
+  `Arc<dyn ConfigProjectionHsaAuthorityV1>` and retains no other HSA access. A registry operation
+  that returns a value captures that value in its own caller frame; the callback itself remains the
+  object-safe unit-returning boundary.
+- On that same Linux gate,
+  `crates/shell/src/execution/agent_runtime/host_session_authority/facade.rs` owns the public,
+  non-serializable `OpenedConfigProjectionHsaAuthorityV1`, its sole constructor
+  `OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home`, and its implementation of
+  `ConfigProjectionHsaAuthorityV1`. The constructor accepts only a sealed
+  `&ConfiguredAcceptedHomeAuthorityV1`; it accepts no pathname, environment value, request field, or
+  raw descriptor. It calls `ConfiguredAcceptedHomeAuthorityV1::revalidate`, reads only that type's
+  exact `accepted_home` and `intended_uid` accessors, opens the named root through existing
+  `TrustedAuthorityRoot::open_for_owner` after a checked `u64`-to-`uid_t` conversion, exact-compares
+  physical path/device/inode, revalidates the
+  still-held configured descriptor, and then retains the `TrustedAuthorityRoot` for the bridge
+  lifetime. Private fields prevent any other production construction.
+- `crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs`
+  owns private `ConfigProjectionHsaParentTransactionV1` with only `begin`, `authority_fd`, and
+  `finish`, plus `with_opened_config_projection_hsa_parent`; `store.rs` owns only the corresponding
+  `pub(super)` `with_config_projection_hsa_parent` forwarding operation. `begin` composes the current
+  trusted-directory entry guards,
+  `StoreLayout`, strict versioned-root decoding, matching-marker checks, and
+  `TrustedOwnedFileLock`: it opens the fixed `authority-v1/lock/root.lock`, acquires it exclusively,
+  revalidates the accepted root and named authority/lock objects, runs
+  `StoreLayout::validate_closed_layout` and `validate_e2_rm_authority_manifest`, rejects HSA temp or
+  legacy state rather than reconciling it, and snapshots the exact root plus every non-E3 authority
+  entry. `finish` repeats those checks and requires the root and every non-E3 entry to be unchanged;
+  the only permitted top-level transition is absent-to-one-directory for the literal E3 child, or
+  retention of that child's exact directory identity. It never calls the landed E2-RM read wrapper,
+  whose deliberately read-only final metadata equality would reject a real E3 mutation, and it does
+  not alter that wrapper's semantics.
+- Linux-only `TrustedDirectory::borrow_fd` is the E3-B descriptor bridge allowance and remains
+  `pub(crate)`. The sole value crossing into `config-projection` is the callback-bounded
+  `BorrowedFd<'fd>` for the already-open exact `authority-v1` directory. No `TrustedAuthorityRoot`,
+  `TrustedDirectory`, `TrustedFile`, parent-lock descriptor, shell-private directory identity, owned
+  descriptor, or path crosses the boundary. The registry must not duplicate, persist, return, or
+  expose the borrowed descriptor; its lifetime prevents a safe retained reference after the
+  callback.
+
+Inside that callback, `crates/config-projection/src/registry.rs` alone opens or creates the literal
+`agent-config-projection-v1` child descriptor-relatively, opens or creates and validates its literal
+`lock`, acquires the child `flock(LOCK_EX)`, and constructs private
+`ConfigProjectionChildTransactionV1`. Every registry operation runs through that type's private
+`begin`/`finish` wrapper. For both `Ok` and ordinary `Err`, the wrapper preserves the operation
+result, performs the required child namespace/object/readback revalidation, and drops the child lock
+before returning from the callback; the shell wrapper then performs its root/layout/non-E3
+revalidation and only afterward drops the parent lock. A verification failure overrides an otherwise
+successful or domain-error result and fails closed. During panic unwinding, the child transaction's
+RAII guard is in the inner config-projection callback frame and is therefore dropped before the
+shell parent transaction's RAII guard in the outer frame; neither destructor publishes or recovers
+state. The next transaction may recover only recognized E3-owned state while holding both locks.
+This supplies safe child-before-parent release during unwinding without pretending that fallible
+post-operation revalidation can execute after a panic.
+
+The later `WorldService::new_linux` consumer constructs and retains one
+`Arc<ConfiguredAcceptedHomeAuthorityV1>`, calls
+`OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home` with that sealed value, and
+retains the result as one concrete `Arc<OpenedConfigProjectionHsaAuthorityV1>`. It passes a clone
+coerced to `Arc<dyn ConfigProjectionHsaAuthorityV1>` together with the same configured authority into
+`AgentConfigProjectionServiceV1::new`, and passes the concrete `Arc` into
+`E3ConfigProjectionPreparationManagerV1::new`. No request handler, registry method, gateway, or
+member caller may construct or replace the bridge.
+
+#### Authenticated-owner propagation for the E3 parent and registry
+
+For the existing E3-E continuation, the ownership-only exception below makes this same bridge
+usable when world-service executes as root for a configured non-root user. It does not restart
+admission, introduce a security model, or authorize E2 schema, authentication, reconciliation,
+history, or lifecycle changes. It supersedes only the conflicting file/symbol exclusions in this
+document for the exact private ownership plumbing named here; all other packet fences remain.
+
+The observed UID-1000 fixture failure is
+`ConfigProjectionHsaParentTransactionV1::begin` -> `StoreLayoutLockScope::open_existing_activated`
+-> `TrustedDirectory::open_directory` -> `open_directory_cstr` -> `validate_open_directory`:
+the last check compares `st_uid` to `effective_uid()` and rejects before the callback. The root
+already retains its authenticated `owner_uid`; descendant capabilities lose it. Independently,
+registry creation helpers create under the executing identity and then check the authenticated
+owner. That is a source-identified latent defect, not an effect reached by the failed parent probe.
+
+Expected ownership must originate only from the existing sealed
+`ConfiguredAcceptedHomeAuthorityV1` and the validated, held `TrustedAuthorityRoot` opened by
+`OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home`. Carry that owner privately
+through existing capabilities, rather than adding a caller-selected UID, path, descriptor, owner
+setter, public overload, or generic privileged filesystem API. The registry continues deriving its
+private transaction owner from the already-validated `authority-v1` descriptor inside the existing
+callback; no caller may substitute that descriptor or choose its expected owner. Root must satisfy
+the same exact expected-owner comparison, with no root or accept-any-owner bypass. Ordinary
+`TrustedAuthorityRoot::open` and same-user HSA/E2 callers retain their existing effective-user
+expectation and checks; unrelated workspace trust rules remain unchanged.
+
+The complete, source-derived allowance is:
+
+- In `crates/shell/src/execution/agent_runtime/host_session_authority/trusted_fs.rs`, retain the
+  authenticated owner in private `TrustedDirectory` state seeded by
+  `TrustedAuthorityRoot::from_opened`, and propagate it in
+  `TrustedDirectory::{open_directory,open_directory_cstr,open_controlled_directory,open_file}`.
+  Adapt private `validate_open_directory` and `validate_open_file` to compare against that retained
+  expectation, including `TrustedDirectory::metadata` and the `create_file` validation call.
+  Only mechanical field initialization/copying is additionally allowed in existing
+  `HeldE3AgentInventoryRootV1::{from_global,from_workspace,source_relative_paths}` and
+  `rollback_candidate_is_empty`; their selection, trust, read, and cleanup behavior is unchanged.
+  No HSA creation, bootstrap, or reconciliation expansion is authorized. Existing
+  `open_controlled_directory_entry`, `open_file_entry`, `entry_metadata`, `revalidate_entry`,
+  `read_regular_file_entry_stable_single_link`, and `verify_named_file_identity` must inherit the
+  same expectation through these opens, without bypassing their identity or stable-read checks.
+- Retain that same authenticated owner across the existing dispatch-policy storage reopen, only
+  through the internal operation and one caller substitution specified in
+  [Authenticated-owner storage reopen](#authenticated-owner-storage-reopen) below.
+- Only if necessary to thread that existing capability, allow private plumbing at
+  `OpenedConfigProjectionHsaAuthorityV1::{from_configured_accepted_home,with_locked_parent}` in
+  `facade.rs`, `with_config_projection_hsa_parent` in `store.rs`,
+  `ConfigProjectionHsaParentTransactionV1::{begin,authority_fd,finish,verify_scope,
+  validate_locked_layout,validate_marker,capture_children}` and
+  `with_opened_config_projection_hsa_parent` in `store/platform/transaction.rs`, and
+  `StoreLayoutLockScope::{open_existing_activated,finish}`, `create_or_open_lock`, and
+  `StoreLayout::{validate_closed_layout,read_existing_versioned_without_reconciliation,
+  validate_matching_marker_if_present,validate_matching_marker_if_present_v2,
+  validate_matching_marker_if_present_v3}` in `store/platform/layout.rs`, all under that same
+  `host_session_authority/` directory. Prefer unchanged callers consuming the corrected capability.
+  Keep strict existing-only opening of HSA directories and `lock/root.lock`, the owned lock,
+  versioned-root/key/object/history and marker validation, temp/legacy rejection, closed manifests,
+  and exact non-E3 snapshots. `finish` must successfully repeat all checks with the same owner;
+  merely reaching the callback is insufficient. `TrustedFile::{read_all,lock_exclusive_owned}` and
+  `TrustedOwnedFileLock` continue operating on the already-validated held file; no lock or E2
+  read-wrapper redesign is admitted.
+- In `crates/config-projection/src/registry.rs`, allow ownership establishment only in the existing
+  private `open_or_create_directory`, `open_or_create_regular_file`, `write_exclusive_file`,
+  `write_immutable`, and `cas_head` helpers, with the smallest private creation-provenance,
+  descriptor-ownership, and failure-cleanup helpers needed by those operations. This includes the
+  child root and lock, fixed registry subdirectories, native-source files, immutable objects and
+  their temporaries, and head-CAS temporaries. Existing
+  `ConfigProjectionChildTransactionV1::{begin,finish,verify_scope,
+  revalidate_observed_resolution_files}`, `open_directory_raw_at`, `open_directory_at`,
+  `open_file_at`, `read_file_at`, `verify_directory`, and `verify_regular_file` may receive only
+  necessary private owner/provenance plumbing and ownership/identity readbacks for that path.
+  Their existing validation rules and every publication/recovery decision remain intact; this is
+  not permission to change registry schemas, transitions, lookup APIs, or installer-owned stores.
+
+For a new E3 object, distinguish successful exclusive creation by this attempt from an existing
+entry or an `EEXIST` race. Bind the created object through a held, descriptor-relative, no-follow
+handle, establish its required ownership with descriptor `fchown` before treating it as valid
+authority, writing authority bytes, or publishing it, and read back ownership, mode, metadata, and
+named-to-held identity before and after publication. Ownership establishment is a no-op when the
+creating identity already equals the authenticated owner. Never apply it to an existing entry,
+substituted child, or an object whose creation provenance is uncertain; reject those cases instead
+of repairing/chowning an existing user store. Do not infer creation merely from an earlier missing
+lookup or swallow `EEXIST` into a new-object ownership operation. Preserve directory `0700`, file
+and lock `0600`, applicable GID requirements, ACL/xattr rules, single-link checks, no-follow,
+beneath/no-magiclink/no-symlink/no-cross-device constraints, and all held/named identity readbacks.
+
+Retain exclusive creation, immutable no-replace publication, expected-bytes head CAS, fsyncs, exact
+retry, and existing interruption cleanup/recovery semantics. A failure or interruption before
+ownership and metadata are validated publishes no authority; cleanup may affect only the exact
+new object whose identity/provenance is still established. Ambiguous or wrong-owner residue must
+reject, never be adopted or chowned on reopen. Recognized valid E3 temporaries retain their existing
+recovery rules. All paths, including ordinary error returns and final readbacks, preserve parent
+root lock before child registry lock and child-before-parent release. Non-E3 entries and authority
+bytes remain unchanged. No process-wide UID switching, daemon identity change, new capability,
+account, helper process, or host policy change is admitted. This is not a general filesystem
+framework.
+
+Later implementation acceptance uses ordinary targeted tests in the existing HSA/facade and
+registry test modules: root enters the real UID-1000 authenticated parent callback and completes
+its final checks; root creates and reopens E3 directories, lock, native-source/immutable files and
+CAS heads with authenticated ownership; ordinary unprivileged HSA/E2 operations remain compatible.
+Negatives cover wrong-owner existing roots/directories/files/locks, substituted root or child,
+unsafe modes/ACLs/xattrs/link counts/device boundaries, exclusive-create races, and interruption
+before/after ownership establishment, write, rename, and readback. Require no repair or publication
+on rejection, retained recognized-temp recovery, existing cross-process lock order, and byte/identity
+preservation of the non-E3 tree on success and failure. Reuse the existing
+`e3_e_authenticated_preparation_response_and_cancellation` manager probe after implementation;
+neither rerun it in this documentation correction nor create a replacement proof harness. The
+separate same-subject fresh-fence/restart lookup/API and terminal-old-fence transition findings
+remain recorded and unresolved outside this allowance. Ownership acceptance alone does not prove
+the manager lifecycle, restart, or complete E3-E acceptance.
+
+##### Authenticated-owner storage reopen
+
+This documentation-only extension covers the next observed boundary after parent/registry owner
+propagation. Its source subject is the preserved product checkout at
+`4c5cac9e721ed1de8e355fea5d96022cdfb5765c`, tree
+`6469628a1b28785fb5a7be2c8d3f37c8f48d0f00`, plus `e3e-ownership-candidate.patch`, SHA-256
+`f2074fc1c8d600b0a1f32dd061cfef70547dacb1118f74ee569ad8a34afb2a13`. The checkpoint and causal
+bindings are `ingress-auth-scope-blocker.md`, `ownership-causal-review.md`,
+`ownership-e2-reopen-causal-binding.json`, `ownership-hsa-auth-diagnostic.log`, and
+`e3e-resume-bindings.json` under
+`/home/spenser/__Active_code/review-evidence/e3-e-standalone-4c5cac9e`. The failed diagnostic reports
+`DispatchPolicyCommitmentError("open dispatch policy commitment authority root")`; it is not
+positive authentication or lifecycle evidence.
+
+The complete bounded call/return path is
+`OpenedConfigProjectionHsaAuthorityV1::authenticate_e3_member_launch_activation_v1` ->
+`resolve_retained_worker_cap` -> `dispatch_policy_commitment_registry_exists_for_authority`
+(held-root descendant opens), then `dispatch_policy_commitment_storage_for_authority` ->
+`dispatch_policy_commitment_storage_opened`. That last helper revalidates the authenticated root
+but calls ordinary `TrustedAuthorityRoot::open` on its physical path, losing the private expected
+owner to effective UID. It returns an independently owned `DispatchPolicyCommitmentStorageV1`,
+whose `transaction` uses `with_opened_existing_versioned_semantic_preflight`, existing reconciliation,
+`open_transaction`, and registry/key reads before returning the compatible cap. The facade then
+calls `authenticate_dispatch_policy_commitment`, which repeats the same storage helper and
+transaction path, validates the exact cap/commitment material, and returns owned authenticated
+material. `member_launch_activation_carrier` converts that material in memory; the facade checks
+the descriptor, full supplied carrier, common fields, and lineage before returning the reconstructed
+carrier to the manager. Both transactions release before the next stage. Source inspection of this
+path through its success and error returns found no second distinct owner-context loss: the second
+read reaches the same reopen, and subsequent directory/file opens consume the retained owner.
+Other pathname constructors, including the separate read-only snapshot and retained-admission
+storage reopens, are not called by this path and gain no allowance.
+
+Only the following additional implementation is authorized:
+
+- In the existing platform implementation of `TrustedAuthorityRoot` in `trusted_fs.rs`, add
+  `pub(in crate::execution::agent_runtime::host_session_authority) fn
+  reopen_for_dispatch_policy_commitment_storage(&self) -> Result<Self, TrustedFsError>`.
+  This visibility reaches the sibling `store::platform::dispatch_policy_commitment` caller through
+  the existing type re-export while remaining internal to HSA; no module or re-export visibility
+  changes are needed. Keep the existing platform gates and unsupported-platform behavior.
+- The operation accepts only `&self`, derives the expected UID from private `self.owner_uid` and
+  the reopen path from private `self.identity.physical_path`, and returns an independently owned,
+  validated root. Revalidate the original held root before opening; reuse existing `open_for_owner`
+  and its `from_opened` validation, including input/ancestor traversal, parent locking, no-follow,
+  owner/mode/ACL and named-to-held path checks. Compare the complete reopened physical identity
+  with the original, revalidate both roots after opening before return, and reject any owner,
+  path, held-descriptor, or identity substitution. Do not replace this opening with descriptor
+  duplication that omits ancestor/path checks. No owner getter, caller-selected UID/path, raw
+  descriptor, public overload, `Clone` implementation, or general cloning API is admitted; this
+  operation has only the named storage helper as its production caller.
+- In `host_session_authority/store/platform/dispatch_policy_commitment.rs`, change only
+  `dispatch_policy_commitment_storage_opened` to call
+  `opened.reopen_for_dispatch_policy_commitment_storage()` in place of the effective-UID
+  constructor. Keep its original-root revalidation, rebound identity comparison, existing error
+  mapping, semantic preflight, reconciliation, authority-store identity capture, and returned
+  storage behavior. The storage transaction's authority-store identity check is unchanged.
+  Ordinary `TrustedAuthorityRoot::open` continues to use effective UID; ordinary same-user E2
+  callers acquire no different ownership authority.
+
+This is the sole added storage-reopen exception to this document's E2/file-symbol exclusions; the
+separate [Linux entropy portability exception](#e3-e-linux-private-home-entropy-portability) does
+not widen this reopen. No changes to E2
+HMAC, cap or commitment authentication, key/registry/schema/history, reconciliation, transaction or
+error semantics are authorized beyond the validation necessary for this reopen. No ownership
+repair, permissions change, process UID/capability change, or fresh-fence/restart API or transition
+is authorized. In particular, the existing reconciliation code is neither replaced with a new read
+wrapper nor expanded to repair authentication inputs.
+
+Later focused acceptance extends the existing HSA/facade and trusted-filesystem tests: root must
+complete the actual two-stage E3 authenticated retained-cap read and return the exact carrier from
+the existing non-root fixture; ordinary same-user E2 reads must retain their behavior, while root's
+ordinary effective-UID constructor still rejects that non-root home. Wrong-owner and replaced
+root/path/held-descriptor cases, including substitution during the reopen, must reject without
+repair. Capture exact E2 key, registry, cap/commitment, root and history bytes before and after the
+valid-fixture read and rejected substitutions: no bytes may be repaired or rewritten merely to
+authenticate. Preserve existing reconciliation semantics and reuse current parent/registry ownership
+evidence where unchanged; do not repeat the complete ownership wall. The existing
+`e3_e_authenticated_preparation_response_and_cancellation` manager probe must proceed beyond this
+reopen and authenticated read; report its actual next outcome without claiming complete lifecycle
+acceptance. Its synthetic-directory `EEXIST` rerun is a separate harness failure, not authentication
+evidence. Later execution uses fresh test-owned state or the fixture's existing safe setup mechanism,
+without changing production behavior for stale fixture state or creating a replacement harness.
+No Cargo, probe execution, installation, host changes, or product edits occur in this documentation
+correction, and landing it does not automatically resume E3-E implementation. Fresh-fence/restart
+findings remain separately unresolved.
+
+For authenticated E2 re-resolution, E3-E adds one Linux-only service-callable operation on that
+existing sealed facade:
+
+```rust
+pub fn authenticate_e3_member_launch_activation_v1(
+    &self,
+    common: transport_api_types::MemberDispatchCommonFieldsV1<'_>,
+    supplied: &transport_api_types::E2MemberLaunchActivationCarrierV1,
+) -> Result<
+    transport_api_types::E2MemberLaunchActivationCarrierV1,
+    config_projection::ConfigProjectionFailureV1,
+>
+```
+
+`OpenedConfigProjectionHsaAuthorityV1` retains one private `HostSessionAuthority` constructed from
+the already opened, identity-matched `TrustedAuthorityRoot`; its existing projection-parent trait
+implementation uses that same authority's root. The new method therefore derives authority only from
+the configured accepted-home capability and accepts no pathname, descriptor, key, or authority
+locator. It sequentially calls the existing shell-private `resolve_retained_worker_cap` for
+`common.orchestration_session_id` and `common.participant_id`, requires its compatible cap, calls
+`authenticate_dispatch_policy_commitment` on that exact cap ref, and uses the existing
+`AuthenticatedDispatchPolicyCommitmentV1::member_launch_activation_carrier` conversion. It requires
+the cap descriptor's store, ref, session, participant, parent-policy ref, and parent-policy revision
+to equal the authenticated material, and requires the reconstructed carrier to equal `supplied` in
+full, including the durable record/key,
+commitment/cap linkage, exact snapshot bytes/hash/ref/revisions, request/idempotency, parent-policy,
+publication-revision, backend, participant, run, and world bindings. It also rechecks the complete
+common and lineage join before returning: `FreshSpawn` requires the exact validated launch-authority
+proof and null parent/resume fields; `Fork` requires no launch-authority proof, the authenticated
+source participant as parent, and a null resume field; session, caller, target, protocol, bootstrap,
+and world/generation values must match their applicable authenticated carrier/proof values. Only the
+reconstructed typed `E2MemberLaunchActivationCarrierV1` crosses the facade; private HSA roots,
+transactions, records, keys, descriptors, snapshots, and errors do not.
+
+E3-E adds one further Linux-only service-callable operation on the same sealed facade; the
+`AgentInventorySourceMaterialV1` argument is only the expected provenance of the selected source and
+never supplies model, capability, MCP, feature, placement, or backend content:
+
+```rust
+pub fn read_e3_selected_inventory_projection_v1(
+    &self,
+    effective_config: &config_projection::EffectiveSubstrateConfigSourceV1,
+    expected_source: &config_projection::AgentInventorySourceMaterialV1,
+) -> Result<
+    config_projection::LogicalAgentConfigProjectionV1,
+    config_projection::ConfigProjectionFailureV1,
+>
+```
+
+The method derives its only filesystem authority from the facade's retained
+`HostSessionAuthority::bootstrap_home`. It exact-matches that authenticated global root to
+`effective_config.accepted_home`, independently opens and retains the exact workspace root, and
+keeps both roots live through discovery, selection, parsing, projection, and final revalidation;
+global and workspace are separate ownership domains and are never assumed to be the same root.
+Private `convert_e3_projection_directory_v1` in the facade file has the sole signature
+`fn(&config_projection::CanonicalDirectoryV1) -> Result<CanonicalDirectoryV1,
+ConfigProjectionFailureV1>` and performs only the checked Linux path/device/inode conversion into
+the existing shell HSA canonical type. The converted global value must equal the authenticated
+bootstrap identity; only the converted workspace value is accepted by
+`TrustedWorkspaceRoot::open_exact`.
+
+`crates/shell/src/execution/agent_runtime/host_session_authority/trusted_fs.rs` owns the one opaque,
+Linux-only, crate-private held-root bridge `HeldE3AgentInventoryRootV1`. It is non-cloneable and
+non-serializable and has only
+`from_global(&TrustedAuthorityRoot) -> Result<Self, ConfigProjectionFailureV1>`,
+`from_workspace(&TrustedWorkspaceRoot) -> Result<Self, ConfigProjectionFailureV1>`,
+`source_relative_paths(&self) -> Result<Vec<String>, ConfigProjectionFailureV1>`, and
+`revalidate(&self) -> Result<(), ConfigProjectionFailureV1>`.
+The two constructors clone only the already-authenticated root descriptor into the opaque value and
+fix its scope and inventory prefix to `agents/` or `.substrate/agents/`, respectively;
+`source_relative_paths` descriptor-enumerates that fixed inventory directory, rejects an unexpected
+entry kind, and returns only direct `*.yaml` candidates in bytewise filename order. No method returns
+a path authority, raw or borrowed descriptor, `TrustedDirectory`, `TrustedFile`, or caller-selectable
+root.
+
+The same trusted-filesystem file owns opaque, crate-private, non-reexported
+`HeldE3AgentInventorySourceV1<'root>` and only
+`open(root: &'root HeldE3AgentInventoryRootV1, relative_path: &str) ->
+Result<Self, ConfigProjectionFailureV1>`, `source_bytes(&self) -> &[u8]`,
+`source_material(&self) -> &AgentInventorySourceMaterialV1`, and
+`revalidate(&self) -> Result<(), ConfigProjectionFailureV1>`. `open` performs the existing no-follow,
+descriptor-relative component walk from the held root, retains the directory/name/file identities,
+reads the regular file once, and constructs the existing public source material from that held root
+and file. The other methods return only `&[u8]`, `&AgentInventorySourceMaterialV1`, or a unit
+`Result`; no descriptor or general filesystem operation crosses this boundary.
+
+The facade constructs one root bridge from each authenticated root and delegates only to new
+shell-private `resolve_e3_selected_inventory_projection_v1` in
+`crates/shell/src/execution/agent_inventory.rs`. That resolver accepts the authenticated bootstrap
+home, both opaque held-root capabilities, and the two public expected inputs above; it accepts no
+request pathname, raw descriptor, root override, parser callback, or caller-selected authority.
+
+```rust
+pub(crate) fn resolve_e3_selected_inventory_projection_v1(
+    bootstrap_home: &OpenedBootstrapHomeV1<'_>,
+    global_inventory_root: &HeldE3AgentInventoryRootV1,
+    workspace_inventory_root: &HeldE3AgentInventoryRootV1,
+    effective_config: &config_projection::EffectiveSubstrateConfigSourceV1,
+    expected_source: &config_projection::AgentInventorySourceMaterialV1,
+) -> Result<
+    config_projection::LogicalAgentConfigProjectionV1,
+    config_projection::ConfigProjectionFailureV1,
+>
+```
+
+The private resolver preserves the existing global-then-workspace discovery, bytewise filename
+order, one-ID-per-root rule, full validation of every encountered source, and whole-agent workspace
+shadow semantics before selecting exactly one enabled world placement. For each enumerated relative
+path it calls `HeldE3AgentInventorySourceV1::open` with the corresponding opaque root; the existing
+descriptor-rooted V3 source walk moves into that exact method rather than reopening either root from
+its pathname.
+The V3 arm is narrowly adapted so strict YAML/schema parsing and ordinary SHA-256 both consume the
+same `source_bytes` vector read from that held regular-file descriptor, and the root, name, file
+device/inode/length, and bytes are revalidated before the held value is dropped. No pathname reread
+may supply parsed content or a digest. The selected value must field-for-field match
+`expected_source`, including scope, relative path, accepted-root identity, file identity, length,
+raw-byte hash, `source_revision`, and `source_hash`; changing only a path, scope, root, file, or hash
+cannot substitute another source.
+
+The resolver invokes the existing strict V3 parser and policy-overlay validator with the existing
+effective policy resolved from the configured bootstrap home while the exact workspace root is
+held; that policy value is used only by the existing overlay validator and supplies no projected
+field or E2 authority. It then invokes the existing `project_inventory_v3_entry` for the selected world placement.
+That helper's otherwise unchanged private signature may be narrowed from the whole
+`&SubstrateConfig` to its sole consumed input, `effective_default_cli_mode: AgentCliMode`; the value
+is obtained by exact parsing of `effective_config.values.default_cli_mode`, not a current ambient
+config read or a hardcoded default. The selected placement must be enabled and world-scoped, and its
+derived backend must equal `effective_config.values.default_backend_id`. Model, capabilities, MCP
+servers, and features are copied only from the parsed selected V3 placement, including explicit
+empty lists, using the existing projection and bytewise ordering rules. V1/V2 loaders and behavior
+remain unchanged and cannot satisfy this operation.
+
+The sole returned value is the existing public nonsecret
+`LogicalAgentConfigProjectionV1`. Its two source refs are constructed from the exact resolved
+effective-config input and selected inventory material, in that order, and its hash uses the
+existing `ConfigProjectionCodecV1` with the already specified logical-projection domain. Shell
+parser, policy, HSA, held-root/file, descriptor, and intermediate placement types never cross the
+facade. Malformed V3 bytes/schema map to `Malformed`; a raw/revision/source/projection digest failure
+maps to `HashInvalid`; root/scope/path/file-identity/length/selection/world/backend or substitution
+mismatch maps to `WrongBinding`; duplicate or ambiguous selection maps to `Conflict`; missing,
+disabled, or non-V3 selected material maps to `UnsupportedConfiguration`; and a trusted-root,
+descriptor, policy-read, or revalidation failure maps to `UnsupportedSecurityPosture`. Every
+failure is terminal for that preparation, with no retry, fallback, repair, source mutation, or V1/V2
+down-conversion.
+
+`E3ConfigProjectionPreparationManagerV1::prepare` is the sole production consumer. It invokes this
+operation after strict request decoding and after one
+`ConfigProjectionRegistryV1::resolve(None, Some(&request.authoring_input_ref))` has returned the
+exact effective-config and inventory-source inputs and released its complete projection transaction.
+It then calls `authenticate_e3_member_launch_activation_v1` and
+`read_e3_selected_inventory_projection_v1` sequentially, while no projection/HSA parent lock is
+live, and completes the source-ref, default-backend, request backend, resolved-runtime, and
+authenticated launch/fork joins before accepting integrated auth, locking the preparation map,
+acquiring exclusion, binding a listener, publishing, or creating any other preparation side effect.
+Only the reconstructed carrier and returned logical projection are used thereafter. The manager
+uses those authenticated values to construct the exact nonsecret projection identity/record and
+the intent-first gateway objects below; it never passes the secret-bearing prepare request into
+`config-projection`. The manager creates and retains
+`E3PreparedRetainedLaunchPublicationV1` before the first kernel effect, completes its public
+publication chain after the manager-owned gateway authority has produced the required readbacks,
+and calls the sole admitted E3-E service signature:
+
+```rust
+pub fn publish_prepared_retained_launch(
+    &self,
+    authoring_input_ref: &ConfigProjectionAuthoringInputRefV1,
+    authenticated_e2_launch_activation: &transport_api_types::E2MemberLaunchActivationCarrierV1,
+    publication: &mut E3PreparedRetainedLaunchPublicationV1,
+) -> Result<
+    (
+        transport_api_types::E3ConfigProjectionPrepareResponseV1,
+        PublishedConfigProjectionCapabilityV1,
+    ),
+    ConfigProjectionFailureV1,
+>
+```
+
+For this path only, the existing lease operation has this additive optional final argument:
+
+```rust
+pub fn acquire_consumer_lease(
+    &self,
+    acquired_projection_ref: &ConfigProjectionRefV1,
+    consumer_kind: ConfigProjectionConsumerKindV1,
+    acquired_at: Timestamp,
+    prepared_consumer_id: Option<&str>,
+) -> Result<ConfigProjectionConsumerLeaseV1, ConfigProjectionFailureV1>
+```
+
+`None` preserves the existing E3-B allocation behavior byte-for-byte. `Some` is accepted only for
+`MemberDispatchV2` and only when it equals the `cpc_` form derived from the exact `e3p_` preparation
+ID in the acquired Dormant record's already published and validated Prepared handoff. It is never a
+general caller-selected ID. Under the existing transaction/lock, absence writes revision-1 `Held`;
+an existing path must exact-resolve to the same store, series, consumer kind, acquired projection,
+`acquired_at`, revision 1, `Held` posture, and lease hash and returns those byte-equal durable bytes.
+Any unequal or Released occupant fails closed and no second consumer is allocated.
+
+The publication value's `record.logical` is the exact logical projection returned by the selected
+V3 reader; it is not a second source read. The service revalidates the configured accepted home and
+re-resolves `authoring_input_ref`; that readback must equal the effective/source/artifact inputs
+bound by `record`, and `authenticated_e2_launch_activation` must equal the record identity's exact
+normalized E2 cap link and all launch/fork, session, participant, backend, run, world, generation,
+and lineage bindings. It then exact-validates every publication member against that record and the
+durable registry objects as specified below. Passing typed observations is not authentication.
+
+The two existing shell E2/source reads retain their transaction, authentication, and failure
+behavior and run sequentially; neither facade operation nor `prepare` calls them from
+`with_locked_parent` or while an E3 projection transaction/parent lock is live. Missing or
+unsupported cap state and any E2 read/authentication/conversion failure map fail-closed to the
+existing `UnsupportedSecurityPosture`; a supplied-versus-authenticated or launch/fork join mismatch
+maps to `WrongBinding`. There is no retry, repair, E2 mutation, current-policy cap recomputation,
+carrier-only acceptance, request-selected authority, or projection assembled from provenance-only
+material. The one narrowly exported publication carrier below is an in-memory call argument, not a
+durable/wire schema or an authority accessor. These operations add no public intermediate module,
+raw accessor, parser, registry, authentication algorithm, key reader, dependency edge, or non-Linux
+support.
+
+The only E3 authority root is:
 
 ```text
 <accepted-home>/authority-v1/agent-config-projection-v1/
@@ -2406,17 +3184,19 @@ failure leaves non-E3 service paths available but makes every V2/E3 request
 `ConfiguredAcceptedHomeAuthorityV1::from_record_for_test` and must pass the same record and physical
 checks.
 
-The projection registry root is reached only from that configured accepted-home bound capability. Its already-open
-`CanonicalDirectoryV1` is revalidated, then every descendant component is opened descriptor-
-relatively with Linux `openat2` resolution flags `RESOLVE_BENEATH | RESOLVE_NO_MAGICLINKS |
-RESOLVE_NO_SYMLINKS | RESOLVE_NO_XDEV`; final opens also use `O_NOFOLLOW`. Registry directories are
-owner UID, mode `0700`; regular authority files and `lock` are owner UID, mode `0600`, link count one,
-with no unexpected ACL or xattr. The held root descriptor's device/inode must remain equal to
-`accepted_home`. The regular `lock` file is opened from that descriptor and held with
-`flock(LOCK_EX)` for the complete read/validate/recovery/publication transaction. A caller cannot
-select or override a home, store, series directory, or active-head path. Root replacement, descriptor
-rebind, unexpected metadata, mount crossing, symlink, non-regular file, link-count anomaly, or
-physical identity change fails before a read or write consumes the replacement.
+The projection registry root is reached only from that configured accepted-home bound capability and
+only after the parent HSA root lock has been acquired and the closed layout revalidated as specified
+above. Its already-open `CanonicalDirectoryV1` is revalidated, then every descendant component is
+opened descriptor-relatively with Linux `openat2` resolution flags `RESOLVE_BENEATH |
+RESOLVE_NO_MAGICLINKS | RESOLVE_NO_SYMLINKS | RESOLVE_NO_XDEV`; final opens also use `O_NOFOLLOW`.
+Registry directories are owner UID, mode `0700`; regular authority files and the child `lock` are
+owner UID, mode `0600`, link count one, with no unexpected ACL or xattr. The held root descriptor's
+device/inode must remain equal to `accepted_home`. The regular child `lock` file is opened from that
+descriptor and held with `flock(LOCK_EX)` while the already-held parent root lock remains held for the
+complete read/validate/recovery/publication transaction. A caller cannot select or override a home,
+store, series directory, or active-head path. Root replacement, descriptor rebind, unexpected
+metadata, mount crossing, symlink, non-regular file, link-count anomaly, or physical identity change
+fails before a read or write consumes the replacement.
 
 The accepted-home artifact manifest may import only immutable records from these two installer-owned
 source stores:
@@ -2450,15 +3230,29 @@ that disagrees with provenance is malformed or wrong-binding. The source entry's
 authenticates its `runtime_support` because that nested value is present while only `entry_hash` is
 omitted from the entry-hash preimage.
 
-`install_linux_managed_state` publishes a new immutable Substrate record only after building,
-installing, and descriptor-readback-hashing both entries. The rendered Codex installer does the same
-only after official-archive verification, unique-entry extraction, install, and installed-descriptor
-readback. A source record's `predecessor_ref` is null at revision 1 and thereafter equals the exact
-prior head ref; its revision is prior plus one. The stream head advances by expected-bytes CAS and
-records its own predecessor-head hash. Exact retry is byte-equal. A different valid source build or
-installed byte sequence creates a new immutable record and head revision, and any accepted projection
-using it creates a new projection series; no fixed immutable filename blocks an upgrade and no old
-record is rewritten.
+In E3-D, `install_linux_managed_state` invokes E3-C's landed helper to publish a new immutable
+Substrate record only after building, installing, and descriptor-readback-validating both real
+entries against their exact build provenance. No Substrate artifact record or head may be published
+or promoted before both entries pass those checks. A V1 artifact, placeholder ELF, invented
+provenance, partial manifest, or publisher success that silently omits either required artifact is
+never a substitute. The rendered Codex installer does the same only after official-archive
+verification, unique-entry extraction, install, and installed-descriptor readback. A source record's
+`predecessor_ref` is null at revision 1 and thereafter equals the exact prior head ref; its revision
+is prior plus one. The stream head advances by expected-bytes CAS and records its own predecessor-head
+hash. Exact retry is byte-equal. A different valid source build or installed byte sequence creates a
+new immutable record and head revision, and any accepted projection using it creates a new projection
+series; no fixed immutable filename blocks an upgrade and no old record is rewritten. A later gateway
+replacement must establish its matching valid source record before the replacement bytes become
+E3-eligible; a stale record cannot authorize different bytes.
+
+Before E3-D's real Substrate artifact producers and integration exist, the missing installed
+artifacts and absent valid Substrate source head have the explicit disposition `Unavailable`.
+Ordinary non-E3 provisioning may remain available, but it cannot report successful E3 artifact
+publication or E3 readiness. Any invocation that actually requires E3 Substrate artifact publication
+must fail closed. E3-C exercises its schemas, validators, import path, and publication/recovery
+helpers with valid bounded test inputs; those inputs are never production artifact authority or
+installed-runtime readiness evidence, and E3-C completion does not require executing or installing
+the E3-D-owned wrapper.
 
 Both source directory chains are `root:substrate` mode `0750`, non-group/other-writable, and opened
 no-follow. `source-store.json`, records, heads, and `lock` are `root:substrate` mode `0640`, link count
@@ -2712,8 +3506,10 @@ activation or final-exec release. A Codex/version/source identity outside the fi
 nftables primitive is `UnsupportedPlatform`. A false/mismatched eight-key activation predicate or
 missing installed accepted-home authority is `UnsupportedConfiguration`; a nonempty V1 MCP/feature
 surface is `UnsupportedPolicySurface`. Missing full-isolation Landlock, unauthenticated E2
-enforcement input, nonzero child capability state, privilege-transition failure, dumpable/ptrace
-exposure, or any failed control-path probe is `UnsupportedSecurityPosture`. None degrades to
+enforcement input, nonzero child capability state, privilege-transition failure, invalid or
+substituted protected-user-namespace identity/membership, unavailable required trusted tracing,
+dumpable credential-process exposure, or any failed control-path probe is
+`UnsupportedSecurityPosture`. None degrades to
 compatibility automatically.
 
 `MissingPreparation` means the V2 carrier has no live sealed preparation in this process even though
@@ -3013,12 +3809,58 @@ struct E3ConfigProjectionCancelResponseV1 {
 
 enum E3ConfigProjectionCancelDispositionV1 { Cancelled, AlreadyTerminal }
 
+// Public only for world-service across its existing dependency on config-projection. This value is
+// non-serializable, non-cloneable, non-debuggable, and has private fields.
+struct E3PreparedRetainedLaunchPublicationV1 {
+    identity: ConfigProjectionIdentityV1,
+    gateway: InWorldGatewayIdentityV1,
+    prepared_handoff: ConfigProjectionSecretHandoffRevisionV1,
+    prepared_handoff_ref: SecretHandoffRefV1,
+    preparation_idempotency_key: String,
+    consumer_id: String,
+    record: Option<AgentConfigProjectionRecordV1>,
+    ordered_child_cgroups: Option<[E3ChildCgroupRegistrationV1; 3]>,
+    dormant_boundary: Option<GatewayAccessBoundaryV1>,
+    activation_intent: Option<ManagedGatewayActivationIntentV1>,
+    launch_input: Option<ManagedGatewayLaunchInputV1>,
+    published_head: Option<ConfigProjectionRefV1>,
+    held_consumer_lease: Option<ConfigProjectionConsumerLeaseV1>,
+}
+
+impl E3PreparedRetainedLaunchPublicationV1 {
+    pub fn new(
+        identity: &ConfigProjectionIdentityV1,
+        gateway: &InWorldGatewayIdentityV1,
+        credential_source_ref: &CredentialSourceRefV1,
+        handoff_id: String,
+        preparation_idempotency_key: String,
+        created_at: Timestamp,
+        expires_at: Timestamp,
+    ) -> Result<Self, ConfigProjectionFailureV1>;
+
+    pub fn prepared_handoff_ref(&self) -> &SecretHandoffRefV1;
+
+    pub fn bind_prepared_chain(
+        &mut self,
+        record: AgentConfigProjectionRecordV1,
+        ordered_child_cgroups: [E3ChildCgroupRegistrationV1; 3],
+        dormant_boundary: GatewayAccessBoundaryV1,
+        activation_intent: ManagedGatewayActivationIntentV1,
+        launch_input: ManagedGatewayLaunchInputV1,
+    ) -> Result<(), ConfigProjectionFailureV1>;
+
+    pub fn published_head(&self) -> Option<&ConfigProjectionRefV1>;
+
+    pub fn held_consumer_lease(&self) -> Option<&ConfigProjectionConsumerLeaseV1>;
+}
+
 // Private, non-serializable, non-cloneable world-service state.
 struct SealedE3ConfigProjectionPreparationV1 {
     preparation_id: String,
     preparation_idempotency_key: String,
-    response: E3ConfigProjectionPrepareResponseV1,
-    projection: PublishedConfigProjectionCapabilityV1,
+    response: Option<E3ConfigProjectionPrepareResponseV1>,
+    projection: Option<PublishedConfigProjectionCapabilityV1>,
+    publication: Option<E3PreparedRetainedLaunchPublicationV1>,
     credential_source: SealedCredentialSourceCapabilityV1,
     gateway_authority: E3GatewayRuntimeAuthorityV1,
     expires_deadline: ClockBoottimeDeadline,
@@ -3064,12 +3906,33 @@ enum MemberDispatchRequest {
 }
 ```
 
-`SealedE3ConfigProjectionPreparationV1`, `SealedCredentialSourceCapabilityV1`, and
-`ClockBoottimeDeadline` are private world-service implementation types, not wire or
-`config-projection` exports. The world-service preparation manager owns the sealed map and composes
-the downward `AgentConfigProjectionServiceV1` persistence API with the sibling gateway-runtime and
-child-exclusion APIs. The shared crate neither imports world-service nor owns listener/process/secret
-capabilities, preserving the stated acyclic Cargo graph.
+`E3PreparedRetainedLaunchPublicationV1` is defined in
+`crates/config-projection/src/service.rs`, reexported only through the crate's existing
+`pub use service::*`. Its exact `new` operation copies only the nonsecret identity, gateway, and
+credential-source reference, validates the IDs/timestamps/bindings, constructs the private
+`LaunchTimeSecretHandoffV1` and `ConfigProjectionSecretHandoffRevisionV1` in `Prepared` posture with
+the fixed E3 secure-FD delivery, and stores its exact nonsecret ref. The chain and progress fields
+begin `None`; `consumer_id` is fixed at construction from
+`credential_source_ref.preparation_id` by the exact prefix substitution above, before any effect or
+lease transaction. `prepared_handoff_ref` exposes only a shared reference to that public nonsecret ref so
+the manager can construct the activation intent and record without a second handoff representation.
+`bind_prepared_chain` fills the five chain fields exactly once after structural/hash/cross-binding
+validation and cannot alter the identity, gateway, handoff, key, or timestamps. `published_head` and
+`held_consumer_lease` each return a shared reference to the corresponding optional existing type so
+the preparation manager can drive exact abandonment/release without raw store access. No field is
+public, and no clone, debug, serde, default, conversion, raw-descriptor, or general context API is
+implemented. The service alone may set the progress fields, first writing the exact returned
+Dormant head and later the exact revision-1 Held lease; neither may be cleared or replaced within an
+attempt.
+
+`SealedE3ConfigProjectionPreparationV1` is opaque and crate-visible only for its bounded ownership
+transfer; `SealedCredentialSourceCapabilityV1` and `ClockBoottimeDeadline` remain private. These are
+world-service implementation types, not wire or
+`config-projection` exports. Before the first publication call, the world-service preparation
+manager moves the new publication carrier into the sealed map alongside the secret owner and live
+gateway owner. The manager therefore continues to own any head/lease progress if the call returns
+an error or unwinds. The shared crate neither imports world-service nor owns
+listener/process/secret capabilities, preserving the stated acyclic Cargo graph.
 
 The E3 local route additionally uses these private, non-serializable world-service observations:
 
@@ -3181,23 +4044,97 @@ buffers. Traces contain only preparation ID, nonsecret idempotency key, backend 
 disposition, and redacted diagnostic ref.
 
 For one accepted preparation, world-service acquires or joins the process-wide E3-exclusive lease,
-moves the integrated-auth payload into a sealed process-local credential-source capability, binds and
-retains the sole listener without listening, installs/readback-validates the initial deny-all
-boundary, calls `listen(16)`, and proves the accepting queue empty before it publishes in dependency
-order the nonsecret credential-source ref, `Prepared` handoff, gateway identity, activation intent,
-native source, `Dormant/ZeroLiveClosed` projection, and revision-1 Held consumer lease. The Dormant
-head and lease are committed before the response is returned. No gateway, readiness probe, Codex,
-UAA, provider, or other child is spawned by either preparation route. The sealed preparation retains
-the credential capability, listener descriptor, artifact descriptors, cgroup/boundary handles,
-consumer lease, and E3-exclusive admission, keyed by preparation ID and exact carrier, until one
-matching V2 launch consumes it or cancellation/expiry/recovery terminates it. Thus the returned
-projection is independently valid before D1 while remaining launch-inhibiting.
+moves the integrated-auth payload into a sealed process-local credential-source capability, and
+binds and retains the sole listener without listening. From the authenticated source/E2 inputs it
+constructs the record identity and zero-live fence, preallocates the fixed IDs, constructs the
+gateway identity and nonsecret credential-source ref, creates the publication carrier, and moves it
+into the sealed attempt before a kernel effect. Through the existing
+`ConfigProjectionRegistryV1::publish_kernel_effect_intent` transaction
+and scoped callback, it directs its retained `E3GatewayRuntimeAuthorityV1` to create and
+readback-validate exactly the `ManagedGateway`, `ReadinessProbe`, and `Codex` cgroups in that order;
+the same transaction publishes and exact-readback-validates each returned
+`E3ChildCgroupRegistrationV1`. It then first-writer publishes and exact-readback-validates the
+gateway identity, publishes the boundary intent before the nftables effect, installs and
+readback-validates the deny-all boundary, calls `listen(16)`, proves the accepting queue empty, and
+obtains the `GatewayAccessBoundaryV1` plus those same three registrations from the live gateway
+owner. Kernel/listener/cgroup/nftables construction, callbacks, readback, and live ownership remain
+entirely in world-service.
+
+This order has no record/handoff cycle. After boundary readback, the manager uses only the
+carrier's exact `prepared_handoff_ref` to construct the `ManagedGatewayActivationIntentV1`. With the
+gateway endpoint now final, it invokes the renderer to produce the opaque plan, passes that plan to
+`publish_native_source`, and retains the returned descriptor-finalized native projection and source
+manifest. It then constructs and hashes the complete `AgentConfigProjectionRecordV1` from that exact
+native value; the record ref permits construction of `ManagedGatewayLaunchInputV1`. It calls
+`bind_prepared_chain` exactly once with that record, the three returned registrations, boundary,
+activation intent, and launch input. Before calling the projection service it has therefore retained
+both the live owners, the exact immutable accepted-home source, and a complete existing-typed
+nonsecret publication chain; no private handoff body was exposed or independently recomputed. The
+service exact-validates the bindings of its two explicit inputs without repeating either shell-owned
+source/E2 read and validates all member hashes and cross-bindings. Its registry transaction must
+exact-resolve the three durable cgroup registrations and their intent refs, in the fixed role order,
+as well as the gateway identity, boundary intent, and already published native source; each must
+equal the passed readback and the record's store/series/fence/preparation/world/generation/gateway/
+boundary/native values. Only then may `publish_dormant` publish, in its existing dependency-first
+order, the nonsecret credential-source ref, `Prepared` handoff, gateway identity, activation intent,
+boundary and launch input, validate the already complete native source, and finally publish the
+`Dormant/ZeroLiveClosed` record/head. It writes that exact returned head into the manager-owned
+carrier before any subsequent fallible operation.
+
+The service next calls the existing `acquire_consumer_lease` with
+`prepared_consumer_id = Some(&publication.consumer_id)` to acquire-or-resolve the revision-1
+`MemberDispatchV2` lease against that exact published head with the record's `created_at`, writes the
+exact returned lease into the same carrier immediately, and calls
+`ConfigProjectionRegistryV1::resolve(Some((&record.identity, held_lease)), None)` only after the
+lease-acquisition transaction has ended. It accepts only `Current` with byte-equal identity,
+record, and head, uses that resolution's existing `PublishedConfigProjectionCapabilityV1`, and
+constructs the response carrier/hash from the exact head, intent, gateway, fence, and lease. The
+service returns `(response, capability)`; while still holding the preparation map entry, the manager
+stores both beside the publication carrier and live gateway/credential/resource owners, verifies
+the response joins those retained objects, and only then returns success. The Dormant head and lease
+are therefore committed and owned before the response is observable. Neither route spawns a
+gateway, readiness probe, Codex, UAA, provider, or other child. FreshSpawn and Fork use this same
+handoff; their already specified nullable proof, lineage, and authenticated E2 joins differ, but
+there is no separate fork rediscovery or publication interface.
+
+The aggregate constructor and one-time chain binder perform only bounded structural, role-order,
+timestamp, and canonical-hash checks; they grant no authority. Malformed shape/timestamp/enum/ID is
+`Malformed`, a bad canonical digest is `HashInvalid`, and any unequal source/E2/record/gateway/
+registration/intent/boundary/launch-input binding is `WrongBinding`. A missing or unreadable
+required immutable object or incomplete dependency chain is `PartialPublication`; a noncurrent head or lease is
+`StaleRevision`; an unequal first-writer/idempotent retry is `Conflict`; and a retired series remains
+`RetiredSeries`. Configured-root, descriptor, transaction-lock, kernel-owner, or exact-readback
+security failure remains `UnsupportedSecurityPosture`. Existing registry operations preserve their
+more specific failure unchanged; the service neither converts a failed validation into success nor
+repairs, substitutes, or republishes through a different path.
 
 An exact retry with the same preparation ID, idempotency key, and byte-equal nonsecret request joins
-the live sealed attempt and returns the identical response. Because reusable secret equality is
-forbidden, world-service does not compare the retried secret values: it immediately closes and
+the live sealed attempt and returns the identical stored response when publication completed. If a
+previous call stopped after durable dependencies/head or after an attempted lease acquisition but before the
+response became observable, the manager retries with the same retained publication carrier and live
+owners. The service exact-resolves its recorded head; it joins a byte-equal immutable publication
+instead of allocating another record/fence or replaying a kernel effect, and it acquires a lease only
+when `held_consumer_lease` is still `None`. That call uses the already retained deterministic
+consumer ID, so an earlier durable write whose return was lost resolves the exact existing lease. A
+present lease must exact-resolve as revision-1 `Held` against that head and is reused; a second
+consumer ID is forbidden. Because reusable secret equality
+is forbidden, world-service does not compare the retried secret values: it immediately closes and
 scrubs that duplicate payload without changing the original capability. A reused preparation ID or
-key with any nonsecret difference is `Conflict`. A preparation expires after exactly 120 seconds by
+key with any nonsecret difference is `Conflict`.
+
+Any failure before a kernel effect may use the existing child-free cleanup. Once an intent/effect,
+publication head, or lease exists, the sealed entry retains the gateway owner, publication carrier,
+exact progress, credential owner, and E3-exclusive lease until cancellation, expiry, exact retry, or
+restart recovery has durably resolved or abandoned every object. An error or unwind cannot remove
+that entry, release exclusion, fabricate a response, or discard the only lease/effect owner; cleanup
+failure remains fail-closed. Existing CAS/idempotent immutable writes and intent recovery decide
+ambiguous durability, and no effect callback is replayed. In-process cleanup first reconciles an
+empty lease slot through the same exact-ID acquire-or-resolve call whenever a head exists; restart
+recovery derives that ID from the durable Prepared handoff/preparation binding and resolves or
+reacquires that known Held lease through the same operation before the existing release operation.
+Neither case enumerates leases, invents a new ID, or requires an in-memory return that may have been
+lost. A preparation expires after exactly
+120 seconds by
 the service's `CLOCK_BOOTTIME` deadline; `expires_at` is the corresponding informational RFC 3339
 UTC projection and is not the timer authority. Cancel and expiry kill any unreleased child, revoke
 and verify the boundary, terminate the handoff as `Failed` or `Expired`, make the old carrier
@@ -3208,7 +4145,8 @@ a different or already Active attempt.
 
 After a service restart no process-local credential capability or held listener/preparation
 capability is reconstructible from durable refs. Recovery therefore revokes the recorded boundary,
-kills and proves quiescent any bound remnant, terminates the old handoff, and makes the old carrier
+kills and proves quiescent any bound remnant, terminates only a nonterminal old handoff (preserving
+Consumed unchanged), and makes the old carrier
 stale. A caller must submit fresh auth under a fresh preparation ID; if the immutable subject is
 unchanged, the service publishes a new fence/root/gateway/handoff/lease revision in the same series.
 A fresh series is permitted only when an immutable subject field changed. No recovery replays a
@@ -3337,11 +4275,1112 @@ E3 does not own or modify:
 - E4 host-visible workspace projection, sync, import, export, or reconciliation; or
 - migration/backfill of legacy workers or projection state.
 
+## Serial E3 decomposition
+
+The controlling slice's E3-A through E3-F labels are internal work-packet headings, not new stable
+IDs or independent authority documents. Their binding order and owners are:
+
+| Packet | Bounded owner | Direct predecessor |
+|---|---|---|
+| `E3-A — strict V2 wire carrier and V1 compatibility` | strict transport/version-wrapper reachability and byte-identical V1 compatibility | pushed and live-verified E3-AC1 correction |
+| `E3-B — projection codec, registry, CAS, recovery, and retirement` | config-projection codec/registry plus the one literal HSA closed-layout addition | proof-clean landed E3-A |
+| `E3-C — authenticated authoring, V3 inventory, artifacts, and Codex rendering` | descriptor-pinned source-store schemas, validation/import, publication/recovery helpers, selected-only V3 provenance, native source, and deterministic Codex rendering; no E3-D artifact production | proof-clean landed E3-B |
+| `E3-D — Linux child security, capability parking, and process-wide exclusion` | Linux privilege descent, enforcement, actual wrapper implementation, static Substrate build/install and publication integration, and universal child/helper exclusion | proof-clean landed E3-C |
+| `E3-E — dormant managed-gateway preparation and adoption` | authenticated preparation, Dormant/no-ACK publication, listener/boundary/readiness, one-time secret delivery, adoption, and revocation | proof-clean landed E3-D |
+| `E3-F — retained V2 Codex launch/resume adoption and integrated proof` | retained local-adapter/gateway capability across initial and resumed V2 turns and integrated proof | proof-clean landed E3-E |
+
+The slice specifies each packet's consumed inputs, explicit nonownership, and minimum successor proof.
+Every packet requires a later fresh admission and explicit dispatch. Passing one packet only makes
+its direct successor eligible to seek admission; it never dispatches that successor. One combined
+E3-A-through-E3-F implementation candidate is forbidden.
+
+## Packet-proportional executable Linux readiness
+
+No statement in this contract means that the current host automatically satisfies an E3 packet's
+acceptance wall. Each later fresh admission must bind that packet's exact outcome and nonownership,
+source revision and toolchain identities, actual proof commands, required host facilities, and
+realistic resource needs. Its retained receipt must make those commands and inputs reproducible and
+must establish the environment needed by the bounded packet; it does not certify unfinished behavior
+owned by a successor.
+
+E3-A requires Linux `x86_64`, the repository-required Rust toolchain (at this baseline, channel
+`1.89.0` and MSRV `1.89`), and the other environment needed for its strict wire-transport and
+V1-compatibility tests. A musl target or linker, privileged namespace/cgroup/nftables facilities,
+gateway or Codex execution, and full E3 security attestation are not E3-A prerequisites merely
+because a later packet needs them. If an actual retained E3-A invocation requires any such facility,
+however, that invocation must satisfy its real prerequisite before the dependent operation; a false
+green, silent skip, or otherwise invalid invocation is not product proof. The same rule applies
+packet by packet: missing or drifting required facilities are environmental stops for the work that
+depends on them, while security behavior implemented by a candidate is established by the owning
+packet's proof rather than presumed before that code exists.
+
+E3-C's bounded proof uses valid test inputs to exercise its source-store schemas, strict validators,
+import and publication/recovery helpers, and native-source/rendering behavior. It neither executes nor
+installs the E3-D-owned `substrate-world-entry` implementation, and its inputs cannot be promoted to
+production artifact authority or installed-runtime readiness evidence. E3-D must consume the landed
+E3-C machinery, implement and statically build/install the real wrapper and gateway, readback-validate
+their descriptors and exact build provenance, and establish the valid Substrate source record/head
+before any dependent E3 runtime operation. Until then the E3 artifact capability is unavailable and
+an invocation requiring its publication fails closed; unrelated non-E3 provisioning may continue
+without claiming E3 publication or readiness.
+
+All product-security predicates in this contract remain unchanged and fail closed. The owning packet
+must establish the required existing `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`, `CAP_DAC_OVERRIDE`, and
+`CAP_SYS_PTRACE` service-authority posture, capability parking and readback, privilege descent,
+trusted-service-owned per-child user-namespace identity/membership, required tracing,
+namespace/cgroup/nftables/Landlock/seccomp confinement, credential
+handling, gateway activation and revocation, and control-path denial before the operations they
+protect and before claiming that packet complete. In particular, adding `CAP_SETUID`, `CAP_SETGID`,
+or `CAP_SETPCAP` to an otherwise unmodified service is not a substitute for E3-D implementing and
+proving the specified synchronous transition-capability parking and bounded parent map-installation
+behavior; no fallback or substitute privilege model is authorized. Host-wide Yama policy remains
+untouched and is not an E3 authority input.
+
+Admissions require reproducible commands and sufficient retained evidence, not a bespoke proof
+wrapper or six newly created roots for every packet. Existing valid build targets, roots, and evidence
+may be reused when their causal inputs are unchanged. Filesystem use must not collide with repository
+or accepted authority state; must use short paths when Unix sockets are involved; must preserve every
+proof-required device relationship; and must keep evidence persistent while placing neither heavy
+builds nor durable state on tmpfs. Separate roots or other isolation are required where the proof
+needs them, including between baseline and candidate when shared state could affect the result, but
+incidental harness topology is not itself a universal admission predicate.
+
+Applicable differential proof begins with the minimum valid matched baseline-and-candidate commands
+that can reach the changed behavior and compares canonical semantic outcomes rather than scheduling
+or emission order. Unchanged commands, candidate bytes, causal inputs, and retained invocation
+evidence may be reused; candidate-only semantic failures still reject the candidate, and an invalid,
+resource-killed, incomplete, or provenance-ambiguous invocation never counts as product proof. The
+mandated E3-A comparison baseline remains
+`2b2fc6c50b40046dbeaeb5b316562fbd96480a2a`; the pushed E3-AC1 documentation landing is authority,
+not a substitute comparison commit.
+Documentation validation in this correction is not E3 implementation evidence, and this correction
+grants no packet admission, dispatch, implementation, green E3 gate, or security exception.
+
+### E3-A Linux-first proof-recovery authority
+
+The controlling platform schedule is Linux first, completely. E3-A is a Linux implementation and
+landing packet. Native macOS testing, implementation, provisioning, service work, Lima work, and the
+previously separate macOS parity lane are deferred until the Linux runtime-refactor program is
+complete. `E3A-P2-003` is therefore deferred and nonblocking for E3-A's Linux completion: the
+historical baseline and candidate Lima logs remain unavailable/zero-test evidence and must remain
+recorded honestly, but the macOS-only exact Lima test is not a Linux proof gate. A macOS-gated
+crate's empty or zero-test Linux execution establishes no macOS compatibility, correctness, or
+completion claim. Required Linux checks must exercise their intended Linux code or tests nonzero.
+No rerun is required solely to remove a non-discriminating macOS package from an already-retained
+invocation. The existing byte-preserving Lima V1-wrapper conversion in the preserved candidate is
+frozen mechanical compatibility only; it authorizes no macOS runner, VM, installer, service,
+implementation, parity work, or proof claim.
+
+The preserved recovery subject is product base
+`5e972add652224b97323f6abd496e94440d72242`, tree
+`ddbceef5f723a190cea70c310b462b3276fee82d`, with product fingerprint
+`4c4e1b4ef940621553e3a9d6472d69748117857080849cf4e246aca69d64f81a` and full-index binary
+product-delta SHA-256 `139b28a1eeb8d5e498b20723d17a37ad170be26e01585d0e6136c7a33aefbe94` against exact
+comparison baseline `2b2fc6c50b40046dbeaeb5b316562fbd96480a2a`. The semantic differential remains governed by
+retained authority commit `5b703b26431f9dee5e9e0686e280536a6fb030c8`. Existing valid E3-A
+proof is reusable only while its candidate bytes, commands, and causal inputs remain unchanged; this
+recovery does not restart admission or the full proof wall.
+
+`E3A-P2-004` retains its original failed parity fixture and result. Recovery may add only a direct
+colocated prepared-runtime builder fixture under the existing test authority, proving that
+`backend_id`, `protocol`, `binary_path`, and `backend_kind` remain frozen after descriptor drift and
+that `config_projection == None`. It must not relabel the old fixture as passing, change unrelated
+HSA semantics, or edit production behavior solely to manufacture the witness.
+
+For `E3A-P2-005`, a later recovery dispatch has exactly this harness-only ownership:
+
+1. In `crates/shell/tests/repl_world_first_routing_v1.rs`, change only the `PtyRepl::spawn`
+   argument lists inside
+   `c3_first_targeted_world_turn_uses_initial_prompt_in_member_dispatch` and
+   `c3_internal_toolbox_fork_command_reuses_retained_fork_bootstrap_with_explicit_lineage`, solely
+   to pass the global `--install-prefix PATH` selector followed by that test's existing UTF-8
+   `substrate_home`. The selector is the supported global CLI input: its Unix path is normalized and
+   selected as the invocation's install-bootstrap prefix. No other call site, helper, fixture,
+   assertion, timeout, or test behavior may change.
+2. In the actual helper `crates/shell/tests/common.rs::ensure_substrate_built`—not
+   `tests/support/common.rs`—change only the nested build program/argv so the existing build is
+   exactly `rustup run 1.89.0 cargo build -p substrate --bin substrate --locked`. Do not change the
+   helper's locking, binary selection, messages, or callers.
+
+Forged witnesses, disabled validation, unrelated installed binaries, broader fixture rewrites,
+increased timeouts, and changed assertions remain forbidden. The same minimal harness-only overlay
+is permitted for those two matched integrations on each side. The baseline commit remains immutable:
+the baseline proof subject must be labeled as exact
+`2b2fc6c50b40046dbeaeb5b316562fbd96480a2a` plus a separately fingerprinted baseline harness
+overlay, while the candidate subject is the preserved product fingerprint above plus a separately
+fingerprinted candidate harness overlay. Each overlay must contain only the three approved hunks in
+the two named files and retain its exact full-index binary patch digest plus pre/post file SHA-256
+values. It grants no baseline product repair, assertion change, or alternate comparison commit.
+Each side's receipt must bind its actual source identity, Rust 1.89.0 toolchain, built executable
+path/hash, and isolated mutable HOME, `SUBSTRATE_HOME`, target, socket, runtime, and temporary state.
+Use the existing side-specific checkouts and harness; do not create a full source copy or a bespoke
+proof framework.
+
+For `E3A-P2-006`, the only permitted E3-A inherited-product Clippy difference is:
+
+- file `crates/shell/src/execution/agent_runtime/retained_worker_runtime.rs`;
+- symbol `reject_before_registration_in_registry`;
+- diagnostic `clippy::too_many_arguments`, severity `error` under `-D warnings`, message
+  `this function has too many arguments (9/7)`;
+- owning product base `5e972add652224b97323f6abd496e94440d72242`, file blob
+  `ea701ea539a1dc85c72a1a2c4b3c843696c3570b`, and file SHA-256
+  `91e2bddab7a6c0f3d13d412c8ca86396973deed16dec118eeea878114a55482c`; and
+- retained command targets `transport-api-types`, `transport-api-client`, `world-mac-lima`, `shell`,
+  and `world-service` with `--lib --tests --locked -- -D warnings`. The baseline raw log contains
+  zero copies of the exact message and the candidate raw log contains one. The directly resulting
+  terminal summaries are baseline 12 versus candidate 13 errors for `shell` lib and baseline 11
+  versus candidate 12 errors for `shell` lib test: exactly one additional error in each summary.
+
+This is an explicit E3-A-only allowance over retained red Clippy logs, not an absolutely green
+Clippy result and not permission to ignore every inter-lineage difference. The named file and symbol
+must remain byte-identical to the owning product base, the raw diagnostic and terminal summaries
+must be retained and reported, and no lint suppression or unrelated source repair is authorized.
+Every other diagnostic identity, severity, multiplicity, terminal outcome, and semantic difference
+remains subject to the existing differential rules; any E3-A-added diagnostic or expansion of this
+single content-bound difference rejects completion. The comparison commit remains
+`2b2fc6c50b40046dbeaeb5b316562fbd96480a2a`, not the product base.
+
+The preserved review record at
+`/home/spenser/__Active_code/review-evidence/e3-a-strict-v2-wire-5e972add/review/review-cycle-record.json`
+remains unchanged at `bounded_stop`. `E3A-P2-001` and `E3A-P2-002` are fixed with reusable retained
+proof; `E3A-P2-003` is deferred and nonblocking for Linux only by the controlling decision above;
+`E3A-P2-004` and `E3A-P2-005` require only their bounded Linux recovery; `E3A-P2-006` requires the
+exact allowance disposition above; and `E3A-P2-007` is mechanically corrected in preserved
+evidence. Those are carried dispositions, not findings caused by the last remediation.
+
+After the bounded recovery and proof—but not during this documentation correction—one new process-
+evidence record may start a separate schema-version-1 review sequence solely for this scope-stop
+re-entry. It must use the existing closed fields and validator without a new kind or validator
+change. Its linked prompt/report must cite the preserved stopped record and bind one complete
+subject fingerprint covering the bounded recovery delta and both overlay fingerprints, disposition
+of `E3A-P2-003` through `E3A-P2-006`, relevant retained proof, and the final aggregate candidate
+identity. The initial schema kind is `discovery`, but the reviewer receives one fresh focused
+assessment of that recovery subject, not rediscovery of unchanged E3-A implementation. Do not copy
+historical IDs into the new record, rewrite raw reviews, or append a fictitious
+`supplemental_causal` cycle to the stopped record. `CLEAN` is terminal. If the focused assessment
+finds a new valid `P1` or `P2` in its bounded subject, assign a new ID, perform one consolidated
+in-fence remediation, and use a different fresh delta closure under the canonical procedure; no
+open-ended review is authorized.
+
+The final Linux completion decision must account explicitly for every carried `E3A-P2-001` through
+`E3A-P2-007` disposition, the macOS deferral, the exact lint allowance, all relevant retained and
+recovered proof, and the final candidate identity. Linux strict V1/V2 compatibility, fail-closed
+behavior, and every other applicable Linux safety requirement remain mandatory. This platform
+scheduling and proof-applicability correction is not a Linux safety waiver, does not itself complete
+or land E3-A, and does not admit or dispatch E3-B.
+
+### Same-subject fresh preparation and restart readback
+
+This is a bounded E3-E interface/catalog correction to the already required immutable-series and
+cancellation/restart semantics above. The current source subject is the preserved 24-file candidate
+over product `4c5cac9e721ed1de8e355fea5d96022cdfb5765c`, bound by
+`same-subject-checkpoint-receipt.json`, `e3e-same-subject-checkpoint-bindings.json` and
+`e3e-same-subject-checkpoint-candidate.patch` (SHA-256
+`bc9f90ef6b25f55a9d559bce89d568c7fbe225163bdf12b206f09b825a32be05`) in
+`review-evidence/e3-e-standalone-4c5cac9e`. These supersede older checkpoint descriptions, including
+CURRENT in `ingress-auth-scope-blocker.md`. The historical semantic baseline remains
+`2b2fc6c50b40046dbeaeb5b316562fbd96480a2a`, not that product's parent. The current candidate has
+implemented the recovery result and subject readback below, but discards validated terminal-child
+evidence and launch-input runtime-config identity. The following additions complete that readback
+for its prescribed cleanup consumers; the other previously assigned implementation remains
+unfinished. This correction changes no durable schema, lifecycle edge, admission, or E3-F ownership.
+
+The shared durable read extends the existing registry recovery transaction, rather than weakening
+capability resolution or introducing another index. These are the exact revised/additional
+signatures (all types are config-projection-owned unless qualified):
+
+```rust
+impl ConfigProjectionRegistryV1 {
+    pub fn recover(
+        &self,
+        subject: Option<&ConfigProjectionIdentityV1>,
+    ) -> Result<ConfigProjectionRecoveryReadbackV1, ConfigProjectionFailureV1>;
+}
+
+pub enum ConfigProjectionSubjectReadbackV1 {
+    Unbound,
+    Bound(ConfigProjectionPreparationMetadataV1),
+}
+
+pub struct ConfigProjectionPreparationMetadataV1 {
+    pub(crate) record: AgentConfigProjectionRecordV1,
+    pub(crate) projection_ref: ConfigProjectionRefV1,
+    pub(crate) prepared_handoff: ConfigProjectionSecretHandoffRevisionV1,
+    pub(crate) current_handoff: ConfigProjectionSecretHandoffRevisionV1,
+    pub(crate) consumer_lease: Option<ConfigProjectionConsumerLeaseV1>,
+}
+
+impl ConfigProjectionPreparationMetadataV1 {
+    pub fn record(&self) -> &AgentConfigProjectionRecordV1;
+    pub fn projection_ref(&self) -> &ConfigProjectionRefV1;
+}
+
+impl AgentConfigProjectionServiceV1 {
+    pub fn resolve_preparation_subject_v1(
+        &self,
+        subject: &ConfigProjectionIdentityV1,
+    ) -> Result<ConfigProjectionSubjectReadbackV1, ConfigProjectionFailureV1>;
+}
+```
+
+`src/registry.rs` owns the enum, metadata type/accessors, and private
+`read_preparation_subject_in_transaction_v1`; only the registry constructs metadata after complete
+locked readback. The types have no Serde representation, public constructor, mutable accessor,
+descriptor, credential, listener, barrier, ACK owner, or launch capability. The two getters expose
+existing nonsecret record/equality material, not live authority. `src/service.rs` owns the service
+method: revalidate configured accepted home, call `recover(Some(subject))`, check the returned store
+against that home, and require the non-null subject result. Existing store-only consumers, including
+`AgentConfigProjectionServiceV1::new`, call `recover(None)` and consume its `store` field; `None`
+preserves existing store initialization/recovery and returns no subject result. Existing exports
+`pub use registry::*` and `pub use service::*` suffice; no new module or export mechanism is owned.
+
+For `Some`, the store must already exist and validate; this mode must not initialize missing
+authority. Under the existing parent-before-child locks, recover recognized temporaries by the
+existing rules, then compute the existing subject hash by omitting only `series_id` and
+`identity_hash`. Read exactly `subjects/<subject-hash>.json`, validate its canonical hash and full
+immutable subject equality, and use its first-writer-bound series ID and identity. The supplied
+identity is an authenticated candidate for lookup; its prospective series ID/hash cannot override
+an existing binding. `Unbound` means validated absence of that binding with no conflicting/partial
+subject publication or attributable retained attempt evidence in the existing validated namespace.
+Only this outcome permits first-writer series allocation. A missing store, bound series head,
+record, required handoff or dependency is a typed failure, not `Unbound`. No new scan, index, durable
+store, or public filesystem accessor is authorized; reuse the existing recovery/tree validation and
+exact intent/record joins, including failure on ambiguous pre-head effects.
+
+`Bound` returns the exact current head/record and that fence's immutable Prepared handoff plus its
+exact current handoff revision. Derive the one deterministic consumer ID from that Prepared
+handoff's preparation ID and read only its known lease path, including canonical current head and
+immutable revision/predecessor checks. `consumer_lease = None` means that exact lease path is absent;
+an incomplete or corrupt occupant is an error. A Released lease is readable metadata, never a Held
+lease or a new consumer. No lease enumeration is needed for this read. Retired subjects return
+`RetiredSeries` after exact retirement validation, even when all old records remain readable;
+malformed, newer, wrong-bound, hash-invalid, partial, and conflicting state retain their existing
+typed failures. Readback alone asserts neither cleanup nor successor eligibility. Existing
+`resolve(Some((&identity, held_lease)), None)` and its usable
+`PublishedConfigProjectionCapabilityV1` requirement remain unchanged.
+
+The existing abandonment operation accepts either retained progress or this durable snapshot, so
+restart does not need to manufacture an `E3PreparedRetainedLaunchPublicationV1` or live preparation:
+
+```rust
+pub enum E3PreparationAbandonmentTargetV1<'a> {
+    Live(&'a mut E3PreparedRetainedLaunchPublicationV1),
+    Recovered(&'a ConfigProjectionPreparationMetadataV1),
+}
+
+impl AgentConfigProjectionServiceV1 {
+    pub fn publish_preparation_abandonment(
+        &self,
+        target: E3PreparationAbandonmentTargetV1<'_>,
+        terminal_state: SecretHandoffStateV1,
+        released_at: Timestamp,
+        failure_diagnostic_ref: Option<RedactedDiagnosticRefV1>,
+    ) -> Result<Option<SecretHandoffRefV1>, ConfigProjectionFailureV1>;
+}
+
+impl ConfigProjectionRegistryV1 {
+    pub(crate) fn publish_handoff_transition_v1(
+        &self,
+        identity: &ConfigProjectionIdentityV1,
+        fence_id: &str,
+        successor: &ConfigProjectionSecretHandoffRevisionV1,
+        expected_projection_ref: Option<&ConfigProjectionRefV1>,
+    ) -> Result<SecretHandoffRefV1, ConfigProjectionFailureV1>;
+}
+
+impl E3ConfigProjectionPreparationManagerV1 {
+    pub(crate) fn recover_expired(
+        &self,
+        failed_preparation: Option<&str>,
+        recovered: Option<E3PreparationRecoveryV1<'_>>,
+    ) -> Result<(), config_projection::ConfigProjectionFailureV1>;
+}
+```
+
+`src/service.rs` owns the target enum and adapts its existing private abandonment validators and
+successor builder; `src/registry.rs` owns the optional expected-head check in the existing handoff
+transaction and its private helpers. Every abandonment caller supplies `Some(exact old head)`;
+`None` preserves other admitted handoff lifecycle callers' existing checks. Under both locks the
+transaction repeats current-head, identity, fence, preparation and non-Active checks before any
+handoff mutation, including exact retries. It must also validate the already required durable old
+boundary revocation and exact child/kernel-effect quiescence evidence before abandonment may
+release a consumer lease. Terminal handoff state alone is insufficient. No new terminal-evidence
+schema or caller-provided cleanup boolean is accepted.
+
+The Live arm retains existing partial-publication reconciliation and its exact deterministic
+acquire-or-resolve lease path. The Recovered arm re-reads the same subject/head and handoff/lease
+chain, rejects changed bindings/head or an Active attempt, and never republishes a Dormant record,
+Prepared chain, native source, or kernel effect. It constructs only the already legal terminal
+handoff successor from the actual durable predecessor. An existing terminal successor is reused
+only after full immutable/head/predecessor equality validation; Failed versus Expired and all
+retained diagnostics/timestamps remain exact. If the known lease is absent, reconcile it with
+`acquire_consumer_lease` using the old Dormant acquisition ref/time and deterministic ID before
+`release_consumer_lease`. If already Released, validate and reuse its exact durable release instead
+of reacquiring or choosing a new release timestamp. A Held lease is released only after the exact
+terminal handoff commit and cleanup proof. Any failed readback or cleanup leaves ownership or
+recovery admission closed. No Released lease is passed to capability resolution.
+
+The restart cleanup caller/callee path is also explicit; store validation is not kernel recovery.
+`ConfigProjectionRecoveryReadbackV1` and `E3KernelEffectRecoveryV1` are non-Serde readback types
+owned/exported by `src/registry.rs`, containing only the existing typed nonsecret objects below.
+The existing `validate_kernel_effect_tree`, `validate_child_cgroup_tree`,
+`validate_child_process_tree` and boundary/record readers supply these joins during their existing
+recovery traversal. There is no second scan or persistent recovery catalog. `Some(subject)` filters
+readback to its bound current fence; `None` returns all retained intent joins for startup, including
+intents with no effect registration or projection head. Optional fields mean proven absence only;
+partial, duplicate, corrupt or ambiguous joins fail closed. Terminal series remain terminal, and
+store-only callers do not treat these readbacks as authority to act.
+
+```rust
+pub struct ConfigProjectionRecoveryReadbackV1 {
+    pub store: ConfigProjectionStoreV1,
+    pub subject: Option<ConfigProjectionSubjectReadbackV1>,
+    pub kernel_effects: Vec<E3KernelEffectRecoveryV1>,
+}
+
+pub struct E3KernelEffectRecoveryV1 {
+    pub intent: E3KernelEffectIntentV1,
+    pub resolution: Option<E3KernelEffectResolutionV1>,
+    pub child_cgroup: Option<E3ChildCgroupRegistrationV1>,
+    pub child_processes: Vec<E3ChildProcessRegistrationV1>,
+    pub boundary: Option<GatewayAccessBoundaryV1>,
+    pub projection: Option<AgentConfigProjectionRecordV1>,
+    pub terminal_child_evidence: Vec<E3TerminalChildQuiescenceEvidenceV1>,
+    pub gateway_config: Option<GatewayRuntimeConfigIdentityV1>,
+}
+
+// world-service/src/e3_config_projection_prepare.rs
+pub(crate) enum E3PreparationRecoveryV1<'a> {
+    Startup { service_instance_id: &'a str },
+    Subject(&'a config_projection::ConfigProjectionPreparationMetadataV1),
+}
+
+// world-service/src/gateway_runtime.rs
+pub(crate) enum E3GatewayRevocationTargetV1<'a> {
+    Live(&'a mut E3GatewayRuntimeAuthorityV1),
+    Recovered {
+        effects: &'a [config_projection::E3KernelEffectRecoveryV1],
+        service_instance_id: &'a str,
+        exclusion: &'a crate::e3_child_security::E3PrivilegedChildExclusionV1,
+    },
+}
+
+impl E3GatewayRuntimeAuthorityV1 {
+    pub(crate) fn revoke(
+        target: E3GatewayRevocationTargetV1<'_>,
+        registry: &config_projection::ConfigProjectionRegistryV1,
+    ) -> anyhow::Result<()>;
+}
+
+// world-service/src/e3_child_security.rs
+impl E3PrivilegedChildExclusionV1 {
+    pub(crate) fn require_recovering_v1(&self) -> anyhow::Result<()>;
+}
+
+// config-projection/src/registry.rs
+impl ConfigProjectionRegistryV1 {
+    pub fn publish_kernel_effect_resolution(
+        &self,
+        resolution: &E3KernelEffectResolutionV1,
+        resolve_effect: Option<&mut dyn FnMut()
+            -> Result<Option<GatewayAccessBoundaryV1>, ConfigProjectionFailureV1>>,
+        expected_projection_ref: Option<&ConfigProjectionRefV1>,
+    ) -> Result<E3KernelEffectResolutionV1, ConfigProjectionFailureV1>;
+}
+```
+
+The two added public fields are owned snapshots of existing nonsecret types, with no serialized
+readback schema. `terminal_child_evidence` contains zero or more complete retained objects, ordered
+by `(final_projection_ref.revision, evidence_id)` with no duplicate evidence identity. `gateway_config`
+is zero or one recorded identity for the effect's exact preparation/fence. `recover` and the service
+and manager signatures above stay unchanged; `recover_expired` passes these fields intact in the
+existing `Recovered.effects` slice to `gateway_runtime.rs::revoke_recovered_v1`. Store-only service
+construction discards them; `resolve_preparation_subject_v1` still returns only subject metadata.
+The Subject abandonment arm revalidates proof through the registry's existing private readers.
+
+`src/registry.rs::validate_registry_tree` owns completion of both joins before returning or applying
+the subject filter. Extend its two existing private traversal callees to these exact signatures:
+
+```rust
+fn validate_terminal_evidence_tree(
+    transaction: &ConfigProjectionChildTransactionV1,
+    verify_objects: bool,
+    effects: &mut [E3KernelEffectRecoveryV1],
+) -> Result<(), ConfigProjectionFailureV1>;
+
+fn validate_gateway_preparation_tree(
+    transaction: &ConfigProjectionChildTransactionV1,
+    verify_objects: bool,
+    effects: &mut [E3KernelEffectRecoveryV1],
+) -> Result<(), ConfigProjectionFailureV1>;
+```
+
+Recovery uses `verify_objects = true`. Collect terminal objects at the existing canonical-file read
+in `validate_terminal_evidence_tree`, after `validate_terminal_evidence_object` and path/ID equality
+succeed. Join each full object by store/series, its exact `final_projection_ref` record and world/
+generation, and the fence/preparation derived from that record's publication and Prepared handoff.
+Match every observation to its immutable process registration ID/hash, role, PID/start time,
+original service instance, boot and exact cgroup registration ID/hash/identity; join each cgroup
+registration's kernel intent ref/hash and fence to the retained effect. The existing validator's
+complete series registration-set checks remain required, including applicable retained history;
+do not truncate an evidence object's observations to a selected effect or current fence. Attach
+it to each effect of its final-record attempt and each historical effect whose registrations it
+covers, retaining the full object in every copy. The registry validates all these joins before
+`Some(subject)` filters effect entries. Historical final refs remain historical: they cannot be
+relabeled as the current projection or used as proof for registrations they do not cover.
+
+The cleanup consumer groups the existing effects by exact store/series/fence/preparation and
+compares shared evidence copies by identity and complete canonical bytes. For the required final
+projection ref and complete registration coverage, reuse the unique matching retained object;
+different evidence IDs/objects competing for that same cleanup proof are ambiguous and reject,
+even if both claim quiescence. Other validated historical objects remain available for their exact
+joins. An empty vector means validated absence of applicable published evidence, not permission to
+invent earlier observations. With proven absence only, the existing cleanup path may create its
+first object from actual observations. `publish_terminal_child_evidence` continues to accept the
+complete object and return its ref: retries pass the recovered object unchanged, preserving its
+original evidence ID, hash, timestamps, observations and original/recovery service-instance IDs.
+A later recovery process uses its fresh ID for new observations, never rewrites a prior observer.
+
+Collect `gateway_config` during `validate_gateway_preparation_tree`'s existing
+`gateway-launch-inputs` traversal. Decode canonical `ManagedGatewayLaunchInputV1`, validate filename/
+launch-input ID, store, hash and shape with `validate_gateway_recovery_candidate` and
+`validate_gateway_launch_input`, then reuse `validate_prepared_gateway_chain` and its exact readers
+against the originating Dormant record, original Deny boundary, gateway identity, activation intent
+and immutable Prepared handoff. Do not pass a later ReadyClosed/Active record or Revoked boundary
+as those original objects. Require every recorded ref/hash, identity hash, session/participant,
+backend, world/generation, preparation/fence, listener/namespace, readiness nonce and gateway
+artifact binding to agree; join all three registered child roles and their intent/process/cgroup
+bindings through the existing validators. The current/retained projection and boundary joins must
+belong to that same attempt and preserve their validated predecessor history. Only then copy the
+launch input's `gateway_config` to that attempt's effect entries. Require one exact launch input;
+competing inputs are ambiguous even if their config identities are equal. A missing input required
+by a published preparation is partial publication, never `None`. `None` is reserved for validated
+pre-publication absence with no dependent record requiring it, and supplies no config to delete.
+
+The bounded cleanup input set is thus the existing intents, resolutions, registrations, boundary,
+projection, new full evidence and recorded config identity, plus the existing fresh service ID,
+exclusion and registry arguments. `revoke_recovered_v1` owns config removal: use the recorded root
+canonical path/device/inode, `relative_path`, mode, byte length and SHA-256; require the fixed
+`/run/substrate/e3-gateway/<series>/<fence>/config.toml` binding. Obtain UID/GID from the already
+returned projection's `native.root.owner_uid/owner_gid`, cross-checking the exact accepted-home
+identity/owner used by both manager native-root construction and `listen_after_dormant_boundary`.
+Use that record's backend and the bound listener port with existing `render_integrated_config` for
+the nonsecret expected bytes. Open fresh no-symlink descriptors and repeat the existing protected
+parent, ownership/mode, exact root, named-versus-open file identity, single-link, entry-set and
+bytes/hash checks before unlink/fsync. The durable config identity contains no config-file inode
+or removal flags: do not manufacture the lost live owner's descriptors, inode, bytes or flags.
+Already-absent runtime paths require the existing durable cleanup proof and current exact absence
+checks; an unavailable owner/binding, unexpected entry, substituted object or unproved partial
+removal fails closed. Config identity remains recorded even after the runtime path is removed.
+
+Neither field establishes current cleanup or live authority. Retained evidence never replaces
+required current PID/boot/cgroup/namespace observations, complete descendant quiescence or old
+boundary revocation; perform those checks before deleting config or accepting an exact cleanup
+retry. Missing dependencies, unresolved partial temporaries, corrupt canonical bytes/hashes,
+wrong-bound or ambiguous joins fail the whole readback using existing typed failures, rather than
+becoming an empty vector/`None`. Preserve parent-before-child locks, expected-current-head checks,
+startup exclusion, Held-lease capability gating and terminal handoff/lease cleanup. This adds no
+reader API, scan, index, durable object, credential carrier or E3-F implementation authority.
+
+`require_recovering_v1` only checks the existing exclusion state under its mutex and fails unless
+it is `Recovering`; it neither changes admission nor returns a launch lease. `run_world_service`
+allocates the already required single fresh process-instance ID and, before generic GC,
+`finish_recovery` or listeners, calls its installed
+`service.e3_projection_preparations` manager's
+`recover_expired(None, Some(E3PreparationRecoveryV1::Startup { service_instance_id: &id }))`.
+The manager retains that ID in a private `OnceLock<String>`; a different/repeated startup dispatch
+cannot replace it. Startup is the sole producer of this variant. It checks `require_recovering_v1`,
+obtains `registry.recover(None)`, and passes its exact joined `kernel_effects` to
+`E3GatewayRuntimeAuthorityV1::revoke(Recovered { ... }, &registry)`. Failure poisons/retains
+`Recovering` and returns before admission opens. The existing one startup call is the owner of this
+sequence; no scheduler, supervisor or new scanner is added.
+
+`gateway_runtime.rs` owns private `revoke_live_v1` and `revoke_recovered_v1` extracted behind the
+revised `revoke` entry point. The Live arm preserves the retained-owner path; the Recovered arm
+opens only the namespace/cgroup coordinates bound by the supplied existing intents/registrations,
+revalidates them, denies/revokes the exact old boundary, kills and proves every bound remnant and
+complete descendant tree quiescent using the existing recovery observation rules, then removes
+only those exact effects. It never calls `new`, binds/adopts a listener, recreates an effect, or
+constructs a credential, gateway launch or preparation owner. A nonterminal current-process owner
+cannot be treated as restarted. Missing process identity, substituted namespace/handles/cgroups,
+unclassified descendants or failed kill/absence proof reject, including on already-resolved inputs;
+retained resolution bytes are not a substitute for required current kernel observations.
+
+Both arms call the existing `publish_kernel_effect_resolution` with the exact existing resolution
+(or one retained new resolution for an unresolved intent) and its scoped cleanup callback. Its
+optional final expected ref is required when a projection exists; the registry repeats that exact
+head/fence/intent join under both locks before invoking the callback or accepting an exact retry.
+A headless intent uses `None` and must remain exactly headless. The callback's only added result is
+an observed Revoked boundary revision when a published boundary needs its legal successor; cgroup
+cleanup returns `None`. The registry validates and writes/readbacks that revision using existing
+boundary transition/hash/write helpers and the unchanged boundary store, then the existing kernel
+resolution in the same transaction. Existing non-boundary callbacks mechanically return `Ok(None)`.
+An already committed resolution/Revoked revision is exact-resolved without replaying an effect;
+conflicting successors or lost required observations reject. No callback re-enters the registry or
+HSA. Deletion without retained/recoverable proof of a required Revoked revision is not repaired by
+fabricating rule handles or accepting absence as that revision.
+
+For registered children, `revoke_recovered_v1` constructs the existing
+`E3TerminalChildQuiescenceEvidenceV1` from its actual PID/start/boot observations and twice-empty
+complete cgroup trees, and calls `publish_terminal_child_evidence` before deleting the observed
+cgroups. It reuses complete exact existing evidence on retry; it does not invent wait status or
+use the old service-instance ID as the new observer. Unregistered/headless effects follow only the
+existing intent-resolution rules and cannot manufacture terminal projection evidence. Completed
+kernel cleanup is followed by a fresh registry read. For each non-Active complete old preparation,
+the startup arm invokes its same `Subject` abandonment path, which publishes the terminal handoff
+and releases the known lease without credentials. Partial publications, ineligible Active history
+without the already required terminal retained-runtime evidence, or any unresolved effect keep
+admission closed; this boundary grants no E3-F teardown/launch implementation. Only after this
+sequence succeeds may `run_world_service` continue its existing GC/recovery completion. Later
+fresh-auth `prepare` reads the same subject history and needs no startup reconstruction.
+
+The production callers form one path:
+
+1. `prepare` keeps its existing pre-effect authoring read and both authenticated shell reads. After
+   building the exact immutable candidate identity and before accepting a new credential owner,
+   exclusion lease, listener or effect, it calls `resolve_preparation_subject_v1`. For `Bound`, use
+   `metadata.record().identity` unchanged and retain `metadata.projection_ref()` as the expected
+   predecessor; never allocate another series to bypass it. Existing live exact preparation retries
+   keep their response/owners and scrub duplicate auth. A different live contender cannot abandon
+   that owner. A terminal or restarted attempt requires a fresh preparation ID and fresh auth; the
+   old carrier/ID remains stale and cannot reconstruct process-local state.
+2. `cancel` and `recover_expired` replace their capability-producing durable posture checks with
+   the same service read, comparing the returned exact identity/head to their retained attempt or
+   supplied recovery snapshot. Cancel, expiry timer, pre-prepare expiry and failed-attempt cleanup
+   pass `recovered = None` and use `Live`. `prepare`, after fresh authentication and a Bound read
+   with no live owner, passes `Some(E3PreparationRecoveryV1::Subject(&metadata))` for the terminal-history path. That arm uses
+   `Recovered`, retains no credential/listener/launch owner for the old attempt, and repeats the
+   read after cleanup. A same-process nonterminal attempt without its owner is ineligible, not a
+   restart inference. The Startup path above establishes kernel cleanup and drives this same
+   Subject path before opening admission. Subject processing revalidates its durable cleanup
+   proof; absent proof rejects. Live cancellation/expiry calls the revised `revoke(Live(...),
+   &registry)` before `publish_preparation_abandonment(Live(...), ...)`; startup uses
+   `revoke(Recovered { ... }, &registry)` before `publish_preparation_abandonment(Recovered(...),
+   ...)`. Neither path treats the readback itself as cleanup.
+3. After terminal handoff and lease cleanup, the fresh attempt retains only the old expected ref
+   as nonsecret predecessor state in `SealedE3ConfigProjectionPreparationV1`. `prepare` allocates
+   fresh preparation/fence/root/gateway/boundary/handoff/intent/consumer identities, constructs
+   revision `expected.revision.checked_add(1)` and `predecessor_ref = Some(expected)` (Unbound
+   remains revision 1/None), and binds the exact same revision/ref into its activation intent,
+   launch input and publication carrier. It then uses the unchanged
+   `publish_prepared_retained_launch` signature. That service publishes the new Dormant record,
+   acquires its distinct Held lease, and only then obtains the existing capability via `resolve`.
+   No secret, descriptor, listener, barrier, launch input or ACK is replayed from the old attempt.
+
+`publish_dormant` already forwards `record.predecessor_ref` to
+`publish_record_in_transaction`; its signature need not change. E3-E owns the missing fresh-fence
+implementation in `src/registry.rs::{publish_successor,validate_record_transition}` and their
+private existing evidence readers/validators, plus the manager's predecessor/revision construction
+and the service's existing publication validation call sites. Under both locks, before committing
+new dependencies/head, revalidate the exact subject binding, expected current head, monotonic
+revision/predecessor, distinct new fence/root/gateway/handoff/lease identities, old Revoked boundary,
+required terminal child/kernel evidence, terminal handoff and release of old-fence consumers. The
+already specified Dormant/ReadyClosed/Active-to-fresh-Dormant edges are the authority; this assigns
+implementation ownership without inventing edges. Active history requires the existing terminal
+retained-runtime evidence and never goes through preparation cancellation. E3-F launch, active
+runtime teardown, resumed turns and their dispatch remain outside this correction.
+
+The current-head-equals-successor retry branch in `publish_successor` must validate the exact record,
+head, predecessor and complete old/new dependencies before success, not bypass fresh-fence checks.
+An unchanged expected head admits only one successor; a different contender rejects as
+`StaleRevision`/`Conflict`. Recognized immutable-before-head interruption may complete only its exact
+existing CAS; failed/partial recovery cannot select a new series or new retry identities. Later
+head movement also rejects stale cancellation/expiry snapshots. These checks and the existing
+handoff/lease transactions reuse parent/child locking, canonical bytes, no-replace writes, fsync and
+readbacks; they introduce no generic transaction framework or orchestration machinery.
+
+Future implementation proof uses existing registry/service tests, the colocated preparation-manager
+probe and gateway-owner fixtures, plus `tests/agent_config_projection_v1.rs`: cancel then fresh-auth
+prepare must retain the series and increment the revision with fresh identities; restart after
+kernel cleanup must reject stale old refs and require fresh authentication while reusing that
+series; failed cleanup, nonterminal owners, missing/partial/corrupt/retired state must block a
+successor and preserve evidence; exact retries and concurrent expected-head contenders must prove
+one immutable successor/lease, stable bytes and no effect replay, including handoff-commit and
+lease-release lost-return boundaries. These are later tests, not proof executed by this correction.
+The affected additional future regressions use those same surfaces: interruption after terminal
+evidence publication but before cleanup completion; exact evidence reuse after restart with
+unchanged IDs/timestamps/observations and fresh current kernel checks; cleanup using the recorded
+runtime-config identity; and rejection of wrong-bound, partial, corrupt or ambiguous evidence/
+launch-input readback (including retained-history coverage and competing inputs). Do not run these
+tests as part of this documentation change. Completed native-source, authenticated-owner and E2
+evidence is reused; older passing manager evidence is historical, not proof of this changed
+recovery implementation. The three newly failing registry tests and unwired-field Clippy errors
+remain unfinished candidate work without weakened validation or acceptance. The disposed
+manifest-inode finding stays closed and the earlier candidate Clippy diagnostic remains unwaived.
+
+### E3-D shared-Landlock fixed-device correction
+
+This section is the single normative owner of the narrow, separately implementable correction for
+the diagnosed E3-D/shared-Landlock fixed-device mismatch blocking E3-E. The retained diagnostic
+establishes userspace classifier rejection of required `/dev/null` before rule installation and
+setup attestation; `/dev/urandom` was not reached. Kernel rule application and subsequent startup
+remain unproved. A later bounded source implementation requires separate authorization.
+
+The existing shared Linux path-rule consumer may recognize exactly `/dev/null`, character device
+major/minor `1:3`, for read/write opens, and `/dev/urandom`, character device `1:9`, for read-only
+opens. These are two closed private target kinds, not a general character-device class or regular
+files. Recognize the fixed names before generic regular-file/directory classification so a
+substituted regular file or directory cannot pass. Validate `S_IFCHR` and `st_rdev` by `fstat` on
+the actual `O_PATH` rule descriptor submitted to `landlock_add_rule`, not on an earlier pathname
+check or the wrapper's already-closed support-validation descriptor.
+
+Open and hold `/dev` with `O_PATH|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC`; resolve only the fixed leaf
+beneath it with `openat2` and `RESOLVE_BENEATH|RESOLVE_NO_MAGICLINKS|RESOLVE_NO_SYMLINKS|
+RESOLVE_NO_XDEV`, using `O_PATH|O_NOFOLLOW|O_CLOEXEC`. Reject a returned link descriptor as well
+as link traversal, escape, or a mount crossing below that held directory. `/dev` is resolution
+machinery, never an allowed hierarchy or ancestor rule under this correction. A required missing
+device, wrong type/rdev, unsupported selection, or resolution failure fails closed; do not silently
+omit a required rule. Literal path/type/rdev validation is required independently in each consumer
+open; no cross-layer inode-persistence promise or serialized device identity is introduced.
+
+Use the existing four-vector interface and distinguish explicit vector selections before broad
+category masks lose their origin. An explicit device `exec_paths` selection is rejected, as is any
+`/dev/urandom` `write_paths` selection. A device selected only for discovery/directory access is
+rejected; existing convenience discovery accompanying read remains accepted without a device
+`READ_DIR` grant. Incidental `EXECUTE`, `READ_DIR`, and other non-device bits contributed by the
+existing read/write category masks are filtered, not mistaken for explicit requests. Emit only
+`READ_FILE` and/or `WRITE_FILE` selected for `/dev/null`, and only `READ_FILE` for `/dev/urandom`;
+never emit device execute, truncate, enumeration, creation, removal or reparenting rights. Empty or
+unsupported device grants fail closed. Arbitrary character devices and alternate names are not
+admitted by this exception.
+
+Full policies selecting either fixed device must handle both `READ_FILE` and `WRITE_FILE`, even
+for a read-only selection, so omitted write grants deny fresh write opens. Do not derive
+`handled_access_fs` solely from filtered positive grants: unhandled rights are generally allowed.
+Preserve write-only mode's existing semantics, including unhandled reads, with only `WRITE_FILE`
+for a selected `/dev/null` and rejection of `/dev/urandom` writing. Policies without a fixed-device
+subject and all non-device regular-file/directory classification, masks, missing-path handling and
+ABI behavior retain their existing semantics; the legacy write-only `/dev` directory policy is
+outside this correction. The intentional compatibility extension is exact-device handling through
+existing shared callers, with no public opt-in, descriptor-carrying API or new dependency.
+
+The existing derived-support and role-narrowing layers both consume this correction for the
+`Codex` and `ManagedGateway` wrapper roles. `ManagedGatewayReadinessProbe` gains no common-device
+rule. Producer vectors and their support/role/intersection hashes, E2 authority and governed rules,
+public policy shape, schemas, namespace/exclusion/privilege/seccomp controls, tracing, lifecycle and
+unrelated security behavior remain frozen. This does not authorize Codex execution or E3-F.
+
+These permissions mediate fresh opens for reading/writing, not every subsequent device operation.
+They add no ioctl mediation or retroactive restriction of inherited descriptors, and no higher
+Landlock ABI requirement; existing unsupported-ABI/error rejection still applies. The semantics
+follow the [Linux Landlock access and handled-rights documentation](https://docs.kernel.org/6.6/userspace-api/landlock.html),
+[kernel non-directory rule handling](https://github.com/torvalds/linux/blob/v6.16/security/landlock/fs.c#L295-L336),
+[device/ioctl limits](https://docs.kernel.org/6.12/userspace-api/landlock.html#ioctl-support), and
+[openat2 resolution rules](https://man7.org/linux/man-pages/man2/openat2.2.html).
+
+**Exact later source fence.** Only these existing files and surfaces are eligible under separate
+implementation authorization:
+
+| File | Permitted correction |
+|---|---|
+| `crates/world/src/landlock.rs` | Linux-private `PathRuleTargetKind`, `classify_path_rule_target`, `compatible_path_rule_access`, `open_path_rule`, `apply_filesystem_policy`, and `apply_write_only_allowlist`: only fixed-device recognition/resolution/selection/rights branches, minimal file-private helpers for those branches, and colocated tests. |
+| `crates/world/tests/landlock.rs` | Focused exact-device cases using the existing subprocess test structure. |
+| `crates/world-service/src/bin/substrate-world-entry.rs` | Colocated tests and minimal test-only fixtures for existing support-device validation, both enforcement layers/common-set roles and readiness exclusion. No production-body change is proposed here. |
+
+Public signatures, `LandlockFilesystemPolicy`, generic `open_opath`, unrelated mask helpers,
+`internal_exec` forwarding/resolution, wrapper production vectors/validators, and gateway/manager
+production code remain outside this fence. No new source file, dependency, environment setting,
+serialized field, descriptor channel or persistent identity is admitted. This documentation change
+edits none of these source files.
+
+**Discriminating later proof.** Reuse existing test structures and unaffected evidence; this
+correction does not require redundant installations, full historical walls or a new proof harness
+merely for orchestration. Keep the following evidence classes separate:
+
+- Unprivileged regressions cover exact name/type/rdev, swapped device descriptors, wrong identity,
+  regular/directory substitution, arbitrary character targets/aliases, missing targets, links,
+  escape and resolution rejection through private test seams without mutating host `/dev`.
+  Cover exact masks, explicit execute/urandom-write/discover-only rejection, incidental category
+  bits and discovery-plus-read compatibility, empty/unsupported requests, ABI-compatible masks,
+  full read-only device policies handling writes, and existing non-device/empty-policy compatibility.
+- Real-kernel consumer checks run in disposable unprivileged subprocesses with `no_new_privs` on
+  an enabled Landlock kernel, using fresh opens after restriction. Apply the real consumer twice
+  for the exact null read/write and urandom read closure; require both reports applied, null
+  read/write success, urandom read success, and `EACCES` for urandom write, `/dev` enumeration and
+  an otherwise DAC-readable sibling such as `/dev/zero`. Separately require a urandom-only read
+  policy to deny write opens, exposing accidentally unhandled writes; verify write-only mode
+  leaves reads unrestricted and retain existing exact-file/directory compatibility checks.
+  An inherited device FD is not a positive open result. Missing kernel support is an explicit
+  skip/inconclusive result, never success or acceptance.
+- Separately authorized privileged wrapper integration covers existing support-device validation,
+  actual enforcement in both layers for Codex/ManagedGateway role fixtures, unchanged vectors and
+  hashes, readiness exclusion, and failure before attestation for invalid devices. Use private
+  namespace fixtures for missing/substituted subjects and forbidden mount crossings without
+  changing host `/dev`; do not launch Codex.
+- Installed connected acceptance requires a later, separately authorized activation with corrected
+  installed provenance establishing actual setup attestation and passage beyond the former
+  failure. Neither the retained failed diagnostic nor successful classification substitutes for it;
+  later startup success is not presumed.
+
+Documentation landing establishes no source repair, successful rule application, installed
+acceptance, E3-E closure or E3-F admission. The next eligible operation is separately authorized
+bounded source implementation, not automatic runtime acceptance.
+
+### E3-D cgroup denial-target identity correction
+
+This section is the single normative owner of a later, separately authorized correction to the
+frozen E3-D parent validator blocking E3-E. It is grounded in preserved product commit
+`0f82096c5cc197c9ded0b4e52d13095abff76569`, tree
+`f7a6b60369a7e8d5ad497ac60d2dcd575afa5e6a`, and the 2026-09-16 startup diagnostic retained under
+`review-evidence/e3-e-runtime-directory-dac-20260916/diagnostic-20260916T190729Z/diagnostic-note.md`
+outside the repository. Installed revision 5 is `iar_01a0ab5f-4080-7edf-9045-602f3551ac95`;
+that failed activation is not successful installed acceptance.
+
+At that source, `gateway_runtime.rs::spawn_descriptor_pinned` constructs authenticated, canonically
+ordered denial targets for all three retained role cgroups (ManagedGateway, Codex and readiness),
+while `expected_process_cgroup` correctly names ManagedGateway. The `CgroupControl` branch of
+`validate_denied_control_probe_target_identities_v1` instead requires every target to equal that
+one cgroup and calls `validate_child_cgroup_membership` for each. The parent rejects the Codex
+target before final-exec release. The wrapper's captured empty/oversized-pipe error is secondary:
+source ordering attributes it to cleanup closing the unreleased final gate, not a new codec, DAC
+or Landlock-device defect.
+
+**Required correction and preserved invariants.** Independently revalidate every authenticated,
+retained `CgroupControl` target against its own `CanonicalCgroupIdentityV1` and require the literal
+control name `cgroup.procs`. Preserve the existing cgroup-v2 mount device/inode and target-directory
+device/inode checks and fail on absent, substituted or mismatched identities. Target validation
+must not compare every target with `expected_process_cgroup` or require the current child to be a
+member of sibling denial-target cgroups. A child remains required to belong to its own expected,
+retained cgroup; this correction permits neither membership in every denial-target cgroup nor
+moving the child among those cgroups to satisfy validation.
+
+The retained-namespace equality check in `validate_child_security_attestation_v1` and live
+`/proc` membership readback in `validate_live_child_security_readback_v1` continue to bind the
+running child to its own retained cgroup. Preserve their identity readback, setup membership
+validation, retained ownership and fail-closed behavior. Reuse the identity checks already in
+`validate_child_cgroup_membership`, with a minimal file-private extraction separating identity
+validation from process membership if needed. Merely deleting checks, skipping sibling probes,
+reducing the target list to the gateway cgroup, or accepting ambient/caller-selected targets is not
+a correction. The complete held target set, canonical ordering, target/input/result hashes,
+exact wrapper-result matching, fixed operation/errno checks and independent parent revalidation
+before release and after results remain required. No wire semantics or wrapper probe behavior changes.
+
+**Exact later implementation fence.** Production edits are confined to
+`crates/world-service/src/e3_child_security.rs` and only:
+
+- the `CgroupControl` branch of `validate_denied_control_probe_target_identities_v1`;
+- `validate_child_cgroup_membership` only as needed to share its unchanged identity checks while
+  preserving its process-membership behavior;
+- a minimal file-private cgroup identity-validation helper, if necessary; and
+- directly affected colocated regression tests.
+
+The existing parent attestation/live-readback callers and namespace-setup membership caller are
+context, not authority for unrelated edits. Gateway target construction, wrapper production code,
+schemas, hash domains, descriptor ownership, privilege descent, namespace lifecycle, Landlock,
+seccomp, credentials and E3-F remain unchanged. No new resolver, registry, public API or descriptor
+ownership model is admitted. This fence is reconciled against the exact producer, validator,
+membership and wrapper paths above; if implementation requires a wider production boundary,
+report the exact conflict and stop rather than infer file-wide authority.
+
+**Focused later regressions and acceptance.** Within that fence:
+
+- accept distinct valid retained gateway/Codex/readiness target identities without requiring
+  gateway membership in the sibling cgroups; require a regression that reaches and fails for the
+  diagnosed baseline equality/membership reason, not an unrelated fixture or setup failure;
+- continue rejecting incorrect actual child membership in its own expected/retained cgroup;
+- reject absent/substituted target identities, mismatched cgroup mount device/inode or directory
+  device/inode, and any control name other than `cgroup.procs`; and
+- reuse the unchanged target-set integrity and denial-result validators and relevant existing
+  checks for missing/extra/reordered/duplicate/substituted or rehashed targets and wrong fixed
+  operation/errno; add tests only where affected coverage is missing.
+
+Focused tests do not establish installed activation. Later separately authorized exact-commit
+installation and the existing connected acceptance must prove progress through the actual
+service -> wrapper -> parent target/security validation -> final-exec path and the already-required
+gateway/readiness/publication/cleanup path. Preserve prior valid proof; do not restart whole-E3-E
+review/planning, create a second acceptance framework or impose an unrelated test wall. The
+canonical [development review contract](development-review-and-remediation-contract.md) governs
+the later consolidated implementation, focused regression, review, installation and acceptance
+session under its separate authorization.
+
+This documentation allowance implements none of the correction and establishes no new runtime
+proof. E3-E remains open; E3-F is not admitted.
+
+### E3-E activation callable boundaries
+
+The complete bounded protocol and source/caller map are in
+[managed gateway adoption](managed-gateway-adoption-v1.md#e3-e-activation-publication-and-ownership-seam).
+These exceptions supersede only conflicting E3-E signature/visibility limits in the admission
+catalog; schemas, hash domains and storage paths remain unchanged. The E3-D lifecycle ownership
+exception is [terminal namespace release](#e3-e-terminal-child-namespace-owner-boundary). The
+separately authorized [fixed-device consumer correction](#e3-d-shared-landlock-fixed-device-correction)
+has its own exact fence. The [cgroup denial-target identity correction](#e3-d-cgroup-denial-target-identity-correction)
+qualifies only its named E3-D validator/helper/test freeze; E3-F ownership remains unchanged.
+
+In `crates/config-projection/src/service.rs`, the already admitted operations have these exact
+signatures. The observation enum is public solely across the existing world-service dependency,
+non-Serde and nonpersistent; it contains no live capability, secret, descriptor or callback.
+The existing `pub use service::*` exports it without another `lib.rs` change.
+
+```rust
+pub enum E3ManagedGatewayActivationObservationV1 {
+    Delivered { delivered_at: Timestamp },
+    Ready {
+        gateway_process_identity: GatewayProcessIdentityV1,
+        child_security_attestation: E3ChildSecurityAttestationV1,
+        observed_at: Timestamp,
+    },
+}
+
+impl AgentConfigProjectionServiceV1 {
+    pub fn resolve_activation_carrier(
+        &self,
+        publication: &E3PreparedRetainedLaunchPublicationV1,
+        carrier: &transport_api_types::ConfigProjectionActivationCarrierV1,
+    ) -> Result<ManagedGatewayLaunchInputV1, ConfigProjectionFailureV1>;
+
+    pub fn activate_managed_gateway(
+        &self,
+        publication: &mut E3PreparedRetainedLaunchPublicationV1,
+        observation: E3ManagedGatewayActivationObservationV1,
+    ) -> Result<Option<ConfigProjectionRefV1>, ConfigProjectionFailureV1>;
+}
+
+impl ConfigProjectionRegistryV1 {
+    pub fn publish_ready_closed(
+        &self,
+        expected_head: &ConfigProjectionRefV1,
+        record: &AgentConfigProjectionRecordV1,
+        ack: &ManagedGatewayActivationAckV1,
+        held_lease: &ConfigProjectionConsumerLeaseV1,
+    ) -> Result<ConfigProjectionRefV1, ConfigProjectionFailureV1>;
+}
+```
+
+`resolve_activation_carrier` is the initial Dormant readback, using the publication's original
+Held lease in the existing `resolve` and requiring exact record/head equality plus durable prepared-
+chain validation. It returns the byte-equal retained launch input only after those checks. It is not
+a ReadyClosed retry resolver. `activate_managed_gateway(Delivered)` freezes/publishes/readbacks the
+unique Delivered successor and returns `None`; only then may the parent probe. `Ready` requires
+that durable Delivered progress, constructs/freezes and publishes Consumed, then ACK/ReadyClosed,
+and returns `Some(exact_ready_ref)`. Equal same-step retries use retained objects; unequal
+observations conflict, out-of-order steps reject, and Ready never implies another secret delivery.
+Neither method imports world-service or obtains a raw transaction/descriptor accessor.
+
+`E3PreparedRetainedLaunchPublicationV1` may retain private activation progress: the Delivered and
+Consumed wrappers/refs, original observation, complete ACK/ref and ReadyClosed record/ref. The
+original prepared record, `published_head` and `held_consumer_lease` remain unchanged. Only these
+service methods and `publish_preparation_abandonment` may consume that progress. Private
+`validate_gateway_activation_publication_v1`, `build_gateway_handoff_successor_v1`, and
+`build_gateway_ready_closed_v1` own their bounded validation/construction; no public handoff getter
+or generic publication object is added.
+
+In `src/registry.rs`, `publish_ready_closed` opens one `with_transaction`, validates the expected
+Dormant/current-exact-retry and original Held lease, then calls private
+`publish_gateway_ack_in_transaction_v1` followed by existing `publish_record_in_transaction` and
+exact record/head readback. The ACK helper uses `write_immutable` and private
+`resolve_gateway_ack_in_transaction_v1` on only `gateway-acks/<ack-id>.json`; no standalone public
+or crate-public ACK writer/resolver exists. Private `validate_gateway_activation_authority_v1`
+shares the live-publication head/fence/lease checks with the activation handoff path. Private
+`validate_gateway_ack_chain_v1` owns complete immutable joins; existing
+`validate_reference_bindings` remains shape-only and cannot substitute for it. Wire that chain
+validation into `publish_record_in_transaction`, `publish_successor` (including exact retry),
+`resolve_projection_in_transaction`, `read_preparation_subject_in_transaction_v1`,
+`validate_series_tree`, and the existing record/head temporary-recovery validators. Private reads
+of the ACK's Dormant predecessor use shape/prepared-chain validation, avoiding recursive ACK
+resolution. Audit/recovery validates immutable evidence without constructing live ownership.
+
+The existing `validate_registry_tree`, `validate_gateway_preparation_tree`,
+`validate_gateway_recovery_candidate`, `recover_owned_temps`/`recover_temp`, and `parse_temp_name`
+may recognize and validate the already specified ACK directory and its bounded immutable temporary
+kind through existing recovery/write primitives. Recovery can retain/exact-readback a valid orphan
+ACK but cannot promote it to live activation or replay a spawn. No generic lookup or new storage
+layout is introduced. All ReadyClosed callers must pass ACK evidence and the original Held lease;
+existing Active/readback callers must resolve the same evidence privately, not retain a ref-only
+bypass. This admits no new Active execution caller.
+
+In `crates/world-service/src/e3_config_projection_prepare.rs`, `take_for_v2` has the exact crate-
+visible boundary `fn(&self, &transport_api_types::MemberDispatchRequestV2) ->
+Result<SealedE3ConfigProjectionPreparationV1, ConfigProjectionFailureV1>`. It alone claims, performs
+bounded gateway activation, and transfers the map-owned preparation once. The sealed type becomes
+`pub(crate)` only so the existing `MemberRuntimeLaunchAdmissionV2` can own it; only its `publication`,
+`projection`, `gateway_authority`, and new `ready_closed_ref: Option<ConfigProjectionRefV1>` fields
+are crate-visible for that ownership transfer. All other fields and construction remain private;
+there is no public export, Clone, Serde or reconstruction from refs. Private claim/consumed progress
+stays in the manager, and private `activate_prepared_gateway_v1` and
+`cleanup_prepared_gateway_v1` operate on the already borrowed entry without reacquiring its map
+lock. `prepare`, `cancel`, and `recover_expired` may make only the corresponding retention/cleanup
+call-site adaptations. `take_for_v2` joins `prepare` as a caller of the existing authenticated E2
+facade operation; the selected-inventory facade operation remains prepare-only. The concrete HSA
+facade stays in the manager and is never transferred with the preparation.
+
+The already cataloged `E3GatewayRuntimeAuthorityV1` methods own private one-spawn/probe/delivery
+progress and held OS resources, including the existing private `ManagedGatewayLaunchCapabilityV1`;
+consume its one-shot launch permission while retaining parent cleanup handles and exclusion.
+Only the [terminal namespace owner boundary](#e3-e-terminal-child-namespace-owner-boundary) may
+adapt E3-D helper signatures/private lifecycle state; the separate
+[fixed-device consumer correction](#e3-d-shared-landlock-fixed-device-correction) changes no such
+interface or state. The [cgroup denial-target identity correction](#e3-d-cgroup-denial-target-identity-correction)
+separately permits only its exact validator/private-helper/test edits. Other E3-D security and all
+E3-F member-runtime execution remain excluded. Later
+focused tests may change only the affected colocated service/registry/manager/runtime/gateway tests
+and existing E3 integration surfaces; the managed-gateway section specifies their minimum proof.
+
+### E3-E terminal child namespace owner boundary
+
+This is the sole E3-E lifecycle exception to the E3-D helper freeze; the separately authorized
+[fixed-device consumer correction](#e3-d-shared-landlock-fixed-device-correction) has its own fence
+and leaves this lifecycle unchanged, as does the separate
+[cgroup denial-target identity correction](#e3-d-cgroup-denial-target-identity-correction).
+The owning file remains
+`crates/world-service/src/e3_child_security.rs`; the non-cloneable
+`HeldE3PrivilegedChildExclusionLeaseV1` is the caller's existing authority. Its shared
+`E3PrivilegedChildExclusionV1` retains the private namespace map. No caller receives that map,
+namespace descriptor, independent namespace capability, raw PID/path release API or callback.
+The [managed-gateway cleanup protocol](managed-gateway-adoption-v1.md#terminal-namespace-release-and-exclusion-last)
+owns ordering, all call paths and later proof. This section owns the callable and private-state fence.
+
+```rust
+// In e3_child_security.rs; Result is anyhow::Result.
+pub(crate) fn install_and_validate_e3_child_user_namespace_v1(
+    lease: &mut HeldE3PrivilegedChildExclusionLeaseV1,
+    parent_setup_socket: &OwnedFd,
+    identity: &config_projection::ConfigProjectionIdentityV1,
+    child: &config_projection::E3ChildProcessRegistrationV1,
+    requirement: &config_projection::E3UserNamespaceRequirementV1,
+) -> Result<()>;
+
+impl HeldE3PrivilegedChildExclusionLeaseV1 {
+    pub(crate) fn release_terminal_child_user_namespace_v1(
+        &mut self,
+        child: &config_projection::E3ChildProcessRegistrationV1,
+    ) -> Result<()>;
+
+    pub(crate) fn release_after_cleanup_v1(&mut self) -> Result<()>;
+}
+
+// In gateway_runtime.rs; this is the manager's final fallible release boundary.
+impl E3GatewayRuntimeAuthorityV1 {
+    pub(crate) fn release_exclusion_after_cleanup_v1(&mut self) -> Result<()>;
+}
+```
+
+**Lease and child binding.** Setup replaces the old exclusion/PID/start/cgroup arguments with the
+held lease, existing projection identity and complete process registration; PID/start/cgroup are
+derived from that registration. The runtime supplies its already retained gateway or probe registration, joined to the
+exact cgroup registration/intent, role, fence, store/series, boot and service instance, and to its
+launch input's world/generation and preparation. Setup exact-checks the supplied identity's
+world/generation against its private lease fields and its store/series against the registration,
+then checks the registration's cgroup/boot against the actual process before any mapped release. World/generation
+are the acquired lease binding, not values inferred from a pathname. The same registration must be
+used for terminal release; a reconstructed numerically equal PID is insufficient.
+
+The lease retains private per-child setup/completion progress, keyed by the existing PID/start pair
+and complete registration equality. A private process-local lease ownership marker binds each map
+entry to the actual acquiring lease, not merely to a same-world count; it is not a new persistent or
+stable ID. Record the exact setup invocation before fallible namespace work. A slot distinguishes
+never-retained setup, held namespace, and completed release. Capture the namespace device/inode,
+original pidfd and process start identity in the existing held entry, along with that registration
+and lease binding. A failed final `USERNS_MAPPED` send leaves the held slot intact. Failed setup
+before retention leaves its never-retained slot; an unknown child is not an already-released child.
+Duplicate registration/namespace insertion must check before mutation, never replace/drop a prior
+entry and then return an error. Allocation or unwind cannot discard the only held descriptor.
+
+`release_terminal_child_user_namespace_v1` requires an unreleased matching lease in the same
+exclusive epoch and exact private registration/lease binding. For a held entry it revalidates the
+held namespace descriptor identity and its stored service-parent/owner binding, polls the original
+pidfd terminal, then runs `verify_e3_child_process_and_cgroup_quiescent` and
+`read_empty_e3_cgroup_tree` against the original canonical cgroup while it still exists. Both
+complete-tree observations must be empty and equal, including descendant object identities; a
+renamed/replaced mount, directory or descendant, live pidfd, populated tree, wrong boot/world/
+generation/role/fence/registration or sibling lease rejects. No `/proc/<pid>` reopening after reap
+may substitute a different process for the held pidfd. Preserve all existing exact-object checks.
+
+Only after successful validation does the owner close that namespace descriptor and mark that
+exact slot released as one state transition. Keep private non-owning identity/completion data for
+same-live-lease retry; no fallible publication follows descriptor loss inside this operation.
+`Ok(())` means this slot owns no namespace: either this call released it, this exact lease already
+released it, or its recorded setup never retained one. The last case is not terminal-process or
+cgroup proof; the runtime still owes its independent kill/reap/empty checks before removal. Unknown
+slots and unequal retries error. Completed-slot retry never reopens a removed cgroup or closes a
+second descriptor. It cannot certify a reappearing replacement cgroup for later cleanup. The method
+never changes a lease count, releases another child, opens admission or publishes durable evidence.
+Any validation error leaves the held slot, descriptors, counts and closed admission unchanged.
+
+**Final release and unwind.** `release_after_cleanup_v1` is the sole counted release for this
+lease. It requires all its setup slots to be never-retained or explicitly released; an unresolved
+held namespace rejects without decrement. It calls the owner's private `release_e3_exclusive`
+under one state lock, validating the lease binding and positive count before mutation. A non-last
+release decrements exactly once and leaves all siblings' slots, descriptors and leases unchanged.
+The last release requires no held namespace anywhere, clears only completed/non-owning epoch
+bookkeeping and enters the existing `LegacyShared { live_non_e3_children: 0 }` state. It must not
+reopen cgroups for slots already released, treat missing cgroups as quiescence, or bulk-release an
+unresolved sibling. Every fallible check precedes the count/mode mutation; set the lease's released
+flag in the same critical section. An equal repeat on that released lease is a no-op. The current
+decrement-before-validation path is forbidden here: an error must not leave zero counted leases
+with live ownership. This changes no non-E3 admission or recovery algorithm.
+
+`release_exclusion_after_cleanup_v1` is called only by the preparation cleanup owner after the
+runtime's exact kernel/listener/config cleanup and the original handoff/consumer/capability cleanup
+have succeeded. It checks the runtime's retained completion state and invokes the lease method;
+errors leave the runtime in the sealed entry for retry. The manager marks `cleanup_complete` and
+takes/drops the runtime only after success. Destructors are not fallible cleanup or recovery: a
+released lease drop is inert; an unexpected unreleased E3 owner/lease drop preserves closed
+admission and unresolved shared ownership (poisoning on lost accountability), never decrements or
+claims success. A never-started, resource-free owner must also use explicit final release in normal
+cleanup. No destructor abort is used to handle an ordinary cleanup validation error.
+
+**Exact later implementation fence.** Only these adaptations are added to E3-E's existing fence:
+
+- `e3_child_security.rs`: `HeldE3PrivilegedChildExclusionLeaseV1` private child/lease progress and
+  the two methods above plus `Drop`; `E3PrivilegedChildExclusionStateV1`, `ExclusionModeV1` and
+  `HeldE3ChildUserNamespaceV1` private ownership/completion fields;
+  `E3PrivilegedChildExclusionV1::{acquire_e3_exclusive,retain_child_user_namespace,
+  release_e3_exclusive}` for binding, non-replacing retention and transactional counted release;
+  `install_and_validate_e3_child_user_namespace_v1` and its private
+  `install_and_validate_e3_child_user_namespace_on_sync_thread_v1` for the typed lease/registration
+  boundary and partial setup retention; `verify_e3_child_process_and_cgroup_quiescent` and
+  `read_empty_e3_cgroup_tree` for this per-child use and exact descendant identity comparison.
+  Private already-locked helpers may implement these operations without recursive locking.
+  `validate_child_security_attestation_v1` may only adapt its private map lookup to require a held
+  slot; its security checks, signature and attestation semantics stay frozen.
+- `gateway_runtime.rs`: `E3GatewayRuntimeAuthorityV1` and private
+  `ManagedGatewayLaunchCapabilityV1` cleanup progress, `spawn_descriptor_pinned` and
+  `spawn_readiness_probe` setup calls, `probe_readiness` successful-probe release,
+  `revoke`, `revoke_live_v1` (including private `remove_empty`), `Drop`, and
+  `release_exclusion_after_cleanup_v1`. Preserve exact process ownership before registration,
+  freeze terminal evidence before publication, and retain per-object removal progress on errors.
+- `e3_config_projection_prepare.rs`: `SealedE3ConfigProjectionPreparationV1` private terminal
+  progress and `E3ConfigProjectionPreparationManagerV1::{prepare,take_for_v2,
+  activate_prepared_gateway_v1,cleanup_prepared_gateway_v1,cancel,recover_expired}` only for these
+  owner/caller transitions and retry after handoff/consumer release. No new registry/service API.
+- Only the affected colocated tests in those three files, including all three existing E3-D setup
+  helper test calls and the gateway/probe/manager cleanup callers, plus already admitted E3-E
+  integration proof surfaces. No new generic proof harness.
+
+This exception does not alter UID/GID maps, capability parking/descent, namespace creation/handshake
+bytes, Landlock/seccomp, tracing, secret channels, schemas, hashes, storage, restart evidence recovery
+or V1 compatibility. It assigns no `e3_codex_launch.rs` or member-runtime production caller, no
+retained Codex lifecycle, and no E3-F implementation. Later E3-F integration consumes this boundary
+under its own authority. Source inspection for this documentation is not product impact analysis,
+implementation, test execution or E3-E source-review completion.
+
 ## Admission fence and required proof
 
-This specification is documentation authority only. A later fresh E3 admission must bind an exact
-source commit, re-run impact analysis on every named symbol, and may authorize only the following
-symbol-level product fence:
+This specification is documentation authority only. The following is an ownership catalog partitioned
+by the serial E3-A through E3-F work packets in the controlling slice; it is not one combined
+implementation candidate. Every packet requires its own later fresh admission, exact source commit,
+readiness receipt, impact analysis on each named symbol, explicit dispatch, and packet-bounded proof.
+Success in one packet makes only its direct successor eligible to seek admission and never dispatches
+that successor automatically.
+
+For E3-B only, the later storage admission must additionally bind
+`crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/layout.rs`,
+specifically `StoreLayout::validate_closed_layout`, for the sole additive literal
+`agent-config-projection-v1` directory match described above. No other function in that product path
+and no weakening of the closed-layout validator is owned. It must also bind
+`crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs`,
+specifically `validate_e2_rm_authority_manifest` for the identical sole literal match and the exact
+`ConfigProjectionHsaParentTransactionV1::{begin,authority_fd,finish}` plus
+`with_opened_config_projection_hsa_parent` bridge named above; no E2-RM authority data, read
+semantics, history, reconciliation, schema, or namespace change is owned.
+Subject to those corrections, later packet admissions may select only their applicable symbols from
+this catalog. For the existing E3-E continuation, the bounded
+[authenticated-owner propagation exception](#authenticated-owner-propagation-for-the-e3-parent-and-registry)
+additionally applies to the exact HSA and registry symbols named there; the bounded
+[same-subject fresh preparation correction](#same-subject-fresh-preparation-and-restart-readback)
+also applies only to its exact types, signatures, owning symbols and production callers, overriding
+conflicting restrictions below. Neither correction restarts admission or broadens another entry:
 
 1. create exactly `crates/config-projection/{Cargo.toml,src/lib.rs,src/codec.rs,src/registry.rs,
    src/service.rs,src/codex_0125.rs,src/linux_artifacts.rs}` and add only its dependency/export entries
@@ -3352,7 +5391,12 @@ symbol-level product fence:
    depends downward on `transport-api-types`.
    `transport-api-types` receives no dependency on the new crate. The new crate may expose only the
    data types named in this contract and `managed-gateway-adoption-v1` other than the explicitly
-   transport-owned wire types above, plus these operational symbols:
+   transport-owned wire types above, plus these operational symbols. E3-D alone owns the narrow
+   security-field correction in `src/lib.rs`: add the embedded `E3LinuxIdMapExtentV1`,
+   `E3UserNamespaceRequirementV1`, and `E3UserNamespaceAttestationV1` types; replace only the Yama
+   field in `E3WorldFsEnforcementInputV1` and `E3ChildSecurityAttestationV1`; and add the exact child
+   namespace device/inode fields to `E3GatewaySecretReadyAttestationV1`. It owns no other projection,
+   gateway, record, receipt, or codec-schema change. The admitted operational symbols are:
    `ConfigProjectionCodecV1::{encode_canonical_json,decode_canonical_json,domain_sha256}`,
    `ConfigProjectionRegistryV1::{open,recover,resolve,publish_dormant,publish_ready_closed,
    publish_active,publish_native_source,realize_native_root,recover_native_realization,
@@ -3368,13 +5412,200 @@ symbol-level product fence:
    activate_managed_gateway,prepare_codex_launch,
    validate_resumed_turn,release_codex_launch,revoke_retained_runtime}`,
    `ConfiguredAcceptedHomeAuthorityV1::{from_installed_bootstrap_authority,from_record_for_test,
-   revalidate}`,
+   revalidate,accepted_home,intended_uid}`,
+   `ConfigProjectionHsaAuthorityV1::with_locked_parent`,
    `CanonicalDirectoryV1::{capture_linux_from_fd,revalidate_linux_from_fd}`,
    `Codex0125ProjectionV1::{render,validate_loader_inputs,validate_setup_ready}`, and
    `LinuxArtifactSourceV1::{validate_store,resolve_ref,import_manifest,
-   validate_e3_static_elf_v1,validate_system_config_mount_target_v1,
-   validate_host_ptrace_posture_v1}`. Colocated `mod tests` blocks
-   are allowed; no other `pub`/`pub(crate)` function or free private helper is admitted;
+   validate_e3_static_elf_v1,validate_system_config_mount_target_v1}`. The obsolete
+   `validate_host_ptrace_posture_v1` name is deleted rather than renamed or left with artifact-source
+   ownership; host process security belongs to E3-D's world-service child-security path below.
+   For the bounded E3-E native-construction correction only, E3-E may consume the following narrow
+   E3-C-owned adaptations in `crates/config-projection/src/codex_0125.rs` and
+   `crates/config-projection/src/registry.rs`; this does not reopen any other E3-C finding or behavior.
+   The exact revised renderer signature is:
+
+   ```rust
+   impl Codex0125ProjectionV1 {
+       pub fn render(
+           identity: &ConfigProjectionIdentityV1,
+           effective: &EffectiveAgentConfigProjectionV1,
+           managed_gateway: &ManagedGatewayProjectionV1,
+           root: NativeProjectionRootV1,
+           fence_id: &str,
+           project_loader_inputs: Vec<CodexLoaderInputAttestationV1>,
+       ) -> Result<Codex0125ProjectionPlanV1, ConfigProjectionFailureV1>;
+   }
+   ```
+
+   `project_loader_inputs` contains all and only the already observed, source-matched `Project`
+   entries; `System`, `User`, `McpCredentials`, `Auth`, and `CloudRequirements` entries are rejected
+   at this boundary because they depend on the not-yet-created accepted-home source. The public
+   `Codex0125ProjectionPlanV1` is an opaque, non-`Clone`, non-Serde process-local type with private
+   fields exactly `identity`, `effective`, `managed_gateway`, `root`, `fence_id`,
+   `project_loader_inputs`, `config_bytes`, `config_byte_length`, `config_sha256`, `renderer`,
+   `environment`, and `invocation`; it has no public constructor, getter, mutation, or persistence
+   representation. `render_config_toml_v1` is the sole private TOML byte generator, extracted from
+   the existing nested implementation without a second grammar. The only new crate-private
+   operations in this file are `Codex0125ProjectionPlanV1::config_bytes_v1` for the registry's
+   immediate write and `Codex0125ProjectionV1::finalize_from_native_source_v1(&Codex0125ProjectionPlanV1,
+   &Codex0125NativeSourceObservationV1) -> Result<NativeAgentConfigProjectionV1,
+   ConfigProjectionFailureV1>`. The crate-private, non-cloneable, non-serializable
+   `Codex0125NativeSourceObservationV1` has private fields exactly `source_root`, `codex_home`,
+   `system_empty`, `config_device_id`, `config_inode`, `config_mode`, `config_owner_uid`,
+   `config_owner_gid`, `config_link_count`, `config_byte_length`, and `config_sha256`, plus one
+   crate-private `new` constructor used only by the registry after same-descriptor validation.
+   Finalization alone constructs the source-rooted `System`/`User`/pseudo-layer entries, appends the
+   plan's already observed `Project` entries in canonical precedence order, validates the complete
+   closure, and computes the unchanged native hash domain.
+
+   The exact revised registry signature is:
+
+   ```rust
+   impl ConfigProjectionRegistryV1 {
+       pub fn publish_native_source(
+           &self,
+           series_id: &str,
+           fence_id: &str,
+           plan: &Codex0125ProjectionPlanV1,
+           created_at: Timestamp,
+       ) -> Result<
+           (NativeAgentConfigProjectionV1, NativeProjectionSourceManifestV1),
+           ConfigProjectionFailureV1,
+       >;
+   }
+   ```
+
+   In `src/registry.rs`, only private `capture_codex_native_source_observation_v1` and the existing
+   `publish_native_source_directory`, `validate_native_source_directory`,
+   `validate_native_projection_source_input`, and `recover_native_source_temps` may be adapted to
+   implement the acyclic construction/readback sequence above. The capture helper retains the opened
+   config descriptor through read/hash/two-`fstat` validation and constructs the one observation;
+   it exposes no descriptor. `publish_dormant` may change only its existing native-source call site
+   to require and exact-validate that already published source instead of creating one. No schema,
+   hash domain, public registry operation, source-store layout, realization operation, recovery
+   fallback, or permissive partial-tree promotion is added.
+   For the bounded installed-CA corrective delta only, E3-D may add private
+   `resolve_exact_installed_ca_bundle_v1`, call it only from the otherwise-frozen support-file opening
+   inside `LinuxArtifactSourceV1::import_manifest`, and change that file's colocated `mod tests` in
+   `crates/config-projection/src/linux_artifacts.rs`, solely to implement the exact logical-CA
+   resolver and final-descriptor validation above. The exception adds no public symbol, schema,
+   registry behavior, manifest field, alternate pathname, or resolution rule for another support
+   object.
+   For E3-E only, `crates/config-projection/src/service.rs` may define the exact
+   `E3PreparedRetainedLaunchPublicationV1` and its `new`, `prepared_handoff_ref`,
+   `bind_prepared_chain`, `published_head`, and `held_consumer_lease` operations described above;
+   may change
+   `AgentConfigProjectionServiceV1::publish_prepared_retained_launch` to the exact three-argument
+   and tuple-result signature above; and may add only private
+   `validate_prepared_retained_launch_publication_v1`,
+   `build_prepared_secret_handoff_revision_v1`, and `build_prepared_response_v1` helpers. The type
+   is exported only by the existing `crates/config-projection/src/lib.rs::pub use service::*`; no
+   other `lib.rs` change is admitted. The service receives no prepare request, integrated-auth
+   payload, raw descriptor, kernel callback, or world-service type. In
+   `crates/config-projection/src/registry.rs`, E3-E may extend only the private
+   `PreparedGatewayChainV1` and `validate_prepared_gateway_chain` to accept the fixed ordered
+   `&[E3ChildCgroupRegistrationV1; 3]` and authenticate each with the existing
+   `resolve_child_cgroup_registration`; `publish_prepared_gateway_chain` may mechanically ignore
+   that validation-only tuple member. E3-E may also add only the optional final
+   `prepared_consumer_id` argument shown above to the existing `acquire_consumer_lease` operation,
+   plus crate-private `prepared_member_dispatch_consumer_id_v1` and private
+   `acquire_or_resolve_prepared_consumer_lease_v1` in `src/registry.rs`, solely for the exact
+   deterministic `MemberDispatchV2` acquire-or-resolve/recovery behavior above; `None` preserves all
+   other existing callers and behavior. No public registry operation is added. Except for the bounded
+   [activation interfaces](#e3-e-activation-callable-boundaries), no other service method signature
+   or public config-projection surface changes.
+
+   For the already admitted E3-E abandonment lifecycle, `src/service.rs` owns
+   `AgentConfigProjectionServiceV1::publish_preparation_abandonment` and the private nonsecret
+   construction/validation helpers necessary for that operation. The service uses the retained
+   publication's identity, fence, and private handoff revision to construct the exact
+   `Failed`/`Expired` successor, preserving the preparation and gateway bindings. It supplies that
+   complete existing wrapper, including its immediate `predecessor_ref`, timestamps, nullable
+   diagnostic ref, and unchanged revision hash domain, through this sole additional internal
+   callable boundary owned by `src/registry.rs`:
+
+   ```rust
+   impl ConfigProjectionRegistryV1 {
+       pub(crate) fn publish_handoff_transition_v1(
+           &self,
+           identity: &ConfigProjectionIdentityV1,
+           fence_id: &str,
+           successor: &ConfigProjectionSecretHandoffRevisionV1,
+           expected_projection_ref: Option<&ConfigProjectionRefV1>,
+           activation_consumer_lease: Option<&ConfigProjectionConsumerLeaseV1>,
+       ) -> Result<SecretHandoffRefV1, ConfigProjectionFailureV1>;
+   }
+   ```
+
+   `expected_projection_ref` retains the candidate's current-attempt abandonment guard; terminal
+   abandonment passes `activation_consumer_lease = None` and keeps its existing cleanup checks.
+   For Delivered/Consumed only, `activate_managed_gateway` must pass both the original Dormant
+   expected ref and `Some` of its exact revision-1 Held dispatch lease. The registry repeats the
+   current Dormant/intent/fence/lease checks inside that same transaction before mutation; missing
+   guards reject. An activation guard cannot publish Failed/Expired or bypass cleanup. All existing
+   terminal callers mechanically pass `None` for the new final argument. The four-argument source
+   guard is retained rather than replaced by the former three-argument catalog declaration.
+
+   `identity` supplies the exact store and immutable series subject; `fence_id` supplies the attempt
+   fence that neither the identity nor the handoff ref carries. The successor carries the
+   preparation/receiver bindings and the expected handoff head in its required non-null
+   `predecessor_ref`; no duplicate expected-ref argument or private-handoff accessor is needed.
+   The registry exact-resolves that predecessor and the existing gateway/attempt evidence under
+   the parent-before-child locks, validates all store/subject/preparation/gateway/fence bindings
+   and unchanged handoff fields, and admits only the legal unique successor with revision increment
+   one defined by [managed gateway adoption](managed-gateway-adoption-v1.md) and
+   [launch-time secret handoff](launch-time-secret-handoff-v1.md). Revision-1 `Prepared` remains
+   owned by the existing prepared-chain writer. This internal transaction may also be reused by
+   already admitted handoff lifecycle callers for their existing legal transitions; it is not
+   restricted to a terminal target or a Dormant-only projection posture. Each caller's existing
+   lifecycle prerequisites remain mandatory. Abandonment must reject another or already Active
+   attempt, with the durable attempt/head checks repeated under these same locks before mutation.
+
+   `src/registry.rs` owns the necessary private validation, write, readback, and recovery helpers
+   for this transaction. It compares the handoff head's exact canonical bytes to the predecessor,
+   publishes and durably validates the immutable successor revision before advancing the head by
+   the existing expected-bytes CAS, and returns its nonsecret ref only after durable exact readback
+   and successful child/parent transaction completion. If that head already names the supplied
+   successor, success requires byte-equal revision and head readback with the same predecessor and
+   all bindings; a matching terminal enum alone is insufficient. Unequal successor bytes, a second
+   successor, or any other stale/conflicting head rejects. A lost return is retried with the same
+   successor bytes, never freshly chosen timestamps or diagnostics. An installed revision whose
+   head still names its predecessor can complete only that same validated CAS; a temporary or
+   immutable revision alone never proves the transition committed. Existing recovery may read and
+   reconcile the exact retained chain privately, including progress preceding a projection-head
+   return, but may neither invent terminal evidence nor replay a secret or kernel effect. An
+   unresolved or failed readback retains accountable ownership and exclusion.
+
+   The returned ref records only the handoff transition. The abandonment service and preparation
+   manager still perform cancellation/expiry in the order above: kill unreleased children, revoke
+   and verify the boundary, terminate the handoff, make the old carrier terminal/stale, then release
+   consumer and exclusion leases while retaining authority objects. Recording `Failed`/`Expired`
+   does not attest kernel cleanup, descriptor/buffer cleanup, lease release, or complete cancellation;
+   their existing obligations and cleanup-failure retention remain unchanged. This exception adds
+   no public API, raw transaction/descriptor accessor, arbitrary callback, generic persistence
+   interface, new schema/store/hash domain, credential carrier, lookup system, transition, or
+   future-packet behavior. It changes neither the two linked contracts nor their lifecycle.
+
+   Colocated `mod tests` blocks
+   are allowed. Apart from the exact [activation exceptions](#e3-e-activation-callable-boundaries),
+   no other `pub`/`pub(crate)` surface is admitted. Within only the E3-B-owned
+   `src/codec.rs` and `src/registry.rs`, ordinary private free functions, private inherent methods,
+   and private implementation types necessary to implement the admitted codec/registry operations
+   are allowed without a separate authority amendment; they may not expand the public API, product
+   behavior, file ownership, or later-packet scope. Private helpers in any other new-crate file remain
+   unadmitted except for the explicitly named service allowances above. One E3-E exception is admitted
+   in `crates/config-projection/src/lib.rs`: E3-E may
+   define `LaunchTimeSecretHandoffV1` there as a private, non-exported, non-reexported type used only
+   as the private `handoff` constituent of `ConfigProjectionSecretHandoffRevisionV1`. Its fields and
+   semantics remain exactly those specified in `launch-time-secret-handoff-v1.md`, and its embedding,
+   revision hashing, bindings, and lifecycle remain exactly those specified in
+   `managed-gateway-adoption-v1.md`. The implementation reuses the existing constituent types and
+   established strict codec patterns. This exception authorizes no public type or accessor, second
+   handoff representation, new credential carrier, new wire field, changed hashing, or changed
+   lifecycle behavior; it rewrites neither the schema nor its preserved extracted source body and does
+   not generalize the private-helper allowance. All other file/symbol restrictions and E3-D/E3-E/E3-F
+   ownership remain unchanged;
 2. in `crates/shell/src/execution/config_model.rs`, only new private
    `E3PinnedConfigPatchSourceV1`, `E3EffectiveConfigResolutionSnapshotV1`,
    `open_e3_workspace_config_source_v1`, `resolve_e3_effective_config_source_v1`, and
@@ -3391,14 +5622,113 @@ symbol-level product fence:
    `OpenedBootstrapHomeV1::read_config_yaml` unchanged. Existing
    `resolve_effective_config_with_explain_for_bootstrap_home`, cached/pathname loaders,
    `ConfigExplainV1`, `ConfigExplainKey`, `ConfigExplainSource`, and all non-E3 config resolution
-   remain byte/behavior-frozen; in
+   remain byte/behavior-frozen. For E3-B in that same facade file, only public
+   `OpenedConfigProjectionHsaAuthorityV1`, its
+   `from_configured_accepted_home` constructor, and its `ConfigProjectionHsaAuthorityV1`
+   implementation are additionally admitted. The constructor and implementation may call only the
+   exact configured-authority accessors and shell parent-transaction bridge named above. E3-B may
+   also add only: `with_config_projection_hsa_parent` as the one `pub(super)` forwarding operation in
+   `host_session_authority/store.rs`; `TrustedDirectory::borrow_fd` as `pub(crate)` in
+   `host_session_authority/trusted_fs.rs`; and one direct public re-export of
+   `OpenedConfigProjectionHsaAuthorityV1` from `crates/shell/src/lib.rs`, without making any
+   intermediate HSA module public. For E3-E only, that same facade file may replace the facade's
+   private `TrustedAuthorityRoot` field with one private `HostSessionAuthority`, adapt the existing
+   constructor and `with_locked_parent` implementation to that same retained root, import the
+   existing shell-private `resolve_retained_worker_cap`, `authenticate_dispatch_policy_commitment`,
+   `ResolvedPolicyCommitmentCompatibilityV1`, and authenticated carrier conversion, and add only
+   `OpenedConfigProjectionHsaAuthorityV1::authenticate_e3_member_launch_activation_v1` with the exact
+   signature and behavior above, plus
+   `OpenedConfigProjectionHsaAuthorityV1::read_e3_selected_inventory_projection_v1` with the exact
+   signature and behavior above. The latter may construct the existing `OpenedBootstrapHomeV1`, add
+   only private `convert_e3_projection_directory_v1`, call only the private inventory resolver named
+   below, and use existing `TrustedWorkspaceRoot::{open_exact,revalidate}` plus the exact opaque
+   held-root/source bridge named below. Both methods are available through the facade's existing direct root
+   re-export; no intermediate module visibility changes. No other HSA type, descriptor, operation,
+   facade visibility, or `dispatch_policy_commitment.rs` change is admitted, except the exact
+   internal storage reopen and helper substitution in
+   [Authenticated-owner storage reopen](#authenticated-owner-storage-reopen) and the separate
+   [Linux entropy portability exception](#e3-e-linux-private-home-entropy-portability). All of these bridge
+   additions and the re-export are Linux-gated; other platforms retain their existing unsupported E3
+   posture. In
    `crates/shell/src/execution/agent_inventory.rs`, only additive `AgentFileV3`, `AgentConfigV3`,
    `AgentPlacementsV3`, `AgentPlacementConfigV3`, `AgentRuntimeProjectionInputV1`,
    `PlacementProjectedInventoryEntryV3`, and `AgentInventorySourceMaterialV1`, the V3 variants/arms in
    existing `ParsedAgentInventoryFile`, `parse_and_validate_agent_file_raw`, `validate_agent_file`,
    `merge_inventory_root`,
    `load_effective_agent_inventory`, `load_effective_agent_inventory_for_bootstrap_home`, and new
-   `validate_agent_schema_v3` and `project_inventory_v3_entry`. The legacy
+   `validate_agent_schema_v3` and `project_inventory_v3_entry`. E3-E may additionally add only the
+   private `resolve_e3_selected_inventory_projection_v1`, and may adapt only the V3 arm of
+   `parse_and_validate_agent_file_raw` to parse and hash the held bytes plus narrow
+   `project_inventory_v3_entry`'s effective-config argument to the existing `AgentCliMode` value as
+   specified above. The resolver may call existing
+   `policy_model::resolve_effective_policy_for_bootstrap_home`,
+   `HeldE3AgentInventoryRootV1::{source_relative_paths,revalidate}`,
+   `HeldE3AgentInventorySourceV1::{open,source_bytes,source_material,revalidate}`,
+   `validate_agent_schema_v3`, `project_inventory_v3_entry`, and `ConfigProjectionCodecV1`; no
+   named dependency gains broader visibility. In
+   `crates/shell/src/execution/agent_runtime/host_session_authority/trusted_fs.rs`, apart from the
+   narrow Linux entropy portability exception below, E3-E may add only
+   crate-private `HeldE3AgentInventoryRootV1::{from_global,from_workspace,source_relative_paths,
+   revalidate}` and crate-private
+   `HeldE3AgentInventorySourceV1::{open,source_bytes,source_material,revalidate}` with the exact
+   signatures and behavior above. Their fields remain private; neither type is re-exported; and they
+   add no raw/borrowed descriptor, path-authority, `TrustedDirectory`, `TrustedFile`, generic
+   resolver, write, or mutation operation.
+
+   <a id="e3-e-linux-private-home-entropy-portability"></a>
+
+   **E3-E Linux private-home entropy portability exception.** Later, separately authorized
+   implementation may repair only the Linux entropy-acquisition portion of the existing private
+   `random_component` in this `trusted_fs.rs`, with minimal file-private support, colocated
+   deterministic test seams strictly needed for the repair and its failure cases, and focused
+   regression tests in the same existing test area. This is the sole additional portability
+   exception to the file/symbol and HSA exclusions; it does not broaden authenticated-owner
+   storage reopen or grant file-wide authority.
+
+   The bound product is `d3d13cfe4f3a67314f43142cc547683e13007606`, tree
+   `a0d17f5034a07786de2438bed58ba17e918cd757`. Its required musl build failed with E0425 at
+   `trusted_fs.rs:2732`: pinned `libc 0.2.186` does not declare Linux-musl `getentropy`. The helper
+   is unchanged from product parent `4c5cac9e721ed1de8e355fea5d96022cdfb5765c`; E3-E's Linux shell
+   dependency in world-service exposes it to this compilation path. The compiler, musl target and
+   linker exist; missing packages, kernel entropy, linker failure and resource exhaustion are not
+   established causes. No matched baseline build establishes historical failure or baseline green.
+   The source review and four retained native binaries keep their exact historical identities and
+   limitations; neither required musl binary was produced, and native binaries are not substitutes.
+   The retained blocker records are `build-receipt.json`, `musl-failure-read-only-diagnosis.json`
+   and `musl-failure-disposition.json` under
+   `/home/spenser/__Active_code/review-evidence/e3-e-standalone-4c5cac9e/build-d3d13cfe`.
+
+   Accept a name only after acquiring all 12 cryptographically secure random bytes. Preserve the
+   existing prefix, 24 lowercase-hex-character suffix, path-component validation, caller behavior
+   and error mapping. Unsuccessful acquisition must fail closed with `ValidationUnavailable`;
+   predictable fallback and partially initialized output are forbidden. Follow the chosen API's
+   actual return contract, correctly handling interruption, partial progress, zero progress and
+   terminal errors; a blind `getentropy`-to-`getrandom` rename is not sufficient. Preserve existing
+   macOS and all unrelated platform behavior: this adds no macOS parity lane. Private-home
+   ownership, descriptor validation, rollback, collision handling, authentication, permissions
+   and filesystem security semantics remain unchanged.
+
+   This exception permits no Cargo dependency/version or lockfile change, public entropy API,
+   cross-crate abstraction, generic randomness subsystem or HSA refactor. It permits neither
+   dependency removal nor target changes to evade compilation, helper disabling, timestamp/PID
+   entropy, permissions changes or relaxed security checks. Installer package workarounds,
+   production publication, installation, restart, host changes, unrelated E2/E3 behavior and E3-F
+   remain outside this allowance.
+
+   Later focused verification must cover complete output, retry/partial progress where applicable,
+   zero-progress/error rejection, and unchanged name format/error mapping. The exact required
+   `x86_64-unknown-linux-musl` release build for `substrate-world-entry` and `substrate-gateway`
+   must proceed beyond this compiler boundary and report its actual next result; relevant native
+   regression proof must cover changed causal inputs. Retain the original failed build and all
+   valid prior evidence, reuse unaffected proof, and do not restart complete E3-E source discovery.
+   The later source delta requires its own bounded review and commit binding; old artifacts remain
+   evidence of their old commit, not automatically artifacts of the repaired commit. This separate
+   documentation lineage is no replacement product baseline; historical
+   `2b2fc6c50b40046dbeaeb5b316562fbd96480a2a` is neither parent nor new build subject here. This
+   correction establishes no repair, successful musl build, runtime proof, installation, E3-E
+   completion or E3-F admission, and does not automatically resume implementation.
+
+   The legacy
    `validate_agent_file -> AgentFileV1` entry point adds only an exhaustive V3 arm returning
    `user_error("unsupported agent schema_version 3 in legacy validate_agent_file")`; the E3 caller
    maps that disposition to `UnsupportedLegacyState`, and no path down-converts V3. V1/V2 behavior
@@ -3418,13 +5748,13 @@ symbol-level product fence:
    `ExecuteRequest`, `ExecuteRequestDef`, `ExecuteRequest::validate`, and
    `TryFrom<ExecuteRequestDef> for ExecuteRequest`. Existing `MemberDispatchRequestV1`,
    `MemberDispatchRequestDef`, and V1 fixtures are byte/behavior-frozen. In
-   `crates/world-mac-lima/src/lib.rs`, the only authorized non-Linux change is the existing
-   `convert_member_dispatch` return type/body and its call in `convert_exec_request`: it converts
-   the existing `world_api::MemberDispatchRequestV1` exactly as at the baseline and wraps that value
-   as `transport_api_types::MemberDispatchRequest::V1`. It cannot construct, accept, down-convert, or
-   claim V2/E3, and the untagged wrapper must leave the serialized V1 object byte-identical. Its
-   existing conversion fixture may add only an `as_v1`/V1-variant match around its unchanged field
-   assertions plus the identical-bytes assertion;
+   `crates/world-mac-lima/src/lib.rs`, the preserved E3-A candidate already contains only the
+   existing `convert_member_dispatch` return-type/body adaptation and its call in
+   `convert_exec_request`: it converts the existing `world_api::MemberDispatchRequestV1` exactly as
+   at the baseline and wraps that value as `transport_api_types::MemberDispatchRequest::V1`. That
+   mechanical conversion remains frozen during Linux proof recovery. It cannot construct, accept,
+   down-convert, or claim V2/E3, and the untagged wrapper must leave the serialized V1 object byte-
+   identical. Its presence grants no native macOS proof or implementation authority;
    in `crates/transport-api-client/src/lib.rs`, only new strict
    `e3_config_projection_prepare` and `e3_config_projection_cancel` methods posting to the two fixed
    routes above; existing gateway and execute client methods are frozen;
@@ -3528,15 +5858,61 @@ symbol-level product fence:
    `E3GcSweepAdmissionV1` across every `Command`; GC selection and deletion semantics are frozen;
 6. create exactly `crates/world-service/src/e3_config_projection_prepare.rs` with only
    `E3ConfigProjectionPreparationManagerV1::{new,prepare,cancel,take_for_v2,recover_expired}` and
-   its private `SealedE3ConfigProjectionPreparationV1`, `SealedCredentialSourceCapabilityV1`, and
-   `ClockBoottimeDeadline`; create exactly `crates/world-service/src/e3_codex_launch.rs` with
+   its sealed `SealedE3ConfigProjectionPreparationV1` (crate visibility only as fixed above),
+   private `SealedCredentialSourceCapabilityV1`, and
+   `ClockBoottimeDeadline`. Its private state may retain the one concrete
+   `Arc<substrate_shell::OpenedConfigProjectionHsaAuthorityV1>` passed by `WorldService::new_linux`;
+   for the bounded native-construction correction it may add only
+   `native_plan: Option<config_projection::Codex0125ProjectionPlanV1>` and
+   `native_source_manifest: Option<config_projection::NativeProjectionSourceManifestV1>` to
+   `SealedE3ConfigProjectionPreparationV1`. Both are nonsecret retry state, neither is a new durable
+   schema, and neither may be returned or treated as publication authority.
+   `prepare` and the bounded activation path in `take_for_v2` are the only production callers of
+   `authenticate_e3_member_launch_activation_v1`; `prepare` remains the sole production caller of
+   `read_e3_selected_inventory_projection_v1`. It may call the existing
+   `ConfigProjectionRegistryV1::resolve` once for the pre-side-effect authoring-input read described
+   above; construct the admitted existing nonsecret identity, gateway, kernel-intent, registration,
+   boundary, activation-intent, record, and launch-input types; call the already admitted registry
+   kernel-intent/gateway-identity operations in the exact intent/effect/readback order above; create
+   and retain `E3PreparedRetainedLaunchPublicationV1` before those effects, use its exact Prepared-ref
+   accessor while completing the gateway observations, then call the revised
+   `Codex0125ProjectionV1::render` and `ConfigProjectionRegistryV1::publish_native_source` exactly
+   once for first construction after the managed-gateway base URL and all source-independent inputs
+   are final. It constructs the record only from the returned native projection, retains the returned
+   source manifest for equality/readback checks, and never supplies a guessed source/runtime identity.
+   It then uses only the carrier's exact
+   Prepared-ref accessor to complete and one-time-bind the public chain after readback, and pass only
+   the authoring ref, authenticated E2 carrier, and mutable publication carrier to
+   `AgentConfigProjectionServiceV1::publish_prepared_retained_launch`. It stores the returned
+   response/capability while retaining that carrier, gateway authority, credential owner, and
+   exclusion before success. Its existing `cancel`, `take_for_v2`, and `recover_expired` may call
+   the publication carrier's two shared-reference accessors to drive the already admitted
+   abandonment/lease-release lifecycle, plus the exact service/ownership boundaries in
+   [E3-E activation callable boundaries](#e3-e-activation-callable-boundaries); no raw registry or descriptor accessor is added. It must
+   obey the completed no-overlapping-lock ordering above. An error after immutable source
+   publication retains the same attempt, carrier, credential/gateway/exclusion owners, plan
+   coordinates, and source identity for exact retry or bounded cleanup; it cannot release exclusion,
+   fabricate a record, or publish success. `realize_native_root` remains a later operation over the
+   published exact head/source manifest, and setup-ready validation remains in
+   `E3Codex0125LaunchAdapterV1`; neither operation nor any per-exec observation moves into
+   preparation publication.
+   No other world-service symbol receives or exposes that facade. Create exactly
+   `crates/world-service/src/e3_codex_launch.rs` with
    `E3Codex0125LaunchAdapterV1::{new,prepare,spawn_setup_wrapper,validate_setup_ready,
    release_final_exec,cancel}` and `crates/world-service/src/e3_child_security.rs` with only
+   `bind_e3_service_user_namespace_v1`,
    `build_authenticated_world_fs_enforcement_input_v1`,
-   `validate_child_security_attestation_v1`, `probe_child_control_path_denials_v1`, and
+   `create_e3_child_user_namespace_channel_v1`,
+   `install_and_validate_e3_child_user_namespace_v1`,
+   `validate_child_security_attestation_v1`, `probe_child_control_path_denials_v1`, the private
+   `HeldE3ServiceUserNamespaceV1`, private `HeldE3ChildUserNamespaceV1`, and
    `E3PrivilegedChildExclusionV1::{new_recovering,register_recovered_non_e3_child,
    finish_recovery,acquire_non_e3_child,
-   acquire_e3_exclusive,release_non_e3_child,release_e3_exclusive,poison_recovering}`. In
+   acquire_e3_exclusive,release_non_e3_child,release_e3_exclusive,poison_recovering}`. E3-E may additionally make only the
+   [terminal namespace owner adaptations](#e3-e-terminal-child-namespace-owner-boundary), including
+   the lease methods, private state and affected caller/tests enumerated there, and the separately
+   authorized [cgroup denial-target identity correction](#e3-d-cgroup-denial-target-identity-correction)
+   within only its exact validator/private-helper/colocated-test fence. In
    `crates/world-service/src/e3_local_transport.rs`, create only
    `E3AuthenticatedLinuxUdsListenerV1::from_inherited`,
    `E3AuthenticatedLinuxUdsListenerV1::accept_peer`, and the private authenticated-listener/peer
@@ -3551,7 +5927,18 @@ symbol-level product fence:
    `apply_authenticated_world_fs_enforcement`, `drop_child_privileges_and_caps`,
    `install_child_seccomp`, `write_setup_ready_attestation`, `await_final_exec`, and
    `exec_pinned_child`, plus `run_managed_gateway_readiness_probe` for the exact no-final-exec probe
-   role. In
+   role. `parse_launch_descriptors` owns the exact `SUBSTRATE_WORLD_ENTRY_USERNS_FD` startup pointer,
+   and `prepare_private_child_namespace` owns only the child-side direct-unshare/setup handshake and
+   subsequent private mount-namespace setup; neither may accept a caller namespace or use `setns`
+   for user-namespace entry. For the bounded installed-CA corrective delta only,
+   `validate_runtime_support_manifest` may add private `resolve_exact_e3_ca_bundle_v1`, and
+   `prepare_private_child_namespace` may add and call private
+   `install_exact_e3_ca_bundle_mount_v1`, solely for the exact descriptor validation and private
+   single-file realization above before `apply_authenticated_world_fs_enforcement`. The existing
+   Landlock implementation and path-policy model are unchanged by that CA delta; no generic resolver,
+   directory rule, or symlink-capable Landlock surface is owned. The separately authorized
+   [fixed-device consumer correction](#e3-d-shared-landlock-fixed-device-correction) owns only its
+   enumerated shared-consumer branches and tests, with the policy model unchanged. In
    `crates/world-service/src/gateway_runtime.rs`, only existing `GatewayRuntimeManager`,
    `GatewayRuntimeManager::{new,status,sync,sync_with_timeout,sync_with_timeout_locked,restart}`,
    `start_runtime`, `stop_runtime`, `recover_runtime`, `runtime_for_world_or_manifest`,
@@ -3569,6 +5956,11 @@ symbol-level product fence:
    Arc<E3PrivilegedChildExclusionV1>` and
    `ManagedGatewayRuntime.privileged_child_exclusion_lease:
    Arc<HeldNonE3PrivilegedChildLeaseV1>` field held for a non-E3 gateway lifetime.
+   For E3-E, only the return of existing
+   `E3GatewayRuntimeAuthorityV1::listen_after_dormant_boundary` may narrow to
+   `Result<(GatewayAccessBoundaryV1, [E3ChildCgroupRegistrationV1; 3])>` so the manager receives the
+   already owned/readback registrations in exact `ManagedGateway`, `ReadinessProbe`, `Codex` order;
+   it creates no second observation or authority and exposes no descriptor or new helper.
    Existing `prepare_linux_world_entry_launcher` and
    `render_linux_world_entry_wrapper`, `gateway_health_ready`, and
    `gateway_health_ready_blocking` remain V1-only and frozen;
@@ -3583,27 +5975,45 @@ symbol-level product fence:
    `build_e3_in_world_app`, `serve_e3_inherited_listener`, `e3_validate_member_identity`, and
    `e3_health_check`. Existing `build_app`, `health_check`, every OAuth/token/messages/chat route,
    and the non-E3 main/port-1455 bind behavior are frozen and unreachable in E3 mode;
-8. in `crates/shell/src/builtins/world_deps/inventory.rs`, only existing
+8. E3-C owns the following publication machinery without owning production of the E3-D wrapper: in
+   `crates/shell/src/builtins/world_deps/inventory.rs`, only existing
    `codex_runtime_install_script_template_v1` plus new
    `render_codex_installer_artifact_source_v1`; in
    `crates/shell/src/builtins/world_deps/surfaces.rs`, only existing
    `CodexRuntimeInstallSpecV1`, `resolve_codex_runtime_install_spec_for_target_v1`, and
    `render_codex_runtime_install_script_v1`. The version remains exactly `0.125.0`. In
    `scripts/linux/world-lifecycle.sh`, only existing `record_linux_managed_state`,
-   `install_linux_managed_state`, and `restore_linux_managed_state`, plus new shell functions
+   `install_linux_managed_state`, and `restore_linux_managed_state` for the E3-C-owned system-config,
+   installed-home-bootstrap, and source-store lifecycle changes, plus new shell functions
    `provision_e3_system_config_mount_target_v1`, `publish_installed_home_bootstrap_v1`, and
-   `publish_substrate_artifact_source_v1`; in
-   `scripts/linux/world-provision.sh`, only existing `resolve_install_bootstrap_context`, the
-   `cargo build` target list, `SERVICE_UNIT_CONTENT` (including explicit `CAP_SETUID`, `CAP_SETGID`,
-   and `CAP_SETPCAP` solely for the verified one-way child transition plus
-   `SecureBits=noroot-locked`), and the exact
-   carrier/account/UID/primary-GID/source-build values passed
-   into `install_linux_managed_state`. That lifecycle function alone calls the two new publication
-   helpers. The new ELF target is added to the existing world-service package; provisioning builds
+   `publish_substrate_artifact_source_v1`. E3-C's production lifecycle integration may call the
+   system-config and installed-home-bootstrap helpers, but it must not invoke the Substrate artifact
+   publisher as a production success path. It tests the Substrate helper with valid bounded inputs
+   that are neither production artifact authority nor installed-runtime readiness evidence. In
+   `scripts/linux/world-provision.sh`, E3-C owns only existing `resolve_install_bootstrap_context` and
+   the exact carrier/account/UID/primary-GID values passed into `install_linux_managed_state` for its
+   owned bootstrap behavior.
+
+   E3-D owns the corresponding Substrate production integration: only the later additive changes to
+   existing `install_linux_managed_state` needed to build/install/readback-validate the two real
+   Substrate artifacts and invoke the landed Substrate publication helper without a missing-artifact
+   success path; and in `scripts/linux/world-provision.sh`, only the `cargo build` target list,
+   `SERVICE_UNIT_CONTENT` (including explicit `CAP_SETUID`, `CAP_SETGID`, and `CAP_SETPCAP` solely for
+   the verified one-way child transition plus `SecureBits=noroot-locked`), and the exact source-build
+   values passed into `install_linux_managed_state`. The new ELF target is added to the existing
+   world-service package; E3-D provisioning builds
    and installs `substrate-world-entry` and the E3-eligible `substrate-gateway` for exact
    `x86_64-unknown-linux-musl`, rejects either ELF unless it is exact `StaticExec` or constrained
    relocation-only `StaticPie` under support policy V1, and does not replace the baseline host-
-   target world-service daemon or V1 gateway artifact; and
+   target world-service daemon or V1 gateway artifact. It must publish and read back the complete
+   valid Substrate record/head before dependent E3 runtime use; no V1 fallback, placeholder ELF,
+   invented provenance, partial manifest, silent missing-artifact success, or stale record for
+   replacement bytes is admitted. For the bounded installed-CA corrective delta only, E3-D may also
+   change the private `file_support` logic inside
+   `scripts/linux/world-lifecycle.sh::publish_substrate_artifact_source_v1` and the `e3c_tests`
+   module in `crates/shell/src/builtins/world_deps/inventory.rs`, solely for the direct-file and exact
+   relative-symlink cases above. Lifecycle order, artifact-production requirements, other support
+   objects, and every other E3-C publication/import surface remain frozen; and
 9. only the exact V2-to-V3 Codex world placement change in `config/agents/codex.yaml`, setting the
    fixed installed Codex path, `model: codex`, and empty MCP/feature lists. No host placement meaning
    changes; and
@@ -3631,9 +6041,144 @@ symbol-level product fence:
     adaptation. No baseline fixture value, V1 assertion, test skip condition, or product behavior may
     change to accommodate E3.
 
+### E3-E native-Linux runtime-directory DAC correction
+
+This narrow ownership allowance permits a later, separately authorized native-Linux correction of
+the runtime-directory DAC blocker. It does not reopen E3 or authorize implementation, installation,
+host permission changes, service restart, or connected acceptance in this documentation packet.
+E3-E remains open; E3-F is not admitted. Documentation success is neither implementation nor
+runtime proof.
+
+The retained deployment receipt at
+`/home/spenser/__Active_code/review-evidence/e3-e-deploy-accept-490d061a/receipt.md` and its
+`attempt-20260916T151639Z/` evidence bind successful installation to product
+`490d061a0d6b377549559ac220b2fc58d3eedd14`, tree `cc6036975215807e6b54e003b27bea9911fecdd3`,
+and installed revision 4, `iar_01a0aad7-561e-7f3e-9e81-c9e6cdd2c140`. Connected activation failed
+before delivery/readiness: the private child could not traverse `root:substrate` mode `0750`
+`/run/substrate` to open its gateway realization while constructing Landlock rules. Its exact target
+UID/GID mapping and zero supplementary groups provide no `substrate` group access; the retained
+no-supplementary-groups probe reproduced `EACCES`. Failure cleanup completed, but successful
+activation remains unproved. Preserve the raw review's P1 classification as historical evidence.
+For this selected correction the demonstrated fail-closed functional blockage is P2 under the
+[development-review contract](development-review-and-remediation-contract.md#review-priority),
+unless additional evidence establishes a severe security or authority failure; do not rewrite the
+old evidence.
+
+The later correction must satisfy all of the following:
+
+1. Preserve `/run/substrate` ownership `root:substrate` and mode `0750`. Grant only the
+   authenticated installed bootstrap UID an effective named-user **access** ACL of `r-x` on that
+   exact directory, with an ACL mask consistent with that mode and effective grant. Read permission
+   preserves the user's existing host group-derived access because a matching named-user ACL is
+   checked before group matching. This grants no write permission, world traversal, recursive or
+   default ACL, or permission to enumerate ancestors under child Landlock. See
+   [acl(5)](https://man7.org/linux/man-pages/man5/acl.5.html).
+2. Both existing native-Linux world-service unit generators must apply the ACL using existing
+   `setfacl` tooling through a mandatory `ExecStartPre`, after systemd prepares `RuntimeDirectory`
+   and before world-service starts. Bind the existing validated `INSTALL_BOOTSTRAP_UID`, never a
+   hardcoded UID, ambient login identity, or every `substrate` group member. ACL setup failure must
+   prevent daemon startup: no ignored-failure `-` prefix or best-effort bypass. Reapply on service
+   starts so directory recreation or reboot cannot lose the grant. Preserve RuntimeDirectory
+   lifetime, namespace mappings, capabilities, and all unit security settings. See
+   [systemd.exec(5)](https://man.archlinux.org/man/systemd.exec.5.en) and
+   [systemd.service(5)](https://man.archlinux.org/man/systemd.service.5.en).
+3. Add `/run/substrate`'s nonrecursive ACL state to the existing Linux managed-state snapshot and
+   restoration path. Reuse `linux_snapshot_acl_state` and `linux_restore_acl_state`, retaining
+   existing absent-path semantics and restoration of the prior ACL on rollback. No new rollback
+   framework is authorized.
+4. Preserve private-realization ownership/modes, accepted-home and artifact-store boundaries,
+   socket ACL behavior, and every existing Landlock policy. No ancestor `READ_DIR` rule or
+   supplementary-group workaround is allowed. The shared socket-ACL helper API remains unchanged.
+
+The later product fence is limited to these symbols and behaviors, not file-wide ownership:
+
+| Existing path | Sole permitted correction |
+|---|---|
+| `scripts/linux/world-provision.sh` | `SERVICE_UNIT_CONTENT`'s mandatory runtime-directory ACL hook. |
+| `scripts/substrate/install-substrate.sh` | The native-Linux unit generator in `provision_linux_world`, for the equivalent hook only. |
+| `scripts/linux/world-lifecycle.sh` | `record_linux_managed_state` and only directly necessary existing ACL snapshot/restoration/readback handling for `/run/substrate`. |
+| `tests/installers/world_provision_smoke.sh` | Focused unit-generation, setup-failure, and ACL rollback coverage. |
+| `tests/installers/prefix_propagation_r2_2.sh` | Focused native-Linux release-unit/bootstrap-UID coverage and compatibility with existing dev unit alignment. |
+
+The dev installer's existing alignment preserves other unit directives; test that compatibility
+without editing it needlessly. No macOS/Windows change or release-installer security refactor is
+authorized. This is the sole additional runtime-directory ACL exception to the existing installer/
+lifecycle freezes; the gateway-smoke exception retains its separate fence. Unrelated publication,
+cleanup, rollback, security, and predecessor ownership remain frozen.
+
+Minimum later verification must establish:
+
+- both generated units bind the exact authenticated UID and make ACL setup mandatory; setup
+  failure cannot start the daemon, and recreation/start reapplies the effective grant;
+- rollback restores the prior ACL, with existing absent-path semantics retained;
+- the target with no supplementary groups can traverse to its realization without ancestor write,
+  other-UID access to the private realization, or a new Landlock ancestor-listing grant; and
+- exact installed readback and the existing connected E3-E acceptance path establish whether this
+  actual blocker is fixed. Installation alone, a stubbed unit test, or this documentation cannot
+  prove successful activation.
+
+Reuse unchanged security tests and valid prior evidence. Do not add a second acceptance framework
+or require an unrelated full test wall. Product implementation, installation, and connected
+acceptance each require separate authorization; preserve the installed revision-4 test binding and
+historical evidence until such authority explicitly permits a later change.
+
+### E3-E installer gateway-smoke deferral exception
+
+This is a narrow future implementation allowance only. A later, separately authorized E3-E maintainer
+change may add a maintainer-facing, invocation-local `--skip-gateway-smoke` option to the development
+installer and Linux provisioner; this correction neither implements nor validates that option, grants
+no installation or runtime-acceptance claim, leaves E3-E open, and does not admit E3-F.
+
+The future source fence is exact: in `scripts/substrate/dev-install-substrate.sh`, only option
+state/help/parsing, narrowly necessary pre-side-effect applicability validation, and forwarding in the
+existing Linux `provision_args` invocation; in `scripts/linux/world-provision.sh`, only option
+state/help/parsing and an early deferral branch in existing `maybe_run_gateway_lifecycle_proof`; in
+`tests/installers/world_provision_smoke.sh`, only focused default/explicit-deferral and mandatory-path
+preservation cases; and create only
+`tests/installers/dev_install_gateway_smoke_deferral.sh` for isolated-stub parsing, applicability, and
+exact-forwarding regression coverage. This does not grant file-wide authority. In particular,
+`world-lifecycle.sh`, authentication-helper bodies, release installers, public Substrate CLI, gateway
+installation optionality, host policy, runtime security, artifact schemas, cleanup/rollback, and
+non-Linux behavior remain frozen, except for the separately authorized
+[runtime-directory DAC correction](#e3-e-native-linux-runtime-directory-dac-correction)'s exact
+unit-hook and ACL snapshot/restoration fence; that exception grants no other release-installer or
+lifecycle change.
+
+Absent the option, eligible and ineligible gateway-smoke behavior remains byte/behavior equivalent.
+When present on a native Linux world-enabled dev install or direct native-Linux maintainer provision,
+the dev installer forwards the option alongside the exact existing bootstrap context, and the provisioner
+returns from the optional smoke path before eligibility evaluation, authentication inspection or
+creation, gateway sync/restart, or gateway health requests. It emits a clear non-secret result such as
+`gateway smoke deferred/skipped by request`; it never reports smoke success, installed E3 runtime
+acceptance, or E3 completion. The dev installer must reject the option with `--no-world` and on an
+unsupported platform (macOS, Windows, WSL, or another non-native-Linux host) before build or
+installation side effects. The direct Linux provisioner must reject `--no-world`, and must reject
+`--skip-gateway-smoke` on an unsupported host, during argument parsing before installation side
+effects. Deferral is not `--no-world`, which skips provisioning, and it does not skip gateway
+installation, which remains required. Because the existing synthetic-auth mode may preserve and use
+an already-present account `auth.json`, deferral must precede eligibility and auth handling. This
+documentation correction reads no credential contents.
+The option creates no persisted configuration or policy, ambient environment switch, bootstrap-carrier
+schema change, or credential workaround. It does not waive mandatory builds, installed
+descriptor/ELF/support validation, provenance publication, service/socket lifecycle, or failure
+propagation, including the existing non-dry-run `--skip-build` rejection.
+
+The later focused tests must prove that absence preserves both eligible and ineligible defaults; the dev
+installer forwards this option with the exact existing bootstrap context; explicit deferral occurs in an
+otherwise eligible stubbed configuration before every auth or gateway command; and injected mandatory
+path failure still fails after build/install/readback/publication/service operations are exercised.
+They must also cover help/parsing and each unsupported combination. Tests are bounded, unprivileged,
+isolated stubs with synthetic sentinels only, never real credentials. A deferred smoke is never counted
+as installed E3 runtime acceptance. Unchanged causal inputs may reuse valid evidence, while new
+in-scope regressions or required-path failures block; a future clean-commit installation must bind its
+actual commit and scripts and cannot relabel current build receipts as its proof.
+Existing Clippy/test baseline failures remain separately classified, are not green, require no
+unrelated remediation, and cannot support a whole-workspace-green claim.
+
 No file-wide authority is granted. D1 envelope code, receipt/manifest/StateStore/E2/E2-RM/B2.2,
-broker, D2, E4, unrelated gateway providers, public UX, and non-Linux product changes other than the
-one byte-preserving Lima V1 wrapper conversion named in item 3 are excluded.
+broker, D2, E4, unrelated gateway providers, public UX, and all new non-Linux product changes are
+excluded. The already-present byte-preserving Lima V1 wrapper conversion named in item 3 remains
+frozen compatibility material rather than proof-recovery ownership.
 The implementation must stop for a new authority decision if correct closure requires a symbol or
 file outside this fence.
 
@@ -3641,6 +6186,9 @@ The later admission must require proof using candidate Substrate binaries built 
 and the descriptor-pinned official Codex archive above for:
 
 - canonical codec/hash/reference negatives and every typed resolution class;
+- the focused authenticated-owner parent/open/create/write/readback and compatibility tests in
+  [the ownership exception](#authenticated-owner-propagation-for-the-e3-parent-and-registry), without
+  treating their success as fresh-fence/restart or complete lifecycle acceptance;
 - E3-owned Linux `CanonicalDirectoryV1` capture/reopen/device/inode/path negatives and proof that no
   config-projection or transport dependency reaches shell's private host-session authority types;
 - strict V3 inventory duplicate/alias/merge/unknown/newer/legacy cases, exact global/workspace
@@ -3648,10 +6196,17 @@ and the descriptor-pinned official Codex archive above for:
   that V1/V2 cannot source E3 model/MCP/feature values;
 - first-writer/CAS, two-process conflict, every temp/rename/file-fsync/directory-fsync/readback crash
   boundary, exact retry, reopen, retention, and retirement;
-- immutable accepted-home native-source publication and separate `/run` realization at every
-  directory-create/copy/manifest/fsync/rename/readback crash boundary, including wrong UID/GID,
-  config mutation, read-only bind failure, mutable-state non-aliasing, safe pre-ownership recovery,
-  and kill/revoke-before-cleanup after possible ownership;
+- first native construction with no pre-existing output and no duplicated renderer; byte-identical
+  plan rendering; actual held accepted-home source-root/config/system-empty identity and same-opened-
+  file byte/hash binding; native-before-source-manifest hash ordering; rejection of changed plan
+  bytes, substituted source objects, incomplete publication, synthetic identity, and unequal retry;
+  and exact retry/recovery at every affected create/write/finalize/fsync/rename/readback boundary;
+- immutable accepted-home native-source publication and separate later `/run` realization at every
+  directory-create/copy/manifest/fsync/rename/readback crash boundary, including proof that source
+  observations, realization identities, and per-exec mounted-loader observations remain distinct;
+  wrong UID/GID, config mutation, source/realization or realization/mount substitution, read-only
+  bind failure, mutable-state non-aliasing, safe pre-ownership recovery, and
+  kill/revoke-before-cleanup after possible ownership;
 - every cgroup and nftables boundary crash at intent-before-effect, effect-before-effect-record,
   effect-record publication, recovery-resolution publication, and resolution-readback boundaries,
   proving fixed-name absence or exact safe reversal, no unrecorded/adopted/orphaned kernel object,
@@ -3693,8 +6248,17 @@ and the descriptor-pinned official Codex archive above for:
   fields; acceptance of both exact `StaticExec` and constrained relocation-only `StaticPie`, including
   the descriptor-pinned Codex 0.125 `ET_DYN` artifact; rejection of every interpreter, `DT_NEEDED`,
   forbidden dynamic tag, non-relative relocation, nonempty dynamic symbol/string payload,
-  loader/dependency/architecture mismatch; symlink/hash/inode
-  drift; every fixed device/regular file; exact explicitly enumerable subtree closure; rejection of
+  loader/dependency/architecture mismatch; direct-regular-file CA success; success for the exact
+  logical CA path resolving through the observed trusted relative
+  `../../ca-certificates/extracted/tls-ca-bundle.pem` layout beneath `/etc`; publisher/importer/wrapper
+  agreement on the logical pathname and consumed final device/inode/mode/length/hash; and rejection
+  of a boundary escape, absolute or magic link, cycle or second traversal, different otherwise-safe
+  relative target, untrusted or writable component, nonregular endpoint, link/endpoint substitution,
+  or final identity/hash drift. The
+  privately realized logical CA path must reopen as the same regular object and remain readable under
+  the existing exact-file Landlock rule without a CA-directory/discovery rule. Existing direct-file
+  support-manifest fixtures and every non-CA support-file symlink rejection remain compatible;
+  every fixed device/regular file; exact explicitly enumerable subtree closure; rejection of
   every E3-synthesized ancestor discovery rule, including `/`, `/etc`, `/usr`, `/lib*`, `/dev`, an
   accepted-home ancestor, or a realization parent; and proof that no directory-wide CA or ambient
   path can enter a self-consistent hash; numeric self-proc descriptor success plus rejection of
@@ -3702,21 +6266,37 @@ and the descriptor-pinned official Codex archive above for:
   a non-procfs mount, or any magic/symbolic-link resolution; first-provision/exact-existing
   `/etc/codex` target success plus nonempty/symlink/mount/metadata/identity/crash failure, with no
   per-child shared-root creation or cleanup;
-- for both gateway and every initial/resumed Codex child, exact target UID/GID with zero supplementary
-  groups and zero ambient/effective/permitted/inheritable/bounding capabilities, `NoNewPrivs=1`,
-  wrapper/probe setup `dumpable=0` and ptracer 0, gateway post-exec secret-ready `Dumpable=0` plus
-  soft/hard `RLIMIT_CORE=0` for its credential lifetime, and non-secret Codex post-exec
-  `Dumpable=1`; all require `TracerPid=0`, boot-stable Yama `ptrace_scope=3`, and same-UID
-  ptrace/process-vm/pidfd-getfd denial,
-  seccomp-filter mode, exact E2 plan hash plus derived-support,
+- for every gateway, readiness probe, and initial/resumed Codex child, proof that the primary service
+  remained in its bound host user namespace while the wrapper created a fresh per-process-tree user
+  namespace before exposure; exact trusted-service owner, held parent descriptor, one-extent
+  identity UID/GID maps, actual child membership, and distinct sibling/other-role namespace identities;
+  rejection of wrong/substituted owner, parent, map, descriptor, member, reused identity, shared role
+  namespace, host-root mapping, caller namespace, or premature setup release; and exact target UID/GID
+  with zero supplementary groups and zero ambient/effective/permitted/inheritable/bounding
+  capabilities, `NoNewPrivs=1`, wrapper/probe setup `Dumpable=0`, gateway post-exec secret-ready
+  `Dumpable=0` plus soft/hard `RLIMIT_CORE=0` for its credential lifetime, non-secret Codex post-exec
+  `Dumpable=1`, role-appropriate `TracerPid`, seccomp-filter mode, exact E2 plan hash plus derived-support,
   role-narrowing, and effective-intersection Landlock hash equality, including positive access to
   each required E3 `/run`/mounted-config object and denied access outside the union; denied
   registry/sibling/cgroup/nftables/world-service/other-role probes whose ordered concrete targets are
   byte-equal across the enforcement input, per-target hashes, emitted results, and parent-held
   identity revalidation, and failure before secret write or final release for every
-  missing/extra/reordered/substituted target or transition/readback error, plus proof that the three parked transition
-  capabilities are never effective/ambient in world-service and are never acquired by any V1 or
-  non-E3 child;
+  missing/extra/reordered/substituted target or transition/readback error, plus proof that the three
+  parked transition capabilities are never effective/ambient in world-service except the exact
+  synchronous `CAP_SETUID`/`CAP_SETGID` map-write scope, are parked and read back before child release,
+  and are never acquired by any V1 or non-E3 child;
+- a same-host-UID, zero-capability denial canary whose explicitly authorized, `Dumpable=1`, same-host-
+  namespace positive control succeeds for ptrace, `process_vm_readv`, `/proc/<pid>/mem`, and
+  `pidfd_getfd` before the identical inspector is denied against the post-exec protected target with
+  exact `EPERM` for ptrace/process-vm, `EACCES|EPERM` for proc-mem, and successful `pidfd_open` allowed
+  only when `pidfd_getfd` then returns `EPERM`; an unsuccessful control is inconclusive, not a pass;
+  trusted service tracing across the protected boundary must retain its required initial exec stop,
+  exit stop, cwd/environment readback, and applicable PTY `FIONREAD`/drain marker, while unrelated
+  same-user host tracing retains the same result and errno before, during, and after E3, the distinct
+  canary positive control succeeds, and the global Yama bytes are unchanged;
+  invalid namespace identity or unavailable required tracing fails closed without changing host
+  policy; and a target-UID mode-`0600` file retains ordinary target-user ownership and read/write
+  access;
 - service/gateway crash-dump barriers proving service `RLIMIT_CORE=0`/`PR_GET_DUMPABLE=0` readback
   precedes E3 route registration, an injected service barrier failure accepts no E3 body,
   and a canonical gateway secret-ready attestation precedes every secret delivery; missing, malformed,
@@ -3727,7 +6307,7 @@ and the descriptor-pinned official Codex archive above for:
   side effect for every other baseline method/path;
 - readiness-probe cgroup enforcement proving the probe is the descriptor-pinned wrapper child rather
   than a world-service thread, receives and exact-validates the complete nested enforcement input and
-  self-artifact descriptor through the seven-FD/two-barrier ABI, has the exact zero-capability/support/seccomp
+  self-artifact descriptor through the eight-FD/three-barrier ABI, has the exact zero-capability/support/seccomp
   posture, cannot access secrets/config/workspace/control objects, is denied from the wrong cgroup,
   permits only the enumerated syscall/argument filter, proves the exact socket remains connected and
   in the readiness cgroup while the parent withholds the request-release byte, transmits its canonical
@@ -3744,10 +6324,10 @@ and the descriptor-pinned official Codex archive above for:
   unclassified descendant; compatibility-gateway `sync`/timeout/restart/start and manifest-recovery
   paths all transfer one shared lease into the runtime before spawn/adoption, retain it through every
   runtime handle until cgroup-empty stop, and startup recovery seeds the exact legacy count; E3
-  rejects absent/non-3/mutated Yama posture or boot-ID drift before any relevant barrier; a
-  non-secret Codex exec's `Dumpable=1` remains protected by Yama-3 and the exact same-UID
-  ptrace/process-vm/pidfd-getfd denial canary, while the credential-bearing gateway must remain
-  non-dumpable with both core limits zero;
+  rejects boot-ID drift or any protected-user-namespace identity/membership drift before the relevant
+  barrier; a non-secret Codex exec's `Dumpable=1` remains protected by its held user namespace and the
+  positive-controlled same-UID memory/FD denial canary, while the credential-bearing gateway must
+  remain in its separate held namespace, non-dumpable, and at both core limits zero;
 - doctor/pending-diff/clear/reconcile/world-fs-read races proving each route holds one non-E3 lease
   before strategy selection, `ensure_session`, probe-file mutation, or helper spawn and returns typed
   `UnsupportedSecurityPosture` with no side effect during E3-exclusive mode; kernel-overlay, transient
@@ -3810,11 +6390,40 @@ and the descriptor-pinned official Codex archive above for:
 - V1 byte-identical compatibility while exclusion is idle, typed pre-spawn
   `UnsupportedSecurityPosture` while it is E3-exclusive, V2 success, old-server/new-client and
   new-server/old-client behavior, missing legacy state, and unknown/newer V3 rejection before D1
-  exists, plus the Lima bridge's exact untagged `MemberDispatchRequest::V1` conversion with no V2
-  construction or serialized-byte change;
+  exists. Native Lima conversion proof is deferred until Linux completion under the E3-A recovery
+  authority above and is not part of this Linux acceptance wall;
 - exact E2 launch and fork cap linkage without any E2/E2-RM mutation or current-parent
-  reconstruction, including `Some(exact proof)` for `FreshSpawn`, `None` for `Fork`, and byte-equal
-  nullable proof values across prepare/idempotency/sealed preparation/V2; and
+  reconstruction, including ordinary colocated facade-adapter tests, reusing the existing E2 fixture
+  patterns, for valid `FreshSpawn` and `Fork` plus missing, tampered, wrong-store, wrong-cap, and
+  session/participant/backend/run/world/lineage-mismatched durable authority; every negative must
+  fail before preparation side effects. These retain `Some(exact proof)` for `FreshSpawn`, `None` for
+  `Fork`, and byte-equal nullable proof values across prepare/idempotency/sealed preparation/V2; and
+- ordinary colocated shell/facade and preparation-manager tests, reusing the existing V3 inventory
+  and projection fixtures, for a valid authenticated global selection and a valid workspace
+  whole-agent shadow with distinct authenticated roots; both prove that descriptor bytes supply the
+  explicit model/capability/MCP/feature values and their own hashes. Missing/disabled/non-V3 source,
+  duplicate ID, wrong scope/root/path/device/inode/length/revision/source hash, changed held bytes,
+  post-read substitution, shadow-selection mismatch, disabled or non-world placement, and derived,
+  effective, request, or resolved-runtime backend mismatch must produce the mapped typed failure
+  before preparation-map, exclusion, listener, credential-acceptance, or publication side effects;
+  the existing V1/V2 fixture results remain byte/behavior-identical; and
+- ordinary colocated service/registry/gateway-owner/preparation-manager tests for both FreshSpawn
+  and Fork proving that the exact authenticated authoring/E2 inputs and manager-owned cgroup/
+  boundary readbacks produce dependency-first immutable publication, one Dormant head, one
+  revision-1 Held lease, one matching resolved capability/response, and retention of that exact
+  lease plus every live resource owner before success. Missing, reordered, duplicated, stale,
+  substituted, or wrong-store/series/fence/preparation/world/generation/role/intent registration or
+  boundary material must fail before the head. Injected failure after the head but before the lease,
+  and after the lease but before response retention, must leave the sealed owner/exclusion and exact
+  head/lease progress reachable; an exact retry must join the same head, acquire at most one lease,
+  return the same response, and never replay an effect. A fault immediately after the lease's
+  durable commit but before its return/carrier write must reacquire the exact deterministic consumer
+  path and prove the byte-equal Held lease; restart must derive the same path from durable
+  preparation/handoff material and release it without enumeration. Cancellation, expiry, cleanup failure, and
+  restart ambiguity at those boundaries must publish no success, prematurely release no exclusion,
+  and retain or recover enough exact authority to revoke/abandon/release through the existing
+  lifecycle. These tests reuse existing E2, V3, registry intent, gateway-owner, and preparation
+  fixtures and add no proof framework; and
 - V2 emission and equality fixtures through both
   `continue_world_worker_fork_command_bootstrap_after_delivery` and
   `build_continue_world_worker_fork_command_transport_request`, plus every direct Spawn/Fork path;
@@ -3825,11 +6434,15 @@ and the descriptor-pinned official Codex archive above for:
   submit-vs-unregister, submit-vs-restart, prepare-vs-revoke, and final-release-vs-revoke barriers
   proving the one control mutex's winner, no child side effect after `Revoking`, and no final gate
   write unless lifecycle is still `Active`; and
-- an exact-baseline differential wall against `138864a26dbc4721366c6cc8934d464d1929a189`
-  showing no candidate-only failure across the authorized crates and all existing world-service/
-  gateway/member-dispatch tests.
+- an exact-baseline differential wall against
+  `2b2fc6c50b40046dbeaeb5b316562fbd96480a2a` showing no unallowed candidate-only failure across
+  the packet-authorized crates and all existing applicable Linux world-service/gateway/member-
+  dispatch tests.
 
-No current gate becomes green from this document. E3 requires a later fresh admission and explicit
-dispatch. E4 becomes eligible for its own later admission only after E3 is implementation-clean; D1
-may then consume the opaque projection capability in V3; D3 remains the later integrated proof owner.
-E2-RM/B2.2 coordination may proceed independently and neither is an E3 prerequisite.
+`E2-RM` is already landed at `2012bb8b5562a73ed0ee45238c19252c16b25065`; that fact satisfied the
+prerequisite for the E3-AC1 documentation authority and is not an E3 runtime dependency. The
+preserved E3-A candidate remains incomplete and unlanded, and no E3 gate becomes green here. No D1,
+D2, D3, E4, compatibility-promotion, or non-Linux work is admitted. B4 remains separate and is
+neither modified nor adjudicated by this correction. E3-A Linux proof recovery requires a next
+explicit dispatch after this correction is pushed and its live origin identity is verified; E3-B
+through E3-F remain separately admission- and dispatch-gated by their direct predecessor.

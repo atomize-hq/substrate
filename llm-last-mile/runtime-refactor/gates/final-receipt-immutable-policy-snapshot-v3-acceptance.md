@@ -29,14 +29,18 @@ The snapshot bytes in conditions 6–7 are exactly E1's
 same sequence. E2 record/index/link hashes may use their own domain-separated deterministic
 preimages, but no recursively key-sorted replacement is a policy snapshot hash.
 
+<a id="current-e2-rm--b22-admission-correction"></a>
+
 ## First `E2-RM` / B2.2 admission correction (preserved history)
 
-E2's completion satisfies persistence and immutable linkage, but does not by itself give B2.2 a
-recoverable post-response-loss read path. The existing authenticated E2 operation requires an
-already-known commitment ref. Therefore condition 11 also requires the separately bounded
-[`E2-RM` authenticated accepted-work receipt-material
-projection](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite)
-before B2.2 can be freshly admitted.
+The earlier admission correction identified the missing post-response-loss read path beyond E2's
+completed persistence and immutable linkage. [`E2-RM`](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite) now records the read-only authenticated
+historic-material projection landed at `2012bb8b5562a73ed0ee45238c19252c16b25065`;
+[B2.2](../slices/b2-2-foreground-receipt-return.md#current-admission-disposition) records foreground receipt return/retry landed at
+`0e16a88b2c833c8176ac0e40c6eef33388a5b7df`. The audit matched both landed patches to
+retained `CLEAN` review; separate canonical terminal closure was not located for either, and
+E2-RM's push receipt expressly excludes closure. The following immutable-material rule remains
+controlling; the earlier prerequisite diagnosis is historical, not an unimplemented-current claim.
 
 `E2-RM` must resolve the exact committed request/subject index from authenticated authority plus
 expected B1 acceptance, validate the immutable E2 record/ref/linkage hash, return the preserved
@@ -49,10 +53,19 @@ closed.
 This is a read-only E2 prerequisite, not receipt construction or exposure. B1/B2.1 ownership is
 unchanged, B2.2 still owns foreground receipt construction/return, B3.2 still owns remaining
 receipt/manifest/messaging/lifecycle work, B4 still owns targeted control, and D1/E3 retain their
-future envelope/projection fields. `E2-RM` and B2.2 each require later fresh admission and explicit
-dispatch; this documentation correction admits neither and changes no completed E2 gate result.
+future envelope/projection fields. The earlier admission correction did not dispatch either packet;
+the landing facts above neither manufacture terminal closure nor change completed E2 gate results.
 
 ## Second `E2-RM` / B2.2 admission correction (2026-09-03; controlling)
+
+**Integration status qualification (2026-09-17):** The second correction below remains
+controlling for read semantics, ownership, and the bounded implementation/proof fence. Its
+“future”, “unadmitted”, “unimplemented”, and B2.2-blocked statements record 2026-09-03
+scheduling and proof status, not current blockers. E2-RM and B2.2 are now
+implemented/review-clean/landed as recorded above; separate canonical terminal closures
+were not located. E3-A–D landed; [E3-E is closed](../slices/e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17);
+enclosing E3 remains incomplete, and E3-F remains unadmitted and undispatched. This
+qualification creates no proof result, closure, admission, or new implementation authority.
 
 Condition 11 requires more than semantic equality against caller-provided B1 material. A later
 E2-RM implementation must open only the existing accepted-home layout, acquire the existing HSA

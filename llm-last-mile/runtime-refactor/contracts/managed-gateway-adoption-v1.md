@@ -1,6 +1,6 @@
 **Kind:** contract
 **Stable ID:** `managed-gateway-adoption-v1`
-**Status:** canonical specification; E3 is not admitted, dispatched, or implemented
+**Status:** canonical specification; E3-A through E3-D landed; E3-E terminally complete and product landed; enclosing E3 incomplete; E3-F not admitted or dispatched; see the [E3-E terminal closure](../slices/e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17)
 **Canonical for:** E3 managed-gateway identity, dormant/activation lifecycle, OS access boundary, non-secret intent/launch-input/ACK/reference records, one-time secret-FD reuse, and pre-release revalidation
 **Authority baseline:** source commit `138864a26dbc4721366c6cc8934d464d1929a189`, tree `881393e8fc6db7d4422f97cceadfa550d076a14f`
 **Supersedes:** E3 planning statements that treat a loopback URL, readiness response, request header, copied auth, or provider success as managed-gateway adoption proof
@@ -246,6 +246,8 @@ struct E3GatewaySecretReadyAttestationV1 {
     launch_input_hash: String,
     gateway_pid: u32,
     gateway_pid_start_time_ticks: u64,
+    user_namespace_device_id: u64,
+    user_namespace_inode: u64,
     dumpable: u32, // exactly 0 after PR_SET_DUMPABLE and PR_GET_DUMPABLE
     rlimit_core_soft: u64, // exactly 0
     rlimit_core_hard: u64, // exactly 0
@@ -422,7 +424,7 @@ Lowercase SHA-256 values are computed over:
 | `boundary_hash` | `{"boundary":<boundary with boundary_hash omitted>,"domain":"substrate.e3.gateway-access-boundary.v1"}` |
 | `intent_hash` | `{"domain":"substrate.e3.managed-gateway-activation-intent.v1","intent":<intent with intent_hash omitted>}` |
 | `launch_input_hash` | `{"domain":"substrate.e3.managed-gateway-launch-input.v1","launch_input":<launch input with launch_input_hash omitted>}` |
-| gateway secret-ready `attestation_hash` | `{"attestation":<secret-ready attestation with attestation_hash omitted>,"domain":"substrate.e3.gateway-secret-ready-attestation.v1"}` |
+| gateway secret-ready `attestation_hash` | `{"attestation":<complete secret-ready attestation, including user-namespace device/inode, with attestation_hash omitted>,"domain":"substrate.e3.gateway-secret-ready-attestation.v1"}` |
 | handoff `revision_hash` | `{"domain":"substrate.e3.config-projection-secret-handoff-revision.v1","revision":<handoff revision wrapper with revision_hash omitted>}` |
 | `ack_hash` | `{"ack":<ack with ack_hash omitted>,"domain":"substrate.e3.managed-gateway-activation-ack.v1"}` |
 | readiness-probe `input_hash` | `{"domain":"substrate.e3.managed-gateway-readiness-probe-input.v1","input":<probe input with input_hash omitted>}` |
@@ -436,7 +438,8 @@ The ACK embeds the exact nonsecret wrapper security attestation validated before
 secret delivery; its recomputed hash must equal
 `gateway_process_identity.child_security_attestation_hash`. Its process identity also carries the
 exact validated post-exec secret-ready attestation hash; that attestation must bind the same gateway
-instance, launch input, PID, and start time and prove zero dumpability/core limits before delivery.
+instance, launch input, PID, start time, and parent-validated user-namespace device/inode and prove
+zero dumpability/core limits before delivery.
 A gateway self-report without the pinned pipe/barrier, later `/proc` snapshot, same-PID value, or
 equal attestation under another projection cannot replace either proof.
 `ManagedGatewayLaunchInputRefV1` resolves exactly one immutable launch input by configured store and
@@ -480,6 +483,262 @@ For each individual ref, every store/ID/revision/hash field is byte-equal to the
 No rule permits Prepared, Delivered, and Consumed to equal one another, or Deny to equal Allow;
 authority is the exact unique successor chain just stated. A second successor, skipped revision, predecessor mismatch, or
 equal-state object under another ID is `Conflict` or `WrongBinding` and prevents release.
+
+## E3-E activation publication and ownership seam
+
+This section fixes the bounded callable path through `ReadyClosed`; it grants no E3-F execution.
+The source checkpoint is product `4c5cac9e721ed1de8e355fea5d96022cdfb5765c` plus the protected
+connected-recovery candidate SHA-256
+`04bdfc319ee636a5a07b696867bf7c5a27d5081127ea238da81225ff43b6d1bb`, against documentation base
+`66a233d4e10ce14bfae4b78f9816a49713b0ff5b`. The candidate has the ACK schema but its
+`publish_ready_closed(expected_head, record)` validates only ACK-reference shape/equality. Its
+`activate_managed_gateway`, `resolve_activation_carrier`, and `take_for_v2` are not implemented.
+The following is a complete implementation assignment, not a claim that those paths work today.
+
+The installed E3-E runtime-directory traversal blocker is governed solely by the projection
+contract's [native-Linux runtime-directory DAC correction](agent-config-projection-v1.md#e3-e-native-linux-runtime-directory-dac-correction).
+That later, separately authorized unit-hook and ACL rollback allowance preserves this contract's
+private realizations, exact child mappings, privilege descent, socket behavior, and Landlock policy.
+The retained failure occurred before delivery/readiness; installation and failure cleanup do not
+prove successful activation. This documentation grants no implementation or connected-acceptance
+claim, leaves E3-E open, and does not admit E3-F.
+
+**Publication choice.** Extend the existing ReadyClosed operation to receive the complete ACK and
+original Held dispatch lease. It privately writes/readbacks the ACK before the record/head under
+one existing registry transaction. A separate ACK writer would split the same caller's obligation
+and require another callable/readback boundary; no independent writer or resolver consumer exists
+in this path. All immutable ACK reads remain private, including later record resolution and audit.
+The exact signatures and narrow visibility exceptions are in
+[the projection contract](agent-config-projection-v1.md#e3-e-activation-callable-boundaries).
+
+**Producers, consumers, and retained values.**
+
+| Value | Exact producer and consumer |
+|---|---|
+| Prepared response, Dormant capability, private publication, credential owner and gateway owner | `E3ConfigProjectionPreparationManagerV1::prepare` retains them in its sealed map. `take_for_v2` compares every shared prepare/V2 launch field, nullable launch/fork proof, authenticated E2 carrier, preparation/key, Dormant ref, intent, gateway, fence and original revision-1 Held lease; it claims that entry once before any child side effect. |
+| Current E2 authority | `take_for_v2` calls the existing `OpenedConfigProjectionHsaAuthorityV1::authenticate_e3_member_launch_activation_v1` with V2 common fields and the retained E2 carrier, and requires the reconstructed carrier to equal it. Repeat before irreversible gates, secret write and publication; each HSA call finishes outside registry transactions. No current-policy reconstruction replaces the immutable snapshot. |
+| Exact launch input | `AgentConfigProjectionServiceV1::resolve_activation_carrier` exact-resolves the original Dormant/lease and the carrier's retained prepared chain, then returns only its existing `ManagedGatewayLaunchInputV1`. `take_for_v2` passes it to its retained `E3GatewayRuntimeAuthorityV1::spawn_descriptor_pinned`. The input was already published during preparation; do not allocate or publish another launch identity. |
+| Descriptors and enforcement input | The runtime owner opens and holds wrapper/gateway descriptors against `identity.runtime_artifacts` and the exact accepted manifest/support identities; it retains the prepared listener, config and cgroup/boundary handles. The authenticated E2 carrier supplies snapshot bytes/length/ref/hash/revision and immutable cap; the configured bootstrap supplies UID/GID, and E3-D's exclusion owner supplies boot/user-namespace bindings. The runtime builds the existing role-specific `E3WorldFsEnforcementInputV1`, uses `build_authenticated_world_fs_enforcement_input_v1`, and keeps every parent control descriptor out of the child. |
+| Pinned gateway process/security identity | `spawn_descriptor_pinned`, `validate_child_security`, `validate_listener_inventory`, and `validate_gateway_secret_ready` compose the existing E3-D namespace/security helpers, wrapper and independent pidfd/proc/cgroup checks. Those helpers consume the shared implementation under the projection contract’s separately authorized [fixed-device correction](agent-config-projection-v1.md#e3-d-shared-landlock-fixed-device-correction), which solely owns its allowance, source/test fence and later proof. Child/process registrations precede the first gate. The runtime retains the exact wrapper attestation and post-exec secret-ready hash in the process identity; a gateway self-report is insufficient. |
+| One-time delivery and Delivered timestamp | The runtime creates the existing empty `create_inherited_auth_bundle_pipe` and distinct `create_e3_gateway_secret_ready_pipe`. `deliver_secret_after_privilege_drop` moves the original integrated-auth payload into the existing `GatewayAuthBundleV1` encoding only after all live/security checks, writes once, closes and scrubs. It does not call the compatibility `prepare_gateway_auth_bundle_handoff`, which writes eagerly. The manager scrubs the retained ingress buffer and any remaining auth copy, freezes the successful write/close timestamp, and calls the service's `Delivered` step before probing. |
+| Readiness observation | `spawn_readiness_probe`, `validate_readiness_probe`, and `probe_readiness` own the descriptor-pinned probe and both one-shot barriers above. `E3GatewayLaunchContractV1`, the existing one-time auth reader, and `e3_health_check` supply the exact launch/listener/consumption response. The parent validates the entire connected/result/response chain, repeats live gateway checks, and freezes one `observed_at` before passing the service's `Ready` step. |
+| Consumed, ACK and ReadyClosed | `AgentConfigProjectionServiceV1::activate_managed_gateway` constructs the unique Delivered/Consumed successors from its private handoff, then the full ACK and ReadyClosed record from the retained chain and validated observation. Only `ConfigProjectionRegistryV1::publish_ready_closed` persists the ACK. The returned ReadyClosed ref is stored beside the original capability/lease and live runtime owner. |
+| Successful transfer | `take_for_v2` moves the same sealed preparation, including publication, original projection capability, gateway owner and ReadyClosed ref, exactly once into the existing `MemberRuntimeLaunchAdmissionV2` ownership slot. E3-F owns that production caller and subsequent retained-runtime adoption; E3-E's bounded harness may consume/revoke the same result without wiring dispatch or spawning Codex. |
+
+**Identity and exact retry.** The service freezes `Delivered` before its first handoff write. On the
+first validated Ready observation it allocates one `gaa_<UUIDv7>` and one successor record ID,
+sets `gateway_ready_revision = 1`, and uses that observation's canonical timestamp for
+`Consumed.consumed_at`, `ACK.observed_at`, and the ReadyClosed record's `created_at`. All timestamps
+must satisfy existing ordering/expiry checks; wall-clock adjustment never extends `CLOCK_BOOTTIME`.
+The existing opaque publication retains the complete Delivered/Consumed wrappers and returned refs,
+ACK/ref, ReadyClosed record/ref and observation before each fallible write. It preserves the original
+Dormant head and Held lease fields. The service computes hashes with the existing codec/domains;
+the registry independently recomputes every hash and derives/exact-compares every ref. No timestamp,
+ID, nonce, hash, or payload is reallocated on publication retry, and no secret-derived value appears.
+
+The ReadyClosed transaction validates the configured store/root and subject, non-retirement, exact
+current head (original Dormant or this exact ReadyClosed retry), and the original Held lease's
+immutable revision/head, deterministic preparation consumer ID, kind and acquisition ref. The
+lease's `acquired_projection_ref` remains the Dormant ref: do not pass that lease to the existing
+`resolve` as though it had been acquired against ReadyClosed, rewrite it, or invent a second lease.
+Successful publication returns exact record readback directly. The retained Dormant capability is
+not relabeled as a newly resolved ReadyClosed capability.
+
+Private registry validation joins the intent's preparation/Dormant coordinates, E2/artifacts,
+fence/nonce/Prepared/Deny refs; the launch input's exact Dormant/intent/gateway/listener/config/HTTP
+surface/Prepared/Deny/nonce; the unique Prepared -> Delivered -> Consumed lineage and unchanged
+credential/delivery/receiver fields; the ACK's launch ref, process/artifact/cgroup registration,
+wrapper security attestation/hash, post-exec secret-ready hash, listener, nonce, revision 1 and
+Consumed ref; and all three ReadyClosed ACK refs, its exact Consumed ref, unchanged Deny ref and
+`ZeroLiveClosed` fence/native root. Resolve the registered gateway PID/start/boot/service-instance
+and cgroup bindings, rather than accepting a numerically equal PID. The live owner additionally
+revalidates held executable, pidfd, namespace, socket and boundary identities before and after
+publication. An immutable security hash does not replace those live checks.
+
+**Lock scope and arbitration.** The manager's existing preparation-map mutex serializes claim,
+cancel, expiry, duplicate take and final transfer. A bounded synchronous activation helper works on
+the already borrowed entry, retaining the claim and every partial resource through errors; it never
+calls a manager method that reacquires that mutex. Check the fixed deadline before every barrier,
+secret delivery, publication and transfer; pipe/probe waits are deadline-bounded. Cancel/expiry
+that wins the map arbitration makes the attempt terminal before spawn; a take that wins is the sole
+worker and either transfers once or leaves an owned failed attempt for cleanup. A losing duplicate
+request cannot start or retry the worker's OS effects. After transfer, preparation cancellation
+cannot reach that owner; the retained-runtime caller owns cancellation. No wait holds an HSA or
+projection filesystem lock. Service calls acquire/release parent then child transactions separately;
+private helpers reuse the already-held transaction and never call a locking registry entrypoint.
+Existing kernel-intent transactions retain their own narrow effect/readback critical sections.
+Filesystem publication and kernel liveness are not one atomic operation: any post-publication live
+failure revokes the attempt and prevents returning usable live ownership.
+
+**Interruption and resource outcomes.**
+
+| Outcome | Required action and owner |
+|---|---|
+| Delivered or Consumed write/head return lost | The same live worker retries the frozen successor through the service/registry; it does not repeat the secret write, probe or barriers. A new V2 request cannot resume that worker. |
+| ACK durable, ReadyClosed head still Dormant | Retain the exact ACK and attempt owner; the same live worker may exact-readback it and finish the expected-head CAS within its original deadline. An orphan ACK proves no activation and grants no capability. |
+| ReadyClosed head durable, reply lost | The same worker supplies the identical record/ACK and original lease. Success requires exact current head, immutable record/ACK/dependencies and Held-lease readback, then live revalidation. A different or later head rejects. |
+| Conflicting retry or stale authority | Unequal canonical bytes or attempt identities reject; stale head, Released lease, retired series, changed E2/world/generation or fence forbids publication/transfer. Clean only this worker's descriptor-identified old resources; never revoke a successor from a stale ref/name. |
+| Cancel, expiry, security failure or process death | Close all gates/pipes and scrub credentials. Follow [terminal namespace release and exclusion-last](#terminal-namespace-release-and-exclusion-last): verify denial, reap and prove exact groups empty, release each retained child namespace before cgroup removal, complete durable/kernel/listener/config cleanup, then handoff/consumer cleanup and explicit exclusion release last. |
+| Cleanup/readback failure or unwind | Keep the sealed entry and all unresolved owners/exclusion for bounded cleanup. The private cleanup helper is shared by activation failure, `cancel` and `recover_expired` without recursive map locking. Unexpected owner loss keeps admission poisoned/closed; no destructor fabricates cleanup evidence. |
+| Service restart | Recover evidence and revoke/kill/prove quiescence under existing recovery rules; never reconstruct the preparation/listener/credential or adopt the old gateway/ACK. Consumed stays terminal. Fresh auth requires new process, preparation, handoff, intent, launch input, ACK, fence/root and lease in the same eligible immutable-subject series. |
+
+A head may remain durable after cleanup; it is historical evidence, not live authorization. Cleanup
+uses the exact current attempt head when publication advanced to ReadyClosed, while the original
+carrier/lease still names its Dormant predecessor. `publish_preparation_abandonment` must reconcile
+its retained publication progress, preserve Consumed without a forbidden terminal transition, and
+release only that attempt's lease after verified cleanup. It must still reject an Active or different
+attempt. Immutable ACK/intent/launch/handoff records are retained. Successful transfer retains the
+listener duplicate, pidfd, config/artifact and namespace/cgroup/boundary owners and E3 exclusion for
+the retained caller; probe sockets/gates are closed and the probe is reaped before success. No
+credential resend, duplicate spawn, replayed gate, or stale-worker cleanup is an outcome.
+
+**All callers and minimum later proof.** At the bound source, the five ReadyClosed call expressions
+in `config-projection/src/registry.rs::tests` and the one in
+`world-service/src/e3_config_projection_prepare.rs::tests` require complete ACK and Held-lease
+fixtures. Their synthetic Active history remains synthetic. Extend the existing shared durable
+validation used by publication, resolve, record/head readback, tree validation and temporary
+recovery to resolve ACK evidence for ReadyClosed and existing Active records. Historical validation
+checks immutable dependencies without requiring a now-live process or Held lease; activation checks
+current authority separately. There is no reference-only publication, resolver, test or recovery
+bypass and no new Active execution caller.
+
+Later focused tests cover wrong/missing ACK and every join, original-lease binding, exact retry at
+both interruption points, conflicting bytes, handoff lost returns, duplicate take/cancel/expiry,
+process death, one write/no replay, failed cleanup and successor isolation. Installed Linux
+acceptance must connect actual service -> E3-D wrapper -> gateway -> readiness -> Consumed -> ACK
+-> ReadyClosed -> revocation, with privilege/namespace/listener negatives, secret canary absence,
+and restart cleanup followed by fresh authorization. Direct gateway tests are insufficient. This
+planning/landing task runs none of those product tests or probes and certifies neither E3-E as a
+whole nor E3-F. Existing schemas, domains, storage layout, E3-D security and restart semantics stand,
+subject to the terminal owner-lifecycle exception below and the separately authorized
+[fixed-device consumer correction](agent-config-projection-v1.md#e3-d-shared-landlock-fixed-device-correction).
+The separately authorized
+[cgroup denial-target identity correction](agent-config-projection-v1.md#e3-d-cgroup-denial-target-identity-correction)
+also qualifies only its exact frozen E3-D validator/private-helper/colocated-test boundary. That
+single normative owner defines the correction, preserved security checks and later focused proof;
+gateway target construction and wrapper probes remain unchanged. Neither correction changes the
+activation protocol or terminal namespace ownership. This documentation allowance does not prove
+installed activation, complete E3-E or admit E3-F.
+
+### Terminal namespace release and exclusion-last
+
+This correction is grounded in preserved product HEAD
+`4c5cac9e721ed1de8e355fea5d96022cdfb5765c` plus candidate composite
+`sha256:f5ffa8b32508c10b36e2eb256ce21003c662132d93f974e2ff6dc9a1418c1fc0`, which historically binds
+old authority `f0fc4288f536f738f446e784d22a358b9a36f980`. In that candidate,
+`e3_child_security.rs` SHA-256 `6fd6850e10c9e942859d9696158e0144193af09d9062c2270d27e799aa853775`
+retains namespaces until `release_e3_exclusive` reopens their cgroups. The E3-E `revoke` path
+therefore stops before launched-attempt cgroup removal and retains ownership/admission closed.
+That is incomplete source, not successful cleanup or connected runtime proof. The exact new
+[lease-owned callable and implementation fence](agent-config-projection-v1.md#e3-e-terminal-child-namespace-owner-boundary)
+resolve only this owner/caller boundary; the completed publication plan and recovery review stand.
+
+**Ordered live cleanup.** The single retained preparation/runtime owner performs these steps:
+
+1. Under its existing owner arbitration, mark the attempt terminal; close every start/final/probe
+   gate and auth pipe, scrub transient credentials, install `Revoked` denial against the held exact
+   boundary and verify it. No late activation or ownership transfer may pass after that point.
+2. Kill/reap every actually started gateway/probe, including a child whose registration or setup
+   failed. Use retained original pidfds/PID/start identities; preserve wait outcomes for retry.
+   Prove every preallocated cgroup and its complete descendant tree empty twice against exact
+   held mount/directory identities. Failure keeps the remaining owners and exclusion. An unused
+   Codex group has no child namespace to release but still requires empty/removal proof.
+3. For every recorded setup call, invoke the lease's
+   `release_terminal_child_user_namespace_v1` with the exact retained child registration while
+   its original cgroup still exists. E3-D independently validates terminal pidfd and twice-empty
+   cgroup state before releasing each held namespace. A never-retained setup slot is not a
+   substitute for step 2. Do not delete any group that still has a held namespace. Release of one
+   child neither consumes an exclusion lease nor affects another child or sibling attempt.
+4. Freeze the existing `E3TerminalChildQuiescenceEvidenceV1` and each existing cleanup resolution
+   before its first fallible publication, retaining IDs, timestamps, canonical bytes and readback
+   progress. Publish/readback terminal evidence and the verified `Revoked` boundary through the
+   existing registry operations before deleting registered groups. Required absent/headless
+   evidence still follows its existing intent/registration rules; do not fabricate a registration
+   for a failed spawn. These records prove their existing kernel/process facts, not a persistent
+   live namespace capability. No schema or namespace-release record is added.
+5. Close the retained listener before deleting groups. Remove only the descriptor-identified empty
+   cgroups after step 3 and durable pre-removal evidence, retaining each successful removal before
+   a later fallible call. Complete existing per-effect resolution publication/readback and boundary
+   teardown; retain verified denial until no child can use the listener. Remove only the exact
+   rebuildable config realization, then close remaining runtime descriptors. A missing group is
+   acceptable on a same-live cleanup retry only with this owner's prior exact successful removal
+   and required durable proof; a reappearing/substituted object rejects. Cgroup absence is never
+   accepted by E3-D as the first terminal namespace validation.
+6. The manager reconciles the exact current attempt head and frozen publication progress, completes
+   legal nonterminal handoff termination or preserves terminal `Consumed`, publishes/readbacks the
+   original consumer lease's sole Released successor, and releases the original projection
+   capability. Retain the sealed runtime and frozen terminal progress if any return is lost.
+7. Only then call `release_exclusion_after_cleanup_v1`, which invokes the lease's explicit
+   `release_after_cleanup_v1`. If it fails, keep the runtime in the entry, admission closed and the
+   attempt terminal. Mark manager cleanup complete and discard the owner only after success. Last
+   counted release alone permits legacy admission; sibling leases keep the epoch exclusive.
+
+The successful readiness probe is a separate terminal child in the still-live gateway attempt:
+`probe_readiness` closes its probe sockets/gates, reaps it, proves its exact group twice empty and
+releases only its namespace through the same operation before publishing Ready/returning transferable
+ownership. Keep its non-owning completion/registration and wait result in the live launch owner;
+do not remove its preallocated group or publish whole-attempt terminal evidence at that point.
+Later final cleanup exact-retries its release without reaping again, preserves its terminal evidence
+and removes that group in the sequence above. The gateway namespace and exclusion remain held
+through successful ReadyClosed transfer. This adds no E3-F caller or Codex execution.
+
+**Partial startup, retries and locks.** Failure before a child exists uses existing child-free
+cleanup. A started child without a completed registration remains owned and must be killed/reaped;
+no namespace setup is permitted before the runtime retains its exact process registration. Setup
+records its lease-local slot before namespace work; failure before retention confirms only that no
+namespace was retained, whereas failure after retention (including a lost mapped reply or missing
+security attestation) must release the retained namespace through the same operation. Attestation
+presence is never the test for ownership. No failed setup is replayed on a fresh activation request.
+
+The preparation-map mutex remains the outer lock for activation failure, `cancel`, `recover_expired`
+and transfer; shared cleanup operates on the already borrowed entry. Once transferred, the existing
+retained owner arbitration replaces that mutex and preparation cancellation cannot reach it.
+Private lease/map transitions acquire the exclusion state mutex once underneath owner arbitration.
+They never call a public helper that locks it again, acquire HSA/registry locks, or invoke a generic
+callback. The setup thread's socket waits and capability/map work run without the exclusion state
+mutex, while the exclusively borrowed lease and recorded slot prohibit concurrent release of that
+child. The release operation may perform bounded descriptor readback and nonblocking pidfd polling
+under that mutex; it never kills, blocks waiting for exit, or waits for cgroup emptiness there.
+
+All process kill/reap/wait and E3-D release calls occur outside HSA and projection filesystem
+transactions. Drop the exclusion mutex before any registry operation. Existing parent-then-child
+transaction ordering and narrow kernel effect/readback critical sections remain unchanged; a
+registry effect callback must not call namespace release or wait for a process. Recheck exact group
+identity/emptiness at removal; earlier namespace-release success cannot bless later substitution.
+
+Same-live-attempt cleanup resumes from retained per-child release and per-object/evidence progress.
+If gateway release fails after probe release, retain the gateway ownership and keep the probe's
+completed slot; never reacquire or double-close it. If evidence publication fails after namespace
+release, keep cgroups and exclusion, exact-retry frozen evidence, then continue cleanup. If a later
+removal, config cleanup, handoff/consumer publication or final exclusion return fails, retain all
+unresolved resources and successful-step markers. The manager's early cleanup readback must accept
+only its exact already-Released consumer successor when its own frozen cleanup progress proves that
+step completed; it must not require a still-Held lease or restart activation. Unequal/stale head or
+lease evidence rejects. Final release marks the lease released atomically with count mutation, so a
+lost outer return cannot decrement twice. A completed cleanup retry checks retained completion
+before requiring a removed runtime or Held lease.
+
+Unwind preserves unresolved shared namespace ownership and closed admission; it cannot use a
+destructor as a retry worker or successful cleanup receipt. If accountable live ownership is lost,
+poison/keep admission closed until service restart. Restart follows existing evidence
+recovery/quiescence under `Recovering`, with fresh authorization afterward; it never reconstructs
+old namespace ownership, a live gateway/listener, credentials, or same-live retry markers from refs.
+Consumed stays terminal, historical evidence stays immutable, and recovery discovery is not reopened.
+
+**Minimum later proof.** A later authorized implementation must cover connected gateway and probe
+release-before-cgroup-removal followed by exclusion-last; terminal/live pidfd and populated-tree
+cases; wrong world/generation/lease/registration/role/fence/boot and substituted process/namespace/
+mount/group/descendant rejection; two sibling attempts and distinct probe/gateway ownership;
+partial startup before and after retention, including failed mapped reply; successful probe reaping;
+partial cleanup and lost evidence/removal/handoff/final-release returns; equal retry without double
+release; failed validation preserving exact owners and positive counts; and legacy admission only
+after every lease's required cleanup. Include ordinary cancel/expiry, failed activation, bounded
+ownership transfer/cleanup and restart evidence recovery followed by fresh authorization.
+Unprivileged source tests may exercise state, error and identity logic but cannot establish Linux
+namespace/cgroup effects. Connected Linux runtime proof requires its own explicit authorization and
+must exercise the actual service owner/caller path. Historical 57-config/9-world passes, eight ignored
+cases and scoped Clippy remain historical candidate evidence. This documentation task runs no product
+build, test, probe, installed acceptance or service restart, and consumes no whole-E3-E source review.
 
 ## Sealed launch capability and inherited inputs
 
@@ -560,20 +819,35 @@ SUBSTRATE_LLM_AUTH_BUNDLE_FD
 
 The immediate executable is not the gateway. World-service uses the same manifest-pinned ELF
 `substrate-world-entry` helper and two-stage protocol defined by the projection contract, with
-`SUBSTRATE_WORLD_ENTRY_ROLE=managed_gateway`; its five wrapper pointers identify the held gateway
-ELF, gateway working directory, enforcement-input reader, setup-ready writer, and final-exec reader.
+`SUBSTRATE_WORLD_ENTRY_ROLE=managed_gateway`; its six wrapper pointers identify the held gateway
+ELF, gateway working directory, enforcement-input reader, setup-ready writer, final-exec reader, and
+the parent-created `SUBSTRATE_WORLD_ENTRY_USERNS_FD` setup socket.
 The launch-input, reserved-listener, secret-ready write end, and empty secret-handoff read end also
 survive the wrapper exec;
 no cgroup, nftables, registry, installer-store, or other enforcement-control descriptor does. The
 parent attaches the gated PID to the exact gateway cgroup before releasing wrapper exec. The wrapper
-derives the exact E2 plan and installs the projection contract's derived-support layer followed by
-its gateway role-narrowing layer, which carries no E2 workspace/project right, then clears all
+creates its fresh per-gateway user namespace and blocks while world-service installs and validates
+the exact identity maps through the projection contract's parent-owned handshake. World-service
+retains the resulting namespace descriptor through cgroup-empty revocation; no caller, Codex,
+sibling, readiness probe, or other role receives it or shares that namespace. Only after mapped
+release does the wrapper create its private mount namespace, derive the exact E2 plan, and install the
+projection contract's derived-support layer followed by its gateway role-narrowing layer, which
+carries no E2 workspace/project right, then clears all
 ambient/effective/permitted/inheritable/bounding
 capabilities, drops to the installed UID/GID with no supplementary groups, installs the exact
-no-new-privileges/dumpability/ptrace/seccomp posture, and emits the strict
+no-new-privileges/dumpability/protected-user-namespace/seccomp posture, and emits the strict
 `E3ChildSecurityAttestationV1`. It cannot read the still-empty secret pipe. World-service
 exact-validates the attestation and independent `/proc`/pidfd/cgroup/FD/negative-access probes before
-writing the one final-exec byte.
+writing the one final-exec byte. The projection contract's
+[cgroup denial-target identity correction](agent-config-projection-v1.md#e3-d-cgroup-denial-target-identity-correction)
+governs the narrow later parent-validator repair on this path; this producer, final-exec gate,
+one-time secret delivery and failure cleanup retain their existing semantics and ownership.
+
+The user-namespace boundary protects memory and file descriptors across the validated namespace
+edge; it does not block same-UID signals or changes to intentionally shared user files. Existing
+artifact/configuration integrity, policy, Landlock, gateway access binding, activation/revocation,
+and retained-turn protections remain authoritative. No same-UID process is trusted merely by UID,
+and this contract makes no claim against a hostile host administrator or compromised kernel.
 
 The already unprivileged wrapper then uses the held manifest-matched gateway descriptor with
 `execveat(AT_EMPTY_PATH)` and argv exactly
@@ -603,10 +877,10 @@ bytes, or any ambient identity value aborts before readiness.
 After `/proc/<pinned-pid>/exe` exact-matches the held no-setid/no-file-capability gateway artifact,
 the inherited listener inventory still matches, and independent post-exec checks reproduce the
 attested UID/GID, zero capability masks, no-new-privileges, `TracerPid=0`, both zero core limits, the
-exact boot ID and irreversible Yama `ptrace_scope=3` denial, seccomp mode,
+exact boot ID and exact membership in the parent-held protected user namespace, seccomp mode,
 both Landlock layer hashes and their effective-intersection hash, and cgroup, world-service reads the
 secret-ready pipe to bounded EOF and exact-validates its hash, gateway/launch/PID/start binding,
-`dumpable=0`, zero core limits, and tracer value. That descriptor-pinned self-attestation plus the
+user-namespace device/inode, `dumpable=0`, zero core limits, and tracer value. That descriptor-pinned self-attestation plus the
 parent's live process readback becomes `GatewayProcessIdentityV1.secret_ready_attestation_hash`.
 Only then does world-service write the existing `GatewayAuthBundleV1` bytes into the
 pipe, closes and scrubs its writer/transient buffer, and publishes the unique `Delivered` handoff
@@ -719,11 +993,12 @@ The parent forks through the same prebuilt syscall-only gate, attaches the child
 `readiness_probe_cgroup`, and descriptor-execs the already manifest-pinned `substrate-world-entry`
 with role `ManagedGatewayReadinessProbe`. Its argv is exactly `["substrate-world-entry"]`, its working
 directory is `/`, and its environment starts empty and contains exactly the authenticated literal
-`SUBSTRATE_WORLD_ENTRY_ROLE=managed_gateway_readiness_probe` plus these seven decimal FD pointers:
+`SUBSTRATE_WORLD_ENTRY_ROLE=managed_gateway_readiness_probe` plus these eight decimal FD pointers:
 
 ```text
 SUBSTRATE_E3_READINESS_PROBE_INPUT_FD
 SUBSTRATE_WORLD_ENTRY_SETUP_READY_FD
+SUBSTRATE_WORLD_ENTRY_USERNS_FD
 SUBSTRATE_E3_READINESS_PROBE_START_FD
 SUBSTRATE_E3_READINESS_PROBE_CONNECTED_FD
 SUBSTRATE_E3_READINESS_PROBE_REQUEST_RELEASE_FD
@@ -733,16 +1008,17 @@ SUBSTRATE_WORLD_ENTRY_SELF_ARTIFACT_FD
 
 The role parser accepts that lowercase literal only for this ABI and routes it exclusively to
 `run_managed_gateway_readiness_probe`; a missing, duplicate, differently cased, aliased, nondecimal,
-or extra environment entry aborts before any socket syscall or setup-ready output. The seven values
-identify respectively the immutable probe-input reader, setup-ready writer, one-byte probe-start
-reader, bounded connected-attestation writer, one-byte request-release
+or extra environment entry aborts before any socket syscall or setup-ready output. The eight values
+identify respectively the immutable probe-input reader, setup-ready writer, user-namespace setup
+socket, one-byte probe-start reader, bounded connected-attestation writer, one-byte request-release
 reader, bounded result writer, and a duplicate of the exact held wrapper ELF descriptor. The last FD
 is used only to byte/metadata/runtime-support match `enforcement_input.executable_artifact`, is closed
 before the start byte, and can never select or execute another artifact. It inherits no listener,
 gateway secret, config, workspace, cgroup, nftables, registry, or second/final target-executable
-descriptor. The wrapper validates the input, self-artifact, and its cgroup,
-applies the exact readiness-probe support closure, drops to the target UID/GID with zero groups and
-all capability sets zero, installs the common anti-ptrace/no-new-privileges posture and a probe
+descriptor. The wrapper validates the input, self-artifact, and its cgroup, creates a fresh
+readiness-probe user namespace through the parent-owned mapping handshake, then applies the exact
+readiness-probe support closure, drops to the target UID/GID with zero groups and all capability sets
+zero, installs the common protected-user-namespace/no-new-privileges posture and a probe
 seccomp profile. Before installing that filter it allocates and fixes all
 request/connected-attestation/result/parser buffers, resolves the exact numeric IPv4 listener, reads
 the immutable deadline durations, and performs every pre-socket filesystem, cgroup, identity, hash, and
@@ -849,9 +1125,12 @@ The only valid sequence is:
    unwritten secret bytes solely in world-service transient memory. The gateway may not bind a
    replacement socket. Construct the sealed launch capability and descriptor-exec the pinned wrapper
    behind its parent cgroup gate with the nonsecret launch input, listener, enforcement input, and
-   empty secret reader. The wrapper applies the exact derived-support and gateway role-narrowing
+   empty secret reader. The wrapper creates its fresh user namespace and blocks while world-service
+   installs and validates only the configured identity maps; after mapped release it creates the
+   private mount namespace and applies the exact derived-support and gateway role-narrowing
    filesystem layers, privilege drop,
-   capability clearing, anti-ptrace posture, and seccomp filter, emits its security attestation, and
+   capability clearing, protected-user-namespace posture, and seccomp filter, emits its security
+   attestation, and
    blocks. Only the readiness probe can connect; Codex and gateway do not yet exist.
 3. Exact-validate the wrapper security attestation and independent live process state, then release
    the final wrapper gate. Require that the same pinned unprivileged PID descriptor-execed the exact
@@ -877,8 +1156,9 @@ The only valid sequence is:
    the ACK points to its dormant predecessor, never to the record that contains the ACK. Create the
    Codex child with prebuilt argv/environment/descriptors behind the wrapper-exec gate, attach it to
    the exact member cgroup, and release only that gate. The pinned wrapper creates the private config
-   namespace, applies the authenticated E2 filesystem policy, completes the exact UID/GID/capability/
-   no-new-privileges/anti-ptrace/seccomp transition, emits the exact setup-ready and child-security
+   mount namespace inside its already parent-validated fresh user namespace, applies the authenticated
+   E2 filesystem policy, completes the exact UID/GID/capability/
+   no-new-privileges/protected-user-namespace/seccomp transition, emits the exact setup-ready and child-security
    attestations, and blocks on the independent
    final-exec gate; Codex does not exist and cannot connect yet.
 6. Immediately before activation, resolve the configured accepted-home active head and revalidate
@@ -888,7 +1168,8 @@ The only valid sequence is:
    `AllowExactMember` successor for the exact child cgroup and publish the `Active/Released`
    projection revision with that successor ref.
 7. Immediately before final-exec release for the initial or any later sequential resumed turn,
-   validate the setup-ready/security attestation and child namespace,
+   validate the setup-ready/security attestation and exact membership in the parent-held child user
+   namespace and private mount namespace,
    then repeat the same authority and live-identity validation, including equality with the
    just-published active head and complete ordered rule set. Write exactly one final-exec byte; the
    wrapper revalidates and descriptor-execs Codex.
@@ -986,8 +1267,11 @@ listener acceptable, cannot satisfy an E3 gate, and is never automatic fallback 
 malformed, newer, legacy, wrong-bound, hash-invalid, stale, partially published, or conflicting E3
 authority. Gateway absence or an unsupported kernel boundary is typed `UnsupportedLegacyState` or
 `UnsupportedPlatform`; missing authenticated E2/Landlock confinement, privilege/capability descent,
-anti-ptrace posture, or control-path denial is `UnsupportedSecurityPosture`; corruption/substitution
-is fail-closed.
+valid trusted-service-owned user-namespace identity/membership, required trusted tracing, gateway
+non-dumpability, or control-path denial is `UnsupportedSecurityPosture`; corruption/substitution is
+fail-closed. Substrate does not change or require a value for host-wide Yama policy; a host policy
+that blocks required tracing produces the actual compatibility failure rather than a silent tracing
+fallback.
 
 This contract adds no implementation evidence and marks no gate green. E3 still requires later fresh
 admission and explicit dispatch; D1 later consumes the ACK/projection capability in its V3 carrier,
