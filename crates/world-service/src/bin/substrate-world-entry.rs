@@ -1346,9 +1346,8 @@ fn exec_pinned_child(
     unreachable!()
 }
 
-fn validate_managed_gateway_readiness_probe_input(
+fn validate_managed_gateway_readiness_probe_fields(
     input: &ManagedGatewayReadinessProbeInputV1,
-    self_artifact_fd: RawFd,
 ) -> Result<()> {
     if input.schema_version != 1
         || input.connect_deadline_ms != 1_000
@@ -1369,7 +1368,7 @@ fn validate_managed_gateway_readiness_probe_input(
         || !input
             .listener_identity
             .deny_boundary_effective_before_listen
-        || input.listener_identity.responses_base_path != "/v1/responses"
+        || input.listener_identity.responses_base_path != "/v1"
         || input.launch_input_ref.authority_store_id != input.gateway_ref.authority_store_id
         || input.launch_input_ref.launch_input_hash.len() != 64
         || input.launch_input_ref.launch_input_id.is_empty()
@@ -1396,6 +1395,14 @@ fn validate_managed_gateway_readiness_probe_input(
         bail!("managed-gateway readiness-probe input hash mismatch");
     }
     validate_enforcement_input_hash(&input.enforcement_input)?;
+    Ok(())
+}
+
+fn validate_managed_gateway_readiness_probe_input(
+    input: &ManagedGatewayReadinessProbeInputV1,
+    self_artifact_fd: RawFd,
+) -> Result<()> {
+    validate_managed_gateway_readiness_probe_fields(input)?;
     validate_current_process_cgroup(&input.readiness_probe_cgroup)?;
     validate_current_kernel_boot_id(&input.enforcement_input.kernel_boot_id)?;
     let pid = std::process::id();
@@ -5632,6 +5639,200 @@ fn main() {{
         }
     }
 
+    fn readiness_input_contract_fixture() -> ManagedGatewayReadinessProbeInputV1 {
+        let directory = CanonicalDirectoryV1 {
+            physical_path: "/fixture".to_string(),
+            physical_identity: config_projection::DirectoryPhysicalIdentityV1::Linux {
+                device_id: 1,
+                inode: 2,
+            },
+        };
+        let mut enforcement = synthetic_wrapper_input(
+            E3IsolatedChildRoleV1::ManagedGatewayReadinessProbe,
+            &directory,
+        );
+        enforcement.immutable_worker_cap_ref.commitment_id =
+            "dpc_01991f65-7800-7000-8000-000000000005".to_string();
+        enforcement.policy_authority =
+            config_projection::E3PolicyAuthoritySourceV1::InitialLaunch {
+                e2_activation_id: "ela_01991f65-7800-7000-8000-000000000006".to_string(),
+                commitment_ref: enforcement.immutable_worker_cap_ref.clone(),
+            };
+        enforcement.executable_artifact.role = ConfigProjectionArtifactRoleV1::WorldEntryWrapper;
+        enforcement.executable_artifact.configured_absolute_path =
+            "/usr/local/lib/substrate/e3/substrate-world-entry".to_string();
+        enforcement.expected_process_cgroup = CanonicalCgroupIdentityV1 {
+            cgroup_v2_mount_device_id: 1,
+            cgroup_v2_mount_inode: 2,
+            cgroup_directory_inode: 3,
+            cgroup_relative_path: "substrate/test/readiness".to_string(),
+        };
+        enforcement.enforcement_input_hash = hash_omitting(
+            "substrate.e3.world-fs-enforcement-input.v1",
+            "input",
+            &enforcement,
+            "enforcement_input_hash",
+        )
+        .unwrap();
+        // Same field bindings as spawn_readiness_probe, with nonsecret fixture identities.
+        let mut input = ManagedGatewayReadinessProbeInputV1 {
+            schema_version: 1,
+            launch_input_ref: ManagedGatewayLaunchInputRefV1 {
+                authority_store_id: "cpa_01991f65-7800-7000-8000-000000000001".to_string(),
+                launch_input_id: "gal_01991f65-7800-7000-8000-000000000004".to_string(),
+                launch_input_hash: "d".repeat(64),
+            },
+            gateway_ref: InWorldGatewayRefV1 {
+                authority_store_id: "cpa_01991f65-7800-7000-8000-000000000001".to_string(),
+                gateway_instance_id: "cgi_01991f65-7800-7000-8000-000000000002".to_string(),
+                gateway_identity_hash: "b".repeat(64),
+            },
+            listener_identity: GatewayListenerIdentityV1 {
+                transport: "tcp".to_string(),
+                network_namespace_inode: 7,
+                address: "127.0.0.1".to_string(),
+                port: 4317,
+                socket_inode: 8,
+                listen_backlog: 16,
+                deny_boundary_effective_before_listen: true,
+                responses_base_path: "/v1".to_string(),
+            },
+            readiness_nonce: "01991f65-7800-7000-8000-000000000003".to_string(),
+            readiness_probe_cgroup: enforcement.expected_process_cgroup.clone(),
+            target_uid: enforcement.target_uid,
+            target_gid: enforcement.target_gid,
+            enforcement_input: enforcement,
+            connect_deadline_ms: 1_000,
+            request_release_deadline_ms: 1_000,
+            response_deadline_ms: 1_000,
+            maximum_response_bytes: 65_536,
+            input_hash: String::new(),
+        };
+        seal_readiness_input_fixture(&mut input);
+        input
+    }
+
+    fn seal_readiness_input_fixture(input: &mut ManagedGatewayReadinessProbeInputV1) {
+        input.input_hash = hash_omitting(
+            "substrate.e3.managed-gateway-readiness-probe-input.v1",
+            "input",
+            input,
+            "input_hash",
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_readiness_input_accepts_contract_base_path() {
+        let input = readiness_input_contract_fixture();
+        let wire = ConfigProjectionCodecV1::encode_canonical_json(&input).unwrap();
+        let decoded: ManagedGatewayReadinessProbeInputV1 = decode_exact_canonical(&wire).unwrap();
+        assert_eq!(decoded, input);
+        validate_managed_gateway_readiness_probe_fields(&decoded).unwrap();
+    }
+
+    #[test]
+    fn test_readiness_input_rejects_member_endpoint_as_base_path() {
+        let mut input = readiness_input_contract_fixture();
+        input.listener_identity.responses_base_path = "/v1/responses".to_string();
+        seal_readiness_input_fixture(&mut input);
+        assert_eq!(
+            validate_managed_gateway_readiness_probe_fields(&input)
+                .unwrap_err()
+                .to_string(),
+            "malformed managed-gateway readiness-probe input"
+        );
+    }
+
+    #[test]
+    fn test_readiness_input_rejects_malformed_base_paths() {
+        for path in ["", "/", "v1", "/v1/", "/V1", "/v2", "/v1?x=1"] {
+            let mut input = readiness_input_contract_fixture();
+            input.listener_identity.responses_base_path = path.to_string();
+            seal_readiness_input_fixture(&mut input);
+            assert!(
+                validate_managed_gateway_readiness_probe_fields(&input).is_err(),
+                "{path}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_readiness_input_preserves_other_field_and_hash_checks() {
+        let valid = readiness_input_contract_fixture();
+        validate_managed_gateway_readiness_probe_fields(&valid).unwrap();
+        let fields = serde_json::to_value(&valid).unwrap();
+        for (pointer, replacement) in [
+            ("/schema_version", serde_json::json!(2)),
+            ("/connect_deadline_ms", serde_json::json!(999)),
+            ("/request_release_deadline_ms", serde_json::json!(1_001)),
+            ("/response_deadline_ms", serde_json::json!(5_000)),
+            ("/maximum_response_bytes", serde_json::json!(65_537)),
+            ("/target_uid", serde_json::json!(0)),
+            ("/target_gid", serde_json::json!(0)),
+            ("/target_uid", serde_json::json!(1001)),
+            ("/target_gid", serde_json::json!(1001)),
+            (
+                "/readiness_probe_cgroup/cgroup_directory_inode",
+                serde_json::json!(4),
+            ),
+            (
+                "/enforcement_input/child_role",
+                serde_json::json!("ManagedGateway"),
+            ),
+            ("/listener_identity/transport", serde_json::json!("udp")),
+            ("/listener_identity/address", serde_json::json!("127.0.0.2")),
+            ("/listener_identity/port", serde_json::json!(0)),
+            ("/listener_identity/socket_inode", serde_json::json!(0)),
+            ("/listener_identity/listen_backlog", serde_json::json!(0)),
+            (
+                "/listener_identity/deny_boundary_effective_before_listen",
+                serde_json::json!(false),
+            ),
+            (
+                "/launch_input_ref/authority_store_id",
+                serde_json::json!("other"),
+            ),
+            ("/launch_input_ref/launch_input_id", serde_json::json!("")),
+            (
+                "/launch_input_ref/launch_input_hash",
+                serde_json::json!("short"),
+            ),
+            (
+                "/launch_input_ref/launch_input_hash",
+                serde_json::json!("Z".repeat(64)),
+            ),
+            ("/readiness_nonce", serde_json::json!("not-a-uuid")),
+            (
+                "/readiness_nonce",
+                serde_json::json!("01991f65-7800-4000-8000-000000000003"),
+            ),
+            (
+                "/enforcement_input/enforcement_input_hash",
+                serde_json::json!("0".repeat(64)),
+            ),
+        ] {
+            let mut changed = fields.clone();
+            *changed.pointer_mut(pointer).unwrap() = replacement;
+            let mut input: ManagedGatewayReadinessProbeInputV1 =
+                serde_json::from_value(changed).unwrap();
+            // Reseal the outer input so its hash cannot mask a removed field check.
+            seal_readiness_input_fixture(&mut input);
+            assert!(
+                validate_managed_gateway_readiness_probe_fields(&input).is_err(),
+                "{pointer}"
+            );
+        }
+        let mut bad_hash = valid;
+        bad_hash.input_hash = "0".repeat(64);
+        assert_eq!(
+            validate_managed_gateway_readiness_probe_fields(&bad_hash)
+                .unwrap_err()
+                .to_string(),
+            "managed-gateway readiness-probe input hash mismatch"
+        );
+    }
+
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn readiness_state_machine_completes_without_post_filter_allocation_syscalls() {
@@ -5669,7 +5870,7 @@ fn main() {{
             socket_inode: listener_stat.st_ino,
             listen_backlog: 16,
             deny_boundary_effective_before_listen: true,
-            responses_base_path: "/v1/responses".to_string(),
+            responses_base_path: "/v1".to_string(),
         };
         let gateway_ref = InWorldGatewayRefV1 {
             authority_store_id: "cpa_01991f65-7800-7000-8000-000000000001".to_string(),
