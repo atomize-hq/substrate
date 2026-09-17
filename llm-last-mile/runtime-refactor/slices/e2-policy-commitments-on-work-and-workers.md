@@ -1,7 +1,7 @@
 **Kind:** slice row
 **Stable ID:** `e2-policy-commitments-on-work-and-workers`
 **Canonical for:** extracted E2 slice row, the controlling E2 authority correction, the terminal implementation closure, and the post-closure `E2-RM` prerequisite disposition below
-**Status:** E2 terminally complete; `E2-RM` specified but not admitted, dispatched, or implemented
+**Status:** E2 terminally complete; `E2-RM` implemented/review-clean/landed; separate `E2-RM` canonical terminal closure not located
 **Authority scope:** exact extracted source table header and row, the controlling correction, the terminal closure, and the documentation-only `E2-RM` prerequisite disposition below; no B2.2, E3, receipt, full-manifest, cancel, observation, lifecycle, or non-Linux implementation authority
 **Source span:** [`../03-phase-slice-map.md`](../03-phase-slice-map.md) line 221
 **Supersedes:** canonical ownership of the extracted `E2 — Policy commitments on work and workers` row and only the stale E2 clauses identified in the correction below
@@ -339,6 +339,18 @@ their own future admission and dispatch; neither is admitted or dispatched by th
 terminally complete.
 
 ## Post-closure `E2-RM` prerequisite disposition (2026-09-02; controlling)
+
+**Current status (2026-09-17):** [`E2-RM` owner](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite) records implementation and landing at
+`2012bb8b5562a73ed0ee45238c19252c16b25065`, with its landed patch matched to retained
+`CLEAN` review. Separate canonical terminal closure was not located; the push receipt excludes it.
+[B2.2](b2-2-foreground-receipt-return.md#current-admission-disposition) has its own later landing
+and the same separate-closure uncertainty. E2's recorded slice closure is distinct from that later
+product chronology. [E3-E](e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17)
+is closed; enclosing E3 remains incomplete and E3-F unadmitted/undispatched.
+
+**Historical admission correction:** The following 2026-09-02 diagnosis and future-admission
+wording are preserved history. Their immutable-material and ownership rules still apply; they do
+not describe current implementation status or reopen terminal E2.
 
 The E2 implementation and closure above remain terminally complete and unchanged. A later B2.2
 admission review identified one smaller missing E2-owned read boundary: after a foreground response

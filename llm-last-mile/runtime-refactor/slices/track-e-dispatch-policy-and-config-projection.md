@@ -10,12 +10,13 @@
 
 # Track E — Dispatch-scoped policy narrowing and config projection
 
-> **Authority boundary:** This file is a navigation index only. E1 is terminally complete at
-> `18f719898ce2a48f65e95b3b23f3b2cfd685c4af`; E2 is terminally complete over implementation
-> `96e102d9f5690e0d63957f6e9db56d632b7cdd17`, and its completed E2-RM authority correction remains
-> separately specified/unadmitted. E3 now has a controlling documentation-only specification but is
-> not admitted, dispatched, implemented, or green. E4 remains undispatched. Schedule authority stays
-> with the controlling decision, packet, and gate owners.
+> **Authority boundary:** This file is a navigation index only. E1 and E2 retain terminal closure.
+> [`E2-RM`](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite) and [B2.2](b2-2-foreground-receipt-return.md#current-admission-disposition)
+> are implemented/review-clean/landed, with separate canonical terminal closure not located.
+> E3-A through E3-D are landed; [E3-E](e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17)
+> is terminally complete/product landed, with closure on the separate authority branch. Enclosing
+> E3 remains incomplete; E3-F is unadmitted/undispatched. E4 remains undispatched. Schedule
+> authority stays with the controlling decision, packet, and gate owners.
 
 The extracted E2 row below is pre-correction navigation. Its current authority is the
 [E2 correction and closure](e2-policy-commitments-on-work-and-workers.md#terminal-closure):

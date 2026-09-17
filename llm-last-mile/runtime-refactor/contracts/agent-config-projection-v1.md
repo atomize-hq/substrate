@@ -1,6 +1,6 @@
 **Kind:** contract
 **Stable ID:** `agent-config-projection-v1`
-**Status:** canonical specification; E3-A has a preserved unlanded candidate under bounded Linux proof recovery; E3-B through E3-F are not admitted, dispatched, or implemented
+**Status:** canonical specification; E3-A through E3-D landed; E3-E terminally complete and product landed; enclosing E3 incomplete; E3-F not admitted or dispatched
 **Canonical for:** E3 config-projection identity, record, reference, versioned member-dispatch carrier, persistence, validation, Codex 0.125 native rendering, compatibility, and D1 handoff boundaries
 **Correction source baseline:** commit `81cfd33d4c5d16c31c837eeddff769995c566570`, tree `d40f6663a2aa01996ce8b4957f4aae0d30830961`, parent `138864a26dbc4721366c6cc8934d464d1929a189`
 **Landed prerequisite fact:** `E2-RM` is landed at `2012bb8b5562a73ed0ee45238c19252c16b25065`; that landing permits this documentation correction but is not an E3 runtime dependency
@@ -16,9 +16,14 @@
 > capability and owns `WorldRuntimeAdapterExecutionEnvelopeV1`; E3 does not construct that envelope,
 > receipts, retained manifests, broker policy, or E4 workspace synchronization.
 
-The preserved E3-A wire candidate is not complete or landed. This documentation correction
+**Historical E3-A recovery context (not current dispatch authority):** The preserved E3-A wire candidate is not complete or landed. This documentation correction
 authorizes only a later bounded Linux proof-recovery dispatch; it changes no product/test bytes,
 executes no missing proof, and grants no E3-B admission or successor dispatch.
+
+Current packet status follows the
+[E3-E terminal closure](../slices/e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17)
+on the separate authority branch; E3-E's product landing does not integrate those branches or prove
+retained Codex/Active/resume. The historical recovery prose does not renew recovery dispatch.
 
 ## Source-grounded correction
 

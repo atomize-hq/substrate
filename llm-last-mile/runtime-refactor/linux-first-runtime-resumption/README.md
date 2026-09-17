@@ -10,13 +10,13 @@
 
 # A1.3 Linux-first packet family index
 
-> **Authority boundary:** This file only assembles links for terminally complete `A1.3-P1`,
-> terminally complete A1.4/A1, A2, A3, Track A, E1, and E2, and the inseparable held predecessors
-> `A1.3-P0` and `A1.3`. B2.2 remains a separate future-admission candidate, not admitted or
-> dispatched. E3-A through E3-D are landed; E3-E is an admitted, incomplete and unlanded
-> implementation candidate; E3-F is not dispatched. This index does not dispatch implementation,
-> reopen the closed reentry gate, broaden
-> macOS or Windows scope, or replace the linked canonical owners.
+> **Authority boundary:** This file assembles links for terminally complete A1.3-P1, A1.4/A1,
+> A2, A3, Track A, E1, E2, and held A1.3-P0/A1.3 predecessors. [`E2-RM`](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite) and [B2.2](../slices/b2-2-foreground-receipt-return.md#current-admission-disposition)
+> are implemented/review-clean/landed; separate canonical terminal closure was not located.
+> E3-A through E3-D are landed; [E3-E closure](../slices/e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17) records terminal completion/product landing,
+> with closure on the separate authority branch. Enclosing E3 remains incomplete; E3-F is not
+> admitted or dispatched. This index does not dispatch implementation, reopen the closed reentry
+> gate, broaden macOS or Windows scope, or replace the linked canonical owners.
 
 | Component | Canonical owner |
 |---|---|

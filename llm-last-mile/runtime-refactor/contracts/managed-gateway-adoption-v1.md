@@ -1,6 +1,6 @@
 **Kind:** contract
 **Stable ID:** `managed-gateway-adoption-v1`
-**Status:** canonical specification; E3 is not admitted, dispatched, or implemented
+**Status:** canonical specification; E3-A through E3-D landed; E3-E terminally complete and product landed; enclosing E3 incomplete; E3-F not admitted or dispatched; see the [E3-E terminal closure](../slices/e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17)
 **Canonical for:** E3 managed-gateway identity, dormant/activation lifecycle, OS access boundary, non-secret intent/launch-input/ACK/reference records, one-time secret-FD reuse, and pre-release revalidation
 **Authority baseline:** source commit `138864a26dbc4721366c6cc8934d464d1929a189`, tree `881393e8fc6db7d4422f97cceadfa550d076a14f`
 **Supersedes:** E3 planning statements that treat a loopback URL, readiness response, request header, copied auth, or provider success as managed-gateway adoption proof

@@ -21,7 +21,9 @@ The controlling schemas and nonownership wall are
 [`agent-config-projection-v1.md`](../contracts/agent-config-projection-v1.md) and
 [`managed-gateway-adoption-v1.md`](../contracts/managed-gateway-adoption-v1.md). This correction leaves
 the extracted `AgentConfigProjectionService` and `WorldRuntimeAdapterExecutionEnvelope` rows below as
-historical architecture projection. D1 still owns the envelope and later strict V3; E3 is unadmitted.
+historical architecture projection. D1 still owns the envelope and later strict V3. E3-A through
+E3-D are landed; the [E3-E closure](../slices/e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17) records terminal completion/product landing on a separate
+lineage from authority closure. Enclosing E3 remains incomplete; E3-F is not admitted or dispatched.
 
 ## Current E2 policy-commitment ownership correction
 

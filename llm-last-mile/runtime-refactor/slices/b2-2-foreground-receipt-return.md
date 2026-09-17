@@ -1,7 +1,7 @@
 **Kind:** slice row
 **Stable ID:** `b2-2-foreground-receipt-return`
 **Canonical for:** extracted B2.2 slice row and the current `E2-RM` admission correction
-**Status:** canonical slice row record; B2.2 blocked on specified-but-unadmitted `E2-RM`
+**Status:** B2.2 implemented/review-clean/landed; separate canonical terminal closure not located
 **Authority scope:** exact extracted source table header and row plus the documentation-only admission correction below; no schedule, dispatch, or implementation authority
 **Source span:** [`../03-phase-slice-map.md`](../03-phase-slice-map.md) line 177
 **Supersedes:** canonical ownership of the extracted `B2.2 — Foreground receipt return` row
@@ -15,6 +15,17 @@
 > B1/B2.1 or E2 implementation, and does not admit or dispatch `E2-RM` or B2.2.
 
 ## Current admission disposition
+
+**Current status (2026-09-17):** B2.2 foreground receipt return and authenticated retry landed at
+`0e16a88b2c833c8176ac0e40c6eef33388a5b7df`. The [2026-09-17 control-plane audit](</home/spenser/__Active_code/review-evidence/runtime-refactor-control-plane-audit-20260917T152119Z.md>)
+matched its landed patch to retained final `CLEAN` review, with focused 18-pass proof and inherited
+failures preserved; this is not an absolutely green workspace claim. Separate canonical terminal
+closure was not located. [`E2-RM` owner](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite) separately records its implemented/review-clean/landed status
+and closure uncertainty. Neither landing is a new closure or successor admission here.
+
+**Historical admission correction:** The following diagnosis and fresh-admission requirements
+record the earlier preimplementation disposition. Its immutable-material and ownership rules remain
+controlling; its unimplemented-prerequisite claim is superseded by the landing facts above.
 
 B2.2 is not admissible from the completed E2 closure alone. The existing authenticated E2 lookup
 requires an already-known `DispatchPolicyCommitmentRefV1` and does not expose the complete stored

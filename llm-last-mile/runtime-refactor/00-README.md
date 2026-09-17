@@ -13,7 +13,7 @@
 **Repo-truth snapshot:** 2026-08-02 at
 `4ceecd50e20d822dda7cbd8f0e1bef4ccad65d8e` / tree
 `8ed5dc7a354b731016a103b68091864b6a09223a`; re-check live code before every slice.
-**Current scheduling projection:** [`index/current.md`](index/current.md) is the visibly non-authoritative current-state projection for terminally complete A1.3-P1, A1.4/A1, A2, A3, Track A, E1, and E2; the completed documentation-only but specified/unadmitted E2-RM authority correction; landed E3-A through E3-D, the admitted but incomplete/unlanded E3-E implementation candidate, its landed gateway activation seam documentation, and undispatched E3-F; the separate future-admission B2.2 candidate, blocked pending `E2-RM` completion and fresh re-admission; held A1.3-P0/A1.3 records; the separate macOS lane; and deferred Windows work. Canonical decisions, packets, and gates remain at their linked path-stable owners.
+**Current scheduling projection:** [`index/current.md`](index/current.md) is the non-authoritative projection for terminally complete A1.3-P1, A1.4/A1, A2, A3, Track A, E1, and E2; implemented/review-clean/landed E2-RM and B2.2 with separate canonical terminal closure not located; landed B3.2/B4 source with exact terminal proof/CLEAN/closure receipts not located; landed E3-A–D and terminally complete/product-landed E3-E, with closure on the separate authority branch; incomplete enclosing E3 and unadmitted/undispatched E3-F; held A1.3-P0/A1.3 records; separate nonblocking macOS and deferred Windows work. Recorded slice closure is distinct from later product chronology. Canonical decisions, packets, and gates remain at their linked owners.
 **Navigation indexes:** [`index/README.md`](index/README.md) by stable title/owner, [`index/by-id.md`](index/by-id.md), [`index/by-kind.md`](index/by-kind.md), and [`index/by-packet.md`](index/by-packet.md).
 **Historical scheduling state (superseded for active scheduling on 2026-08-19):**
 Canonical historical content: [`history/cross-cutting-control-pack-checkpoints.md#historical-scheduling-state-superseded-for-active-scheduling-on-2026-08-19`](history/cross-cutting-control-pack-checkpoints.md#historical-scheduling-state-superseded-for-active-scheduling-on-2026-08-19). Use [`index/current.md`](index/current.md) and its linked owners—not this historical record—for active, held, lane-local, and deferred state.
@@ -99,11 +99,12 @@ with [`AgentConfigProjectionRecordV1`](contracts/agent-config-projection-v1.md) 
 [`Managed gateway adoption V1`](contracts/managed-gateway-adoption-v1.md). It preserves the landed
 carrier, corrects the absent local `crates/codex`, and specifies strict V2 before D1's later V3.
 
-**Non-authoritative E3 status:** E3-A through E3-D are landed. E3-E is an admitted implementation
-candidate, incomplete and unlanded. Its gateway activation seam correction landed as documentation
-at `d3e82fa2d486be95ab5a2326c7c8ccd304e520f6`; neither that documentation CLEAN nor the narrow
-connected-recovery CLEAN completes whole-E3-E or installed acceptance. E3-F is not dispatched;
-its successor requirements remain unchanged. The contracts and slice own the design:
+**Non-authoritative E3 status:** E3-A through E3-D are landed. [E3-E is terminally complete and
+product landed](slices/e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17),
+with canonical closure on the separate authority branch. Enclosing E3 remains incomplete;
+E3-F is not admitted or dispatched. The earlier seam documentation and narrow recovery reviews
+remain bounded historical evidence; the terminal closure owns the completed E3-E proof and limits.
+The contracts and slice retain the design and unchanged successor requirements:
 
 - [Prepared/Held ownership, parent gateway startup and readiness](contracts/managed-gateway-adoption-v1.md#e3-e-activation-publication-and-ownership-seam).
 - [Consumed → ACK → ReadyClosed publication, cancellation/cleanup, exact same-live-attempt retry and fresh authorization after service restart](contracts/managed-gateway-adoption-v1.md#e3-e-activation-publication-and-ownership-seam).

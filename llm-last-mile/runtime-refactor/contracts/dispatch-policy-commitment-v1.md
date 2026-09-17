@@ -1,7 +1,7 @@
 **Kind:** contract
 **Stable ID:** `dispatch-policy-commitment-v1`
 **Status:** canonical; implemented and terminally complete under the E2 closure
-**Canonical for:** additive `DispatchPolicyCommitmentV1` persisted record, exact subject/linkage rules, immutable policy/cap semantics, the specified-but-unadmitted `E2-RM` accepted-work receipt-material projection prerequisite, downstream receipt/manifest consumption, and mixed-version fail-closed behavior
+**Canonical for:** additive `DispatchPolicyCommitmentV1` persisted record, exact subject/linkage rules, immutable policy/cap semantics, the landed `E2-RM` accepted-work receipt-material projection with separate canonical closure unverified, downstream receipt/manifest consumption, and mixed-version fail-closed behavior
 **Authority scope:** canonical E2 contract plus terminal status projection and the documentation-only `E2-RM` prerequisite specification; this document grants no new admission, dispatch, implementation, receipt construction, retained-manifest construction, migration, or synthetic-cap authority
 **Supersedes:** only E2 statements that require E2 to construct a final receipt or complete `RetainedWorkerManifestV1`; omit the real dispatch/tool-translation carrier needed to consume E1 narrowing; require a retained worker's launch policy to equal the current parent; place fresh-Spawn E2 persistence after B3.2a admission; define a second snapshot canonicalization; or require a synthetic `SupervisorObservationClaimV1`/`resumable` field
 **Superseded by:** none
@@ -542,7 +542,18 @@ record omitting either must not validate or be reported as a complete manifest.
 
 **Stable ID:** `E2-RM`
 
-**Status:** specified prerequisite; not admitted, not dispatched, and not implemented
+**Status:** implemented and landed at `2012bb8b5562a73ed0ee45238c19252c16b25065`;
+landed patch matched to retained final `CLEAN` review; separate canonical terminal closure not located.
+
+The [2026-09-17 control-plane audit](</home/spenser/__Active_code/review-evidence/runtime-refactor-control-plane-audit-20260917T152119Z.md>) matched the landed patch to retained review
+and push evidence. The [push receipt](</home/spenser/__Active_code/.evidence/substrate-e2-rm-implementation-resume-20260904T021844Z/push-receipt-2012bb8b5-20260905T024106Z.txt>)
+expressly excludes canonical closure. This status overlay records implementation/review/landing,
+not a new closure or successor admission. [B2.2](../slices/b2-2-foreground-receipt-return.md#current-admission-disposition)
+records its separate landing; E2's existing terminal closure remains unchanged.
+
+**Historical admission context:** The admission-gap diagnosis and later-admission wording below
+record the earlier correction. The immutable-material requirements and ownership fence remain
+controlling; the diagnosis is not a current claim that the read boundary is unimplemented.
 
 The B2.2 admission review found that the completed E2 store preserves the immutable material needed
 to reproduce the original foreground receipt, but its existing authenticated lookup accepts only an

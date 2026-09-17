@@ -31,12 +31,14 @@ preimages, but no recursively key-sorted replacement is a policy snapshot hash.
 
 ## Current `E2-RM` / B2.2 admission correction
 
-E2's completion satisfies persistence and immutable linkage, but does not by itself give B2.2 a
-recoverable post-response-loss read path. The existing authenticated E2 operation requires an
-already-known commitment ref. Therefore condition 11 also requires the separately bounded
-[`E2-RM` authenticated accepted-work receipt-material
-projection](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite)
-before B2.2 can be freshly admitted.
+The earlier admission correction identified the missing post-response-loss read path beyond E2's
+completed persistence and immutable linkage. [`E2-RM`](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite) now records the read-only authenticated
+historic-material projection landed at `2012bb8b5562a73ed0ee45238c19252c16b25065`;
+[B2.2](../slices/b2-2-foreground-receipt-return.md#current-admission-disposition) records foreground receipt return/retry landed at
+`0e16a88b2c833c8176ac0e40c6eef33388a5b7df`. The audit matched both landed patches to
+retained `CLEAN` review; separate canonical terminal closure was not located for either, and
+E2-RM's push receipt expressly excludes closure. The following immutable-material rule remains
+controlling; the earlier prerequisite diagnosis is historical, not an unimplemented-current claim.
 
 `E2-RM` must resolve the exact committed request/subject index from authenticated authority plus
 expected B1 acceptance, validate the immutable E2 record/ref/linkage hash, return the preserved
@@ -49,8 +51,8 @@ closed.
 This is a read-only E2 prerequisite, not receipt construction or exposure. B1/B2.1 ownership is
 unchanged, B2.2 still owns foreground receipt construction/return, B3.2 still owns remaining
 receipt/manifest/messaging/lifecycle work, B4 still owns targeted control, and D1/E3 retain their
-future envelope/projection fields. `E2-RM` and B2.2 each require later fresh admission and explicit
-dispatch; this documentation correction admits neither and changes no completed E2 gate result.
+future envelope/projection fields. The earlier admission correction did not dispatch either packet;
+the landing facts above neither manufacture terminal closure nor change completed E2 gate results.
 
 ## E3 projection/full-manifest clarification
 

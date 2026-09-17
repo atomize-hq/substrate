@@ -25,7 +25,7 @@ WorldDispatchRequestV1::validate}` and the exact tool-translation chain
 
 Only the directly necessary `ExecuteRequest`/`MemberTurnSubmitRequestV1` policy carrier builders
 and the symbol-level preparation/persistence links named in the
-[E2 implementation fence](../slices/e2-policy-commitments-on-work-and-workers.md#e2-implementation-fence-for-a-future-fresh-dispatch)
+[E2 implementation fence](../slices/e2-policy-commitments-on-work-and-workers.md#admitted-and-implemented-e2-symbol-fence)
 may carry the E1 result into real dispatch. This correction grants no broad file authority and no
 router, provider, cancellation, supervisor, or orchestration-lifecycle change.
 

@@ -6,19 +6,23 @@
 
 ## E3 specification disposition
 
-The documentation-only E3 contracts
-[`AgentConfigProjectionRecordV1`](../contracts/agent-config-projection-v1.md) and
-[`Managed gateway adoption V1`](../contracts/managed-gateway-adoption-v1.md) define the future proof
-wall but satisfy none of the extracted promotion conditions below. There is no E3 codec/persistence
-implementation, real V2 path, candidate-Substrate-source-built Linux crash/retry or sibling-isolation
-proof, secret-canary result, Codex 0.125 ambient-layer closure, or exact-baseline differential
-evidence.
+Current packet evidence is bounded by the [E3-E closure](../slices/e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17): E3-A through E3-D are landed;
+E3-E is terminally complete and landed on the product branch, with canonical closure on the separate
+authority branch. Strict V2 codec, projection persistence, authenticated authoring/artifacts, Linux
+child security, and E3-E activation/recovery/bounded synthetic secret-canary evidence are retained.
+The closure links the exact reviews, differential evidence, and installed revision-12 provenance;
+these are retained observations, not a fresh host-liveness claim.
 
-`RG-CONFIG-03` remains only the already-landed reusable FD-carrier baseline; it is not proof of
-direct Codex adoption. E3 remains unadmitted, undispatched, and unimplemented. After a fresh E3
-admission and independently clean implementation, E4 may seek its own admission, D1 may consume the
-opaque projection capability in strict V3, and D3 remains the final integration owner. E2-RM/B2.2
-coordination is independent and neither is an E3 prerequisite. No gate is greened here.
+Enclosing E3 remains incomplete; E3-F is not admitted or dispatched. Synthetic E3-E evidence does
+not establish direct Codex/provider/Active/resume proof or the whole-seam promotion conditions below.
+Recovery exit 80 is recovery evidence; service crash proof used a production-component harness,
+not the persistent daemon. Optional gateway smoke remains deferred. `RG-CONFIG-03`'s landed FD
+carrier remains preserved; production Codex adoption and the other unresolved gates stay open.
+
+[`E2-RM`](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite) and [B2.2](../slices/b2-2-foreground-receipt-return.md#current-admission-disposition) record landed patches matched to retained `CLEAN` reviews,
+with separate canonical terminal closures not located. These facts do not promote full receipts,
+retained manifests, or the whole E3 seam. D1 retains V3/envelope, D2 side-effect brokerage, D3 final
+joined proof, and E4 write/sync. Their existing prerequisites remain unchanged.
 
 ## E2 terminal implementation disposition
 
@@ -45,8 +49,8 @@ The source-built Linux and exact-baseline differential walls are recorded in the
 [E2 terminal closure](../slices/e2-policy-commitments-on-work-and-workers.md#terminal-closure).
 D1/E3 receipt/full-manifest composition, B2.2 foreground-return, B4 cancel semantics, later
 observation integration, `RG-BASE-03` under C2, and non-Linux proof remain outside this promotion.
-B2.2 and E3 are only separate future-admission successor candidates; neither is admitted or
-dispatched here.
+That E2 closure did not admit or dispatch successors. Later product landing and bounded E3-E
+closure evidence are qualified above; they do not widen this E2 promotion.
 
 <!-- exact-extracted-body:start -->
 ## 14. Contract promotion gates

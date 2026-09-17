@@ -31,6 +31,13 @@ Primary source memos:
 
 <!-- exact-extracted-body:how-to-read-this-ledger:end -->
 
+Current repository-root memo navigation (the three original extracted links above are preserved
+historical paths and do not resolve from this relocated owner):
+
+- [World-task debug memo](../../../RUN_WORLD_TASK_DEBUG_CANONICAL.md)
+- [Retained-worker blocking-deviation memo](../../../CONTINUE_WORLD_WORKER_BLOCKING_DEVIATION_DEBUG.md)
+- [Codex world-dispatch gap memo](../../../CODEX_WORLD_DISPATCH_GAP_WRITEUP.md)
+
 | Evidence component | Canonical owner | Current extracted scope |
 |---|---|---|
 | Batch 1 — canonical issue ledger | [`canonical-issue-ledger.md#canonical-issue-ledger`](canonical-issue-ledger.md#canonical-issue-ledger) | Full extracted `## Canonical issue ledger` table plus the preserved `### A1.2a-WB gate assignment` body; exact issue IDs, chronology, limitations, obligations, literals, hashes, commands, and negative requirements remain unchanged. |
