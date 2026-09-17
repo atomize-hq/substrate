@@ -2504,6 +2504,111 @@ mod tests {
         watch.verify_retry(&published).unwrap();
     }
 
+    // Bounded opt-in crash acceptance uses the existing recovery phase and fixture directory.
+    // Only this private input file and the intended service/gateway secret memory are excluded
+    // from canary scans. No request body or credential value is written to evidence.
+    fn e3_e_canary_service_readback(
+        directory: &std::path::Path,
+        boundary: &str,
+    ) -> anyhow::Result<()> {
+        let mut limits = libc::rlimit {
+            rlim_cur: 1,
+            rlim_max: 1,
+        };
+        anyhow::ensure!(
+            unsafe { libc::getrlimit(libc::RLIMIT_CORE, &mut limits) } == 0,
+            "service core readback failed"
+        );
+        let dumpable = unsafe { libc::prctl(libc::PR_GET_DUMPABLE, 0, 0, 0, 0) };
+        anyhow::ensure!(
+            dumpable == 0 && limits.rlim_cur == 0 && limits.rlim_max == 0,
+            "service secret memory posture drifted"
+        );
+        fs::write(
+            directory.join(format!("{boundary}.json")),
+            serde_json::to_vec(&serde_json::json!({
+                "boundary": boundary, "pid": std::process::id(), "dumpable": dumpable,
+                "core_soft": limits.rlim_cur, "core_hard": limits.rlim_max,
+                "hardening": "production lock_e3_service_secret_memory_v1"
+            }))?,
+        )?;
+        Ok(())
+    }
+
+    fn e3_e_canary_signal_gateway(
+        process: &config_projection::GatewayProcessIdentityV1,
+        directory: &std::path::Path,
+    ) -> anyhow::Result<()> {
+        use std::io::Read;
+        use std::os::fd::{AsRawFd, FromRawFd};
+        let raw = unsafe { libc::syscall(libc::SYS_pidfd_open, process.pid, 0) };
+        anyhow::ensure!(raw >= 0, "gateway pidfd unavailable");
+        let pidfd = unsafe { std::os::fd::OwnedFd::from_raw_fd(raw as i32) };
+        let stat = fs::read_to_string(format!("/proc/{}/stat", process.pid))?;
+        let start: u64 = stat
+            .rsplit_once(')')
+            .ok_or_else(|| anyhow::anyhow!("process stat malformed"))?
+            .1
+            .split_whitespace()
+            .nth(19)
+            .ok_or_else(|| anyhow::anyhow!("process start missing"))?
+            .parse()?;
+        anyhow::ensure!(
+            start == process.pid_start_time_ticks,
+            "gateway identity changed"
+        );
+        fs::write(
+            directory.join("gateway-ready.json"),
+            serde_json::to_vec(process)?,
+        )?;
+        // The external driver scans the held live gateway before releasing this test-only barrier.
+        let mut release = [0];
+        std::io::stdin().read_exact(&mut release)?;
+        anyhow::ensure!(release == [1], "canary observation barrier rejected");
+        anyhow::ensure!(
+            unsafe {
+                libc::syscall(
+                    libc::SYS_pidfd_send_signal,
+                    pidfd.as_raw_fd(),
+                    libc::SIGABRT,
+                    std::ptr::null::<libc::siginfo_t>(),
+                    0,
+                )
+            } == 0,
+            "gateway crash signal failed"
+        );
+        let mut status: libc::siginfo_t = unsafe { std::mem::zeroed() };
+        // Observe without reaping: the production runtime remains the sole cleanup owner.
+        anyhow::ensure!(
+            unsafe {
+                libc::waitid(
+                    libc::P_PIDFD,
+                    pidfd.as_raw_fd() as u32,
+                    &mut status,
+                    libc::WEXITED | libc::WNOWAIT,
+                )
+            } == 0,
+            "gateway crash wait failed"
+        );
+        let observed_pid = unsafe { status.si_pid() };
+        let observed_signal = unsafe { status.si_status() };
+        fs::write(
+            directory.join("gateway-crash.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "pid": observed_pid, "start_time_ticks": start, "waitid_code": status.si_code,
+                "signal": observed_signal, "core_generated": status.si_code == libc::CLD_DUMPED,
+                "identity_safe_signal": "pidfd_send_signal", "reaped_by_test": false
+            }))?,
+        )?;
+        anyhow::ensure!(
+            observed_pid == process.pid as i32
+                && observed_signal == libc::SIGABRT
+                && status.si_code == libc::CLD_KILLED,
+            "unexpected gateway crash/core status"
+        );
+        Ok(())
+    }
+
     #[tokio::test(flavor = "current_thread")]
     #[ignore = "explicit test-owned authenticated HSA fixture and root cgroup/netfilter environment"]
     async fn e3_e_authenticated_preparation_response_and_cancellation() -> anyhow::Result<()> {
@@ -2515,6 +2620,14 @@ mod tests {
             "isolated manager fixture requires root"
         );
         let recovery_phase = std::env::var("E3_E_RECOVERY_PHASE").ok();
+        let canary_case = matches!(
+            recovery_phase.as_deref(),
+            Some("canary-service" | "canary-gateway")
+        );
+        if canary_case {
+            crate::lock_e3_service_secret_memory_v1()?;
+        }
+
         let connected_activation = std::env::var_os("E3_E_CONNECTED_ACTIVATION").is_some();
         let activation_series = std::env::var_os("E3_E_CONNECTED_ACTIVATION_SERIES").is_some();
         let live_registered_restart =
@@ -2592,7 +2705,12 @@ mod tests {
             .ok_or_else(|| anyhow::anyhow!("explicit authenticated fixture required"))?;
         let artifact_path = std::env::var_os("E3_E_MANAGER_ARTIFACT_FIXTURE_READ")
             .ok_or_else(|| anyhow::anyhow!("explicit synthetic artifact fixture required"))?;
-        let fixture: serde_json::Value = serde_json::from_slice(&fs::read(fixture_path)?)?;
+        let fixture_path = PathBuf::from(fixture_path);
+        let canary_directory = fixture_path.parent().context("fixture parent missing")?;
+        if canary_case {
+            e3_e_canary_service_readback(canary_directory, "service-before-body")?;
+        }
+        let fixture: serde_json::Value = serde_json::from_slice(&fs::read(&fixture_path)?)?;
         let home = PathBuf::from(fixture["accepted_home_path"].as_str().unwrap());
         let workspace = PathBuf::from(fixture["workspace_root_path"].as_str().unwrap());
         let accepted = Arc::new(configured(&home));
@@ -2662,6 +2780,48 @@ mod tests {
             .recover(None)
             .map(|readback| readback.store)
             .context("recover fixture registry")?;
+        if recovery_phase.as_deref() == Some("canary-recovered") {
+            let service = Arc::new(AgentConfigProjectionServiceV1::new(
+                registry.clone(),
+                accepted,
+            )?);
+            let exclusion =
+                crate::e3_child_security::E3PrivilegedChildExclusionV1::new_recovering()?;
+            let manager = E3ConfigProjectionPreparationManagerV1::new(
+                authority,
+                service,
+                registry.clone(),
+                exclusion.clone(),
+            );
+            manager.recover_expired(
+                None,
+                Some(E3PreparationRecoveryV1::Startup {
+                    service_instance_id: &format!("wsi_{}", uuid::Uuid::now_v7()),
+                }),
+            )?;
+            exclusion.finish_recovery()?;
+            anyhow::ensure!(
+                exclusion.acquire_non_e3_child().is_ok(),
+                "recovery retained exclusion"
+            );
+            anyhow::ensure!(
+                registry
+                    .recover(None)?
+                    .kernel_effects
+                    .iter()
+                    .all(|effect| effect.resolution.is_some()),
+                "canary recovery retained unresolved effects"
+            );
+            fs::remove_dir(
+                PathBuf::from("/sys/fs/cgroup/substrate").join(
+                    fixture["world_id"]
+                        .as_str()
+                        .context("fixture world missing")?,
+                ),
+            )?;
+            eprintln!("E3_CANARY_SERVICE_CRASH_RECOVERY_COMPLETE");
+            return Ok(());
+        }
         if recovery_phase.as_deref() == Some("active-recovered") {
             let before = registry.recover(None)?;
             let record = before
@@ -3306,6 +3466,20 @@ mod tests {
         let activation: E2MemberLaunchActivationCarrierV1 =
             serde_json::from_value(fixture["e2_launch_activation"].clone())?;
         let mut request = e3e_preparation_fixture();
+        if canary_case {
+            let canary = fs::read_to_string(canary_directory.join("credential.input"))?;
+            anyhow::ensure!(
+                canary.len() >= 40 && !canary.contains(char::is_whitespace),
+                "invalid synthetic canary input"
+            );
+            request
+                .integrated_auth
+                .cli_codex
+                .as_mut()
+                .context("CLI fixture missing")?
+                .access_token = canary;
+        }
+
         request.preparation_id = format!("e3p_{}", uuid::Uuid::now_v7());
         request.orchestration_session_id = activation.orchestration_session_id.clone();
         request.participant_id = activation.retained_participant_id.clone();
@@ -3494,6 +3668,63 @@ mod tests {
             let wire = serde_json::to_vec(&request)?;
             let response = manager.prepare(hyper::Body::from(wire.clone())).await?;
             response.validate().map_err(anyhow::Error::msg)?;
+            if canary_case {
+                e3_e_canary_service_readback(canary_directory, "service-after-authenticated-prepare")?;
+                let identity = manager.preparations.lock().unwrap()[&request.preparation_id].identity.clone();
+                if recovery_phase.as_deref() == Some("canary-service") {
+                    // The external driver pins this process identity, observes live surfaces, then
+                    // sends SIGABRT. No destructor or cancellation replaces the genuine crash.
+                    loop { unsafe { libc::pause(); } }
+                }
+                let dispatch = MemberDispatchRequestV2 {
+                    schema_version: 2,
+                    orchestration_session_id: request.orchestration_session_id.clone(),
+                    participant_id: request.participant_id.clone(),
+                    orchestrator_participant_id: request.orchestrator_participant_id.clone(),
+                    parent_participant_id: request.parent_participant_id.clone(),
+                    resumed_from_participant_id: request.resumed_from_participant_id.clone(),
+                    backend_id: request.backend_id.clone(),
+                    protocol: request.protocol.clone(),
+                    run_id: request.run_id.clone(),
+                    world_id: request.world_id.clone(),
+                    world_generation: request.world_generation,
+                    initial_prompt: None,
+                    resolved_runtime: request.resolved_runtime.clone(),
+                    retained_worker_launch_authority: request
+                        .retained_worker_launch_authority
+                        .clone(),
+                    e2_launch_activation: Some(request.e2_launch_activation.clone()),
+                    config_projection: response.config_projection.clone(),
+                };
+                let mut transferred = manager.take_for_v2(&dispatch)?;
+                let observed = (|| -> anyhow::Result<()> {
+                    let ConfigProjectionSubjectReadbackV1::Bound(ready) =
+                        manager.projection_service.resolve_preparation_subject_v1(&identity)?
+                    else { anyhow::bail!("canary ReadyClosed subject absent"); };
+                    anyhow::ensure!(ready.record().managed_gateway.posture == ManagedGatewayProjectionPostureV1::ReadyClosed
+                        && ready.record().nonsecret_handoff.observed_state == SecretHandoffStateV1::Consumed
+                        && transferred.credential_source.is_none(), "canary consumption boundary absent");
+                    let ack_ref = ready.record().managed_gateway.activation_ack_ref.as_ref().context("canary ACK absent")?;
+                    let ack_path = home.join("authority-v1/agent-config-projection-v1/gateway-acks")
+                        .join(format!("{}.json", ack_ref.activation_ack_id));
+                    let ack: ManagedGatewayActivationAckV1 = ConfigProjectionCodecV1::decode_canonical_json(&fs::read(ack_path)?)?;
+                    anyhow::ensure!(ack.ack_hash == ack_ref.ack_hash, "canary ACK identity mismatch");
+                    transferred.gateway_authority.as_mut().context("gateway owner missing")?
+                        .validate_gateway_secret_ready()?;
+                    e3_e_canary_service_readback(canary_directory, "service-after-consumption")?;
+                    crate::gateway_runtime::canary_observation::after_readiness(&ack.gateway_process_identity)?;
+                    e3_e_canary_signal_gateway(&ack.gateway_process_identity, canary_directory)
+                })();
+                let cleanup = manager.cleanup_prepared_gateway_v1(&mut transferred, false);
+                observed?;
+                cleanup?;
+                anyhow::ensure!(transferred.cleanup_complete && transferred.gateway_authority.is_none()
+                    && transferred.credential_source.is_none() && transferred.projection.is_none()
+                    && exclusion.acquire_non_e3_child().is_ok(), "canary gateway cleanup incomplete");
+                eprintln!("E3_CANARY_GATEWAY_CRASH_AND_OWNER_CLEANUP_COMPLETE");
+                return Ok(());
+            }
+
             if let Some((identity, revision)) = &prior_head {
                 let map = manager.preparations.lock().unwrap();
                 let owner = &map[&request.preparation_id];

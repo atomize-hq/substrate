@@ -1012,6 +1012,8 @@ impl E3GatewayRuntimeAuthorityV1 {
         // Retry belongs exclusively to durable publication. A delivery attempt, including a
         // partial/error return, consumes the writer and can never be entered a second time.
         self.validate_gateway_secret_ready()?;
+        #[cfg(test)]
+        canary_observation::before_secret(self)?;
         let owned = self.launch.as_mut().context("E3 launch owner missing")?;
         anyhow::ensure!(
             !owned.delivery_started && owned.delivered_at.is_none(),
@@ -1272,6 +1274,24 @@ impl E3GatewayRuntimeAuthorityV1 {
             .read(true)
             .write(true)
             .open("/dev/null")?;
+        #[cfg(test)]
+        let canary_endpoints = canary_observation::capture_probe(
+            &entries,
+            null.as_raw_fd(),
+            &[
+                probe_start_writer.as_raw_fd(),
+                connected_reader.as_raw_fd(),
+                request_writer.as_raw_fd(),
+                result_reader.as_raw_fd(),
+            ],
+            &[
+                input_writer.as_raw_fd(),
+                setup_reader.as_raw_fd(),
+                start_reader.as_raw_fd(),
+                start_writer.as_raw_fd(),
+                userns_parent.as_raw_fd(),
+            ],
+        )?;
         main.probe = Some(Box::new(ManagedGatewayLaunchCapabilityV1 {
             deadline,
             identity: main.identity.clone(),
@@ -1449,6 +1469,11 @@ impl E3GatewayRuntimeAuthorityV1 {
         probe.security = Some(ConfigProjectionCodecV1::decode_canonical_json(&bytes)?);
         // Setup-ready proves the child has passed the mapped-release trailing-data check.
         drop(userns_parent);
+        #[cfg(test)]
+        if let Some(endpoints) = canary_endpoints {
+            self.validate_readiness_probe()?;
+            canary_observation::probe_setup(self, endpoints)?;
+        }
         self.validate_readiness_probe()
     }
 
@@ -1598,6 +1623,8 @@ impl E3GatewayRuntimeAuthorityV1 {
                 && socket_rows[0][3] == "01",
             "E3 probe socket tuple/state mismatch"
         );
+        #[cfg(test)]
+        canary_observation::connected(&connected)?;
         self.validate_readiness_probe()?;
         authenticate()?;
         let probe = self
@@ -10880,5 +10907,734 @@ for line in sys.stdin:
         );
         assert!(observation < validator.find("libc::prlimit(").unwrap());
         assert!(observation < validator.find("self.validate_child_security()").unwrap());
+    }
+}
+
+// Only the explicit synthetic gateway-canary test observes these existing barriers.
+#[cfg(test)]
+pub(crate) mod canary_observation {
+    use super::*;
+    use serde::{Deserialize, Serialize};
+    use std::collections::BTreeMap;
+    use std::os::unix::fs::MetadataExt;
+
+    #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+    pub(super) struct Endpoint {
+        device: u64,
+        inode: u64,
+        kind: u32,
+        access: u32,
+    }
+    impl Endpoint {
+        fn same_object(&self, other: &Self) -> bool {
+            (self.device, self.inode, self.kind) == (other.device, other.inode, other.kind)
+        }
+    }
+    #[derive(Serialize, Deserialize)]
+    pub(super) struct ProbeEndpoints {
+        child: BTreeMap<i32, Endpoint>,
+        child_closed: BTreeMap<i32, Endpoint>,
+        parent_closed: Vec<Endpoint>,
+        inherited_roles: BTreeMap<i32, String>,
+        roles: BTreeMap<i32, String>,
+        parent: BTreeMap<i32, Endpoint>,
+    }
+    fn directory() -> Option<PathBuf> {
+        if std::env::var("E3_E_RECOVERY_PHASE").ok().as_deref() != Some("canary-gateway") {
+            return None;
+        }
+        std::env::var_os("E3_E_AUTHENTICATED_MANAGER_FIXTURE")
+            .and_then(|p| PathBuf::from(p).parent().map(Path::to_path_buf))
+    }
+    fn endpoint(pid: u32, fd: i32) -> Result<Endpoint> {
+        let path = format!("/proc/{pid}/fd/{fd}");
+        let meta = fs::metadata(&path).with_context(|| format!("stat endpoint {path}"))?;
+        let path = format!("/proc/{pid}/fdinfo/{fd}");
+        let info =
+            fs::read_to_string(&path).with_context(|| format!("read endpoint flags {path}"))?;
+        let flags = info
+            .lines()
+            .find_map(|l| l.strip_prefix("flags:\t"))
+            .context("missing FD flags")?;
+        Ok(Endpoint {
+            device: meta.dev(),
+            inode: meta.ino(),
+            kind: meta.mode() & libc::S_IFMT,
+            access: u32::from_str_radix(flags, 8)? & (libc::O_ACCMODE | libc::O_PATH) as u32,
+        })
+    }
+    fn inventory(pid: u32) -> Result<BTreeMap<i32, Endpoint>> {
+        let path = format!("/proc/{pid}/fd");
+        let mut fds = Vec::new();
+        for entry in fs::read_dir(&path).with_context(|| format!("enumerate {path}"))? {
+            let entry = entry.with_context(|| format!("enumerate entry {path}"))?;
+            let fd = entry.file_name().to_string_lossy().parse::<i32>()?;
+            // Our enumeration directory is observation machinery, never a child channel.
+            if pid == std::process::id()
+                && fs::read_link(entry.path())
+                    .with_context(|| format!("read endpoint link {}", entry.path().display()))?
+                    == PathBuf::from(&path)
+            {
+                continue;
+            }
+            fds.push(fd);
+        }
+        fds.into_iter()
+            .map(|fd| Ok((fd, endpoint(pid, fd)?)))
+            .collect()
+    }
+    fn identity(pid: u32, start: u64, executable: &fs::File) -> Result<()> {
+        anyhow::ensure!(
+            ManagedGatewayLaunchCapabilityV1::e3_process_start(pid)
+                .with_context(|| format!("read process identity /proc/{pid}/stat"))?
+                == start,
+            "process identity mismatch pid={pid} start={start}"
+        );
+        let path = format!("/proc/{pid}/exe");
+        let actual =
+            fs::metadata(&path).with_context(|| format!("stat pinned executable {path}"))?;
+        let expected = executable
+            .metadata()
+            .context("stat parent-owned pinned executable descriptor")?;
+        anyhow::ensure!(
+            (actual.dev(), actual.ino()) == (expected.dev(), expected.ino()),
+            "pinned executable identity mismatch pid={pid} start={start}"
+        );
+        Ok(())
+    }
+    fn live(
+        pid: u32,
+        start: u64,
+        executable: &fs::File,
+        canary: &[u8],
+    ) -> Result<serde_json::Value> {
+        identity(pid, start, executable)?;
+        let mut surfaces = BTreeMap::new();
+        for name in ["cmdline", "environ"] {
+            let path = format!("/proc/{pid}/{name}");
+            let bytes = fs::read(&path).with_context(|| format!("read live surface {path}"))?;
+            let matches = bytes.windows(canary.len()).filter(|w| *w == canary).count();
+            anyhow::ensure!(matches == 0, "canary matches on {path}");
+            surfaces.insert(
+                name,
+                serde_json::json!({"bytes_scanned":bytes.len(),"matches":matches}),
+            );
+        }
+        let endpoints = inventory(pid)?;
+        identity(pid, start, executable)?;
+        Ok(
+            serde_json::json!({"pid":pid,"start_time_ticks":start,"executable":{"device":executable.metadata()?.dev(),"inode":executable.metadata()?.ino()},"surfaces":surfaces,"endpoints":endpoints}),
+        )
+    }
+    fn read_observation(dir: &Path, name: &str) -> Result<serde_json::Value> {
+        let path = dir.join(name);
+        let bytes =
+            fs::read(&path).with_context(|| format!("read observation {}", path.display()))?;
+        serde_json::from_slice(&bytes)
+            .with_context(|| format!("decode observation {}", path.display()))
+    }
+    fn observe(
+        stage: &str,
+        operation: impl FnOnce(&Path, &[u8]) -> Result<serde_json::Value>,
+    ) -> Result<()> {
+        let Some(dir) = directory() else {
+            return Ok(());
+        };
+        let canary_path = dir.join("credential.input");
+        let canary = fs::read(&canary_path)
+            .with_context(|| format!("read private synthetic input {}", canary_path.display()))?;
+        anyhow::ensure!(canary.len() >= 40, "invalid private synthetic input");
+        match operation(&dir, &canary) {
+            Ok(value) => fs::write(
+                dir.join(format!("{stage}.json")),
+                serde_json::to_vec_pretty(&value)?,
+            )
+            .map_err(Into::into),
+            Err(error) => {
+                fs::write(
+                    dir.join(format!("{stage}-unavailable.json")),
+                    serde_json::to_vec_pretty(
+                        &serde_json::json!({"stage":stage,"status":"unavailable","operation_path_error":format!("{error:#}")}),
+                    )?,
+                )?;
+                Err(error).with_context(|| format!("canary observation unavailable at {stage}"))
+            }
+        }
+    }
+    pub(super) fn before_secret(owner: &E3GatewayRuntimeAuthorityV1) -> Result<()> {
+        observe("channels-before-secret", |_, canary| {
+            let launch = owner.launch.as_ref().context("gateway owner")?;
+            let child = launch
+                .gateway_registration
+                .as_ref()
+                .context("gateway registration")?;
+            let secret = endpoint(
+                std::process::id(),
+                launch
+                    .auth_writer
+                    .as_ref()
+                    .context("secret writer")?
+                    .as_raw_fd(),
+            )?;
+            let gateway = live(
+                child.pid,
+                child.pid_start_time_ticks,
+                &launch.executable,
+                canary,
+            )
+            .with_context(|| {
+                format!(
+                    "gateway pid={} start={}",
+                    child.pid, child.pid_start_time_ticks
+                )
+            })?;
+            let child_fds: BTreeMap<i32, Endpoint> =
+                serde_json::from_value(gateway["endpoints"].clone())?;
+            let receivers: Vec<_> = child_fds
+                .iter()
+                .filter(|(_, e)| e.same_object(&secret))
+                .collect();
+            anyhow::ensure!(
+                secret.access == libc::O_WRONLY as u32
+                    && receivers.len() == 1
+                    && receivers[0].1.access == libc::O_RDONLY as u32,
+                "one-time secret endpoint identity/direction mismatch"
+            );
+            let parent = inventory(std::process::id())?;
+            anyhow::ensure!(
+                parent.values().filter(|e| e.same_object(&secret)).count() == 1,
+                "parent retains unexpected secret endpoint"
+            );
+            Ok(
+                serde_json::json!({"gateway":gateway,"secret_writer":secret,"secret_reader_fd":receivers[0].0,
+                "parent_endpoints":parent,"secret_ready":launch.secret_ready}),
+            )
+        })
+    }
+    pub(super) fn capture_probe(
+        entries: &[(&str, i32)],
+        null: i32,
+        parent: &[i32],
+        closed_parent: &[i32],
+    ) -> Result<Option<ProbeEndpoints>> {
+        if directory().is_none() {
+            return Ok(None);
+        }
+        Ok(Some(capture_probe_endpoints(
+            entries,
+            null,
+            parent,
+            closed_parent,
+        )?))
+    }
+    fn capture_probe_endpoints(
+        entries: &[(&str, i32)],
+        null: i32,
+        parent: &[i32],
+        closed_parent: &[i32],
+    ) -> Result<ProbeEndpoints> {
+        let pid = std::process::id();
+        let mut child = BTreeMap::new();
+        for fd in 0..3 {
+            child.insert(fd, endpoint(pid, null)?);
+        }
+        let mut child_closed = BTreeMap::new();
+        let mut roles = (0..3)
+            .map(|fd| (fd, "stdio_dev_null".to_string()))
+            .collect::<BTreeMap<_, _>>();
+        for (name, fd) in entries {
+            let e = endpoint(pid, *fd)?;
+            if [
+                "SUBSTRATE_E3_READINESS_PROBE_INPUT_FD",
+                "SUBSTRATE_WORLD_ENTRY_SETUP_READY_FD",
+                "SUBSTRATE_WORLD_ENTRY_USERNS_FD",
+                "SUBSTRATE_WORLD_ENTRY_SELF_ARTIFACT_FD",
+            ]
+            .contains(name)
+            {
+                child_closed.insert(*fd, e);
+            } else {
+                child.insert(*fd, e);
+                roles.insert(*fd, name.to_string());
+            }
+        }
+        // Only these parent-owned channel endpoints have ended their lifetime. The
+        // child's consumed self-artifact object remains legitimately pinned in the parent.
+        let parent_closed = closed_parent
+            .iter()
+            .map(|fd| endpoint(pid, *fd))
+            .collect::<Result<_>>()?;
+        Ok(ProbeEndpoints {
+            child,
+            child_closed,
+            parent_closed,
+            roles,
+            inherited_roles: entries
+                .iter()
+                .map(|(name, fd)| (*fd, name.to_string()))
+                .collect(),
+            parent: parent
+                .iter()
+                .map(|fd| Ok((*fd, endpoint(pid, *fd)?)))
+                .collect::<Result<_>>()?,
+        })
+    }
+    fn forbidden_matches(
+        actual: &BTreeMap<i32, Endpoint>,
+        forbidden: &[Endpoint],
+    ) -> Vec<serde_json::Value> {
+        actual
+            .iter()
+            .filter(|(_, e)| forbidden.iter().any(|f| e.same_object(f)))
+            .map(|(fd, e)| serde_json::json!({"fd":fd,"actual":e}))
+            .collect()
+    }
+    fn inventory_difference(
+        actual: &BTreeMap<i32, Endpoint>,
+        expected: &BTreeMap<i32, Endpoint>,
+        forbidden: &[Endpoint],
+    ) -> serde_json::Value {
+        let missing: Vec<_> = expected
+            .iter()
+            .filter(|(fd, _)| !actual.contains_key(fd))
+            .map(|(fd, e)| serde_json::json!({"fd":fd,"expected":e}))
+            .collect();
+        let unexpected: Vec<_> = actual
+            .iter()
+            .filter(|(fd, _)| !expected.contains_key(fd))
+            .map(|(fd, e)| serde_json::json!({"fd":fd,"actual":e}))
+            .collect();
+        let mismatched: Vec<_> = expected
+            .iter()
+            .filter_map(|(fd, e)| {
+                actual
+                    .get(fd)
+                    .filter(|a| *a != e)
+                    .map(|a| serde_json::json!({"fd":fd,"expected":e,"actual":a}))
+            })
+            .collect();
+        let prohibited = forbidden_matches(actual, forbidden);
+        serde_json::json!({"passed":missing.is_empty() && unexpected.is_empty() && mismatched.is_empty() && prohibited.is_empty(),
+            "missing":missing,"unexpected":unexpected,"identity_or_access_mismatched":mismatched,"forbidden_channel_matches":prohibited})
+    }
+    fn validate_inventory(
+        actual: &BTreeMap<i32, Endpoint>,
+        expected: &BTreeMap<i32, Endpoint>,
+        forbidden: &[Endpoint],
+    ) -> Result<()> {
+        let difference = inventory_difference(actual, expected, forbidden);
+        anyhow::ensure!(
+            difference["passed"] == true,
+            "endpoint inventory mismatch or prohibited channel; inspect retained comparison"
+        );
+        Ok(())
+    }
+    fn retain_probe_inventory(
+        dir: &Path,
+        observed: &serde_json::Value,
+        expected: &ProbeEndpoints,
+        actual: &BTreeMap<i32, Endpoint>,
+        forbidden: &[Endpoint],
+        self_proc_valid: bool,
+    ) -> Result<()> {
+        let path = dir.join("channels-probe-inventory.json");
+        let difference = inventory_difference(actual, &expected.child, forbidden);
+        fs::write(
+            &path,
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "stage":"setup-ready EOF; probe-start byte withheld", "role":"ReadinessProbe",
+                "observation":observed,"actual":actual,"expected":expected,"difference":difference,
+                "numeric_self_proc_valid":self_proc_valid
+            }))?,
+        )
+        .with_context(|| format!("persist inventory comparison {}", path.display()))?;
+        anyhow::ensure!(self_proc_valid, "numeric self-proc capability missing, duplicated or replacing live endpoint; inspect retained comparison");
+        validate_inventory(actual, &expected.child, forbidden)
+    }
+    pub(super) fn probe_setup(
+        owner: &E3GatewayRuntimeAuthorityV1,
+        mut expected: ProbeEndpoints,
+    ) -> Result<()> {
+        observe("channels-probe-setup", |dir, canary| {
+            let main = owner.launch.as_ref().context("gateway owner")?;
+            let probe = main.probe.as_ref().context("probe owner")?;
+            let child = probe
+                .gateway_registration
+                .as_ref()
+                .context("probe registration")?;
+            fs::write(
+                dir.join("channels-probe-binding.json"),
+                serde_json::to_vec_pretty(&serde_json::json!({
+                    "stage":"setup-ready EOF; probe-start byte withheld", "pid":child.pid,
+                    "start_time_ticks":child.pid_start_time_ticks,"executable_artifact":probe.enforcement.executable_artifact
+                }))?,
+            )?;
+            let observed = live(
+                child.pid,
+                child.pid_start_time_ticks,
+                &probe.executable,
+                canary,
+            )
+            .with_context(|| {
+                format!(
+                    "probe-start withheld pid={} start={}",
+                    child.pid, child.pid_start_time_ticks
+                )
+            })?;
+            let actual: BTreeMap<i32, Endpoint> =
+                serde_json::from_value(observed["endpoints"].clone())?;
+            // The wrapper retains exactly one O_PATH capability to its authenticated numeric proc directory.
+            let proc_path = format!("/proc/{}", child.pid);
+            let proc = fs::metadata(&proc_path)
+                .with_context(|| format!("stat numeric self-proc {proc_path}"))?;
+            let self_proc = Endpoint {
+                device: proc.dev(),
+                inode: proc.ino(),
+                kind: libc::S_IFDIR,
+                access: libc::O_PATH as u32,
+            };
+            let self_fds: Vec<_> = actual.iter().filter(|(_, e)| **e == self_proc).collect();
+            let self_proc_valid =
+                self_fds.len() == 1 && !expected.child.contains_key(self_fds[0].0);
+            if self_proc_valid {
+                expected.child.insert(*self_fds[0].0, self_proc);
+                expected
+                    .roles
+                    .insert(*self_fds[0].0, "numeric_self_proc".into());
+            }
+            let before: serde_json::Value = read_observation(dir, "channels-before-secret.json")?;
+            let secret: Endpoint = serde_json::from_value(before["secret_writer"].clone())?;
+            let mut forbidden: Vec<_> = expected.child_closed.values().cloned().collect();
+            forbidden.push(secret.clone());
+            retain_probe_inventory(
+                dir,
+                &observed,
+                &expected,
+                &actual,
+                &forbidden,
+                self_proc_valid,
+            )?;
+            let parent = inventory(std::process::id())?;
+            let parent_forbidden = forbidden_matches(&parent, &expected.parent_closed);
+            fs::write(
+                dir.join("channels-parent-setup.json"),
+                serde_json::to_vec_pretty(&serde_json::json!({
+                    "stage":"setup-ready EOF; probe-start byte withheld","pid":std::process::id(),
+                    "actual":parent,"required_endpoints":expected.parent,"closed_channel_objects":expected.parent_closed,
+                    "forbidden_channel_matches":parent_forbidden
+                }))?,
+            )?;
+            for (fd, e) in &expected.parent {
+                anyhow::ensure!(
+                    endpoint(std::process::id(), *fd)? == *e,
+                    "parent probe endpoint changed"
+                );
+            }
+            anyhow::ensure!(
+                parent_forbidden.is_empty(),
+                "setup/exec/namespace parent endpoint still open"
+            );
+            anyhow::ensure!(
+                !parent.values().any(|e| e.same_object(&secret)),
+                "parent secret endpoint still open"
+            );
+            for e in expected.child.values().filter(|e| e.kind == libc::S_IFIFO) {
+                let opposite: Vec<_> = expected
+                    .parent
+                    .values()
+                    .filter(|p| p.same_object(e))
+                    .collect();
+                anyhow::ensure!(
+                    opposite.len() == 1 && opposite[0].access != e.access,
+                    "probe pipe has no exact opposite parent endpoint"
+                );
+                anyhow::ensure!(
+                    parent.values().filter(|p| p.same_object(e)).count() == 1,
+                    "parent retained child endpoint"
+                );
+            }
+            let gateway_child = main
+                .gateway_registration
+                .as_ref()
+                .context("gateway registration")?;
+            let gateway = live(
+                gateway_child.pid,
+                gateway_child.pid_start_time_ticks,
+                &main.executable,
+                canary,
+            )?;
+            let gateway_fds: BTreeMap<i32, Endpoint> =
+                serde_json::from_value(gateway["endpoints"].clone())?;
+            anyhow::ensure!(
+                !gateway_fds.values().any(|e| e.same_object(&secret)),
+                "gateway secret endpoint not closed after consume"
+            );
+            let service_exe = fs::File::open("/proc/self/exe")?;
+            let service = live(
+                std::process::id(),
+                ManagedGatewayLaunchCapabilityV1::e3_process_start(std::process::id())?,
+                &service_exe,
+                canary,
+            )?;
+            Ok(
+                serde_json::json!({"stage":"setup-ready EOF; probe-start byte withheld","probe":observed,
+                "gateway":gateway,"service":service,"expected":expected,"parent_endpoints":parent,
+                "secret_channel_closed_in_parent_and_gateway":true}),
+            )
+        })
+    }
+    pub(super) fn connected(connected: &serde_json::Value) -> Result<()> {
+        observe("channels-probe-connected", |_, _| {
+            Ok(serde_json::json!({
+                "stage":"connected-attestation EOF; request-release byte withheld",
+                "production_validated_attestation":connected
+            }))
+        })
+    }
+    pub(crate) fn after_readiness(
+        gateway: &config_projection::GatewayProcessIdentityV1,
+    ) -> Result<()> {
+        observe("channels-after-readiness", |dir, _| {
+            let setup: serde_json::Value = read_observation(dir, "channels-probe-setup.json")?;
+            let expected: ProbeEndpoints = serde_json::from_value(setup["expected"].clone())?;
+            let parent = inventory(std::process::id())?;
+            let gateway_fds = inventory(gateway.pid)?;
+            let before: serde_json::Value = read_observation(dir, "channels-before-secret.json")?;
+            let secret: Endpoint = serde_json::from_value(before["secret_writer"].clone())?;
+            let mut forbidden: Vec<_> = expected.parent.values().cloned().collect();
+            forbidden.push(secret);
+            for e in parent.values().chain(gateway_fds.values()) {
+                anyhow::ensure!(
+                    !forbidden.iter().any(|f| f.same_object(e)),
+                    "readiness/secret endpoint remains after protocol completion"
+                );
+            }
+            let connected: serde_json::Value =
+                read_observation(dir, "channels-probe-connected.json")?;
+            let socket_inode = connected["production_validated_attestation"]["socket_inode"]
+                .as_u64()
+                .context("probe socket inode")?;
+            anyhow::ensure!(
+                !parent
+                    .values()
+                    .chain(gateway_fds.values())
+                    .any(|e| e.kind == libc::S_IFSOCK && e.inode == socket_inode),
+                "probe socket unexpectedly retained"
+            );
+            let probe_pid = setup["probe"]["pid"].as_u64().context("probe PID")?;
+            anyhow::ensure!(
+                !PathBuf::from(format!("/proc/{probe_pid}")).exists(),
+                "probe was not reaped"
+            );
+            anyhow::ensure!(
+                ManagedGatewayLaunchCapabilityV1::e3_process_start(gateway.pid)?
+                    == gateway.pid_start_time_ticks,
+                "gateway identity changed"
+            );
+            Ok(
+                serde_json::json!({"probe_pid":probe_pid,"probe_reaped":true,"parent_endpoints":parent,
+                "gateway_endpoints":gateway_fds,"probe_socket_inode":socket_inode,"protocol_endpoint_closure":true}),
+            )
+        })
+    }
+    #[test]
+    fn canary_inventory_checks_use_exact_objects_and_directions() {
+        let expected = BTreeMap::from([(
+            7,
+            Endpoint {
+                device: 1,
+                inode: 22,
+                kind: libc::S_IFIFO,
+                access: 0,
+            },
+        )]);
+        validate_inventory(&expected, &expected, &[]).unwrap();
+        let secret = Endpoint {
+            device: 1,
+            inode: 33,
+            kind: libc::S_IFIFO,
+            access: 0,
+        };
+        let mut actual = expected.clone();
+        actual.insert(8, secret.clone());
+        assert!(validate_inventory(&actual, &expected, &[secret])
+            .unwrap_err()
+            .to_string()
+            .contains("prohibited"));
+        assert!(validate_inventory(&actual, &expected, &[]).is_err());
+        assert!(validate_inventory(&BTreeMap::new(), &expected, &[]).is_err());
+        actual = expected.clone();
+        actual.get_mut(&7).unwrap().inode += 1;
+        assert!(validate_inventory(&actual, &expected, &[]).is_err());
+        actual = expected.clone();
+        actual.get_mut(&7).unwrap().access = 1;
+        assert!(validate_inventory(&actual, &expected, &[]).is_err());
+    }
+    #[test]
+    fn canary_identity_and_unavailable_paths_are_exact() {
+        let exe = fs::File::open("/proc/self/exe").unwrap();
+        let pid = std::process::id();
+        let start = ManagedGatewayLaunchCapabilityV1::e3_process_start(pid).unwrap();
+        identity(pid, start, &exe).unwrap();
+        assert!(identity(pid, start + 1, &exe)
+            .unwrap_err()
+            .to_string()
+            .contains("identity mismatch"));
+        let null = fs::File::open("/dev/null").unwrap();
+        assert!(identity(pid, start, &null).is_err());
+        let error = format!("{:#}", endpoint(pid, -1).unwrap_err());
+        assert!(error.contains(&format!("stat endpoint /proc/{pid}/fd/-1")));
+    }
+    #[test]
+    fn canary_capture_excludes_closed_self_artifact_but_not_parent_alias() {
+        let artifact = fs::File::open("/proc/self/exe").unwrap();
+        let child_artifact = artifact.try_clone().unwrap();
+        let null = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/null")
+            .unwrap();
+        let (reader, writer) = create_inherited_auth_bundle_pipe().unwrap();
+        let (input_reader, input_writer) = create_inherited_auth_bundle_pipe().unwrap();
+        let (setup_reader, setup_writer) = create_inherited_auth_bundle_pipe().unwrap();
+        let (connected_reader, connected_writer) = create_inherited_auth_bundle_pipe().unwrap();
+        let (request_reader, request_writer) = create_inherited_auth_bundle_pipe().unwrap();
+        let (result_reader, result_writer) = create_inherited_auth_bundle_pipe().unwrap();
+        let (userns_parent, userns_child) =
+            crate::e3_child_security::create_e3_child_user_namespace_channel_v1().unwrap();
+        let expected = capture_probe_endpoints(
+            &[
+                (
+                    "SUBSTRATE_WORLD_ENTRY_SELF_ARTIFACT_FD",
+                    child_artifact.as_raw_fd(),
+                ),
+                ("SUBSTRATE_E3_READINESS_PROBE_START_FD", reader.as_raw_fd()),
+                (
+                    "SUBSTRATE_E3_READINESS_PROBE_INPUT_FD",
+                    input_reader.as_raw_fd(),
+                ),
+                (
+                    "SUBSTRATE_WORLD_ENTRY_SETUP_READY_FD",
+                    setup_writer.as_raw_fd(),
+                ),
+                ("SUBSTRATE_WORLD_ENTRY_USERNS_FD", userns_child.as_raw_fd()),
+                (
+                    "SUBSTRATE_E3_READINESS_PROBE_CONNECTED_FD",
+                    connected_writer.as_raw_fd(),
+                ),
+                (
+                    "SUBSTRATE_E3_READINESS_PROBE_REQUEST_RELEASE_FD",
+                    request_reader.as_raw_fd(),
+                ),
+                (
+                    "SUBSTRATE_E3_READINESS_PROBE_RESULT_FD",
+                    result_writer.as_raw_fd(),
+                ),
+            ],
+            null.as_raw_fd(),
+            &[
+                writer.as_raw_fd(),
+                connected_reader.as_raw_fd(),
+                request_writer.as_raw_fd(),
+                result_reader.as_raw_fd(),
+            ],
+            &[
+                input_writer.as_raw_fd(),
+                setup_reader.as_raw_fd(),
+                userns_parent.as_raw_fd(),
+            ],
+        )
+        .unwrap();
+        assert!(
+            !expected.child.contains_key(&child_artifact.as_raw_fd()),
+            "validated self-artifact is closed before setup-ready"
+        );
+        assert_eq!(
+            expected.child[&reader.as_raw_fd()],
+            endpoint(std::process::id(), reader.as_raw_fd()).unwrap()
+        );
+        assert!(artifact.metadata().unwrap().is_file());
+        let child_artifact_fd = child_artifact.as_raw_fd();
+        let artifact_object = endpoint(std::process::id(), artifact.as_raw_fd()).unwrap();
+        assert_eq!(expected.child_closed[&child_artifact_fd], artifact_object);
+        drop(child_artifact);
+        let parent_actual = BTreeMap::from([
+            (artifact.as_raw_fd(), artifact_object.clone()),
+            (
+                writer.as_raw_fd(),
+                endpoint(std::process::id(), writer.as_raw_fd()).unwrap(),
+            ),
+        ]);
+        assert!(forbidden_matches(&parent_actual, &expected.parent_closed).is_empty());
+        let mut actual = expected.child.clone();
+        // A recycled number is a different object, not a retained artifact. It is still
+        // an unexpected endpoint unless assigned a legitimate live role.
+        actual.insert(
+            child_artifact_fd,
+            endpoint(std::process::id(), reader.as_raw_fd()).unwrap(),
+        );
+        assert!(forbidden_matches(&actual, std::slice::from_ref(&artifact_object)).is_empty());
+        assert!(validate_inventory(&actual, &expected.child, &[]).is_err());
+        actual.remove(&child_artifact_fd);
+        validate_inventory(&actual, &expected.child, &[artifact_object]).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let observed = serde_json::json!({"pid":std::process::id(),"start_time_ticks":ManagedGatewayLaunchCapabilityV1::e3_process_start(std::process::id()).unwrap(),"executable":"test-owned binding"});
+        retain_probe_inventory(dir.path(), &observed, &expected, &actual, &[], true).unwrap();
+        actual.remove(&reader.as_raw_fd());
+        assert!(
+            retain_probe_inventory(dir.path(), &observed, &expected, &actual, &[], true).is_err()
+        );
+        let report: serde_json::Value = serde_json::from_slice(
+            &fs::read(dir.path().join("channels-probe-inventory.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(report["difference"]["missing"][0]["fd"], reader.as_raw_fd());
+        assert_eq!(report["actual"], serde_json::to_value(&actual).unwrap());
+        assert_eq!(
+            report["expected"]["child"],
+            serde_json::to_value(&expected.child).unwrap()
+        );
+        assert_eq!(report["observation"], observed);
+        for change_identity in [true, false] {
+            actual = expected.child.clone();
+            let e = actual.get_mut(&reader.as_raw_fd()).unwrap();
+            if change_identity {
+                e.inode += 1;
+            } else {
+                e.access = libc::O_WRONLY as u32;
+            }
+            assert!(
+                retain_probe_inventory(dir.path(), &observed, &expected, &actual, &[], true)
+                    .is_err()
+            );
+            let report: serde_json::Value = serde_json::from_slice(
+                &fs::read(dir.path().join("channels-probe-inventory.json")).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(
+                report["difference"]["identity_or_access_mismatched"][0]["fd"],
+                reader.as_raw_fd()
+            );
+        }
+        let (secret_reader, _secret_writer) = create_inherited_auth_bundle_pipe().unwrap();
+        let secret = endpoint(std::process::id(), secret_reader.as_raw_fd()).unwrap();
+        actual = expected.child.clone();
+        actual.insert(secret_reader.as_raw_fd(), secret.clone());
+        assert!(
+            retain_probe_inventory(dir.path(), &observed, &expected, &actual, &[secret], true)
+                .is_err()
+        );
+        let report: serde_json::Value = serde_json::from_slice(
+            &fs::read(dir.path().join("channels-probe-inventory.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            report["difference"]["unexpected"][0]["fd"],
+            secret_reader.as_raw_fd()
+        );
+        assert_eq!(
+            report["difference"]["forbidden_channel_matches"][0]["fd"],
+            secret_reader.as_raw_fd()
+        );
     }
 }
