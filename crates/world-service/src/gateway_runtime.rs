@@ -914,7 +914,6 @@ impl E3GatewayRuntimeAuthorityV1 {
 
     #[allow(dead_code)]
     pub(crate) fn validate_gateway_secret_ready(&mut self) -> Result<()> {
-        use std::os::unix::fs::MetadataExt;
         type Launch = ManagedGatewayLaunchCapabilityV1;
         let owned = self.launch.as_mut().context("E3 launch owner missing")?;
         if owned.secret_ready.is_none() {
@@ -956,11 +955,14 @@ impl E3GatewayRuntimeAuthorityV1 {
             .as_ref()
             .context("E3 secret-ready evidence missing")?;
         {
-            let proc = fs::File::open(format!("/proc/{}", ready.gateway_pid))?;
-            anyhow::ensure!(
-                proc.metadata()?.uid() == 0,
-                "E3 gateway remains dumpable after exec"
-            );
+            let proc_root = Launch::e3_open_pinned("/proc", true)?;
+            validate_gateway_proc_owner(
+                &proc_root,
+                ready.gateway_pid,
+                ready.gateway_pid_start_time_ticks,
+                &owned.enforcement.user_namespace_requirement.uid_map,
+                &owned.enforcement.user_namespace_requirement.gid_map,
+            )?;
             let mut limits = libc::rlimit {
                 rlim_cur: 1,
                 rlim_max: 1,
@@ -10323,6 +10325,118 @@ fn compare(value: &[u8]) -> Vec<u8> {
     )
 }
 
+// Linux task_dump_owner exempts the 0555 PID directory. A regular stat entry instead
+// reports the effective IDs for dumpable=1, or namespace-root IDs for other values.
+// E3's independently validated one-ID maps omit inside UID/GID 0, so make_kuid/kgid(0)
+// fails and the kernel uses GLOBAL_ROOT_UID/GID (0 in the service's host namespace).
+// This excludes dumpable=1; it does NOT distinguish 0 from 2. The trusted exact-0
+// post-exec attestation and independent child-security checks remain mandatory.
+fn validate_gateway_proc_owner(
+    proc_root: &fs::File,
+    pid: u32,
+    start: u64,
+    uid_map: &config_projection::E3LinuxIdMapExtentV1,
+    gid_map: &config_projection::E3LinuxIdMapExtentV1,
+) -> Result<()> {
+    use std::io::Read;
+    use std::os::unix::fs::MetadataExt;
+    let mut procfs: libc::statfs = unsafe { std::mem::zeroed() };
+    anyhow::ensure!(
+        unsafe { libc::fstatfs(proc_root.as_raw_fd(), &mut procfs) } == 0
+            && procfs.f_type == libc::PROC_SUPER_MAGIC,
+        "E3 secret-ready observation root is not procfs"
+    );
+    // Same no-mount/no-link/beneath resolution as E3-D's private proc opener. Its
+    // helper is intentionally private to that owner; no new cross-owner API is needed.
+    let open = |parent: &fs::File, name: &str, directory: bool| -> Result<fs::File> {
+        #[repr(C)]
+        struct OpenHow {
+            flags: u64,
+            mode: u64,
+            resolve: u64,
+        }
+        let how = OpenHow {
+            flags: (libc::O_CLOEXEC
+                | libc::O_NOFOLLOW
+                | if directory {
+                    libc::O_PATH | libc::O_DIRECTORY
+                } else {
+                    libc::O_RDONLY
+                }) as u64,
+            mode: 0,
+            resolve: 0x01 | 0x02 | 0x04 | 0x08,
+        };
+        let name = std::ffi::CString::new(name)?;
+        let fd = unsafe {
+            libc::syscall(
+                libc::SYS_openat2,
+                parent.as_raw_fd(),
+                name.as_ptr(),
+                &how,
+                std::mem::size_of::<OpenHow>(),
+            )
+        } as i32;
+        if fd < 0 {
+            return Err(std::io::Error::last_os_error())
+                .context("open E3 secret-ready proc observation");
+        }
+        Ok(unsafe { fs::File::from_raw_fd(fd) })
+    };
+    let read = |file: &fs::File| -> Result<String> {
+        let mut text = String::new();
+        file.take(4097).read_to_string(&mut text)?;
+        anyhow::ensure!(text.len() <= 4096, "E3 proc observation exceeded bound");
+        Ok(text)
+    };
+    let process = open(proc_root, &pid.to_string(), true)?;
+    for (name, expected) in [("uid_map", uid_map), ("gid_map", gid_map)] {
+        // This is the contract's exact protected mapping, not a blanket root assumption.
+        anyhow::ensure!(
+            expected.inside_id != 0
+                && expected.inside_id == expected.outside_id
+                && expected.length == 1,
+            "E3 secret-ready requires the protected non-root identity map"
+        );
+        let values = read(&open(&process, name, false)?)?
+            .split_whitespace()
+            .map(str::parse::<u64>)
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        anyhow::ensure!(
+            values == [expected.inside_id, expected.outside_id, 1],
+            "E3 secret-ready process map changed"
+        );
+    }
+    let validate_stat = |file: &fs::File| -> Result<()> {
+        let text = read(file)?;
+        let (pid_text, _) = text.split_once(" (").context("E3 proc stat PID missing")?;
+        let (_, tail) = text
+            .rsplit_once(") ")
+            .context("E3 proc stat comm missing")?;
+        let fields: Vec<_> = tail.split_whitespace().collect();
+        anyhow::ensure!(
+            pid_text.parse::<u32>()? == pid
+                && fields
+                    .get(19)
+                    .context("E3 proc stat start missing")?
+                    .parse::<u64>()?
+                    == start
+                && !matches!(fields.first(), Some(&"Z" | &"X" | &"x")),
+            "E3 secret-ready process identity changed or exited"
+        );
+        Ok(())
+    };
+    let stat = open(&process, "stat", false)?;
+    validate_stat(&stat)?;
+    let owner = stat.metadata()?;
+    anyhow::ensure!(
+        owner.is_file() && owner.uid() == 0 && owner.gid() == 0,
+        "E3 gateway proc ownership is inconsistent with non-dumpability"
+    );
+    // A dead proc inode may itself getattr as root. Re-read through the pinned PID
+    // directory after observation, and retain the caller's independent pidfd check.
+    validate_stat(&open(&process, "stat", false)?)
+}
+
 #[cfg(test)]
 mod e3_e_secret_ready_pipe_tests {
     use super::*;
@@ -10527,3 +10641,172 @@ mod e3_e_secret_ready_pipe_tests {
 }
 
 // Fixed E3 netfilter wire codecs shared by live installation and recovered revocation.
+
+#[cfg(test)]
+mod e3_e_proc_owner_tests {
+    use super::*;
+    use config_projection::E3LinuxIdMapExtentV1;
+    use std::os::unix::fs::MetadataExt;
+
+    struct ControlledChild {
+        child: Child,
+        output: BufReader<std::process::ChildStdout>,
+        start: u64,
+        uid: E3LinuxIdMapExtentV1,
+        gid: E3LinuxIdMapExtentV1,
+    }
+
+    impl Drop for ControlledChild {
+        fn drop(&mut self) {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+
+    impl ControlledChild {
+        fn spawn() -> Self {
+            // Python starts single-threaded, creates only its own user namespace, then execs
+            // so mm->user_ns also names that namespace. No host policy or other process changes.
+            let script = r#"
+import ctypes, os, resource, sys
+libc = ctypes.CDLL(None, use_errno=True)
+if len(sys.argv) == 1:
+    uid, gid = os.getuid(), os.getgid()
+    assert uid != 0 and gid != 0
+    assert libc.unshare(0x10000000) == 0, ctypes.get_errno()
+    with open('/proc/self/uid_map', 'w') as f: f.write(f'{uid} {uid} 1\n')
+    with open('/proc/self/setgroups', 'w') as f: f.write('deny')
+    with open('/proc/self/gid_map', 'w') as f: f.write(f'{gid} {gid} 1\n')
+    os.execv(sys.executable, [sys.executable, '-c', sys.argv[0], 'mapped'])
+resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+assert libc.prctl(4, 0, 0, 0, 0) == 0
+start = open('/proc/self/stat').read().rsplit(') ', 1)[1].split()[19]
+print(os.getpid(), start, libc.prctl(3, 0, 0, 0, 0), flush=True)
+for line in sys.stdin:
+    assert libc.prctl(4, int(line), 0, 0, 0) == 0
+    print(libc.prctl(3, 0, 0, 0, 0), flush=True)
+"#;
+            // Pass the script itself as argv[0] for the explicit second exec.
+            let bootstrap = format!("import sys; sys.argv[0] = {script:?}; exec(sys.argv[0])");
+            let mut child = Command::new("python3")
+                .args(["-c", &bootstrap])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::inherit())
+                .spawn()
+                .unwrap();
+            let output = BufReader::new(child.stdout.take().unwrap());
+            let mut child = Self {
+                child,
+                output,
+                start: 0,
+                uid: E3LinuxIdMapExtentV1 {
+                    inside_id: unsafe { libc::getuid() } as u64,
+                    outside_id: unsafe { libc::getuid() } as u64,
+                    length: 1,
+                },
+                gid: E3LinuxIdMapExtentV1 {
+                    inside_id: unsafe { libc::getgid() } as u64,
+                    outside_id: unsafe { libc::getgid() } as u64,
+                    length: 1,
+                },
+            };
+            let line = child.line();
+            let fields: Vec<u64> = line
+                .split_whitespace()
+                .map(|v| v.parse().unwrap())
+                .collect();
+            assert_eq!(fields.len(), 3, "child did not report controlled state");
+            assert_eq!(fields[0], u64::from(child.child.id()));
+            assert_eq!(fields[2], 0, "child PR_GET_DUMPABLE readback");
+            child.start = fields[1];
+            child
+        }
+        fn line(&mut self) -> String {
+            let mut line = String::new();
+            assert_ne!(
+                self.output.read_line(&mut line).unwrap(),
+                0,
+                "child exited before synchronization"
+            );
+            line
+        }
+        fn set_dumpable(&mut self, value: u32) {
+            writeln!(self.child.stdin.as_mut().unwrap(), "{value}").unwrap();
+            assert_eq!(self.line().trim(), value.to_string());
+        }
+        fn validate(&self, root: &fs::File) -> Result<()> {
+            validate_gateway_proc_owner(root, self.child.id(), self.start, &self.uid, &self.gid)
+        }
+    }
+
+    #[test]
+    fn test_gateway_proc_owner_actual_kernel() {
+        let mut child = ControlledChild::spawn();
+        let root = ManagedGatewayLaunchCapabilityV1::e3_open_pinned("/proc", true).unwrap();
+        let pid = child.child.id();
+        for dumpable in [0, 1, 0] {
+            child.set_dumpable(dumpable);
+            let dir = fs::metadata(format!("/proc/{pid}")).unwrap();
+            let stat = fs::metadata(format!("/proc/{pid}/stat")).unwrap();
+            eprintln!("pid={pid} PR_GET_DUMPABLE={dumpable} directory={}:{} stat={}:{} uid_map={} {} 1 gid_map={} {} 1", dir.uid(), dir.gid(), stat.uid(), stat.gid(), child.uid.inside_id, child.uid.outside_id, child.gid.inside_id, child.gid.outside_id);
+            assert_eq!(u64::from(dir.uid()), child.uid.outside_id);
+            assert_ne!(
+                dir.uid(),
+                0,
+                "old directory predicate falsely rejects dumpable=0"
+            );
+            assert_eq!(child.validate(&root).is_ok(), dumpable == 0);
+        }
+        child.start += 1;
+        assert!(child.validate(&root).is_err(), "wrong start accepted");
+        child.start -= 1;
+        child.uid.inside_id = 0;
+        assert!(child.validate(&root).is_err(), "wrong mapping accepted");
+        child.uid.inside_id = child.uid.outside_id;
+        child.child.kill().unwrap();
+        child.child.wait().unwrap();
+        assert!(child.validate(&root).is_err(), "disappeared child accepted");
+    }
+
+    #[test]
+    fn test_gateway_proc_owner_unavailable_or_substituted() {
+        let child = ControlledChild::spawn();
+        let fake = tempfile::tempdir().unwrap();
+        let root = fs::File::open(fake.path()).unwrap();
+        assert!(child.validate(&root).is_err());
+        std::os::unix::fs::symlink(
+            format!("/proc/{}", child.child.id()),
+            fake.path().join(child.child.id().to_string()),
+        )
+        .unwrap();
+        assert!(
+            child.validate(&root).is_err(),
+            "substituted proc root accepted"
+        );
+        let proc = fs::File::open("/proc").unwrap();
+        assert!(
+            validate_gateway_proc_owner(&proc, 0, child.start, &child.uid, &child.gid).is_err()
+        );
+    }
+
+    #[test]
+    fn test_gateway_proc_owner_is_live_on_cached_attestation() {
+        let source = include_str!("gateway_runtime.rs");
+        let validator = source
+            .split_once("pub(crate) fn validate_gateway_secret_ready(")
+            .unwrap()
+            .1
+            .split_once("pub(crate) fn deliver_secret_after_privilege_drop(")
+            .unwrap()
+            .0;
+        let cached = validator.find("let ready = owned").unwrap();
+        let observation = validator.find("validate_gateway_proc_owner(").unwrap();
+        assert!(
+            cached < observation,
+            "cached attestation must not bypass live observation"
+        );
+        assert!(observation < validator.find("libc::prlimit(").unwrap());
+        assert!(observation < validator.find("self.validate_child_security()").unwrap());
+    }
+}
