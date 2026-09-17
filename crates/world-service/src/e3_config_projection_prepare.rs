@@ -2236,6 +2236,274 @@ mod tests {
         assert!(manager.preparations.lock().unwrap().is_empty());
     }
 
+    fn snapshot_terminal_records(
+        directory: &std::path::Path,
+    ) -> anyhow::Result<BTreeMap<PathBuf, Vec<u8>>> {
+        let entries = match fs::read_dir(directory) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(BTreeMap::new())
+            }
+            Err(error) => return Err(error.into()),
+        };
+        entries
+            .map(|entry| {
+                let path = entry?.path();
+                let bytes = fs::read(&path)?;
+                Ok((path, bytes))
+            })
+            .collect()
+    }
+
+    #[derive(Clone)]
+    struct TerminalPublicationWatch {
+        directory: PathBuf,
+        before: BTreeMap<PathBuf, Vec<u8>>,
+        projection_ref: ConfigProjectionRefV1,
+        world_id: String,
+        world_generation: u64,
+    }
+
+    impl TerminalPublicationWatch {
+        fn current_publication(&self) -> anyhow::Result<Option<(PathBuf, Vec<u8>)>> {
+            let records = snapshot_terminal_records(&self.directory)?;
+            for (path, bytes) in &self.before {
+                anyhow::ensure!(
+                    records.contains_key(path),
+                    "historical terminal record disappeared"
+                );
+                anyhow::ensure!(
+                    records.get(path) == Some(bytes),
+                    "historical terminal bytes changed"
+                );
+            }
+            let mut new = records
+                .iter()
+                .filter(|(path, _)| !self.before.contains_key(*path));
+            let Some((path, bytes)) = new.next() else {
+                return Ok(None);
+            };
+            anyhow::ensure!(
+                new.next().is_none(),
+                "unexpected additional terminal records"
+            );
+            let record: config_projection::E3TerminalChildQuiescenceEvidenceV1 =
+                serde_json::from_slice(bytes)?;
+            anyhow::ensure!(
+                ConfigProjectionCodecV1::encode_canonical_json(&record)? == *bytes,
+                "terminal record is not canonical"
+            );
+            anyhow::ensure!(
+                record.schema_version == 1
+                    && record.authority_store_id == self.projection_ref.authority_store_id
+                    && record.series_id == self.projection_ref.series_id
+                    && record.final_projection_ref == self.projection_ref
+                    && record.world_id == self.world_id
+                    && record.world_generation == self.world_generation
+                    && *path == self.directory.join(format!("{}.json", record.evidence_id)),
+                "new terminal record identity mismatch"
+            );
+            Ok(Some((path.clone(), bytes.clone())))
+        }
+
+        fn verify_retry(&self, expected: &(PathBuf, Vec<u8>)) -> anyhow::Result<()> {
+            let current = self
+                .current_publication()?
+                .ok_or_else(|| anyhow::anyhow!("current terminal record disappeared"))?;
+            anyhow::ensure!(
+                current.0 == expected.0,
+                "current terminal record identity changed"
+            );
+            anyhow::ensure!(current.1 == expected.1, "current terminal bytes changed");
+            Ok(())
+        }
+    }
+
+    fn terminal_watch_fixture(
+        directory: PathBuf,
+    ) -> (
+        TerminalPublicationWatch,
+        config_projection::E3TerminalChildQuiescenceEvidenceV1,
+    ) {
+        let reference = ConfigProjectionRefV1 {
+            authority_store_id: "cpa_01991f65-7800-7000-8000-000000000001".into(),
+            series_id: "cps_01991f65-7800-7000-8000-000000000002".into(),
+            record_id: "cpr_01991f65-7800-7000-8000-000000000003".into(),
+            revision: 3,
+            record_hash: "a".repeat(64),
+        };
+        let record = config_projection::E3TerminalChildQuiescenceEvidenceV1 {
+            schema_version: 1,
+            authority_store_id: reference.authority_store_id.clone(),
+            series_id: reference.series_id.clone(),
+            evidence_id: "tce_01991f65-7800-7000-8000-000000000004".into(),
+            final_projection_ref: reference.clone(),
+            world_id: "terminal-watch-world".into(),
+            world_generation: 1,
+            ordered_terminal_processes: vec![],
+            ordered_empty_cgroups: vec![],
+            observed_at: Timestamp("2026-09-17T00:00:00Z".into()),
+            evidence_hash: String::new(),
+        };
+        (
+            TerminalPublicationWatch {
+                directory,
+                before: BTreeMap::new(),
+                projection_ref: reference,
+                world_id: record.world_id.clone(),
+                world_generation: record.world_generation,
+            },
+            record,
+        )
+    }
+
+    fn write_terminal_fixture(
+        directory: &std::path::Path,
+        record: &config_projection::E3TerminalChildQuiescenceEvidenceV1,
+    ) -> PathBuf {
+        let mut value = serde_json::to_value(record).unwrap();
+        value.as_object_mut().unwrap().remove("evidence_hash");
+        let hash = ConfigProjectionCodecV1::domain_sha256(
+            "substrate.e3.terminal-child-quiescence.v1",
+            &serde_json::json!({"evidence": value}),
+        )
+        .unwrap();
+        let mut record = record.clone();
+        record.evidence_hash = hash;
+        fs::create_dir_all(directory).unwrap();
+        let path = directory.join(format!("{}.json", record.evidence_id));
+        fs::write(
+            &path,
+            ConfigProjectionCodecV1::encode_canonical_json(&record).unwrap(),
+        )
+        .unwrap();
+        path
+    }
+
+    #[test]
+    fn test_terminal_publication_watch_with_and_without_history() {
+        for historical in [false, true] {
+            let tmp = tempfile::tempdir().unwrap();
+            let (mut watch, record) = terminal_watch_fixture(tmp.path().join("terminal"));
+            if historical {
+                let mut old = record.clone();
+                old.evidence_id = "tce_01991f65-7800-7000-8000-000000000005".into();
+                old.final_projection_ref.revision = 2;
+                write_terminal_fixture(&watch.directory, &old);
+            }
+            watch.before = snapshot_terminal_records(&watch.directory).unwrap();
+            assert!(watch.current_publication().unwrap().is_none());
+            let path = write_terminal_fixture(&watch.directory, &record);
+            let published = watch.current_publication().unwrap().unwrap();
+            assert_eq!(published.0, path);
+            assert_eq!(published.1, fs::read(path).unwrap());
+            watch.verify_retry(&published).unwrap();
+            watch.verify_retry(&published).unwrap();
+        }
+    }
+
+    #[test]
+    fn test_terminal_publication_watch_requires_exact_binding() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (watch, record) = terminal_watch_fixture(tmp.path().join("terminal"));
+        for field in [
+            "schema",
+            "store",
+            "series",
+            "reference",
+            "world",
+            "generation",
+            "filename",
+        ] {
+            let mut wrong = record.clone();
+            match field {
+                "schema" => wrong.schema_version = 2,
+                "store" => wrong.authority_store_id.push('x'),
+                "series" => wrong.series_id.push('x'),
+                "reference" => wrong.final_projection_ref.revision = 2,
+                "world" => wrong.world_id.push('x'),
+                "generation" => wrong.world_generation += 1,
+                "filename" => (),
+                _ => unreachable!(),
+            }
+            let path = write_terminal_fixture(&watch.directory, &wrong);
+            let path = if field == "filename" {
+                let other = watch.directory.join("wrong.json");
+                fs::rename(path, &other).unwrap();
+                other
+            } else {
+                path
+            };
+            assert!(
+                watch
+                    .current_publication()
+                    .unwrap_err()
+                    .to_string()
+                    .contains("identity mismatch"),
+                "{field}"
+            );
+            fs::remove_file(path).unwrap();
+            assert!(watch.current_publication().unwrap().is_none());
+        }
+        write_terminal_fixture(&watch.directory, &record);
+        assert!(watch.current_publication().unwrap().is_some());
+    }
+
+    #[test]
+    fn test_terminal_publication_watch_rejects_retry_drift() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (mut watch, record) = terminal_watch_fixture(tmp.path().join("terminal"));
+        let mut old = record.clone();
+        old.evidence_id = "tce_01991f65-7800-7000-8000-000000000005".into();
+        old.final_projection_ref.revision = 2;
+        let old_path = write_terminal_fixture(&watch.directory, &old);
+        watch.before = snapshot_terminal_records(&watch.directory).unwrap();
+        let path = write_terminal_fixture(&watch.directory, &record);
+        let published = watch.current_publication().unwrap().unwrap();
+        let mut changed = record.clone();
+        changed.observed_at.0 = "2026-09-17T00:00:01Z".into();
+        write_terminal_fixture(&watch.directory, &changed);
+        assert!(watch
+            .verify_retry(&published)
+            .unwrap_err()
+            .to_string()
+            .contains("current terminal bytes changed"));
+        fs::write(&path, &published.1).unwrap();
+        for revision in [2, 3] {
+            let mut extra = record.clone();
+            extra.evidence_id = "tce_01991f65-7800-7000-8000-000000000006".into();
+            extra.final_projection_ref.revision = revision;
+            let extra_path = write_terminal_fixture(&watch.directory, &extra);
+            assert!(watch
+                .verify_retry(&published)
+                .unwrap_err()
+                .to_string()
+                .contains("additional terminal records"));
+            fs::remove_file(extra_path).unwrap();
+        }
+        fs::write(&old_path, b"changed history").unwrap();
+        assert!(watch
+            .verify_retry(&published)
+            .unwrap_err()
+            .to_string()
+            .contains("historical terminal bytes changed"));
+        fs::remove_file(&old_path).unwrap();
+        assert!(watch
+            .verify_retry(&published)
+            .unwrap_err()
+            .to_string()
+            .contains("historical terminal record disappeared"));
+        fs::write(&old_path, &watch.before[&old_path]).unwrap();
+        fs::remove_file(&path).unwrap();
+        assert!(watch
+            .verify_retry(&published)
+            .unwrap_err()
+            .to_string()
+            .contains("current terminal record disappeared"));
+        fs::write(&path, &published.1).unwrap();
+        watch.verify_retry(&published).unwrap();
+    }
+
     #[tokio::test(flavor = "current_thread")]
     #[ignore = "explicit test-owned authenticated HSA fixture and root cgroup/netfilter environment"]
     async fn e3_e_authenticated_preparation_response_and_cancellation() -> anyhow::Result<()> {
@@ -2337,6 +2605,7 @@ mod tests {
         struct InterruptedParent {
             inner: Arc<substrate_shell::OpenedConfigProjectionHsaAuthorityV1>,
             interrupt_after: Mutex<Option<PathBuf>>,
+            interrupt_terminal: Mutex<Option<TerminalPublicationWatch>>,
         }
         impl ConfigProjectionHsaAuthorityV1 for InterruptedParent {
             fn with_locked_parent(
@@ -2347,8 +2616,20 @@ mod tests {
                     -> Result<(), ConfigProjectionFailureV1>,
             ) -> Result<(), ConfigProjectionFailureV1> {
                 self.inner.with_locked_parent(operation)?;
+                let mut terminal = self.interrupt_terminal.lock().unwrap();
+                let terminal_published = terminal
+                    .as_ref()
+                    .map(|watch| watch.current_publication())
+                    .transpose()
+                    .map_err(|error| {
+                        eprintln!("terminal publication watch failed: {error}");
+                        ConfigProjectionFailureV1::UnsupportedSecurityPosture
+                    })?
+                    .flatten()
+                    .is_some();
                 let mut marker = self.interrupt_after.lock().unwrap();
-                if marker.as_ref().is_some_and(|path| path.exists()) {
+                if terminal_published || marker.as_ref().is_some_and(|path| path.exists()) {
+                    terminal.take();
                     marker.take();
                     if std::env::var("E3_E_RECOVERY_PHASE").as_deref() == Ok("writer") {
                         // Simulate loss of the entire service process, without running owner drops.
@@ -2365,6 +2646,7 @@ mod tests {
         let interrupted = Arc::new(InterruptedParent {
             inner: authority.clone(),
             interrupt_after: Mutex::new(None),
+            interrupt_terminal: Mutex::new(None),
         });
         let registry = Arc::new(
             ConfigProjectionRegistryV1::open(interrupted.clone())
@@ -3752,7 +4034,15 @@ os.execv('/bin/sleep', ['/bin/sleep', '600'])
             let terminal_dir = projection_root
                 .join("terminal-child-evidence")
                 .join(&identity.series_id);
-            *interrupted.interrupt_after.lock().unwrap() = Some(terminal_dir.clone());
+            let terminal_watch = TerminalPublicationWatch {
+                before: snapshot_terminal_records(&terminal_dir)?,
+                directory: terminal_dir,
+                projection_ref: response.config_projection.dormant_projection_ref.clone(),
+                world_id: identity.world_id.clone(),
+                world_generation: identity.world_generation,
+            };
+            anyhow::ensure!(terminal_watch.current_publication()?.is_none(), "terminal publication preceded cleanup");
+            *interrupted.interrupt_terminal.lock().unwrap() = Some(terminal_watch.clone());
             anyhow::ensure!(
                 manager.cancel(cancel.clone()).is_err(),
                 "terminal publication return was not interrupted"
@@ -3763,14 +4053,8 @@ os.execv('/bin/sleep', ['/bin/sleep', '600'])
                     && exclusion.acquire_non_e3_child().is_err(),
                 "terminal publication interruption lost ownership"
             );
-            let terminal_paths = fs::read_dir(&terminal_dir)?
-                .map(|entry| entry.map(|entry| entry.path()))
-                .collect::<std::io::Result<Vec<_>>>()?;
-            anyhow::ensure!(
-                terminal_paths.len() == 1,
-                "terminal publication was not unique"
-            );
-            let original_evidence = fs::read(&terminal_paths[0])?;
+            anyhow::ensure!(interrupted.interrupt_terminal.lock().unwrap().is_none(), "current terminal publication did not trigger interruption");
+            let original_terminal = terminal_watch.current_publication()?.context("current terminal publication missing after interruption")?;
             let boundary_id = {
                 let map = manager.preparations.lock().unwrap();
                 map[&request.preparation_id]
@@ -3796,6 +4080,8 @@ os.execv('/bin/sleep', ['/bin/sleep', '600'])
                     && exclusion.acquire_non_e3_child().is_err(),
                 "Revoked publication interruption removed recoverable coordinates"
             );
+            anyhow::ensure!(interrupted.interrupt_after.lock().unwrap().is_none(), "Revoked publication did not trigger interruption");
+            terminal_watch.verify_retry(&original_terminal)?;
             let original_revoked = fs::read(&revoked_path)?;
             let descendant = cgroup_paths[0].join("unexpected-descendant");
             fs::create_dir(&descendant)?;
@@ -3808,6 +4094,8 @@ os.execv('/bin/sleep', ['/bin/sleep', '600'])
                     && exclusion.acquire_non_e3_child().is_err(),
                 "resolved-boundary retry ignored a new descendant"
             );
+            terminal_watch.verify_retry(&original_terminal)?;
+            anyhow::ensure!(fs::read(&revoked_path)? == original_revoked, "Revoked bytes changed during descendant retry");
             let unexpected_config = config_root.join("unexpected");
             fs::write(&unexpected_config, b"nonsecret cleanup interruption")?;
             let config_retry = manager.cancel(cancel.clone());
@@ -3819,19 +4107,19 @@ os.execv('/bin/sleep', ['/bin/sleep', '600'])
                     && exclusion.acquire_non_e3_child().is_err(),
                 "config rejection lost ownership after kernel resolution"
             );
+            terminal_watch.verify_retry(&original_terminal)?;
+            anyhow::ensure!(fs::read(&revoked_path)? == original_revoked, "Revoked bytes changed during rejected retries");
             let cancelled = manager.cancel(cancel.clone())?;
-            anyhow::ensure!(
-                fs::read(&terminal_paths[0])? == original_evidence
-                    && fs::read(&revoked_path)? == original_revoked
-                    && fs::read_dir(&terminal_dir)?.count() == 1,
-                "cleanup retry rewrote terminal observations or Revoked bytes"
-            );
+            terminal_watch.verify_retry(&original_terminal)?;
+            anyhow::ensure!(fs::read(&revoked_path)? == original_revoked, "Revoked bytes changed during cleanup retry");
             eprintln!("E3_MANAGER_INTERRUPTED_TERMINAL_AND_REVOKED_PUBLICATION_EXACT_RETRY");
             eprintln!("E3_MANAGER_RESOLVED_RETRY_DESCENDANT_AND_CONFIG_REJECTION_RETAINED");
             anyhow::ensure!(
                 manager.cancel(cancel)? == cancelled,
                 "cancel retry changed response"
             );
+            terminal_watch.verify_retry(&original_terminal)?;
+            anyhow::ensure!(fs::read(&revoked_path)? == original_revoked, "Revoked bytes changed after completed retry");
             anyhow::ensure!(
                 matches!(
                     manager.prepare(hyper::Body::from(wire)).await,
