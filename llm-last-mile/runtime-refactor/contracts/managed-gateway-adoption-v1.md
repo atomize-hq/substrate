@@ -740,6 +740,38 @@ must exercise the actual service owner/caller path. Historical 57-config/9-world
 cases and scoped Clippy remain historical candidate evidence. This documentation task runs no product
 build, test, probe, installed acceptance or service restart, and consumes no whole-E3-E source review.
 
+## E3-F retained successor and cleanup joins
+
+The normative [E3-F callable ownership clarification](agent-config-projection-v1.md#e3-f-retained-ownership-and-callable-joins)
+settles the successor interfaces; this section is its gateway-owner join. Consume the implemented
+`take_for_v2` and the preceding E3-E transfer rules unchanged. ReadyClosed publication retains the
+original Dormant-acquired Held dispatch lease. The retained V2 owner receives that publication,
+projection capability and gateway owner together, with no credentials or HSA facade in the transfer.
+Its constructor receives the same configured registry/service pair; neither a public registry getter
+nor a reconstructed capability is a substitute.
+
+The gateway alone holds its original private `_exclusion`. The two narrowly named Codex namespace
+operations in the linked clarification borrow that original lease inside this owner; they expose no
+raw lease or generic callback. `allow_exact_member` joins the held member cgroup, exact process/setup
+attestation, current ReadyClosed lineage and original Held lease to the verified boundary effect.
+Only its observed `AllowExactMember` result permits the service's unique Active publication; the
+retained owner's final authority check and gate write remain separate. Resumed turns use the same
+Active/lease/gateway/member-cgroup identity with new exact process/namespace registrations.
+
+Per-turn completion releases the terminal child's namespace slot while its cgroup exists, retaining
+the empty member cgroup and runtime resources. Terminal cleanup uses existing `revoke` for verified
+denial, gateway/probe cleanup and kernel resolutions; it already leaves exclusion release separate.
+The retained owner then completes exact durable consumer-lease release followed by native cleanup through
+`revoke_retained_runtime`, drops its projection capability, and calls existing
+`release_exclusion_after_cleanup_v1`. Any failed stage keeps the same accountable owner and retry
+progress. No lease reacquisition, filesystem lock over a process wait, ambiguous-release re-exec,
+or restart adoption is permitted. E3-E's existing cleanup caller and closure are unchanged.
+
+These are future E3-F requirements, not admission or implementation. The
+[Codex loader fence](agent-config-projection-v1.md#e3-f-codex-loader-and-setup-implementation-fence) and
+[selected deterministic proof route](agent-config-projection-v1.md#e3-f-deterministic-pinned-codex-proof-route)
+retain the existing gateway/probe protocols and distinguish test stimulus from executed proof.
+
 ## Sealed launch capability and inherited inputs
 
 Only world-service may construct `ManagedGatewayLaunchCapabilityV1`. After resolving the published

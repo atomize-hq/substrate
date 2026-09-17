@@ -41,6 +41,11 @@ completion and product landing, with canonical closure on the separate authority
 E3 remains incomplete and E3-F unadmitted/undispatched. This bounded evidence does not promote the
 whole seam: direct Codex/Active/resume and integrated successor proof remain outstanding.
 
+The [E3-F seam/proof clarification](../contracts/agent-config-projection-v1.md#e3-f-callable-ownership-and-deterministic-proof-clarification)
+documents the future callable/ownership, loader-fence and deterministic-proof boundaries on the
+integrated source/authority baseline. E3-F remains unadmitted and undispatched; no runtime proof or
+seam promotion follows from this documentation.
+
 ## AgentConfigProjectionService
 
 Table-column projection: the repeated seam-table header below is a projection of the canonical shared column definitions in [`README.md#shared-crosswalk-table-columns`](README.md#shared-crosswalk-table-columns).

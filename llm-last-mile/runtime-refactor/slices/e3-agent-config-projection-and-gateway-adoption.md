@@ -506,6 +506,20 @@ worker dispatch, D1/E4 work or successor planning.
 
 ### E3-F — retained V2 Codex launch/resume adoption and integrated proof
 
+**Admission status:** unadmitted and undispatched. The documentation-only
+[E3-F seam/proof clarification](../contracts/agent-config-projection-v1.md#e3-f-callable-ownership-and-deterministic-proof-clarification)
+settles shell visibility/authoring, callable local control, retained-owner/lease/cleanup joins,
+the narrow Codex loader/setup fence and one source-grounded deterministic proof route against
+integrated baseline `f2cba8179af91df218158069cf1f47f144a8a43e`. Its
+[future symbol/test fence](../contracts/agent-config-projection-v1.md#e3-f-future-symbol-fence-and-proof-accounting)
+qualifies the catalog below; the
+[gateway successor join](../contracts/managed-gateway-adoption-v1.md#e3-f-retained-successor-and-cleanup-joins)
+consumes the closed E3-E transfer unchanged. Ordinary missing E3-F implementation is future work,
+not a reopening of E3-E. The selected proof mechanism and its explicit acceptance-only support-file
+exception are documented, not executed. Installed artifact/provenance prerequisites remain later
+proof prerequisites. Fresh admission is a separate transition; implementation requires a later
+explicit dispatch. Enclosing E3 remains incomplete.
+
 - **Bounded behavior:** join the sealed preparation to the V2 carrier, advance the exact projection
   lineage from E3-E's ReadyClosed through Active, retain the non-cloneable local Codex adapter and gateway
   capability, and revalidate/release/revoke them across initial and resumed turns.

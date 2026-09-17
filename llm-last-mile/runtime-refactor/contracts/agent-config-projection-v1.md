@@ -5355,7 +5355,527 @@ retained Codex lifecycle, and no E3-F implementation. Later E3-F integration con
 under its own authority. Source inspection for this documentation is not product impact analysis,
 implementation, test execution or E3-E source-review completion.
 
+## E3-F callable ownership and deterministic proof clarification
+
+This section settles the E3-F producer-to-retained-runtime seam against integrated source
+`f2cba8179af91df218158069cf1f47f144a8a43e` (tree
+`b527f39b8c08850e78f2a47c2c3139da04268fb5`). It qualifies only the conflicting visibility,
+callable-result, ownership, and future symbol-fence clauses identified below. It does not change
+projection/configuration semantics, E2 authority, any durable schema/hash, or the completed
+[E3-E closure](../slices/e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17).
+E3-F remains **unadmitted and undispatched**. Missing E3-F code described here is ordinary future
+implementation, not a new prerequisite or an E3-E defect. Fresh admission is a separate transition;
+implementation requires a later explicit dispatch. Nothing in this section is executed proof.
+
+### E3-F shell authoring and preparation custody
+
+The source landmarks are
+[`config_model.rs`](../../../crates/shell/src/execution/config_model.rs),
+[`orchestrator_world_dispatch.rs`](../../../crates/shell/src/execution/orchestrator_world_dispatch.rs),
+[`async_repl.rs`](../../../crates/shell/src/repl/async_repl.rs), and
+[`world_ops.rs`](../../../crates/shell/src/execution/routing/dispatch/world_ops.rs).
+The three E3-C snapshot/resolver/extractor symbols are currently module-private. Their minimum
+future visibility is `pub(super)` within `execution`, including the sealed
+`E3EffectiveConfigResolutionSnapshotV1<'authority>`. Its fields and
+`E3PinnedConfigPatchSourceV1` remain private; no `Clone`, serialization, descriptor accessor, or
+mutable access is added. The sole new snapshot accessor is
+`pub(super) fn effective_config(&self) -> &SubstrateConfig`, borrowing for no longer than `self`.
+The existing signatures of `resolve_e3_effective_config_source_v1` and
+`extract_e3_effective_config_source_v1` otherwise remain unchanged. No general resolver is widened.
+
+`orchestrator_world_dispatch` owns `pub(crate) author_e3_projection_for_spawn` and
+`author_e3_projection_for_fork`. Both borrow the already accepted bootstrap-home facade, exact
+workspace identity, selected V3 inventory and authenticated launch/fork material, and the configured
+`AgentConfigProjectionServiceV1`; their result is the existing owned
+`ConfigProjectionAuthoringInputRefV1` or the existing typed failure mapped at the shell boundary.
+They resolve once, use the snapshot's immutable effective-config view for selection, extract the
+same snapshot, and call `publish_retained_launch_inputs` or `publish_retained_fork_inputs` with a
+single frozen timestamp. The snapshot, bootstrap-home borrow and selected inventory source remain
+live through publication/readback. The extracted owned value is not permission to detach authoring
+from those live source guards. Revalidation failure aborts before preparation; no reread through
+cached/pathname config, second environment parse, resolver duplication or policy recomposition is
+permitted. Startup calls these orchestration functions; it does not import the snapshot into `repl`.
+
+The producer path is complete only with all of these joins:
+
+| Producer/caller | Required future join |
+|---|---|
+| `prepare_authority_bound_spawn_world_worker` → `PreparedSpawnWorldWorkerBootstrap` → `prepare_member_runtime_startup_from_authority_registration` → `PreparedAgentRuntime` | Author from the exact accepted context; retain the frozen authoring/prepare coordinates and cancellation responsibility until submission is resolved. Preserve the E2 snapshot, reservation and launch proof. |
+| `spawn_prepared_world_worker` and its Spawn transport builder; toolbox Spawn through the same preparation | Use the same author/prepare path; FreshSpawn carries its exact `Some` launch proof. No injected-carrier test stands for a production producer. |
+| `fork_world_worker` / `prepare_fork_policy_commitment` and the Fork transport builder; toolbox Fork | Use the authenticated fork parent and immutable child commitment; preserve the specified `None` launch-proof posture. |
+| `continue_world_worker_fork_command_bootstrap_after_delivery` → `build_continue_world_worker_fork_command_transport_request` | Propagate the same prepared Fork carrier into the common fork builder; do not author or prepare twice. |
+| `start_internal_dispatch_member_runtime`, `start_remote_member_runtime_with_prepared`, their binding-retry path, and `execute_spawn_world_worker_stream` | Validate the typed preparation response, then copy its activation carrier unchanged through `MemberDispatchTransportRequest` and the existing strict V2 codec. |
+
+The prepare caller holds transient auth only for the existing authenticated UDS request. It verifies
+schema, canonical response hash, preparation ID/key, timestamps/expiry, exact store/series/fence,
+Dormant/intent/gateway refs and original revision-1 Held lease against the prepared subject and
+existing authoritative readback. It must not accept a self-consistent response for another subject.
+All common V2 fields remain equal to the prepared request, including world/generation, runtime,
+nullable parent/resume fields and the exact E2 carrier. No credential enters `ExecuteRequest`, a
+retained manifest, log, or carrier. Before known failed submission the caller sends the existing
+exact cancel request; a lost cancel is accounted for by the original preparation's expiry/recovery.
+An ambiguous execution submission retries the same carrier and existing E2 identity, never fresh
+preparation or a second execution. `MissingPreparation` after restart requires the already defined
+fresh-auth/new-fence transition. V1/non-E2 paths retain `None` and their existing behavior.
+
+### E3-F local run control and cancellation
+
+Pinned `unified-agent-api = 0.3.7` has public `AgentWrapperRunHandle` fields and public
+`AgentWrapperRunControl`, but `AgentWrapperCancelHandle::new` is **crate-private**. Its private
+Codex event mapper is not callable either. The earlier requirement to preserve the run-control
+surface means observable event/completion/cancel semantics, not construction of that external
+cancel type. No UAA patch/upgrade, private API call, dummy backend launch or local Codex crate is
+allowed.
+
+In `prompt_fulfillment.rs`, add exactly crate-visible `MemberRunControlV1 { handle:
+AgentWrapperRunHandle, cancel: MemberRunCancelV1 }` and a crate-visible, field-sealed cloneable
+`MemberRunCancelV1` whose private alternatives are the unchanged UAA cancel handle and an E3
+cancel-request handle. `PromptFulfillmentBridge::run_control` returns
+`Result<MemberRunControlV1, AgentWrapperError>`. Its V1 alternative moves the existing UAA handle
+and cancel value into that representation without wrapping/replacing the event stream or completion
+future. `for_member_backend` still selects precisely the existing runtime.
+
+The E3 alternative references one exact turn's adapter-owned cancellation state, not an independent
+pidfd or retained owner. `cancel(&self)` is synchronous, idempotent and non-panicking; it records the
+request and wakes the accountable adapter task. A pre-completion request wins completion with
+`AgentWrapperError::Backend { message: "cancelled" }`, even if termination races natural exit;
+after resolved completion it is a no-op. Cancellation requests do not promise successful cleanup.
+The adapter task owns kill/reap and bounded pipe draining, retains progress on failure, and resolves
+completion only after terminal-child accounting. Dropping the consumer stream/future cannot drop
+that task or its live resource owner. Malformed JSONL, pipe failure, timeout and unwind retain the
+same cleanup obligation. Event-channel backpressure cannot prevent cancellation/reaping.
+
+The public `unified-agent-api-codex = 0.3.7`
+`JsonlThreadEventParser::{new,parse_line}` supplies parsing; the local adapter owns a bounded private
+normalizer matching the pinned UAA Codex mapping and bounds. It emits the existing
+`AgentWrapperEvent` kinds/channels/tool facets and completion/session-handle shape consumed by
+`surfaced_uaa_session_id_from_data`, `frames_from_completion`, bootstrap registration and E2 event
+projection. A valid `thread.started` ID is retained and exact-matched on resume; exit zero alone
+without the required session/completion evidence is not resumability. The final message comes from
+the confined output file with the existing bounded completion rules. UAA's private mapper is source
+reference, not a newly exported dependency API.
+
+The complete mechanical consumer fence includes `ActiveBootstrapRuntime.cancel`,
+`ActiveSubmittedTurn.cancel`, all three `run_control` destructuring sites in
+`MemberRuntimeManager::{launch,submit_turn,submit_e2_turn}`, and
+`ActiveMemberRuntime::{cancel_bootstrap,cancel_bootstrap_if_span_matches}` plus the existing signal,
+registration-error, disconnect and unregister call sites that use those fields. V1 cancel delegates
+unchanged. An ordinary E3 turn cancel targets only its turn; only explicit terminal unregister,
+invalid authority/generation, bootstrap without a resumable session, or runtime-ending cancellation
+enters retained revocation. A bare sum type that leaves a UAA-only stored cancel slot or bypasses
+completion/session normalization is not sufficient.
+
+### E3-F retained ownership and callable joins
+
+Consume unchanged
+[`E3ConfigProjectionPreparationManagerV1::take_for_v2`](../../../crates/world-service/src/e3_config_projection_prepare.rs)
+and the [E3-E one-time transfer](managed-gateway-adoption-v1.md#e3-e-activation-publication-and-ownership-seam).
+`WorldService::execute_stream` selects V2 before non-E3 lease acquisition or helper/world side
+effects, validates common placement/E2 bindings, calls `take_for_v2(&request)` once and moves the
+result into crate-visible, field-sealed `MemberRuntimeLaunchAdmissionV2`. Nonstream member dispatch
+still rejects; V1 conversion and behavior stay unchanged. The manager receives the already
+configured projection service, its exact registry and the same exclusion instance; its default
+constructors reject V2. In `WorldService::new_linux`, clone the locally constructed registry Arc
+before moving it to preparation-manager construction and pass it together with the matching service
+Arc into `MemberRuntimeManager::with_replay_and_e3_projection_service`. Retain those paired options
+in the manager and each E3 owner; missing or unequal configured authority fails before transfer.
+This is construction-time injection of the existing authority, not a registry getter, new registry
+or HSA facade in the sealed transfer.
+
+`launch_v2` consumes that admission. It does **not** reactivate the gateway or resolve the original
+Dormant lease as a ReadyClosed lease. The transferred publication, original non-cloneable projection
+capability, ReadyClosed ref and gateway owner move together into the retained E3 owner. The E3-E
+publication retains its original Dormant `published_head` and original Held lease. Add private
+Codex publication/retry progress to that same publication, rather than rewriting those fields.
+The preparation contains no live credential or HSA facade after transfer. No accessor is added to
+recover either, and `take_for_v2` is outside the future edit fence.
+
+The illustrative retained-state fields earlier in this contract are an ownership inventory, not
+permission to duplicate leases. In particular, `privileged_child_exclusion_lease` is physically
+owned **only** by `E3GatewayRuntimeAuthorityV1::_exclusion`, retained inside this same E3 owner;
+`consumer_lease` denotes the original publication's Held dispatch lease. The adapter owns its pinned
+artifact/native resources; the original projection capability retains its accepted-home authority
+and live-capability accounting. These are constituents of one non-cloneable retained owner, not a
+new capability resolved from an Active ref. Do not add a second lease/capability or change either
+lease's acquisition coordinates.
+
+The following are exact future operational boundaries. Shared types live in existing
+`config-projection/src/service.rs` and are exported through its existing `pub use service::*` only
+where world-service must call them. They are process-local, field-sealed, non-Serde, non-Clone and
+have no public constructor. This adds no durable schema or independent resolver/store.
+
+- `E3CodexRuntimeInputsV1` holds the exact record, source and already specified realization
+  manifests; held wrapper/Codex/source/config/realization/system-empty/workspace/output-directory
+  descriptors; and the original store/series/fence/lease/ACK bindings. Only the service/registry
+  construct it. Its purpose-specific read-only `record`, `source_manifest`, `realization_manifest`,
+  `wrapper_fd`, `codex_fd`, `source_root_fd`, `source_config_fd`, `realization_root_fd`,
+  `system_empty_fd`, `workspace_fd`, and `output_directory_fd` methods return references or
+  `BorrowedFd<'_>` bounded by `&self`; none extracts, duplicates or reopens authority. The complete
+  value moves once into `E3Codex0125LaunchAdapterV1::new`; it remains there through cleanup. The
+  adapter's crate-visible `retained_inputs(&self) -> &E3CodexRuntimeInputsV1` allows only the exact
+  service validation/publication calls below; mutable cleanup is performed by its terminal `cancel`
+  branch borrowing the service and publication. No owned descriptor or mutable input accessor escapes.
+- `E3CodexTurnAuthorityV1<'a>` is a borrowed tagged input: initial exact
+  `&E2MemberLaunchActivationCarrierV1` plus bootstrap run/span IDs, or resumed exact
+  `&MemberTurnSubmitRequestV1` plus validated recorded Codex session ID/span ID. The caller has
+  already performed the existing authenticated E2 admission/current-parent/durable-join checks;
+  this tag grants no authority independently. The service equality-joins the supplied immutable
+  snapshot/cap subject with the retained projection; it does not reconstruct E2 or accept a new
+  caller E3 ref. All borrowed material outlives the call and is never stored as an unchecked pointer.
+
+| Operation and minimum visibility | Producer/caller, input/result, ownership and failure contract |
+|---|---|
+| `AgentConfigProjectionServiceV1::prepare_codex_launch` — public across the existing crate edge | `(&self, &mut E3PreparedRetainedLaunchPublicationV1, &PublishedConfigProjectionCapabilityV1, &ConfigProjectionRefV1 /* transferred ReadyClosed */, &E3CodexTurnAuthorityV1, Timestamp) -> Result<E3CodexRuntimeInputsV1, ConfigProjectionFailureV1>`. Called only by initial `launch_v2`; validates current authority and constructs/pins native realization and artifact inputs. Retain partial native/resource progress in the publication before each effect; errors borrow, never consume, its owner. Exact retry returns only the same validated realization; successful resource transfer occurs once. |
+| `ConfigProjectionRegistryV1::realize_native_root` — `pub(crate)` | `(&self, &mut E3PreparedRetainedLaunchPublicationV1, &PublishedConfigProjectionCapabilityV1, &ConfigProjectionRefV1, Timestamp) -> Result<E3CodexRuntimeInputsV1, ConfigProjectionFailureV1>`. Called only by `prepare_codex_launch`; source manifest, original lease and frozen native progress come from the validated publication/current-authority join, not caller paths. Construct/pin the already specified `NativeProjectionRealizationManifestV1`; retain partial progress in the publication before effects. |
+| `ConfigProjectionRegistryV1::recover_native_realization` — `pub(crate)` | `(&self, &mut E3PreparedRetainedLaunchPublicationV1, &PublishedConfigProjectionCapabilityV1, &ConfigProjectionRefV1) -> Result<(), ConfigProjectionFailureV1>`. Called by `prepare_codex_launch` before retrying realization or by terminal cleanup. Reconcile only the same frozen publication progress and exact existing native manifest; no new timestamp, root adoption after possible child ownership, or second resource transfer. Restart uses the existing durable registry recovery posture, not this live-owner call. |
+| `AgentConfigProjectionServiceV1::validate_resumed_turn` — public | `(&self, &E3PreparedRetainedLaunchPublicationV1, &PublishedConfigProjectionCapabilityV1, &ConfigProjectionRefV1 /* retained Active */, &E3CodexRuntimeInputsV1, &E3CodexTurnAuthorityV1) -> Result<(), ConfigProjectionFailureV1>`. Used by the retained owner before preparation and again before final release; no new resources, lease, projection or gateway are produced. For initial release the same method validates the initial tag against the just-published Active ref. |
+| `AgentConfigProjectionServiceV1::release_codex_launch` — public | `(&self, &mut E3PreparedRetainedLaunchPublicationV1, &PublishedConfigProjectionCapabilityV1, &ConfigProjectionRefV1 /* ReadyClosed */, &E3CodexRuntimeInputsV1, &E3ChildProcessRegistrationV1, &CodexSetupReadyAttestationV1, &GatewayAccessBoundaryV1, Timestamp) -> Result<ConfigProjectionRefV1, ConfigProjectionFailureV1>`. Called by the initial owner after parent-validated setup and exact-member permission. Freeze one Active record/ID/time before its first write and publish its unique successor through `publish_active`; it does not write the process gate. Lost returns retry those exact bytes. |
+| `ConfigProjectionRegistryV1::publish_active` — existing public operation, narrowed guard | Retain its existing expected-head/record arguments and add `&ConfigProjectionConsumerLeaseV1` for the original Held dispatch lease. Repeat the complete retained-lineage/lease guard in the same parent-before-child publication transaction. Exact current Active retry returns exact readback; a different successor or retired/stale/released lease fails. Existing E3 tests mechanically supply their correct lease. No V1 caller gains Active authority. |
+| `AgentConfigProjectionServiceV1::revoke_retained_runtime` — public | `(&self, &mut E3PreparedRetainedLaunchPublicationV1, &PublishedConfigProjectionCapabilityV1, &ConfigProjectionRefV1 /* last owned head */, &E3TerminalChildQuiescenceEvidenceV1, &GatewayAccessBoundaryV1 /* Revoked */, Option<&mut E3CodexRuntimeInputsV1>, Timestamp) -> Result<ConfigProjectionConsumerLeaseV1, ConfigProjectionFailureV1>`. Called only after gateway/member cleanup has produced exact terminal evidence and verified denial. It authenticates that evidence, records the required existing terminal/revocation state, releases/readbacks the original durable consumer lease, then performs descriptor-validated native cleanup in that existing order. `None` is legal only before successful input transfer and uses the publication's partial native progress; after transfer the exact retained inputs are mandatory. The returned value is its sole Released successor; success also attests completed native cleanup. Frozen progress/time survives every error/retry. It does not close a kernel owner or release exclusion. |
+
+The service's current-authority checks use a single narrowly crate-visible registry operation
+`validate_retained_codex_authority_v1(&self, &E3PreparedRetainedLaunchPublicationV1,
+&PublishedConfigProjectionCapabilityV1, &ConfigProjectionRefV1) ->
+Result<(AgentConfigProjectionRecordV1, NativeProjectionSourceManifestV1,
+ManagedGatewayActivationAckV1, GatewayAccessBoundaryV1), ConfigProjectionFailureV1>`,
+returning owned exact nonsecret readback values under the existing transaction. Its private
+validation is shared with native creation/recovery and `publish_active`; it is not a general
+ref-to-capability resolver. It joins configured store/root and non-retirement; original Dormant
+acquisition, deterministic preparation consumer ID, revision-1 Held lease and its current durable
+head; exact Prepared → Delivered → Consumed/ACK/ReadyClosed lineage; immutable identity, E2,
+artifacts and native source; and the unique same-fence Active successor when required. No public
+registry getter or HSA callback escapes to world-service. Filesystem transactions complete before
+any process, socket, pipe, namespace handshake or reap wait. Repeat guards immediately before
+publication and release; a previous check is not a permanent authorization token.
+
+Same-owner namespace access is by two crate-visible operations on the existing gateway owner,
+not by exposing `_exclusion`:
+
+```rust
+fn install_codex_user_namespace_v1(
+    &mut self, parent_setup_socket: &OwnedFd,
+    identity: &ConfigProjectionIdentityV1,
+    child: &E3ChildProcessRegistrationV1,
+    requirement: &E3UserNamespaceRequirementV1,
+) -> anyhow::Result<()>;
+fn release_codex_user_namespace_v1(
+    &mut self, child: &E3ChildProcessRegistrationV1,
+) -> anyhow::Result<()>;
+```
+
+The adapter/retained owner calls these with the same attempt's exact Codex-role registration.
+The first delegates to existing `install_and_validate_e3_child_user_namespace_v1` with an exclusive
+borrow of the original lease. The second delegates to its existing
+`release_terminal_child_user_namespace_v1`, while the registered cgroup still exists. Both validate
+store/series/fence/world/generation/role/registration against the retained gateway attempt. Partial
+namespace progress remains in the existing lease slots; never repeat setup on an already registered
+child. Recovery releases that slot only with the existing terminal/never-retained rules. No
+lease clone, reacquisition, raw accessor, callback, or new namespace ledger is allowed.
+
+`E3GatewayRuntimeAuthorityV1::allow_exact_member` is crate-visible and borrows `&mut self`, the
+configured `&ConfigProjectionRegistryV1`, exact ReadyClosed ref, original Held consumer lease,
+`&E3ChildProcessRegistrationV1` and parent-validated `&CodexSetupReadyAttestationV1`; it returns the
+existing owned `GatewayAccessBoundaryV1` with `AllowExactMember`. It validates the same lineage,
+held listener/network/cgroup/rule handles and live gateway security, then uses the existing
+intent/effect/readback machinery to change only its boundary to the exact member cgroup. Keep
+partial kernel progress before effects; an equal live retry reobserves the same rule handles and
+bytes, while a changed or ambiguous rule set revokes. This result is observed authorization input
+to `release_codex_launch`, not Active publication or permission to exec by itself.
+
+The adapter's `prepare` and `spawn_setup_wrapper` borrow its retained inputs and exact turn/E2
+material; retain output-file identity, pidfd, child registration, pipes and gates before each
+fallible effect; call the same gateway owner's namespace-install operation; and return only a
+prepared-turn handle tied to that owner. `validate_setup_ready` checks wrapper evidence and
+independently observes descriptors/bytes/mounts. `release_final_exec` writes the single gate byte
+only when called by the retained owner after the service check, exact-member permission and Active
+publication. `cancel` only requests/executes cleanup of that exact adapter turn. These cataloged adapter operations and the narrowly typed immutable `retained_inputs` borrow never
+call UAA or acquire another projection/exclusion lease. The retained owner supplies the adapter with
+a temporary exclusive gateway-owner borrow for namespace setup/release; the adapter never stores
+that reference across the call or owns a second gateway. Its constructor consumes the inputs and
+returns the field-sealed adapter without spawning; fallible setup remains in `prepare`. `prepare`
+returns `Result<(), ConfigProjectionFailureV1>` after recording the exact turn in the adapter;
+`spawn_setup_wrapper` returns `Result<E3ChildProcessRegistrationV1, ConfigProjectionFailureV1>`;
+`validate_setup_ready` returns the validated owned `CodexSetupReadyAttestationV1` or a typed failure;
+`release_final_exec` returns `Result<MemberRunControlV1, AgentWrapperError>`; and `cancel` returns
+`Result<(), ConfigProjectionFailureV1>` only after the requested per-turn or terminal cleanup has
+completed. Error values never contain or discard the resource owner. Temporary manifest/registration/
+attestation values carry equality evidence, not new authority.
+
+The one E3 control mutex serializes bootstrap and resumed `Preparing → Prepared → Released → Idle`
+with `Active → Revoking → Revoked`. Release active-member registry locks before acquiring it;
+never take the legacy `active_turn_span_id` mutex under it. Reserve a turn under control, release
+control during process/pipe waits, and recheck the exact turn/lifecycle before retaining Prepared.
+The final authority revalidation and one gate write linearize under control while lifecycle is
+Active, with no filesystem-authority lock held during that write. Revocation that wins first
+prevents preparation or release. A gate error after write may mean execution: preserve the existing
+E2 `CallEntered`/`LaunchIndeterminate`/Started/Completed truth and never re-exec that turn.
+
+Initial admission owns resources before resumable registration. Extend only the existing
+`ActiveMemberRegistry` with a private cleanup-only E3 ownership slot keyed by exact participant and
+fence; put the provisional owner there immediately after transfer and before further fallible
+setup, and atomically move it to the active slot only on valid registration. This is in-process
+custody inside the existing manager, not a new store, admission route or resumable member. A failed
+response, setup, registration or teardown retains that slot and its exact retry progress. Terminal
+unregister similarly retains the owner there until cleanup completes; it cannot remove the last
+reachable owner and return success on cleanup error. Existing manager operations retry only its
+pending cleanup, with no fresh launch, generic supervisor or new lifecycle framework.
+
+Per-turn completion/cancel first accounts for the exact child and descendants, closes turn gates,
+publishes/validates terminal evidence, and releases its namespace slot **before** cgroup removal.
+The original member cgroup is retained empty between turns, so its exact boundary identity remains
+valid; it is removed only at terminal cleanup. Each resumed process gets a new registration and
+namespace slot within that same held cgroup. It repeats the three credential/cache-name absence
+checks without reading/deleting any present entry. Only successful accounting clears the matching turn to Idle; source/realization descriptors,
+Active head, original Held lease and gateway stay retained for both sequential resumed E2 turns.
+A cleanup error retains the turn/owner and prohibits another turn. A forbidden entry or invalid
+binding makes the entire runtime Revoking.
+
+Terminal cleanup uses the same retained owner for initial partial setup and resumed turns: mark
+Revoking; close all release channels; cancel and account for preparing/released Codex children;
+release their exact namespace slots while cgroups exist; revoke and verify the gateway boundary;
+then use the existing gateway `revoke(Live(&mut gateway), &registry)` lifecycle for gateway/probe
+terminal evidence, their namespace release and kernel effect resolution. That operation already
+leaves exclusion release separate. The retained owner calls `revoke_retained_runtime` with the
+retained terminal/boundary evidence and exact native inputs (or partial publication), retains its
+Released readback, and only after success drops the projection capability and calls the existing
+`release_exclusion_after_cleanup_v1(&mut self) -> anyhow::Result<()>`. No new gateway finalization
+mode or lease accessor is needed. A failure after durable lease release retains the same owner, descriptors and exclusion until native
+cleanup completes; retry accepts only that exact Released successor for cleanup, never launch. A
+lost durable release return retries exact readback before native cleanup or exclusion release. The default
+E3-E posture/order stays unchanged. Every stage
+retains successful-step markers; retry never interprets arbitrary absence as this owner's removal.
+Drop is only fail-closed poisoning, not cleanup. Restart has no live handles to adopt: use existing
+recovery to revoke/kill exact remnants and release their original lease; require a fresh authenticated
+preparation/fence for later execution. It never reconstructs an Active adapter from a pathname/ref.
+
+### E3-F Codex loader and setup implementation fence
+
+The required fingerprint remains the exact domain-separated source-closure hash specified in
+[Exact projection content](#exact-projection-content). The integrated wrapper's
+`write_setup_ready_attestation` currently copies `projection_identity_hash` into that field;
+that unadopted Codex branch is incomplete and must be replaced, not legitimized.
+
+Only the Codex branch of existing `E3CodexLaunchPlanV1` gains the already specified complete
+`CodexAmbientConfigClosureV1`, source/realization manifests and the immutable config identity/bytes
+needed for the source → realization → mounted-object join. These are bounded per-launch inputs
+covered by the existing launch-plan hash, not new authority or a durable schema. The adapter
+constructs them from retained descriptors and exact service readback, never from caller JSON or
+path assertions. Its matching local plan encoding must be byte-identical to the wrapper's strict
+decoder; no new transport/dependency crate is introduced.
+
+In `crates/world-service/src/bin/substrate-world-entry.rs`, the exact future source fence is
+`E3CodexLaunchPlanV1`, Codex-only calls in `main`, `validate_codex_plan`, `bind_codex_mounts`, the
+Codex call in `apply_authenticated_world_fs_enforcement`, the Codex branches of
+`write_setup_ready_attestation` and `exec_pinned_child`, and a private
+`validate_codex_loader_realization_v1` shared by those Codex branches. Preserve the existing
+`await_final_exec` byte protocol; add only its Codex caller's immediately-after-gate revalidation.
+Do not alter gateway/probe branches, generic descriptor/security protocols, CA resolver, privilege
+transitions, seccomp or Landlock rules. Directly necessary colocated Codex tests are included.
+
+Parent and wrapper separately validate source descriptors/manifests, real runtime identities,
+readonly mounts and config bytes, exact ordered loader locators/dispositions, project-root/trust
+algorithms, and all required absences. `Codex0125ProjectionV1::validate_setup_ready` consumes the
+expected native closure and the observed attestation plus descriptor-backed parent observations;
+its result is `Result<(), ConfigProjectionFailureV1>`, never a rewritten fingerprint. Distinct source,
+realization and mount inodes are not conflated. Parent validates after setup and immediately before
+the gate; wrapper validates before attesting and again after the gate. Only the successful exact join
+permits the unchanged source fingerprint. Mutated config, substituted directory/mount, extra loader,
+newly enabled layer, invalid hash, missing observation or present/unreadable credential/cache name
+fails before execution. The existing post-turn absence wall remains mandatory.
+
+### E3-F deterministic pinned-Codex proof route
+
+The selected route is **real pinned Codex → real pinned Substrate gateway → a deterministic local
+HTTPS upstream responder in a disposable acceptance namespace**. It exercises the existing provider
+implementation and fixed OAuth endpoint, not an injected `GatewayProvider`. Neither Codex nor the
+gateway executable is replaced by a fake. `CODEX_RS_SSE_FIXTURE` is not used or authorized by this
+route: pinned [flags](https://github.com/openai/codex/blob/rust-v0.125.0/codex-rs/core/src/flags.rs)
+and [client](https://github.com/openai/codex/blob/rust-v0.125.0/codex-rs/core/src/client.rs)
+show it returns before provider setup. Offline fixture success cannot establish gateway access,
+denial or provider-path execution.
+
+**Acceptance-only input exception.** A privileged, explicitly invoked E3 integration test may prepare
+an attempt-owned mount/network namespace with root-owned, descriptor-pinned support files at the
+existing logical paths: `/etc/hosts` maps only `chatgpt.com` to the local responder at
+`127.0.0.2`; `/etc/ssl/certs/ca-certificates.crt` contains only that attempt's test trust root.
+The responder listens at `127.0.0.2:443` in the world's network namespace, outside the service's
+managed child/cgroup ownership tree. Its private key and synthetic expected token remain in the
+trusted fixture controller, never in Codex, its tools, the accepted home or gateway config.
+Use the existing common support-file/CA validation and source-publication machinery to bind the
+actual namespace-local objects, with their real hashes/inodes/ownership. Do not edit host `/etc`,
+host trust, host DNS, host routing or production source heads, transplant an old support manifest,
+mount a different file after publication, use TLS-verification bypass, or fabricate provenance.
+A private `/etc` tree must keep the CA directory/endpoint on the same permitted mount/filesystem
+under the existing resolver rules; single-file bind substitution is not an exemption from them.
+
+The fixture world has no external interface/default route and no reachable host/provider network;
+all DNS/proxy environment and alternate provider escape paths are absent. Any required network
+setup occurs before E3 exclusion and is separately accounted for by the test controller. The
+responder is trusted test infrastructure, not a service helper or member; it cannot be used as a
+Codex-denial probe. The test must positively establish local connectivity/TLS and externally closed
+routing before admitting synthetic credentials. A containment failure aborts the test, rather than
+trying a real provider. No production option, environment selector, accepted input field or provider
+route is added. Ordinary production launch cannot select these support inputs; only the privileged
+test namespace contains them. This exception authorizes a future test stimulus, not execution,
+installation or publication during this documentation packet.
+
+The authenticated preparation stimulus uses the existing `GatewayIntegratedAuthPayloadV1` with
+`backend_id: "cli:codex-world"`, `cli_codex: Some` containing an attempt-random synthetic
+`access_token` and explicit nonempty synthetic `account_id`, and `api_env: None`. It follows the
+existing one-time FD path. [`CodexAuthSource::resolve` / `resolve_selected_mode`](../../../crates/gateway/src/auth/codex_auth_context.rs)
+accept that explicit account binding without JWT fallback; the real provider sends the token in
+`Authorization: Bearer ...` and the account in `ChatGPT-Account-ID`. The responder accepts only that
+exact pair. No actual OpenAI token/account, refresh endpoint, host token store or failed-auth response
+is used. This proves the integrated credential/request path against a synthetic local peer, not
+OpenAI authentication. Test key/controller-secret files remain outside all child grants.
+
+Source grounding at the integrated baseline:
+
+| Executable boundary | Callable source and implication |
+|---|---|
+| Codex command/session | Pinned [exec CLI](https://github.com/openai/codex/blob/rust-v0.125.0/codex-rs/exec/src/cli.rs) and [exec implementation](https://github.com/openai/codex/blob/rust-v0.125.0/codex-rs/exec/src/lib.rs) implement initial stdin and `exec ... resume <session-id> -`. Use exactly the production argv and eight-key environment above, including `model = "codex"`; no `-c`, provider/model override or extra environment key. |
+| Gateway real request path | [`build_e3_in_world_app` / `e3_validate_member_identity`](../../../crates/gateway/src/server/mod.rs) route the identity-checked `POST /v1/responses` to [`handle_openai_responses`](../../../crates/gateway/src/server/openai_responses.rs), its existing model mapping and the real provider. No conformance-harness registry injection is used. |
+| Fixed upstream/TLS | [`OpenAIProvider::{effective_base_url,codex_responses_endpoint,send_message_stream}`](../../../crates/gateway/src/providers/openai.rs) retain `https://chatgpt.com/backend-api/codex/responses`, OAuth headers and the existing `codex` → `codex-mini-latest` mapping. `Client::new()` uses the gateway's declared native-TLS features. Locked `native-tls 0.2.18::TlsConnector::new` calls `openssl-probe 0.2.1::probe` and `load_verify_locations`; its first Linux certificate file is the already allowed `/etc/ssl/certs/ca-certificates.crt`. `connect` keeps hostname verification. Pin these exact Cargo.lock versions/source checksums in later proof. |
+| Responder | A bounded test-local Python `ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)` with `load_cert_chain(cert, key)` and `wrap_socket(..., server_side=True)` supplies TLS to an HTTP/1.1 socket server. [Python SSL API](https://docs.python.org/3/library/ssl.html) documents these actual calls. Generate a short-lived test certificate with DNS SAN `chatgpt.com` using `openssl req -x509 -newkey rsa:2048 -noenc -keyout <key> -out <cert> -days 1 -subj /CN=chatgpt.com -addext subjectAltName=DNS:chatgpt.com`; pin its bytes and validity. [OpenSSL req](https://docs.openssl.org/3.6/man1/openssl-req/) defines these parameters. Treat this self-signed certificate as the attempt-only trust anchor; never install its key/trust on the host. |
+| Response format | The responder accepts only `POST /backend-api/codex/responses`, the expected synthetic bearer/account binding and existing routed model. Reply `200`, `Content-Type: text/event-stream`, connection close, with blank-line-separated `event: <type>` / `data: <JSON>` frames. The integrated gateway's `CodexSemanticAssemblyState` and its colocated `codex_semantic_sync_assembles_text_and_tools_from_event_family` show the accepted event family; pinned [Codex response parser](https://github.com/openai/codex/blob/rust-v0.125.0/codex-rs/codex-api/src/sse/responses.rs) and [source fixture helpers](https://github.com/openai/codex/blob/rust-v0.125.0/codex-rs/core/tests/common/responses.rs) establish the downstream protocol. |
+
+For each success response, emit `response.created` with a unique response ID;
+`response.output_item.added` with `output_index:0` and an assistant message with a unique item ID;
+`response.output_text.delta` with `output_index:0,content_index:0,delta:<turn-marker>`;
+`response.output_text.done` and `response.output_item.done` with the same complete text/message;
+and `response.completed` whose response has that ID, `status:"completed"`, complete output and
+numeric usage (`input_tokens`, `output_tokens`, `total_tokens`). All JSON `type` values equal their
+event names. No `[DONE]` without completed evidence, invented JSONL on stdout, or auth error is a
+success stimulus. The local responder gates each response on the exact expected request/turn marker
+and records sanitized request-body/model/path/sequence evidence, never credential bytes. Unexpected
+request, retry or sequence is a test failure unless the specific retry negative is being exercised.
+
+Run an initial retained E2 bootstrap and then **two sequential resumed E2 turns**, with unique prompt
+and reply markers. Preserve one session ID and the same store/series/fence/native roots, Active
+ref/ACK, original Held lease, gateway instance/listener and world generation. Pin each distinct child
+pidfd/start time, namespace, E2 turn/snapshot, output file, setup attestation and gate outcome.
+Success requires real `thread.started`, matching session ID, assistant output/last-message bytes,
+`turn.completed`, exit zero, existing E2 completion and post-turn absence/quiescence readback.
+Pinned [JSONL emission](https://github.com/openai/codex/blob/rust-v0.125.0/codex-rs/exec/src/event_processor_with_jsonl_output.rs)
+implements these events, and [resume tests](https://github.com/openai/codex/blob/rust-v0.125.0/codex-rs/exec/tests/suite/resume.rs)
+show the session rollout is appended. Require the second and third upstream request to carry the
+corresponding accumulated conversation markers; a fresh session returning the right text fails.
+
+Loader differential comparisons use that same official executable/source pin and fixed invocation.
+In isolated source-matched layer permutations, use distinguishable nonsecret model/config poison
+values and compare native loader behavior to `validate_loader_inputs`: the exact project-root-to-cwd
+`.codex/config.toml` chain is disabled by the rendered trust decision; standalone `cwd/config.toml`
+and an extra git-root layer never contribute. Allowed production cases must reach the real gateway
+with the expected model/provider and empty MCP/features. Enabled conflicting system/user/project,
+profile/thread/CLI/env cases must produce the specified rejection/different native result in the
+separate loader comparator, never be silently accepted by E3. Comparator-only poisoned inputs are
+not runtime authorization, and their failures are not successful retained turns. Use the actual
+source/realization/mount descriptor chain and parent/wrapper fingerprint comparisons for E3 setup;
+Codex has no claimed origin-attestation API. Preserve the pinned ephemeral-store/no-cloud branch
+source checks and before/after-turn three-name absence negatives.
+
+The same integrated acceptance subject must also demonstrate the existing security, lifecycle and
+denial walls. Request/response evidence proves real Codex-to-gateway/provider-adapter execution;
+it does not prove external OpenAI credential validity or live provider service behavior. Join both
+same-backend siblings by their distinct series/root/grant/cgroup/namespace identities. For dynamic
+cross-root/cross-gateway denial, the responder may emit the pinned Responses `function_call` event
+with the exact shell tool advertised in that real Codex request (`shell` command vector,
+`shell_command` command string, or `exec_command` `cmd` with `login:false,tty:false` as selected by
+the pinned tool configuration). Emit the call as `response.output_item.added` and `response.output_item.done` with
+`item:{type:"function_call",call_id:<unique-id>,name:<advertised-name>,arguments:<JSON-string>}`,
+then `response.completed`. The arguments encode bounded read/connect commands, use the advertised
+tool schema verbatim, and set `login:false` wherever supported. Require Codex to execute the call
+and send its matching `function_call_output` in the next real gateway request; the responder then
+sends the final assistant success sequence. Pin the tool call ID, real command-execution event,
+descendant PID/start time, inherited net/mount/user namespaces, cgroup and enforcement posture.
+Only that demonstrated descendant/enforcement join supports a statement about Codex's process tree;
+a separate responder, readiness process or host probe cannot substitute. Baseline positive controls
+must succeed. Kernel denial readback after terminal revocation remains tied to the original boundary
+and cgroup evidence, not a request from an already dead child.
+
+With deterministic responder barriers, retain all existing submit/unregister, submit/restart,
+prepare/revoke and final-release/revoke race requirements, ambiguous-release no-reexec, initial and
+resumed cancellation, partial cleanup retry, terminal revocation, protected namespace/memory/FD
+controls and secret-canary observations. Wrong member/header, sibling grant, stale/tampered
+inventory/artifact/head/lease/ACK/E2, retirement, descriptor/mount substitution and mixed-version
+negatives remain mandatory. Add wrong TLS hostname, absent/wrong test trust root, malformed SSE,
+missing completion and wrong resume ID controls: none counts as a successful turn. The fixture
+private input/key storage is explicitly excluded from public-output canary scans; gateway, Codex,
+logs/traces/receipts/manifests and runtime files retain their existing no-secret requirements.
+
+All three successful turns and gateway/provider-path claims use one integrated lane. Loader
+comparators and existing E3-D/E3-E evidence contribute only their named narrower claims; they share
+exact executable/source/security protocol identities where reused, not fabricated process/lease
+identity. The fixture is an upstream server, not a fake Codex executable or a replacement gateway.
+No test-only environment exception is needed. There is no claim of an external provider response,
+production host trust modification or acceptance of failed authentication.
+
+### E3-F future symbol fence and proof accounting
+
+The following narrow additions qualify the existing catalog only for a later admitted E3-F packet.
+All are ordinary future implementation unless explicitly marked consumed unchanged above:
+
+- Shell: the three `config_model` visibility changes and one immutable accessor; the two authoring
+  functions and the existing retained Spawn/Fork/toolbox/continue-fork preparation, submit/cancel
+  and transport builders named above; only carrier/custody fields in
+  `PreparedSpawnWorldWorkerBootstrap` and `PreparedAgentRuntime`; and their existing startup/binding-
+  retry callers. `world_ops` is limited to carrier propagation through its cataloged builders.
+  No retained-worker authority, StateStore, manifest or E2 mutation is included.
+- World-service: cataloged construction/injection, `execute_stream`, common placement/binding
+  validation and version-preserving conversion; V2 admission, `launch_v2`, retained owner/control
+  types, private cleanup-only custody inside `ActiveMemberRegistry`, and E3 branches in existing
+  launch/submit/register/unregister/bootstrap/turn lifecycle methods; the exact control/cancel
+  types and stored consumers above; and the six cataloged local adapter methods plus their private
+  JSONL/bounds/descriptor/pipe helpers and `retained_inputs`; construction in `service.rs::new_linux`
+  and `member_runtime.rs::with_replay_and_e3_projection_service` adds only paired existing service/
+  registry injection. `lib.rs` adds only the existing cataloged module declaration.
+- Config-projection: the four service operations, private same-publication Codex progress, the
+  two sealed process-local input types and their exact accessors; the two cataloged native
+  realization/recovery operations, narrow retained-lineage validator and original-lease guard on
+  `publish_active`; and `Codex0125ProjectionV1::validate_setup_ready`. Implement the already
+  specified realization manifest type in `lib.rs` if still absent; do not invent another schema.
+- Gateway owner: `allow_exact_member`, the two narrow same-owner Codex namespace operations,
+  and their necessary private retained progress/validation. Consume existing `revoke` and
+  `release_exclusion_after_cleanup_v1` unchanged; the default E3-E path stays unchanged. Wrapper:
+  only the Codex plan/loader/mount/setup/final-release symbols in the preceding subsection.
+- Tests: directly necessary colocated E3 tests in those exact source owners, and extensions only
+  to `crates/config-projection/tests/agent_config_projection_v1.rs` and
+  `crates/world-service/tests/e3_config_projection_activation_v1.rs`. The latter owns the bounded
+  namespace/TLS responder fixture using existing OS/Python/OpenSSL interfaces, not a new product
+  service, script, dependency or provider hook. Keep V1 fixture values/assertions/skips unchanged.
+
+Minimum tests cover every authoring producer/response/submission cancellation path; sealed snapshot
+visibility/lifetime; both stored cancel consumers and event/session/completion normalization;
+one-time transfer, original lease, native exact retry/recovery, Active publication and descriptor
+ownership; same-owner namespace setup/release and cleanup failure retention; the loader chain and
+wrong-fingerprint/mount/absence negatives; all three real integrated turns; all named race/security/
+denial/negative controls; and the applicable exact-baseline differential at
+`2b2fc6c50b40046dbeaeb5b316562fbd96480a2a`. Reuse causally unchanged E3-A–E proof. New E3-F tests have
+no fictitious baseline run. Builds and runtime execution are later admission/dispatch work.
+
+Installed provenance is an environment prerequisite, not a prerequisite to this documentation.
+The earlier report that the fixed Codex source store was absent and archive availability unknown
+remains retained evidence, not a fresh host observation. Before dependent installed proof, use the
+existing installer/publication protocol under separate authorization for the official Codex 0.125.0
+archive/extracted digest and fixed source store; bind candidate service/wrapper/gateway bytes and
+namespace-local support inputs honestly through existing schemas. Test namespace publication never
+advances the host's source head or qualifies as persistent-daemon deployment. Retained installation
+revision 12 (`iar_01a0ad98-9c6f-7266-88c7-bd8cc6d953c0`, source
+`755f15b8a579b370099630bb71072a3cae7fec69`, tree
+`b8e143e6324a456666ca90bba647c3db1902e4ff`) is not reinstalled to match documentation HEAD.
+Later admission verifies required namespace/TLS/tool/privilege/provenance prerequisites without
+waiving a claim if they are unavailable. Recovery exit 80 remains recovery evidence, service crash
+proof remains a component harness, and synthetic E3-E evidence remains neither Codex/Active/resume
+nor external-provider proof. E3-E remains closed; enclosing E3 remains incomplete.
+
 ## Admission fence and required proof
+
+For E3-F only, the [future symbol/test additions](#e3-f-future-symbol-fence-and-proof-accounting)
+and their [callable/ownership definitions](#e3-f-callable-ownership-and-deterministic-proof-clarification)
+qualify the corresponding entries below. The module-private shell helpers, externally constructible
+UAA cancel handle, duplicated exclusion-owner illustration and omitted Codex wrapper branches are
+superseded only to the precise extent stated there. E3-E closure and the existing acceptance wall
+remain unchanged; this catalog is not an implementation dispatch.
 
 This specification is documentation authority only. The following is an ownership catalog partitioned
 by the serial E3-A through E3-F work packets in the controlling slice; it is not one combined
