@@ -7762,3 +7762,347 @@ Future regression groups are required, not executed by this documentation:
   and existing request/cap tests; no change to selected V3 handling or authentication. Existing
   host-only validation remains effective. Inherited failed retry fixtures remain unproved until a
   separately scoped implementation establishes their required assertions.
+
+## E3-F sealed custody bridge correction
+
+This additive correction binds committed `088f62d81c182b92cac404983b8bf512becc829c`, tree
+`b40da914c1e5d73fc79f13c0946f6af9c97455d1`, and the preserved W candidate identified by
+`sha256:cd89226b984def497b8a67f92a329e430f9d2899f16cfd743d4f7db07c55f427`. That fingerprint hashes
+**the exact bytes** of `candidate-binding.json` in the persistent evidence directory
+`e3f-classification-production-20260918T135445Z`; the full-index binary HEAD-to-working-tree diff
+SHA-256 is `efcd97c433e33bc8a5182d7fc4a8f7db4a1946625dfeed3ab252291e6785c8c5`.
+The historical binding and proof remain immutable. Its privacy witness establishes Rust field
+visibility only; it does not establish production custody, transfer or cancellation.
+
+**Limited supersession.** This section supersedes “crate-visible only for moving it into REPL
+startup”, the exhaustive three-helper support restriction and the exact-field restriction under
+[prepared ownership](#e3-f-prepared-ownership-and-submission-boundaries), solely for the callable
+operations and private data enumerated below. It replaces that section's submit/cancel signatures
+as specified below and qualifies its builder/execute/confirmed-transfer paragraphs. It supplements
+only the custody, direct-execution and REPL rows of the [finite producer fence](#e3-f-finite-producer-implementation-and-test-fence)
+and the corresponding [future symbol fence](#e3-f-future-symbol-fence-and-proof-accounting).
+The [failure table](#e3-f-exact-response-failure-and-retry)'s “definitive rejection before transfer”
+row is subject to the evidence limitation below, not a callable rollback permission. The original
+bytes remain historical prefixes. All other restrictions remain controlling, including field
+privacy, non-Clone/non-Serde custody, single response/lease ownership, and builder non-ownership.
+
+### E3-F bridge source boundary and evidence limits
+
+The actual paths are in
+[`orchestrator_world_dispatch.rs`](../../../crates/shell/src/execution/orchestrator_world_dispatch.rs)
+(`spawn_prepared_world_worker`, direct `fork_world_worker`, the continue-fork child helper,
+`execute_spawn_world_worker_stream`) and
+[`async_repl.rs`](../../../crates/shell/src/repl/async_repl.rs)
+(`handle_internal_toolbox_world_dispatch_request`, `PreparedAgentRuntime`,
+`build_member_dispatch_transport_request`, `start_internal_dispatch_member_runtime`,
+`start_remote_member_runtime_with_prepared`, `abort_remote_member_bootstrap_runtime`).
+W adds the sealed custody and prepare/validate/cancel support, but has no production custody
+constructors, prepared-container wiring or bridge. The REPL and world transport files are unchanged
+between D and W. W's private state is inaccessible to the sibling REPL module.
+
+[`world_ops.rs`](../../../crates/shell/src/execution/routing/dispatch/world_ops.rs) builds
+`MemberDispatchTransportRequest` → `MemberDispatchRequest::V2` → `ExecuteRequest` without executing.
+Both existing execution owners enter `AgentClient::execute_stream(request).await` only after that
+construction. The [client](../../../crates/transport-api-client/src/lib.rs) returns an HTTP response
+on success; `map_http_error` formats status/API errors into `anyhow::Error`. Neither that error nor
+`ExecuteStreamFrame::Error { message, .. }` has an authenticated preparation rejection/transfer
+classification. Timeout, join failure, dropped future, EOF, missing Start, a response body, and
+`RuntimeStartupSignal::{Running, Failed}` alone likewise establish neither non-submission nor
+transfer. Do not parse diagnostic strings into authority.
+
+At this binding [`WorldService::execute_stream`](../../../crates/world-service/src/service.rs)
+still rejects V2 with “member_dispatch V2 launch is not implemented”. There is no current positive
+production E3 transfer proof. The already authorized
+[retained ownership join](#e3-f-retained-ownership-and-callable-joins) requires one
+[`take_for_v2`](../../../crates/world-service/src/e3_config_projection_prepare.rs) before V2 launch,
+then the existing manager's provisional/retained owner. `take_for_v2` arbitrates transfer under its
+lock, removes the preparation and aborts its preparation expiry task; it exposes no shell transfer
+receipt. ReadyClosed publication precedes that arbitration and alone is not proof of transfer.
+The bridge consumes existing frame/registration and subject-readback APIs; it adds no observation
+endpoint, service change, schema or implementation of that separately authorized retained join.
+
+### E3-F bridge callable signatures and frozen transport
+
+All six operations below live in `execution::orchestrator_world_dispatch`, are Linux-only, and use
+`anyhow::Result`. These are the complete additional callable boundary, not implemented signatures
+at this documentation binding. `Arc` means `std::sync::Arc`; client and wire types are the existing
+`transport_api_client::AgentClient` and `transport_api_types` types. Custody remains field-sealed,
+non-Clone and non-Serde; no public constructor, state getter/setter or mutable field accessor exists.
+
+```rust
+pub(crate) async fn submit_e3_projection_preparation_v1(
+    custody: &mut E3ProducerPreparationCustodyV1,
+    request: E3ConfigProjectionPrepareRequestV1,
+    client: Arc<AgentClient>,
+) -> Result<()>;
+fn validate_e3_projection_prepare_response_v1(
+    custody: &E3ProducerPreparationCustodyV1,
+    response: &E3ConfigProjectionPrepareResponseV1,
+) -> Result<()>;
+pub(crate) async fn cancel_e3_projection_preparation_v1(
+    custody: &mut E3ProducerPreparationCustodyV1,
+) -> Result<()>;
+pub(crate) fn prepared_e3_dispatch_transport_v1(
+    custody: &E3ProducerPreparationCustodyV1,
+    candidate: &MemberDispatchTransportRequest,
+) -> Result<MemberDispatchTransportRequest>;
+pub(crate) fn enter_e3_dispatch_execute_v1(
+    custody: &mut E3ProducerPreparationCustodyV1,
+    transport: &MemberDispatchTransportRequest,
+    execute: &transport_api_types::ExecuteRequest,
+) -> Result<()>;
+pub(crate) fn observe_e3_dispatch_frame_v1(
+    custody: &mut E3ProducerPreparationCustodyV1,
+    frame: &transport_api_types::ExecuteStreamFrame,
+) -> Result<()>;
+```
+
+The sole extra custody fields are private `preparation_client: Option<Arc<AgentClient>>`,
+`observed_start: Option<(transport_api_types::RuntimeFrameIdentityV1, String)>`, and
+`last_frame_sequence: Option<u64>`, all initially `None`. The Arc retains the **same authenticated
+prepare client** for cancellation even when later transport construction fails. It is not another
+client, transport, lease or authority. Submit accepts that existing handle by value, validates the
+same request/subject as before, stores the handle before `PrepareEntered` and before awaiting its
+existing prepare call, and destroys the sole transient auth request through that call. No auth is
+stored in the custody. Cancel uses the stored client and exact validated cancellation material;
+no caller can substitute a cancellation client. Its prior Unsent no-effect/Cancelled idempotence,
+Prepared → CancelPending → Cancelled transitions and response equality checks remain. The private
+prepare validator and its authoritative registry/subject/lease joins remain unchanged.
+
+`prepared_e3_dispatch_transport_v1` requires `Prepared`, a successfully subject-validated response
+and usable exact cancellation material. It revalidates that response through the existing private
+validator before producing transport. Reject Unsent, PrepareEntered, CancelPending, Cancelled,
+ExecuteEntered, Transferred and ExpiryRecoveryRequired. The input is the named builder's ordinary
+**carrier-free** candidate. Compare every field with `common_transport`: session, participant,
+orchestrator, parent/resume lineage, backend/protocol, run, world/generation, initial prompt,
+runtime kind/binary, launch authority, E2 activation, and exact policy snapshot (including its
+canonical bytes/hash). Both input and frozen common transport must have `config_projection=None`.
+No prompt exception, caller override, newly allocated child/run ID, or replacement carrier is
+permitted. Mismatch fails before execute; do not silently overwrite it with frozen values.
+
+After equality succeeds, return an owned field-by-field nonsecret copy of the frozen transport,
+setting only `config_projection` to the immutable carrier copy from the validated response.
+The response remains the single carrier owner; this transport copy is equality evidence with no
+lease or cancellation ownership. No new `Clone` implementation for custody or capability is
+permitted. Returned transport may outlive the borrow, but never authorizes another execute.
+Subsequent caller mutation is detected again at entry. The existing transport builder still owns
+its cwd/environment/profile/network/fs-policy fields outside the member payload; this bridge
+neither promotes them to preparation authority nor replaces their existing checks.
+
+`enter_e3_dispatch_execute_v1` is called by the execution owner **after every pre-entry fallible
+construction/validation and immediately before** `client.execute_stream(execute_request).await`,
+with no intervening fallible step, task spawn or await. It requires `Prepared`; rechecks the same
+frozen common fields, original carrier and authoritative prepared response; validates the exact
+V2 member payload against that transport using existing codecs, including the prompt, runtime
+and E2/projection carriers; and joins `execute.policy_snapshot` to the frozen exact snapshot by
+its existing canonical serialization/validation. A V1/absent member payload or changed transport
+fails without changing state. Outer ExecuteRequest fields retain the existing builder's semantics;
+freeze that one built request locally and pass it unchanged to the current client, without
+rebuilding or refreshing its binding. On success set only `Prepared → ExecuteEntered` before the
+await. That state conservatively means the client boundary was entered, not server acceptance.
+No transport builder invokes this operation or receives a mutable custody borrow.
+
+### E3-F bridge observation and cancellation evidence
+
+`observe_e3_dispatch_frame_v1` borrows the **actual decoded frame from that single execute stream**
+in the existing direct loop or REPL observation task. It runs before that frame can advertise
+startup success or a launch receipt. It does not execute, poll a client, publish E2 admission truth,
+or drive a new observer. The complete private support is ordinary field comparison, existing
+codec validation, and exact subject/readback validation, plus the two observation fields above.
+Calls in Unsent, PrepareEntered, Prepared, CancelPending, Cancelled or ExpiryRecoveryRequired
+return an error without mutation. After Transferred, frames may continue through the same
+stream/sequence checks but never repeat the transfer join or change cancellation responsibility.
+
+In ExecuteEntered, validate frame identity, accept one nonempty Start span on the stream's first
+frame, and retain its stream identity/span and sequence. Subsequent frames must have that same
+stream ID and strictly increasing sequence; the existing stream/replay owner retains its stronger
+durable cursor rules. Missing/duplicate Start, wrong stream, malformed identity or mismatched
+registration returns an error and leaves entered execution conservative. Error/Exit frames are
+not rejection certificates and do not reset the state. Generic errors and future loss need no
+state-setting callable: ExecuteEntered itself prohibits resubmission and preparation cancellation.
+
+Only a Registered event after that Start can establish the shell's confirmed transfer. Require
+valid frame/event identity; exact session/run/participant/backend/world/generation and parent/resume
+lineage from the frozen transport; event span equal to the retained Start span; and the existing
+canonical `SESSION_HANDLE_SCHEMA_V1` with a nonempty session ID. Use the existing
+`service.resolve_preparation_subject_v1` against the identity derived from the already validated
+response and frozen subject. Require Bound current **Active** metadata for the same store,
+series/fence, immutable subject, E2 cap, effective/inventory/logical/artifact identity and original
+Dormant preparation lineage. Concretely, compare `record.identity`, `record.logical`,
+`record.effective.accepted_policy`, the publication fence ID (Released on Active), activation
+intent and expected/receiving gateway refs, and credential-source preparation ID/issued/expiry
+times to the stored response and frozen inputs; require Consumed handoff and the existing
+activation ACK/release/closed-record reference validation. The existing subject readback validates
+the Prepared handoff ancestry and original Dormant acquisition internally; its private handoff
+and lease fields remain private. Do not require the original preparation deadline to remain in
+the future after transfer, or equate Active creation time with preparation time. Use the existing
+record/reference fields and validation; never
+resolve/acquire a replacement live capability or reuse the Dormant-only prepare validator against
+an Active head. Unbound, stale/retired, different fence/subject, ReadyClosed-only or failed readback
+cannot confirm transfer. Readback is observation, not a new resource owner. Registration over the
+exact V2 stream plus this join is evidence only in the already specified take-for-V2 → retained
+owner → Active → valid-registration ordering; future production tests must establish that path.
+The current V2 rejection, a fabricated helper event or an HTTP response does not establish it.
+
+On this evidence, set `ExecuteEntered → Transferred`, clear only producer `cancel_request` and
+`preparation_client`, and retain immutable response/identity accounting. No caller supplies a
+boolean, desired state, claimed-success token or freely constructed transfer witness. Repeated
+observation after Transferred cannot reacquire producer cancellation or authorize another execute;
+existing runtime observation continues unchanged. This local marker relinquishes producer
+preparation cancellation; it does not move or release the service's actual retained resources.
+E2 `observe_admission_transport_start`, `mark_admission_routable_outcome`, cancellation-won and
+terminal handling still run in their existing order. A subsequent E2 publication failure does not
+undo a service transfer or authorize preparation cancel. `RuntimeStartupSignal::Running` stays
+its existing notification shape and cannot be used as a substitute for the frame/readback join.
+
+**Definitive rejection is evidence-gated, not an available rollback API.** A locally failed builder
+or failed entry validation while still Prepared proves no client entry on this path and permits
+`cancel_e3_projection_preparation_v1` for that exact preparation. Once ExecuteEntered, the existing
+client/error/frame APIs expose no definitive pre-transfer rejection proof. Even the present V2
+“not implemented” diagnostic is not a typed authenticated rejection witness at the caller.
+There is consequently **no ExecuteEntered → Prepared/CancelPending operation in this fence**.
+A genuinely evidenced definitive pre-transfer rejection would permit the same exact preparation
+cancel under the earlier failure table, but adding a source of such evidence or a callable to
+consume it requires a separate exact authority decision. This packet instead keeps all such
+entered errors conservative. Absence in a readback, a Dormant/ReadyClosed head, a timeout or a
+terminal startup failure cannot justify rollback. This is the complete disposition for the current
+APIs, not an unspecified next transition or permission to broaden their schemas.
+
+Before entry, cancellation validates the original ID/key/carrier; failure or lost cancel future
+leaves CancelPending and the same original service deadline. Reattempting that exact cancellation
+is permitted while the owner remains reachable; success requires the existing exact cancellation
+response. After entry, preparation cancel refuses even if transfer is unconfirmed; after transfer
+it always refuses. Existing exact runtime-ending cancellation and E3-E/E2 recovery own cleanup.
+No second execute, preparation, world-binding refresh, renewed deadline, replacement carrier or
+regenerated participant/run/E2/request identity follows ambiguity or cleanup failure.
+
+### E3-F bridge caller moves and failure lifetimes
+
+Direct Spawn keeps the optional owner in `spawn_prepared_world_worker` through builder failure and
+moves it into `execute_spawn_world_worker_stream` only when calling that existing executor. Add a
+final `e3_preparation: Option<E3ProducerPreparationCustodyV1>` argument there. Direct Fork and
+continue-fork child bootstrap take their one commitment owner into the same argument only after
+their last fallible preparation/builder checks. Non-E3 calls pass None. The existing transport
+request borrow and return type are unchanged. On pre-entry error the local async owner awaits
+exact preparation cancellation with its retained client before returning the existing failure;
+a cancellation error never becomes a successful cleanup claim. Direct execution owns custody
+through stream observation; when the existing post-registration observer is spawned, move remaining
+nonsecret accounting into that observer or drop the Transferred marker. Never spawn an alternative
+execution task or move the parent-delivery observer's held-input guards.
+
+For Spawn REPL registration, change only the constructor's error result to
+`Result<PreparedAgentRuntime, (RuntimeBootstrapFailure, PreparedSpawnWorldWorkerBootstrap)>`.
+Perform its existing descriptor/manifest/authority checks by borrowing `spawn`, then move fields
+and `e3_preparation` at successful return. Each failure returns the same prepared owner to the
+existing `spawn_blocking` caller. That caller cancels/accounts before `recovery.project_failure`.
+A panic or lost worker result cannot return this owner; service expiry/recovery remains the fallback.
+For Fork retain the prescribed mutable commitment borrow and take only on successful return;
+failed construction leaves the owner with the async toolbox handler. No change to
+`RuntimeBootstrapFailure` or the shared startup-signal enum is needed.
+
+`PreparedAgentRuntime` still gains only its one optional custody field. The E3 branch of
+`build_member_dispatch_transport_request` constructs its existing candidate from prepared parity,
+manifest, prompt, run and E2 fields, then calls `prepared_e3_dispatch_transport_v1`. It never reads
+custody fields. `start_internal_dispatch_member_runtime` forwards the owner unchanged to
+`start_remote_member_runtime_with_prepared`; the latter's existing owned argument and result
+signature stay unchanged. Before any `?`/early return that can lose Prepared custody, handle the
+error locally and await its cancellation. All pre-entry manifest persistence, authority-worker,
+transport and entry-validation errors are included. The retained client makes this possible even
+if the execute builder failed before returning a client. Reuse the existing authenticated builder
+and client type; there is no alternative transport or raw-HTTP path.
+
+After successful entry and HTTP response, move the single custody value into the **existing** REPL
+`observe_task` when that task is spawned. It calls the frame operation before applying startup
+notification, retains conservative entered accounting on read/decode/startup failures, and requires
+no custody clone, Arc-wrapped custody, added startup-result owner, or state mutation from the outer
+startup waiter. The HTTP-response-to-task-spawn interval is still owned by the startup future;
+errors/drops there are entered ambiguity. `mark_runtime_ownership_retained` is local bookkeeping,
+not transfer evidence. No use of `?` may silently treat its persistence error as pre-entry failure.
+The observation task, if already spawned, remains the existing detached observer when its awaiting
+startup future is dropped; do not abort it to manufacture non-submission.
+
+| Actual failure/loss boundary | Reachable owner and required disposition |
+|---|---|
+| Synchronous authoring or first preparation worker fails before client entry | No service preparation exists. Destroy the unsent transient auth. Existing E2 failure/recovery remains; a worker panic does not imply a submitted prepare. |
+| Prepare future errors/drops after PrepareEntered | The borrowed custody stays with its async caller if that caller survives; the existing private guard may synchronously mark ExpiryRecoveryRequired. Only validated exact response/cancel material permits cancel. Without it, original ID/key and server expiry/recovery account for the attempt. Dropping the whole caller loses local memory, not server obligations. |
+| Prepared builder, prompt/manifest, authority-registration or join-return error | Direct async owner, returned Spawn owner, or Fork commitment owns exact cancel. Await it before normal error return. Worker panic/lost result or whole-future drop falls back to original expiry/recovery; no async Drop promise. |
+| Cancel error/drop | Reachable custody remains CancelPending with unchanged ID/key/carrier/client. If lost, the preparation manager's original expiry/recovery applies; no success/cleanup claim. |
+| Execute await error/drop; response then persistence failure; missing/malformed Start or registration | ExecuteEntered remains conservative. Same stream/request/carrier/E2 identity only; existing admission interruption, accepted/start/registration observation and pending-admission recovery apply where already supported. No new observation retry route is introduced for Fork or continue-fork. If a span is authoritatively known, use existing exact runtime-ending cancellation; absence of a span does not license guessed cancellation. |
+| Startup Failed, channel closure, timeout, private transport registration failure, or later manifest failure | Preserve `abort_remote_member_bootstrap_runtime`'s exact-span cancel/observer join and `send_cancel_transport = !authority_managed` behavior. Authority-managed Spawn keeps its existing pending-admission cancellation/recovery route; do not bypass it with direct cancel. A transferred service owner handles cleanup even if the shell never obtained proof. |
+| Confirmed transfer followed by any local error/drop | No preparation cancellation. The existing manager's provisional/retained cleanup owner and exact E3-E/E2 runtime-ending cancellation retain progress; preparation expiry was disarmed at actual transfer. Do not claim that the old preparation deadline cleans a transferred runtime. |
+
+The post-start checks in both toolbox Spawn and Fork still own a returned live runtime until it
+is inserted in `member_runtimes`. Any failure in those existing launch-span/manifest/lineage checks
+must invoke the existing `shutdown_host_orchestrator_runtime` on that exact runtime before returning
+its failure; do not drop the last local runtime handle and report preparation cancellation.
+This is caller cleanup placement, not a new cancellation mechanism or successful-cleanup guarantee.
+Local run control and retained cancellation remain exactly
+[the existing E3-F/E3-E rules](#e3-f-local-run-control-and-cancellation).
+
+Continue-fork's already accepted parent remains accepted. Failed child construction cancels only
+its exact unentered preparation; ambiguous child execution observes/recovers only its original
+identity. Neither case rolls back or redelivers the parent. Existing cfg(test) binding-retry helpers
+are not a production retry owner, and E3 may not use their consuming/regenerating callbacks.
+
+### E3-F bridge finite implementation and regression fence
+
+This is a planning correction only. Additional future edits are limited to:
+
+- `orchestrator_world_dispatch.rs`: the six exact operations above; the three private custody
+  fields; private field/subject/frame comparators and the existing prepare-drop guard; direct
+  Spawn/Fork/continue-fork ownership and error cleanup at the named sites; the final executor
+  argument and its mechanical non-E3 None callers. `build_spawn_world_worker_transport_request`
+  gains a final `Option<&E3ProducerPreparationCustodyV1>` for the prepared branch; Fork's builder
+  obtains that borrow from its existing commitment argument; the continue-fork builder delegates
+  through it. Carrier-free construction used to author the original request stays before custody
+  submission and cannot call the prepared bridge. `member_dispatch_transport_request_from_typed`
+  remains a freezing/forwarding builder, with no execute or transition operation.
+- `async_repl.rs`: the existing toolbox preparation/registration/execute joins; the exact Spawn
+  error tuple and Fork mutable-borrow/take rule; PreparedAgentRuntime's one custody field; named
+  transport builder and existing start/observation/abort call sites described above; returned-runtime
+  cleanup at existing toolbox post-start checks. Existing startup signal, generic failure type,
+  runtime-ending cancellation implementation and compatibility wrapper stay unchanged. The
+  cfg(test) `start_internal_dispatch_member_runtime` alternative must route **E3 custody only** to
+  the same remote start function; its non-E3 local test behavior stays unchanged. This closes the
+  source-observed test bypass without creating a test-only custody protocol.
+- `world_ops.rs`: only the earlier authorized exact carrier forwarding through its named builders,
+  if needed. No bridge state, new client, execution or cancellation lives here. Client/types,
+  preparation manager, retained manager, E2 observation and config registry/service are read-only
+  dependencies of this correction. Their previously authorized E3-F work is not expanded.
+
+Colocated directly necessary future regression groups, required but **not run here**, are:
+
+1. `test_e3f_bridge_frozen_transport`: real named direct/REPL builders accept a prepared exact
+   candidate and copy only the original carrier; reject unprepared state, supplied carrier, changed
+   prompt, parity/manifest drift, E2/snapshot/lineage/world/run changes and post-copy mutation at entry.
+2. `test_e3f_bridge_execute_entry_and_loss`: barrier before entry versus inside the real client
+   await; construction/validation failure cancels, entered error/timeout/future loss does not cancel
+   preparation or execute twice. Assert exact request/carrier/E2 identity and existing recovery.
+3. `test_e3f_bridge_rejection_evidence`: unentered local failure is cancellable; generic HTTP/API
+   error text (including V2 unsupported), stream Error/Exit, absent readback and failed startup never
+   authorize entered rollback. There is no presently callable evidenced post-entry rejection branch;
+   tests must not invent a boolean or mock error category to claim one.
+4. `test_e3f_bridge_transfer_observation`: response/Start/Running alone and ReadyClosed alone cannot
+   transfer; wrong stream/span/subject/session/run/lineage and missing canonical session handle fail.
+   Exact Registered plus Active same-fence readback on the authorized production V2 path relinquishes
+   only producer cancellation. Inject failure after service transfer but before shell confirmation;
+   verify retained cleanup remains owned. Helper-only synthetic frames are insufficient proof.
+5. `test_e3f_bridge_failure_ownership`: prepare future loss, Spawn returned-owner versus worker
+   panic/lost result, Fork error-before-take, cancellation error/loss, HTTP-response-to-observer gap,
+   startup timeout/channel failure and private registration/post-start manifest failure; verify the
+   reachable local owner or precise server recovery owner, and no async Drop cleanup assertion.
+6. `test_e3f_bridge_production_direct_repl_parity`: exercise actual direct Spawn/Fork/continue-fork
+   and toolbox Spawn/Fork → remote startup/observation, not just custody helpers or the local
+   cfg(test) runtime substitute. Assert one prepare/execute, immutable identities, separate exact
+   pre-entry cancellation versus post-transfer runtime cancellation, unchanged authority-managed
+   cancellation arbitration, and accepted-parent/no-redelivery behavior.
+
+No implementation resumes or becomes accepted through this text. Production ingress and parent/
+child routing remain unfinished; the obsolete classification-conflict diagnostic is red; three new
+candidate Clippy diagnostics, shared fixture failures and earlier retry limitations remain unresolved
+or unproved. The classification, inventory/V3, E2/carrier, parent-acceptance, auth, Codex loader,
+installed-proof and runtime-lifecycle designs stay settled. E3-F remains admitted/dispatched but
+**paused, unaccepted and unclosed**; E3-E remains closed and E3 incomplete. No new admission,
+installed proof, deployment, integration or E2-RM/B2.2/B3.2/B4 closure is claimed. A needed semantic
+change beyond this finite bridge and earlier authority requires an exact stop, not an implied
+service/schema/lease/executor/retry expansion.

@@ -46,3 +46,11 @@ controls absent-workspace classification and its bounded future source/test fenc
 admitted/dispatched but paused, unaccepted and unclosed; E3-E remains closed and enclosing E3
 incomplete. This is documentation only; no implementation, installed proof, deployment, integration
 or new E2-RM/B2.2/B3.2/B4 closure is claimed.
+
+### E3-F sealed custody bridge correction status
+
+The [canonical sealed custody bridge](../contracts/agent-config-projection-v1.md#e3-f-sealed-custody-bridge-correction)
+settles the bounded future owner/caller/test interface and conservative execution-evidence rules.
+E3-F remains admitted/dispatched but paused, unaccepted and unclosed; E3-E remains closed and E3
+incomplete. Documentation task publication does not integrate into landing or W, resume implementation,
+resolve candidate failures, or claim installed proof, deployment or new E2-RM/B2.2/B3.2/B4 closure.
