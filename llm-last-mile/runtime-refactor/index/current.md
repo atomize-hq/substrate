@@ -37,3 +37,12 @@
 | Other undispatched successors | E03, protected-lifecycle revival, and other successors remain undispatched | [`macos-dev-parity/DECISION.md#cross-lane-continuation`](../macos-dev-parity/DECISION.md#cross-lane-continuation) | Each remains subject to its own later exact authority; neither current lane dispatches the other's successor. |
 
 Decision and owner navigation: [`README.md`](README.md).
+
+
+### E3-F configuration classification correction status
+
+The [canonical classification/extraction correction](../contracts/agent-config-projection-v1.md#e3-f-configuration-classification-and-strict-extraction-correction)
+controls absent-workspace classification and its bounded future source/test fence. E3-F remains
+admitted/dispatched but paused, unaccepted and unclosed; E3-E remains closed and enclosing E3
+incomplete. This is documentation only; no implementation, installed proof, deployment, integration
+or new E2-RM/B2.2/B3.2/B4 closure is claimed.

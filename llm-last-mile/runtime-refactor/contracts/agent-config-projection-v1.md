@@ -7515,3 +7515,250 @@ D2, D3, E4, compatibility-promotion, or non-Linux work is admitted. B4 remains s
 neither modified nor adjudicated by this correction. E3-A Linux proof recovery requires a next
 explicit dispatch after this correction is pushed and its live origin identity is verified; E3-B
 through E3-F remain separately admission- and dispatch-gated by their direct predecessor.
+
+
+## E3-F configuration classification and strict extraction correction
+
+This additive correction controls the complete classification → extraction → authoring boundary
+against committed `904d4179fbcadcc181c57754f95648d80408f0cf`, tree
+`eb7a35e8ea266f4b4c83f4cd3177d7777c281583`. E3-F remains already admitted/dispatched, **paused,
+unaccepted and unclosed**; E3-E remains closed and enclosing E3 incomplete. This is documentation
+authority only, with no implementation, installed proof, deployment or new E2-RM/B2.2/B3.2/B4
+closure. Task-branch publication alone does not integrate this authority into an implementation checkout.
+
+**Supersession is limited and explicit.** For classification, this section supersedes the
+unconditional selected-workspace requirement in the original descriptor-pinned resolution paragraph
+under [Authoritative projection inputs and inventory V3](#authoritative-projection-inputs-and-inventory-v3), the `config_model.rs` visibility/accessor-only row in
+[the finite producer fence](#e3-f-finite-producer-implementation-and-test-fence), and the “sole new
+snapshot accessor” restriction in [shell authoring](#e3-f-shell-authoring-and-preparation-custody).
+The resolver/extractor argument and result signatures and the snapshot's accepted-home lifetime stay
+unchanged. The selected-workspace requirement still applies to strict E3 extraction. This section
+qualifies [continue-fork routing and held-input custody](#e3-f-continue-fork-parent-acceptance-and-held-input-custody)
+and [the single-config join](#e3-f-single-config-policy-authoring-and-auth-join) only to carry the
+classification guard and frozen effective view on the false branch as well. Their unconditional
+non-E3 `None` argument requirements are superseded only for the additional classified-config input
+defined below; `e3_inputs` and `e3_base_policy` remain `None` there. All other historical text,
+extracted bytes, hashes, admission/proof history and settled requirements remain preserved.
+
+### E3-F classification source postures
+
+The source boundary is in `crates/shell/src/execution/config_model.rs`:
+`E3PinnedConfigPatchSourceV1`, `E3EffectiveConfigResolutionSnapshotV1`,
+`open_e3_workspace_config_source_v1`, `resolve_e3_effective_config_source_v1`, and
+`extract_e3_effective_config_source_v1`. The committed resolver calls the opener before exposing an
+immutable view; the opener rejects no selected layer with “E3 requires a selected workspace
+configuration root”. In contrast, `load_workspace_config_patch` returns `Ok(None)` for that case.
+`workspace::find_workspace_root` scans the canonical start's ancestors, selecting the first regular
+`workspace.yaml` whose directory has no existing `workspace.disabled`. A disabled directory is
+skipped, not a barrier to ancestor selection. `settings.yaml` is rejected at the selected root; it
+does not independently select a workspace.
+
+The preserved W candidate is additional source evidence: fingerprint
+`sha256:44e7cd516ad8df5099d34cbe7be4241a63ec1b692c2b1a10e91af835b1ae0bfb` hashes the **exact bytes** of
+`candidate-subject.json` in `e3f-producer-continuation-20260918T025929Z`; its full-index binary
+HEAD-to-working-tree diff SHA-256 is
+`11b6bc34034fa4ddc9118c895eecdf8c712f3146ba9dbf311de7adbf6d0bbbe3`. W adds the immutable accessor and
+borrowed authoring consumers but retains the rejecting opener. Its
+`test_e3f_continue_fork_non_e3_snapshot_classification_boundary` proves authenticated non-E3
+acceptance can reach `Proposed` with `llm.enabled=false` and no workspace marker while the mandated
+snapshot fails. A passing assertion of that conflict is **not** a successful routing regression.
+The historical 15-test/compatibility results are bounded evidence; candidate visibility/unwired-code
+Clippy diagnostics and inherited retry failures remain outside this documentation remediation.
+
+The authenticated HSA workspace identity and the selected configuration-layer root are different
+facts. The former is required even when the latter is absent. Retain and check the exact authenticated
+workspace path/device/inode and bootstrap-home authority throughout classification. Do not initialize
+a workspace, fabricate a marker/source location/hash, or change which root the existing selection
+order chooses to satisfy E3. A legitimate selected ancestor is configuration input; it does not
+replace the authenticated target workspace.
+
+| Observed posture | Sealed classification input and disposition |
+|---|---|
+| No selected layer after a successful, guarded traversal | Explicit `WorkspaceAbsent` posture with the selection evidence below; pass `None` as the workspace layer to the existing composer. Effective defaults/global/environment values remain available. A false predicate can take the existing non-E3 route. |
+| Disabled marker at a candidate directory | Preserve the existing skip-and-continue ancestor rule. Record the observed control entry and skipped candidate; do not parse its suppressed YAML. With no later selection this is guarded no-layer selection, not an assertion that all marker names were missing. |
+| Selected readable workspace YAML, including an ancestor | Retain the actual selected root/file and its single byte vector; parse it and supply that layer with its actual explain path. Classification may be false. Strict extraction additionally requires selected-root equality to authenticated workspace authority. A different ancestor is not absence and is never silently rebound. |
+| Empty valid workspace YAML or a patch with no E3 keys | Present source, using existing parser/default/merge semantics, never `WorkspaceAbsent`. |
+| Global `config.yaml` absent | Preserve the existing sealed global-absence posture and default empty global patch; this is independent of workspace-layer absence. |
+| Selected legacy settings, invalid UTF-8/YAML, read/metadata failure, untrusted traversal, symlink, wrong authenticated root identity, or failed revalidation | Fail the snapshot/guard operation; do not manufacture absence, inspect a partial effective value, or catch the error and choose non-E3. |
+
+`Path::is_file`/`exists` and the selector's canonicalization fallback can hide errors. A bare
+`find_workspace_root(..) == None` is therefore insufficient evidence for `WorkspaceAbsent`. At this
+sealed boundary, observe the same finite ancestor order using held directories and no-follow
+component inspection. Only genuine `ENOENT` proves a missing entry. Preserve safe observed
+non-file marker and disabled-entry skip semantics separately from missing names; no new marker
+format/content parser or stop-at-disabled policy is introduced. Symlinks (including dangling ones),
+permission/I/O failures or an unprovable start/root identity are errors, not selector negatives.
+Inspect only the entries needed to decide the same selection, ending at the first selection or the
+filesystem root; no scan of unrelated files or new global workspace policy is authorized.
+
+### E3-F one sealed classification snapshot
+
+Extend private `E3PinnedConfigPatchSourceV1` with `WorkspaceAbsent`; keep `Global` and `Workspace`
+as distinct postures. The snapshot privately owns a new Linux-only, field-sealed
+`E3WorkspaceConfigSelectionGuardV1` alongside its effective value, explanation and patch sources.
+This guard holds the authenticated start/workspace identity and descriptor, the ordered directory
+handles/identities visited through selection (or exhaustion), and the observed identities/kinds or
+proved absence of `.substrate`, `workspace.yaml` and `workspace.disabled` that determined selection.
+For the selected directory it also retains the existing legacy-settings exclusion and the selected
+`.substrate` identity. It records the original selected root or no-selection result. Its private
+construction/revalidation code may use a private observation enum and vector within `config_model`;
+these are process-local guards, not a new serialized witness/schema. `WorkspaceAbsent` is constructible
+only with that guard's no-selection result. No dummy file descriptor, empty-file substitute, source
+hash or explain origin represents a missing workspace layer.
+
+Keep the resolver's existing `(cwd, bootstrap_home, expected_workspace_root)` arguments and sealed
+return type. Interpret `expected_workspace_root` as the authenticated workspace identity, not a
+requirement that it contributed a config patch. The opener returns either the present patch or
+explicit absent posture together with the selection guard (a private tuple result change is allowed).
+Its present branch retains current no-follow file, device, link-count and read-stability checks;
+move only the selected-versus-authenticated root equality requirement to extraction. A valid
+selected ancestor may supply classification values but cannot supply E3 workspace authority.
+
+The resolver opens/parses global input once, observes/opens/parses the selected workspace input
+once if present, captures environment overrides once, and calls `resolve_effective_from_layers`
+once with the same empty CLI overrides and explain/protected-exclude settings. Pass `None`, not an
+empty synthetic workspace patch/path, when absent. Preserve defaults, parsing, validation, merging,
+precedence, list behavior and environment errors. No second call to a cached/pathname resolver,
+second environment capture, alternative composer, or auth-driven config patch is permitted.
+For host-only configuration, reuse the existing bootstrap-home resolver’s conditional policy
+validation tail inside this resolver: obtain its existing bootstrap-home effective policy and call
+private `validate_config_against_policy` on the frozen value. Do not bypass that compatibility
+validation or resolve config again; the parser/composer/validator bodies remain unchanged.
+
+Snapshot visibility remains minimum `pub(super)` in `execution`, with private fields, no Clone,
+Serde, raw descriptor accessor or mutable accessor. Retain
+`pub(super) fn effective_config(&self) -> &SubstrateConfig` and add only
+`pub(super) fn revalidate(&self) -> Result<()>`. The latter validates bootstrap/global source,
+authenticated workspace and selection/source guards without extraction or semantic recomposition;
+it works on both present and absent postures. Resolver return and classification use require a
+successful guard check. The effective view never outlives the snapshot. Keep resolver and extractor
+`pub(super)`; narrow `author_e3_projection_for_spawn/fork` to `pub(super)` as their actual consumers
+are within `execution`, avoiding a crate-visible interface containing a less-visible snapshot.
+No visibility widening of the config types or auth helpers is authorized.
+
+Strict extraction first revalidates this same snapshot and then requires a present valid workspace
+source whose actual root equals its frozen authenticated workspace identity. Affirmative eight-key
+activation from defaults/global/environment with missing required workspace authority still fails
+before inventory authoring/preparation. Absent or mismatched workspace authority never produces
+`EffectiveSubstrateConfigSourceV1`. Preserve the existing activation check, ordered eight-key
+origins, revision/hash preimages, backend equality and public source schema. False activation on an
+explicit E3 preparation remains `UnsupportedConfiguration`. Extraction and authoring borrow the same
+snapshot; repeated extraction is equality/revalidation of frozen input, not rereading/recomposing
+configuration. The authoring helpers retain their existing exact-source readback comparisons.
+
+### E3-F classification guard ownership and consumer joins
+
+Revalidation observes current names relative to held directories and compares them with the captured
+selection: directory/root identities, each relevant control-entry kind/identity or absence, selected
+file identity/length and read-time modification metadata, and the existing global-source guard.
+Retain modification/ctime metadata needed to reject in-place source drift as well as replacement.
+It must detect marker appearance/disappearance, disabled-marker changes, nearer or different
+selection, selected-directory replacement and failed checks. Do not open a replacement config file
+for parsing, switch to a new ancestor, recapture environment, or reclassify on drift. Metadata/name
+observations are guards, not a second configuration resolution. The existing bootstrap facade’s
+`revalidate` may equality-read its already bound global source as it does today; those bytes cannot
+replace the frozen parse input. No facade change follows. This is bounded join-time validation under the
+existing held-source threat model, not a filesystem watcher, mutation lock or promise to detect
+every transient filesystem event between joins.
+
+For authenticated Linux continue-fork, `continue_world_worker` owns the snapshot and its bootstrap/
+workspace guards on both classified branches in its existing async stack. Authentication and the
+early accepted-work lookup retain their prior order and exact target/cap/backend checks. Resolve
+once before the first new pre-delivery policy/acceptance operation. Freeze the eight-key predicate
+and requested/authenticated backend comparison; only the affirmative branch acquires the existing
+configured E3 authority, strict extracted source and held inventory selection. The false branch
+keeps `e3_inputs=None`, requires no configured E3 service/registry or V3 selection, and retains the
+snapshot guard until the existing child-bootstrap join completes.
+
+Check the snapshot before and after the initial/reconstructed/final parent carrier and request
+constructions, and immediately before parent delivery. On successful delivery check again before
+child contract/policy/authoring or compatibility child bootstrap, preserving the existing parent
+closeout/obligation order. A failed/ambiguous delivery creates no child auth/preparation. A guard
+failure after successful delivery preserves accepted parent work and reports the child failure;
+no rollback, redelivery, fresh selection or recovery route is added. E3 repeats its existing exact
+extraction, held-inventory/bootstrap/configured-authority checks before child authoring and before/
+after publication/readback, including failure paths. Child-only credential acquisition, the one
+prepare request, custody/cancellation owner, original lease, and exact retry identities remain as
+specified in the connected clarification. Local cancellation drops these guards; they never move
+into the detached parent observer or prepared containers.
+
+There is one additional source-grounded consumer constraint: `resolve_e2_dispatch_policy` currently
+uses `resolve_internal_dispatch_context` on its `None` branch, and that function resolves config;
+the non-E3 child helper does so again. Merely returning an absent snapshot would leave those rereads.
+Add a final `classified_config: Option<&SubstrateConfig>` argument to `resolve_e2_dispatch_policy`
+and `prepare_fork_policy_commitment`. With `e3_base_policy=None` and `Some(config)`, construct the
+same compatibility context from that frozen value, then consume the unchanged base-policy/E2
+algorithm. `Some(e3_base_policy)` retains the settled E3 route. No supplied config authenticates a
+parent, replaces a policy snapshot, or relaxes inventory validation.
+
+Factor only the tail of `resolve_internal_dispatch_context` into private
+`resolve_internal_dispatch_context_with_config(workspace_root: &Path, effective_config:
+&SubstrateConfig) -> Result<InternalDispatchContext>`. It uses the existing policy resolution and
+V1 inventory loader, in the same order, and copies the immutable effective value into the existing
+owned context. The original wrapper still resolves once then delegates; its callers outside this
+classified boundary remain unchanged. On the classified non-E3 child branch use this helper for
+`resolve_world_dispatch_contract`, which stays unchanged. Do not change the V1 loader, the selected
+V3 adapter, E2 policy algorithm or source selection as part of this input plumbing.
+
+Add one final `classification_snapshot: Option<&E3EffectiveConfigResolutionSnapshotV1<'_>>` argument
+to `prepare_retained_acceptance_submission`, `resolve_continue_e2_policy_carrier`,
+`build_continue_world_worker_submit_request_with_acceptance_context`,
+`build_continue_world_worker_submit_request_with_message`, and
+`continue_world_worker_fork_command_bootstrap_after_delivery`. The classified authenticated branch
+passes the same `Some(&snapshot)` for either outcome; if `e3_inputs` is also present its snapshot
+must be that identical borrow. Forward the immutable view to the E2/Fork classified-config input;
+the child uses it in its existing non-E3 context construction. Other callers, including ordinary
+Continue and the compatibility `build_continue_world_worker_submit_request` wrapper, pass `None`
+mechanically. Direct Spawn/Fork producers pass their already required snapshot's view to the added
+Fork argument on E3 branches and `None` on their unchanged compatibility branches;
+`prepare_task_acceptance_submission` supplies `None` for the new E2 input. These additions change
+no return types, carrier fields, parent acceptance algorithm, cap checks or retry behavior.
+
+### E3-F classification correction future source and test fence
+
+This is the complete additional future fence for this correction, including W's preserved candidate
+as source evidence. It supplements the existing finite F1–F4 producer fence; no product edit is made
+by this documentation packet and no F5–F14 design is reopened.
+
+| Source file | Permitted future delta |
+|---|---|
+| `crates/shell/src/execution/config_model.rs` | Private patch absent variant; snapshot-owned selection guard/private observation representation and their construction/revalidation; `open_e3_workspace_config_source_v1` tuple/posture change; resolver conditional layer composition; extractor strict authority join; snapshot `effective_config`/`revalidate`; minimum visibility above. Factor only existing source checks needed by these operations. Colocated regression tests below. |
+| `crates/shell/src/execution/orchestrator_world_dispatch.rs` | Classified snapshot locals and guard calls in Linux `continue_world_worker`; the five exact snapshot-forwarding signatures/callers above; two classified-config E2/Fork signatures; narrow compatibility-context tail helper/wrapper; classified non-E3 child consumption; mechanical `None` at existing task/compatibility callers; E3 view forwarding in `fork_world_worker`, `prepare_fork_world_worker_bootstrap`, and the child helper. Existing `prepare_authority_bound_spawn_world_worker` and those direct Fork ingress callbacks use the same revalidating resolver/extractor under the earlier fence. Two authoring functions narrow visibility and consume the strengthened extractor. Colocated tests and their directly affected argument lists only. |
+| `crates/shell/src/execution/workspace.rs`, `agent_runtime/host_session_authority/facade.rs`, `agent_inventory.rs`, `agent_runtime/dispatch_contract.rs` | Read-only semantic dependencies for this correction: selection order, bootstrap source guard, unchanged V1/V3 inventory behavior and launch-contract checks. Earlier independently authorized inventory/adapter work is neither enlarged nor reopened. |
+
+No public schema, durable marker, new config key, general config-model refactor, file-wide format or
+lint cleanup, REPL ownership change, Codex loader, auth resolver, deterministic installed-proof
+change, service-side relaxation or non-Linux routing change follows. Private guard support is limited
+to the captured finite selection/source evidence above. If implementation needs another semantic
+source/caller change beyond this catalog and the unchanged prior fence, stop at that exact boundary.
+
+Future regression groups are required, not executed by this documentation:
+
+- `test_e3f_continue_fork_non_e3_absent_workspace_routing`: authenticated target and compatible cap,
+  false activation, no selected layer; enter actual pre-delivery classification, reach `Proposed`,
+  preserve all three carrier/request identities and successful existing non-E3 parent/child routing.
+  Assert one configuration/environment resolution, no initialized marker, E3 inventory/service,
+  authoring, credentials or preparation. Replace/supplement the conflict diagnostic only when this
+  successful path exists; do not relabel its current passing result.
+- `test_e3f_classification_present_and_strict_extraction`: valid E3 exact-root classification,
+  extraction/publication readback equality and eight-key origins/hash parity; false explicit E3
+  preparation rejection; affirmative global/environment activation with no layer rejects extraction
+  before any preparation; selected ancestor mismatch cannot be used as E3 workspace authority.
+- `test_e3f_classification_absence_and_source_errors`: absent global versus absent workspace;
+  empty/present YAML; disabled local marker with and without selected ancestor; safe skipped
+  non-file markers; selected legacy settings; invalid UTF-8/YAML, symlink/dangling symlink,
+  inaccessible metadata/read, wrong authenticated identity and source revalidation failure. Errors
+  never become no-layer success. Suppressed YAML is not spuriously parsed.
+- `test_e3f_classification_join_drift`: deterministic barriers at classification return, the three
+  carrier constructions, pre-delivery, post-delivery/pre-child and authoring/readback; add/remove
+  workspace/disabled markers, introduce a nearer selection, replace directory/file or mutate the
+  selected file in place. Both false and true branches reject drift without reroute, re-resolution,
+  redelivery or fresh preparation. Preserve accepted parent work on post-delivery failure and the
+  existing cancellation/ambiguous-submission ownership and identity rules.
+- `test_e3f_classification_parse_precedence_compatibility`: compare frozen effective/explain results
+  with the existing resolver on stable valid fixtures (defaults/global/optional workspace/env,
+  empty CLI, merge/list/validation behavior), and assert single capture on the classified route.
+  Cover non-E3 V1 context use, ordinary Continue, unauthenticated compatibility, direct Spawn/Fork
+  and existing request/cap tests; no change to selected V3 handling or authentication. Existing
+  host-only validation remains effective. Inherited failed retry fixtures remain unproved until a
+  separately scoped implementation establishes their required assertions.

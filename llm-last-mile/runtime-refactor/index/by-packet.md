@@ -77,3 +77,12 @@
 | `A1.1d-5R2-3-family` | [`current-state.md`](../a1.1d-5r2-3/current-state.md) | linked family context in [`README.md`](../a1.1d-5r2-3/README.md) | [`slice-and-task.md`](../a1.1d-5r2-3/slice-and-task.md) | [`contracts-and-gates.md`](../a1.1d-5r2-3/contracts-and-gates.md) | linked evidence/receipts in [`README.md`](../a1.1d-5r2-3/README.md) | [`README.md`](../a1.1d-5r2-3/README.md) |
 | `A1.1d-5R2-2-renewed-closeout-family` | [`current-state.md`](../a1.1d-5r2-2-renewed-closeout/current-state.md) | [`architecture.md`](../a1.1d-5r2-2-renewed-closeout/architecture.md), [`crosswalk.md`](../a1.1d-5r2-2-renewed-closeout/crosswalk.md) | [`slice-and-task.md`](../a1.1d-5r2-2-renewed-closeout/slice-and-task.md) | [`contracts-and-gates.md`](../a1.1d-5r2-2-renewed-closeout/contracts-and-gates.md) | [`evidence-regression.md`](../a1.1d-5r2-2-renewed-closeout/evidence-regression.md) | [`README.md`](../a1.1d-5r2-2-renewed-closeout/README.md) |
 | `A1.1d-5R2-2F-family` | [`current-state.md`](../a1.1d-5r2-2f/current-state.md) | [`architecture.md`](../a1.1d-5r2-2f/architecture.md), [`crosswalk.md`](../a1.1d-5r2-2f/crosswalk.md), [`authenticated-runtime-projections.md`](../history/authenticated-runtime-projections.md) | [`slice-and-task.md`](../a1.1d-5r2-2f/slice-and-task.md) | [`contracts-and-gates.md`](../a1.1d-5r2-2f/contracts-and-gates.md) | [`evidence-regression.md`](../a1.1d-5r2-2f/evidence-regression.md) | [`README.md`](../a1.1d-5r2-2f/README.md), cross-packet checkpoints in [`cross-cutting-control-pack-checkpoints.md`](../history/cross-cutting-control-pack-checkpoints.md) |
+
+
+### E3-F configuration classification correction status
+
+The [canonical classification/extraction correction](../contracts/agent-config-projection-v1.md#e3-f-configuration-classification-and-strict-extraction-correction)
+controls absent-workspace classification and its bounded future source/test fence. E3-F remains
+admitted/dispatched but paused, unaccepted and unclosed; E3-E remains closed and enclosing E3
+incomplete. This is documentation only; no implementation, installed proof, deployment, integration
+or new E2-RM/B2.2/B3.2/B4 closure is claimed.

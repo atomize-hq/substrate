@@ -63,3 +63,12 @@ Table-column projection: the repeated seam-table header below is a projection of
 | Seam | Current code artifacts | Current semantic status | Authority boundary correct? | Enforcement point correct? | Proven by smoke/e2e? | Refactor action | Sibling seams that must stay in context |
 |---|---|---|---|---|---|---|---|
 | WorldRuntimeAdapterExecutionEnvelope | world Codex guest-entrypoint validation in `agent_runtime/validator.rs`; placement config in `config/agents/codex.yaml`; launcher/env/cwd plus copied seed-home setup in `world-service/member_runtime.rs`; reusable managed-gateway FD carrier and one-time consumer | `DefensiveScaffoldingOnly` | no | no | no | Persist one envelope bound to world generation, retained worker, Substrate-owned config projection, immutable policy snapshot, runtime deps, command-broker posture, and credential posture. Reuse the existing secure-FD carrier, join its non-secret evidence to the exact gateway receiver, and give Codex the gateway endpoint/session contract instead of copied credentials. Fail closed or use named non-promotable compatibility mode when exact adoption is unavailable. | AgentConfigProjectionService; RuntimeFamilyRealizationAdapter; WorldCommandExecutionBroker; RetainedWorkerRuntime |
+
+
+### E3-F configuration classification correction status
+
+The [canonical classification/extraction correction](../contracts/agent-config-projection-v1.md#e3-f-configuration-classification-and-strict-extraction-correction)
+controls absent-workspace classification and its bounded future source/test fence. E3-F remains
+admitted/dispatched but paused, unaccepted and unclosed; E3-E remains closed and enclosing E3
+incomplete. This is documentation only; no implementation, installed proof, deployment, integration
+or new E2-RM/B2.2/B3.2/B4 closure is claimed.
