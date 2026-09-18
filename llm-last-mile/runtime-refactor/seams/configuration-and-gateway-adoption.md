@@ -38,13 +38,15 @@ separately granted, logged, non-promotable compatibility.
 No D1 envelope, receipt, retained manifest, E2/E2-RM record, broker policy, or E4 workspace-sync
 authority moves. E3-A through E3-D are landed; the [E3-E closure](../slices/e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17) records E3-E terminal
 completion and product landing, with canonical closure on the separate authority branch. Enclosing
-E3 remains incomplete and E3-F unadmitted/undispatched. This bounded evidence does not promote the
+E3 remains incomplete and E3-F is admitted/dispatched but paused at its producer boundary. This bounded evidence does not promote the
 whole seam: direct Codex/Active/resume and integrated successor proof remain outstanding.
 
 The [E3-F seam/proof clarification](../contracts/agent-config-projection-v1.md#e3-f-callable-ownership-and-deterministic-proof-clarification)
 documents the future callable/ownership, loader-fence and deterministic-proof boundaries on the
-integrated source/authority baseline. E3-F remains unadmitted and undispatched; no runtime proof or
-seam promotion follows from this documentation.
+integrated source/authority baseline. Its admission status describes the prior checkpoint; the
+[connected producer clarification](../contracts/agent-config-projection-v1.md#e3-f-connected-producer-selection-and-custody-clarification)
+controls the current selection/custody boundary. E3-F remains paused, unaccepted and unclosed; no
+runtime proof or seam promotion follows from this documentation.
 
 ## AgentConfigProjectionService
 

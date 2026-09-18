@@ -5355,6 +5355,555 @@ retained Codex lifecycle, and no E3-F implementation. Later E3-F integration con
 under its own authority. Source inspection for this documentation is not product impact analysis,
 implementation, test execution or E3-E source-review completion.
 
+## E3-F connected producer selection and custody clarification
+
+This additive decision controls the connected F2 → F3/F4 producer boundary on committed
+`a8b1a44ed2f9c33f6963eb552f9da05c198bce6a`, tree
+`766709683f93fa5d151da1db74d297160324cba7`. It qualifies the shell authoring/result/custody
+clauses in [the earlier clarification](#e3-f-shell-authoring-and-preparation-custody), its
+[future fence](#e3-f-future-symbol-fence-and-proof-accounting), catalog items 2 and 4 in
+[Admission fence and required proof](#admission-fence-and-required-proof), and their producer
+acceptance clauses only as specified here. Those earlier admission-status sentences describe their
+historical checkpoint; the current status below controls. Extracted bodies, historical hashes,
+closed predecessor receipts, and all other E3-F requirements remain unchanged.
+
+**Current disposition:** E3-F was already admitted and explicitly dispatched and is paused at this
+producer boundary, unaccepted and unclosed. This documentation corrects authority; it neither
+repeats admission nor resumes implementation. E3-E remains closed; enclosing E3 remains incomplete.
+The admission catalog was evidence, not authority, and omitted connected callables. Its historical
+claim of completeness is not proof of coverage. The preserved six-file implementation candidate
+is additional source evidence, not an approved implementation: fingerprint
+`sha256:96d81de930916acbeea388214b5f040233ca90ebefcb059dae0a57f7bd5b4462` identifies the exact
+`candidate-subject.json` bytes in the 2026-09-18 continuation, not a commit. Its authoring helpers
+have no production prepare caller. Passing helper/carrier-injection tests do not establish ingress,
+snapshot/auth joins, asynchronous submission, or cancellation custody.
+
+### E3-F held selected-source ingress
+
+The production ingress belongs to Linux retained Spawn and authenticated Fork (including the
+parent acceptance through child bootstrap for continue-fork, as qualified
+[below](#e3-f-continue-fork-parent-acceptance-and-held-input-custody)). Open configured accepted-home authority using existing
+`ConfiguredAcceptedHomeAuthorityV1::from_installed_bootstrap_authority`, the existing
+`OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home`, registry `open`, and service
+`new`; retain that exact configured service/registry pair for authoring and readback. The caller's
+existing bootstrap home must equal the configured accepted home by physical path/device/inode and
+intended owner, and the workspace must equal authenticated HSA workspace identity. No fixture
+constructor, environment-selected replacement home, service-default fallback, or new registry
+getter is a production ingress. Open the existing `TrustedAuthorityRoot::open_for_owner` at that
+exact home and `TrustedWorkspaceRoot::open_exact` at that workspace; construct the existing held
+global/workspace inventory roots with `from_global`/`from_workspace`. These are held source
+handles, not additional projection or exclusion leases. No HSA visibility change is required.
+
+Resolve `E3EffectiveConfigResolutionSnapshotV1` exactly once under the accepted bootstrap borrow.
+Its sole immutable `effective_config()` view and repeated, revalidating
+`extract_e3_effective_config_source_v1` supply the same effective configuration; extraction is not
+a second resolution. An E3 selected/default backend must exact-match the requested backend and
+remain the admitted CLI Codex world placement with the enabled in-world gateway. A selected V3
+failure is terminal, never a retry through a V1 loader. Non-E3 routing is chosen from the original
+request/accepted context before an E3 failure, never by catching that failure.
+
+The existing strict selector requires `expected_source`, but production has no prior trustworthy
+pathname-to-source selection operation. Do not fabricate the expected source, assume `codex.yaml`,
+probe the selector once per file, parse YAML twice in the caller, or build a V1 inventory entry.
+Instead, factor its **one existing scan/parse/shadow/select implementation** into the following
+Linux-only operation in `execution/agent_inventory.rs`:
+
+```rust
+pub(crate) fn with_e3_selected_inventory_projection_v1<T, E: From<ConfigProjectionFailureV1>>(
+    bootstrap_home: &OpenedBootstrapHomeV1<'_>,
+    global: &HeldE3AgentInventoryRootV1,
+    workspace: &HeldE3AgentInventoryRootV1,
+    effective: &EffectiveSubstrateConfigSourceV1,
+    expected: Option<&AgentInventorySourceMaterialV1>,
+    consume: impl FnOnce(
+        &Policy,
+        &LogicalAgentConfigProjectionV1,
+        &PlacementProjectedInventoryEntryV3,
+        &HeldE3AgentInventorySourceV1<'_>,
+    ) -> Result<T, E>,
+) -> Result<T, E>;
+```
+
+The callback borrows the same bootstrap-home policy resolved by the selector; it does not resolve
+a second policy. The error parameter preserves the existing typed selector failures for the strict
+wrapper and the existing E2/anyhow failure for production callbacks. This is a purpose-specific
+input adapter, not a new general inventory/config resolver. It uses the
+existing parser and V3 projector unchanged, validates every discovered file and same-root duplicate
+ID, applies workspace **whole-agent** shadowing (including disabled/non-V3 shadows), and selects
+exactly one eligible world entry by the frozen effective default backend. It retains all scanned
+source guards and both roots across `consume`, revalidating them and the bootstrap before and after
+that call. The chosen source is the held descriptor from that scan, with its complete accepted
+root/scope/relative path/device/inode/length/raw hash/revision/source hash; freeze that material as
+the expected source before invoking `consume`. A supplied `Some(expected)` additionally performs
+all current exact identity/hash comparisons with their existing failure classifications. `None`
+is allowed only at production ingress with both authenticated roots and the frozen effective
+source; it does not skip selection, provenance, security, or eligibility validation.
+
+`resolve_e3_selected_inventory_projection_v1` keeps its existing signature and strict required
+expected-source behavior: delegate to this operation with `Some(expected_source)` and return the
+logical value. Its sole baseline production caller,
+`OpenedConfigProjectionHsaAuthorityV1::read_e3_selected_inventory_projection_v1`, stays unchanged.
+The new operation's only new production consumers are the E3 branches of
+`prepare_authority_bound_spawn_world_worker`, `fork_world_worker`,
+`prepare_fork_world_worker_bootstrap`. Their callbacks perform the remaining synchronous joins
+below; no borrowed guard escapes. Continue-fork uses the same factored held selection through
+`continue_world_worker`, retaining it across delivery as specified below; the child helper borrows
+that selection instead of invoking another selector. Tests may use the same operations.
+Independent service-side strict revalidation remains mandatory; it is not a duplicate caller
+resolver and is not replaced by trusting the producer's logical value.
+
+The selected V3 entry also has CLI binary, capability, origin and policy-overlay inputs absent
+from `LogicalAgentConfigProjectionV1`. Preserve those from the **same scan**, rather than
+reconstructing them from the logical projection. In `agent_runtime/dispatch_contract.rs`, add only
+`pub(crate) fn resolve_e3_selected_inventory_contract(base_policy: &Policy, envelope:
+&DispatchRequestEnvelope, selected: &PlacementProjectedInventoryEntryV3) ->
+Result<ResolvedLaunchContract, DispatchResolutionError>`. Its callers are the three synchronous ingress
+callbacks above and the E3 branch of
+`continue_world_worker_fork_command_bootstrap_after_delivery` borrowing the pre-delivery selection. It exact-checks the envelope backend/world placement and delegates to the existing
+projected-contract algorithm through a private borrowed
+`enum InventoryDispatchCandidateV1<'a> { Legacy(&'a ProjectedInventoryEntryV1),
+E3(&'a PlacementProjectedInventoryEntryV3) }`. Adapt only
+`resolve_inventory_projected_contract` and `validate_inventory_projected_candidate` to this input;
+private field matching maps V3 `realized_agent_id` to the existing launch `agent_id`. Keep V3 source
+and runtime-projection identity in the selected value; construct no V1/projected-V1 object.
+The existing exact-backend and unique-scope functions borrow their unchanged V1 candidates through
+the Legacy alternative. Preserve validation order, required capabilities, overrides, backend
+allowlist, overlay application, runtime family, provenance and errors. No second policy algorithm
+or new runtime descriptor schema is introduced. Consume `materialize_runtime_descriptor` unchanged.
+The ordinary `resolve_internal_dispatch_context`/`resolve_world_dispatch_contract` remain the
+unchanged compatibility route and are bypassed only by these exact E3 ingress branches.
+
+### E3-F single config, policy, authoring and auth join
+
+The ingress callback holds the snapshot's immutable effective config, its extracted effective
+source, the selected V3 entry/logical projection/source and the existing effective base policy.
+Borrow the selector's existing bootstrap-home effective-policy result and use unchanged selected
+launch-contract checks; no YAML/config/environment reparse or reconstructed unchecked selection is allowed.
+Steering and concurrency checks still run against the same policy input they require. The selected
+inventory overlay retains its existing launch-contract role; it cannot replace the authenticated
+E2 parent policy or recompute the committed cap.
+
+Add a final `e3_base_policy: Option<&Policy>` argument to `resolve_e2_dispatch_policy`. `Some`
+borrows only the accepted E3 ingress policy in place of obtaining `context.base_policy` through
+`resolve_internal_dispatch_context`. Everything after/before that dependency remains the existing
+algorithm: exact current session/caller/world, authenticated parent ref/revision, narrowing
+permission, E1 narrowing validation, no-patch exact parent snapshot hash, exact serialized snapshot
+validation, applied-patch identity and registry initialization. It must not trust the argument as
+E2 authority or accept a supplied snapshot. The three callers are exhaustively classified:
+
+- `prepare_fork_policy_commitment` propagates a final `Option<&Policy>` supplied by its three
+  callers: direct `fork_world_worker`, `prepare_fork_world_worker_bootstrap`, and continue-fork
+  bootstrap. E3 passes `Some`; existing non-E3 E2 Fork passes `None`. Preserve exact source cap,
+  current-parent snapshot/ref/revision checks, fork patch, publication/authentication, child/run IDs,
+  snapshot bytes and activation carrier. Continue-fork still passes no fork patch.
+- `prepare_task_acceptance_submission` passes `None` mechanically; ephemeral E2/V1 behavior and
+  accepted-work identity are unchanged.
+- `resolve_continue_e2_policy_carrier` propagates `Some(&inputs.selection.policy)` on the
+  authenticated E3 continue-fork route, including all three pre-delivery constructions below.
+  Ordinary retained turns and non-E3 continue-fork pass `None`. This is a semantic input route,
+  not mechanical None propagation; the E2 algorithm and parent-turn lifecycle remain unchanged.
+
+FreshSpawn retains its existing admission/reservation/launch algorithm in
+`prepare_authority_bound_spawn_world_worker`. Supply the selected contract and held base policy to
+its existing checks; do not copy that algorithm into an E3 helper or route it through Fork policy.
+The exact `Some(launch_authority_proof)` remains mandatory for FreshSpawn and `None` for Fork.
+
+Qualify the previous standalone authoring signature: `author_e3_projection_for_spawn/fork` now
+borrow the **already resolved** snapshot, extracted effective source, selected logical/source,
+authenticated launch commitment, frozen common transport fields, configured service/registry, account
+home and one authoring timestamp. They do not resolve config or inventory themselves. Their
+synchronous result is the existing authoring ref plus the one typed transient prepare request;
+the nonsecret expected inputs are copied into the custody value below before it leaves the callback.
+Publish with existing `publish_retained_launch_inputs`/`publish_retained_fork_inputs`; call existing
+`registry.resolve(None, Some(&authoring_ref))` and exact-compare effective/source/artifact readback
+while all snapshot/source guards remain live. Re-extraction/revalidation must match before and
+after publication/readback, including failure paths; a failed final guard cannot yield a request.
+
+Only after those joins, call `world_gateway::resolve_e3_integrated_auth_payload` with the snapshot's
+actual effective config, effective policy and actual selected logical projection. Determine the
+account home through existing `unix_account_home_for_principal` for the authenticated intended
+principal, as the committed gateway path does; it is not the Substrate home or an arbitrary HOME.
+Reuse unchanged `resolve_cli_codex_integrated_auth` and `codex_auth_state_path`: environment token
+precedence, optional account ID, file fallback, environment/file policy checks and sanitized errors
+remain theirs. The adapter emits only `cli_codex`, with `api_env: None`, after its fixed
+selection/gateway checks. No copying or widening of those private resolver bodies is authorized.
+
+`build_e3_projection_prepare_request_v1` immediately moves that auth into the existing typed request.
+Freeze preparation ID, nonsecret idempotency preimage/key, E2/common transport fields and credential
+**shape**, never credential bytes/hash, once. Credentials exist only in this transient request and
+the unchanged authenticated client's request serialization, then in the existing service's secret
+owner; they never enter prepared runtime containers, cancellation state, carriers, manifests,
+ExecuteRequest, logs or receipts. Returning this request as a separate tuple element to the async
+caller is permitted; storing it in a retained prepared container is not. Cancellation before client
+entry simply destroys the unsent request; no preparation lease exists yet. For synchronous callback producers the guards end after
+the authoring/readback callback; continue-fork retains its lexical handles as specified below. Subsequent prepare/readback uses the immutable
+nonsecret authoring ref and independent service/HSA revalidation, not a second shell config resolve.
+
+### E3-F continue-fork parent acceptance and held-input custody
+
+This subsection corrects `E3F-PC-P2-001` in the same connected producer boundary. In the committed
+source, `continue_world_worker` calls `prepare_retained_acceptance_submission` before parent
+delivery. Its initial carrier, reconstructed submit request, and final carrier each reach
+`resolve_continue_e2_policy_carrier` → `resolve_e2_dispatch_policy` →
+`resolve_internal_dispatch_context`; the V1 loader rejects V3 before the later child helper can
+run. Covering only that child helper therefore does not cover continue-fork.
+
+**Routing and authentication.** Only Linux `WorkerContinueForkCommand` with the existing
+`PreparedOrchestratorWorldDispatch.b_owned_authority` and its authenticated `retained_target` may
+use this new parent input route. Consume `prepare_orchestrator_world_dispatch` /
+`resolve_e2_retained_target_authority` unchanged: exact session/caller/backend/world/target and
+`Compatible { cap }` are required, not a request boolean or a backend-name guess. Unsupported cap,
+stale linkage or malformed authority fails under existing E2 rules. The payload selects the kind
+of operation; it does not authenticate E3 selection or bypass these checks.
+
+Before either pre-delivery policy check or acceptance preparation on that branch, hold the existing
+accepted HSA bootstrap root at the authenticated store home and exact workspace, resolve the one
+sealed config snapshot, and inspect its immutable effective view. The existing eight-key activation
+predicate (four enablements, `in_world`, `world`, `persistent`, exact default backend) is the
+configuration discriminator. Its backend must equal the authenticated retained target and request.
+An affirmative E3 configuration requires the configured accepted-home physical/owner join and
+strict held V3 selection above; it cannot downgrade on missing installed authority, source failure,
+unsupported runtime, or a backend/selection mismatch. A false activation predicate follows the
+existing non-E3 route, selected before strict E3 extraction/selection; it is not recovery from an
+E3 error. Ordinary `WorkerContinue`, other typed Continue payloads, compatibility without B-owned
+authority, and non-Linux paths do not acquire E3 inputs or change their routing. Non-E3 does not
+require configured E3 service/registry construction. Config inspection uses existing parse/merge/
+precedence semantics; no new config key, request flag, durable E3 marker, or V3-to-V1 adapter is added.
+A false predicate on an explicitly E3 preparation remains `UnsupportedConfiguration`; this
+preparation-input discriminator is not permission to reactivate an E3 worker through compatibility.
+
+**One held selection across await.** Factor the scan used by
+`with_e3_selected_inventory_projection_v1` into this additional Linux-only, `pub(crate)` operation
+in `agent_inventory.rs` (no second scan or parser):
+
+```rust
+pub(crate) fn hold_e3_selected_inventory_projection_v1<'r>(
+    bootstrap_home: &OpenedBootstrapHomeV1<'_>,
+    global: &'r HeldE3AgentInventoryRootV1,
+    workspace: &'r HeldE3AgentInventoryRootV1,
+    effective: &EffectiveSubstrateConfigSourceV1,
+    expected: Option<&AgentInventorySourceMaterialV1>,
+) -> Result<HeldE3SelectedInventoryProjectionV1<'r>, ConfigProjectionFailureV1>;
+```
+
+`HeldE3SelectedInventoryProjectionV1<'r>` is field-sealed, non-Clone and non-Serde. Its exact fields
+are `policy: Policy`, `logical: LogicalAgentConfigProjectionV1`,
+`selected: PlacementProjectedInventoryEntryV3`, `sources: Vec<HeldE3AgentInventorySourceV1<'r>>`,
+`global: &'r HeldE3AgentInventoryRootV1`, and `workspace: &'r HeldE3AgentInventoryRootV1`.
+The selected entry's complete source material identifies exactly one member of `sources`.
+Minimum immutable `pub(crate)` accessors expose `policy`, `logical`, `selected`, and that selected
+held source. `pub(crate) fn revalidate(&self) -> Result<(), ConfigProjectionFailureV1>` checks all
+sources and both roots. The bootstrap/snapshot checks remain with their lexical owner. Construction
+is private to the factored selector and performs the same initial/final checks. The existing
+`with_...` operation calls `hold_...`, borrows its values for the callback, and revalidates afterward;
+its strict-wrapper behavior and error mapping remain unchanged. The only other production caller
+of `hold_...` is `continue_world_worker` with `None`, after the authentication/configuration joins.
+These two entry shapes share one selection algorithm, not two inventory resolvers.
+
+In `orchestrator_world_dispatch.rs`, add only private, non-Clone/non-Serde
+`E3ContinueForkInputsV1<'a, 'home, 'roots>` with fields
+`snapshot: &'a E3EffectiveConfigResolutionSnapshotV1<'home>`,
+`effective_source: &'a EffectiveSubstrateConfigSourceV1`,
+`selection: &'a HeldE3SelectedInventoryProjectionV1<'roots>`,
+`configured: &'a ConfiguredAcceptedHomeAuthorityV1`,
+`bootstrap_home: &'a OpenedBootstrapHomeV1<'home>`,
+`service: &'a Arc<AgentConfigProjectionServiceV1>`,
+`registry: &'a Arc<ConfigProjectionRegistryV1>`, and
+`registry_authority: &'a ResolvedWorldWorkRegistryAuthorityV1`.
+The last borrow is the already authenticated authority in the routed `prepared`, including its
+immutable cap, current-parent ref/hash/revision and exact target; it is not copied into a new
+witness schema. Matching configured service/registry Arcs are lexical locals as above, borrowed
+for child authoring/readback; the child custody shares these same Arcs, without acquiring a lease. No auth or preparation
+request exists in this parent input context.
+
+`continue_world_worker` owns the trusted roots, bootstrap facade, snapshot, extracted source,
+held selection and service/registry locals. On the authenticated branch only, perform
+`resolve_continue_world_dispatch_target_for_routing`'s existing exact-target-presence
+check before taking `registry_authority`'s long borrow; that branch returns the same prepared value.
+Keep non-E3 routing and the existing policy/closeout/guard/acceptance/delivery order.
+The borrowed context and these locals live in the same async stack through the delivery await and
+child synchronous authoring/readback. Do not return borrowed guards from the synchronous callback,
+store self-references in `PreparedOrchestratorWorldDispatch`, or move held inputs into the detached
+parent-observation task. Rust's ordinary async-local borrowing suffices; no new task owner or lease
+is authorized. `PreparedRetainedAcceptanceSubmission` gains **no fields**: its existing
+`base_policy: Box<Policy>` is a nonsecret value copy of the selected policy on this branch, and its
+existing E2 publication/snapshot/cap/proposal/request fields retain their present meanings.
+
+**Exact argument and caller fence.** Add final
+`e3_inputs: Option<&E3ContinueForkInputsV1<'_, '_, '_>>` to these four private functions, retaining
+all existing arguments and return types:
+
+- `prepare_retained_acceptance_submission`: its two callers are in `continue_world_worker`.
+  Ordinary `WorkerContinue` passes `None`; the later nonordinary branch passes the classified
+  context, `Some` only for E3 continue-fork. Use its selected policy for the existing steering and
+  payload checks, and thread the same borrow to both direct carrier calls and the reconstructed
+  request. The outer continue steering/payload/concurrency policy uses that same input.
+- `resolve_continue_e2_policy_carrier`: initial and final calls in acceptance preparation plus
+  the call in `build_continue_world_worker_submit_request_with_message` all receive the same
+  context. Borrow its policy for the new final argument of `resolve_e2_dispatch_policy`; retain
+  all current parent-snapshot ref/revision checks, cap authentication, intersection and carrier
+  construction. `None` retains the original policy/inventory route.
+- `build_continue_world_worker_submit_request_with_acceptance_context`: its sole caller is
+  acceptance preparation; forward the borrow to `_with_message` when reconstructing the proposal.
+- `build_continue_world_worker_submit_request_with_message`: its two callers are the acceptance
+  wrapper above and `build_continue_world_worker_submit_request`. The latter keeps its existing
+  signature and supplies `None`, preserving its compatibility caller and five existing request
+  tests. It is not a route for an E3 continue-fork submission.
+
+`build_continue_world_worker_submit_request_with_authenticated_carrier` and
+`build_continue_world_worker_submit_request_from_authenticated_carrier` need no signature or behavior changes: proposal allocation receives
+the initial authenticated carrier with only the allocated message ID filled, then the existing
+validators and canonical digest bind the request. Preserve all three carrier resolutions, allocated
+message-ID checks, reconstructed submission digest equality, final cap-ref equality, and exact
+initial/final snapshot bytes/hash checks. Never carry a parent preparation credential or child
+projection carrier in `MemberTurnSubmitRequestV1`, B1 proposals/records, or E2 publication context.
+The existing immutable B1 accepted-work identity, request/idempotency keys, proposal reuse and
+[accepted-work readback](dispatch-policy-commitment-v1.md#authenticated-b1-provenance) stay unchanged.
+This grants no edits to B1/E2 storage, publication algorithms or accepted-receipt recovery.
+
+**After delivery.** Add a final borrowed `e3_inputs` argument of the same type to
+`continue_world_worker_fork_command_bootstrap_after_delivery`; its only caller is
+`continue_world_worker`, supplying the same context. Before child contract/policy/authoring, repeat
+snapshot extraction and exact-compare the original effective source, revalidate all held inventory
+sources/roots and bootstrap, and compare selected source/logical identities. No config or YAML
+resolution runs again. Reauthenticate the current parent and immutable source cap through existing
+`prepare_fork_policy_commitment` with `Some(selection.policy())` and no fork patch; its existing
+comparison to the captured registry-authority parent ref/revision remains mandatory. Parent drift
+cannot be repaired by replacing the original context or cap. This preserves the
+[E2 current-parent/intersection rules](dispatch-policy-commitment-v1.md#retained-target-resolution-under-parent-drift).
+Child contract materialization borrows the same selected V3 entry. Only then author the projection,
+resolve transient auth, and freeze one child preparation request as specified above. Hold the
+original guards through publication/readback. Their useful borrow ends there; the lexical owner
+may retain the handles until the child helper returns, without another selection or lock/lease.
+The original E2 child/run identity, Fork `None` launch-proof posture and single custody owner apply.
+
+A failed/ambiguous parent delivery creates no child preparation, auth request or lease. The existing
+parent observer owns accepted work and keeps its exact request/E2 identity; the caller's cancellation
+drops only its local held inputs. Lost observer response, existing acceptance, restart or the
+existing nonordinary-retry blocking-observer error does not authorize replaying parent delivery or
+creating a child to compensate. The early accepted-work lookup remains before new ingress and is
+consumed unchanged. Successful delivery followed by failed guard/child preparation preserves the
+accepted parent and existing obligation/closeout order; report the child failure without rollback,
+redelivery or an invented resume path. Once child prepare is entered, the single owner and known/
+ambiguous submission, cancellation and expiry rules below control. No second preparation is hidden
+in repeated parent-carrier construction or post-delivery validation.
+
+### E3-F prepared ownership and submission boundaries
+
+Add one field-sealed, non-Clone, non-Serde `E3ProducerPreparationCustodyV1` in
+`orchestrator_world_dispatch`, crate-visible only for moving it into REPL startup. Its exact fields
+are `authoring_input_ref`, `expected_effective`, `expected_inventory`, `expected_logical`,
+`expected_artifact_manifest`, `common_transport` (the frozen nonsecret
+`MemberDispatchTransportRequest`, initially carrier-free), `preparation_id`,
+`preparation_idempotency_key`, `authoring_created_at`, `response:
+Option<E3ConfigProjectionPrepareResponseV1>`, `cancel_request:
+Option<E3ConfigProjectionCancelRequestV1>`, `submission_state`, and the matching configured
+`service`/`registry` Arcs. `submission_state` is the private enum
+`E3ProducerSubmissionStateV1 { Unsent, PrepareEntered, Prepared, ExecuteEntered,
+Transferred, CancelPending, Cancelled, ExpiryRecoveryRequired }`. These are process-local custody
+markers, not durable truth or a replacement runtime lifecycle. The single response owns the
+carrier; transports may copy that immutable carrier as equality evidence, never clone custody.
+
+`PreparedSpawnWorldWorkerBootstrap` and `PreparedForkPolicyCommitmentV1` each gain only
+`e3_preparation: Option<E3ProducerPreparationCustodyV1>`; `PreparedForkWorldWorkerBootstrap` already
+owns its optional commitment and needs no duplicate custody slot. `PreparedAgentRuntime` gains
+that same optional field. The transient request accompanies the synchronous preparation result
+as a separate `Option<E3ConfigProjectionPrepareRequestV1>` tuple element. The two Spawn prepare
+functions and Fork bootstrap return `(existing_prepared_type, Option<request>)`; their non-E3
+alternative returns `None` and unchanged prepared data. The Fork commitment helper still returns
+its commitment; its ingress callback attaches the authoring/custody result after exact E2
+publication. Direct Fork/continue-fork keep the separate transient request in their async local
+scope. No new request or authority is manufactured in a transport builder.
+
+Private support in this same module is limited to
+`submit_e3_projection_preparation_v1(&mut E3ProducerPreparationCustodyV1,
+E3ConfigProjectionPrepareRequestV1, &AgentClient) -> async Result<()>`,
+`validate_e3_projection_prepare_response_v1(&E3ProducerPreparationCustodyV1,
+&E3ConfigProjectionPrepareResponseV1) -> Result<()>`, and
+`cancel_e3_projection_preparation_v1(&mut E3ProducerPreparationCustodyV1,
+&AgentClient) -> async Result<()>`; the submit/cancel operations are `pub(crate)` only because
+REPL invokes them. These signatures denote async functions, not a new executor/client. The
+existing prepared owner remains reachable across their awaits. Before client entry freeze its
+Unsent → PrepareEntered transition, move the sole transient request to
+`AgentClient::e3_config_projection_prepare`, and store the returned response/cancel coordinates
+before any further fallible step. Build no alternate HTTP client or transport.
+
+The direct dispatch entrypoints and toolbox handler submit preparation immediately after the
+synchronous result, before moving its prepared owner into startup or execute. A construction,
+join-worker, prompt/manifest validation or registration error remains accountable to that local
+owner. A dropped preparation future with no usable response becomes ExpiryRecoveryRequired under
+the original ID/key; it is not safe to fabricate a cancel carrier or retry with fresh auth. Service
+expiry/recovery remains the resource owner when the shell cannot obtain exact cancellation material.
+
+For REPL Fork, change only the last argument of
+`prepare_fork_child_runtime_startup_for_descriptor` from `&PreparedForkPolicyCommitmentV1` to
+`&mut PreparedForkPolicyCommitmentV1`. `handle_internal_toolbox_world_dispatch_request` borrows
+`fork.policy_commitment.as_mut()`, performs all current fallible descriptor/manifest/E2 equality
+checks, and **only at successful return** takes `e3_preparation` into `PreparedAgentRuntime`.
+On error the commitment still owns it and the async handler cancels/accounts for it. The remaining
+commitment metadata stays in `fork` for the existing post-start manifest checks. No clone, second
+preparation, second lease, or ownership hidden behind the old immutable borrow is permitted.
+Spawn's authority-registration constructor similarly moves custody only after its fallible checks;
+on failure its worker result returns the same owner to the async caller alongside the existing
+failure. A join panic/lost result falls back to the original server deadline, with no success claim.
+
+`spawn_prepared_world_worker` and `start_internal_dispatch_member_runtime` pass that owner to
+`execute_spawn_world_worker_stream` and `start_remote_member_runtime_with_prepared`, respectively.
+The latter two build transport from the frozen fields, preserve the exact prepared carrier through
+F4, and retain cancellation responsibility before ExecuteEntered. Builders borrow; they cannot
+take custody. On confirmed service transfer, the unchanged E3-E manager/retained-runtime boundary
+owns cancellation; producer preparation cancellation cannot reach that owner. Post-transfer
+startup/manifest/registration failure uses existing exact runtime-ending cancellation, never an
+extra preparation cancel or re-execution. Continue-fork's child request passes the same Fork
+carrier through its existing common Fork builder; the already delivered parent turn is not replayed.
+
+### E3-F exact response, failure and retry
+
+Strict decoding/self-consistent hashing and client ID/key checks are necessary but insufficient.
+Validate the response against the expected **subject**, not a subject learned from its carrier:
+resolve the frozen authoring ref with the matching registry; require exact effective/source/artifact
+manifest equality and the stored logical selection; form the existing identity fields from those
+inputs and the exact E2/common fields. A service-allocated series/fence cannot be predicted: use
+the response series only as a claimed series in that identity, seal with the existing domain, then
+call `service.resolve_preparation_subject_v1`. Its immutable-subject join ignores candidate
+series/hash for lookup and must return Bound metadata whose identity and projection ref exactly
+match the claim. Unbound, retired, wrong subject, stale head or incomplete readback rejects.
+
+Require Dormant/ZeroLiveClosed, exact store/series/fence and full E2 cap link; authoring/source and
+artifact equality; exact intent/gateway/Dormant refs; original preparation ID/key and prepared/expiry
+times equal to authoritative record handoff material; canonical timestamp ordering and unexpired
+original deadline. Validate schema, response hash and every carrier field using existing codecs.
+Construct the **claimed value**, not a new lease: schema 1, configured store/series, deterministic
+preparation consumer ID under the existing domain, MemberDispatchV2, revision 1, no predecessor,
+Dormant acquired ref, Held, `acquired_at = record.created_at`, no released time, and carrier lease
+hash. `registry.resolve(Some((&expected_identity, &claimed_lease)), Some(&authoring_ref))` must
+validate that complete claim against the durable original Held lease and prepared chain. Drop its
+temporary resolved capability immediately after validation; it neither acquires a lease nor becomes
+a second retained capability. No public metadata/lease getter or new lease acquisition is allowed.
+Freeze accepted response/cancel coordinates only for this subject; an untrusted mismatching
+response must never authorize cancelling somebody else's carrier.
+
+| Failure boundary | Required existing authority/custody disposition |
+|---|---|
+| Before prepare client entry | No live preparation. Destroy transient auth; preserve existing E2 admission failure/identity handling. |
+| Prepare rejected, response lost/malformed/mismatched, or future dropped | No execute. If exact response plus authoritative subject/readback establishes this attempt, cancel that exact preparation; otherwise retain nonsecret ID/key/failure accounting and rely on original expiry/recovery. Do not invent a carrier or renew the deadline. |
+| Known failed construction/submission before execute entry | Exact preparation cancel through existing authenticated client; retain CancelPending on failure. Original server expiry/recovery accounts for lost cancel. Mark existing E2 interruption without changing its meaning. |
+| Execute entered, transport/response ambiguous | Keep identical carrier, participant/run/E2 identity and request. Use existing accepted/start/registration observation and pending-admission recovery; no new prepare, world-binding refresh, second execute, or claim of known non-submission from a generic error. An exact observation retry is not permission to execute again. |
+| Definitive rejection before transfer | Cancel the same preparation; preserve existing E2 rejection/interruption. No retry with regenerated identity. |
+| Confirmed transfer/registration | Retained runtime owns cancellation under unchanged E3-E/E2 rules. Producer relinquishes only that responsibility; returned response is not by itself proof of transfer. |
+| Restart/MissingPreparation or expiry | Existing recovery revokes/cleans the old attempt. Only the already defined fresh-auth/new-fence transition may create later work after exact cleanup and E2 admission checks; never reconstruct the old live owner or silently retry this submission. |
+
+At this baseline `start_remote_member_runtime_with_binding_retry_using` and both
+`refresh_member_runtime_startup_after_binding_mismatch` and
+`refresh_member_runtime_binding_from_shared_world_metadata_after_mismatch` are **cfg(test)**.
+They are not an implemented production retry owner. Preserve their non-E3 regeneration tests and
+compatibility semantics. Add colocated E3 tests of the actual production submission functions and
+use a borrowing test callback for E3 custody, never their consuming callback plus fresh preparation.
+`start_remote_member_runtime` remains the compatibility wrapper; E3 starts arrive with prepared
+custody through `start_remote_member_runtime_with_prepared`. A changed binding makes frozen E3
+material invalid; it does not permit copying a carrier into a newly prepared runtime. The inherited
+two red retry fixtures that fail before retry assertions prove none of this.
+
+### E3-F finite producer implementation and test fence
+
+The preceding exact signatures/fields are the complete **additional** future producer boundary;
+they qualify F1–F4 only. Other F5–F14 authority is consumed unchanged, not reopened here. Within
+each row only the described E3 branch, named private support and directly necessary colocated E3
+tests may change. No file-wide or wildcard caller permission follows.
+
+| File (relative to repository root) | Exact symbol/caller delta or unchanged consumption |
+|---|---|
+| `crates/shell/src/execution/config_model.rs` | Existing sealed snapshot/resolver/extractor minimum `pub(super)` visibility and immutable `effective_config` accessor only; no new resolver or lifetime escape. |
+| `crates/shell/src/execution/agent_inventory.rs` | New `with_e3_selected_inventory_projection_v1`, shared `hold_e3_selected_inventory_projection_v1` and sealed held-selection type/accessors/revalidate; strict `resolve_e3_selected_inventory_projection_v1` delegates as specified. Existing raw parser, V3 projector, held-root/source operations, V1/V2 loaders stay unchanged. |
+| `crates/shell/src/execution/agent_runtime/dispatch_contract.rs` | New selected-entry adapter and private borrowed candidate enum; only `resolve_inventory_projected_contract`, `validate_inventory_projected_candidate`, and the two mechanical Legacy call sites in `resolve_inventory_contract_for_exact_backend`/`resolve_inventory_contract_for_unique_scope`. Existing policy/capability/override/runtime-family operations consumed unchanged. |
+| `crates/shell/src/execution/orchestrator_world_dispatch.rs` | Three synchronous ingress callbacks and the held continue-fork route above; `resolve_e2_dispatch_policy`, `prepare_fork_policy_commitment`; `prepare_spawn_world_worker_bootstrap`; two authoring functions and frozen request builder; custody/state types and three submit/validate/cancel helpers; fields in PreparedSpawn/PreparedForkPolicy only. Direct dispatch entrypoints `dispatch_orchestrator_world_request` and `_for_principal`, Linux `spawn_world_worker`, `spawn_prepared_world_worker`, `execute_spawn_world_worker_stream`; builders `member_dispatch_transport_request_from_typed`, `build_spawn_world_worker_transport_request`, `build_fork_world_worker_transport_request`, `build_continue_world_worker_fork_command_transport_request` only freeze/borrow/forward. `prepare_orchestrator_world_dispatch` existing authentication remains unchanged. `prepare_task_acceptance_submission` only adds `None`. The exact additional E3 parent fence is `continue_world_worker`, `E3ContinueForkInputsV1` and its eight borrowed fields, `prepare_retained_acceptance_submission`, `resolve_continue_e2_policy_carrier`, `build_continue_world_worker_submit_request_with_acceptance_context`, `_with_message`, and the child helper, with arguments/branches specified above; `build_continue_world_worker_submit_request` only supplies `None` internally. No field is added to PreparedOrchestratorWorldDispatch or PreparedRetainedAcceptanceSubmission; only the latter's existing base_policy input changes on E3. The authenticated-carrier builders, parent observer, accepted-work lookup, cap/store/receipt algorithms and compatibility routing are consumed unchanged. |
+| `crates/shell/src/repl/async_repl.rs` | `handle_internal_toolbox_world_dispatch_request` owns synchronous-result → authenticated prepare and error cancellation; PreparedAgentRuntime custody field; `prepare_fork_child_runtime_startup_for_descriptor` mutable borrow/take; `prepare_member_runtime_startup_from_authority_registration` move/error return; `build_member_dispatch_transport_request`, `start_internal_dispatch_member_runtime`, `start_remote_member_runtime_with_prepared` forward/submit/account. Compatibility `start_remote_member_runtime` remains unchanged. Test-only binding helper may add only the E3 borrowing test branch; no production retry framework. |
+| `crates/shell/src/execution/routing/dispatch/world_ops.rs` | Existing `MemberDispatchTransportRequest`, `ExecuteRequestInput`, `build_execute_request`, `build_member_dispatch_payload`, `build_agent_client_and_member_dispatch_request`, `_for_cwd`, Linux `_impl`: carrier forwarding only if needed. Strict codecs/clients remain unchanged. |
+| `crates/shell/src/builtins/world_gateway.rs` | Only `resolve_e3_integrated_auth_payload` and directly necessary colocated E3 tests. Three private auth/path/compatibility resolvers remain unchanged; W's corrected adapter is evidence to verify, not automatic acceptance. |
+
+PreparedAgentRuntime's other literal constructors receive only `e3_preparation: None`:
+`apply_greenfield_host_start_from_authority`, `prepare_hidden_owner_helper_runtime`,
+`prepare_legacy_fork_child_runtime_startup_for_descriptor`, and
+`prepare_member_runtime_startup_for_descriptor`; the host destructure in
+`start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_request_tx` only rejects unexpected
+E3 custody before host effects. Its existing descriptor-drift test literal receives None. Preserve
+all manifest, session, startup-extension, parity, lease-token and non-Linux semantics.
+
+The changed Spawn tuple signature has these additional **test-only** mechanical consumers in
+orchestrator_world_dispatch (discard/assert the None request, preserve assertions/fixtures):
+`b4_pending_admission_start_observer_transport_error_remains_claimed`,
+`b4_pending_admission_registered_observer_transport_error_remains_claimed`,
+`seed_routable_e2_spawn_source`,
+`dispatch_contract_inspect_world_worker_pending_admission_exact_target_join_returns_projection`,
+`b4_pending_admission_retry_sends_transport_once`,
+`b4_pending_admission_direct_transport_error_holds_claim_until_expiry`,
+`b4_pending_admission_undelivered_response_is_recoverable_on_exact_retry`,
+`b4_pending_admission_abandoned_claim_recovers_via_cancel_world_work_after_reopen`,
+`b4_pending_admission_concurrent_cancel_world_work_sends_transport_once`,
+`b4_pending_admission_pretransport_and_terminal_truth_send_no_transport`,
+`b4_pending_admission_cancel_world_work_durably_prevents_manual_routability`,
+`run_b4_direct_pending_admission_terminal_observer`, and
+`b4_pending_admission_direct_registered_path_cancels_only_exact_bootstrap_span`.
+Fork tuple consumption also affects
+`e2_fork_paths_resolve_cap_authority_without_legacy_participants_or_child_b3` only mechanically.
+In async_repl the additional test consumers are `run_b4_pending_admission_observer_race` and
+`b4_pending_admission_toolbox_chain_preserves_typed_failures_and_unrelated_errors`.
+No inherited test failure may be hidden by weakening these assertions.
+
+Required new discriminating test groups (planned, not run by this documentation):
+
+- `test_e3f_production_ingress_global_and_workspace_shadow`: enter all four actual ingress
+  producers without a supplied expected source; different filenames and disabled/non-V3 workspace
+  shadows; direct/toolbox Spawn/Fork and continue-fork starting before parent acceptance; no call
+  to V1 loader on any E3 parent or child join.
+- `test_e3f_held_source_substitution`: replace selected/unselected file or root, mutate bytes or
+  duplicate ID between scan/publication/readback; verify no prepare/execute and unchanged strict
+  required-expected-source consumer behavior. Reject newer schema and V3→V1 fallback.
+- `test_e3f_exact_config_selection_auth_join`: one config resolution, actual selected logical
+  input, same authoring source/artifacts and account-home policy; environment precedence/file
+  fallback and sanitized negatives with synthetic values, no retained/request-carrier credentials.
+- `test_e3f_e2_policy_input_parity`: exact parent/snapshot/narrowing/Fork-cap checks unchanged;
+  E3 Some and non-E3 None routes; unchanged legacy projected-contract behavior and V3 capability,
+  overlay/allowlist/descriptor negatives through the shared algorithm.
+- `test_e3f_continue_fork_parent_delivery_child_reachability`: enter the real direct and toolbox
+  Continue dispatch chain with authenticated E2 target/cap and held V3 config/source, before
+  acceptance preparation. Observe initial carrier → allocated proposal/request → reconstructed
+  request/carrier → final carrier → one parent delivery → guard checks → one child preparation →
+  child execute. Assert exact message ID, proposal digest, parent snapshot bytes/hash/ref/revision,
+  immutable cap and request/idempotency identities at each repeated construction. Injection only
+  after acceptance or at child transport is not proof.
+- `test_e3f_continue_fork_held_context_and_drift`: count one config resolution and one shared
+  inventory scan across the await, no pre-delivery auth/prepare, same selected source/overlay/auth
+  join after delivery. Substitute selected/unselected source, config/root, target/cap or parent
+  ref/revision at allocation, reconstruction and delivery boundaries; fail before the next effect,
+  preserve an already accepted parent, and never re-resolve, redeliver or reprepare to repair drift.
+- `test_e3f_continue_fork_parent_failure_retry_and_non_e3`: definitive parent failure, ambiguous
+  delivery, lost observer response, already-accepted retry and restart create no new child or
+  parent execution; child ambiguity retains one frozen carrier/E2 identity. Exercise false-config
+  non-E3 continue-fork, ordinary WorkerContinue, other typed payloads, legacy compatibility and
+  unsupported authenticated cap with unchanged E2/B1 outcomes. A request flag/backend spelling
+  cannot select E3; configured-home/backend/source mismatch after affirmative selection fails
+  closed. Retain the five existing `continue_world_worker_submit_request_*` identity/prompt tests
+  unchanged; only their shared wrapper's internal None argument is mechanical.
+- `test_e3f_fork_custody_move_and_failure`: mutable commitment retains custody on every startup
+  failure, moves once on success, preserves later manifest checks; analogous Spawn worker failure,
+  no clone/second lease/prepare, FreshSpawn Some(proof) versus Fork None.
+- `test_e3f_prepare_response_exact_subject`: well-formed but foreign subject; each schema/hash,
+  ID/key/time/store/series/fence/reference/original-Held-lease mismatch fails before execute;
+  original authoritative readback and self-consistent wrong-response controls are distinct.
+- `test_e3f_submission_cancel_and_ambiguity`: failures before/after prepare and execute entry,
+  dropped join/future, lost response/cancel, definitive rejection, service transfer, restart/expiry;
+  every edge has one accountable owner, original deadlines and no duplicate effect.
+- `test_e3f_production_binding_retry_identity`: drive real production submit/observation boundary
+  to ambiguity, then exact E2 recovery; require byte-identical carrier/run/participant/commitment,
+  one prepare and one execute, changed-binding rejection and no compatibility regeneration.
+
+Reuse unchanged E3-A–E and prior candidate evidence only within its causal limits. Carrier injection,
+unit success, test compilation and retry fixtures that never reach assertions cannot prove these
+production joins. This clarification runs no Cargo, installed execution, credentials, privileged
+fixtures or new upstream Codex review. It changes no runtime ownership, native realization, Codex
+adapter, gateway/security protocol, durable schema, TLS route, installation or integration authority.
+
 ## E3-F callable ownership and deterministic proof clarification
 
 This section settles the E3-F producer-to-retained-runtime seam against integrated source

@@ -1,7 +1,7 @@
 **Kind:** controlling numbered specification and preserved slice row
 **Stable ID:** `e3-agent-config-projection-and-gateway-adoption`
 **Canonical for:** controlling E3 authority correction, contract/file/symbol fence, dependency and gate disposition, and preserved historical row
-**Status:** E3-A through E3-D landed; E3-E terminally complete; enclosing E3 incomplete; E3-F not admitted or dispatched
+**Status:** E3-A through E3-D landed; E3-E terminally complete; enclosing E3 incomplete; E3-F admitted/dispatched, paused at the producer boundary
 **Historical E3-A proof-recovery status:** canonical specification; E3-A has a preserved incomplete and unlanded candidate under bounded Linux proof recovery; E3-B through E3-F are not admitted, dispatched, or implemented
 **Historical E3-A proof-recovery authority scope:** documentation-only E3-A proof-recovery authority; no product/test change, proof execution, completion, landing, or successor admission/dispatch
 **Source span:** [`../03-phase-slice-map.md`](../03-phase-slice-map.md) line 222
@@ -505,6 +505,13 @@ proof still belong to E3-F. Enclosing E3 is not complete. This record grants no 
 worker dispatch, D1/E4 work or successor planning.
 
 ### E3-F — retained V2 Codex launch/resume adoption and integrated proof
+
+**Current producer-boundary status:** E3-F was already admitted and dispatched; it is paused,
+unaccepted and unclosed. The [connected producer clarification](../contracts/agent-config-projection-v1.md#e3-f-connected-producer-selection-and-custody-clarification)
+controls the source-selection, single-config/auth and preparation-custody boundary and its finite
+future fence. This documentation does not repeat admission, resume implementation, provide installed
+proof or integrate the preserved candidate. E3-E remains closed; enclosing E3 remains incomplete.
+The admission statements in the following prior seam/proof checkpoint are historical.
 
 **Admission status:** unadmitted and undispatched. The documentation-only
 [E3-F seam/proof clarification](../contracts/agent-config-projection-v1.md#e3-f-callable-ownership-and-deterministic-proof-clarification)
