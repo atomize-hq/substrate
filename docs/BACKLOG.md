@@ -18,6 +18,14 @@ Keep concise, actionable, and security-focused.
 
 - Outside the bounded R3 evidence-retirement and one preserved-orphan lane: design publisher upgrade/replacement across changing code identities; general authorized orphan recovery after partial or externally interrupted teardown; decide whether full-product uninstall may retire the final publisher/anchor; and define multi-install ownership and last-claim retirement rules. Do not fold these into the external evidence finalizer, the prospective V2 protocol, or the exact precommit-less recovery lane.
 
+## Required Research — Multi-World State and Environment
+
+- **Research required before mechanism selection — execution not started**
+  - Confirmed multi-World Lanes require stable project baselines, V1 per-World dependency/configuration overrides, stateful transitions, independent promotion, and optional sibling synchronization.
+  - Use the [bounded research and experiment brief](ideas/world-state-environment-research.md) for existing inputs, comparison criteria, experiment acceptance, and the later planning handoff. This entry is a discovery pointer, not a second progress ledger.
+  - Reconcile ADR-0009/0010, historical guest-rootfs planning, workspace sync, and internal Git plans rather than adopt or recreate them wholesale. Guest OS/image isolation does not itself prove a frozen project baseline. Keep older guest-rootfs scope/delivery distinct from newly deferred alternative-Lane backing.
+  - Exit: evidence-backed recommendation plus reviewed contract deltas and an implementation plan. Semantic B01–B05 work may continue; mechanism selection and runtime-guarantee claims wait for evidence. No experiment or implementation is dispatched by this entry.
+
 ## Current Investigation
 
 - **Status/stop seam: fallback-only orchestration session with unknown posture and late world member registration**
