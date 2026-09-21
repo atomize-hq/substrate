@@ -10,6 +10,8 @@ The [core architecture dossier](../../../SUBSTRATE_CORE_ARCHITECTURE_SESSION_DEC
 
 Working assumption: retain the existing Collider planning scenario—one exact Linux ephemeral World task in Control Plane/Lane views plus Workspace dependency requirement read/add/remove—as the bounded handoff target. That selection comes from the consumer plan, not new user ratification of an implementation dispatch. It does not define the complete Substrate architecture or defer V1 per-World overrides.
 
+This is a semantic proof target, not a selected executable runtime profile. B01's readiness gate below must be satisfied before treating that scenario as runnable or safe.
+
 | Input | Bound identity / qualification |
 |---|---|
 | Core dossier | SHA-256 `07d956b9936569dd8f7fcb12b8b6500b49b91187d91167cb42453413b9fdbe15`; current 335-line revision includes SCA-12. The initial 314-line dossier was read in full; the research follow-up delta was reviewed in place. |
@@ -36,6 +38,12 @@ Initial authoring fence was this draft and the companion B03 draft. The 2026-09-
 ## 3. B01 — Authenticated submission and exact reconciliation
 
 **Existing owners:** dispatch + HSA + Receipt Registry + E2 commitment + B2.2 receipt construction. [Receipt/supervision family](../../../llm-last-mile/runtime-refactor/seams/runtime-event-receipt-supervision-and-retained-runtime.md), [ephemeral receipt](../../../llm-last-mile/runtime-refactor/contracts/active-ephemeral-task-receipt-v1.md), [B2.2 owner](../../../llm-last-mile/runtime-refactor/slices/b2-2-foreground-receipt-return.md).
+
+**Runtime-profile readiness gate:** before running the consumer proof, name its supported ingress, runtime family/backend and version, action/tool capabilities, credential posture, and exact World execution route. Bind these to current source and applicable security-owner requirements, then prove the selected path on installed Linux. No such profile is selected or certified by this draft. Existing B1/B2.1/B2.2 receipt behavior is real bounded functionality; a receipt test or in-World process placement is not proof of credential isolation or complete side-effect mediation.
+
+The [runtime dossier](../../../RUNTIME_REFACTOR_SESSION_DECISIONS_2026-09-18.md) records copied Codex configuration/auth debt (R16), incomplete E3 producer/custody/admission/retained execution and proof (R23–R28), and absent/partial D1 envelope, D2 brokerage and D3 joined proof (R29–R30). At the reviewed Linux `088f62d…` source binding, [world-service](../../../crates/world-service/src/service.rs) rejects V2 member launch as unimplemented. Credential-bearing E3/V2/retained routes therefore remain design-only here; the inherited copy bridge is not a substitute for their security contract. Any selected UAA shell/edit/write/tool/process/network/native side-effect channel must have applicable broker/enforcement evidence or be disabled. If that cannot be established for a proposed profile, keep it design-only rather than count it as the narrow proof.
+
+This gate does not declare all ephemeral execution absent or require completion of every E3/D1/D2/D3 feature before any consumer experiment. A narrower supported profile may be proposed with its own explicit limits and evidence; it must not silently reduce required security or imply proof of excluded routes.
 
 ### Proposed operation meanings
 
@@ -116,13 +124,15 @@ Bind receipt revision, stream/frame cursor, semantic-event identity, and observe
 
 Producer disappearance may leave an unresolved nonterminal claim. Preserve available history and expose an unavailable tail; do not replay by rerunning the prompt. UI unmount/disconnect only detaches observation. Owner recovery guarantees after shell/service restart must be stated and tested separately, not assumed from Lane durability.
 
-Preserve the existing cancellation distinctions: pending closeout, already terminal, no active cancelable work, unreachable owner, invalid target, World mismatch, ambiguous target, and policy denial. Only exact terminal evidence yields cancelled. Completion can win before or after cancellation acknowledgement. Worker stop, turn/task cancel, and pending-admission cancel remain different operations.
+Preserve the existing accepted-work cancellation distinctions: pending closeout, already terminal, no active cancelable work, unreachable owner, invalid target, World mismatch, ambiguous target, and policy denial. Only exact work-terminal evidence yields a cancelled task/turn. Completion can win before or after cancellation acknowledgement. Worker stop, turn/task cancel, and pending-admission cancel remain different operations.
+
+The [current dispatch outcomes](../../../crates/shell/src/execution/agent_runtime/dispatch_contract.rs) also include `CancelledBeforeTransport` and `AlreadyRoutable` for pending-admission control. B4 further requires distinct cancelled-before-registration, registered-before-transport, transport-ambiguous/cancel-pending, already-routable and terminal dispositions. These describe admission progress, not interchangeable accepted-task terminal states. The bounded operations above target accepted work only: pending-admission cancellation is explicitly unsupported by this proposed surface until separately specified using exact admission identity. If exposed later, preserve these outcomes and their owner projections losslessly; never substitute an accepted-work receipt, `NoActiveCancelableWork`, or a fabricated task terminal result.
 
 Expose `Completed`, `Failed`, `Cancelled`, `NeedsRetainedFollowup`, and `Invalidated` losslessly where the selected owner supports them. `NeedsRetainedFollowup` ends ephemeral work; it creates no worker or continuation route. Do not invent a terminal wall-clock timestamp: absent source time stays absent, even if the UI uses a labeled presentation timestamp.
 
 **Hierarchy extension:** authorized redirection must produce coordinator-visible causation/state updates without a hidden competing instruction chain. Ordering, stale-plan rejection, notification recovery, and escalation acknowledgement need their own messaging/control contract. They are not implied by observing a receipt and need not be implemented for the one-task proof.
 
-**Proof required:** acceptance without running; immediate terminal; two authorized views of one work item; disconnect/reconnect; duplicate/conflicting/out-of-order frames; missing tail and producer restart; cancel/completion races; late cancellation ACK; exact terminal readback; nonstandard terminal mapping; unauthorized read/cancel. Unsupported observations remain visible as such.
+**Proof required:** acceptance without running; immediate terminal; two authorized views of one work item; disconnect/reconnect; duplicate/conflicting/out-of-order frames; missing tail and producer restart; cancel/completion races; late cancellation ACK; exact terminal readback; nonstandard terminal mapping; unauthorized read/cancel; explicit rejection of unsupported pending-admission targets without substituting task cancellation. Any later admission-control extension must prove lossless B4 outcome mapping. Unsupported observations remain visible as such.
 
 ## 5. B03 — Lane and World binding
 
@@ -184,6 +194,7 @@ The current proof edits only Workspace declarations. It neither exposes Lane/Wor
 | Exact accepted work | Accepted-first projection; running only when owner evidence supports it. |
 | Receipt + historical Lane/World binding | Same work can appear in Control Plane and Lane projections; opening two views does not create two behavioral owners. |
 | Cancel-request acknowledgement | Pending cancellation; continue observing until exact terminal evidence. Client `cancelRequest.generation` is not owner cancellation identity. |
+| Pending-admission control target/outcome | Explicit unsupported-path result in the bounded accepted-work surface. Any later supported extension preserves `CancelledBeforeTransport`, `AlreadyRoutable`, and B4 admission progress separately from task terminality. |
 | Owner terminal / unusual result class | Lossless mapping or explicit unsupported contract path; no success/cancel fabrication. Terminal time remains unavailable when absent. |
 | Owner cursor and read cut | Adapter checkpoint/projection sequence is separate; filtering cannot introduce unexplained sequence holes. |
 | Declared dependency change | Configuration result, not installed/applied confirmation. Applied status must name the observed World. |
@@ -196,7 +207,7 @@ This is a proposal-review checklist, not a new canonical status ledger. Link to 
 
 | Item | Freshly read document evidence | Remaining boundary before implementation-ready claim |
 |---|---|---|
-| B01 | B2.2 owner records landed/review-clean receipt return and E2-RM use, with separate closure unlocated. The older consumer plan must not call these wholly absent. | Review §3.1–3.2 result algebra/admission ordering; select supported human/delegated ingress and durable correlation placement, canonicalization, retention/expiry, exact wire types and call chain. |
+| B01 | B2.2 owner records landed/review-clean receipt return and E2-RM use, with separate closure unlocated. The older consumer plan must not call these wholly absent. | Satisfy the runtime-profile readiness gate; review §3.1–3.2 result algebra/admission ordering; select supported human/delegated ingress and durable correlation placement, canonicalization, retention/expiry, exact wire types and call chain. |
 | B02 | Existing Supervisor and cancellation contracts define exact ownership and outcomes. B4 owner records landed source but unverified exact terminal proof/closure. | Public authenticated read/observe/cancel, cut/cursor/retention/restart contract, result mapping and exact-path proof. |
 | B03 | HSA exact binding and physical adoption exist as named owner contracts, not the newly confirmed multi-World Lane authority. | Review companion §3.1/4.5 revision scopes and linked receipt carrier; choose authority placement/HSA bridge, exact wire schemas, transition/admission serialization, supported association reads. |
 | B04 | Collider canonical context/continuity requirements were refreshed. | Handbook owner contract, concrete typed references/callable integration, preparation/acceptance boundary and delivered-context evidence. |
@@ -237,3 +248,5 @@ For new files, no-index checks can report differences; inspect whitespace diagno
 Root review and mechanical checks for this semantic follow-up passed: 32 draft link targets/fragments, whitespace, dossier source pin, unchanged HEAD/index and protected documents, and the two-file edit fence. Root review also distinguishes stale-destination rejection for a new request from immutable original-binding return for an accepted retry. These are documentation checks, not execution tests or independent approval.
 
 **Drift rule:** before owner acceptance or implementation admission, recheck the dossier hashes, relevant Substrate owner documents and shared dependencies, and consumer mapping at the recorded bases. A moving branch tip alone is not grounds for a complete reread; a changed relevant authority or dependency is. Never treat a file hash alone as proof that its transitive semantics stayed unchanged.
+
+**2026-09-21 review correction:** the independent source/document review requested changes for the runtime-profile gate and pending-admission outcome coverage, and qualified the HSA redesign inference. These draft corrections address that scope without approving a runtime profile or adding implementation authority. Existing bytes were first checkpointed at local `f461ac3f0` on `docs/substrate-collider-contracts`; the earlier authoring/source bindings above remain historical evidence, not that branch's current HEAD. This correction does not update the dossiers, research scope, canonical owners, or runtime source.
