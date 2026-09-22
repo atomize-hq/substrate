@@ -4,7 +4,7 @@
 - Repo / Workspace: `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate`
 - Date: 2026-09-20
 - Authoring Session: Interactive `interview-me` core-product-shape session
-- Last Updated: 2026-09-20 — B01–B05 draft progress and required state/environment research follow-up reconciled in place.
+- Last Updated: 2026-09-21 — bounded B01–B05 planning targets authored for consumer/owner review; E3-F chronology and design-versus-implementation gates clarified. No implementation or canonical owner amendment.
 - Branch / Commit: `feat/internal-host-orchestrator-world-dispatch-bootstrap` @ `a8b1a44ed2f9c33f6963eb552f9da05c198bce6a`
 - Status: Confirmed product intent recorded; B01–B05 contract proposals drafted; explicit mechanism research/experiments required but not started. No implementation, runtime validation, archive, cutover, or canonical owner-contract rewrite is authorized by this dossier.
 - Primary Topic: Durable Workspace lanes, hierarchical orchestration, and a bounded Collider B01–B05 handoff.
@@ -47,8 +47,11 @@
 
 - Core product intent and the later clarifications are recorded below. At the user's final confidence checkpoint, the assistant stated approximately 95% confidence and no further core-intent interview questions were needed; remaining questions belong to contract/implementation design unless a genuine product conflict emerges. This is not a quantitative readiness measure or individual approval of B01–B05 schemas.
 - The user authorized continuing semantic contract design and recording the research requirement where later work can discover it. Current documentation scope: this dossier, the two proposal drafts, one research brief, and a backlog pointer. No research execution, mechanism experiment, runtime test, implementation audit, canonical owner-contract rewrite, or external comparison research has been performed.
-- Local binding remains branch `feat/internal-host-orchestrator-world-dispatch-bootstrap`, HEAD `a8b1a44ed2f9c33f6963eb552f9da05c198bce6a`, tree `766709683f93fa5d151da1db74d297160324cba7`; no staged changes. Before this follow-up, the two dossiers and two contract drafts were untracked; this dossier's pre-edit SHA-256 was `3ccc7284baf04987136f0f3cdddd5091ae2843e28eec24a238c332e84ddd2fe5` (baseline only, not updated bytes).
-- Prior read-only contract work rebound the clean authoritative Linux checkout at `088f62d81c182b92cac404983b8bf512becc829c`, tree `b40da914c1e5d73fc79f13c0946f6af9c97455d1`, and compared named owner documents; the later planning lookup also checked backlog/ADR/sync references against that checkout. This refreshed document evidence, not source/runtime readiness or the dirty E3 worktree. The historical runtime dossier and R1–R34 remain untouched. B03-first remains a proposed review order, not approved schemas or implementation dispatch.
+- Initial authoring binding was branch `feat/internal-host-orchestrator-world-dispatch-bootstrap`, HEAD `a8b1a44ed2f9c33f6963eb552f9da05c198bce6a`, tree `766709683f93fa5d151da1db74d297160324cba7`; no staged changes. Before that follow-up, the two dossiers and two contract drafts were untracked; this dossier's pre-edit SHA-256 was `3ccc7284baf04987136f0f3cdddd5091ae2843e28eec24a238c332e84ddd2fe5` (historical baseline only, not updated bytes). The 2026-09-21 joint pass starts from clean `docs/substrate-collider-contracts` at `f43173ff31ef2c037a7183c577d05d22b4eba94a`, with these documents tracked.
+- Prior read-only contract work rebound the clean authoritative Linux checkout at `088f62d81c182b92cac404983b8bf512becc829c`, tree `b40da914c1e5d73fc79f13c0946f6af9c97455d1`, and compared named owner documents; the later planning lookup also checked backlog/ADR/sync references against that checkout. This refreshed document evidence, not source/runtime readiness or the dirty E3 worktree. The historical runtime dossier and R1–R34 remain untouched. The subsequent source-backed draft work and 2026-09-21 review refine B03-first into the joint B01/B03 pass below, not approved schemas or implementation dispatch.
+- **User clarification, 2026-09-21:** E3-F started, then paused because gaps/prerequisites needed correction; the subsequent need for Substrate input for Collider brought the work to this contract-design pass. Do not reinterpret that as never dispatched, as proof the gaps have been fixed, or as authorization to resume E3-F. The handoff readiness register records the mismatch with older canonical status projections without rewriting the historical dossier.
+- **Current design direction, 2026-09-21:** after Pro's bounded KEEP recommendation and local source reconciliation, the user authorized proceeding with concrete owner-contract design. Develop the Workspace association / authorized selected-World responsibility split in the existing drafts; review B01 request acceptance and B03 binding together, then B02. Exact owner interfaces, storage/transaction/revocation protocol, custody mapping, schemas and runtime profile remain design/proof gates. This is authorization to develop the direction, not canonical-owner approval or a documentation reset.
+- **Planning handoff checkpoint, 2026-09-21:** the user then explicitly directed finishing the bounded B01–B05 target contracts, not further broad core-model discovery. The handoff now gives target inputs/outcomes, identity/race/lifetime rules, implementation status and proof limits for all five; it includes a bounded refresh of Collider requirements, Handbook's real SDK/semantic-owner foundations and Substrate dependency writers. Consumer/owner acceptance remains pending. Core architecture is sufficiently settled for this planning handoff; complete Substrate implementation, E3-F, filesystem experiments and documentation cutover are not prerequisites. The exact Handbook adapter mapping, runtime exposure/profile and engineering mechanisms remain named delivery obligations, not supplied callable support.
 
 ## Key Decisions
 
@@ -132,7 +135,7 @@ Local labels below aid resumption only. They do not create a competing canonical
 - **Status:** Confirmed objective; later contract formulations are proposal only.
 - **Decision:** The near-term purpose is a coherent contract handoff for Collider B01–B05 without turning the selected proof into the definition of all Substrate.
 - **Existing Collider planning scope, not separately confirmed in this interview:** The cited `substrate-accepted-work-boundary-plan.md` selects an ephemeral World task plus dependency read/add/remove as its bounded planning scenario. The planning/proposed handoff does not require lane orchestrators, retained-worker scope expansion, a merge engine, real approval continuation, queue promotion, or Qualified Session continuity first. This is inherited planning context, not new user ratification of the proof scenario or its exclusions.
-- **Assistant proposal, not user-ratified contract:** Begin with B03 identity/binding, then B01/B02 acceptance/control, B04 context delivery, and B05 independently. The product identity/cardinality/transition rules are now clarified in SCA-03. Their exact B03 binding representation, acceptance freeze point, validation, and exposure remain owner-design proposals, not accepted schemas or APIs.
+- **Design sequence, refined 2026-09-21:** develop B03 identity/binding and B01 acceptance as one joint owner-contract unit, then B02 observation/control; B04 context delivery and B05 declaration mutation can develop independently against the same identity conventions. The user authorized proceeding with this design work, not its unfinished interfaces. The product identity/cardinality/transition rules are clarified in SCA-03. Their exact B03 binding representation, acceptance freeze point, validation, and exposure remain owner-design proposals, not accepted schemas or APIs.
 - **B01–B05 questions to carry forward:**
   - **B01:** authenticated caller/delegation binding, request identity versus accepted work, idempotency/conflicts, uncertain acknowledgement, reconciliation, and retention/expiry;
   - **B02:** exact-work observation/control/reconnect/cancellation/lifetime and visibility of direct redirection;
@@ -286,15 +289,15 @@ Local labels below aid resumption only. They do not create a competing canonical
 
 ## Recommended Next Steps
 
-1. **Continue the existing B03 proposal into owner-contract review, not implementation.**
-   - Goal: define explicit multi-World selection/binding, one-current-Lane association, historical execution identity, state/diff custody across transitions, and mismatch/absence semantics fitting SCA-03/SCA-05/SCA-08. Separate the narrow accepted-work association needed by Collider from the fuller promotion/transition design; do not require a merge engine to prove one task.
-   - Output: refine the existing `docs/contracts/draft/lane-world-binding.md` with owner-reviewed identities, schemas, call boundaries and recovery rules; do not create a competing B03 note. Keep state/environment mechanisms gated on SCA-12 evidence.
-   - Success condition: Collider can present one exact work item in its Control Plane and selected Lane view without inferring Lane from World/session/cwd, and no new scheduler/merge engine is required.
+1. **Review the authored bounded B01–B05 planning handoff with the consumer and affected owners.**
+   - Goal: accept or amend target behavior so Collider can plan without guessing submission, observation/control, binding, context delivery or declaration-mutation semantics. Preserve SCA-03/05/08/10 and distinguish the narrow proof from the complete architecture.
+   - Output: review `docs/contracts/draft/collider-b01-b05-handoff.md` and its B03 companion in place; verify the consumer mapping and explicitly assign remaining delivery dependencies, including the Handbook adapter. Do not require a merge engine, E3-F completion, installed proof or documentation reset to accept a planning target.
+   - Success condition: all five targets have concrete inputs/outcomes, identities, failure/race rules and honest existing/change/proof status. Target answers are authored; cross-owner/consumer acceptance is still pending.
 
-2. **Use the B03 result to bound B01/B02, then design B04 and B05 independently.**
-   - Goal: retain exact caller/accepted-work/control semantics; keep context delivery and revision-aware dependency mutation with their proper owners. Account for SCA-10 baseline/override semantics without widening the bounded Workspace-only B05 proof by implication.
-   - Output: owner-specific contracts that clearly separate target semantics, current exposure, implementation, and proof.
-   - Success condition: no interface is invented from a UI projection or historical planning table, and the selected ephemeral-task/dependency proof is not misrepresented as whole-product completion.
+2. **After target acceptance, close implementation contracts through joint B01/B03, then B02; plan B04/B05 owner integration independently.**
+   - Goal: select concrete authenticated entrypoints, versioned schemas, runtime profile, storage/recovery/fencing and supported-writer mechanisms against their owners. Account for SCA-10 without expanding the Workspace-only proof by implication.
+   - Output: separately reviewable owner amendments and implementation/proof plans; no automatic source dispatch.
+   - Success condition: engineering and runtime gates are explicit but are not confused with the already-authored planning handoff. No guessed callable API or fixture is promoted to owner truth.
 
 3. **Dispatch the recorded state/environment research and experiments when separately authorized.**
    - Goal: follow `docs/ideas/world-state-environment-research.md`; reconcile existing plans, compare candidates, and run approved disposable experiments for project state, per-World environments and lifecycle safety. Keep older guest-rootfs scope separate from newly deferred alternative-Lane backing.
@@ -319,7 +322,7 @@ A fresh agent should:
 
 2. **Reconfirm before making a claim or edit:**
    - live repository/worktree, branch, commit, status, and the applicable authoritative platform/source binding;
-   - the exact authorized artifact/path scope for the next contract pass (B03-first remains the recommended order, not an implemented or ratified API);
+   - the exact authorized artifact/path scope for the next contract pass (bounded B01–B05 consumer reconciliation now; joint B01/B03 implementation-contract closure, then B02, only after target acceptance);
    - whether a new request authorizes contract documentation, implementation, research, or only analysis.
 
 3. **Avoid redoing or misrepresenting:**
@@ -332,4 +335,4 @@ A fresh agent should:
    - do not alter runtime-refactor history, Collider canonical documents, or existing owner contracts as part of this decision record.
 
 4. **Start with:**
-   - continue the existing B03 identity/binding draft using SCA-03/SCA-05/SCA-08, with SCA-10–12 for configuration, scope and research boundaries. Resolve semantic owner gaps without selecting state/environment machinery prematurely. Do not restart a broad interview or begin implementation. Rebind authoritative owner documents before new contract/source claims; research execution, experiments, and implementation need their own bounded authorization.
+   - review the reconciled B01–B05 target and existing Collider consumer mapping in place, using SCA-03/05/08 and SCA-10–12. Keep the concrete Handbook operation/reference/delivery binding and nonstandard terminal segment representation visible as open owner/consumer decisions. After target acceptance, close implementation contracts through joint B01/B03, then B02; B04/B05 integration can be planned independently. Do not restart the core interview, select state/environment mechanisms, or begin implementation/experiments without their own authorization. Rebind authoritative owner documents before new contract/source claims.
