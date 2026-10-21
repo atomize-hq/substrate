@@ -17,6 +17,7 @@
 | Landed E3-E gateway activation seam documentation | Documentation landed at `d3e82fa2d486be95ab5a2326c7c8ccd304e520f6` | [Publication/ownership seam](../contracts/managed-gateway-adoption-v1.md#e3-e-activation-publication-and-ownership-seam), [callable boundaries](../contracts/agent-config-projection-v1.md#e3-e-activation-callable-boundaries), [handoff clarification](../contracts/launch-time-secret-handoff-v1.md#e3-adoption-clarification-2026-09-02-outside-preserved-body) | Prepared/Held startup/readiness; Consumed → ACK → ReadyClosed with ACK evidence and original Held lease; cancellation/cleanup, same-live-attempt retry and fresh authorization after service restart. Documentation CLEAN grants no product completion. |
 | E3 successor packet | E3-F — dispatched then paused; W8 unaccepted/unclosed | [E3-F](../slices/e3-agent-config-projection-and-gateway-adoption.md#e3-f--retained-v2-codex-launchresume-adoption-and-integrated-proof) | The independently landed/proof-clean E3-E prerequisite is satisfied; [I1/I2 design and source fences now bound](../slices/e3-agent-config-projection-and-gateway-adoption.md#i1i2-design-binding-and-runtime-return-sequence--2026-10-21); explicit fresh source/proof resumption still required; retained V2 execution and integrated proof remain E3-F-owned. D1 later owns V3/envelope, E4 follows clean E3 implementation, and D3 owns final integration. |
 | E3-F seam/proof clarification | historical documentation; later E3-F dispatched then paused | [Canonical clarification](../contracts/agent-config-projection-v1.md#e3-f-callable-ownership-and-deterministic-proof-clarification) | Historical callable/ownership and proof-route clarification; [dated current correction](../slices/e3-agent-config-projection-and-gateway-adoption.md#current-e3-f-status-correction--2026-10-21) preserves W8 unaccepted/unclosed and I1/I2 design now bound at the canonical return sequence; implementation/proof outstanding. |
+| E3-F connected producer clarification | documentation only; admitted/dispatched, paused, unaccepted/unclosed | [Canonical producer boundary](../contracts/agent-config-projection-v1.md#e3-f-connected-producer-selection-and-custody-clarification) | Held V3 selection, single config/auth join, E2 parent-acceptance → delivery → child inputs and frozen preparation/cancellation custody; producer documentation incorporated in this line; implementation and source-candidate integration remain outstanding. |
 | Prior completed global implementation slice | `E1 — Restricted world_fs narrowing` — `terminally complete` | [`e1-restricted-world-fs-narrowing.md`](../slices/e1-restricted-world-fs-narrowing.md) | Exact closure commit `18f719898ce2a48f65e95b3b23f3b2cfd685c4af`, tree `60e94c7b5c985463d3311b8f556520dea8244287`, sole parent/implementation commit `6194788d45267d91b4428a42e24c02dfcaae3c1e`. |
 | Prior completed global implementation slice | `A3 — Persistence and compatibility split` — `terminally complete` | [`a3-persistence-and-compatibility-split.md`](../slices/a3-persistence-and-compatibility-split.md) | Completed at implementation commit `627e0febf9e0a5143a8b92ba54f1c9377d3ffae5` and tree `2fe1acc6d0abe2a50c2f44dc47f636f51223d390` under its exact reviewed closure identities; Track A is terminally complete. |
 | Prior completed global implementation slice | `A2 — HostExecutionEpisode demotion` — `terminally complete` | [`a2-host-execution-episode-demotion.md`](../slices/a2-host-execution-episode-demotion.md) | Completed at commit `1d7176a25b7662368e6e1fb3f65b3521e6cab78b` and tree `e71f731c279a8d65e1111245fc3d31940edd3afd` under its exact reviewed closure identities; the fork-successor prerequisite is consumed. |
@@ -37,3 +38,21 @@
 | Other undispatched successors | E03, protected-lifecycle revival, and other successors remain undispatched | [`macos-dev-parity/DECISION.md#cross-lane-continuation`](../macos-dev-parity/DECISION.md#cross-lane-continuation) | Each remains subject to its own later exact authority; neither current lane dispatches the other's successor. |
 
 Decision and owner navigation: [`README.md`](README.md).
+
+
+### E3-F configuration classification correction status
+
+The [canonical classification/extraction correction](../contracts/agent-config-projection-v1.md#e3-f-configuration-classification-and-strict-extraction-correction)
+controls absent-workspace classification and its bounded future source/test fence. E3-F remains
+admitted/dispatched but paused, unaccepted and unclosed; E3-E remains closed and enclosing E3
+incomplete. The classification documentation is incorporated in this line; no implementation,
+installed proof, deployment, source-candidate integration or new E2-RM/B2.2/B3.2/B4 closure is claimed.
+
+### E3-F sealed custody bridge correction status
+
+The [canonical sealed custody bridge](../contracts/agent-config-projection-v1.md#e3-f-sealed-custody-bridge-correction)
+settles the bounded future owner/caller/test interface and conservative execution-evidence rules.
+E3-F remains admitted/dispatched but paused, unaccepted and unclosed; E3-E remains closed and E3
+incomplete. The reviewed bridge documentation is incorporated in this line; Linux checkout
+publication/readback remains a separate owner operation. No implementation resumes, candidate failure
+is resolved, or installed proof, deployment or new E2-RM/B2.2/B3.2/B4 closure is claimed.

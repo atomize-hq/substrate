@@ -38,13 +38,15 @@ separately granted, logged, non-promotable compatibility.
 No D1 envelope, receipt, retained manifest, E2/E2-RM record, broker policy, or E4 workspace-sync
 authority moves. E3-A through E3-D are landed; the [E3-E closure](../slices/e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17) records E3-E terminal
 completion and product landing, with canonical closure on the separate authority branch. Enclosing
-E3 remains incomplete and E3-F unadmitted/undispatched. This bounded evidence does not promote the
+E3 remains incomplete and E3-F is admitted/dispatched but paused at its producer boundary. This bounded evidence does not promote the
 whole seam: direct Codex/Active/resume and integrated successor proof remain outstanding.
 
 The [E3-F seam/proof clarification](../contracts/agent-config-projection-v1.md#e3-f-callable-ownership-and-deterministic-proof-clarification)
 documents the future callable/ownership, loader-fence and deterministic-proof boundaries on the
-integrated source/authority baseline. E3-F remains unadmitted and undispatched; no runtime proof or
-seam promotion follows from this documentation.
+integrated source/authority baseline. Its admission status describes the prior checkpoint; the
+[connected producer clarification](../contracts/agent-config-projection-v1.md#e3-f-connected-producer-selection-and-custody-clarification)
+controls the current selection/custody boundary. E3-F remains paused, unaccepted and unclosed; no
+runtime proof or seam promotion follows from this documentation.
 
 ## AgentConfigProjectionService
 
@@ -61,3 +63,21 @@ Table-column projection: the repeated seam-table header below is a projection of
 | Seam | Current code artifacts | Current semantic status | Authority boundary correct? | Enforcement point correct? | Proven by smoke/e2e? | Refactor action | Sibling seams that must stay in context |
 |---|---|---|---|---|---|---|---|
 | WorldRuntimeAdapterExecutionEnvelope | world Codex guest-entrypoint validation in `agent_runtime/validator.rs`; placement config in `config/agents/codex.yaml`; launcher/env/cwd plus copied seed-home setup in `world-service/member_runtime.rs`; reusable managed-gateway FD carrier and one-time consumer | `DefensiveScaffoldingOnly` | no | no | no | Persist one envelope bound to world generation, retained worker, Substrate-owned config projection, immutable policy snapshot, runtime deps, command-broker posture, and credential posture. Reuse the existing secure-FD carrier, join its non-secret evidence to the exact gateway receiver, and give Codex the gateway endpoint/session contract instead of copied credentials. Fail closed or use named non-promotable compatibility mode when exact adoption is unavailable. | AgentConfigProjectionService; RuntimeFamilyRealizationAdapter; WorldCommandExecutionBroker; RetainedWorkerRuntime |
+
+
+### E3-F configuration classification correction status
+
+The [canonical classification/extraction correction](../contracts/agent-config-projection-v1.md#e3-f-configuration-classification-and-strict-extraction-correction)
+controls absent-workspace classification and its bounded future source/test fence. E3-F remains
+admitted/dispatched but paused, unaccepted and unclosed; E3-E remains closed and enclosing E3
+incomplete. The classification documentation is incorporated in this line; no implementation,
+installed proof, deployment, source-candidate integration or new E2-RM/B2.2/B3.2/B4 closure is claimed.
+
+### E3-F sealed custody bridge correction status
+
+The [canonical sealed custody bridge](../contracts/agent-config-projection-v1.md#e3-f-sealed-custody-bridge-correction)
+settles the bounded future owner/caller/test interface and conservative execution-evidence rules.
+E3-F remains admitted/dispatched but paused, unaccepted and unclosed; E3-E remains closed and E3
+incomplete. The reviewed bridge documentation is incorporated in this line; Linux checkout
+publication/readback remains a separate owner operation. No implementation resumes, candidate failure
+is resolved, or installed proof, deployment or new E2-RM/B2.2/B3.2/B4 closure is claimed.

@@ -38,7 +38,7 @@ The controlling schemas and nonownership wall are
 the extracted `AgentConfigProjectionService` and `WorldRuntimeAdapterExecutionEnvelope` rows below as
 historical architecture projection. D1 still owns the envelope and later strict V3. E3-A through
 E3-D are landed; the [E3-E closure](../slices/e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17) records terminal completion/product landing on a separate
-lineage from authority closure. Enclosing E3 remains incomplete; the [dated E3-F correction](../slices/e3-agent-config-projection-and-gateway-adoption.md#current-e3-f-status-correction--2026-10-21) records dispatched-then-paused work, with W8 unaccepted/unclosed and `c381` published-unintegrated; no continuation is authorized.
+lineage from authority closure. Enclosing E3 remains incomplete; the [dated E3-F correction](../slices/e3-agent-config-projection-and-gateway-adoption.md#current-e3-f-status-correction--2026-10-21) records dispatched-then-paused work, with W8 unaccepted/unclosed and reviewed `c381` producer/classification/bridge documentation incorporated in this line; Linux checkout publication/readback is separate and no source continuation is authorized.
 The [I1/I2 contract binding](../contracts/agent-config-projection-v1.md#e3-f-i1i2-ownership-and-accounting-reconciliation)
 now replaces the mandatory common non-E3 lease/additive E3 field with required tagged ownership.
 The retained E3 owner arbitrates child/adapter custody and turn lifecycle; gateway owns original

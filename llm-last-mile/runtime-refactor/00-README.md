@@ -103,7 +103,7 @@ carrier, corrects the absent local `crates/codex`, and specifies strict V2 befor
 **Non-authoritative E3 status:** E3-A through E3-D are landed. [E3-E is terminally complete and
 product landed](slices/e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17),
 with canonical closure on the separate authority branch. Enclosing E3 remains incomplete;
-The [dated E3-F correction](slices/e3-agent-config-projection-and-gateway-adoption.md#current-e3-f-status-correction--2026-10-21) records dispatched-then-paused work: W8 unaccepted/unclosed, I1/I2 unresolved and `c381` published-unintegrated; no continuation is authorized. The earlier seam documentation and narrow recovery reviews
+The [dated E3-F correction](slices/e3-agent-config-projection-and-gateway-adoption.md#current-e3-f-status-correction--2026-10-21) records dispatched-then-paused work: W8 unaccepted/unclosed, I1/I2 design resolved with source implementation/proof outstanding, and reviewed `c381` producer/classification/bridge documentation incorporated in this line; Linux checkout publication/readback is separate and no source continuation is authorized. The earlier seam documentation and narrow recovery reviews
 remain bounded historical evidence; the terminal closure owns the completed E3-E proof and limits.
 The contracts and slice retain the design and unchanged successor requirements:
 

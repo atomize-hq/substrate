@@ -12,6 +12,7 @@
 | Identifier | Kind | Canonical owner | Current status or scope |
 |---|---|---|---|
 | `B01-B03-P1` | packet | [B01-B03-P1](../slices/tasks/b01-b03-authenticated-preflight.md) | Admission contract bound; native Workspace open/load/approved init and no-send preflight; issuer prerequisite superseded; source not dispatched/runtime unproved [Scheduling: E3F-RETAINED-PROOF-RETURN](../slices/e3-agent-config-projection-and-gateway-adoption.md#i1i2-design-binding-and-runtime-return-sequence--2026-10-21); separate P1 authorization, no technical E3-F prerequisite for independent reads. |
+| E3-F producer clarification | documentation authority correction | [Connected producer boundary](../contracts/agent-config-projection-v1.md#e3-f-connected-producer-selection-and-custody-clarification) | E3-F already admitted/dispatched; paused, unaccepted/unclosed. Producer documentation incorporated in this line; implementation, installed proof and source-candidate integration remain outstanding; E3-E closed, enclosing E3 incomplete. |
 | `A1.3-P1` | completed packet | [`linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md) | `terminally complete` |
 | `A1.4` | completed checkpoint | [`slices/tasks/a1-4-auto-attach-producer-adoption.md`](../slices/tasks/a1-4-auto-attach-producer-adoption.md) | `terminally complete`; enclosing A1 terminally complete |
 | `A2` | completed slice | [`slices/a2-host-execution-episode-demotion.md`](../slices/a2-host-execution-episode-demotion.md) | `terminally complete` |
@@ -77,3 +78,21 @@
 | `A1.1d-5R2-3-family` | [`current-state.md`](../a1.1d-5r2-3/current-state.md) | linked family context in [`README.md`](../a1.1d-5r2-3/README.md) | [`slice-and-task.md`](../a1.1d-5r2-3/slice-and-task.md) | [`contracts-and-gates.md`](../a1.1d-5r2-3/contracts-and-gates.md) | linked evidence/receipts in [`README.md`](../a1.1d-5r2-3/README.md) | [`README.md`](../a1.1d-5r2-3/README.md) |
 | `A1.1d-5R2-2-renewed-closeout-family` | [`current-state.md`](../a1.1d-5r2-2-renewed-closeout/current-state.md) | [`architecture.md`](../a1.1d-5r2-2-renewed-closeout/architecture.md), [`crosswalk.md`](../a1.1d-5r2-2-renewed-closeout/crosswalk.md) | [`slice-and-task.md`](../a1.1d-5r2-2-renewed-closeout/slice-and-task.md) | [`contracts-and-gates.md`](../a1.1d-5r2-2-renewed-closeout/contracts-and-gates.md) | [`evidence-regression.md`](../a1.1d-5r2-2-renewed-closeout/evidence-regression.md) | [`README.md`](../a1.1d-5r2-2-renewed-closeout/README.md) |
 | `A1.1d-5R2-2F-family` | [`current-state.md`](../a1.1d-5r2-2f/current-state.md) | [`architecture.md`](../a1.1d-5r2-2f/architecture.md), [`crosswalk.md`](../a1.1d-5r2-2f/crosswalk.md), [`authenticated-runtime-projections.md`](../history/authenticated-runtime-projections.md) | [`slice-and-task.md`](../a1.1d-5r2-2f/slice-and-task.md) | [`contracts-and-gates.md`](../a1.1d-5r2-2f/contracts-and-gates.md) | [`evidence-regression.md`](../a1.1d-5r2-2f/evidence-regression.md) | [`README.md`](../a1.1d-5r2-2f/README.md), cross-packet checkpoints in [`cross-cutting-control-pack-checkpoints.md`](../history/cross-cutting-control-pack-checkpoints.md) |
+
+
+### E3-F configuration classification correction status
+
+The [canonical classification/extraction correction](../contracts/agent-config-projection-v1.md#e3-f-configuration-classification-and-strict-extraction-correction)
+controls absent-workspace classification and its bounded future source/test fence. E3-F remains
+admitted/dispatched but paused, unaccepted and unclosed; E3-E remains closed and enclosing E3
+incomplete. The classification documentation is incorporated in this line; no implementation,
+installed proof, deployment, source-candidate integration or new E2-RM/B2.2/B3.2/B4 closure is claimed.
+
+### E3-F sealed custody bridge correction status
+
+The [canonical sealed custody bridge](../contracts/agent-config-projection-v1.md#e3-f-sealed-custody-bridge-correction)
+settles the bounded future owner/caller/test interface and conservative execution-evidence rules.
+E3-F remains admitted/dispatched but paused, unaccepted and unclosed; E3-E remains closed and E3
+incomplete. The reviewed bridge documentation is incorporated in this line; Linux checkout
+publication/readback remains a separate owner operation. No implementation resumes, candidate failure
+is resolved, or installed proof, deployment or new E2-RM/B2.2/B3.2/B4 closure is claimed.

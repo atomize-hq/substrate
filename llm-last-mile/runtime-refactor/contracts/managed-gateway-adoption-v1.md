@@ -818,8 +818,9 @@ authenticated registry/OS recovery must deny/kill/account all exact remnants bef
 release, with no Active restart adoption. The [ordered E3-E cleanup](#terminal-namespace-release-and-exclusion-last)
 remains authoritative for its original path; E3-E closure is not reopened.
 
-These bindings resolve I1/I2 at the design-contract level only. Source changes, targeted and
-installed proof, c381 integration and E3-F continuation require separate authorization. The
+These bindings resolve I1/I2 at the design-contract level only. The reviewed c381 producer,
+classification and custody-bridge documentation is incorporated in this documentation line. Source
+changes, targeted and installed proof, and E3-F continuation require separate authorization. The
 [Codex loader fence](agent-config-projection-v1.md#e3-f-codex-loader-and-setup-implementation-fence) and
 [selected deterministic proof route](agent-config-projection-v1.md#e3-f-deterministic-pinned-codex-proof-route)
 remain; test stimulus is not executed proof.
