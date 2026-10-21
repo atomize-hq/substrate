@@ -2,13 +2,25 @@
 **Stable ID:** `B1-B2.1-family`
 **Canonical for:** B1/B2.1 family runtime carrier, adapter, retained prerequisites, acceptance, supervisor, and differential contracts
 **Status:** canonical historical/completed-family record
-**Authority scope:** exact extracted family-local source bodies only; no implementation authority
+**Authority scope:** exact extracted family-local source bodies plus the proposed documentation-only B01/B03 extension boundary; no implementation authority
 **Source span:** composite of the seven preserved root compatibility spans listed in the extraction ledger; mixed future-family regions are excluded
 **Supersedes:** canonical ownership of the extracted source bodies; source headings remain compatibility anchors
 **Superseded by:** none
 **Projection consumers:** [`README.md`](README.md)
 
 # B1/B2.1 family contracts and gates
+
+## Proposed B01/B03 extension boundary — 2026-10-21
+
+The historical/completed-family contracts below retain their original meaning and proof. The authorized [B01 target design](../../../docs/contracts/draft/collider-b01-b05-handoff.md#32-immutable-request-identity-and-the-admission-boundary) and [B03 transaction/effect/recovery protocol](../../../docs/contracts/draft/lane-world-binding.md#47-associationadmission-consistency-and-recovery) propose a narrow consumer extension, with no implementation authority, current exported API, component-owner signoff or runtime promotion claimed here.
+
+B1's existing session/request proposal allocator alone reserves acceptance identity; the proposed consumer reverse link fixes one correlation/actor/request/reservation/material seal before possible send. `reserve_consumer_proposal`, `read_consumer_proposal` and `close_unsubmitted_proposal` are proposed StateStore/B1 interfaces, not current exports. Same-key retries preserve original material and proposal. B1 records acceptance only from the exact original runtime ACK; a runtime gate consume, attempt marker or individually authentic unrelated receipt cannot substitute.
+
+B2.1 claims/journals the exact accepted stream before later frames escape; E2 publishes original policy material, B2.2 returns the receipt and Workspace association authority publishes original binding. Missing composition after B1 acceptance is `AcceptedMaterialIncomplete`, never pre-submission refusal. Runtime/dispatch must durably record possible-send before transport; service close/consume/fence orders stale senders and applicable invalidators, with gate close before authoritative effect-facing commit. No owner persistence lock crosses runtime I/O. Conclusive refusal/release requires positive never-consumed and participant close evidence; otherwise uncertainty retains original custody. Consume is not acceptance/delivery; later current-use/delivery and emergency invalidation/cancellation retain separate owners.
+
+New source-bound proof must cover authenticated ingress/delegation/read, complete request/B04 equality, concurrent key/proposal/association joins, A→B→A revisions, revocation ordering, every prepare/send/consume/ACK/publication crash boundary, service restart/ACK loss and byte-identical read-only reconciliation with zero re-execute. B01 §3.4 specifies the actual-backend/version/channel/credential/enforcement-or-disabled/handshake manifest. No real profile is qualified by this documentation or by fixture tests. Existing B0 replay and historical family proof remain useful within their stated bounds; they do not establish the new service gate or complete consumer path.
+
+[`B01-B03-P1`](../slices/tasks/b01-b03-authenticated-preflight.md) binds proposed initial native Substrate Workspace open/load, separately approved absent-only initialization and no-send preflight. The separate issuer prerequisite is superseded by human clarification; configured open requires no enrollment/pairing/new approval. Bounded admission contract, undispatched source work and unproved runtime are separate states. Normal open/preflight allocates no identity/client request key/correlation/B1 proposal/association reservation, binds no registry/Supervisor and performs no reconciliation/runtime/send/acceptance effect. Initialization has separate approved writes. Eligibility is neither a B1/B2.1 gate result nor a request disposition and cannot authorize later Submit. Historical family and full-send proof/retention obligations above remain unchanged.
 
 ## 2A. Runtime event identity and ordering carrier
 

@@ -1,8 +1,8 @@
 **Kind:** seam family
 **Stable ID:** `runtime-event-receipt-supervision-and-retained-runtime-family`
-**Canonical for:** runtime event, receipt, supervision, and retained-worker runtime seam extraction plus the current E2 and second `E2-RM` ownership corrections
+**Canonical for:** runtime event, receipt, supervision, and retained-worker runtime seam extraction plus the current E2 and second `E2-RM` ownership corrections and proposed B01/B03 composition boundary
 **Status:** canonical current seam-family record
-**Authority scope:** exact extracted family-local source bodies plus the documentation-only E2 and `E2-RM` ownership corrections; no implementation authority
+**Authority scope:** exact extracted family-local source bodies plus the documentation-only E2 and `E2-RM` ownership corrections and proposed B01/B03 composition boundary; no implementation authority
 **Source span:** D8 runtime-event, receipt, supervision, and retained-runtime family extraction from `02-seam-crosswalk.md`
 **Supersedes:** canonical ownership of the extracted `RuntimeEventTransport`, `WorldWorkReceiptRegistry`, `WorldWorkExecutionSupervisor`, and `RetainedWorkerRuntime` rows
 **Superseded by:** none
@@ -11,6 +11,30 @@
 # Runtime event, receipt, supervision, and retained runtime seam extraction
 
 > **Authority boundary:** This file owns only the extracted `RuntimeEventTransport`, `WorldWorkReceiptRegistry`, `WorldWorkExecutionSupervisor`, and `RetainedWorkerRuntime` seam rows. It does not promote any seam, move the A0 authority-leak inventory, reopen D5/D6/D7 or already-extracted D8 family owners, rewrite `b1-b2-1/` or `b3-1-c1/`, extract the remaining C/D seam families, or authorize B0/B1/B2.1/B3.1/B3.2/B4/C implementation work.
+
+## Proposed B01/B03 composition boundary — 2026-10-21
+
+The [joint consumer contract](../../../docs/contracts/draft/collider-b01-b05-handoff.md#32-immutable-request-identity-and-the-admission-boundary) and [B03 protocol](../../../docs/contracts/draft/lane-world-binding.md#47-associationadmission-consistency-and-recovery) propose an authenticated consumer ingress, original-request/material correlation, exact association reservation and runtime consume/fence extension. These are target responsibilities, not present exported APIs, implementation admission, component-owner signoff or a change to the historical seam classifications below.
+
+B1 remains sole proposal/immutable ACK-acceptance owner. A consumer correlation reverse-joins its one existing session/request proposal; runtime `Consumed` is only effect admission and cannot create B0 Start or B1 truth. B2.1 alone claims/journals/replays exact accepted streams and owns terminality; E2 retains original admitted policy material; B2.2 constructs/returns the receipt; Workspace association authority authenticates the reserved historical binding. S1 retains original B04 material and separately joins actual authorized delivery. Complete consumer acceptance requires all original B1/B2.1/E2/B2.2/B03 joins, but proves neither full B04 delivery nor installed readiness.
+
+Dispatch's proposed recovery coordinator can complete original missing owner publications after exact evidence; read-only reconciliation cannot invoke it, repair indexes or execute again. Preparing, possible-send unresolved, accepted-material-incomplete, complete acceptance, conclusive no-send refusal and read/integrity failure remain distinct. Original acceptance survives foreground/publication loss. Runtime gate/epoch closure precedes authoritative effect-facing revocation/currentness commit; all applicable invalidators must participate or the profile is unsupported. Emergency invalidation/cancellation and a later current-use/delivery guard remain independent.
+
+B03 §§4.7–4.9 supplies concrete source/module/symbol placement, per-owner locking/forward-join recovery, positive fence/close/release evidence and every crash boundary. B01 §§3.3–3.4 supplies non-reconciling authenticated reads, privacy/retention and real-profile proof obligations. No duplicate acceptance registry, scheduler, global authority lock across runtime I/O or frozen permissions is introduced. Existing replay remains bounded process-memory producer transport and cannot prove no-send after service restart. This amendment neither promotes seams nor reopens retained-worker/E3/I1/I2 work.
+
+[`B01-B03-P1`](../slices/tasks/b01-b03-authenticated-preflight.md) binds proposed initial native Workspace open/load, separately approved absent-only initialization and distinct no-send preflight. The human clarification supersedes the setup-issuer prerequisite: no enrollment/pairing/new approval for configured open. Admission contract bound is separate from source dispatch (not authorized) and runtime proof (unperformed). Normal open/preflight has no identity/correlation/proposal/reservation, reconciliation, runtime gate or execute effects; nonreconciling exact HSA/custody/config/policy/association reads and current disclosure checks must meet the packet. Initialization is a separate declared mutation. Eligibility grants no future send/B1 acceptance or promotion of the later full-send composition above.
+
+**Current E3 status correction — 2026-10-21:** the [canonical dated E3-F correction](../slices/e3-agent-config-projection-and-gateway-adoption.md#current-e3-f-status-correction--2026-10-21) supersedes inherited current-status projections below: E3-F was dispatched and is paused; W8 remains unaccepted/unclosed, `c381` published-unintegrated; no continuation or closure follows. The
+[I1/I2 design binding](../contracts/agent-config-projection-v1.md#e3-f-i1i2-ownership-and-accounting-reconciliation)
+now specifies required tagged retained ownership and sealed adapter-to-gateway cleanup accounting.
+Per-turn readback while gateway lives is process-local custody evidence only; whole-attempt durable
+terminal cleanup requires every exact registered process/cgroup and all original ordering/retry
+invariants. Neither kernel cleanup evidence, a reaped process nor gateway liveness establishes B0
+terminal truth, B1 acceptance or B2.1 completion. Those existing owners remain unchanged; no new
+supervisor/registry/schema or seam promotion follows. Implementation/proof are outstanding. The
+[canonical scheduling checkpoint](../slices/e3-agent-config-projection-and-gateway-adoption.md#i1i2-design-binding-and-runtime-return-sequence--2026-10-21)
+keeps I1/I2 first, separately authorized paused-W8 E3-F continuation/proof next, then separate P1
+selection at the bounded proof return. This is priority, not an E3-F prerequisite for read-only opening.
 
 ## Current E2 ownership correction
 

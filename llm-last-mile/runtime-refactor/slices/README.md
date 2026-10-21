@@ -16,6 +16,20 @@
 
 Each slice is independently reviewable. A0 is a diagnostic inventory; every later implementation slice must move one authority boundary plus proof. A slice may read sibling context without editing sibling ownership.
 
+### Current E3-F and Workspace-opening priority — 2026-10-21
+
+The [canonical E3 owner sequence](e3-agent-config-projection-and-gateway-adoption.md#i1i2-design-binding-and-runtime-return-sequence--2026-10-21)
+records the current human-selected order: bounded I1/I2 contract reconciliation first; separately
+explicitly authorized continuation/proof of paused W8 with reviewed c381 under amended owner fences;
+then `E3F-RETAINED-PROOF-RETURN`, an honest bounded proof return (passed or stopped), at which
+B01-B03-P1 is the next separately selected consumer implementation/proof admission before broader
+runtime successors. It does not dispatch any step. A stopped proof retains its blockers and cannot
+license dependent retained work. P1 remains independently scoped open/init/no-send work, ADMISSION
+CONTRACT BOUND, source not dispatched and runtime unproved. This priority supersedes earlier
+consumer-first planning recommendations only for current scheduling; it creates no universal
+E3-F technical dependency for Workspace inspection and makes P1 no prerequisite to I1/I2.
+The preserved hard-dependency spine below and separately owned successor gates remain intact.
+
 ### Bounded review sequence
 
 Every new slice follows the development-review contract in `04`. Freeze the selected integrated

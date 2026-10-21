@@ -1,7 +1,7 @@
 **Kind:** controlling numbered specification and preserved slice row
 **Stable ID:** `e3-agent-config-projection-and-gateway-adoption`
 **Canonical for:** controlling E3 authority correction, contract/file/symbol fence, dependency and gate disposition, and preserved historical row
-**Status:** E3-A through E3-D landed; E3-E terminally complete; enclosing E3 incomplete; E3-F not admitted or dispatched
+**Status:** E3-A through E3-D landed; E3-E terminally complete; enclosing E3 incomplete; E3-F dispatched then paused, W8 unaccepted/unclosed; no continuation authorized
 **Historical E3-A proof-recovery status:** canonical specification; E3-A has a preserved incomplete and unlanded candidate under bounded Linux proof recovery; E3-B through E3-F are not admitted, dispatched, or implemented
 **Historical E3-A proof-recovery authority scope:** documentation-only E3-A proof-recovery authority; no product/test change, proof execution, completion, landing, or successor admission/dispatch
 **Source span:** [`../03-phase-slice-map.md`](../03-phase-slice-map.md) line 222
@@ -18,7 +18,88 @@
 > preserves the exact historical Track E row and the earlier correction chronology below. The
 > E3-A proof-recovery header fields describe that historical correction, not current packet status.
 > E3-E is terminally complete under its closure record below. Enclosing E3 remains incomplete:
-> E3-F is not admitted or dispatched, and this closure grants no successor execution authority.
+> E3-F was later dispatched and paused as corrected below; this closure grants no continuation authority.
+
+## Current E3-F status correction — 2026-10-21
+
+The accepted [reentry assessment §§1–3](../../../docs/guidance/2026-10-21-substrate-reentry-assessment.md#2-runtime-stopping-point-and-status-axes), source-qualified against the preserved September 18 candidate and the [SCA product-intent record](../../../SUBSTRATE_CORE_ARCHITECTURE_SESSION_DECISIONS_2026-09-20.md), corrects the former “not admitted or dispatched” current projection: **E3-F was dispatched and then paused.** Its eight-file W candidate remains unaccepted and unclosed. The
+[dated I1/I2 reconciliation](#i1i2-design-binding-and-runtime-return-sequence--2026-10-21) now binds
+ownership/accounting design; implementation/proof remain outstanding. Custody clarification `c381e9f30d5b09bfb10f2d442c46065810b22928` is published but unintegrated into D/W. Fresh read-only D/W correspondence is retained by [B01-B03-P1](tasks/b01-b03-authenticated-preflight.md#source-correspondence-and-current-status); it is not new runtime proof.
+
+E3-E stays closed; enclosing E3 remains incomplete. No source resumption, integration, cleanup, successor dispatch or E3-F closure is authorized. Earlier admission/clarification and E3-E closure wording below remains its as-of chronology, including the historical unadmitted/undispatched status; it is superseded for current status only by this correction. Existing contract/Track E/slice-index headers and other inherited projections retain that older wording and route here; they cannot erase the later dispatch or authorize continuation. The dated design binding qualifies those exact authority/custody fences; independent documentation
+acceptance and separate source continuation/proof authorization remain required. The independent no-send B01-B03-P1 packet does not reopen E3.
+
+## I1/I2 design binding and runtime return sequence — 2026-10-21
+
+The existing [projection owner contract](../contracts/agent-config-projection-v1.md#e3-f-i1i2-ownership-and-accounting-reconciliation)
+and [gateway successor owner](../contracts/managed-gateway-adoption-v1.md#e3-f-retained-successor-and-cleanup-joins)
+now bind the concrete I1/R26 and I2/R27 target. Required
+`MemberRuntimeOwnershipV1::{NonE3,E3}` replaces the impossible mandatory common non-E3 lease plus
+additive optional E3 state. NonE3 has the independent ordinary unprojected-agent/UAA purpose under
+counted idle-only admission; the E3 arm owns the original transferred bundle and never falls back.
+Gateway-owned sealed Codex accounting retains per-turn custody/history without publishing whole
+terminal truth while gateway lives; amended private Live revoke joins the exact complete durable
+process/cgroup sets before final cleanup. The linked original callable/source fences are qualified
+in place. Service exclusion, E3-D security and E3-E closure remain intact; no new coexistence or
+simultaneous-turn requirement is introduced. **Design bound; source implementation and proof remain
+outstanding.** This documentation is not W8 acceptance, a runtime fix or E3 closure.
+
+**Named scheduling point: `E3F-RETAINED-PROOF-RETURN`.** Current human priority is:
+
+1. Complete and accept this bounded I1/I2 owner-contract reconciliation.
+2. Seek **separate explicit authorization** for the exact E3-F continuation and proof from freshly
+   rebound W8 under these amended fences, consuming the reviewed c381 six-operation custody bridge.
+   Do not discard or silently adopt W8. Bind source/installed prerequisites and finite remaining
+   F1–F14 obligations below. Bridge Git integration, source work, proof and publication remain
+   distinct explicitly selected actions; no continuation is dispatched by this sequence.
+3. At the bounded E3-F proof return, either passed or honestly stopped with retained blockers,
+   `E3F-RETAINED-PROOF-RETURN` schedules [B01-B03-P1](tasks/b01-b03-authenticated-preflight.md) as the
+   next separately authorized consumer implementation/proof admission before selecting broader
+   D1/D2/D3/E4 successors. A stopped E3-F does not become success or permit dependent retained work.
+   P1 can be selected only for its independent open/init/no-send scope and actual prerequisites.
+
+This is scheduling priority, not a new hard dependency: P1 is not prerequisite to I1/I2 and E3-F
+completion is not universally required for read-only Workspace opening. Earlier consumer-first
+[reentry §5–6](../../../docs/guidance/2026-10-21-substrate-reentry-assessment.md#6-follow-ons-and-safe-parallel-work)
+and SCA handoff recommendations retain their bounded planning chronology; this current instruction
+returns to interrupted runtime work. No dossier/receipt is rewritten. P1 remains **ADMISSION
+CONTRACT BOUND**, proposed implementation only, not dispatched or runtime-proven; its packet stays
+SHA-256 `1d54906d3d0aabb62d66548e45ce44e55fb59d7646564ca80e4cf3fc8cbef23e`.
+Configured same-host opening goes through Substrate without Connect/enrollment/pairing/issuer
+ceremony; absent-only initialization gets settings approval once; invalid/incomplete state diagnoses
+without hidden repair/regrant. Exact internal nonreconciling root/HSA/custody/policy reads remain as
+specified. No `.substrate` discovery permission expansion or later-send authority follows.
+
+**Preserved continuation subject and custody.** Prior read-only correspondence binds Linux D and W
+at `088f62d81c182b92cac404983b8bf512becc829c`, tree
+`b40da914c1e5d73fc79f13c0946f6af9c97455d1`; W8 fingerprint
+`cd89226b984def497b8a67f92a329e430f9d2899f16cfd743d4f7db07c55f427`, diff SHA-256
+`efcd97c433e33bc8a5182d7fc4a8f7db4a1946625dfeed3ab252291e6785c8c5`.
+This is reused evidence, not a new host/runtime run. Fresh source admission must rebind the actual
+subject. Reviewed c381 is published/unintegrated; consume prepare/validate/cancel/transport/enter/
+observe without reopening its bounded review. Observed transfer requires exact Registered plus
+Active readback; actual service transfer places cleanup with the provisional/retained service owner
+even if the shell misses that reply. Original expiry applies only before transfer. After-entry
+ambiguity retains original identity/custody and never redelivers execute or reconstructs authority.
+E3-E remains closed; E3-F remains paused, W8 unaccepted/unclosed, enclosing E3 incomplete.
+
+| Remaining E3-F obligation | Exact later source/proof boundary; no present completion claim |
+|---|---|
+| F1–F4 | Frozen classification/config and direct Spawn/Fork/continue producers; REPL/toolbox custody and production carrier/execute joins, within existing shell/transport catalog and reviewed bridge. |
+| F5–F7 | V2 service admission/take transfer; required tagged retained/resume/cleanup ownership; local event/run/cancel semantics and original E2/B0 truth. |
+| F8–F10 | Pinned adapter/descriptor execution, service/native cleanup and registry exact lineage/realization/original Held lease guards, under amended callable fence. |
+| F11–F12 | Sealed gateway accounting, namespace/security/revocation and wrapper/loader/final gate; all historical process/group membership and exclusion-last. |
+| F13–F14 | Registry/native positive/negative/retry/crash/ACK proof and real pinned Codex initial plus at least two resumed integrated turns through actual production joins, with installed artifact provenance and selected namespace/TLS prerequisites. |
+
+Existing launchers and proposed absent test selectors are named in the
+[I1/I2 proof contract](../contracts/agent-config-projection-v1.md#e3-f-i1i2-ownership-and-accounting-reconciliation);
+the existing deterministic real-Codex proof route remains normative. No build/test/runtime check
+ran in this documentation reconciliation. A later packet must bind actual new selectors/commands,
+required Linux privileges/artifacts and exact candidate before execution. Reuse unchanged E3-A–E
+proof without relabeling synthetic E3-E success as Codex/Active/resume proof. H1–H3/conditional H4,
+S1/B02/B05 and unrelated B4/C2/E2-RM closure gaps are not invented E3-F prerequisites. D1/V3/envelope,
+D2 side-effect mediation, D3 joined integration and E4 write/sync remain separately owned and require
+applicable predecessor/authorization/proof; this sequence grants no blanket successor admission.
 
 ## Controlling authority correction
 
@@ -506,7 +587,7 @@ worker dispatch, D1/E4 work or successor planning.
 
 ### E3-F — retained V2 Codex launch/resume adoption and integrated proof
 
-**Admission status:** unadmitted and undispatched. The documentation-only
+**Current admission disposition:** dispatched then paused; W8 unaccepted/unclosed, no continuation authorized. The [dated correction](#current-e3-f-status-correction--2026-10-21) controls current status. The earlier documentation-only
 [E3-F seam/proof clarification](../contracts/agent-config-projection-v1.md#e3-f-callable-ownership-and-deterministic-proof-clarification)
 settles shell visibility/authoring, callable local control, retained-owner/lease/cleanup joins,
 the narrow Codex loader/setup fence and one source-grounded deterministic proof route against
@@ -517,8 +598,9 @@ qualifies the catalog below; the
 consumes the closed E3-E transfer unchanged. Ordinary missing E3-F implementation is future work,
 not a reopening of E3-E. The selected proof mechanism and its explicit acceptance-only support-file
 exception are documented, not executed. Installed artifact/provenance prerequisites remain later
-proof prerequisites. Fresh admission is a separate transition; implementation requires a later
-explicit dispatch. Enclosing E3 remains incomplete.
+proof prerequisites. The [I1/I2 binding and return sequence](#i1i2-design-binding-and-runtime-return-sequence--2026-10-21)
+qualifies the private ownership/accounting fences; continuation still requires explicit resumption
+and fresh source/proof binding. Enclosing E3 remains incomplete.
 
 - **Bounded behavior:** join the sealed preparation to the V2 carrier, advance the exact projection
   lineage from E3-E's ReadyClosed through Active, retain the non-cloneable local Codex adapter and gateway
@@ -527,6 +609,9 @@ explicit dispatch. Enclosing E3 remains incomplete.
   the exact shell retained-runtime startup call sites that consume E3-A's carrier and E3-C's
   authoring outputs without changing the carrier codec, and the two bounded E3 integration test
   surfaces cataloged by the contract.
+- **Design/source-fence amendment:** required tagged member ownership and exact sealed adapter-to-gateway
+  accounting, private Live revoke full-history join and narrow branch-local construction migration
+  are named in the projection contract; all new callable names remain proposed/absent until source work.
 - **Direct predecessor:** independently landed and proof-clean E3-E.
 - **Consumes:** the complete proof-clean outputs of E3-A through E3-E and the current E2 turn carrier.
 - **Explicit nonownership:** D1/D2/D3 envelopes or brokerage/integration ownership, E4 workspace

@@ -758,19 +758,71 @@ Only its observed `AllowExactMember` result permits the service's unique Active 
 retained owner's final authority check and gate write remain separate. Resumed turns use the same
 Active/lease/gateway/member-cgroup identity with new exact process/namespace registrations.
 
-Per-turn completion releases the terminal child's namespace slot while its cgroup exists, retaining
-the empty member cgroup and runtime resources. Terminal cleanup uses existing `revoke` for verified
-denial, gateway/probe cleanup and kernel resolutions; it already leaves exclusion release separate.
-The retained owner then completes exact durable consumer-lease release followed by native cleanup through
-`revoke_retained_runtime`, drops its projection capability, and calls existing
-`release_exclusion_after_cleanup_v1`. Any failed stage keeps the same accountable owner and retry
-progress. No lease reacquisition, filesystem lock over a process wait, ambiguous-release re-exec,
-or restart adoption is permitted. E3-E's existing cleanup caller and closure are unchanged.
+The [I1/I2 accounting contract](agent-config-projection-v1.md#e3-f-i1i2-ownership-and-accounting-reconciliation)
+replaces the prior unchanged-Live-revoke assumption. Its field-sealed, process-local
+`E3CodexTurnCleanupV1` moves actual terminal child custody from adapter to private gateway history
+through `account_codex_turn_v1`; `observe_codex_accounting_v1` supplies exact retry readback.
+The retained caller first obtains the owned immutable `E3CodexAccountingKeyV1` from the original
+adapter's `terminal_accounting_key_v1` for its exact reserved turn/span, ends that immutable borrow,
+then passes the key with the mutable terminal slot. Partial setup cannot export a key; wrong/stale
+turns fail, and equal retry after handoff uses the retained key without constructing authority.
+The adapter's exact mutable Option slot remains owner of every failed pre-transfer operation;
+namespace-release success is retained there even if a later step errors. After committed transfer
+the source slot is None and gateway history alone owns the original terminal pidfd/wait contribution.
+The gateway always owns cgroup descriptors, namespace slots and original exclusion. Full signatures,
+constructor/accessor limits, pre-registration custody and ACK-loss cases are normative at that link.
+No public schema/store/endpoint or second cleanup supervisor is added.
 
-These are future E3-F requirements, not admission or implementation. The
+While the gateway remains alive, accounting releases only that exact terminal Codex namespace slot
+while the original member cgroup exists. A matching process-local accounting readback permits the
+turn to become Idle; it cannot publish whole-attempt terminal evidence, release the consumer lease,
+remove the member group or establish B0 semantic completion. Retain that group empty, the original
+Active ref/lease, gateway and native inputs for subsequent sequential turns, each with a new process
+and namespace registration. An error retains custody and blocks another turn.
+
+Terminal cleanup marks Revoking, closes all gates, binds its original last owned head through
+`bind_retained_revocation_v1`, then calls proposed `deny_retained_boundary_v1` with the exact
+configured registry/head. Only exact `E3RetainedBoundaryDenialReadbackV1` from original held
+namespace/intent/handles permits subsequent Codex cancel/reap/account, including partial setup.
+This owned immutable readback attests observed reject-only kernel denial, with no authority or
+terminal evidence; it cannot assert a durable Revoked successor or effect resolution. Failure or
+ACK loss retains original progress/custody, keeps admission closed and requires same-operation
+readback/retry before late effects. Unknown or substituted handles fail closed. Repeat current
+bound-head/held-object equality and actual denial before late effects and after waits; no filesystem
+transaction spans those waits. The existing boundary helper's narrowly fenced retained Revoked/
+non-removing branch reconciles only that original pending denial, as specified at the link.
+After every Codex contribution is accounted, use amended `revoke_live_v1` behind existing public
+`revoke` to reverify denial and join retained Codex history with gateway/probe owners. Match the complete
+applicable durable process/cgroup sets, including earlier resumed registrations and attempt lineage;
+unknown/omitted/extra/changed registrations fail closed. Current full-group emptiness is reobserved.
+The retained head remains bound throughout both stages; after actual whole-attempt quiescence the
+gateway freezes evidence ID/time before
+first durable terminal write. Require exact readback on retry, never a rebased replacement. Namespace release remains before cgroup removal.
+No Codex-only terminal object is valid while gateway lives. Existing durable schema/validator and
+E3-E's no-Codex default path/recovery invariants are preserved; the old implementation freeze is
+qualified only for this explicit accounting join, early-denial helper branch and retained progress.
+Phase one never invokes whole revoke to obtain an expected partial failure. Durable boundary/
+effect bookkeeping stays in the existing final resolution transaction; its failure retains observed
+denial and Revoking cleanup custody without claiming durable success.
+
+After Live revoke, `terminal_cleanup_readback_v1` validates the original bound final head and
+persisted exact evidence/Revoked boundary plus completed kernel cleanup. Its field-sealed borrowed
+`E3GatewayTerminalCleanupReadbackV1` exposes only immutable `terminal_evidence`/`revoked_boundary`
+inputs for the service, with no lease/owner accessor. Failure retains original cleanup custody.
+Then complete exact original consumer-lease Released readback and native cleanup through
+`revoke_retained_runtime`, drop the projection capability, and call
+`release_exclusion_after_cleanup_v1` last. Every failure retains its one owner and successful-step
+markers. Lost transfer/terminal/lease ACKs use exact original readback and never double-reap,
+transfer, release, reacquire or relaunch. Process-memory history is not crash proof; existing
+authenticated registry/OS recovery must deny/kill/account all exact remnants before original-custody
+release, with no Active restart adoption. The [ordered E3-E cleanup](#terminal-namespace-release-and-exclusion-last)
+remains authoritative for its original path; E3-E closure is not reopened.
+
+These bindings resolve I1/I2 at the design-contract level only. Source changes, targeted and
+installed proof, c381 integration and E3-F continuation require separate authorization. The
 [Codex loader fence](agent-config-projection-v1.md#e3-f-codex-loader-and-setup-implementation-fence) and
 [selected deterministic proof route](agent-config-projection-v1.md#e3-f-deterministic-pinned-codex-proof-route)
-retain the existing gateway/probe protocols and distinguish test stimulus from executed proof.
+remain; test stimulus is not executed proof.
 
 ## Sealed launch capability and inherited inputs
 

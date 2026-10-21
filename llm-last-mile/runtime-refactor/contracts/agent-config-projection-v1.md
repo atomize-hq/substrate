@@ -80,7 +80,9 @@ At the authority baseline:
 11. Baseline `ActiveMemberRuntime` retains a binary path, environment, E2 activation, and worker-cap
     identity but no E3 capability/native/gateway state; both submitted-turn paths reconstruct a
     prompt bridge from that path. E3 must add exact retained state and may not treat successful first
-    launch as a capability.
+    launch as a capability. The later I1/I2 binding replaces the mandatory common lease and
+    additive-only representation with required tagged ownership; it preserves the ordinary
+    non-E3 capability purpose without an E3 fallback.
 12. The E2-authorized continue/fork-command path reaches
     `continue_world_worker_fork_command_bootstrap_after_delivery` and
     `build_continue_world_worker_fork_command_transport_request` before the common fork builder.
@@ -3546,7 +3548,15 @@ struct MemberRuntimeLaunchAdmissionV2 {
     preparation: SealedE3ConfigProjectionPreparationV1,
 }
 
-// Sealed, process-local state owned by exactly one ActiveMemberRuntime.
+// Proposed E3-F private replacement; no wire or durable schema change.
+// Exactly one required variant, never two optional authority fields.
+enum MemberRuntimeOwnershipV1 {
+    NonE3(NonE3MemberRuntimeOwnershipV1),
+    E3(ActiveE3ConfigProjectionRuntimeV1),
+}
+// NonE3MemberRuntimeOwnershipV1 holds the original counted non-E3 lease and
+// branch-local ordinary launch/UAA state. ActiveMemberRuntime holds ownership.
+// Sealed, process-local E3 state owned through that one required variant.
 struct ActiveE3ConfigProjectionRuntimeV1 {
     identity: ConfigProjectionIdentityV1,
     closed_ref: ConfigProjectionRefV1,
@@ -3560,7 +3570,7 @@ struct ActiveE3ConfigProjectionRuntimeV1 {
     native_realization: HeldDirectoryDescriptor,
     gateway_runtime: HeldE3GatewayRuntimeV1,
     immutable_worker_cap_identity: RetainedTurnWorkerCapIdentity,
-    privileged_child_exclusion_lease: HeldE3PrivilegedChildExclusionLeaseV1,
+    // Original E3 exclusion is physically owned only inside gateway_runtime.
     control: Mutex<ActiveE3ProjectionControlV1>,
 }
 
@@ -3677,14 +3687,16 @@ first accepted E3 preparation CASes `LegacyShared { live_non_e3_children: 0 }` t
 later E3 preparations in the exact world/generation join it and increment a non-cloneable lease
 count. The preparation retains that lease through V2 consumption and the active runtime. No request may
 wait while holding a spawn-side lock: a conflicting mode fails immediately and safely.
-`MemberRuntimeManager::launch_v2` consumes
-`MemberRuntimeLaunchAdmissionV2`, resolves the carried Dormant head, performs the gateway activation
-and ReadyClosed publication, obtains the exact Active ref,
-and moves the non-cloneable capability, lease, artifact/native descriptors, adapter, and live gateway
-handle plus its exclusion lease into the new `ActiveMemberRuntime.e3_projection`. Registration failure calls the single
-revoke-and-release path before discarding the runtime. The V1 `launch` constructor and V1 active
-state never synthesize this field; while the process-wide exclusion is idle their behavior remains
-frozen, and while it is E3-exclusive they fail at the common pre-spawn security admission.
+`MemberRuntimeManager::launch_v2` consumes `MemberRuntimeLaunchAdmissionV2` after the
+unchanged E3-E `take_for_v2` transfer. It does not reactivate the gateway or resolve the original
+Dormant lease as ReadyClosed. It moves the original publication, capability, adapter/native
+resources and gateway into the required `MemberRuntimeOwnershipV1::E3` variant. The mandatory
+common non-E3 lease field and the formerly proposed additive `e3_projection` field are replaced,
+not made optional. The [I1/I2 reconciliation](#e3-f-i1i2-ownership-and-accounting-reconciliation)
+defines construction, custody, ordinary-path purpose and retirement. Registration failure keeps
+cleanup-only custody in the existing registry until exact cleanup succeeds. V1 construction uses
+only the NonE3 variant with its original counted lease; E3 never obtains a non-E3 lease. Service
+exclusion still rejects ordinary admission before spawn throughout an E3-exclusive epoch.
 
 The bootstrap child uses the same `control` mutex and `Preparing` → `Prepared` → `Released`
 transitions with its bootstrap run/span identity. The runtime is not registered as resumable until
@@ -3694,7 +3706,7 @@ failure enters `Revoking` under the same mutex, so the initial final-exec gate h
 
 `MemberTurnSubmitRequestV1` remains schema/byte unchanged; a resumed request acquires no E3 carrier
 from its caller. Both existing submit branches first inspect the retained active runtime. When
-`e3_projection` is present they call
+the required ownership tag is `E3` they call
 `ActiveE3ConfigProjectionRuntimeV1::admit_and_reserve_resumed_turn`. The existing E2 durable join may
 first reserve/identify its turn and elect a leader because that operation cannot launch a child; the
 active-member registry lock is then released before the E3 control lock is acquired. Under the one
@@ -5363,7 +5375,10 @@ This section settles the E3-F producer-to-retained-runtime seam against integrat
 callable-result, ownership, and future symbol-fence clauses identified below. It does not change
 projection/configuration semantics, E2 authority, any durable schema/hash, or the completed
 [E3-E closure](../slices/e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17).
-E3-F remains **unadmitted and undispatched**. Missing E3-F code described here is ordinary future
+The [current E3-F disposition](../slices/e3-agent-config-projection-and-gateway-adoption.md#current-e3-f-status-correction--2026-10-21)
+is dispatched then paused; W8 remains unaccepted/unclosed. This earlier clarification grants no
+continuation. The dated I1/I2 reconciliation below qualifies its exact private ownership/revoke
+fences; missing E3-F code described here is ordinary future
 implementation, not a new prerequisite or an E3-E defect. Fresh admission is a separate transition;
 implementation requires a later explicit dispatch. Nothing in this section is executed proof.
 
@@ -5473,7 +5488,9 @@ and the [E3-E one-time transfer](managed-gateway-adoption-v1.md#e3-e-activation-
 `WorldService::execute_stream` selects V2 before non-E3 lease acquisition or helper/world side
 effects, validates common placement/E2 bindings, calls `take_for_v2(&request)` once and moves the
 result into crate-visible, field-sealed `MemberRuntimeLaunchAdmissionV2`. Nonstream member dispatch
-still rejects; V1 conversion and behavior stay unchanged. The manager receives the already
+still rejects; V1 wire conversion/validation and supported ordinary behavior stay unchanged.
+Private retained ownership construction/routing changes only as specified in the
+[I1/I2 reconciliation](#e3-f-i1i2-ownership-and-accounting-reconciliation). The manager receives the already
 configured projection service, its exact registry and the same exclusion instance; its default
 constructors reject V2. In `WorldService::new_linux`, clone the locally constructed registry Arc
 before moving it to preparation-manager construction and pass it together with the matching service
@@ -5491,8 +5508,7 @@ The preparation contains no live credential or HSA facade after transfer. No acc
 recover either, and `take_for_v2` is outside the future edit fence.
 
 The illustrative retained-state fields earlier in this contract are an ownership inventory, not
-permission to duplicate leases. In particular, `privileged_child_exclusion_lease` is physically
-owned **only** by `E3GatewayRuntimeAuthorityV1::_exclusion`, retained inside this same E3 owner;
+permission to duplicate leases. The original E3 exclusion lease is physically owned **only** by `E3GatewayRuntimeAuthorityV1::_exclusion`, retained inside this same E3 owner;
 `consumer_lease` denotes the original publication's Held dispatch lease. The adapter owns its pinned
 artifact/native resources; the original projection capability retains its accepted-home authority
 and live-capability accounting. These are constituents of one non-cloneable retained owner, not a
@@ -5549,7 +5565,8 @@ any process, socket, pipe, namespace handshake or reap wait. Repeat guards immed
 publication and release; a previous check is not a permanent authorization token.
 
 Same-owner namespace access is by two crate-visible operations on the existing gateway owner,
-not by exposing `_exclusion`:
+not by exposing `_exclusion`. Terminal Codex slot release is invoked through the single accounting
+transition below; the adapter must not release the same slot again after transfer:
 
 ```rust
 fn install_codex_user_namespace_v1(
@@ -5620,33 +5637,240 @@ unregister similarly retains the owner there until cleanup completes; it cannot 
 reachable owner and return success on cleanup error. Existing manager operations retry only its
 pending cleanup, with no fresh launch, generic supervisor or new lifecycle framework.
 
-Per-turn completion/cancel first accounts for the exact child and descendants, closes turn gates,
-publishes/validates terminal evidence, and releases its namespace slot **before** cgroup removal.
-The original member cgroup is retained empty between turns, so its exact boundary identity remains
-valid; it is removed only at terminal cleanup. Each resumed process gets a new registration and
-namespace slot within that same held cgroup. It repeats the three credential/cache-name absence
-checks without reading/deleting any present entry. Only successful accounting clears the matching turn to Idle; source/realization descriptors,
-Active head, original Held lease and gateway stay retained for both sequential resumed E2 turns.
-A cleanup error retains the turn/owner and prohibits another turn. A forbidden entry or invalid
-binding makes the entire runtime Revoking.
+Per-turn completion/cancel first closes the exact turn's gates, reaps its actual child and
+accounts for descendants through the [sealed accounting handoff](#e3-f-i1i2-ownership-and-accounting-reconciliation).
+That handoff releases the terminal namespace slot while the group exists and retains the exact
+Codex contribution in the gateway owner. Its process-local readback is not a whole-attempt terminal
+object and is never passed to `publish_terminal_child_evidence` while the gateway is alive. Only a
+matching accounted turn may become Idle. The empty member cgroup, original Held dispatch lease,
+Active head, gateway and source/native descriptors survive between sequential turns. A cleanup
+error blocks another turn; invalid binding or a forbidden entry makes the runtime Revoking.
 
-Terminal cleanup uses the same retained owner for initial partial setup and resumed turns: mark
-Revoking; close all release channels; cancel and account for preparing/released Codex children;
-release their exact namespace slots while cgroups exist; revoke and verify the gateway boundary;
-then use the existing gateway `revoke(Live(&mut gateway), &registry)` lifecycle for gateway/probe
-terminal evidence, their namespace release and kernel effect resolution. That operation already
-leaves exclusion release separate. The retained owner calls `revoke_retained_runtime` with the
-retained terminal/boundary evidence and exact native inputs (or partial publication), retains its
-Released readback, and only after success drops the projection capability and calls the existing
-`release_exclusion_after_cleanup_v1(&mut self) -> anyhow::Result<()>`. No new gateway finalization
-mode or lease accessor is needed. A failure after durable lease release retains the same owner, descriptors and exclusion until native
-cleanup completes; retry accepts only that exact Released successor for cleanup, never launch. A
-lost durable release return retries exact readback before native cleanup or exclusion release. The default
-E3-E posture/order stays unchanged. Every stage
-retains successful-step markers; retry never interprets arbitrary absence as this owner's removal.
-Drop is only fail-closed poisoning, not cleanup. Restart has no live handles to adopt: use existing
-recovery to revoke/kill exact remnants and release their original lease; require a fresh authenticated
-preparation/fence for later execution. It never reconstructs an Active adapter from a pathname/ref.
+Terminal cleanup marks Revoking, closes all release channels, calls `bind_retained_revocation_v1`
+then `deny_retained_boundary_v1` and requires its exact observed-denial readback before cancelling,
+reaping or accounting every preparing/released Codex child through the same owner. The amended private Live
+implementation behind existing `revoke(Live(&mut gateway), &registry)` first requires the
+original head bound by `bind_retained_revocation_v1`, then joins all retained Codex
+contributions with gateway/probe process custody and the full applicable cgroup set. It publishes
+only exact whole-attempt terminal evidence, releases each namespace before its cgroup removal,
+and resolves kernel effects. The prior unchanged-implementation requirement is retired only for
+this accounting join and the retained early-denial helper branch specified below; the public revoke
+signature, E3-E default behavior and recovery safety remain.
+The retained owner obtains the gateway's exact borrowed `terminal_cleanup_readback_v1` below,
+then calls `revoke_retained_runtime` with its terminal/boundary evidence and original
+inputs/publication, retaining the exact Released consumer-lease readback. After native cleanup
+succeeds it drops the projection capability and calls `release_exclusion_after_cleanup_v1` last.
+Every failed stage retains the same owner and successful-step markers; released-lease retry permits
+cleanup only. A lost return requires exact readback, never a fresh lease or launch. Drop poisons
+closed admission rather than completing cleanup. Restart uses existing authenticated registry/OS
+recovery to deny/kill/account remnants and release original custody; it never reconstructs an Active
+adapter from a pathname/ref or a vanished process-memory contribution.
+
+#### E3-F I1/I2 ownership and accounting reconciliation
+
+**2026-10-21 design binding; implementation and proof outstanding.** This resolves the documented
+I1/R26 constructibility and I2/R27 accounting design conflicts within the existing owners. It
+qualifies the private representation, callable and source fences in place; it is not runtime
+acceptance, bridge integration, E3-F resumption or enclosing E3 closure. Source correspondence and
+the diagnostic conflicts are retained in the [accepted reentry assessment](../../../docs/guidance/2026-10-21-substrate-reentry-assessment.md#2-runtime-stopping-point-and-status-axes)
+and historical September 18 dossier. They do not prove this future implementation.
+
+**I1: one required common ownership tag.** `ActiveMemberRuntime.ownership:
+MemberRuntimeOwnershipV1` replaces both the old mandatory common
+`Arc<HeldNonE3PrivilegedChildLeaseV1>` and the proposed additive `e3_projection` field. Its NonE3
+variant owns `NonE3MemberRuntimeOwnershipV1`, with the original counted non-E3 lease and branch-local
+binary/launcher/environment/protocol/UAA execution state. Its E3 variant owns the original
+non-cloneable `ActiveE3ConfigProjectionRuntimeV1` bundle. Shared placement/session/E2 bindings
+remain common. Constructors must supply exactly one complete variant before publication; there is
+no nullable/dummy lease, unchecked default, or E3 fallback to ordinary launch fields. Existing
+launch/submit/cancel/register/unregister/bootstrap/turn consumers match that tag, with no second
+owner of a resource. A private accessor may borrow a variant; it cannot extract an authority lease.
+
+The NonE3 branch's independent purpose is ordinary supported unprojected agent/UAA execution while
+E3 exclusion is idle. Its counted admission is an E3-D security obligation, not evidence of E3
+credential/config confinement. The E3 replacement immediately retires the old common-field and
+additive-only construction assumption and any superseded E3 executable fallback. Strict V1 wire
+support remains bounded to ordinary capabilities with that independent purpose; it cannot claim
+E3 or coexist with credential-bearing E3. Removing those ordinary capabilities requires a separately
+selected replacement with equivalent capability/security proof. D1's later V3/envelope is not
+silently implemented here. The old V1 private-construction freeze is qualified only for this
+ownership migration and variant routing, preserving V1 wire bytes, validation and observable
+ordinary behavior. No new simultaneous-agent/turn requirement follows. Existing E3-D same-world/
+generation epoch membership and one-turn-per-runtime arbitration remain unchanged; conflicting
+ordinary/E3 acquisition fails immediately before side effects.
+
+**I2: subordinate cleanup custody moves into the existing gateway owner.** All following new names
+are **proposed, absent source interfaces** in `e3_codex_launch.rs` and `gateway_runtime.rs`, with
+`pub(super)` visibility only where needed across these world-service siblings. No durable/wire
+schema, endpoint, generic supervisor or second registry is added. The existing retained E3 control
+owner serializes adapter/gateway access; it never holds registry/HSA filesystem transactions over
+process waits. The gateway alone owns the original exclusion, namespace slots, cgroup descriptors
+and kernel-effect intent/effect progress throughout. The adapter initially owns each exact child's
+pidfd/reap/gate/pipe cleanup; completed child custody transfers once into gateway history.
+
+`E3CodexAccountingKeyV1` contains exact authority-store/series/preparation/fence/world/generation,
+turn/span and full `E3ChildProcessRegistrationV1` binding. It is constructed privately by the adapter
+from retained inputs and registry-exact registration readback, never from caller paths/PIDs. The key
+is a field-sealed, owned immutable, non-Serde, non-Clone equality value with no caller constructor,
+descriptor/lease accessor or authority. The purpose-specific output `terminal_accounting_key_v1`
+below is the only export to the retained caller; it creates an equal owned value from that adapter's
+sealed terminal turn. Its lifetime is independent of an adapter borrow, so the caller can keep it
+while mutably borrowing the cleanup slot. A pre-registration/unfinished turn has no such output.
+`E3CodexTurnCleanupV1` additionally owns the original terminal pidfd, terminal parent wait result,
+closed-gate/pipe progress, descriptor-bound member-cgroup registration/intent equality, and namespace
+release progress. It is field-sealed, non-Clone, non-Serde and has no public constructor. It does
+not duplicate the gateway's cgroup/exclusion ownership. `E3CodexAccountingReadbackV1` contains that
+exact key plus the parent-wait result, cgroup registration equality and `NamespaceReleased` or the
+validated `NeverRetained` disposition. It is non-authoritative process-local equality evidence.
+
+| Proposed callable; exact result | Construction/caller, validation and custody |
+|---|---|
+| `E3Codex0125LaunchAdapterV1::seal_terminal_cleanup_v1(&mut self, key: &E3CodexAccountingKeyV1) -> Result<(), ConfigProjectionFailureV1>` — private | Only adapter cancel/completion after exact gate closure and actual wait/reap/descendant accounting. It moves its own registered terminal turn into its private `Option<E3CodexTurnCleanupV1>`; any validation error leaves original child and progress in the adapter. Repeated equal call validates the same slot, never reaps twice or creates a new registration. |
+| `E3Codex0125LaunchAdapterV1::terminal_accounting_key_v1(&self, turn_id: &str, span_id: &str) -> Result<E3CodexAccountingKeyV1, ConfigProjectionFailureV1>` — `pub(super)` | Retained owner supplies its already reserved exact turn/span under E3 control after the adapter's private seal succeeds. Validate that identity against the same terminal slot and registry-confirmed registration retained by this adapter; return one owned immutable equality key without lending an adapter reference. Before sealing, on partial/unregistered setup, or for another turn/span, return a typed error without moving custody. Equal retries, including after source becomes None, return equal keys for that same unacknowledged turn; never create/register/reap a child. Keep the private key until exact gateway readback is acknowledged. A stale key cannot address a later turn's slot; gateway observation may only read its matching historical entry. |
+| `E3Codex0125LaunchAdapterV1::terminal_cleanup_slot_v1(&mut self, key: &E3CodexAccountingKeyV1) -> Result<&mut Option<E3CodexTurnCleanupV1>, ConfigProjectionFailureV1>` — `pub(super)` | Retained owner calls only for the exact sealed current/completed turn under control. It returns a bounded mutable borrow of that one slot, permitting only the gateway handoff below. Mismatched key errors without moving custody. The adapter retains the immutable key after its Option becomes None so it can request exact readback. No generic resource extraction accessor. |
+| `E3GatewayRuntimeAuthorityV1::account_codex_turn_v1(&mut self, registry: &ConfigProjectionRegistryV1, key: &E3CodexAccountingKeyV1, source: &mut Option<E3CodexTurnCleanupV1>) -> Result<E3CodexAccountingReadbackV1, ConfigProjectionFailureV1>` — `pub(super)` | Retained owner passes the adapter's exact slot and configured registry. Match full attempt/registration/cgroup identity against original held descriptors and durable readback; confirm actual terminal pidfd/wait and current descendant/group emptiness. Call existing lease-owned terminal namespace release while the group exists and retain success in the source bundle. After all fallible validation, commit by moving the bundle into private gateway history and filling exact readback with no fallible step after move. Error leaves source custody and partial-success markers intact. An existing equal gateway entry returns only its exact readback with source None; duplicate source or changed entry is WrongBinding/Conflict, never double custody. |
+| `E3GatewayRuntimeAuthorityV1::observe_codex_accounting_v1(&self, key: &E3CodexAccountingKeyV1) -> Result<Option<E3CodexAccountingReadbackV1>, ConfigProjectionFailureV1>` — `pub(super)` | Retained owner/adapter recovery supplies the original exact key. Same attempt and every registration binding must match. Some contains the same committed readback; None means no handoff entry and requires the original source bundle to remain present. Source None plus result None is a custody error and keeps runtime closed. This read does not reap, release, register, publish, repair or grant terminal authority. |
+| `E3GatewayRuntimeAuthorityV1::bind_retained_revocation_v1(&mut self, registry: &ConfigProjectionRegistryV1, expected_head: &ConfigProjectionRefV1) -> Result<(), ConfigProjectionFailureV1>` — `pub(super)` | Already-Revoking retained owner supplies its original last owned head before Live revoke. Validate exact configured store/current durable head, immutable series/fence/world/preparation lineage and original owned gateway attempt; retain that exact ref in existing terminal progress. Equal retry is readback-only; different or advanced head fails closed. Any failure after binding retains the same head and Revoking owner; no later launch/publication may advance it, and unavailable/mismatched durable readback requires existing recovery. This does not publish, release a lease, mint authority or produce terminal evidence. E3-E's original Live caller uses no retained binding and keeps its existing behavior. |
+| `E3GatewayRuntimeAuthorityV1::deny_retained_boundary_v1(&mut self, registry: &ConfigProjectionRegistryV1, expected_head: &ConfigProjectionRefV1) -> Result<E3RetainedBoundaryDenialReadbackV1, ConfigProjectionFailureV1>` — `pub(super)` | Already-Revoking retained owner calls after `bind_retained_revocation_v1`, before cancelling/reaping any live Codex child. Require the exact bound current head/configured registry, original gateway attempt, held namespace and owned boundary intent/handles; close original authority-bearing channels and mark this owner terminal. Use its original `install_dormant_boundary` with that held intent/ref, `Revoked`, and `remove_after_revoke = false`; verify exact reject-only kernel readback, then retain denial progress and return owned equality readback. No caller boundary/intent/handle input, namespace switch, process wait, group/listener removal, terminal publication, effect-resolution write or lease release. Errors and lost returns retain all original custody/progress and prohibit subsequent late effects until equal retry verifies denial. |
+| `E3GatewayRuntimeAuthorityV1::terminal_cleanup_readback_v1<'a>(&'a self, registry: &ConfigProjectionRegistryV1, expected_head: &ConfigProjectionRefV1) -> Result<E3GatewayTerminalCleanupReadbackV1<'a>, ConfigProjectionFailureV1>` — `pub(super)` | Retained owner calls after successful Live revoke with the original bound head. Require equality to frozen terminal progress, exact persisted whole-attempt evidence object/ref and Revoked boundary, completed original kernel resolutions/listener/group cleanup, and retained unreleased exclusion. Errors expose no partial success and keep cleanup-only custody. Success returns sealed immutable borrows of this gateway's terminal evidence and Revoked boundary, never a mutable owner or lease. Equal retry revalidates the same evidence; arbitrary current ref/liveness cannot construct it. |
+
+`E3RetainedBoundaryDenialReadbackV1` is proposed in `gateway_runtime.rs`, `pub(super)` as a type,
+field-sealed, owned immutable, non-Serde and non-Clone. Only `deny_retained_boundary_v1` constructs
+it. Its private equality contents are the exact bound `ConfigProjectionRefV1`, original
+`E3KernelEffectIntentRefV1`, access-boundary/gateway identity, held network-namespace device/inode,
+nftables table handle, exact `NftablesChainIdentityV1`, ordered `Vec<NftablesRuleIdentityV1>` and
+observed `GatewayAccessPostureV1::Revoked`. It has no authority/descriptor/lease accessor and no
+conversion to `GatewayAccessBoundaryV1` or terminal evidence. The caller retains this owned value
+as the phase result without extending a gateway borrow; subsequent late-effect calls revalidate
+current head/held-object equality and actual denial through the original gateway, never trust a
+cached readback as permission. Repeating the same call reobserves the same kernel state and returns
+equal contents; another head/intent/namespace/handle or unexpected missing boundary fails closed.
+
+This early result means **observed kernel denial only**. The durable boundary may still be
+`AllowExactMember` (or Dormant) until the existing final resolution transaction can publish its
+legal Revoked successor. Neither the result nor retained denial progress asserts that durable write,
+whole-attempt quiescence, kernel-effect resolution or consumer-lease release. The existing final
+whole revoke remains the sole path to terminal readback; do not call it expecting partial failure
+to obtain early denial. Final resolution failure leaves the original owner Revoking with observed
+denial and unresolved durable bookkeeping, not fabricated durable success.
+
+For an interrupted netlink ACK, retain the original pending intent and prior table/chain/rule
+identities before the effect. Equal retry in the retained Revoked/non-removing branch of
+`install_dormant_boundary` first observes that exact original inventory: an exact reject-only
+successor with unchanged surviving handles completes the same denial; an exactly unchanged prior
+inventory permits retry of that same denial batch. Missing, extra, substituted or ambiguous readback
+returns error with pending custody intact. No boundary recreation/adoption or new intent is allowed.
+The same retained progress is used when final Live revoke reobserves denial before gateway/probe
+reaping. After final boundary deletion has begun, retries use existing exact removal/absence and
+resolution progress instead of calling phase one to reinstall a boundary. Its E3-E no-retained-
+binding path keeps existing behavior; no new public finalization mode or recovery API is added.
+
+The callable sequence for a registered terminal turn is: adapter cancel/completion privately seals
+its own registration key; retained owner obtains owned `terminal_accounting_key_v1(turn_id, span_id)`;
+end that immutable borrow; borrow `terminal_cleanup_slot_v1(&key)` mutably and pass it with `&key`
+to `account_codex_turn_v1`; end the slot borrow; observe matching readback before acknowledging only
+that turn. Caller IDs select an already owned turn, never construct a key. Any error retains the
+same slot/key or committed gateway entry; partial setup follows the original pre-registration path.
+
+`E3GatewayTerminalCleanupReadbackV1<'a>` is a proposed field-sealed non-Serde process-local
+readback in `gateway_runtime.rs`, constructed only by that method. Its only `pub(super)` accessors
+are `terminal_evidence(&self) -> &E3TerminalChildQuiescenceEvidenceV1` and
+`revoked_boundary(&self) -> &GatewayAccessBoundaryV1`. The retained owner passes those bounded
+borrows to `revoke_retained_runtime` with its original publication/capability/head and exact native
+inputs. The readback carries no authority clone, exclusion or owned descriptor. End the borrow
+before mutable final exclusion release; errors after durable consumer release retain the same
+original native/exclusion owner and exact Released successor for cleanup-only retry.
+
+
+Before fork the adapter retains an owned partial-turn slot containing exact turn/span, gate/pipe,
+output and intended cgroup/registration progress. Immediately after actual spawn it records original
+pidfd/PID/start/boot/service identity there before later fallible work. Failure before registration
+completion remains adapter custody, including kill/reap and namespace never-retained/setup progress.
+An ambiguous registration write resolves only its original intended registration by exact readback;
+it never fabricates a new one or assumes absence from a failed reply. A conclusive no-registration
+case still reaps the actual child and proves the descriptor-bound group empty; it contributes no
+fabricated registered process, while every durable cgroup/intent remains whole-cleanup input.
+For a confirmed pre-registration child, the adapter uses existing typed setup-slot disposition:
+release any actually retained exact namespace through its original gateway owner while the group
+exists; a proven never-retained slot is not released as if it held a descriptor. Keep that progress
+until exact group emptiness/intent resolution. Only fully exact registered terminal children can be
+sealed for the handoff above. Failed cleanup
+keeps the provisional/active cleanup-only owner reachable; no failed response discards a child.
+
+| State/boundary | Accountable custody and retry consequence |
+|---|---|
+| Spawn/setup/reap incomplete | Adapter in the retained/provisional E3 owner holds original child and partial progress; gateway holds original cgroup/namespace/exclusion. No Idle or last-owner removal. |
+| Namespace released, later validation/outer error | Source bundle retains Released progress; retry validates that exact existing slot. It does not release again, treat arbitrary absence as success or reacquire authority. |
+| Handoff committed, outer ACK/response lost | Gateway history owns original terminal pidfd/wait contribution; adapter source is None and retains only key. Observe exact key, require equal readback, then clear only that matching turn. No double transfer, reap or namespace release. |
+| Gateway alive, Codex turn accounted | Retained runtime remains Active with empty original member group and all native resources/original leases. Readback permits matching turn Idle only. Whole-attempt terminal publication is forbidden. New resumed process gets a new exact registration/namespace slot in that same group. |
+| Terminal cleanup or failed durable publication | Runtime remains Revoking; gateway retains all historical registered Codex contributions, gateway/probe child custody and cgroup/intents. Missing/extra/conflicting membership blocks cleanup. |
+| Service crash | Process-local history is lost, not durable proof. Existing authenticated registry/OS recovery denies, kills and observes exact registered remnants, accounts all applicable sets and releases original custody. No Active adoption, synthetic terminality or new preparation from old refs. |
+
+At whole-runtime revocation, close gates and verify boundary denial before late effects; cancel and
+account every Codex child, then gateway/probe. `revoke_live_v1` must match each applicable durable
+process registration to exactly one original gateway/probe owner or validated Codex history entry,
+and each applicable cgroup to the original gateway-owned descriptor/intent. Include every prior
+resumed turn and applicable preparation lineage, not only the latest child. Retained wait status
+is process evidence; current group/descendant emptiness must be reobserved at finalization. The
+unchanged registry validator independently enforces sorted exact whole process/cgroup sets and
+binding/hash/role/PID/start/boot/final-head equality. A live gateway, omitted Codex or unowned extra
+registration cannot pass. No Codex-only `E3TerminalChildQuiescenceEvidenceV1` while gateway lives.
+
+The retained owner first calls `bind_retained_revocation_v1` with its original last owned head,
+then `deny_retained_boundary_v1` before Codex cancellation/reaping. Require successful exact denial
+readback; an error cannot advance to those late effects. Revalidate current bound-head/held-object
+equality and observed denial immediately before each later Codex kill/reap/accounting stage,
+including after waits and retries; `account_codex_turn_v1` in Revoking repeats the same denial check
+before namespace release/transfer. Ordinary Active per-turn accounting retains its gateway-alive
+semantics and needs no revocation denial. No registry/HSA filesystem transaction spans a process
+wait. Only after every Codex contribution is accounted does the owner call existing whole Live
+revoke, which repeats current equality/denial before gateway/probe reaping and final effects.
+The private retained binding, rather than a guessed current Active ref,
+supplies the terminal final head. After whole-attempt quiescence is actually observed, freeze the
+terminal evidence ID and observation time beside that head before first publication. Read back the exact same evidence object/ref
+on ambiguous write/ACK retry; changing head/time/ID is not a retry. A concurrent changed head fails
+closed into existing exact recovery, never silently rebases terminal evidence. No new admission or
+turn may change the owned head after Revoking wins. Release each namespace while its registered
+group still exists; publish/read back whole-attempt evidence and resolve effects before removing
+only exact empty groups. Then original consumer-lease Released readback, native cleanup, projection
+capability drop and original exclusion release last, as above. Failure after lease release retains
+native descriptors/exclusion and permits only same-Released cleanup. Kernel cleanup accounting
+never supplies B0/B1/B2.1 semantic completion or a receipt; those owners retain their exact truth.
+
+**Later required checks, not executed proof.** Existing launchers are `cargo test -p world-service
+--lib`, `cargo test -p config-projection --lib`, `cargo test -p config-projection --test
+agent_config_projection_v1`, and `cargo test -p world-service --test
+e3_config_projection_activation_v1`. Existing package/test files are real; no test here proves the
+new design. Proposed absent tests in those exact owners are
+`test_e3f_tagged_owner_exclusion`, `test_e3f_gateway_alive_turn_accounting`,
+`test_e3f_codex_accounting_transfer_retry`, `test_e3f_whole_attempt_accounting_and_cleanup`, and
+`test_e3f_accounting_crash_recovery`, `test_e3f_terminal_accounting_key_output`, and
+`test_e3f_retained_early_denial_order_retry`. These names are proposed, absent source selectors.
+Later admission binds actual selectors and installed commands.
+
+Required callable cases additionally prove key output from the original sealed adapter with no
+immutable/mutable borrow overlap, wrong turn/span/runtime rejection, no key on partial setup, equal
+output before/after lost handoff ACK and no stale-key access to a later slot. Early-denial cases
+keep Codex and gateway alive at Revoking entry: verify original held-intent denial before Codex
+kill/reap/account, then full gateway/probe revoke; inject wrong registry/head/intent/namespace/
+handle, changed head between stages, failure before/after the denial batch, netlink ACK loss,
+outer return loss and crash before/after denial. Require equal retry or fail-closed retained custody,
+no terminal/durable-success output from phase one, no early final whole-revoke call, and final
+resolution failure with observed denial but unresolved durable state and original leases. Verify
+post-wait current equality/denial, namespace-before-group and exclusion-last ordering.
+
+Required cases: construct both ownership variants without mixed leases; idle ordinary behavior and
+E3/non-E3 acquisition races; initial plus two resumed processes with gateway alive and one stable
+member group; all historical registrations exactly once at finalization; missing/extra/duplicate/
+changed role/PID/start/boot/fence/hash/group; forged bundle or premature terminal publication;
+turn reservation versus revoke and accounting versus cancel; every pre-registration/setup/reap/
+namespace-release/transfer/evidence-write/group-removal/lease-release/native-cleanup failure;
+namespace success followed by error, lost handoff/terminal/lease ACK, and service crash on both sides
+of each custody boundary. Every retry retains original identity, exact set and original lease;
+no double cleanup, ordinary fallback, second execute or liveness-derived terminality. Preserve the
+selected real pinned-Codex/gateway/TLS F14 route below; fake Codex and synthetic E3-E success cannot
+substitute. Source implementation, local tests, installed proof, publication/integration and
+canonical closure are separate obligations.
 
 ### E3-F Codex loader and setup implementation fence
 
@@ -5822,7 +6046,9 @@ All are ordinary future implementation unless explicitly marked consumed unchang
   retry callers. `world_ops` is limited to carrier propagation through its cataloged builders.
   No retained-worker authority, StateStore, manifest or E2 mutation is included.
 - World-service: cataloged construction/injection, `execute_stream`, common placement/binding
-  validation and version-preserving conversion; V2 admission, `launch_v2`, retained owner/control
+  validation and version-preserving conversion; required `ActiveMemberRuntime.ownership`,
+  `MemberRuntimeOwnershipV1`, `NonE3MemberRuntimeOwnershipV1` and exact branch-local field/consumer
+  migration replacing the old common lease and additive e3_projection; V2 admission, `launch_v2`, retained owner/control
   types, private cleanup-only custody inside `ActiveMemberRegistry`, and E3 branches in existing
   launch/submit/register/unregister/bootstrap/turn lifecycle methods; the exact control/cancel
   types and stored consumers above; and the six cataloged local adapter methods plus their private
@@ -5835,8 +6061,19 @@ All are ordinary future implementation unless explicitly marked consumed unchang
   `publish_active`; and `Codex0125ProjectionV1::validate_setup_ready`. Implement the already
   specified realization manifest type in `lib.rs` if still absent; do not invent another schema.
 - Gateway owner: `allow_exact_member`, the two narrow same-owner Codex namespace operations,
-  and their necessary private retained progress/validation. Consume existing `revoke` and
-  `release_exclusion_after_cleanup_v1` unchanged; the default E3-E path stays unchanged. Wrapper:
+  and their necessary private retained progress/validation; the exact sealed accounting types,
+  `E3CodexAccountingKeyV1`, `E3CodexTurnCleanupV1`, `E3CodexAccountingReadbackV1`,
+  `E3GatewayTerminalCleanupReadbackV1` and its two immutable purpose-specific accessors,
+  `E3RetainedBoundaryDenialReadbackV1` with only the sealed equality shape above;
+  adapter `seal_terminal_cleanup_v1`/`terminal_accounting_key_v1`/`terminal_cleanup_slot_v1` and
+  gateway `account_codex_turn_v1`, `observe_codex_accounting_v1`, `bind_retained_revocation_v1`,
+  `deny_retained_boundary_v1`, `terminal_cleanup_readback_v1` named in the I1/I2 table;
+  private `revoke_live_v1` matching/terminal progress and necessary callers for full Codex history;
+  existing `install_dormant_boundary` only its retained-bound-head Revoked/non-removing branch and
+  local exact `observe` readback reconciliation of the same pending denial after ACK loss, as above.
+  This permits no generic boundary API, new intent, boundary adoption or changed E3-E default path.
+  Existing public `revoke` signature and `release_exclusion_after_cleanup_v1` remain; their E3-E
+  default behavior and recovery invariants stay unchanged. Wrapper:
   only the Codex plan/loader/mount/setup/final-release symbols in the preceding subsection.
 - Tests: directly necessary colocated E3 tests in those exact source owners, and extensions only
   to `crates/config-projection/tests/agent_config_projection_v1.rs` and
@@ -6344,8 +6581,9 @@ conflicting restrictions below. Neither correction restarts admission or broaden
    `requested_shared_world_owner_spec`, `exact_bound_world_ownership_adoption`,
    `convert_member_dispatch_request`, and `validate_member_dispatch_binding`. In
    `crates/world-service/src/member_runtime.rs`, only new `MemberRuntimeLaunchAdmissionV2`,
-   `ActiveE3ConfigProjectionRuntimeV1`, `ActiveE3ProjectionLifecycleV1`, the additive
-   `ActiveMemberRuntime.e3_projection` field, `MemberRuntimeManager.e3_projection_service`,
+   `ActiveE3ConfigProjectionRuntimeV1`, `ActiveE3ProjectionLifecycleV1`, required
+   `ActiveMemberRuntime.ownership`, `MemberRuntimeOwnershipV1`, `NonE3MemberRuntimeOwnershipV1`,
+   and only their necessary private variant accessors/branch-local field migration, `MemberRuntimeManager.e3_projection_service`,
    `MemberRuntimeManager.privileged_child_exclusion`,
    `MemberRuntimeManager::with_replay_and_e3_projection_service`,
    `MemberRuntimeManager::launch_v2`,
@@ -6359,8 +6597,9 @@ conflicting restrictions below. Neither correction restarts admission or broaden
    `validate_member_runtime_binary`, `prepare_runtime_env_for_member_backend`,
    `prepare_codex_runtime_env`, and `prepare_member_runtime_launcher`. Existing
    `MemberRuntimeManager::{new,with_replay_registry}` may initialize no E3 service and must reject V2;
-   After the common process-wide pre-spawn security admission, V1 construction, submission,
-   registration, and cleanup behavior is frozen. In
+   After common process-wide pre-spawn admission, V1 wire/validation and ordinary observable
+   behavior remain frozen. Only private ownership construction and variant routing in these
+   exact lifecycle consumers are qualified by the I1/I2 reconciliation; no E3 fallback is added. In
    `crates/world-service/src/prompt_fulfillment.rs`, only `PromptFulfillmentBridge`, new
    `PromptFulfillmentBridge::for_e3_codex`, and `PromptFulfillmentBridge::run_control`; existing
    `PromptFulfillmentBridge::for_member_backend` and the V1 `GatewayAdapterRuntime`/UAA branch are
@@ -6471,7 +6710,19 @@ conflicting restrictions below. Neither correction restarts admission or broaden
    validate_listener_inventory,validate_gateway_secret_ready,
    deliver_secret_after_privilege_drop,spawn_readiness_probe,
    validate_readiness_probe,probe_readiness,
-   allow_exact_member,revoke}` plus only the additive
+   allow_exact_member,revoke}`; for E3-F only, `E3CodexAccountingKeyV1`,
+   `E3CodexTurnCleanupV1`, `E3CodexAccountingReadbackV1`, `E3GatewayTerminalCleanupReadbackV1`
+   with only `terminal_evidence`/`revoked_boundary` immutable accessors, and
+   `E3RetainedBoundaryDenialReadbackV1` with its specified private equality contents,
+   `E3Codex0125LaunchAdapterV1::{seal_terminal_cleanup_v1,terminal_accounting_key_v1,
+   terminal_cleanup_slot_v1}`,
+   `E3GatewayRuntimeAuthorityV1::{account_codex_turn_v1,observe_codex_accounting_v1,
+   bind_retained_revocation_v1,deny_retained_boundary_v1,terminal_cleanup_readback_v1}`, private
+   `revoke_live_v1` full-history matching/frozen terminal progress and directly necessary callers;
+   `install_dormant_boundary` only its retained-bound-head Revoked/non-removing branch and local
+   exact `observe` reconciliation of that original pending denial after ACK loss, as specified;
+   these qualify the prior unchanged Live implementation fence while preserving E3-E default
+   behavior, exact terminal schemas/validation, recovery and exclusion-last. Plus only the additive
    `GatewayRuntimeManager.privileged_child_exclusion:
    Arc<E3PrivilegedChildExclusionV1>` and
    `ManagedGatewayRuntime.privileged_child_exclusion_lease:
