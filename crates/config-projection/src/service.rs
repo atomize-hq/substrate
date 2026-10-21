@@ -160,6 +160,25 @@ pub(crate) fn exercise_activation_progress_for_test(
     reference
 }
 
+#[cfg(test)]
+pub(crate) fn test_e3f_retained_publication_fixture(
+    publication: &mut E3PreparedRetainedLaunchPublicationV1,
+    head: crate::ConfigProjectionRefV1,
+    lease: crate::ConfigProjectionConsumerLeaseV1,
+) {
+    // The registry fixture has already published these exact bytes. This supplies
+    // only the private prepare-return progress; no production setter is exposed.
+    assert_eq!(
+        publication.record.as_ref().unwrap().identity.series_id,
+        head.series_id
+    );
+    assert_eq!(lease.acquired_projection_ref, head);
+    assert!(publication.published_head.is_none());
+    assert!(publication.held_consumer_lease.is_none());
+    publication.published_head = Some(head);
+    publication.held_consumer_lease = Some(lease);
+}
+
 impl AgentConfigProjectionServiceV1 {
     pub fn new(
         registry: Arc<ConfigProjectionRegistryV1>,

@@ -2128,7 +2128,7 @@ pub(crate) fn resolve_inventory_contract_for_exact_backend(
         1 => resolve_inventory_projected_contract(
             base_policy,
             envelope,
-            matches.pop().expect("single projected match"),
+            InventoryDispatchCandidateV1::Legacy(&matches.pop().expect("single projected match")),
         )
         .map(Some),
         _ => {
@@ -2169,7 +2169,7 @@ pub(crate) fn resolve_inventory_contract_for_unique_scope(
         selected.push(resolve_inventory_projected_contract(
             base_policy,
             envelope,
-            projected,
+            InventoryDispatchCandidateV1::Legacy(&projected),
         )?);
     }
 
@@ -2452,23 +2452,100 @@ fn persisted_host_attach_mode_label(value: HostAttachModePreference) -> &'static
     }
 }
 
+
+enum InventoryDispatchCandidateV1<'a> {
+    Legacy(&'a ProjectedInventoryEntryV1),
+    #[cfg(target_os = "linux")]
+    E3(&'a crate::execution::agent_inventory::PlacementProjectedInventoryEntryV3),
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn resolve_e3_selected_inventory_contract(
+    base_policy: &Policy,
+    envelope: &DispatchRequestEnvelope,
+    selected: &crate::execution::agent_inventory::PlacementProjectedInventoryEntryV3,
+) -> Result<ResolvedLaunchContract, DispatchResolutionError> {
+    if envelope.backend_id.as_deref() != Some(selected.backend_id.as_str())
+        || selected.placement != crate::execution::agent_inventory::AgentPlacement::World
+        || selected.execution_scope != AgentExecutionScope::World
+        || envelope.attach_launch_knobs.requested_execution_scope != AgentExecutionScope::World
+    {
+        return Err(DispatchResolutionError {
+            kind: DispatchResolutionErrorKind::BaselineIneligible,
+            field: "backend_id",
+            rejecting_layer: DispatchRejectingLayer::BaselineTruth,
+            reason: "E3 selected inventory must exact-match the requested world backend".into(),
+        });
+    }
+    resolve_inventory_projected_contract(
+        base_policy,
+        envelope,
+        InventoryDispatchCandidateV1::E3(selected),
+    )
+}
+
 fn resolve_inventory_projected_contract(
     base_policy: &Policy,
     envelope: &DispatchRequestEnvelope,
-    projected: ProjectedInventoryEntryV1,
+    projected: InventoryDispatchCandidateV1<'_>,
 ) -> Result<ResolvedLaunchContract, DispatchResolutionError> {
     validate_inventory_projected_candidate(&projected)?;
-    validate_dispatch_overrides(envelope, projected.execution_scope)?;
-    let effective_policy =
-        resolve_inventory_effective_policy(base_policy, projected.policy_overlay.as_ref());
-    let (capabilities, capability_origins) = resolve_inventory_capabilities(
-        projected.capabilities.clone(),
-        &envelope.capability_overrides,
-    )?;
+    let (
+        agent_id,
+        backend_id,
+        execution_scope,
+        policy_overlay,
+        capabilities,
+        origin,
+        execution_scope_origin,
+        cli_mode_origin,
+        cli_runtime_family,
+        kind,
+        cli_mode,
+        cli_binary,
+        path,
+    ) = match projected {
+        InventoryDispatchCandidateV1::Legacy(p) => (
+            &p.agent_id,
+            &p.backend_id,
+            p.execution_scope,
+            &p.policy_overlay,
+            &p.capabilities,
+            p.origin,
+            p.execution_scope_origin,
+            p.cli_mode_origin,
+            p.cli_runtime_family,
+            p.kind,
+            p.cli_mode,
+            &p.cli_binary,
+            &p.path,
+        ),
+        #[cfg(target_os = "linux")]
+        InventoryDispatchCandidateV1::E3(p) => (
+            &p.realized_agent_id,
+            &p.backend_id,
+            p.execution_scope,
+            &p.policy_overlay,
+            &p.capabilities,
+            p.origin,
+            p.execution_scope_origin,
+            p.cli_mode_origin,
+            p.cli_runtime_family,
+            p.kind,
+            p.cli_mode,
+            &p.cli_binary,
+            &p.path,
+        ),
+    };
+
+    validate_dispatch_overrides(envelope, execution_scope)?;
+    let effective_policy = resolve_inventory_effective_policy(base_policy, policy_overlay.as_ref());
+    let (capabilities, capability_origins) =
+        resolve_inventory_capabilities(capabilities.clone(), &envelope.capability_overrides)?;
     if !base_policy
         .agents_allowed_backends
         .iter()
-        .any(|allowed| allowed == &projected.backend_id)
+        .any(|allowed| allowed == backend_id)
     {
         return Err(DispatchResolutionError {
             kind: DispatchResolutionErrorKind::OverrideDeniedByPolicy,
@@ -2476,12 +2553,12 @@ fn resolve_inventory_projected_contract(
             rejecting_layer: DispatchRejectingLayer::Policy,
             reason: format!(
                 "selected orchestrator backend '{}' is not allowlisted by effective policy agents.allowed_backends",
-                projected.backend_id
+                backend_id
             ),
         });
     }
 
-    let baseline_origin = match projected.origin {
+    let baseline_origin = match origin {
         AgentInventoryBaselineOrigin::GlobalInventory => FieldBaselineOrigin::GlobalInventory,
         AgentInventoryBaselineOrigin::WorkspaceInventory => FieldBaselineOrigin::WorkspaceInventory,
     };
@@ -2512,14 +2589,14 @@ fn resolve_inventory_projected_contract(
         "execution_scope".to_string(),
         FieldProvenance {
             baseline_origin,
-            value_origin: map_value_origin(projected.execution_scope_origin),
+            value_origin: map_value_origin(execution_scope_origin),
         },
     );
     field_provenance.insert(
         "cli_mode".to_string(),
         FieldProvenance {
             baseline_origin,
-            value_origin: map_value_origin(projected.cli_mode_origin),
+            value_origin: map_value_origin(cli_mode_origin),
         },
     );
     field_provenance.insert(
@@ -2533,7 +2610,7 @@ fn resolve_inventory_projected_contract(
         "effective_policy".to_string(),
         FieldProvenance {
             baseline_origin,
-            value_origin: if projected.policy_overlay.is_some() {
+            value_origin: if policy_overlay.is_some() {
                 FieldValueOrigin::DispatchOverrideNarrowedByPolicy
             } else {
                 FieldValueOrigin::InventoryExplicit
@@ -2550,29 +2627,26 @@ fn resolve_inventory_projected_contract(
         );
     }
 
-    let backend_kind = resolve_shell_owned_runtime_family(
-        projected.agent_id.as_str(),
-        projected.cli_runtime_family,
-    )
-    .map_err(|err| DispatchResolutionError {
-        kind: DispatchResolutionErrorKind::RuntimeUnrealizableAfterResolution,
-        field: "config.cli.runtime_family",
-        rejecting_layer: DispatchRejectingLayer::RuntimeMaterialization,
-        reason: err.to_string(),
-    })?;
+    let backend_kind = resolve_shell_owned_runtime_family(agent_id.as_str(), cli_runtime_family)
+        .map_err(|err| DispatchResolutionError {
+            kind: DispatchResolutionErrorKind::RuntimeUnrealizableAfterResolution,
+            field: "config.cli.runtime_family",
+            rejecting_layer: DispatchRejectingLayer::RuntimeMaterialization,
+            reason: err.to_string(),
+        })?;
 
     Ok(ResolvedLaunchContract {
         caller_kind: envelope.caller_kind,
         baseline_kind: DispatchBaselineKind::InventoryLaunch,
-        agent_id: projected.agent_id,
-        backend_id: projected.backend_id,
+        agent_id: agent_id.clone(),
+        backend_id: backend_id.clone(),
         backend_kind,
         protocol: PURE_AGENT_PROTOCOL.to_string(),
-        execution_scope: projected.execution_scope,
+        execution_scope,
         runtime: ResolvedLaunchRuntime {
-            kind: projected.kind,
-            cli_mode: projected.cli_mode,
-            cli_binary: projected.cli_binary,
+            kind,
+            cli_mode,
+            cli_binary: cli_binary.clone(),
         },
         capabilities,
         attach_launch_knobs: envelope.attach_launch_knobs,
@@ -2580,7 +2654,7 @@ fn resolve_inventory_projected_contract(
         baseline_source: BaselineSourceMetadata {
             baseline_kind: DispatchBaselineKind::InventoryLaunch,
             baseline_origin,
-            inventory_path: Some(projected.path),
+            inventory_path: Some(path.clone()),
             orchestration_session_id: envelope.orchestration_session_id.clone(),
         },
         field_provenance,
@@ -2588,48 +2662,71 @@ fn resolve_inventory_projected_contract(
 }
 
 fn validate_inventory_projected_candidate(
-    projected: &ProjectedInventoryEntryV1,
+    projected: &InventoryDispatchCandidateV1<'_>,
 ) -> Result<(), DispatchResolutionError> {
-    if projected.protocol.as_deref() != Some(PURE_AGENT_PROTOCOL) {
+    let (agent_id, backend_id, execution_scope, protocol, capabilities, kind) = match projected {
+        InventoryDispatchCandidateV1::Legacy(p) => (
+            &p.agent_id,
+            &p.backend_id,
+            p.execution_scope,
+            &p.protocol,
+            &p.capabilities,
+            p.kind,
+        ),
+        #[cfg(target_os = "linux")]
+        InventoryDispatchCandidateV1::E3(p) => (
+            &p.realized_agent_id,
+            &p.backend_id,
+            p.execution_scope,
+            &p.protocol,
+            &p.capabilities,
+            p.kind,
+        ),
+    };
+
+    if protocol.as_deref() != Some(PURE_AGENT_PROTOCOL) {
         return Err(DispatchResolutionError {
             kind: DispatchResolutionErrorKind::BaselineIneligible,
             field: "protocol",
             rejecting_layer: DispatchRejectingLayer::BaselineTruth,
             reason: format!(
                 "selected {} runtime '{}' for backend '{}' {}",
-                runtime_scope_label(projected.execution_scope),
-                projected.agent_id,
-                projected.backend_id,
-                protocol_validation_error("does not advertise", projected.protocol.as_deref())
-                    .replacen("does not advertise ", "", 1),
+                runtime_scope_label(execution_scope),
+                agent_id,
+                backend_id,
+                protocol_validation_error("does not advertise", protocol.as_deref()).replacen(
+                    "does not advertise ",
+                    "",
+                    1
+                ),
             ),
         });
     }
 
-    if let Some(capability) = missing_required_dispatch_capability(&projected.capabilities) {
+    if let Some(capability) = missing_required_dispatch_capability(capabilities) {
         return Err(DispatchResolutionError {
             kind: DispatchResolutionErrorKind::BaselineIneligible,
             field: capability,
             rejecting_layer: DispatchRejectingLayer::BaselineTruth,
             reason: format!(
                 "selected {} runtime '{}' for backend '{}' is missing required capability '{}'",
-                runtime_scope_label(projected.execution_scope),
-                projected.agent_id,
-                projected.backend_id,
+                runtime_scope_label(execution_scope),
+                agent_id,
+                backend_id,
                 capability,
             ),
         });
     }
 
-    if projected.kind != AgentConfigKind::Cli {
+    if kind != AgentConfigKind::Cli {
         return Err(DispatchResolutionError {
             kind: DispatchResolutionErrorKind::RuntimeUnrealizableAfterResolution,
             field: "config.kind",
             rejecting_layer: DispatchRejectingLayer::RuntimeMaterialization,
             reason: format!(
                 "selected runtime '{}' is not runtime-realizable by the shell-owned UAA runtime because config.kind={} is unsupported; only config.kind=cli is supported in v1",
-                projected.agent_id,
-                projected.kind.as_str()
+                agent_id,
+                kind.as_str()
             ),
         });
     }

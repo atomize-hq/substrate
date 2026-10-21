@@ -548,12 +548,131 @@ mod linux {
             &self,
             expected_head: &ConfigProjectionRefV1,
             record: &AgentConfigProjectionRecordV1,
+            held_lease: &ConfigProjectionConsumerLeaseV1,
         ) -> Result<ConfigProjectionRefV1, ConfigProjectionFailureV1> {
-            self.publish(
-                record,
-                Some(expected_head),
-                ManagedGatewayProjectionPostureV1::Active,
-            )
+            self.with_transaction(false, |transaction| {
+                validate_retained_codex_lineage_v1(
+                    transaction,
+                    expected_head,
+                    Some(record),
+                    held_lease,
+                )?;
+                let reference = publish_record_in_transaction(
+                    transaction,
+                    record,
+                    Some(expected_head),
+                    ManagedGatewayProjectionPostureV1::Active,
+                )?;
+                if read_series_head(transaction, &reference.series_id)?.head_ref != reference
+                    || read_record(transaction, &reference)? != *record
+                {
+                    return Err(ConfigProjectionFailureV1::PartialPublication);
+                }
+                validate_retained_codex_lineage_v1(
+                    transaction,
+                    expected_head,
+                    Some(record),
+                    held_lease,
+                )?;
+                Ok(reference)
+            })
+        }
+
+        /// Validate the existing transferred owner without resolving another capability.
+        #[allow(
+            dead_code,
+            reason = "E3-F service operations consume this retained-owner join"
+        )]
+        pub(crate) fn validate_retained_codex_authority_v1(
+            &self,
+            publication: &crate::E3PreparedRetainedLaunchPublicationV1,
+            capability: &PublishedConfigProjectionCapabilityV1,
+            current: &ConfigProjectionRefV1,
+        ) -> Result<
+            (
+                AgentConfigProjectionRecordV1,
+                NativeProjectionSourceManifestV1,
+                crate::ManagedGatewayActivationAckV1,
+                GatewayAccessBoundaryV1,
+            ),
+            ConfigProjectionFailureV1,
+        > {
+            use ConfigProjectionFailureV1::{PartialPublication, StaleRevision, WrongBinding};
+            // The capability must be the original Dormant resolution by this configured
+            // registry, not a capability obtained from a later ReadyClosed/Active head.
+            let dormant_ref = publication.published_head().ok_or(PartialPublication)?;
+            let lease = publication
+                .held_consumer_lease()
+                .ok_or(PartialPublication)?;
+            if !Arc::ptr_eq(&capability._parent, &self.parent)
+                || capability._projection_ref != *dormant_ref
+                || capability._held_lease != *lease
+                || capability.key
+                    != (
+                        current.authority_store_id.clone(),
+                        current.series_id.clone(),
+                    )
+            {
+                return Err(WrongBinding);
+            }
+            self.with_transaction(false, |transaction| {
+                let store = require_store(transaction)?;
+                if store.authority_store_id != current.authority_store_id
+                    || store.accepted_home != capability._identity.accepted_home
+                {
+                    return Err(WrongBinding);
+                }
+                if read_series_head(transaction, &current.series_id)?.head_ref != *current {
+                    return Err(StaleRevision);
+                }
+                let record = read_record(transaction, current)?;
+                validate_record(&record, &store)?;
+                if record.identity != capability._identity || record_ref(&record) != *current {
+                    return Err(WrongBinding);
+                }
+                let ready_ref = match record.managed_gateway.posture {
+                    ManagedGatewayProjectionPostureV1::ReadyClosed => current,
+                    ManagedGatewayProjectionPostureV1::Active => {
+                        record.predecessor_ref.as_ref().ok_or(WrongBinding)?
+                    }
+                    _ => return Err(WrongBinding),
+                };
+                let source = validate_retained_codex_lineage_v1(
+                    transaction,
+                    ready_ref,
+                    (record.managed_gateway.posture == ManagedGatewayProjectionPostureV1::Active)
+                        .then_some(&record),
+                    lease,
+                )?;
+                let dormant = read_record(transaction, dormant_ref)?;
+                if dormant.nonsecret_handoff.secret_handoff_ref
+                    != *publication.prepared_handoff_ref()
+                    || dormant.identity != record.identity
+                {
+                    return Err(WrongBinding);
+                }
+                let ack = resolve_gateway_ack_in_transaction_v1(
+                    transaction,
+                    record
+                        .managed_gateway
+                        .activation_ack_ref
+                        .as_ref()
+                        .ok_or(WrongBinding)?,
+                )?;
+                if ack.dormant_projection_ref != *dormant_ref {
+                    return Err(WrongBinding);
+                }
+                let boundary =
+                    read_boundary(transaction, &record.managed_gateway.access_boundary_ref)?;
+                if record.managed_gateway.posture == ManagedGatewayProjectionPostureV1::Active {
+                    let closed_boundary = read_boundary(transaction, &ack.access_boundary_ref)?;
+                    validate_boundary_transition(&closed_boundary, &boundary)?;
+                    if boundary.posture != GatewayAccessPostureV1::AllowExactMember {
+                        return Err(WrongBinding);
+                    }
+                }
+                Ok((record, source, ack, boundary))
+            })
         }
 
         pub(crate) fn publish_handoff_transition_v1(
@@ -2947,6 +3066,203 @@ mod linux {
             return Err(StaleRevision);
         }
         Ok(())
+    }
+
+    // This guard stays inside the same parent-before-child transaction as Active CAS.
+    // ReadyClosed is a successor of the original acquisition, never a new lease origin.
+    fn validate_retained_codex_lineage_v1(
+        transaction: &ConfigProjectionChildTransactionV1,
+        expected_ready: &ConfigProjectionRefV1,
+        active: Option<&AgentConfigProjectionRecordV1>,
+        lease: &ConfigProjectionConsumerLeaseV1,
+    ) -> Result<NativeProjectionSourceManifestV1, ConfigProjectionFailureV1> {
+        use ConfigProjectionFailureV1::{Conflict, RetiredSeries, StaleRevision, WrongBinding};
+        if active.is_some_and(|record| record.predecessor_ref.as_ref() != Some(expected_ready)) {
+            return Err(StaleRevision);
+        }
+        let store = require_store(transaction)?;
+        if read_retirement(transaction, &expected_ready.series_id)?.is_some() {
+            return Err(RetiredSeries);
+        }
+        let ready = read_record(transaction, expected_ready)?;
+        validate_record(&ready, &store)?;
+        if let Some(active) = active {
+            validate_record(active, &store)?;
+        }
+        if record_ref(&ready) != *expected_ready
+            || ready.managed_gateway.posture != ManagedGatewayProjectionPostureV1::ReadyClosed
+            || active.is_some_and(|record| {
+                record.managed_gateway.posture != ManagedGatewayProjectionPostureV1::Active
+            })
+        {
+            return Err(WrongBinding);
+        }
+        let dormant_ref = ready.predecessor_ref.as_ref().ok_or(WrongBinding)?;
+        let dormant = read_record(transaction, dormant_ref)?;
+        validate_record(&dormant, &store)?;
+        validate_record_transition(&dormant, &ready)?;
+        if let Some(active) = active {
+            validate_record_transition(&ready, active)?;
+        }
+        if record_ref(&dormant) != *dormant_ref
+            || dormant.managed_gateway.posture != ManagedGatewayProjectionPostureV1::Dormant
+            || dormant.logical != ready.logical
+            || active.is_some_and(|record| ready.logical != record.logical)
+            || dormant.effective != ready.effective
+            || active.is_some_and(|record| ready.effective != record.effective)
+            || dormant.native != ready.native
+            || active.is_some_and(|record| ready.native != record.native)
+            || lease.consumer_kind != ConfigProjectionConsumerKindV1::MemberDispatchV2
+            || lease.consumer_id
+                != prepared_member_dispatch_consumer_id_v1(
+                    &dormant
+                        .nonsecret_handoff
+                        .credential_source_ref
+                        .preparation_id,
+                )?
+        {
+            return Err(WrongBinding);
+        }
+        resolve_held_lease(transaction, lease, dormant_ref)?;
+        let subjects = open_directory_at(transaction.root.as_fd(), "subjects")?;
+        let subject = subject_hash(&dormant.identity)?;
+        let binding: ConfigProjectionSubjectBindingV1 =
+            read_canonical_at(subjects.as_fd(), &format!("{subject}.json"))?;
+        validate_binding(&binding, &store)?;
+        if binding.identity != dormant.identity || binding.subject_hash != subject {
+            return Err(WrongBinding);
+        }
+        // Includes the exact Prepared -> Delivered -> Consumed chain, original gateway
+        // and registrations, immutable ACK and its Dormant reference.
+        validate_gateway_ack_chain_v1(transaction, Some(&ready), None)?;
+        if let Some(active) = active {
+            validate_gateway_ack_chain_v1(transaction, Some(active), None)?;
+        }
+        let head = read_series_head(transaction, &expected_ready.series_id)?;
+        if let Some(active) = active.filter(|record| head.head_ref == record_ref(record)) {
+            if read_record(transaction, &head.head_ref)? != *active {
+                return Err(Conflict);
+            }
+        } else if head.head_ref != *expected_ready {
+            return Err(StaleRevision);
+        }
+        validate_retained_codex_native_source_v1(transaction, &dormant)
+    }
+
+    fn validate_retained_codex_native_source_v1(
+        transaction: &ConfigProjectionChildTransactionV1,
+        record: &AgentConfigProjectionRecordV1,
+    ) -> Result<NativeProjectionSourceManifestV1, ConfigProjectionFailureV1> {
+        let store = require_store(transaction)?;
+        let crate::ConfigProjectionPublicationFenceV1::ZeroLiveClosed { fence_id } =
+            &record.activation.publication_fence
+        else {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        };
+        validate_native_projection_source_input(
+            &record.native,
+            &record.identity.series_id,
+            fence_id,
+        )?;
+        let native_sources = open_directory_at(transaction.root.as_fd(), "native-sources")?;
+        let native_series = open_directory_at(native_sources.as_fd(), &record.identity.series_id)?;
+        let config_bytes = STANDARD
+            .decode(&record.native.files[0].bytes_base64)
+            .map_err(|_| ConfigProjectionFailureV1::Malformed)?;
+        let manifest = validate_native_source_directory(
+            &native_series,
+            fence_id,
+            None,
+            Some(&config_bytes),
+            transaction.owner_uid,
+            transaction.native_source_gid,
+        )?;
+        if manifest.authority_store_id != store.authority_store_id
+            || manifest.series_id != record.identity.series_id
+            || manifest.fence_id != *fence_id
+            || manifest.source_root.physical_path
+                != format!(
+                    "{}/authority-v1/agent-config-projection-v1/native-sources/{}/{}",
+                    store.accepted_home.physical_path, record.identity.series_id, fence_id
+                )
+            || manifest.native_projection_hash != record.native.projection_hash
+            || manifest.ordered_file_hashes != [record.native.files[0].sha256.clone()]
+            || manifest.created_at != record.created_at
+        {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        let source_root = open_directory_at(native_series.as_fd(), fence_id)?;
+        let codex_home = open_directory_at(source_root.as_fd(), "codex-home")?;
+        let system_empty = open_directory_at(source_root.as_fd(), "system-empty")?;
+        verify_native_source_directories(
+            &native_series,
+            fence_id,
+            &source_root,
+            &codex_home,
+            &system_empty,
+            transaction.owner_uid,
+            transaction.native_source_gid,
+        )?;
+        let codex_home_metadata = fstat(codex_home.as_raw_fd())?;
+        let system_empty_metadata = fstat(system_empty.as_raw_fd())?;
+        let (observed_bytes, first_config) = read_native_source_file(
+            codex_home.as_fd(),
+            "config.toml",
+            transaction.owner_uid,
+            transaction.native_source_gid,
+        )?;
+        if first_config.st_uid as u64 != record.native.root.owner_uid
+            || first_config.st_gid as u64 != record.native.root.owner_gid
+            || first_config.st_mode & 0o7777 != record.native.files[0].mode
+            || first_config.st_size as u64 != record.native.files[0].byte_length
+            || observed_bytes != config_bytes
+        {
+            return Err(ConfigProjectionFailureV1::Conflict);
+        }
+        verify_native_source_directories(
+            &native_series,
+            fence_id,
+            &source_root,
+            &codex_home,
+            &system_empty,
+            transaction.owner_uid,
+            transaction.native_source_gid,
+        )?;
+        let source_system = CanonicalDirectoryV1 {
+            physical_path: format!("{}/system-empty", manifest.source_root.physical_path),
+            physical_identity: DirectoryPhysicalIdentityV1::Linux {
+                device_id: system_empty_metadata.st_dev,
+                inode: system_empty_metadata.st_ino,
+            },
+        };
+        let source_user = CanonicalDirectoryV1 {
+            physical_path: format!("{}/codex-home", manifest.source_root.physical_path),
+            physical_identity: DirectoryPhysicalIdentityV1::Linux {
+                device_id: codex_home_metadata.st_dev,
+                inode: codex_home_metadata.st_ino,
+            },
+        };
+        for input in &record.native.ambient_closure.inputs {
+            match input.layer.as_str() {
+                "System" if input.directory == source_system => {}
+                "User" if input.directory == source_user => {
+                    if input.relative_path == "config.toml"
+                        && (input.device_id != Some(first_config.st_dev)
+                            || input.inode != Some(first_config.st_ino)
+                            || input.byte_length != Some(first_config.st_size as u64)
+                            || input.sha256.as_deref()
+                                != Some(record.native.files[0].sha256.as_str()))
+                    {
+                        return Err(ConfigProjectionFailureV1::WrongBinding);
+                    }
+                }
+                "Project" => {}
+                "McpCredentials" | "Auth" | "CloudRequirements"
+                    if input.directory == source_user => {}
+                _ => return Err(ConfigProjectionFailureV1::WrongBinding),
+            }
+        }
+        Ok(manifest)
     }
 
     fn resolve_gateway_ack_in_transaction_v1(
@@ -13125,7 +13441,9 @@ mod linux {
             let mut active = successor(&ready, ManagedGatewayProjectionPostureV1::Active);
             active.managed_gateway.access_boundary_ref = boundary_ref(&allow);
             seal_record(&mut active);
-            let active_ref = registry.publish_active(&ready_ref, &active).unwrap();
+            let active_ref = registry
+                .publish_active(&ready_ref, &active, &lease)
+                .unwrap();
             registry
                 .recover(Some(&active.identity))
                 .expect("Active metadata readback remains available before terminal eligibility");
@@ -13277,6 +13595,272 @@ mod linux {
         }
 
         #[test]
+        fn test_e3f_retained_authority_readback_original_owner_and_source() {
+            use std::os::unix::fs::OpenOptionsExt;
+            let (_temp, _parent, registry, store) = test_registry();
+            let fixture = PreparedGatewayFixture::new(&registry, &store, None);
+            let dormant = registry
+                .publish_dormant(&fixture.record, Some(fixture.chain()))
+                .unwrap();
+            let (ready, ack, lease) = ready_gateway_fixture_v1(&registry, &fixture);
+            let Some(ConfigProjectionResolutionV1::Current { capability, .. }) = registry
+                .resolve(Some((&fixture.record.identity, &lease)), None)
+                .unwrap()
+                .0
+            else {
+                panic!("original Dormant capability missing")
+            };
+            let mut publication = crate::E3PreparedRetainedLaunchPublicationV1::new(
+                &fixture.record.identity,
+                &fixture.gateway,
+                &fixture.handoff.handoff.credential_source_ref,
+                fixture.handoff.handoff.handoff_id.clone(),
+                format!("e3pik_{}", "a".repeat(64)),
+                fixture.handoff.handoff.created_at.clone(),
+                fixture.handoff.handoff.expires_at.clone(),
+            )
+            .unwrap();
+            publication
+                .bind_prepared_chain(
+                    fixture.record.clone(),
+                    fixture.registrations.clone(),
+                    fixture.boundary.clone(),
+                    fixture.intent.clone(),
+                    fixture.input.clone(),
+                )
+                .unwrap();
+            let ready_ref = registry
+                .publish_ready_closed(&dormant, &ready, &ack, &lease)
+                .unwrap();
+            assert!(matches!(
+                registry.validate_retained_codex_authority_v1(
+                    &publication,
+                    &capability,
+                    &ready_ref
+                ),
+                Err(ConfigProjectionFailureV1::PartialPublication)
+            ));
+            crate::service::test_e3f_retained_publication_fixture(
+                &mut publication,
+                dormant.clone(),
+                lease.clone(),
+            );
+            let (actual, source, actual_ack, boundary) = registry
+                .validate_retained_codex_authority_v1(&publication, &capability, &ready_ref)
+                .unwrap();
+            assert_eq!(actual, ready);
+            assert_eq!(actual_ack, ack);
+            assert_eq!(source.native_projection_hash, ready.native.projection_hash);
+            assert_eq!(boundary, fixture.boundary);
+            assert_eq!(publication.published_head(), Some(&dormant));
+            assert_eq!(publication.held_consumer_lease(), Some(&lease));
+            // Readback must not increment the process-local live-capability count.
+            let before_count = *live_capabilities()
+                .lock()
+                .unwrap()
+                .get(&capability.key)
+                .unwrap();
+            registry
+                .validate_retained_codex_authority_v1(&publication, &capability, &ready_ref)
+                .unwrap();
+            assert_eq!(
+                *live_capabilities()
+                    .lock()
+                    .unwrap()
+                    .get(&capability.key)
+                    .unwrap(),
+                before_count
+            );
+            let replacement_lease = registry
+                .acquire_consumer_lease(
+                    &ready_ref,
+                    ConfigProjectionConsumerKindV1::MemberDispatchV2,
+                    Timestamp("2026-09-10T00:01:00.000000Z".into()),
+                    None,
+                )
+                .unwrap();
+            let Some(ConfigProjectionResolutionV1::Current {
+                capability: later_capability,
+                ..
+            }) = registry
+                .resolve(Some((&fixture.record.identity, &replacement_lease)), None)
+                .unwrap()
+                .0
+            else {
+                panic!("ReadyClosed fixture capability missing")
+            };
+            assert!(matches!(
+                registry.validate_retained_codex_authority_v1(
+                    &publication,
+                    &later_capability,
+                    &ready_ref
+                ),
+                Err(ConfigProjectionFailureV1::WrongBinding)
+            ));
+            // Persist the synthetic exact-member boundary; a record pointing to a
+            // nonexistent boundary is deliberately insufficient for retained use.
+            let allow =
+                successor_boundary(&fixture.boundary, GatewayAccessPostureV1::AllowExactMember);
+            registry
+                .with_transaction(false, |transaction| {
+                    let boundaries =
+                        open_directory_at(transaction.root.as_fd(), "gateway-boundaries")?;
+                    let directory =
+                        open_directory_at(boundaries.as_fd(), &allow.access_boundary_id)?;
+                    write_immutable(
+                        directory.as_fd(),
+                        &format!("{:020}.json", allow.revision),
+                        &ConfigProjectionCodecV1::encode_canonical_json(&allow)?,
+                        "boundary",
+                        transaction.owner_uid,
+                    )
+                })
+                .unwrap();
+            let mut active = successor(&ready, ManagedGatewayProjectionPostureV1::Active);
+            active.managed_gateway.access_boundary_ref = boundary_ref(&allow);
+            seal_record(&mut active);
+            let active_ref = registry
+                .publish_active(&ready_ref, &active, &lease)
+                .unwrap();
+            assert!(matches!(
+                registry.validate_retained_codex_authority_v1(
+                    &publication,
+                    &capability,
+                    &ready_ref
+                ),
+                Err(ConfigProjectionFailureV1::StaleRevision)
+            ));
+            assert_eq!(
+                registry
+                    .validate_retained_codex_authority_v1(&publication, &capability, &active_ref)
+                    .unwrap()
+                    .0,
+                active
+            );
+            // Equal pathname/bytes are not sufficient when a held source inode changes.
+            let config =
+                Path::new(&source.source_root.physical_path).join("codex-home/config.toml");
+            let displaced = config.with_extension("displaced");
+            let bytes = std::fs::read(&config).unwrap();
+            std::fs::rename(&config, &displaced).unwrap();
+            let mut replacement = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .open(&config)
+                .unwrap();
+            replacement.write_all(&bytes).unwrap();
+            replacement.sync_all().unwrap();
+            drop(replacement);
+            std::fs::remove_file(&displaced).unwrap();
+            assert!(registry
+                .validate_retained_codex_authority_v1(&publication, &capability, &active_ref)
+                .is_err());
+            assert!(registry
+                .publish_active(&ready_ref, &active, &lease)
+                .is_err());
+            assert_eq!(publication.published_head(), Some(&dormant));
+            assert_eq!(publication.held_consumer_lease(), Some(&lease));
+        }
+
+        #[test]
+        fn test_e3f_active_original_lease_guard_exact_retry_and_wrong_acquisition() {
+            let (_temp, _parent, registry, store) = test_registry();
+            let fixture = PreparedGatewayFixture::new(&registry, &store, None);
+            let dormant = registry
+                .publish_dormant(&fixture.record, Some(fixture.chain()))
+                .unwrap();
+            let (ready, ack, lease) = ready_gateway_fixture_v1(&registry, &fixture);
+            let ready_ref = registry
+                .publish_ready_closed(&dormant, &ready, &ack, &lease)
+                .unwrap();
+            let replacement = registry
+                .acquire_consumer_lease(
+                    &ready_ref,
+                    ConfigProjectionConsumerKindV1::MemberDispatchV2,
+                    Timestamp("2026-09-10T00:01:00.000000Z".into()),
+                    None,
+                )
+                .unwrap();
+            let active = successor(&ready, ManagedGatewayProjectionPostureV1::Active);
+            assert!(registry
+                .publish_active(&ready_ref, &active, &replacement)
+                .is_err());
+            let mut changed_lease = lease.clone();
+            changed_lease.acquired_at = Timestamp("2026-09-10T00:01:01.000000Z".into());
+            changed_lease.lease_hash = hash_omitting(
+                "substrate.e3.config-projection-consumer-lease.v1",
+                "lease",
+                &changed_lease,
+                "lease_hash",
+            )
+            .unwrap();
+            assert!(registry
+                .publish_active(&ready_ref, &active, &changed_lease)
+                .is_err());
+            let published = registry
+                .publish_active(&ready_ref, &active, &lease)
+                .unwrap();
+            assert_eq!(
+                registry
+                    .publish_active(&ready_ref, &active, &lease)
+                    .unwrap(),
+                published
+            );
+            let mut unequal = active.clone();
+            unequal.record_id = id("cpr_");
+            seal_record(&mut unequal);
+            assert!(registry
+                .publish_active(&ready_ref, &unequal, &lease)
+                .is_err());
+            registry
+                .release_consumer_lease(&lease, Timestamp("2026-09-10T00:02:00.000000Z".into()))
+                .unwrap();
+            assert!(registry
+                .publish_active(&ready_ref, &active, &lease)
+                .is_err());
+            registry
+                .with_transaction(false, |transaction| {
+                    assert_eq!(
+                        read_series_head(transaction, &published.series_id)?.head_ref,
+                        published
+                    );
+                    assert_eq!(read_record(transaction, &published)?, active);
+                    Ok(())
+                })
+                .unwrap();
+        }
+
+        #[test]
+        fn test_e3f_active_original_lease_guard_rejects_released_lease() {
+            let (_temp, _parent, registry, store) = test_registry();
+            let fixture = PreparedGatewayFixture::new(&registry, &store, None);
+            let dormant = registry
+                .publish_dormant(&fixture.record, Some(fixture.chain()))
+                .unwrap();
+            let (ready, ack, lease) = ready_gateway_fixture_v1(&registry, &fixture);
+            let ready_ref = registry
+                .publish_ready_closed(&dormant, &ready, &ack, &lease)
+                .unwrap();
+            registry
+                .release_consumer_lease(&lease, Timestamp("2026-09-10T00:02:00.000000Z".into()))
+                .unwrap();
+            let active = successor(&ready, ManagedGatewayProjectionPostureV1::Active);
+            assert!(registry
+                .publish_active(&ready_ref, &active, &lease)
+                .is_err());
+            registry
+                .with_transaction(false, |transaction| {
+                    assert_eq!(
+                        read_series_head(transaction, &ready_ref.series_id)?.head_ref,
+                        ready_ref
+                    );
+                    Ok(())
+                })
+                .unwrap();
+        }
+
+        #[test]
         fn e3_b_registry_first_writer_and_expected_head_cas_are_strict() {
             let (_temp, parent, registry, store) = test_registry();
             let fixture = PreparedGatewayFixture::new(&registry, &store, None);
@@ -13303,13 +13887,17 @@ mod linux {
             );
             let active = successor(&ready, ManagedGatewayProjectionPostureV1::Active);
             assert_eq!(
-                registry.publish_active(&dormant_ref, &active),
+                registry.publish_active(&dormant_ref, &active, &lease),
                 Err(ConfigProjectionFailureV1::StaleRevision)
             );
-            let active_ref = registry.publish_active(&ready_ref, &active).unwrap();
+            let active_ref = registry
+                .publish_active(&ready_ref, &active, &lease)
+                .unwrap();
             assert_eq!(active_ref.revision, 3);
             assert_eq!(
-                registry.publish_active(&ready_ref, &active).unwrap(),
+                registry
+                    .publish_active(&ready_ref, &active, &lease)
+                    .unwrap(),
                 active_ref
             );
             assert!(parent.calls.load(Ordering::SeqCst) >= 6);

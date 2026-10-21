@@ -3880,7 +3880,11 @@ mod tests {
                 active.activation.released_at = Some(active.created_at.clone());
                 active.activation.publication_fence = ConfigProjectionPublicationFenceV1::Released { fence_id: owner.fence_id.clone(), closed_record_ref: ready_ref.clone(), activation_ack_ref: ack.clone(), release_hash: ConfigProjectionCodecV1::domain_sha256("substrate.e3.config-projection-release.v1", &serde_json::json!({"activation_ack_ref":ack, "closed_record_ref":ready_ref, "fence_id":owner.fence_id}))? };
                 seal_record(&mut active)?;
-                let active_ref = registry.publish_active(&ready_ref, &active)?;
+                let active_ref = registry.publish_active(
+                    &ready_ref,
+                    &active,
+                    owner.publication.as_ref().unwrap().held_consumer_lease().unwrap(),
+                )?;
                 let recovering = crate::e3_child_security::E3PrivilegedChildExclusionV1::new_recovering()?;
                 let reject = || -> anyhow::Result<()> {
                     let readback = registry.recover(None)?;

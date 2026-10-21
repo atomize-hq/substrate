@@ -2140,6 +2140,8 @@ async fn fork_world_worker(
                 &workspace_root,
                 registry_authority,
                 prepared.request.dispatch_policy_narrowing.clone(),
+                None,
+                None,
             )?;
             let transport_request = build_fork_world_worker_transport_request(
                 &prepared.request,
@@ -4434,12 +4436,410 @@ fn retained_turn_state_revision(state: ActiveRetainedTurnStateV1) -> u64 {
     }
 }
 
+
+#[cfg(target_os = "linux")]
+pub(crate) struct E3ProducerPreparationCustodyV1 {
+    authoring_input_ref: config_projection::ConfigProjectionAuthoringInputRefV1,
+    expected_effective: config_projection::EffectiveSubstrateConfigSourceV1,
+    expected_inventory: config_projection::AgentInventorySourceMaterialV1,
+    expected_logical: config_projection::LogicalAgentConfigProjectionV1,
+    expected_artifact_manifest: config_projection::TrustedRuntimeArtifactManifestV1,
+    common_transport: MemberDispatchTransportRequest,
+    preparation_id: String,
+    preparation_idempotency_key: String,
+    authoring_created_at: config_projection::Timestamp,
+    response: Option<transport_api_types::E3ConfigProjectionPrepareResponseV1>,
+    cancel_request: Option<transport_api_types::E3ConfigProjectionCancelRequestV1>,
+    submission_state: E3ProducerSubmissionStateV1,
+    service: std::sync::Arc<config_projection::AgentConfigProjectionServiceV1>,
+    registry: std::sync::Arc<config_projection::ConfigProjectionRegistryV1>,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(PartialEq, Eq)]
+enum E3ProducerSubmissionStateV1 {
+    Unsent,
+    PrepareEntered,
+    Prepared,
+    ExecuteEntered,
+    Transferred,
+    CancelPending,
+    Cancelled,
+    ExpiryRecoveryRequired,
+}
+
+#[cfg(target_os = "linux")]
+fn validate_e3_projection_prepare_response_v1(
+    custody: &E3ProducerPreparationCustodyV1,
+    response: &transport_api_types::E3ConfigProjectionPrepareResponseV1,
+) -> Result<()> {
+    use config_projection::*;
+    use ConfigProjectionFailureV1::{ExpiredPreparation, WrongBinding};
+    response.validate().map_err(|_| WrongBinding)?;
+    if response.preparation_id != custody.preparation_id
+        || response.preparation_idempotency_key != custody.preparation_idempotency_key
+        || custody.common_transport.config_projection.is_some()
+    {
+        return Err(WrongBinding.into());
+    }
+    let (_, authoring) = custody
+        .registry
+        .resolve(None, Some(&custody.authoring_input_ref))?;
+    let (effective, inventory, manifest) = authoring.ok_or(WrongBinding)?;
+    if effective != custody.expected_effective
+        || inventory != custody.expected_inventory
+        || manifest != custody.expected_artifact_manifest
+        || manifest.created_at != custody.authoring_created_at
+        || custody.expected_logical.sources
+            != vec![
+                LogicalConfigSourceRefV1::EffectiveSubstrateConfig {
+                    authority_store_id: effective.authority_store_id.clone(),
+                    source_revision: effective.source_revision.clone(),
+                    source_hash: effective.source_hash.clone(),
+                },
+                LogicalConfigSourceRefV1::AgentInventory {
+                    authority_store_id: effective.authority_store_id.clone(),
+                    inventory_scope: inventory.inventory_scope.clone(),
+                    source_revision: inventory.source_revision.clone(),
+                    source_hash: inventory.source_hash.clone(),
+                },
+            ]
+    {
+        return Err(WrongBinding.into());
+    }
+    let request = &custody.common_transport;
+    let logical = &custody.expected_logical;
+    let seal = |domain: &str,
+                key: &str,
+                field: &str,
+                mut value: serde_json::Value|
+     -> Result<String, ConfigProjectionFailureV1> {
+        value
+            .as_object_mut()
+            .ok_or(ConfigProjectionFailureV1::Malformed)?
+            .remove(field);
+        config_projection::ConfigProjectionCodecV1::domain_sha256(
+            domain,
+            &serde_json::json!({key:value}),
+        )
+    };
+    let artifact = |role: config_projection::RuntimeArtifactAuthorityRoleV1,
+                    projection_role: config_projection::ConfigProjectionArtifactRoleV1|
+     -> Result<
+        config_projection::DescriptorPinnedArtifactV1,
+        ConfigProjectionFailureV1,
+    > {
+        let entry = manifest
+            .entries
+            .iter()
+            .find(|entry| entry.authority_role == role)
+            .ok_or(ConfigProjectionFailureV1::WrongBinding)?;
+        Ok(config_projection::DescriptorPinnedArtifactV1 {
+            role: projection_role,
+            configured_absolute_path: entry.configured_absolute_path.clone(),
+            device_id: entry.device_id,
+            inode: entry.inode,
+            file_type: "regular".into(),
+            mode: entry.mode,
+            owner_uid: entry.owner_uid,
+            byte_length: entry.byte_length,
+            sha256: entry.sha256.clone(),
+            provenance: entry.provenance.clone(),
+            runtime_support: entry.runtime_support.clone(),
+            authority_ref: config_projection::RuntimeArtifactAuthorityRefV1 {
+                authority_store_id: manifest.authority_store_id.clone(),
+                manifest_id: manifest.manifest_id.clone(),
+                manifest_revision: manifest.revision,
+                manifest_entry_id: entry.manifest_entry_id.clone(),
+                manifest_hash: manifest.manifest_hash.clone(),
+                entry_hash: entry.entry_hash.clone(),
+            },
+        })
+    };
+    let e2 = request.e2_launch_activation.as_ref().ok_or(WrongBinding)?;
+    let subject = match e2.launch_kind {
+        transport_api_types::E2MemberLaunchKindV1::FreshSpawn => {
+            config_projection::ConfigProjectionE2SubjectV1::RetainedWorkerLaunch {
+                retained_participant_id: e2.retained_participant_id.clone(),
+                bootstrap_run_id: e2.bootstrap_run_id.clone(),
+            }
+        }
+        transport_api_types::E2MemberLaunchKindV1::Fork => {
+            config_projection::ConfigProjectionE2SubjectV1::RetainedWorkerFork {
+                source_participant_id: e2
+                    .source_participant_id
+                    .clone()
+                    .ok_or(ConfigProjectionFailureV1::WrongBinding)?,
+                child_participant_id: e2.retained_participant_id.clone(),
+                bootstrap_run_id: e2.bootstrap_run_id.clone(),
+            }
+        }
+    };
+    let cap = config_projection::ConfigProjectionE2CapLinkV1 {
+        e2_activation_id: e2.activation_id.clone(),
+        e2_launch_kind: e2.launch_kind,
+        commitment_ref: e2.commitment_ref.clone(),
+        commitment_subject: subject,
+        immutable_worker_cap_ref: e2.immutable_worker_cap_ref.clone(),
+        immutable_worker_cap_created_revision: e2.immutable_worker_cap_created_revision,
+        immutable_worker_cap_application_revision: e2.immutable_worker_cap_application_revision,
+        policy_snapshot_ref: e2.policy_snapshot_ref.clone(),
+        policy_snapshot_hash: e2.policy_snapshot_hash.clone(),
+        policy_snapshot_revision: e2.policy_snapshot_revision.clone(),
+        request_id: e2.request_id.clone(),
+        idempotency_key: e2.idempotency_key.clone(),
+        caller_participant_id: e2.caller_participant_id.clone(),
+        caller_backend_id: e2.caller_backend_id.clone(),
+        target_backend_id: e2.target_backend_id.clone(),
+        target_world: e2.target_world.clone(),
+        registry_publication_revision: e2.registry_publication_revision,
+    };
+    let mut identity = config_projection::ConfigProjectionIdentityV1 {
+        schema_version: 1,
+        authority_store_id: effective.authority_store_id.clone(),
+        series_id: response.config_projection.series_id.clone(),
+        accepted_home: effective.accepted_home.clone(),
+        workspace_root: effective.workspace_root.clone(),
+        orchestration_session_id: request.orchestration_session_id.clone(),
+        retained_participant_id: request.participant_id.clone(),
+        bootstrap_run_id: request.run_id.clone(),
+        backend_id: request.backend_id.clone(),
+        runtime_family: logical.runtime_family.clone(),
+        world_id: request.world_id.clone(),
+        world_generation: request.world_generation,
+        immutable_launch_cap: cap,
+        runtime_artifacts: config_projection::ConfigProjectionRuntimeArtifactsV1 {
+            codex: artifact(
+                config_projection::RuntimeArtifactAuthorityRoleV1::Codex0125,
+                config_projection::ConfigProjectionArtifactRoleV1::Codex0125,
+            )?,
+            world_entry_wrapper: artifact(
+                config_projection::RuntimeArtifactAuthorityRoleV1::WorldEntryWrapper,
+                config_projection::ConfigProjectionArtifactRoleV1::WorldEntryWrapper,
+            )?,
+            managed_gateway: artifact(
+                config_projection::RuntimeArtifactAuthorityRoleV1::ManagedGateway,
+                config_projection::ConfigProjectionArtifactRoleV1::ManagedGateway,
+            )?,
+        },
+        identity_hash: String::new(),
+    };
+    identity.identity_hash = seal(
+        "substrate.e3.config-projection-identity.v1",
+        "identity",
+        "identity_hash",
+        serde_json::to_value(&identity).map_err(|_| ConfigProjectionFailureV1::Malformed)?,
+    )?;
+    let carrier = &response.config_projection;
+    let ConfigProjectionSubjectReadbackV1::Bound(metadata) =
+        custody.service.resolve_preparation_subject_v1(&identity)?
+    else {
+        return Err(WrongBinding.into());
+    };
+    let record = metadata.record();
+    let credential = &record.nonsecret_handoff.credential_source_ref;
+    if record.identity != identity
+        || metadata.projection_ref() != &carrier.dormant_projection_ref
+        || record.logical != custody.expected_logical
+        || record.effective.accepted_policy != identity.immutable_launch_cap
+        || carrier.authority_store_id != identity.authority_store_id
+        || carrier.series_id != identity.series_id
+        || record.managed_gateway.posture != ManagedGatewayProjectionPostureV1::Dormant
+        || record.activation.publication_fence
+            != (ConfigProjectionPublicationFenceV1::ZeroLiveClosed {
+                fence_id: carrier.fence_id.clone(),
+            })
+        || record.activation.activation_intent_ref != carrier.activation_intent_ref
+        || record.managed_gateway.activation_intent_ref != carrier.activation_intent_ref
+        || record.managed_gateway.expected_gateway_ref != carrier.expected_gateway_ref
+        || record.nonsecret_handoff.receiving_gateway_ref != carrier.expected_gateway_ref
+        || record.activation.gateway_activation_ack_ref.is_some()
+        || record.activation.released_at.is_some()
+        || record.nonsecret_handoff.observed_state != SecretHandoffStateV1::Prepared
+        || credential.preparation_id != custody.preparation_id
+        || credential.issued_at.0 != response.prepared_at
+        || credential.expires_at.0 != response.expires_at
+        || record.created_at.0 != response.prepared_at
+    {
+        return Err(WrongBinding.into());
+    }
+    let prepared_at = chrono::DateTime::parse_from_rfc3339(&response.prepared_at)?;
+    let expires_at = chrono::DateTime::parse_from_rfc3339(&response.expires_at)?;
+    let authored_at = chrono::DateTime::parse_from_rfc3339(&custody.authoring_created_at.0)?;
+    if authored_at > prepared_at || expires_at <= Utc::now() {
+        return Err(ExpiredPreparation.into());
+    }
+    // Claim the original Held lease value. Do not acquire a lease or retain the
+    // temporary resolved capability.
+    let consumer_id = format!(
+        "cpc_{}",
+        custody
+            .preparation_id
+            .strip_prefix("e3p_")
+            .ok_or(WrongBinding)?
+    );
+    if carrier.consumer_id != consumer_id || carrier.consumer_lease_revision != 1 {
+        return Err(WrongBinding.into());
+    }
+    let lease = ConfigProjectionConsumerLeaseV1 {
+        schema_version: 1,
+        authority_store_id: identity.authority_store_id.clone(),
+        series_id: identity.series_id.clone(),
+        consumer_id,
+        consumer_kind: ConfigProjectionConsumerKindV1::MemberDispatchV2,
+        revision: 1,
+        predecessor_lease_hash: None,
+        acquired_projection_ref: carrier.dormant_projection_ref.clone(),
+        posture: ConfigProjectionConsumerLeasePostureV1::Held,
+        acquired_at: record.created_at.clone(),
+        released_at: None,
+        lease_hash: carrier.consumer_lease_hash.clone(),
+    };
+    let (resolved, resolved_authoring) = custody.registry.resolve(
+        Some((&identity, &lease)),
+        Some(&custody.authoring_input_ref),
+    )?;
+    match resolved {
+        Some(ConfigProjectionResolutionV1::Current {
+            identity: read_identity,
+            record: read_record,
+            projection_ref,
+            ..
+        }) if read_identity == identity
+            && read_record == *record
+            && projection_ref == carrier.dormant_projection_ref => {}
+        _ => return Err(WrongBinding.into()),
+    }
+    if resolved_authoring != Some((effective, inventory, manifest)) {
+        return Err(WrongBinding.into());
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) async fn submit_e3_projection_preparation_v1(
+    custody: &mut E3ProducerPreparationCustodyV1,
+    request: transport_api_types::E3ConfigProjectionPrepareRequestV1,
+    client: &transport_api_client::AgentClient,
+) -> Result<()> {
+    use config_projection::ConfigProjectionFailureV1::WrongBinding;
+    request.validate().map_err(|_| WrongBinding)?;
+    let common = &custody.common_transport;
+    if custody.submission_state != E3ProducerSubmissionStateV1::Unsent
+        || custody.response.is_some()
+        || custody.cancel_request.is_some()
+        || common.config_projection.is_some()
+        || request.preparation_id != custody.preparation_id
+        || request.preparation_idempotency_key != custody.preparation_idempotency_key
+        || request.authoring_input_ref != custody.authoring_input_ref
+        || request.orchestration_session_id != common.orchestration_session_id
+        || request.participant_id != common.participant_id
+        || request.orchestrator_participant_id != common.orchestrator_participant_id
+        || request.parent_participant_id != common.parent_participant_id
+        || request.resumed_from_participant_id != common.resumed_from_participant_id
+        || request.backend_id != common.backend_id
+        || request.protocol != common.protocol
+        || request.run_id != common.run_id
+        || request.world_id != common.world_id
+        || request.world_generation != common.world_generation
+        || request.resolved_runtime.backend_kind != common.backend_kind
+        || request.resolved_runtime.binary_path != common.binary_path
+        || request.retained_worker_launch_authority != common.retained_worker_launch_authority
+        || Some(&request.e2_launch_activation) != common.e2_launch_activation.as_ref()
+    {
+        return Err(WrongBinding.into());
+    }
+    custody.submission_state = E3ProducerSubmissionStateV1::PrepareEntered;
+    // Cancellation of this future changes the reachable owner's disposition;
+    // it never invents cancellation coordinates or fresh credentials.
+    struct Entered<'a>(&'a mut E3ProducerPreparationCustodyV1);
+    impl Drop for Entered<'_> {
+        fn drop(&mut self) {
+            if self.0.submission_state == E3ProducerSubmissionStateV1::PrepareEntered {
+                self.0.submission_state = E3ProducerSubmissionStateV1::ExpiryRecoveryRequired;
+            }
+        }
+    }
+    let entered = Entered(custody);
+    let response = client.e3_config_projection_prepare(request).await?;
+    entered.0.cancel_request = Some(transport_api_types::E3ConfigProjectionCancelRequestV1 {
+        schema_version: 1,
+        preparation_id: response.preparation_id.clone(),
+        preparation_idempotency_key: response.preparation_idempotency_key.clone(),
+        config_projection: response.config_projection.clone(),
+    });
+    entered.0.response = Some(response);
+    let validated = validate_e3_projection_prepare_response_v1(
+        entered.0,
+        entered.0.response.as_ref().ok_or(WrongBinding)?,
+    );
+    if let Err(error) = validated {
+        // An untrusted response is failure evidence, never authority to cancel
+        // some other subject.
+        entered.0.cancel_request = None;
+        return Err(error);
+    }
+    entered.0.submission_state = E3ProducerSubmissionStateV1::Prepared;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) async fn cancel_e3_projection_preparation_v1(
+    custody: &mut E3ProducerPreparationCustodyV1,
+    client: &transport_api_client::AgentClient,
+) -> Result<()> {
+    use E3ProducerSubmissionStateV1::*;
+    match custody.submission_state {
+        Unsent => {
+            custody.submission_state = Cancelled;
+            return Ok(());
+        }
+        Cancelled => return Ok(()),
+        Prepared | CancelPending => {}
+        PrepareEntered | ExecuteEntered | Transferred | ExpiryRecoveryRequired => {
+            anyhow::bail!("E3 preparation cancellation lacks exact pre-execute custody")
+        }
+    }
+    let request = custody
+        .cancel_request
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("E3 preparation cancellation material unavailable"))?
+        .clone();
+    custody.submission_state = CancelPending;
+    let response = client.e3_config_projection_cancel(request.clone()).await?;
+    response
+        .validate()
+        .map_err(|_| anyhow::anyhow!("Malformed E3 cancellation response"))?;
+    if response.preparation_id != custody.preparation_id
+        || response.cancelled_dormant_projection_ref
+            != request.config_projection.dormant_projection_ref
+    {
+        anyhow::bail!("WrongBinding E3 cancellation response");
+    }
+    custody.submission_state = Cancelled;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+struct E3ContinueForkInputsV1<'a, 'home, 'roots> {
+    snapshot: &'a config_model::E3EffectiveConfigResolutionSnapshotV1<'home>,
+    effective_source: &'a config_projection::EffectiveSubstrateConfigSourceV1,
+    selection: &'a crate::execution::agent_inventory::HeldE3SelectedInventoryProjectionV1<'roots>,
+    configured: &'a config_projection::ConfiguredAcceptedHomeAuthorityV1,
+    bootstrap_home: &'a crate::execution::agent_runtime::OpenedBootstrapHomeV1<'home>,
+    service: &'a std::sync::Arc<config_projection::AgentConfigProjectionServiceV1>,
+    registry: &'a std::sync::Arc<config_projection::ConfigProjectionRegistryV1>,
+    registry_authority: &'a ResolvedWorldWorkRegistryAuthorityV1,
+}
+
 #[cfg(target_os = "linux")]
 fn resolve_e2_dispatch_policy(
     store: &AgentRuntimeStateStore,
     request: &ValidatedWorldDispatchRequestV1,
     workspace_root: &Path,
     applies_to: transport_api_types::DispatchCapabilitySubjectV1,
+    e3_base_policy: Option<&Policy>,
+    classified_config: Option<&config_model::SubstrateConfig>,
 ) -> Result<ResolvedE2DispatchPolicyV1> {
     let trusted_root = TrustedAuthorityRoot::open(store.substrate_home())
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
@@ -4463,7 +4863,17 @@ fn resolve_e2_dispatch_policy(
         exact.authority.current_policy_ref.clone().ok_or_else(|| {
             anyhow::anyhow!("E2 dispatch authority omits current policy reference")
         })?;
-    let context = resolve_internal_dispatch_context(workspace_root)?;
+    let compatibility_context;
+    let base_policy = match e3_base_policy {
+        Some(policy) => policy,
+        None => {
+            compatibility_context = match classified_config {
+                Some(config) => resolve_internal_dispatch_context_with_config(workspace_root, config)?,
+                None => resolve_internal_dispatch_context(workspace_root)?,
+            };
+            &compatibility_context.base_policy
+        }
+    };
     let (snapshot, snapshot_hash) = match request.dispatch_policy_narrowing.as_ref() {
         Some(patch) => {
             let transport_parent_ref: transport_api_types::PolicyRefV1 = serde_json::from_value(
@@ -4484,14 +4894,13 @@ fn resolve_e2_dispatch_policy(
                     applies_to,
                     parent_policy_ref: transport_parent_ref,
                     parent_policy: exact.current_policy.clone(),
-                    parent_allows_capability_narrowing: context
-                        .base_policy
+                    parent_allows_capability_narrowing: base_policy
                         .agents_world_dispatch_allow_capability_narrowing,
                 },
             )?;
             let resolved =
                 crate::execution::policy_snapshot::resolve_dispatch_narrowed_policy_snapshot(
-                    &context.base_policy,
+                    base_policy,
                     patch,
                     &authenticated,
                     workspace_root,
@@ -4542,6 +4951,8 @@ fn prepare_fork_policy_commitment(
     workspace_root: &Path,
     registry_authority: &ResolvedWorldWorkRegistryAuthorityV1,
     fork_patch: Option<transport_api_types::DispatchPolicyNarrowingPatchV1>,
+    e3_base_policy: Option<&Policy>,
+    classified_config: Option<&config_model::SubstrateConfig>,
 ) -> Result<PreparedForkPolicyCommitmentV1> {
     if registry_authority.world_id != request.world_id
         || registry_authority.world_generation != request.world_generation
@@ -4579,6 +4990,8 @@ fn prepare_fork_policy_commitment(
         transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerFork {
             source_participant_id: source_participant_id.to_string(),
         },
+        e3_base_policy,
+        classified_config,
     )?;
     if e2_policy.validated_policy_snapshot.snapshot_ref()
         != &registry_authority.current_policy_snapshot_ref
@@ -4702,6 +5115,8 @@ fn prepare_task_acceptance_submission(
         &prepared.request,
         workspace_root,
         transport_api_types::DispatchCapabilitySubjectV1::EphemeralTask,
+        None,
+        None,
     )?;
     let resolved_policy = crate::execution::policy_snapshot::ResolvedPolicySnapshot {
         snapshot: e2_policy.validated_policy_snapshot.snapshot().clone(),
@@ -4876,15 +5291,20 @@ fn resolve_retained_acceptance_proposal(
 fn prepare_retained_acceptance_submission(
     prepared: &PreparedOrchestratorWorldDispatch,
     workspace_root: &Path,
+    e3_inputs: Option<&E3ContinueForkInputsV1<'_, '_, '_>>,
+    classification_snapshot: Option<&config_model::E3EffectiveConfigResolutionSnapshotV1<'_>>,
 ) -> Result<PreparedRetainedAcceptanceSubmission> {
     let registry_authority = prepared.b_owned_authority()?;
     let request_id = prepared.request.request_id.clone();
 
-    let base_policy = resolve_internal_dispatch_policy(workspace_root)?;
+    let base_policy = match e3_inputs {
+        Some(inputs) => inputs.selection.policy().clone(),
+        None => resolve_internal_dispatch_policy(workspace_root)?,
+    };
     enforce_world_dispatch_steering_policy(prepared, &base_policy)?;
     enforce_continue_world_worker_payload_policy(prepared, &base_policy)?;
     let (initial_carrier, initial_e2_policy, initial_cap_ref) =
-        resolve_continue_e2_policy_carrier(prepared, None)?;
+        resolve_continue_e2_policy_carrier(prepared, None, e3_inputs, classification_snapshot)?;
     let resolved_policy = crate::execution::policy_snapshot::ResolvedPolicySnapshot {
         snapshot: initial_e2_policy
             .validated_policy_snapshot
@@ -5144,6 +5564,8 @@ fn prepare_retained_acceptance_submission(
     let submit_request = build_continue_world_worker_submit_request_with_acceptance_context(
         prepared,
         proposal.acceptance_context.clone(),
+        e3_inputs,
+        classification_snapshot,
     )?;
     let digest = canonical_world_work_submission_sha256(&prepared.request, &submit_request)?;
     if &digest != canonical_member_turn_submit_request_sha256 {
@@ -5152,6 +5574,8 @@ fn prepare_retained_acceptance_submission(
     let (carrier, final_e2_policy, final_cap_ref) = resolve_continue_e2_policy_carrier(
         prepared,
         proposal.acceptance_context.message_id.as_deref(),
+        e3_inputs,
+        classification_snapshot,
     )?;
     if submit_request.policy_snapshot_carrier.as_ref() != Some(&carrier)
         || final_cap_ref != initial_cap_ref
@@ -5262,6 +5686,329 @@ async fn run_world_task_with_started_task_run_id_tx(
     Ok(WorldDispatchOutcomeV1::AcceptedForeground(Box::new(
         AcceptedForegroundReceiptV1::Ephemeral(receipt),
     )))
+}
+
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "E3-F authoring is joined to preparation in the next increment"
+)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "borrow the existing sealed authorities without a second owner"
+)]
+pub(super) fn author_e3_projection_for_spawn(
+    bootstrap_home: &crate::execution::agent_runtime::OpenedBootstrapHomeV1<'_>,
+    snapshot: &config_model::E3EffectiveConfigResolutionSnapshotV1<'_>,
+    effective: &config_projection::EffectiveSubstrateConfigSourceV1,
+    logical: &config_projection::LogicalAgentConfigProjectionV1,
+    selected_inventory: &crate::execution::agent_runtime::host_session_authority::trusted_fs::HeldE3AgentInventorySourceV1<'_>,
+    authenticated_launch: &crate::execution::agent_runtime::dispatch_policy_commitment::AuthenticatedDispatchPolicyCommitmentV1,
+    transport: &MemberDispatchTransportRequest,
+    service: &config_projection::AgentConfigProjectionServiceV1,
+    registry: &config_projection::ConfigProjectionRegistryV1,
+    effective_policy: &Policy,
+    account_home: &Path,
+    preparation_id: String,
+    created_at: config_projection::Timestamp,
+) -> Result<(
+    config_projection::ConfigProjectionAuthoringInputRefV1,
+    transport_api_types::E3ConfigProjectionPrepareRequestV1,
+)> {
+    use config_projection::{ConfigProjectionFailureV1::WrongBinding, LogicalConfigSourceRefV1};
+    let launch = authenticated_launch
+        .member_launch_activation_carrier()
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    if launch.launch_kind != transport_api_types::E2MemberLaunchKindV1::FreshSpawn {
+        anyhow::bail!("E3 spawn authoring requires its exact authenticated E2 launch kind");
+    }
+    let revalidate = || -> Result<()> {
+        selected_inventory.revalidate()?;
+        bootstrap_home
+            .revalidate()
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        if config_model::extract_e3_effective_config_source_v1(
+            &effective.authority_store_id,
+            snapshot,
+        )? != *effective
+        {
+            return Err(WrongBinding.into());
+        }
+        Ok(())
+    };
+    revalidate()?;
+    let source = selected_inventory.source_material();
+    if transport.e2_launch_activation.as_ref() != Some(&launch)
+        || transport.backend_id != launch.target_backend_id
+        || snapshot.effective_config().llm.routing.default_backend != launch.target_backend_id
+        || logical.backend_id != launch.target_backend_id
+        || logical.execution_scope != "world"
+        || logical.placement != "world"
+        || logical.runtime_family != "codex"
+        || logical.sources
+            != vec![
+                LogicalConfigSourceRefV1::EffectiveSubstrateConfig {
+                    authority_store_id: effective.authority_store_id.clone(),
+                    source_revision: effective.source_revision.clone(),
+                    source_hash: effective.source_hash.clone(),
+                },
+                LogicalConfigSourceRefV1::AgentInventory {
+                    authority_store_id: effective.authority_store_id.clone(),
+                    inventory_scope: source.inventory_scope.clone(),
+                    source_revision: source.source_revision.clone(),
+                    source_hash: source.source_hash.clone(),
+                },
+            ]
+    {
+        return Err(WrongBinding.into());
+    }
+    // Publication/readback errors still run the final source guards. No failed
+    // final guard can release a transient credential-bearing request.
+    let result = (|| {
+        let reference = service.publish_retained_launch_inputs(effective, source, created_at)?;
+        let (_, readback) = registry.resolve(None, Some(&reference))?;
+        let (read_effective, read_source, manifest) = readback.ok_or(WrongBinding)?;
+        if read_effective != *effective
+            || read_source != *source
+            || manifest.authority_store_id != reference.authority_store_id
+            || manifest.manifest_id != reference.runtime_artifact_manifest_id
+            || manifest.revision != reference.runtime_artifact_manifest_revision
+            || manifest.manifest_hash != reference.runtime_artifact_manifest_hash
+        {
+            return Err(WrongBinding.into());
+        }
+        revalidate()?;
+        let auth = crate::builtins::world_gateway::resolve_e3_integrated_auth_payload(
+            snapshot.effective_config(),
+            effective_policy,
+            logical,
+            account_home,
+        )?;
+        let request = build_e3_projection_prepare_request_v1(
+            transport,
+            reference.clone(),
+            preparation_id,
+            auth,
+        )?;
+        Ok((reference, request))
+    })();
+    revalidate()?;
+    result
+}
+
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "E3-F authoring is joined to preparation in the next increment"
+)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "borrow the existing sealed authorities without a second owner"
+)]
+pub(super) fn author_e3_projection_for_fork(
+    bootstrap_home: &crate::execution::agent_runtime::OpenedBootstrapHomeV1<'_>,
+    snapshot: &config_model::E3EffectiveConfigResolutionSnapshotV1<'_>,
+    effective: &config_projection::EffectiveSubstrateConfigSourceV1,
+    logical: &config_projection::LogicalAgentConfigProjectionV1,
+    selected_inventory: &crate::execution::agent_runtime::host_session_authority::trusted_fs::HeldE3AgentInventorySourceV1<'_>,
+    authenticated_launch: &crate::execution::agent_runtime::dispatch_policy_commitment::AuthenticatedDispatchPolicyCommitmentV1,
+    transport: &MemberDispatchTransportRequest,
+    service: &config_projection::AgentConfigProjectionServiceV1,
+    registry: &config_projection::ConfigProjectionRegistryV1,
+    effective_policy: &Policy,
+    account_home: &Path,
+    preparation_id: String,
+    created_at: config_projection::Timestamp,
+) -> Result<(
+    config_projection::ConfigProjectionAuthoringInputRefV1,
+    transport_api_types::E3ConfigProjectionPrepareRequestV1,
+)> {
+    use config_projection::{ConfigProjectionFailureV1::WrongBinding, LogicalConfigSourceRefV1};
+    let launch = authenticated_launch
+        .member_launch_activation_carrier()
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    if launch.launch_kind != transport_api_types::E2MemberLaunchKindV1::Fork {
+        anyhow::bail!("E3 fork authoring requires its exact authenticated E2 launch kind");
+    }
+    let revalidate = || -> Result<()> {
+        selected_inventory.revalidate()?;
+        bootstrap_home
+            .revalidate()
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        if config_model::extract_e3_effective_config_source_v1(
+            &effective.authority_store_id,
+            snapshot,
+        )? != *effective
+        {
+            return Err(WrongBinding.into());
+        }
+        Ok(())
+    };
+    revalidate()?;
+    let source = selected_inventory.source_material();
+    if transport.e2_launch_activation.as_ref() != Some(&launch)
+        || transport.backend_id != launch.target_backend_id
+        || snapshot.effective_config().llm.routing.default_backend != launch.target_backend_id
+        || logical.backend_id != launch.target_backend_id
+        || logical.execution_scope != "world"
+        || logical.placement != "world"
+        || logical.runtime_family != "codex"
+        || logical.sources
+            != vec![
+                LogicalConfigSourceRefV1::EffectiveSubstrateConfig {
+                    authority_store_id: effective.authority_store_id.clone(),
+                    source_revision: effective.source_revision.clone(),
+                    source_hash: effective.source_hash.clone(),
+                },
+                LogicalConfigSourceRefV1::AgentInventory {
+                    authority_store_id: effective.authority_store_id.clone(),
+                    inventory_scope: source.inventory_scope.clone(),
+                    source_revision: source.source_revision.clone(),
+                    source_hash: source.source_hash.clone(),
+                },
+            ]
+    {
+        return Err(WrongBinding.into());
+    }
+    // Publication/readback errors still run the final source guards. No failed
+    // final guard can release a transient credential-bearing request.
+    let result = (|| {
+        let reference = service.publish_retained_fork_inputs(effective, source, created_at)?;
+        let (_, readback) = registry.resolve(None, Some(&reference))?;
+        let (read_effective, read_source, manifest) = readback.ok_or(WrongBinding)?;
+        if read_effective != *effective
+            || read_source != *source
+            || manifest.authority_store_id != reference.authority_store_id
+            || manifest.manifest_id != reference.runtime_artifact_manifest_id
+            || manifest.revision != reference.runtime_artifact_manifest_revision
+            || manifest.manifest_hash != reference.runtime_artifact_manifest_hash
+        {
+            return Err(WrongBinding.into());
+        }
+        revalidate()?;
+        let auth = crate::builtins::world_gateway::resolve_e3_integrated_auth_payload(
+            snapshot.effective_config(),
+            effective_policy,
+            logical,
+            account_home,
+        )?;
+        let request = build_e3_projection_prepare_request_v1(
+            transport,
+            reference.clone(),
+            preparation_id,
+            auth,
+        )?;
+        Ok((reference, request))
+    })();
+    revalidate()?;
+    result
+}
+
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "E3-F prepare submission consumes this frozen request"
+)]
+fn build_e3_projection_prepare_request_v1(
+    transport: &MemberDispatchTransportRequest,
+    authoring_input_ref: config_projection::ConfigProjectionAuthoringInputRefV1,
+    preparation_id: String,
+    integrated_auth: transport_api_types::GatewayIntegratedAuthPayloadV1,
+) -> Result<transport_api_types::E3ConfigProjectionPrepareRequestV1> {
+    use base64::Engine as _;
+    use config_projection::ConfigProjectionFailureV1::WrongBinding;
+
+    // The caller freezes the preparation ID once. A submitted carrier cannot be
+    // turned back into a new preparation, including after an ambiguous release.
+    if transport.config_projection.is_some() {
+        return Err(WrongBinding.into());
+    }
+    let activation = transport
+        .e2_launch_activation
+        .as_ref()
+        .ok_or(WrongBinding)?;
+    let material = transport
+        .exact_policy_snapshot
+        .as_ref()
+        .ok_or(WrongBinding)?;
+    ExactDispatchPolicySnapshotMaterialV1::from_exact_e1_material(
+        material.policy_snapshot.clone(),
+        material.policy_snapshot_bytes.clone(),
+        material.policy_snapshot_hash.clone(),
+    )?;
+    if activation.policy_snapshot_hash != material.policy_snapshot_hash
+        || activation.policy_snapshot_byte_length != material.policy_snapshot_bytes.len() as u64
+        || activation.policy_snapshot_bytes_base64
+            != base64::engine::general_purpose::STANDARD.encode(&material.policy_snapshot_bytes)
+    {
+        return Err(WrongBinding.into());
+    }
+    let mut request = transport_api_types::E3ConfigProjectionPrepareRequestV1 {
+        schema_version: 1,
+        preparation_id,
+        preparation_idempotency_key: String::new(),
+        orchestration_session_id: transport.orchestration_session_id.clone(),
+        participant_id: transport.participant_id.clone(),
+        orchestrator_participant_id: transport.orchestrator_participant_id.clone(),
+        parent_participant_id: transport.parent_participant_id.clone(),
+        resumed_from_participant_id: transport.resumed_from_participant_id.clone(),
+        backend_id: transport.backend_id.clone(),
+        protocol: transport.protocol.clone(),
+        run_id: transport.run_id.clone(),
+        world_id: transport.world_id.clone(),
+        world_generation: transport.world_generation,
+        resolved_runtime: transport_api_types::ResolvedMemberRuntimeDescriptorV1 {
+            backend_kind: transport.backend_kind,
+            binary_path: transport.binary_path.clone(),
+        },
+        retained_worker_launch_authority: transport.retained_worker_launch_authority.clone(),
+        e2_launch_activation: activation.clone(),
+        authoring_input_ref,
+        integrated_auth,
+    };
+    // Construct only the established nonsecret preimage. Never serialize a
+    // credential-bearing request and subsequently try to redact its secret fields.
+    let mut names = vec!["SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN"];
+    if request
+        .integrated_auth
+        .cli_codex
+        .as_ref()
+        .is_some_and(|auth| auth.account_id.is_some())
+    {
+        names.push("SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID");
+    }
+    request.preparation_idempotency_key = format!(
+        "e3pik_{}",
+        config_projection::ConfigProjectionCodecV1::domain_sha256(
+            "substrate.e3.config-projection-prepare-idempotency.v1",
+            &serde_json::json!({
+                "credential_shape": {
+                    "backend_id": &request.integrated_auth.backend_id,
+                    "ordered_field_names": names,
+                },
+                "request": {
+                    "schema_version": request.schema_version,
+                    "preparation_id": &request.preparation_id,
+                    "orchestration_session_id": &request.orchestration_session_id,
+                    "participant_id": &request.participant_id,
+                    "orchestrator_participant_id": &request.orchestrator_participant_id,
+                    "parent_participant_id": &request.parent_participant_id,
+                    "resumed_from_participant_id": &request.resumed_from_participant_id,
+                    "backend_id": &request.backend_id,
+                    "protocol": &request.protocol,
+                    "run_id": &request.run_id,
+                    "world_id": &request.world_id,
+                    "world_generation": request.world_generation,
+                    "resolved_runtime": &request.resolved_runtime,
+                    "retained_worker_launch_authority": &request.retained_worker_launch_authority,
+                    "e2_launch_activation": &request.e2_launch_activation,
+                    "authoring_input_ref": &request.authoring_input_ref,
+                },
+            }),
+        )?
+    );
+    request.validate().map_err(anyhow::Error::msg)?;
+    Ok(request)
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -5773,6 +6520,8 @@ pub(crate) fn prepare_fork_world_worker_bootstrap(
                     &workspace_root,
                     registry_authority,
                     prepared.request.dispatch_policy_narrowing.clone(),
+                    None,
+                    None,
                 )?;
                 (
                     source_participant_id,
@@ -5907,7 +6656,7 @@ async fn continue_world_worker(
         )
     {
         let acceptance_submission =
-            prepare_retained_acceptance_submission(&prepared, &workspace_root)?;
+            prepare_retained_acceptance_submission(&prepared, &workspace_root, None, None)?;
         match acceptance_submission {
             PreparedRetainedAcceptanceSubmission::AlreadyAccepted(acceptance) => {
                 let trusted_root = TrustedAuthorityRoot::open(prepared.store.substrate_home())
@@ -6010,7 +6759,7 @@ async fn continue_world_worker(
         (submit_request, stream_result)
     } else {
         let acceptance_submission =
-            prepare_retained_acceptance_submission(&prepared, &workspace_root)?;
+            prepare_retained_acceptance_submission(&prepared, &workspace_root, None, None)?;
         let PreparedRetainedAcceptanceSubmission::Proposed {
             receipt_registry,
             execution_supervisor,
@@ -6099,6 +6848,8 @@ async fn continue_world_worker(
     let fork_bootstrap = continue_world_worker_fork_command_bootstrap_after_delivery(
         &prepared,
         intended_host_principal,
+    None,
+        None,
     )
     .await?;
     let summary = summarize_continue_world_worker_result(
@@ -6147,6 +6898,8 @@ fn retained_turn_uses_compatibility_transport(
 async fn continue_world_worker_fork_command_bootstrap_after_delivery(
     prepared: &PreparedOrchestratorWorldDispatch,
     intended_host_principal: Option<&PlatformPrincipalV1>,
+    e3_inputs: Option<&E3ContinueForkInputsV1<'_, '_, '_>>,
+    classification_snapshot: Option<&config_model::E3EffectiveConfigResolutionSnapshotV1<'_>>,
 ) -> Result<Option<ContinueWorldWorkerForkBootstrapOutcome>> {
     let WorldDispatchPayloadV1::WorkerContinueForkCommand(_) = &prepared.request.payload else {
         return Ok(None);
@@ -6188,6 +6941,8 @@ async fn continue_world_worker_fork_command_bootstrap_after_delivery(
             &prepared.request,
             &workspace_root,
             registry_authority,
+            None,
+            None,
             None,
         )?;
         let transport_request = build_continue_world_worker_fork_command_transport_request(
@@ -7453,11 +8208,19 @@ async fn stop_world_worker(
 fn resolve_internal_dispatch_context(workspace_root: &Path) -> Result<InternalDispatchContext> {
     let effective_config =
         config_model::resolve_effective_config(workspace_root, &CliConfigOverrides::default())?;
+    resolve_internal_dispatch_context_with_config(workspace_root, &effective_config)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn resolve_internal_dispatch_context_with_config(
+    workspace_root: &Path,
+    effective_config: &config_model::SubstrateConfig,
+) -> Result<InternalDispatchContext> {
     let base_policy = resolve_internal_dispatch_policy(workspace_root)?;
     let inventory = load_effective_agent_inventory(workspace_root, &base_policy)?;
 
     Ok(InternalDispatchContext {
-        effective_config,
+        effective_config: effective_config.clone(),
         base_policy,
         inventory,
     })
@@ -8597,60 +9360,118 @@ fn build_continue_world_worker_fork_command_transport_request(
 fn resolve_continue_e2_policy_carrier(
     prepared: &PreparedOrchestratorWorldDispatch,
     message_id: Option<&str>,
+    e3_inputs: Option<&E3ContinueForkInputsV1<'_, '_, '_>>,
+    classification_snapshot: Option<&config_model::E3EffectiveConfigResolutionSnapshotV1<'_>>,
 ) -> Result<(
     transport_api_types::DispatchPolicySnapshotCarrierV1,
     ResolvedE2DispatchPolicyV1,
     crate::execution::agent_runtime::dispatch_policy_commitment::DispatchPolicyCommitmentRefV1,
 )> {
+    if let Some(snapshot) = classification_snapshot {
+        snapshot.revalidate()?;
+        if e3_inputs.is_some_and(|inputs| !std::ptr::eq(inputs.snapshot, snapshot)) {
+            anyhow::bail!("WrongBinding E3 classification snapshot");
+        }
+    } else if e3_inputs.is_some() {
+        anyhow::bail!("E3 inputs require their classification snapshot");
+    }
     let authority = prepared.b_owned_authority.as_ref().ok_or_else(|| {
         anyhow::anyhow!("E2 Continue requires canonical retained-target authority")
     })?;
-    let target = authority
-        .retained_target
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("E2 Continue requires exact canonical retained target"))?;
-    let cap = match &target.policy_cap_compatibility {
-        ResolvedPolicyCommitmentCompatibilityV1::Compatible { cap } => cap.clone(),
-        ResolvedPolicyCommitmentCompatibilityV1::UnsupportedLegacyState { reason, .. } => {
-            anyhow::bail!("unsupported_legacy_state: {reason:?}")
+    if let Some(inputs) = e3_inputs {
+        if !std::ptr::eq(inputs.registry_authority, authority)
+            || !matches!(
+                prepared.request.payload,
+                WorldDispatchPayloadV1::WorkerContinueForkCommand(_)
+            )
+            || inputs.effective_source.values.default_backend_id
+                != prepared.request.target_backend_id
+            || inputs.selection.logical().backend_id != prepared.request.target_backend_id
+            || config_model::extract_e3_effective_config_source_v1(
+                &inputs.effective_source.authority_store_id,
+                inputs.snapshot,
+            )? != *inputs.effective_source
+        {
+            anyhow::bail!("WrongBinding E3 continue-fork inputs");
         }
-    };
-    let workspace_root = PathBuf::from(&authority.workspace_root);
-    let e2_policy = resolve_e2_dispatch_policy(
-        &prepared.store,
-        &prepared.request,
-        &workspace_root,
-        transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerTurn {
-            retained_participant_id: target.participant_id.clone(),
-        },
-    )?;
-    if e2_policy.validated_policy_snapshot.snapshot_ref() != &authority.current_policy_snapshot_ref
-        || e2_policy.validated_policy_snapshot.revision() != authority.current_policy_revision
-    {
-        anyhow::bail!(
-            "stale_linkage: retained-turn policy authority changed during carrier construction"
-        );
+        inputs.configured.revalidate()?;
+        inputs.selection.revalidate()?;
+        inputs
+            .bootstrap_home
+            .revalidate()
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     }
-    let cap_ref = cap.commitment_ref().clone();
-    let authenticated = resolve_retained_turn_policy_material(
-        &e2_policy.authority,
-        RetainedTurnPolicyResolutionInputV1 {
-            cap,
-            current_parent_and_turn_patch: e2_policy.validated_policy_snapshot.clone(),
-            orchestration_session_id: authority.orchestration_session_id.clone(),
-            caller_participant_id: authority.caller_participant_id.clone(),
-            caller_backend_id: authority.caller_backend_id.clone(),
-            target_backend_id: target.backend_id.clone(),
-            world_id: authority.world_id.clone(),
-            world_generation: authority.world_generation,
-            retained_participant_id: target.participant_id.clone(),
-            active_run_id: prepared.request.request_id.clone(),
-            message_id: message_id.map(str::to_owned),
-            turn_patch: prepared.request.dispatch_policy_narrowing.clone(),
-        },
-    )
-    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
-    Ok((authenticated.into_carrier(), e2_policy, cap_ref))
+    let result = (|| {
+        let target = authority.retained_target.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("E2 Continue requires exact canonical retained target")
+        })?;
+        let cap = match &target.policy_cap_compatibility {
+            ResolvedPolicyCommitmentCompatibilityV1::Compatible { cap } => cap.clone(),
+            ResolvedPolicyCommitmentCompatibilityV1::UnsupportedLegacyState { reason, .. } => {
+                anyhow::bail!("unsupported_legacy_state: {reason:?}")
+            }
+        };
+        let workspace_root = PathBuf::from(&authority.workspace_root);
+        let e2_policy = resolve_e2_dispatch_policy(
+            &prepared.store,
+            &prepared.request,
+            &workspace_root,
+            transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerTurn {
+                retained_participant_id: target.participant_id.clone(),
+            },
+            e3_inputs.map(|inputs| inputs.selection.policy()),
+    classification_snapshot.map(|snapshot| snapshot.effective_config()),
+        )?;
+        if e2_policy.validated_policy_snapshot.snapshot_ref()
+            != &authority.current_policy_snapshot_ref
+            || e2_policy.validated_policy_snapshot.revision() != authority.current_policy_revision
+        {
+            anyhow::bail!(
+                "stale_linkage: retained-turn policy authority changed during carrier construction"
+            );
+        }
+        let cap_ref = cap.commitment_ref().clone();
+        let authenticated = resolve_retained_turn_policy_material(
+            &e2_policy.authority,
+            RetainedTurnPolicyResolutionInputV1 {
+                cap,
+                current_parent_and_turn_patch: e2_policy.validated_policy_snapshot.clone(),
+                orchestration_session_id: authority.orchestration_session_id.clone(),
+                caller_participant_id: authority.caller_participant_id.clone(),
+                caller_backend_id: authority.caller_backend_id.clone(),
+                target_backend_id: target.backend_id.clone(),
+                world_id: authority.world_id.clone(),
+                world_generation: authority.world_generation,
+                retained_participant_id: target.participant_id.clone(),
+                active_run_id: prepared.request.request_id.clone(),
+                message_id: message_id.map(str::to_owned),
+                turn_patch: prepared.request.dispatch_policy_narrowing.clone(),
+            },
+        )
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        Ok((authenticated.into_carrier(), e2_policy, cap_ref))
+    })();
+    if let Some(inputs) = e3_inputs {
+        inputs.selection.revalidate()?;
+        inputs
+            .bootstrap_home
+            .revalidate()
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        inputs.configured.revalidate()?;
+        if config_model::extract_e3_effective_config_source_v1(
+            &inputs.effective_source.authority_store_id,
+            inputs.snapshot,
+        )? != *inputs.effective_source
+        {
+            anyhow::bail!(
+                "WrongBinding E3 continue-fork config changed during carrier construction"
+            );
+        }
+    }
+    if let Some(snapshot) = classification_snapshot {
+        snapshot.revalidate()?;
+    }
+    result
 }
 
 #[cfg(target_os = "linux")]
@@ -8708,9 +9529,11 @@ fn build_continue_world_worker_submit_request_with_authenticated_carrier(
 fn build_continue_world_worker_submit_request_with_message(
     prepared: &PreparedOrchestratorWorldDispatch,
     message_id: Option<&str>,
+    e3_inputs: Option<&E3ContinueForkInputsV1<'_, '_, '_>>,
+    classification_snapshot: Option<&config_model::E3EffectiveConfigResolutionSnapshotV1<'_>>,
 ) -> Result<transport_api_types::MemberTurnSubmitRequestV1> {
     if prepared.b_owned_authority.is_some() {
-        let (carrier, _, _) = resolve_continue_e2_policy_carrier(prepared, message_id)?;
+        let (carrier, _, _) = resolve_continue_e2_policy_carrier(prepared, message_id, e3_inputs, classification_snapshot)?;
         let request = build_continue_world_worker_submit_request_from_authenticated_carrier(
             prepared, carrier,
         )?;
@@ -8773,17 +9596,21 @@ fn build_continue_world_worker_submit_request_with_message(
 fn build_continue_world_worker_submit_request(
     prepared: &PreparedOrchestratorWorldDispatch,
 ) -> Result<transport_api_types::MemberTurnSubmitRequestV1> {
-    build_continue_world_worker_submit_request_with_message(prepared, None)
+    build_continue_world_worker_submit_request_with_message(prepared, None, None, None)
 }
 
 #[cfg(target_os = "linux")]
 fn build_continue_world_worker_submit_request_with_acceptance_context(
     prepared: &PreparedOrchestratorWorldDispatch,
     acceptance_context: transport_api_types::WorldWorkAcceptanceContextV1,
+    e3_inputs: Option<&E3ContinueForkInputsV1<'_, '_, '_>>,
+    classification_snapshot: Option<&config_model::E3EffectiveConfigResolutionSnapshotV1<'_>>,
 ) -> Result<transport_api_types::MemberTurnSubmitRequestV1> {
     let mut request = build_continue_world_worker_submit_request_with_message(
         prepared,
         acceptance_context.message_id.as_deref(),
+        e3_inputs,
+        classification_snapshot,
     )?;
     request.acceptance_context = Some(acceptance_context);
     request.validate().map_err(anyhow::Error::msg)?;
@@ -13141,6 +13968,1015 @@ mod tests {
         fs::write(policy_path, policy).expect("write follow-up-enabled world dispatch policy");
     }
 
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn test_e3f_continue_fork_non_e3_snapshot_classification_boundary() {
+        use std::os::fd::AsFd;
+        use std::os::unix::fs::PermissionsExt;
+        let _env = world_env_guard();
+        let _binary = EnvVarGuard::set_path(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            test_world_codex_runtime_bin().as_path(),
+        );
+        let home = secure_authority_tempdir();
+        home.install_as_home();
+        write_world_dispatch_policy_with_fork_commands(
+            home.path(),
+            true,
+            &["cli:codex-world"],
+            &[
+                "spawn_world_worker",
+                "fork_world_worker",
+                "continue_world_worker",
+            ],
+            &["retained"],
+        );
+        fs::set_permissions(
+            home.path().join("policy.yaml"),
+            fs::Permissions::from_mode(0o600),
+        )
+        .unwrap();
+        fs::write(home.path().join("config.yaml"), "llm: {enabled: false}\n").unwrap();
+        fs::set_permissions(
+            home.path().join("config.yaml"),
+            fs::Permissions::from_mode(0o600),
+        )
+        .unwrap();
+        write_runtime_inventory_entry(home.path(), "codex-world", AgentExecutionScope::World);
+        let workspace = tempdir().unwrap();
+        activate_b_owned_dispatch_authority(
+            home.path(),
+            workspace.path(),
+            "sess_dispatch",
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
+        let (source, authority) = seed_routable_e2_spawn_source(
+            "req-e3f-non-e3-snapshot-boundary",
+            "orch_dispatch",
+            "world-17",
+            2,
+        );
+        let store = AgentRuntimeStateStore::new().unwrap();
+        let mut request = sample_continue_fork_command_world_dispatch_request();
+        request.target_participant_id = Some(source);
+        let prepared = prepare_orchestrator_world_dispatch(&store, request).unwrap();
+        assert!(prepared
+            .b_owned_authority()
+            .unwrap()
+            .retained_target
+            .is_some());
+        let bootstrap_home = authority.bootstrap_home();
+        let effective = config_model::resolve_effective_config_for_bootstrap_home(
+            workspace.path(),
+            &config_model::CliConfigOverrides::default(),
+            &bootstrap_home,
+        )
+        .unwrap();
+        assert!(
+            !effective.llm.enabled,
+            "the eight-key E3 predicate is definitively false"
+        );
+        assert!(!workspace.path().join(".substrate").exists());
+        assert!(matches!(
+            prepare_retained_acceptance_submission(&prepared, workspace.path(), None, None).unwrap(),
+            PreparedRetainedAcceptanceSubmission::Proposed { .. }
+        ));
+        let workspace_identity = config_projection::CanonicalDirectoryV1::capture_linux_from_fd(
+            fs::File::open(workspace.path()).unwrap().as_fd(),
+        )
+        .unwrap();
+        // Diagnostic boundary, not the required successful E3/non-E3 routing
+        // test: the mandated first resolver cannot expose its effective view.
+        let error = config_model::resolve_e3_effective_config_source_v1(
+            workspace.path(),
+            &bootstrap_home,
+            &workspace_identity,
+        )
+        .err()
+        .expect("strict snapshot currently rejects absent workspace configuration");
+        assert_eq!(
+            error.to_string(),
+            "E3 requires a selected workspace configuration root"
+        );
+        assert!(!workspace.path().join(".substrate").exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn test_e3f_e2_policy_input_parity_and_parent_reconstruction() {
+        use crate::execution::agent_runtime::host_session_authority::facade::OpenedConfigProjectionHsaAuthorityV1;
+        use crate::execution::agent_runtime::host_session_authority::trusted_fs::{
+            HeldE3AgentInventoryRootV1, TrustedWorkspaceRoot,
+        };
+        use config_projection::{
+            AgentConfigProjectionServiceV1, CanonicalDirectoryV1, ConfigProjectionCodecV1,
+            ConfigProjectionRegistryV1, ConfiguredAcceptedHomeAuthorityV1,
+            InstalledAcceptedHomeBootstrapRecordV1, Timestamp,
+        };
+        use std::os::fd::AsFd;
+        use std::os::unix::fs::PermissionsExt;
+        use transport_api_types::{InstallBootstrapContextCarrierV1, InstallBootstrapContextV1};
+
+        use crate::execution::agent_inventory::hold_e3_selected_inventory_projection_v1;
+        let _env = world_env_guard();
+        let _binary = EnvVarGuard::set_path(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            test_world_codex_runtime_bin().as_path(),
+        );
+        let home = secure_authority_tempdir();
+        home.install_as_home();
+        write_world_dispatch_policy_with_fork_commands(
+            home.path(),
+            true,
+            &["cli:codex-world"],
+            &[
+                "spawn_world_worker",
+                "fork_world_worker",
+                "continue_world_worker",
+            ],
+            &["retained"],
+        );
+        fs::set_permissions(
+            home.path().join("policy.yaml"),
+            fs::Permissions::from_mode(0o600),
+        )
+        .unwrap();
+        write_runtime_inventory_entry(home.path(), "codex-world", AgentExecutionScope::World);
+        let workspace = tempdir().unwrap();
+        activate_b_owned_dispatch_authority(
+            home.path(),
+            workspace.path(),
+            "sess_dispatch",
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
+        let (source, authority) =
+            seed_routable_e2_spawn_source("req-e3f-input-source", "orch_dispatch", "world-17", 2);
+        let store = AgentRuntimeStateStore::new().unwrap();
+        let mut request = sample_continue_fork_command_world_dispatch_request();
+        request.target_participant_id = Some(source.clone());
+        let prepared = prepare_orchestrator_world_dispatch(&store, request).unwrap();
+        let registry_authority = prepared.b_owned_authority().unwrap();
+        let legacy = resolve_e2_dispatch_policy(
+            &store,
+            &prepared.request,
+            workspace.path(),
+            transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerTurn {
+                retained_participant_id: source.clone(),
+            },
+            None,
+            None,
+        )
+        .unwrap();
+        let accepted_home = CanonicalDirectoryV1::capture_linux_from_fd(
+            fs::File::open(home.path()).unwrap().as_fd(),
+        )
+        .unwrap();
+        let (PlatformPrincipalV1::Unix { account, uid }, _) =
+            crate::execution::install_bootstrap::current_unix_principal_and_home().unwrap()
+        else {
+            panic!("Linux principal required");
+        };
+        let carrier = InstallBootstrapContextCarrierV1::from_context(
+            InstallBootstrapContextV1::new_unix(&accepted_home.physical_path, &account, uid)
+                .unwrap(),
+        )
+        .unwrap();
+        let mut record = InstalledAcceptedHomeBootstrapRecordV1 {
+            schema_version: 1,
+            install_bootstrap_carrier: carrier.encode().unwrap(),
+            host_context_commitment: carrier.host_context_commitment,
+            intended_account: account,
+            intended_uid: u64::from(uid),
+            intended_gid: u64::from(unsafe { libc::getegid() }),
+            accepted_home,
+            installed_at: Timestamp("2026-09-17T00:00:00.000000Z".into()),
+            record_hash: String::new(),
+        };
+        let mut value = serde_json::to_value(&record).unwrap();
+        value.as_object_mut().unwrap().remove("record_hash");
+        record.record_hash = ConfigProjectionCodecV1::domain_sha256(
+            "substrate.e3.installed-accepted-home-bootstrap.v1",
+            &serde_json::json!({"record": value}),
+        )
+        .unwrap();
+        let configured =
+            Arc::new(ConfiguredAcceptedHomeAuthorityV1::from_record_for_test(record).unwrap());
+        let bridge = Arc::new(
+            OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home(&configured)
+                .unwrap(),
+        );
+        let registry = Arc::new(ConfigProjectionRegistryV1::open(bridge).unwrap());
+        let service = Arc::new(
+            AgentConfigProjectionServiceV1::new(registry.clone(), configured.clone()).unwrap(),
+        );
+
+        fs::create_dir_all(workspace.path().join(".substrate")).unwrap();
+        fs::write(workspace.path().join(".substrate/workspace.yaml"), "{}\n").unwrap();
+        fs::write(home.path().join("config.yaml"), "llm: {enabled: true, gateway: {enabled: true, mode: in_world}, routing: {default_backend: 'cli:codex-world'}}\nagents: {enabled: true, defaults: {execution: {scope: world}, cli: {mode: persistent}}}\nworld: {enabled: true}\n").unwrap();
+        fs::set_permissions(
+            home.path().join("config.yaml"),
+            fs::Permissions::from_mode(0o600),
+        )
+        .unwrap();
+        fs::write(
+            home.path().join("agents/codex.yaml"),
+            r#"version: 3
+id: codex
+config:
+  enabled: true
+  kind: cli
+  protocol: substrate.agent.session
+  placements:
+    host:
+      enabled: true
+      cli:
+        binary: codex
+        mode: persistent
+        runtime_family: codex
+      api: null
+      capabilities:
+        session_start: true
+      runtime_projection: null
+    world:
+      enabled: true
+      cli:
+        binary: /var/lib/substrate/world-deps/codex-runtime/bin/codex
+        mode: persistent
+        runtime_family: codex
+      api: null
+      capabilities:
+        session_start: true
+        session_resume: true
+        session_fork: true
+        session_stop: true
+        status_snapshot: true
+        event_stream: true
+        llm: true
+        mcp_client: false
+      runtime_projection:
+        model: codex
+        mcp_servers: []
+        features: []
+"#,
+        )
+        .unwrap();
+        fs::set_permissions(
+            home.path().join("agents/codex.yaml"),
+            fs::Permissions::from_mode(0o600),
+        )
+        .unwrap();
+        let workspace_root = CanonicalDirectoryV1::capture_linux_from_fd(
+            fs::File::open(workspace.path()).unwrap().as_fd(),
+        )
+        .unwrap();
+        let config_projection::DirectoryPhysicalIdentityV1::Linux { device_id, inode } =
+            workspace_root.physical_identity;
+        let trusted_workspace = TrustedWorkspaceRoot::open_exact(
+            &crate::execution::agent_runtime::host_session_authority::schema::CanonicalDirectoryV1 {
+                physical_path: workspace_root.physical_path.clone(),
+                physical_identity: crate::execution::agent_runtime::host_session_authority::schema::DirectoryPhysicalIdentityV1::Linux { device_id, inode },
+            },
+        ).unwrap();
+        let trusted_home = TrustedAuthorityRoot::open(home.path()).unwrap();
+        let bootstrap_home = authority.bootstrap_home();
+        let snapshot = config_model::resolve_e3_effective_config_source_v1(
+            workspace.path(),
+            &bootstrap_home,
+            &workspace_root,
+        )
+        .unwrap();
+        let effective = config_model::extract_e3_effective_config_source_v1(
+            &registry.recover(None).unwrap().store.authority_store_id,
+            &snapshot,
+        )
+        .unwrap();
+        let global = HeldE3AgentInventoryRootV1::from_global(&trusted_home).unwrap();
+        let local = HeldE3AgentInventoryRootV1::from_workspace(&trusted_workspace).unwrap();
+        let selection = hold_e3_selected_inventory_projection_v1(
+            &bootstrap_home,
+            &global,
+            &local,
+            &effective,
+            None,
+        )
+        .unwrap();
+        let inputs = E3ContinueForkInputsV1 {
+            snapshot: &snapshot,
+            effective_source: &effective,
+            selection: &selection,
+            configured: &configured,
+            bootstrap_home: &bootstrap_home,
+            service: &service,
+            registry: &registry,
+            registry_authority,
+        };
+        let e3 = resolve_e2_dispatch_policy(
+            &store,
+            &prepared.request,
+            workspace.path(),
+            transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerTurn {
+                retained_participant_id: source.clone(),
+            },
+            Some(selection.policy()),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            legacy.validated_policy_snapshot.bytes(),
+            e3.validated_policy_snapshot.bytes()
+        );
+        assert_eq!(
+            legacy.validated_policy_snapshot.hash(),
+            e3.validated_policy_snapshot.hash()
+        );
+        assert!(
+            resolve_e2_dispatch_policy(
+                &store,
+                &prepared.request,
+                workspace.path(),
+                transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerTurn {
+                    retained_participant_id: source,
+                },
+                None,
+                None,
+            )
+            .is_err(),
+            "legacy inventory route still rejects V3"
+        );
+        let (initial, _, cap) =
+            resolve_continue_e2_policy_carrier(&prepared, None, Some(&inputs), Some(&snapshot)).unwrap();
+        let proposed =
+            prepare_retained_acceptance_submission(&prepared, workspace.path(), Some(&inputs), Some(&snapshot))
+                .unwrap();
+        let PreparedRetainedAcceptanceSubmission::Proposed {
+            proposal,
+            submit_request,
+            retained_worker_cap_ref,
+            policy_snapshot,
+            ..
+        } = proposed
+        else {
+            panic!("expected an unsubmitted proposal")
+        };
+        assert_eq!(retained_worker_cap_ref, cap);
+        assert_eq!(
+            policy_snapshot.bytes(),
+            legacy.validated_policy_snapshot.bytes()
+        );
+        let message = proposal.acceptance_context.message_id.as_deref().unwrap();
+        let (final_carrier, _, final_cap) =
+            resolve_continue_e2_policy_carrier(&prepared, Some(message), Some(&inputs), Some(&snapshot)).unwrap();
+        let mut allocated = initial;
+        allocated.subject.message_id = Some(message.into());
+        assert_eq!(allocated, final_carrier);
+        assert_eq!(cap, final_cap);
+        assert_eq!(
+            submit_request.policy_snapshot_carrier.as_ref(),
+            Some(&final_carrier)
+        );
+        let reconstructed = build_continue_world_worker_submit_request_with_acceptance_context(
+            &prepared,
+            proposal.acceptance_context.clone(),
+            Some(&inputs),
+            Some(&snapshot),
+        )
+        .unwrap();
+        assert_eq!(*submit_request, reconstructed);
+        let WorldWorkSubmissionIdentityV1::RetainedTurn {
+            canonical_member_turn_submit_request_sha256,
+            ..
+        } = &proposal.submission_identity
+        else {
+            panic!("retained proposal")
+        };
+        assert_eq!(
+            &canonical_world_work_submission_sha256(&prepared.request, &reconstructed).unwrap(),
+            canonical_member_turn_submit_request_sha256
+        );
+        // This is pre-delivery proof only. No parent or child request is sent.
+        let replacement = home.path().join("agents/replacement");
+        fs::write(
+            &replacement,
+            fs::read(home.path().join("agents/codex.yaml")).unwrap(),
+        )
+        .unwrap();
+        fs::set_permissions(&replacement, fs::Permissions::from_mode(0o600)).unwrap();
+        fs::rename(replacement, home.path().join("agents/codex.yaml")).unwrap();
+        assert!(
+            resolve_continue_e2_policy_carrier(&prepared, Some(message), Some(&inputs), Some(&snapshot)).is_err()
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn test_e3f_submission_cancel_and_ambiguity_uninstalled_negative_edges() {
+        use crate::execution::agent_runtime::host_session_authority::facade::OpenedConfigProjectionHsaAuthorityV1;
+        use crate::execution::agent_runtime::host_session_authority::trusted_fs::{
+            HeldE3AgentInventoryRootV1, TrustedWorkspaceRoot,
+        };
+        use config_projection::{
+            AgentConfigProjectionServiceV1, CanonicalDirectoryV1, ConfigProjectionCodecV1,
+            ConfigProjectionRegistryV1, ConfiguredAcceptedHomeAuthorityV1,
+            InstalledAcceptedHomeBootstrapRecordV1, Timestamp,
+        };
+        use std::os::fd::AsFd;
+        use std::os::unix::fs::PermissionsExt;
+        use transport_api_types::{InstallBootstrapContextCarrierV1, InstallBootstrapContextV1};
+
+        use crate::execution::agent_inventory::hold_e3_selected_inventory_projection_v1;
+        let _env = world_env_guard();
+        let _binary = EnvVarGuard::set_path(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            test_world_codex_runtime_bin().as_path(),
+        );
+        let home = secure_authority_tempdir();
+        home.install_as_home();
+        write_world_dispatch_policy_with_fork_commands(
+            home.path(),
+            true,
+            &["cli:codex-world"],
+            &[
+                "spawn_world_worker",
+                "fork_world_worker",
+                "continue_world_worker",
+            ],
+            &["retained"],
+        );
+        fs::set_permissions(
+            home.path().join("policy.yaml"),
+            fs::Permissions::from_mode(0o600),
+        )
+        .unwrap();
+        write_runtime_inventory_entry(home.path(), "codex-world", AgentExecutionScope::World);
+        let workspace = tempdir().unwrap();
+        activate_b_owned_dispatch_authority(
+            home.path(),
+            workspace.path(),
+            "sess_dispatch",
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
+        let (_, authority) =
+            seed_routable_e2_spawn_source("req-e3f-input-source", "orch_dispatch", "world-17", 2);
+        let accepted_home = CanonicalDirectoryV1::capture_linux_from_fd(
+            fs::File::open(home.path()).unwrap().as_fd(),
+        )
+        .unwrap();
+        let (PlatformPrincipalV1::Unix { account, uid }, _) =
+            crate::execution::install_bootstrap::current_unix_principal_and_home().unwrap()
+        else {
+            panic!("Linux principal required");
+        };
+        let carrier = InstallBootstrapContextCarrierV1::from_context(
+            InstallBootstrapContextV1::new_unix(&accepted_home.physical_path, &account, uid)
+                .unwrap(),
+        )
+        .unwrap();
+        let mut record = InstalledAcceptedHomeBootstrapRecordV1 {
+            schema_version: 1,
+            install_bootstrap_carrier: carrier.encode().unwrap(),
+            host_context_commitment: carrier.host_context_commitment,
+            intended_account: account,
+            intended_uid: u64::from(uid),
+            intended_gid: u64::from(unsafe { libc::getegid() }),
+            accepted_home,
+            installed_at: Timestamp("2026-09-17T00:00:00.000000Z".into()),
+            record_hash: String::new(),
+        };
+        let mut value = serde_json::to_value(&record).unwrap();
+        value.as_object_mut().unwrap().remove("record_hash");
+        record.record_hash = ConfigProjectionCodecV1::domain_sha256(
+            "substrate.e3.installed-accepted-home-bootstrap.v1",
+            &serde_json::json!({"record": value}),
+        )
+        .unwrap();
+        let configured =
+            Arc::new(ConfiguredAcceptedHomeAuthorityV1::from_record_for_test(record).unwrap());
+        let bridge = Arc::new(
+            OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home(&configured)
+                .unwrap(),
+        );
+        let registry = Arc::new(ConfigProjectionRegistryV1::open(bridge).unwrap());
+        let service = Arc::new(
+            AgentConfigProjectionServiceV1::new(registry.clone(), configured.clone()).unwrap(),
+        );
+
+        fs::create_dir_all(workspace.path().join(".substrate")).unwrap();
+        fs::write(workspace.path().join(".substrate/workspace.yaml"), "{}\n").unwrap();
+        fs::write(home.path().join("config.yaml"), "llm: {enabled: true, gateway: {enabled: true, mode: in_world}, routing: {default_backend: 'cli:codex-world'}}\nagents: {enabled: true, defaults: {execution: {scope: world}, cli: {mode: persistent}}}\nworld: {enabled: true}\n").unwrap();
+        fs::set_permissions(
+            home.path().join("config.yaml"),
+            fs::Permissions::from_mode(0o600),
+        )
+        .unwrap();
+        fs::write(
+            home.path().join("agents/codex.yaml"),
+            r#"version: 3
+id: codex
+config:
+  enabled: true
+  kind: cli
+  protocol: substrate.agent.session
+  placements:
+    host:
+      enabled: true
+      cli:
+        binary: codex
+        mode: persistent
+        runtime_family: codex
+      api: null
+      capabilities:
+        session_start: true
+      runtime_projection: null
+    world:
+      enabled: true
+      cli:
+        binary: /var/lib/substrate/world-deps/codex-runtime/bin/codex
+        mode: persistent
+        runtime_family: codex
+      api: null
+      capabilities:
+        session_start: true
+        session_resume: true
+        session_fork: true
+        session_stop: true
+        status_snapshot: true
+        event_stream: true
+        llm: true
+        mcp_client: false
+      runtime_projection:
+        model: codex
+        mcp_servers: []
+        features: []
+"#,
+        )
+        .unwrap();
+        fs::set_permissions(
+            home.path().join("agents/codex.yaml"),
+            fs::Permissions::from_mode(0o600),
+        )
+        .unwrap();
+        let workspace_root = CanonicalDirectoryV1::capture_linux_from_fd(
+            fs::File::open(workspace.path()).unwrap().as_fd(),
+        )
+        .unwrap();
+        let config_projection::DirectoryPhysicalIdentityV1::Linux { device_id, inode } =
+            workspace_root.physical_identity;
+        let trusted_workspace = TrustedWorkspaceRoot::open_exact(
+            &crate::execution::agent_runtime::host_session_authority::schema::CanonicalDirectoryV1 {
+                physical_path: workspace_root.physical_path.clone(),
+                physical_identity: crate::execution::agent_runtime::host_session_authority::schema::DirectoryPhysicalIdentityV1::Linux { device_id, inode },
+            },
+        ).unwrap();
+        let trusted_home = TrustedAuthorityRoot::open(home.path()).unwrap();
+        let bootstrap_home = authority.bootstrap_home();
+        let snapshot = config_model::resolve_e3_effective_config_source_v1(
+            workspace.path(),
+            &bootstrap_home,
+            &workspace_root,
+        )
+        .unwrap();
+        let effective = config_model::extract_e3_effective_config_source_v1(
+            &registry.recover(None).unwrap().store.authority_store_id,
+            &snapshot,
+        )
+        .unwrap();
+        let global = HeldE3AgentInventoryRootV1::from_global(&trusted_home).unwrap();
+        let local = HeldE3AgentInventoryRootV1::from_workspace(&trusted_workspace).unwrap();
+        let selection = hold_e3_selected_inventory_projection_v1(
+            &bootstrap_home,
+            &global,
+            &local,
+            &effective,
+            None,
+        )
+        .unwrap();
+
+        let (transport, input, auth) = e3f_prepare_request_fixture(true);
+        let id = format!("e3p_{}", uuid::Uuid::now_v7());
+        let request =
+            build_e3_projection_prepare_request_v1(&transport, input.clone(), id.clone(), auth)
+                .unwrap();
+        let now = Utc::now();
+        let timestamp = Timestamp(now.to_rfc3339_opts(chrono::SecondsFormat::Micros, true));
+        // No artifacts are published by this negative fixture. Success against a
+        // bound authoritative subject needs the separate prepared-chain fixture.
+        let mut custody = E3ProducerPreparationCustodyV1 {
+            authoring_input_ref: input.clone(),
+            expected_effective: effective,
+            expected_inventory: selection
+                .selected_source()
+                .unwrap()
+                .source_material()
+                .clone(),
+            expected_logical: selection.logical().clone(),
+            expected_artifact_manifest: config_projection::TrustedRuntimeArtifactManifestV1 {
+                schema_version: 1,
+                authority_store_id: input.authority_store_id.clone(),
+                manifest_id: input.runtime_artifact_manifest_id.clone(),
+                revision: 1,
+                entries: vec![],
+                created_at: timestamp.clone(),
+                manifest_hash: input.runtime_artifact_manifest_hash.clone(),
+            },
+            common_transport: transport,
+            preparation_id: id.clone(),
+            preparation_idempotency_key: request.preparation_idempotency_key.clone(),
+            authoring_created_at: timestamp.clone(),
+            response: None,
+            cancel_request: None,
+            submission_state: E3ProducerSubmissionStateV1::Unsent,
+            service,
+            registry,
+        };
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let client =
+            transport_api_client::AgentClient::new(transport_api_client::Transport::UnixSocket {
+                path: home.path().join("never-installed.sock"),
+            })
+            .unwrap();
+        // The production client rejects this path before any socket traffic.
+        runtime
+            .block_on(cancel_e3_projection_preparation_v1(&mut custody, &client))
+            .unwrap();
+        assert!(custody.submission_state == E3ProducerSubmissionStateV1::Cancelled);
+        assert!(runtime
+            .block_on(submit_e3_projection_preparation_v1(
+                &mut custody,
+                request,
+                &client
+            ))
+            .is_err());
+        assert!(custody.submission_state == E3ProducerSubmissionStateV1::Cancelled);
+        custody.submission_state = E3ProducerSubmissionStateV1::Unsent;
+        let (_, _, synthetic_auth) = e3f_prepare_request_fixture(true);
+        let request = build_e3_projection_prepare_request_v1(
+            &custody.common_transport,
+            input,
+            id.clone(),
+            synthetic_auth,
+        )
+        .unwrap();
+        let frozen_key = custody.preparation_idempotency_key.clone();
+        let frozen_e2 = custody.common_transport.e2_launch_activation.clone();
+        assert!(runtime
+            .block_on(submit_e3_projection_preparation_v1(
+                &mut custody,
+                request,
+                &client
+            ))
+            .is_err());
+        assert!(custody.submission_state == E3ProducerSubmissionStateV1::ExpiryRecoveryRequired);
+        assert!(custody.response.is_none() && custody.cancel_request.is_none());
+        assert_eq!(custody.preparation_id, id);
+        assert_eq!(custody.preparation_idempotency_key, frozen_key);
+        assert_eq!(custody.common_transport.e2_launch_activation, frozen_e2);
+        assert!(runtime
+            .block_on(cancel_e3_projection_preparation_v1(&mut custody, &client))
+            .is_err());
+        for state in [
+            E3ProducerSubmissionStateV1::PrepareEntered,
+            E3ProducerSubmissionStateV1::ExecuteEntered,
+            E3ProducerSubmissionStateV1::Transferred,
+        ] {
+            custody.submission_state = state;
+            assert!(runtime
+                .block_on(cancel_e3_projection_preparation_v1(&mut custody, &client))
+                .is_err());
+            assert!(custody.cancel_request.is_none());
+        }
+        let store_id = custody.expected_effective.authority_store_id.clone();
+        let series_id = format!("cps_{}", uuid::Uuid::now_v7());
+        let mut response = transport_api_types::E3ConfigProjectionPrepareResponseV1 {
+            schema_version: 1,
+            preparation_id: id.clone(),
+            preparation_idempotency_key: frozen_key,
+            prepared_at: timestamp.0,
+            expires_at: (now + chrono::Duration::seconds(120))
+                .to_rfc3339_opts(chrono::SecondsFormat::Micros, true),
+            response_hash: String::new(),
+            config_projection: transport_api_types::ConfigProjectionActivationCarrierV1 {
+                authority_store_id: store_id.clone(),
+                series_id: series_id.clone(),
+                dormant_projection_ref: transport_api_types::ConfigProjectionRefV1 {
+                    authority_store_id: store_id.clone(),
+                    series_id,
+                    record_id: format!("cpr_{}", uuid::Uuid::now_v7()),
+                    revision: 1,
+                    record_hash: "d".repeat(64),
+                },
+                activation_intent_ref: transport_api_types::ManagedGatewayActivationIntentRefV1 {
+                    authority_store_id: store_id.clone(),
+                    activation_intent_id: format!("gai_{}", uuid::Uuid::now_v7()),
+                    intent_hash: "e".repeat(64),
+                },
+                expected_gateway_ref: transport_api_types::InWorldGatewayRefV1 {
+                    authority_store_id: store_id,
+                    gateway_instance_id: format!("cgi_{}", uuid::Uuid::now_v7()),
+                    gateway_identity_hash: "f".repeat(64),
+                },
+                fence_id: format!("cpf_{}", uuid::Uuid::now_v7()),
+                consumer_id: format!("cpc_{}", id.strip_prefix("e3p_").unwrap()),
+                consumer_lease_revision: 1,
+                consumer_lease_hash: "a".repeat(64),
+            },
+        };
+        let mut value = serde_json::to_value(&response).unwrap();
+        value.as_object_mut().unwrap().remove("response_hash");
+        response.response_hash = ConfigProjectionCodecV1::domain_sha256(
+            "substrate.e3.config-projection-prepare-response.v1",
+            &serde_json::json!({"response":value}),
+        )
+        .unwrap();
+        response
+            .validate()
+            .expect("self-consistent response is a distinct negative control");
+        assert!(validate_e3_projection_prepare_response_v1(&custody, &response).is_err());
+        assert!(
+            custody.cancel_request.is_none(),
+            "unbound subject never authorizes cancellation"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn test_e3f_authoring_producers_reject_wrong_kind_and_source_substitution() {
+        use crate::execution::agent_runtime::dispatch_policy_commitment::DispatchPolicyCommitmentRefV1;
+        use crate::execution::agent_runtime::host_session_authority::facade::OpenedConfigProjectionHsaAuthorityV1;
+        use crate::execution::agent_runtime::host_session_authority::trusted_fs::{
+            HeldE3AgentInventoryRootV1, TrustedWorkspaceRoot,
+        };
+        use config_projection::{
+            AgentConfigProjectionServiceV1, CanonicalDirectoryV1, ConfigProjectionCodecV1,
+            ConfigProjectionRegistryV1, ConfiguredAcceptedHomeAuthorityV1,
+            InstalledAcceptedHomeBootstrapRecordV1, Timestamp,
+        };
+        use std::os::fd::AsFd;
+        use std::os::unix::fs::PermissionsExt;
+        use transport_api_types::{InstallBootstrapContextCarrierV1, InstallBootstrapContextV1};
+
+        let _env = world_env_guard();
+        let _binary = EnvVarGuard::set_path(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            test_world_codex_runtime_bin().as_path(),
+        );
+        let home = secure_authority_tempdir();
+        home.install_as_home();
+        write_allowed_world_dispatch_policy(
+            home.path(),
+            "cli:codex-world",
+            &["spawn_world_worker"],
+            &["retained"],
+        );
+        write_runtime_inventory_entry(home.path(), "codex-world", AgentExecutionScope::World);
+        let workspace = tempdir().unwrap();
+        activate_b_owned_dispatch_authority(
+            home.path(),
+            workspace.path(),
+            "sess_dispatch",
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
+        let prepared = prepare_authority_bound_spawn_world_worker(sample_spawn_request()).unwrap();
+        let reference = &prepared.e2_launch_activation.commitment_ref;
+        let authenticated = authenticate_dispatch_policy_commitment(
+            &prepared.authority,
+            &DispatchPolicyCommitmentRefV1 {
+                authority_store_id: reference.authority_store_id.clone(),
+                commitment_id: reference.commitment_id.clone(),
+                exact_linkage_hash: reference.exact_linkage_hash.clone(),
+            },
+        )
+        .unwrap();
+        let accepted_home = CanonicalDirectoryV1::capture_linux_from_fd(
+            fs::File::open(home.path()).unwrap().as_fd(),
+        )
+        .unwrap();
+        let (PlatformPrincipalV1::Unix { account, uid }, _) =
+            crate::execution::install_bootstrap::current_unix_principal_and_home().unwrap()
+        else {
+            panic!("Linux principal required");
+        };
+        let carrier = InstallBootstrapContextCarrierV1::from_context(
+            InstallBootstrapContextV1::new_unix(&accepted_home.physical_path, &account, uid)
+                .unwrap(),
+        )
+        .unwrap();
+        let mut record = InstalledAcceptedHomeBootstrapRecordV1 {
+            schema_version: 1,
+            install_bootstrap_carrier: carrier.encode().unwrap(),
+            host_context_commitment: carrier.host_context_commitment,
+            intended_account: account,
+            intended_uid: u64::from(uid),
+            intended_gid: u64::from(unsafe { libc::getegid() }),
+            accepted_home,
+            installed_at: Timestamp("2026-09-17T00:00:00.000000Z".into()),
+            record_hash: String::new(),
+        };
+        let mut value = serde_json::to_value(&record).unwrap();
+        value.as_object_mut().unwrap().remove("record_hash");
+        record.record_hash = ConfigProjectionCodecV1::domain_sha256(
+            "substrate.e3.installed-accepted-home-bootstrap.v1",
+            &serde_json::json!({"record": value}),
+        )
+        .unwrap();
+        let configured =
+            Arc::new(ConfiguredAcceptedHomeAuthorityV1::from_record_for_test(record).unwrap());
+        let bridge = Arc::new(
+            OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home(&configured)
+                .unwrap(),
+        );
+        let registry = Arc::new(ConfigProjectionRegistryV1::open(bridge).unwrap());
+        let service = AgentConfigProjectionServiceV1::new(registry.clone(), configured).unwrap();
+        let before = registry.recover(None).unwrap();
+        let workspace_root = CanonicalDirectoryV1::capture_linux_from_fd(
+            fs::File::open(workspace.path()).unwrap().as_fd(),
+        )
+        .unwrap();
+        let trusted_home = TrustedAuthorityRoot::open(home.path()).unwrap();
+        let config_projection::DirectoryPhysicalIdentityV1::Linux { device_id, inode } =
+            workspace_root.physical_identity;
+        let trusted_workspace = TrustedWorkspaceRoot::open_exact(&crate::execution::agent_runtime::host_session_authority::schema::CanonicalDirectoryV1 {
+            physical_path: workspace_root.physical_path.clone(),
+            physical_identity: crate::execution::agent_runtime::host_session_authority::schema::DirectoryPhysicalIdentityV1::Linux { device_id, inode },
+        }).unwrap();
+        fs::create_dir_all(workspace.path().join(".substrate")).unwrap();
+        fs::write(workspace.path().join(".substrate/workspace.yaml"), "{}\n").unwrap();
+        fs::write(home.path().join("config.yaml"), "llm: {enabled: true, gateway: {enabled: true, mode: in_world}, routing: {default_backend: 'cli:codex-world'}}\nagents: {enabled: true, defaults: {execution: {scope: world}, cli: {mode: persistent}}}\nworld: {enabled: true}\n").unwrap();
+        fs::set_permissions(
+            home.path().join("config.yaml"),
+            fs::Permissions::from_mode(0o600),
+        )
+        .unwrap();
+
+        fs::write(
+            home.path().join("agents/codex.yaml"),
+            r#"version: 3
+id: codex
+config:
+  enabled: true
+  kind: cli
+  protocol: substrate.agent.session
+  placements:
+    host:
+      enabled: true
+      cli:
+        binary: codex
+        mode: persistent
+        runtime_family: codex
+      api: null
+      capabilities:
+        session_start: true
+      runtime_projection: null
+    world:
+      enabled: true
+      cli:
+        binary: /var/lib/substrate/world-deps/codex-runtime/bin/codex
+        mode: persistent
+        runtime_family: codex
+      api: null
+      capabilities:
+        session_start: true
+        session_resume: true
+        session_fork: true
+        session_stop: true
+        status_snapshot: true
+        event_stream: true
+        llm: true
+        mcp_client: false
+      runtime_projection:
+        model: codex
+        mcp_servers: []
+        features: []
+"#,
+        )
+        .unwrap();
+        fs::set_permissions(
+            home.path().join("agents/codex.yaml"),
+            fs::Permissions::from_mode(0o600),
+        )
+        .unwrap();
+        let global = HeldE3AgentInventoryRootV1::from_global(&trusted_home).unwrap();
+        let local = HeldE3AgentInventoryRootV1::from_workspace(&trusted_workspace).unwrap();
+        let bootstrap_home = prepared.authority.bootstrap_home();
+        let snapshot = config_model::resolve_e3_effective_config_source_v1(
+            workspace.path(),
+            &bootstrap_home,
+            &workspace_root,
+        )
+        .unwrap();
+        let effective = config_model::extract_e3_effective_config_source_v1(
+            &before.store.authority_store_id,
+            &snapshot,
+        )
+        .unwrap();
+        let selection =
+            crate::execution::agent_inventory::hold_e3_selected_inventory_projection_v1(
+                &bootstrap_home,
+                &global,
+                &local,
+                &effective,
+                None,
+            )
+            .unwrap();
+        let selected = selection.selected_source().unwrap();
+        let transport = build_spawn_world_worker_transport_request(
+            &prepared.request,
+            &prepared.descriptor,
+            &prepared.launch_authority_proof,
+            prepared.e2_launch_activation.clone(),
+            prepared.exact_policy_snapshot.clone(),
+        )
+        .unwrap();
+        let timestamp = Timestamp("2026-09-17T00:00:01.000000Z".into());
+        // Wrong producer kind still fails before publication or credential resolution.
+        let error = author_e3_projection_for_fork(
+            &bootstrap_home,
+            &snapshot,
+            &effective,
+            selection.logical(),
+            selected,
+            &authenticated,
+            &transport,
+            &service,
+            &registry,
+            selection.policy(),
+            home.path(),
+            "e3p_018f0892-cc48-7a56-b711-9f17a2a81586".into(),
+            timestamp.clone(),
+        )
+        .err()
+        .expect("authoring must reject without exposing transient auth");
+        assert!(error
+            .to_string()
+            .contains("exact authenticated E2 launch kind"));
+
+        let inventory_path = home.path().join("agents/codex.yaml");
+        let replacement = home.path().join("agents/replacement");
+        fs::write(&replacement, fs::read(&inventory_path).unwrap()).unwrap();
+        fs::set_permissions(&replacement, fs::Permissions::from_mode(0o600)).unwrap();
+        fs::rename(replacement, inventory_path).unwrap();
+        let error = author_e3_projection_for_spawn(
+            &bootstrap_home,
+            &snapshot,
+            &effective,
+            selection.logical(),
+            selected,
+            &authenticated,
+            &transport,
+            &service,
+            &registry,
+            selection.policy(),
+            home.path(),
+            "e3p_018f0892-cc48-7a56-b711-9f17a2a81586".into(),
+            timestamp.clone(),
+        )
+        .err()
+        .expect("authoring must reject without exposing transient auth");
+        assert_eq!(
+            error.downcast_ref::<config_projection::ConfigProjectionFailureV1>(),
+            Some(&config_projection::ConfigProjectionFailureV1::UnsupportedSecurityPosture)
+        );
+        let after = registry.recover(None).unwrap();
+        assert_eq!(after.store, before.store);
+        assert!(after.subject.is_none() && before.subject.is_none());
+        assert!(after.kernel_effects.is_empty() && before.kernel_effects.is_empty());
+        for directory in [
+            "inputs/effective-config",
+            "inputs/agent-inventory",
+            "runtime-artifacts",
+        ] {
+            assert_eq!(
+                fs::read_dir(
+                    home.path()
+                        .join("authority-v1/agent-config-projection-v1")
+                        .join(directory)
+                )
+                .unwrap()
+                .count(),
+                0
+            );
+        }
+    }
+
     #[cfg(target_os = "linux")]
     fn secure_authority_tempdir() -> AuthorityEnvTestTempDir {
         use std::os::unix::fs::PermissionsExt as _;
@@ -14213,6 +16049,223 @@ mod tests {
             .validate()
             .expect("valid E2 launch activation fixture");
         carrier
+    }
+
+    #[cfg(target_os = "linux")]
+    fn e3f_prepare_request_fixture(
+        fork: bool,
+    ) -> (
+        MemberDispatchTransportRequest,
+        config_projection::ConfigProjectionAuthoringInputRefV1,
+        transport_api_types::GatewayIntegratedAuthPayloadV1,
+    ) {
+        let request = if fork {
+            sample_fork_request()
+        } else {
+            sample_spawn_request()
+        };
+        let proof = sample_retained_launch_authority_proof();
+        let snapshot = minimal_policy_snapshot().canonicalize().unwrap();
+        let bytes = serde_json::to_vec(&snapshot).unwrap();
+        let hash = format!("{:x}", Sha256::digest(&bytes));
+        let activation = sample_e2_launch_activation(
+            if fork {
+                transport_api_types::E2MemberLaunchKindV1::Fork
+            } else {
+                transport_api_types::E2MemberLaunchKindV1::FreshSpawn
+            },
+            &request,
+            &proof.retained_participant_id,
+            &proof.bootstrap_run_id,
+            fork.then_some("ash_member"),
+            &bytes,
+            &hash,
+        );
+        let transport = MemberDispatchTransportRequest {
+            orchestration_session_id: request.orchestration_session_id,
+            participant_id: proof.retained_participant_id.clone(),
+            orchestrator_participant_id: request.caller_participant_id,
+            parent_participant_id: fork.then(|| "ash_member".into()),
+            resumed_from_participant_id: None,
+            backend_id: request.target_backend_id,
+            protocol: proof.protocol.clone(),
+            run_id: proof.bootstrap_run_id.clone(),
+            world_id: request.world_id,
+            world_generation: request.world_generation,
+            initial_prompt: Some("ordinary fixture prompt".into()),
+            backend_kind: transport_api_types::MemberRuntimeBackendKindV1::Codex,
+            binary_path: "/usr/bin/codex".into(),
+            retained_worker_launch_authority: (!fork).then_some(proof),
+            e2_launch_activation: Some(activation),
+            config_projection: None,
+            exact_policy_snapshot: Some(
+                ExactDispatchPolicySnapshotMaterialV1::from_exact_e1_material(
+                    snapshot, bytes, hash,
+                )
+                .unwrap(),
+            ),
+        };
+        let mut input = config_projection::ConfigProjectionAuthoringInputRefV1 {
+            authority_store_id: "cpa_018f0f3a-9b2c-7def-8abc-0123456789ab".into(),
+            effective_config_source_hash: "a".repeat(64),
+            agent_inventory_source_hash: "b".repeat(64),
+            runtime_artifact_manifest_id: "ram_018f0f3a-9b2c-7def-8abc-0123456789ac".into(),
+            runtime_artifact_manifest_revision: 1,
+            runtime_artifact_manifest_hash: "c".repeat(64),
+            input_ref_hash: String::new(),
+        };
+        input.input_ref_hash = input.canonical_hash().unwrap();
+        let auth = transport_api_types::GatewayIntegratedAuthPayloadV1 {
+            backend_id: transport.backend_id.clone(),
+            cli_codex: Some(transport_api_types::GatewayCliCodexIntegratedAuthV1 {
+                account_id: None,
+                access_token: "e3f-unit-only-synthetic-token".into(),
+            }),
+            api_env: None,
+        };
+        (transport, input, auth)
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_e3f_prepare_request_preserves_spawn_and_fork_subject() {
+        for fork in [false, true] {
+            let (transport, input, auth) = e3f_prepare_request_fixture(fork);
+            let id = "e3p_018f0f3a-9b2c-7def-8abc-0123456789ad".to_string();
+            let request = build_e3_projection_prepare_request_v1(
+                &transport,
+                input.clone(),
+                id.clone(),
+                auth.clone(),
+            )
+            .unwrap();
+            request.validate().unwrap();
+            // Strict transport decoding independently checks the existing key preimage.
+            let decoded: transport_api_types::E3ConfigProjectionPrepareRequestV1 =
+                serde_json::from_value(serde_json::to_value(&request).unwrap()).unwrap();
+            assert_eq!(
+                decoded.preparation_idempotency_key,
+                request.preparation_idempotency_key
+            );
+            assert_eq!(request.preparation_id, id);
+            assert_eq!(request.authoring_input_ref, input);
+            assert_eq!(
+                request.orchestration_session_id,
+                transport.orchestration_session_id
+            );
+            assert_eq!(request.participant_id, transport.participant_id);
+            assert_eq!(
+                request.orchestrator_participant_id,
+                transport.orchestrator_participant_id
+            );
+            assert_eq!(
+                request.parent_participant_id,
+                transport.parent_participant_id
+            );
+            assert_eq!(
+                request.resumed_from_participant_id,
+                transport.resumed_from_participant_id
+            );
+            assert_eq!(request.backend_id, transport.backend_id);
+            assert_eq!(request.protocol, transport.protocol);
+            assert_eq!(request.run_id, transport.run_id);
+            assert_eq!(request.world_id, transport.world_id);
+            assert_eq!(request.world_generation, transport.world_generation);
+            assert_eq!(request.resolved_runtime.binary_path, transport.binary_path);
+            assert_eq!(
+                request.resolved_runtime.backend_kind,
+                transport.backend_kind
+            );
+            assert_eq!(
+                request.retained_worker_launch_authority,
+                transport.retained_worker_launch_authority
+            );
+            assert_eq!(
+                Some(&request.e2_launch_activation),
+                transport.e2_launch_activation.as_ref()
+            );
+            let mut rotated = auth.clone();
+            rotated.cli_codex.as_mut().unwrap().access_token = "e3f-unit-only-rotated-token".into();
+            let retry = build_e3_projection_prepare_request_v1(
+                &transport,
+                input.clone(),
+                id.clone(),
+                rotated,
+            )
+            .unwrap();
+            assert_eq!(
+                retry.preparation_idempotency_key,
+                request.preparation_idempotency_key
+            );
+            let mut account = auth;
+            account.cli_codex.as_mut().unwrap().account_id = Some("synthetic-account".into());
+            let with_account = build_e3_projection_prepare_request_v1(
+                &transport,
+                input.clone(),
+                id.clone(),
+                account.clone(),
+            )
+            .unwrap();
+            assert_ne!(
+                with_account.preparation_idempotency_key,
+                request.preparation_idempotency_key
+            );
+            account.cli_codex.as_mut().unwrap().account_id =
+                Some("rotated-synthetic-account".into());
+            let rotated_account =
+                build_e3_projection_prepare_request_v1(&transport, input, id, account).unwrap();
+            assert_eq!(
+                with_account.preparation_idempotency_key,
+                rotated_account.preparation_idempotency_key
+            );
+            assert!(transport.config_projection.is_none());
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_e3f_prepare_request_rejects_missing_or_changed_e2() {
+        let (transport, input, auth) = e3f_prepare_request_fixture(false);
+        let mutations: [fn(&mut MemberDispatchTransportRequest); 9] = [
+            |value| value.e2_launch_activation = None,
+            |value| value.exact_policy_snapshot = None,
+            |value| {
+                value
+                    .exact_policy_snapshot
+                    .as_mut()
+                    .unwrap()
+                    .policy_snapshot_bytes
+                    .push(b' ')
+            },
+            |value| value.world_generation += 1,
+            |value| value.parent_participant_id = Some("other-source".into()),
+            |value| value.retained_worker_launch_authority = None,
+            |value| value.run_id.push_str("-changed"),
+            |value| value.config_projection = Some(e3a_projection_carrier()),
+            |value| {
+                value.backend_kind = transport_api_types::MemberRuntimeBackendKindV1::ClaudeCode
+            },
+        ];
+        for mutate in mutations {
+            let mut changed = transport.clone();
+            mutate(&mut changed);
+            assert!(build_e3_projection_prepare_request_v1(
+                &changed,
+                input.clone(),
+                "e3p_018f0f3a-9b2c-7def-8abc-0123456789ad".into(),
+                auth.clone(),
+            )
+            .is_err());
+        }
+        let (mut fork, input, auth) = e3f_prepare_request_fixture(true);
+        fork.retained_worker_launch_authority = Some(sample_retained_launch_authority_proof());
+        assert!(build_e3_projection_prepare_request_v1(
+            &fork,
+            input,
+            "e3p_018f0f3a-9b2c-7def-8abc-0123456789ad".into(),
+            auth,
+        )
+        .is_err());
     }
 
     #[cfg(target_os = "linux")]

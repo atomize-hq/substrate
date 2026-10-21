@@ -519,6 +519,7 @@ pub(crate) struct CliConfigOverrides {
     reason = "E3-C source authoring precedes E3 runtime adoption"
 )]
 enum E3PinnedConfigPatchSourceV1<'authority> {
+    WorkspaceAbsent,
     Global {
         opened: crate::execution::agent_runtime::host_session_authority::facade::OpenedBootstrapConfigSourceV1<'authority>,
         source_root: config_projection::CanonicalDirectoryV1,
@@ -543,11 +544,253 @@ enum E3PinnedConfigPatchSourceV1<'authority> {
     dead_code,
     reason = "E3-C source authoring precedes E3 runtime adoption"
 )]
-struct E3EffectiveConfigResolutionSnapshotV1<'authority> {
+pub(super) struct E3EffectiveConfigResolutionSnapshotV1<'authority> {
     effective: SubstrateConfig,
     explain: ConfigExplainV1,
     global_patch: E3PinnedConfigPatchSourceV1<'authority>,
     workspace_patch: E3PinnedConfigPatchSourceV1<'authority>,
+    workspace_selection: E3WorkspaceConfigSelectionGuardV1,
+}
+
+#[cfg(target_os = "linux")]
+impl E3EffectiveConfigResolutionSnapshotV1<'_> {
+    pub(super) fn effective_config(&self) -> &SubstrateConfig {
+        &self.effective
+    }
+
+    pub(super) fn revalidate(&self) -> Result<()> {
+        let E3PinnedConfigPatchSourceV1::Global { opened, .. } = &self.global_patch else {
+            return Err(user_error("E3 global source posture is malformed"));
+        };
+        opened.revalidate().map_err(|error| user_error(error.to_string()))?;
+        self.workspace_selection.revalidate()
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug, PartialEq, Eq)]
+enum E3ConfigEntryObservationV1 {
+    Missing,
+    Present {
+        device: u64,
+        inode: u64,
+        mode: u32,
+        owner: u32,
+        group: u32,
+        // Directory contents unrelated to selection may change. File metadata may not.
+        content: Option<(u64, u64, i64, i64, i64, i64)>,
+    },
+}
+
+#[cfg(target_os = "linux")]
+fn observe_e3_config_entry_v1(directory: &File, name: &str) -> Result<E3ConfigEntryObservationV1> {
+    let name = std::ffi::CString::new(name)?;
+    let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+    // SAFETY: the held descriptor, component and output pointer are valid.
+    if unsafe {
+        libc::fstatat(
+            directory.as_raw_fd(),
+            name.as_ptr(),
+            stat.as_mut_ptr(),
+            libc::AT_SYMLINK_NOFOLLOW,
+        )
+    } != 0
+    {
+        let error = io::Error::last_os_error();
+        return if error.raw_os_error() == Some(libc::ENOENT) {
+            Ok(E3ConfigEntryObservationV1::Missing)
+        } else {
+            Err(error).context("failed to inspect configuration selection entry")
+        };
+    }
+    // SAFETY: fstatat initialized stat on success.
+    let stat = unsafe { stat.assume_init() };
+    if stat.st_mode & libc::S_IFMT == libc::S_IFLNK {
+        return Err(user_error("symlink in configuration selection"));
+    }
+    Ok(E3ConfigEntryObservationV1::Present {
+        device: stat.st_dev,
+        inode: stat.st_ino,
+        mode: stat.st_mode,
+        owner: stat.st_uid,
+        group: stat.st_gid,
+        content: (stat.st_mode & libc::S_IFMT != libc::S_IFDIR).then_some((
+            stat.st_nlink,
+            stat.st_size as u64,
+            stat.st_mtime,
+            stat.st_mtime_nsec,
+            stat.st_ctime,
+            stat.st_ctime_nsec,
+        )),
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn open_e3_config_directory_v1(path: &Path) -> Result<File> {
+    use std::os::unix::ffi::OsStrExt;
+    if !path.is_absolute() {
+        return Err(user_error(
+            "configuration guard requires an absolute directory",
+        ));
+    }
+    let mut held = File::open("/")?;
+    for component in path.components() {
+        match component {
+            std::path::Component::RootDir => continue,
+            std::path::Component::Normal(name) => {
+                let name = std::ffi::CString::new(name.as_bytes())?;
+                // SAFETY: held descriptor and name are valid. Every component rejects symlinks.
+                let fd = unsafe {
+                    libc::openat(
+                        held.as_raw_fd(),
+                        name.as_ptr(),
+                        libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+                    )
+                };
+                if fd < 0 {
+                    return Err(io::Error::last_os_error())
+                        .context("untrusted configuration directory traversal");
+                }
+                // SAFETY: successful openat returned a new owned descriptor.
+                held = unsafe { File::from_raw_fd(fd) };
+            }
+            _ => return Err(user_error("configuration directory is not normalized")),
+        }
+    }
+    Ok(held)
+}
+
+#[cfg(target_os = "linux")]
+struct E3ConfigDirectoryObservationV1 {
+    path: PathBuf,
+    held: File,
+    identity: E3ConfigEntryObservationV1,
+    entries: Vec<(&'static str, E3ConfigEntryObservationV1)>,
+}
+
+#[cfg(target_os = "linux")]
+struct E3WorkspaceConfigSelectionGuardV1 {
+    authenticated_workspace: config_projection::CanonicalDirectoryV1,
+    held_workspace: File,
+    start: PathBuf,
+    directories: Vec<E3ConfigDirectoryObservationV1>,
+    selected_root: Option<PathBuf>,
+}
+
+#[cfg(target_os = "linux")]
+impl E3WorkspaceConfigSelectionGuardV1 {
+    fn capture(cwd: &Path, expected: &config_projection::CanonicalDirectoryV1) -> Result<Self> {
+        let held_workspace = open_e3_config_directory_v1(Path::new(&expected.physical_path))?;
+        let meta = held_workspace.metadata()?;
+        let identity = config_projection::DirectoryPhysicalIdentityV1::Linux {
+            device_id: meta.dev(),
+            inode: meta.ino(),
+        };
+        if identity != expected.physical_identity {
+            return Err(user_error("authenticated workspace identity changed"));
+        }
+        let start = if cwd.is_absolute() {
+            cwd.to_path_buf()
+        } else {
+            env::current_dir()?.join(cwd)
+        };
+        // Prove the start before selecting an ancestor; never use canonicalization fallback.
+        let held_start = open_e3_config_directory_v1(&start)?;
+        let canonical_start = cwd.canonicalize()?;
+        if canonical_start != start || !start.starts_with(&expected.physical_path) {
+            return Err(user_error(
+                "configuration start is outside the authenticated workspace",
+            ));
+        }
+        drop(held_start);
+        let mut guard = Self {
+            authenticated_workspace: expected.clone(),
+            held_workspace,
+            start,
+            directories: Vec::new(),
+            selected_root: None,
+        };
+        for path in guard.start.ancestors() {
+            let held = open_e3_config_directory_v1(path)?;
+            let identity = observe_e3_config_entry_v1(&held, ".")?;
+            let substrate = observe_e3_config_entry_v1(&held, ".substrate")?;
+            let is_directory = matches!(&substrate, E3ConfigEntryObservationV1::Present { mode, .. } if mode & libc::S_IFMT == libc::S_IFDIR);
+            guard.directories.push(E3ConfigDirectoryObservationV1 {
+                path: path.to_path_buf(),
+                held,
+                identity,
+                entries: vec![(".substrate", substrate)],
+            });
+            if !is_directory {
+                continue;
+            }
+            let substrate_path = path.join(".substrate");
+            let held = open_e3_config_directory_v1(&substrate_path)?;
+            let identity = observe_e3_config_entry_v1(&held, ".")?;
+            if identity != guard.directories.last().unwrap().entries[0].1 {
+                return Err(user_error(
+                    "configuration control directory changed during selection",
+                ));
+            }
+            let marker = observe_e3_config_entry_v1(&held, "workspace.yaml")?;
+            let disabled = observe_e3_config_entry_v1(&held, "workspace.disabled")?;
+            let selected = matches!(&marker, E3ConfigEntryObservationV1::Present { mode, .. } if mode & libc::S_IFMT == libc::S_IFREG)
+                && disabled == E3ConfigEntryObservationV1::Missing;
+            let mut entries = vec![("workspace.yaml", marker), ("workspace.disabled", disabled)];
+            if selected {
+                let legacy = observe_e3_config_entry_v1(&held, "settings.yaml")?;
+                if legacy != E3ConfigEntryObservationV1::Missing {
+                    return Err(user_error(
+                        "unsupported workspace control entry is present: .substrate/settings.yaml",
+                    ));
+                }
+                entries.push(("settings.yaml", legacy));
+                guard.selected_root = Some(path.to_path_buf());
+            }
+            guard.directories.push(E3ConfigDirectoryObservationV1 {
+                path: substrate_path,
+                held,
+                identity,
+                entries,
+            });
+            if selected {
+                break;
+            }
+        }
+        guard.revalidate()?;
+        Ok(guard)
+    }
+
+    fn revalidate(&self) -> Result<()> {
+        let workspace =
+            open_e3_config_directory_v1(Path::new(&self.authenticated_workspace.physical_path))?;
+        let held = self.held_workspace.metadata()?;
+        let named = workspace.metadata()?;
+        if held.dev() != named.dev()
+            || held.ino() != named.ino()
+            || self.authenticated_workspace.physical_identity
+                != (config_projection::DirectoryPhysicalIdentityV1::Linux {
+                    device_id: named.dev(),
+                    inode: named.ino(),
+                })
+        {
+            return Err(user_error("authenticated workspace identity changed"));
+        }
+        for directory in &self.directories {
+            let named = open_e3_config_directory_v1(&directory.path)?;
+            if observe_e3_config_entry_v1(&named, ".")? != directory.identity
+                || observe_e3_config_entry_v1(&directory.held, ".")? != directory.identity
+            {
+                return Err(user_error("configuration selection directory changed"));
+            }
+            for (name, observed) in &directory.entries {
+                if &observe_e3_config_entry_v1(&directory.held, name)? != observed {
+                    return Err(user_error("configuration selection source changed"));
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -1293,17 +1536,14 @@ pub(crate) fn resolve_effective_config_with_explain_for_bootstrap_home(
 fn open_e3_workspace_config_source_v1<'authority>(
     cwd: &Path,
     expected_workspace_root: &config_projection::CanonicalDirectoryV1,
-) -> Result<E3PinnedConfigPatchSourceV1<'authority>> {
+) -> Result<(E3PinnedConfigPatchSourceV1<'authority>, E3WorkspaceConfigSelectionGuardV1)> {
     use sha2::{Digest, Sha256};
     use std::ffi::CString;
 
-    let selected = workspace::find_workspace_root(cwd)
-        .ok_or_else(|| user_error("E3 requires a selected workspace configuration root"))?;
-    if selected.to_str() != Some(expected_workspace_root.physical_path.as_str()) {
-        return Err(user_error(
-            "selected workspace root does not match the projection workspace binding",
-        ));
-    }
+    let selection = E3WorkspaceConfigSelectionGuardV1::capture(cwd, expected_workspace_root)?;
+    let Some(selected) = selection.selected_root.as_ref() else {
+        return Ok((E3PinnedConfigPatchSourceV1::WorkspaceAbsent, selection));
+    };
     let held_source_root = OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW)
@@ -1322,12 +1562,6 @@ fn open_e3_workspace_config_source_v1<'authority>(
             inode: root_metadata.ino(),
         },
     };
-    if &source_root != expected_workspace_root {
-        return Err(user_error(
-            "opened workspace root identity does not match the projection workspace binding",
-        ));
-    }
-
     let substrate_name = CString::new(".substrate").expect("static component is valid");
     // SAFETY: the retained root descriptor and static component are valid; flags reject symlinks.
     let substrate_fd = unsafe {
@@ -1453,7 +1687,8 @@ fn open_e3_workspace_config_source_v1<'authority>(
         )));
     }
     let source_bytes_sha256 = format!("{:x}", Sha256::digest(&source_bytes));
-    Ok(E3PinnedConfigPatchSourceV1::Workspace {
+    selection.revalidate()?;
+    Ok((E3PinnedConfigPatchSourceV1::Workspace {
         source_root,
         held_source_root,
         source_relative_path: ".substrate/workspace.yaml".to_string(),
@@ -1463,7 +1698,7 @@ fn open_e3_workspace_config_source_v1<'authority>(
         file_byte_length: before.len(),
         source_bytes,
         source_bytes_sha256,
-    })
+    }, selection))
 }
 
 #[cfg(target_os = "linux")]
@@ -1471,7 +1706,7 @@ fn open_e3_workspace_config_source_v1<'authority>(
     dead_code,
     reason = "E3-C source authoring precedes E3 runtime adoption"
 )]
-fn resolve_e3_effective_config_source_v1<'authority>(
+pub(super) fn resolve_e3_effective_config_source_v1<'authority>(
     cwd: &Path,
     bootstrap_home: &crate::execution::agent_runtime::OpenedBootstrapHomeV1<'authority>,
     expected_workspace_root: &config_projection::CanonicalDirectoryV1,
@@ -1520,43 +1755,43 @@ fn resolve_e3_effective_config_source_v1<'authority>(
         source_relative_path: "config.yaml".to_string(),
     };
 
-    let workspace_patch = open_e3_workspace_config_source_v1(cwd, expected_workspace_root)?;
-    let E3PinnedConfigPatchSourceV1::Workspace {
-        source_root: workspace_root,
-        source_relative_path,
-        source_bytes,
-        ..
-    } = &workspace_patch
-    else {
-        unreachable!("workspace opener returns the workspace posture")
+    let (workspace_patch, workspace_selection) =
+        open_e3_workspace_config_source_v1(cwd, expected_workspace_root)?;
+    let workspace_layer = match &workspace_patch {
+        E3PinnedConfigPatchSourceV1::Workspace {
+            source_root, source_relative_path, source_bytes, ..
+        } => {
+            let path = PathBuf::from(&source_root.physical_path).join(source_relative_path);
+            let raw = std::str::from_utf8(source_bytes)
+                .map_err(|_| user_error(format!("invalid UTF-8 in {}", path.display())))?;
+            Some((parse_config_patch_yaml(&path, raw)?, path))
+        }
+        E3PinnedConfigPatchSourceV1::WorkspaceAbsent => None,
+        _ => return Err(user_error("E3 workspace source posture is malformed")),
     };
-    let workspace_path = PathBuf::from(&workspace_root.physical_path).join(source_relative_path);
-    let workspace_raw = std::str::from_utf8(source_bytes)
-        .map_err(|_| user_error(format!("invalid UTF-8 in {}", workspace_path.display())))?;
-    let workspace_patch_value = parse_config_patch_yaml(&workspace_path, workspace_raw)?;
 
     let env_overrides = parse_env_overrides()?;
     let (effective, explain) = resolve_effective_from_layers(
         &global_patch_value,
         &global_path,
-        Some((&workspace_patch_value, &workspace_path)),
+        workspace_layer.as_ref().map(|(patch, path)| (patch, path.as_path())),
         &env_overrides,
         &CliConfigOverrides::default(),
         true,
         true,
     )?;
     let explain = explain.ok_or_else(|| user_error("E3 config explanation was not produced"))?;
-    if let E3PinnedConfigPatchSourceV1::Global { opened, .. } = &global_patch {
-        opened
-            .revalidate()
-            .map_err(|error| user_error(error.to_string()))?;
+    if effective.llm.gateway.mode == LlmGatewayMode::HostOnly {
+        let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
+            cwd, bootstrap_home,
+        )?;
+        validate_config_against_policy(&effective, &policy)?;
     }
-    Ok(E3EffectiveConfigResolutionSnapshotV1 {
-        effective,
-        explain,
-        global_patch,
-        workspace_patch,
-    })
+    let snapshot = E3EffectiveConfigResolutionSnapshotV1 {
+        effective, explain, global_patch, workspace_patch, workspace_selection,
+    };
+    snapshot.revalidate()?;
+    Ok(snapshot)
 }
 
 #[cfg(target_os = "linux")]
@@ -1564,7 +1799,7 @@ fn resolve_e3_effective_config_source_v1<'authority>(
     dead_code,
     reason = "E3-C source authoring precedes E3 runtime adoption"
 )]
-fn extract_e3_effective_config_source_v1(
+pub(super) fn extract_e3_effective_config_source_v1(
     authority_store_id: &str,
     snapshot: &E3EffectiveConfigResolutionSnapshotV1<'_>,
 ) -> Result<config_projection::EffectiveSubstrateConfigSourceV1> {
@@ -1576,6 +1811,7 @@ fn extract_e3_effective_config_source_v1(
     use std::collections::BTreeMap;
     use std::ffi::CString;
 
+    snapshot.revalidate()?;
     let (
         E3PinnedConfigPatchSourceV1::Global {
             opened,
@@ -1598,6 +1834,9 @@ fn extract_e3_effective_config_source_v1(
     else {
         return Err(user_error("E3 config source postures are malformed"));
     };
+    if workspace_root != &snapshot.workspace_selection.authenticated_workspace {
+        return Err(user_error("selected workspace root does not match the projection workspace binding"));
+    }
     opened
         .revalidate()
         .map_err(|error| user_error(error.to_string()))?;
@@ -3457,6 +3696,46 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn test_e3f_classification_absence_and_source_errors() {
+        use std::os::unix::fs::PermissionsExt;
+        let home = tempfile::tempdir_in(std::env::var_os("HOME").unwrap()).unwrap();
+        fs::set_permissions(home.path(), fs::Permissions::from_mode(0o700)).unwrap();
+        let workspace = tempfile::tempdir_in(home.path()).unwrap();
+        let metadata = fs::metadata(workspace.path()).unwrap();
+        let root = config_projection::CanonicalDirectoryV1 {
+            physical_path: workspace.path().to_str().unwrap().into(),
+            physical_identity: config_projection::DirectoryPhysicalIdentityV1::Linux {
+                device_id: metadata.dev(),
+                inode: metadata.ino(),
+            },
+        };
+        let authority = HostSessionAuthority::open(home.path()).unwrap();
+        let bootstrap = authority.bootstrap_home();
+        let snapshot = resolve_e3_effective_config_source_v1(workspace.path(), &bootstrap, &root)
+            .expect("guarded absence must classify");
+        let compatibility = resolve_effective_config_with_explain_for_bootstrap_home(
+            workspace.path(),
+            &CliConfigOverrides::default(),
+            &bootstrap,
+            true,
+        )
+        .unwrap();
+        assert_eq!(snapshot.effective, compatibility.0);
+        assert_eq!(
+            serde_json::to_value(&snapshot.explain).unwrap(),
+            serde_json::to_value(compatibility.1.unwrap()).unwrap()
+        );
+        assert!(extract_e3_effective_config_source_v1(
+            "cpa_018f0892-cc48-7a56-b711-9f17a2a81586",
+            &snapshot
+        )
+        .is_err());
+        assert!(!workspace.path().join(".substrate").exists());
+    }
+
     #[cfg(unix)]
     #[test]
     fn explicit_bootstrap_home_explain_uses_selected_global_config_path() {
@@ -3491,6 +3770,76 @@ mod tests {
         let explain =
             serde_json::to_string(&explain.expect("explain payload")).expect("serialize explain");
         assert!(explain.contains(&selected.path().join("config.yaml").display().to_string()));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn test_e3f_sealed_snapshot_authoring_lifetime() {
+        use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
+
+        let selected = tempfile::tempdir_in(std::env::var_os("HOME").unwrap()).unwrap();
+        fs::set_permissions(selected.path(), fs::Permissions::from_mode(0o700)).unwrap();
+        let config = selected.path().join("config.yaml");
+        fs::write(&config, "llm: {enabled: true, gateway: {enabled: true, mode: in_world}, routing: {default_backend: 'cli:codex-world'}}\nagents: {enabled: true, defaults: {execution: {scope: world}, cli: {mode: persistent}}}\nworld: {enabled: true}\n").unwrap();
+        fs::set_permissions(&config, fs::Permissions::from_mode(0o600)).unwrap();
+        let workspace = TempDir::new().unwrap();
+        let control = workspace.path().join(".substrate");
+        fs::create_dir(&control).unwrap();
+        let workspace_config = control.join("workspace.yaml");
+        fs::write(&workspace_config, "{}\n").unwrap();
+        let metadata = fs::metadata(workspace.path()).unwrap();
+        let root = config_projection::CanonicalDirectoryV1 {
+            physical_path: workspace
+                .path()
+                .canonicalize()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .into(),
+            physical_identity: config_projection::DirectoryPhysicalIdentityV1::Linux {
+                device_id: metadata.dev(),
+                inode: metadata.ino(),
+            },
+        };
+        let authority = HostSessionAuthority::open(selected.path()).unwrap();
+        let snapshot = resolve_e3_effective_config_source_v1(
+            workspace.path(),
+            &authority.bootstrap_home(),
+            &root,
+        )
+        .unwrap();
+        let effective = snapshot.effective_config();
+        assert!(effective.llm.enabled);
+        let source = extract_e3_effective_config_source_v1(
+            "cpa_018f0892-cc48-7a56-b711-9f17a2a81586",
+            &snapshot,
+        )
+        .unwrap();
+        assert_eq!(source.values.llm_enabled, effective.llm.enabled);
+        let E3PinnedConfigPatchSourceV1::Workspace { held_file, .. } = &snapshot.workspace_patch
+        else {
+            panic!("missing workspace guard");
+        };
+        let fd = held_file.as_raw_fd();
+        // An extracted owned value must not let publication ignore source replacement.
+        let replacement = control.join("replacement.yaml");
+        fs::write(&replacement, "{}\n").unwrap();
+        fs::rename(&replacement, &workspace_config).unwrap();
+        assert!(extract_e3_effective_config_source_v1(
+            "cpa_018f0892-cc48-7a56-b711-9f17a2a81586",
+            &snapshot,
+        )
+        .is_err());
+        // SAFETY: F_GETFD observes the retained descriptor without modifying it.
+        assert!(unsafe { libc::fcntl(fd, libc::F_GETFD) } >= 0);
+        drop(snapshot);
+        // No allocation/open occurs between drop and the descriptor observation.
+        assert_eq!(unsafe { libc::fcntl(fd, libc::F_GETFD) }, -1);
+        assert_eq!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::EBADF)
+        );
     }
 
     #[cfg(target_os = "linux")]

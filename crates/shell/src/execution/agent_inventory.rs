@@ -640,9 +640,112 @@ pub(crate) fn resolve_e3_selected_inventory_projection_v1(
     config_projection::LogicalAgentConfigProjectionV1,
     config_projection::ConfigProjectionFailureV1,
 > {
+    with_e3_selected_inventory_projection_v1(
+        bootstrap_home,
+        global_inventory_root,
+        workspace_inventory_root,
+        effective_config,
+        Some(expected_source),
+        |_, logical, _, _| Ok(logical.clone()),
+    )
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) struct HeldE3SelectedInventoryProjectionV1<'r> {
+    policy: Policy,
+    logical: config_projection::LogicalAgentConfigProjectionV1,
+    selected: PlacementProjectedInventoryEntryV3,
+    sources: Vec<crate::execution::agent_runtime::host_session_authority::trusted_fs::HeldE3AgentInventorySourceV1<'r>>,
+    global: &'r crate::execution::agent_runtime::host_session_authority::trusted_fs::HeldE3AgentInventoryRootV1,
+    workspace: &'r crate::execution::agent_runtime::host_session_authority::trusted_fs::HeldE3AgentInventoryRootV1,
+}
+
+#[cfg(target_os = "linux")]
+impl HeldE3SelectedInventoryProjectionV1<'_> {
+    pub(crate) fn policy(&self) -> &Policy {
+        &self.policy
+    }
+
+    pub(crate) fn logical(&self) -> &config_projection::LogicalAgentConfigProjectionV1 {
+        &self.logical
+    }
+
+    pub(crate) fn selected(&self) -> &PlacementProjectedInventoryEntryV3 {
+        &self.selected
+    }
+
+    pub(crate) fn selected_source(&self) -> Result<
+        &crate::execution::agent_runtime::host_session_authority::trusted_fs::HeldE3AgentInventorySourceV1<'_>,
+        config_projection::ConfigProjectionFailureV1,
+    >{
+        self.sources
+            .iter()
+            .find(|source| source.source_material() == &self.selected.source)
+            .ok_or(config_projection::ConfigProjectionFailureV1::WrongBinding)
+    }
+
+    pub(crate) fn revalidate(&self) -> Result<(), config_projection::ConfigProjectionFailureV1> {
+        for source in &self.sources {
+            source.revalidate()?;
+        }
+        self.global.revalidate()?;
+        self.workspace.revalidate()
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn with_e3_selected_inventory_projection_v1<
+    T,
+    E: From<config_projection::ConfigProjectionFailureV1>,
+>(
+    bootstrap_home: &crate::execution::agent_runtime::OpenedBootstrapHomeV1<'_>,
+    global: &crate::execution::agent_runtime::host_session_authority::trusted_fs::HeldE3AgentInventoryRootV1,
+    workspace: &crate::execution::agent_runtime::host_session_authority::trusted_fs::HeldE3AgentInventoryRootV1,
+    effective: &config_projection::EffectiveSubstrateConfigSourceV1,
+    expected: Option<&AgentInventorySourceMaterialV1>,
+    consume: impl FnOnce(
+        &Policy,
+        &config_projection::LogicalAgentConfigProjectionV1,
+        &PlacementProjectedInventoryEntryV3,
+        &crate::execution::agent_runtime::host_session_authority::trusted_fs::HeldE3AgentInventorySourceV1<'_>,
+    ) -> Result<T, E>,
+) -> Result<T, E> {
+    let held = hold_e3_selected_inventory_projection_v1(
+        bootstrap_home,
+        global,
+        workspace,
+        effective,
+        expected,
+    )?;
+    let result = consume(
+        held.policy(),
+        held.logical(),
+        held.selected(),
+        held.selected_source()?,
+    );
+    held.revalidate()?;
+    bootstrap_home
+        .revalidate()
+        .map_err(|_| config_projection::ConfigProjectionFailureV1::UnsupportedSecurityPosture)?;
+    result
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn hold_e3_selected_inventory_projection_v1<'r>(
+    bootstrap_home: &crate::execution::agent_runtime::OpenedBootstrapHomeV1<'_>,
+    global_inventory_root: &'r crate::execution::agent_runtime::host_session_authority::trusted_fs::HeldE3AgentInventoryRootV1,
+    workspace_inventory_root: &'r crate::execution::agent_runtime::host_session_authority::trusted_fs::HeldE3AgentInventoryRootV1,
+    effective_config: &config_projection::EffectiveSubstrateConfigSourceV1,
+    expected_source: Option<&AgentInventorySourceMaterialV1>,
+) -> Result<HeldE3SelectedInventoryProjectionV1<'r>, config_projection::ConfigProjectionFailureV1> {
     use crate::execution::agent_runtime::host_session_authority::trusted_fs::HeldE3AgentInventorySourceV1;
     use crate::execution::config_model::AgentCliMode;
     use config_projection::{ConfigProjectionFailureV1::*, LogicalConfigSourceRefV1};
+    bootstrap_home
+        .revalidate()
+        .map_err(|_| UnsupportedSecurityPosture)?;
+    global_inventory_root.revalidate()?;
+    workspace_inventory_root.revalidate()?;
     let cwd = Path::new(&effective_config.workspace_root.physical_path);
     let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
         cwd,
@@ -691,8 +794,10 @@ pub(crate) fn resolve_e3_selected_inventory_projection_v1(
         let ParsedAgentInventoryFile::V3(file, Some(source)) = parsed else {
             continue;
         };
-        let same_source = source.inventory_scope == expected_source.inventory_scope
-            && source.relative_path == expected_source.relative_path;
+        let same_source = expected_source.is_some_and(|expected| {
+            source.inventory_scope == expected.inventory_scope
+                && source.relative_path == expected.relative_path
+        });
         if same_source
             && file.config.enabled
             && file
@@ -719,20 +824,22 @@ pub(crate) fn resolve_e3_selected_inventory_projection_v1(
         UnsupportedConfiguration
     })?;
     let source = &selected.source;
-    if source.inventory_scope != expected_source.inventory_scope
-        || source.accepted_root != expected_source.accepted_root
-        || source.relative_path != expected_source.relative_path
-        || source.file_device_id != expected_source.file_device_id
-        || source.file_inode != expected_source.file_inode
-        || source.byte_length != expected_source.byte_length
-    {
-        return Err(WrongBinding);
-    }
-    if source.raw_bytes_sha256 != expected_source.raw_bytes_sha256
-        || source.source_revision != expected_source.source_revision
-        || source.source_hash != expected_source.source_hash
-    {
-        return Err(HashInvalid);
+    if let Some(expected_source) = expected_source {
+        if source.inventory_scope != expected_source.inventory_scope
+            || source.accepted_root != expected_source.accepted_root
+            || source.relative_path != expected_source.relative_path
+            || source.file_device_id != expected_source.file_device_id
+            || source.file_inode != expected_source.file_inode
+            || source.byte_length != expected_source.byte_length
+        {
+            return Err(WrongBinding);
+        }
+        if source.raw_bytes_sha256 != expected_source.raw_bytes_sha256
+            || source.source_revision != expected_source.source_revision
+            || source.source_hash != expected_source.source_hash
+        {
+            return Err(HashInvalid);
+        }
     }
     let runtime = selected
         .runtime_projection
@@ -776,12 +883,12 @@ pub(crate) fn resolve_e3_selected_inventory_projection_v1(
                 source_hash: source.source_hash.clone(),
             },
         ],
-        logical_agent_id: selected.logical_agent_id,
+        logical_agent_id: selected.logical_agent_id.clone(),
         placement: selected.placement.as_str().into(),
-        realized_agent_id: selected.realized_agent_id,
-        backend_id: selected.backend_id,
+        realized_agent_id: selected.realized_agent_id.clone(),
+        backend_id: selected.backend_id.clone(),
         kind: selected.kind.as_str().into(),
-        protocol: selected.protocol.ok_or(WrongBinding)?,
+        protocol: selected.protocol.clone().ok_or(WrongBinding)?,
         execution_scope: match selected.execution_scope {
             config_model::AgentExecutionScope::Host => "host",
             config_model::AgentExecutionScope::World => "world",
@@ -816,7 +923,16 @@ pub(crate) fn resolve_e3_selected_inventory_projection_v1(
     bootstrap_home
         .revalidate()
         .map_err(|_| UnsupportedSecurityPosture)?;
-    Ok(logical)
+    let held = HeldE3SelectedInventoryProjectionV1 {
+        policy,
+        logical,
+        selected,
+        sources: held_sources,
+        global: global_inventory_root,
+        workspace: workspace_inventory_root,
+    };
+    held.selected_source()?;
+    Ok(held)
 }
 
 fn default_true() -> bool {
@@ -2238,6 +2354,312 @@ mod tests {
     use crate::execution::workspace::{workspace_marker_path, SUBSTRATE_DIR_NAME};
     use std::collections::{BTreeMap, BTreeSet};
     use std::path::{Path, PathBuf};
+
+
+    #[cfg(target_os = "linux")]
+    mod e3f_held_selection_tests {
+        use super::*;
+        use crate::execution::agent_inventory::{
+            hold_e3_selected_inventory_projection_v1, resolve_e3_selected_inventory_projection_v1,
+            with_e3_selected_inventory_projection_v1,
+        };
+        use crate::execution::agent_runtime::host_session_authority::{
+            facade::HostSessionAuthority,
+            trusted_fs::{HeldE3AgentInventoryRootV1, TrustedAuthorityRoot, TrustedWorkspaceRoot},
+        };
+        use crate::execution::config_model::{
+            extract_e3_effective_config_source_v1, resolve_e3_effective_config_source_v1,
+        };
+        use config_projection::ConfigProjectionFailureV1;
+        use std::fs;
+        use std::os::{fd::AsFd, unix::fs::PermissionsExt};
+
+        fn with_inventory(
+            workspace_yaml: Option<&str>,
+            consume: impl FnOnce(
+                &crate::execution::agent_runtime::OpenedBootstrapHomeV1<'_>,
+                &HeldE3AgentInventoryRootV1,
+                &HeldE3AgentInventoryRootV1,
+                &config_projection::EffectiveSubstrateConfigSourceV1,
+                &Path,
+                &Path,
+            ),
+        ) {
+            let _env = crate::execution::AuthorityEnvTestGuard::preserve();
+            let home = tempfile::tempdir_in(std::env::var_os("HOME").unwrap()).unwrap();
+            let workspace = tempfile::tempdir().unwrap();
+            for root in [home.path(), workspace.path()] {
+                fs::set_permissions(root, fs::Permissions::from_mode(0o700)).unwrap();
+            }
+            fs::create_dir(home.path().join("agents")).unwrap();
+            fs::create_dir_all(workspace.path().join(".substrate/agents")).unwrap();
+            for (path, bytes) in [
+                (home.path().join("config.yaml"), "llm: {enabled: true, gateway: {enabled: true, mode: in_world}, routing: {default_backend: 'cli:codex-world'}}\nagents: {enabled: true, defaults: {execution: {scope: world}, cli: {mode: persistent}}}\nworld: {enabled: true}\n"),
+                (home.path().join("policy.yaml"), "{}\n"),
+                (home.path().join("agents/codex.yaml"), e3c_v3_codex_yaml()),
+                (workspace.path().join(".substrate/workspace.yaml"), "{}\n"),
+            ] {
+                fs::write(&path, bytes).unwrap();
+                fs::set_permissions(path, fs::Permissions::from_mode(0o600)).unwrap();
+            }
+            if let Some(yaml) = workspace_yaml {
+                fs::write(workspace.path().join(".substrate/agents/codex.yaml"), yaml).unwrap();
+            }
+            let trusted = TrustedAuthorityRoot::open(home.path()).unwrap();
+            let authority = HostSessionAuthority::open(home.path()).unwrap();
+            let bootstrap = authority.bootstrap_home();
+            let identity = config_projection::CanonicalDirectoryV1::capture_linux_from_fd(
+                fs::File::open(workspace.path()).unwrap().as_fd(),
+            )
+            .unwrap();
+            let config_projection::DirectoryPhysicalIdentityV1::Linux { device_id, inode } =
+                identity.physical_identity;
+            let trusted_identity = crate::execution::agent_runtime::host_session_authority::schema::CanonicalDirectoryV1 {
+                physical_path: identity.physical_path.clone(),
+                physical_identity: crate::execution::agent_runtime::host_session_authority::schema::DirectoryPhysicalIdentityV1::Linux { device_id, inode },
+            };
+            let trusted_workspace = TrustedWorkspaceRoot::open_exact(&trusted_identity).unwrap();
+            let global = HeldE3AgentInventoryRootV1::from_global(&trusted).unwrap();
+            let local = HeldE3AgentInventoryRootV1::from_workspace(&trusted_workspace).unwrap();
+            let snapshot =
+                resolve_e3_effective_config_source_v1(workspace.path(), &bootstrap, &identity)
+                    .unwrap();
+            let effective = extract_e3_effective_config_source_v1(
+                "cpa_018f0892-cc48-7a56-b711-9f17a2a81586",
+                &snapshot,
+            )
+            .unwrap();
+            consume(
+                &bootstrap,
+                &global,
+                &local,
+                &effective,
+                home.path(),
+                workspace.path(),
+            );
+        }
+
+        #[test]
+        #[serial_test::serial]
+        fn test_e3f_held_selection_global_and_workspace_shadow() {
+            for workspace_yaml in [None, Some(e3c_v3_codex_yaml())] {
+                with_inventory(
+                    workspace_yaml,
+                    |bootstrap, global, local, effective, _, _| {
+                        let held = hold_e3_selected_inventory_projection_v1(
+                            bootstrap, global, local, effective, None,
+                        )
+                        .unwrap();
+                        assert_eq!(held.logical().backend_id, "cli:codex-world");
+                        assert_eq!(
+                            held.selected().source.inventory_scope,
+                            if workspace_yaml.is_some() {
+                                "workspace"
+                            } else {
+                                "global"
+                            }
+                        );
+                        let expected = held.selected_source().unwrap().source_material();
+                        assert_eq!(&held.selected().source, expected);
+                        let strict = resolve_e3_selected_inventory_projection_v1(
+                            bootstrap, global, local, effective, expected,
+                        )
+                        .unwrap();
+                        assert_eq!(&strict, held.logical());
+                        held.revalidate().unwrap();
+                        let mut wrong = expected.clone();
+                        wrong.file_inode += 1;
+                        assert_eq!(
+                            resolve_e3_selected_inventory_projection_v1(
+                                bootstrap, global, local, effective, &wrong,
+                            ),
+                            Err(ConfigProjectionFailureV1::WrongBinding)
+                        );
+                        let mut wrong = expected.clone();
+                        wrong.raw_bytes_sha256 = "0".repeat(64);
+                        assert_eq!(
+                            resolve_e3_selected_inventory_projection_v1(
+                                bootstrap, global, local, effective, &wrong,
+                            ),
+                            Err(ConfigProjectionFailureV1::HashInvalid)
+                        );
+                    },
+                );
+            }
+            for shadow in [
+                e3c_v3_codex_yaml().replacen("enabled: true", "enabled: false", 1),
+                "version: 1\nid: codex\nconfig:\n  enabled: false\n  kind: cli\n  cli: {binary: codex}\n".into(),
+            ] {
+                with_inventory(Some(&shadow), |bootstrap, global, local, effective, _, _| {
+                    assert!(matches!(hold_e3_selected_inventory_projection_v1(
+                        bootstrap, global, local, effective, None,
+                    ), Err(ConfigProjectionFailureV1::UnsupportedConfiguration)));
+                });
+            }
+        }
+
+        #[test]
+        #[serial_test::serial]
+        fn test_e3f_e2_policy_input_parity_selected_contract() {
+            use crate::execution::agent_runtime::dispatch_contract::*;
+            use crate::execution::config_model::AgentExecutionScope;
+            with_inventory(None, |bootstrap, global, local, effective, _, _| {
+                let held = hold_e3_selected_inventory_projection_v1(
+                    bootstrap, global, local, effective, None,
+                )
+                .unwrap();
+                let selected = held.selected();
+                let policy = Policy {
+                    agents_allowed_backends: vec![selected.backend_id.clone()],
+                    ..held.policy().clone()
+                };
+                let envelope = DispatchRequestEnvelope {
+                    caller_kind: DispatchCallerKind::OrchestratorMemberStart,
+                    baseline_kind: DispatchBaselineKind::InventoryLaunch,
+                    backend_id: Some(selected.backend_id.clone()),
+                    orchestration_session_id: Some("session".into()),
+                    requested_execution_scope_override: Some(AgentExecutionScope::World),
+                    capability_overrides: DispatchCapabilityOverrideSet::default(),
+                    attach_launch_knobs: AttachLaunchKnobs {
+                        requested_execution_scope: AgentExecutionScope::World,
+                        host_execution_client_start: HostExecutionClientStart::Defer,
+                        attach_mode_preference: AttachModePreference::FreshAllowed,
+                    },
+                    has_prompt_payload: true,
+                };
+                let resolved =
+                    resolve_e3_selected_inventory_contract(&policy, &envelope, selected).unwrap();
+                assert_eq!(resolved.agent_id, selected.realized_agent_id);
+                assert_eq!(resolved.runtime.cli_binary, selected.cli_binary);
+                assert_eq!(
+                    resolved.baseline_source.inventory_path.as_ref(),
+                    Some(&selected.path)
+                );
+                let mut other = envelope.clone();
+                other.backend_id = Some("cli:other-world".into());
+                assert!(resolve_e3_selected_inventory_contract(&policy, &other, selected).is_err());
+                other = envelope.clone();
+                other.requested_execution_scope_override = Some(AgentExecutionScope::Host);
+                assert!(resolve_e3_selected_inventory_contract(&policy, &other, selected).is_err());
+                let denied = Policy {
+                    agents_allowed_backends: vec![],
+                    ..policy.clone()
+                };
+                assert_eq!(
+                    resolve_e3_selected_inventory_contract(&denied, &envelope, selected)
+                        .unwrap_err()
+                        .kind,
+                    DispatchResolutionErrorKind::OverrideDeniedByPolicy
+                );
+                let mut missing = selected.clone();
+                missing.capabilities.session_fork = false;
+                assert_eq!(
+                    resolve_e3_selected_inventory_contract(&policy, &envelope, &missing)
+                        .unwrap_err()
+                        .field,
+                    "session_fork"
+                );
+                missing = selected.clone();
+                missing.protocol = None;
+                assert_eq!(
+                    resolve_e3_selected_inventory_contract(&policy, &envelope, &missing)
+                        .unwrap_err()
+                        .field,
+                    "protocol"
+                );
+                missing = selected.clone();
+                missing.cli_runtime_family = None;
+                missing.realized_agent_id = "unknown-world".into();
+                assert_eq!(
+                    resolve_e3_selected_inventory_contract(&policy, &envelope, &missing)
+                        .unwrap_err()
+                        .kind,
+                    DispatchResolutionErrorKind::RuntimeUnrealizableAfterResolution
+                );
+                held.revalidate().unwrap();
+            });
+        }
+
+        #[test]
+        #[serial_test::serial]
+        fn test_e3f_held_source_substitution() {
+            for mutation in [
+                "selected",
+                "unselected",
+                "duplicate",
+                "root",
+                "bytes",
+                "callback-error",
+            ] {
+                with_inventory(
+                    Some(e3c_v3_codex_yaml()),
+                    |bootstrap, global, local, effective, home, workspace| {
+                        let mut entered = false;
+                        let result: Result<(), ConfigProjectionFailureV1> =
+                            with_e3_selected_inventory_projection_v1(
+                                bootstrap,
+                                global,
+                                local,
+                                effective,
+                                None,
+                                |_, logical, selected, source| {
+                                    entered = true;
+                                    assert_eq!(logical.backend_id, selected.backend_id);
+                                    assert_eq!(source.source_material(), &selected.source);
+                                    let selected = workspace.join(".substrate/agents/codex.yaml");
+                                    match mutation {
+                                        "selected" | "callback-error" | "unselected" => {
+                                            let path = if mutation == "unselected" {
+                                                home.join("agents/codex.yaml")
+                                            } else {
+                                                selected
+                                            };
+                                            let replacement = path.with_extension("replacement");
+                                            fs::write(&replacement, fs::read(&path).unwrap())
+                                                .unwrap();
+                                            fs::rename(replacement, path).unwrap();
+                                        }
+                                        "duplicate" => fs::write(
+                                            workspace.join(".substrate/agents/duplicate.yaml"),
+                                            e3c_v3_codex_yaml(),
+                                        )
+                                        .unwrap(),
+                                        "root" => {
+                                            fs::rename(
+                                                workspace.join(".substrate/agents"),
+                                                workspace.join(".substrate/old"),
+                                            )
+                                            .unwrap();
+                                            fs::create_dir(workspace.join(".substrate/agents"))
+                                                .unwrap();
+                                        }
+                                        "bytes" => fs::write(
+                                            selected,
+                                            e3c_v3_codex_yaml()
+                                                .replace("model: codex", "model: other"),
+                                        )
+                                        .unwrap(),
+                                        _ => unreachable!(),
+                                    }
+                                    if mutation == "callback-error" {
+                                        Err(ConfigProjectionFailureV1::Conflict)
+                                    } else {
+                                        Ok(())
+                                    }
+                                },
+                            );
+                        assert!(entered, "mutation callback must be reached: {mutation}");
+                        assert!(result.is_err(), "{mutation}");
+                        assert_ne!(
+                            result,
+                            Err(ConfigProjectionFailureV1::Conflict),
+                            "guard failure takes precedence even when callback fails"
+                        );
+                    },
+                );
+            }
+        }
+    }
 
     fn e3c_v3_codex_yaml() -> &'static str {
         r#"version: 3

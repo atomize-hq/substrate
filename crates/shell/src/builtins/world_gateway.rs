@@ -858,27 +858,32 @@ fn config_key_is_explicit(
 pub(crate) fn resolve_e3_integrated_auth_payload(
     effective_config: &config_model::SubstrateConfig,
     effective_policy: &substrate_broker::Policy,
-    backend_entry: &agent_inventory::AgentInventoryEntryV1,
+    selected: &config_projection::LogicalAgentConfigProjectionV1,
     account_home: &Path,
 ) -> anyhow::Result<GatewayIntegratedAuthPayloadV1> {
     if !effective_config.llm.gateway.enabled
         || effective_config.llm.gateway.mode != LlmGatewayMode::InWorld
         || effective_config.llm.routing.default_backend != CLI_CODEX_WORLD_BACKEND
-        || !matches!(
-            backend_entry.file.config.kind,
-            agent_inventory::AgentConfigKind::Cli
-        )
+        || selected.backend_id != effective_config.llm.routing.default_backend
+        || selected.kind != "cli"
+        || selected.runtime_family != "codex"
+        || selected.placement != "world"
+        || selected.execution_scope != "world"
     {
         anyhow::bail!("UnsupportedConfiguration");
     }
-    let payload = resolve_integrated_auth_payload(
-        effective_config,
-        effective_policy,
-        backend_entry,
-        &codex_auth_state_path(account_home),
-    )
-    .map_err(|_| anyhow::anyhow!("E3 integrated authentication unavailable"))?
-    .ok_or_else(|| anyhow::anyhow!("UnsupportedConfiguration"))?;
+    let payload = GatewayIntegratedAuthPayloadV1 {
+        backend_id: selected.backend_id.clone(),
+        cli_codex: Some(
+            resolve_cli_codex_integrated_auth(
+                effective_policy,
+                &selected.backend_id,
+                &codex_auth_state_path(account_home),
+            )
+            .map_err(|_| anyhow::anyhow!("E3 integrated authentication unavailable"))?,
+        ),
+        api_env: None,
+    };
     payload
         .validate()
         .map_err(|_| anyhow::anyhow!("Malformed E3 integrated authentication"))?;
@@ -1602,6 +1607,352 @@ agents:
 
 #[cfg(test)]
 mod classification_tests {
+    #[cfg(target_os = "linux")]
+    mod e3f_auth_tests {
+        use super::super::*;
+        use super::AmbientSelectionGuard;
+        use crate::execution::agent_runtime::host_session_authority::{
+            facade::HostSessionAuthority,
+            trusted_fs::{
+                HeldE3AgentInventoryRootV1, HeldE3AgentInventorySourceV1, TrustedAuthorityRoot,
+                TrustedWorkspaceRoot,
+            },
+        };
+        use config_projection::{
+            CanonicalDirectoryV1, E3EffectiveConfigInputV1, EffectiveSubstrateConfigSourceV1,
+            LogicalAgentConfigProjectionV1,
+        };
+        use serial_test::serial;
+        use std::os::{
+            fd::AsFd,
+            unix::{ffi::OsStrExt, fs::PermissionsExt},
+        };
+
+        // Resolve actual V3 bytes through the existing strict inventory resolver. The
+        // known source is fixture input, not a new production inventory selector.
+        fn with_selection(
+            test: impl FnOnce(&config_model::SubstrateConfig, &LogicalAgentConfigProjectionV1, &Path),
+        ) {
+            let _env = crate::execution::AuthorityEnvTestGuard::preserve();
+            let home = tempfile::tempdir().unwrap();
+            let workspace = tempfile::tempdir().unwrap();
+            fs::set_permissions(home.path(), fs::Permissions::from_mode(0o700)).unwrap();
+            fs::set_permissions(workspace.path(), fs::Permissions::from_mode(0o700)).unwrap();
+            fs::create_dir(home.path().join("agents")).unwrap();
+            fs::set_permissions(
+                home.path().join("agents"),
+                fs::Permissions::from_mode(0o700),
+            )
+            .unwrap();
+            fs::write(home.path().join("policy.yaml"), "{}\n").unwrap();
+            fs::set_permissions(
+                home.path().join("policy.yaml"),
+                fs::Permissions::from_mode(0o600),
+            )
+            .unwrap();
+            fs::write(
+                home.path().join("agents/codex.yaml"),
+                r#"version: 3
+id: codex
+config:
+  enabled: true
+  kind: cli
+  protocol: substrate.agent.session
+  placements:
+    world:
+      enabled: true
+      cli:
+        binary: /var/lib/substrate/world-deps/codex-runtime/bin/codex
+        mode: persistent
+        runtime_family: codex
+      api: null
+      capabilities:
+        session_start: true
+        session_resume: true
+        session_fork: true
+        session_stop: true
+        status_snapshot: true
+        event_stream: true
+        llm: true
+        mcp_client: false
+      runtime_projection:
+        model: codex
+        mcp_servers: []
+        features: []
+"#,
+            )
+            .unwrap();
+            fs::set_permissions(
+                home.path().join("agents/codex.yaml"),
+                fs::Permissions::from_mode(0o600),
+            )
+            .unwrap();
+            let root = TrustedAuthorityRoot::open(home.path()).unwrap();
+            let authority = HostSessionAuthority::open(home.path()).unwrap();
+            let workspace_identity = CanonicalDirectoryV1::capture_linux_from_fd(
+                fs::File::open(workspace.path()).unwrap().as_fd(),
+            )
+            .unwrap();
+            let config_projection::DirectoryPhysicalIdentityV1::Linux { device_id, inode } =
+                workspace_identity.physical_identity;
+            let trusted_workspace = TrustedWorkspaceRoot::open_exact(
+                &crate::execution::agent_runtime::host_session_authority::schema::CanonicalDirectoryV1 {
+                    physical_path: workspace_identity.physical_path.clone(),
+                    physical_identity: crate::execution::agent_runtime::host_session_authority::schema::DirectoryPhysicalIdentityV1::Linux { device_id, inode },
+                },
+            ).unwrap();
+            let global = HeldE3AgentInventoryRootV1::from_global(&root).unwrap();
+            let local = HeldE3AgentInventoryRootV1::from_workspace(&trusted_workspace).unwrap();
+            let selected =
+                HeldE3AgentInventorySourceV1::open(&global, "agents/codex.yaml").unwrap();
+            let mut config = config_model::SubstrateConfig::default();
+            config.llm.gateway.enabled = true;
+            config.llm.gateway.mode = LlmGatewayMode::InWorld;
+            config.llm.routing.default_backend = CLI_CODEX_WORLD_BACKEND.into();
+            let source = EffectiveSubstrateConfigSourceV1 {
+                schema_version: 1,
+                authority_store_id: "as_018f0f3a-9b2c-7def-8abc-0123456789ab".into(),
+                accepted_home: CanonicalDirectoryV1::capture_linux_from_fd(
+                    fs::File::open(home.path()).unwrap().as_fd(),
+                )
+                .unwrap(),
+                workspace_root: workspace_identity,
+                values: E3EffectiveConfigInputV1 {
+                    llm_enabled: true,
+                    agents_enabled: true,
+                    world_enabled: true,
+                    default_execution_scope: "world".into(),
+                    default_cli_mode: "persistent".into(),
+                    managed_gateway_enabled: config.llm.gateway.enabled,
+                    managed_gateway_mode: "in_world".into(),
+                    default_backend_id: config.llm.routing.default_backend.clone(),
+                },
+                ordered_explain_origins: vec![],
+                source_revision: "1".into(),
+                source_hash: "a".repeat(64),
+            };
+            let logical = agent_inventory::resolve_e3_selected_inventory_projection_v1(
+                &authority.bootstrap_home(),
+                &global,
+                &local,
+                &source,
+                selected.source_material(),
+            )
+            .unwrap();
+            test(&config, &logical, home.path());
+            selected.revalidate().unwrap();
+            global.revalidate().unwrap();
+            local.revalidate().unwrap();
+        }
+
+        fn policy() -> substrate_broker::Policy {
+            substrate_broker::Policy {
+                llm_secrets_env_allowed: vec![
+                    CODEX_ACCESS_TOKEN_ENV.into(),
+                    CODEX_ACCOUNT_ID_ENV.into(),
+                ],
+                agents_host_credentials_read_allowed_backends: vec![CLI_CODEX_WORLD_BACKEND.into()],
+                ..Default::default()
+            }
+        }
+
+        fn write_auth(home: &Path, bytes: &str) {
+            fs::create_dir_all(home.join(".codex")).unwrap();
+            fs::write(codex_auth_state_path(home), bytes).unwrap();
+        }
+
+        #[test]
+        #[serial]
+        fn test_e3f_auth_selected_v3_and_environment_precedence() {
+            with_selection(|config, selected, home| {
+                write_auth(
+                    home,
+                    r#"{"access_token":"synthetic-file-token","account_id":"synthetic-file-account"}"#,
+                );
+                let _env = AmbientSelectionGuard::set(&[
+                    (
+                        CODEX_ACCESS_TOKEN_ENV,
+                        Some(std::ffi::OsStr::new(" synthetic-env-token ")),
+                    ),
+                    (
+                        CODEX_ACCOUNT_ID_ENV,
+                        Some(std::ffi::OsStr::new(" synthetic-env-account ")),
+                    ),
+                ]);
+                let payload =
+                    resolve_e3_integrated_auth_payload(config, &policy(), selected, home).unwrap();
+                assert_eq!(payload.backend_id, CLI_CODEX_WORLD_BACKEND);
+                assert!(payload.api_env.is_none());
+                let auth = payload.cli_codex.unwrap();
+                assert!(auth.access_token == "synthetic-env-token");
+                assert!(auth.account_id.as_deref() == Some("synthetic-env-account"));
+            });
+        }
+
+        #[test]
+        #[serial]
+        fn test_e3f_auth_file_fallback_and_optional_account() {
+            with_selection(|config, selected, home| {
+                let _env = AmbientSelectionGuard::set(&[
+                    (CODEX_ACCESS_TOKEN_ENV, None),
+                    (CODEX_ACCOUNT_ID_ENV, None),
+                ]);
+                for account in [None, Some("synthetic-file-account")] {
+                    write_auth(home, &serde_json::json!({"access_token":"synthetic-file-token", "account_id":account}).to_string());
+                    let payload =
+                        resolve_e3_integrated_auth_payload(config, &policy(), selected, home)
+                            .unwrap();
+                    payload.validate().unwrap();
+                    assert_eq!(payload.backend_id, CLI_CODEX_WORLD_BACKEND);
+                    assert!(payload.api_env.is_none());
+                    let auth = payload.cli_codex.unwrap();
+                    assert!(auth.access_token == "synthetic-file-token");
+                    assert!(auth.account_id.as_deref() == account);
+                }
+            });
+        }
+
+        #[test]
+        #[serial]
+        fn test_e3f_auth_selection_rejects_before_credential_lookup() {
+            with_selection(|config, selected, home| {
+                // An attempted environment lookup would return the sanitized resolver
+                // error. Every selection rejection must happen before that lookup.
+                let _env = AmbientSelectionGuard::set(&[
+                    (
+                        CODEX_ACCESS_TOKEN_ENV,
+                        Some(std::ffi::OsStr::from_bytes(b"\xff")),
+                    ),
+                    (CODEX_ACCOUNT_ID_ENV, None),
+                ]);
+                for case in 0..9 {
+                    let mut config = config.clone();
+                    let mut selected = selected.clone();
+                    match case {
+                        0 => selected.backend_id = "cli:other-world".into(),
+                        1 => config.llm.routing.default_backend = "cli:other-world".into(),
+                        2 => selected.kind = "api".into(),
+                        3 => selected.runtime_family = "claude_code".into(),
+                        4 => selected.placement = "host".into(),
+                        5 => selected.execution_scope = "host".into(),
+                        6 => config.llm.gateway.enabled = false,
+                        7 => config.llm.gateway.mode = LlmGatewayMode::HostOnly,
+                        8 => {
+                            config.llm.routing.default_backend = "cli:other-world".into();
+                            selected.backend_id = config.llm.routing.default_backend.clone();
+                        }
+                        _ => unreachable!(),
+                    }
+                    let error =
+                        resolve_e3_integrated_auth_payload(&config, &policy(), &selected, home)
+                            .err()
+                            .expect("E3 authentication must reject");
+                    assert_eq!(
+                        format!("{error:#}"),
+                        "UnsupportedConfiguration",
+                        "case {case}"
+                    );
+                }
+                let error = resolve_e3_integrated_auth_payload(config, &policy(), selected, home)
+                    .err()
+                    .expect("E3 authentication must reject");
+                assert_eq!(
+                    format!("{error:#}"),
+                    "E3 integrated authentication unavailable"
+                );
+            });
+        }
+
+        #[test]
+        #[serial]
+        fn test_e3f_auth_policy_denial_never_falls_back() {
+            with_selection(|config, selected, home| {
+                write_auth(home, r#"{"access_token":"synthetic-file-token"}"#);
+                let _env = AmbientSelectionGuard::set(&[
+                    (
+                        CODEX_ACCESS_TOKEN_ENV,
+                        Some(std::ffi::OsStr::new("synthetic-env-token")),
+                    ),
+                    (
+                        CODEX_ACCOUNT_ID_ENV,
+                        Some(std::ffi::OsStr::new("synthetic-env-account")),
+                    ),
+                ]);
+                for denied in [CODEX_ACCESS_TOKEN_ENV, CODEX_ACCOUNT_ID_ENV] {
+                    let mut denied_policy = policy();
+                    denied_policy
+                        .llm_secrets_env_allowed
+                        .retain(|name| name != denied);
+                    let error =
+                        resolve_e3_integrated_auth_payload(config, &denied_policy, selected, home)
+                            .err()
+                            .expect("E3 authentication must reject");
+                    assert_eq!(
+                        format!("{error:#}"),
+                        "E3 integrated authentication unavailable"
+                    );
+                }
+                let _no_env = AmbientSelectionGuard::set(&[
+                    (CODEX_ACCESS_TOKEN_ENV, None),
+                    (CODEX_ACCOUNT_ID_ENV, None),
+                ]);
+                let mut denied_policy = policy();
+                denied_policy
+                    .agents_host_credentials_read_allowed_backends
+                    .clear();
+                let error =
+                    resolve_e3_integrated_auth_payload(config, &denied_policy, selected, home)
+                        .err()
+                        .expect("E3 authentication must reject");
+                assert_eq!(
+                    format!("{error:#}"),
+                    "E3 integrated authentication unavailable"
+                );
+            });
+        }
+
+        #[test]
+        #[serial]
+        fn test_e3f_auth_errors_are_sanitized() {
+            with_selection(|config, selected, home| {
+                let _env = AmbientSelectionGuard::set(&[
+                    (CODEX_ACCESS_TOKEN_ENV, None),
+                    (CODEX_ACCOUNT_ID_ENV, None),
+                ]);
+                // Missing file, malformed JSON, and missing/empty token all stay opaque.
+                for contents in [
+                    None,
+                    Some("secret-sentinel-invalid-json"),
+                    Some(r#"{"account_id":"synthetic-account"}"#),
+                    Some(r#"{"access_token":"  "}"#),
+                ] {
+                    if let Some(bytes) = contents {
+                        write_auth(home, bytes);
+                    }
+                    let error =
+                        resolve_e3_integrated_auth_payload(config, &policy(), selected, home)
+                            .err()
+                            .expect("E3 authentication must reject");
+                    assert_eq!(
+                        format!("{error:#}"),
+                        "E3 integrated authentication unavailable"
+                    );
+                }
+                let _incomplete = AmbientSelectionGuard::set(&[(
+                    CODEX_ACCOUNT_ID_ENV,
+                    Some(std::ffi::OsStr::new("synthetic-orphan-account")),
+                )]);
+                let error = resolve_e3_integrated_auth_payload(config, &policy(), selected, home)
+                    .err()
+                    .expect("E3 authentication must reject");
+                assert_eq!(
+                    format!("{error:#}"),
+                    "E3 integrated authentication unavailable"
+                );
+            });
+        }
+    }
+
     #[cfg(target_os = "linux")]
     use super::build_gateway_client;
     #[cfg(unix)]
