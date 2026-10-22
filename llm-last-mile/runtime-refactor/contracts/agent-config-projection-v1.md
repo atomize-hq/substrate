@@ -500,8 +500,10 @@ struct AgentInventorySourceMaterialV1 {
 
 Every V3 struct denies unknown fields. YAML duplicate mapping keys, aliases, anchors, merge keys,
 non-UTF-8 input, multiple documents, tags, and non-string mapping keys are rejected before typed
-deserialization. Existing V1 and V2 decoders, compatibility materialization, and non-E3 behavior
-remain byte/behavior-frozen. An enabled `kind: cli`, `placement: world`, `runtime_family: codex`
+deserialization. Future E3-F retention of existing V1/V2 decoders, compatibility materialization
+and non-E3 implementations follows the
+[greenfield rule](#e3-f-greenfield-retention-and-replacement--2026-10-21); historical E3-C proof is
+unchanged. An enabled `kind: cli`, `placement: world`, `runtime_family: codex`
 candidate is E3-eligible only in V3, with `cli.mode`, `cli.binary`, and `runtime_projection` explicit.
 For E3's fixed `cli:codex-world` backend, `model` is exactly `"codex"`, the landed
 `GatewayBackendBinding.routed_model`; the gateway's existing provider mapping to
@@ -1269,7 +1271,9 @@ cannot satisfy native-root confinement or descriptor-pinned execution. E3 theref
 `E3Codex0125LaunchAdapterV1` in world-service. For V2 only, the strict launch admission calls
 `PromptFulfillmentBridge::for_e3_codex` with the sealed published projection capability; V1 and
 non-Codex dispatch continue through the existing `PromptFulfillmentBridge::for_member_backend` and
-`GatewayAdapterRuntime`/UAA path unchanged. The local adapter preserves the existing
+`GatewayAdapterRuntime`/UAA path at this staged boundary. Future E3-F retention/replacement of
+that realization follows the [greenfield rule](#e3-f-greenfield-retention-and-replacement--2026-10-21),
+while required UAA common semantics remain. The local adapter preserves the existing
 `AgentWrapperRunControl` event/cancel surface and Codex JSONL normalization but owns argv assembly,
 preopened output-file injection, stdin/stdout/stderr pipes, pidfd, cancellation, and exec.
 E3 neither creates nor patches a local `crates/codex` replacement; this division is clarification of
@@ -1623,11 +1627,13 @@ exact-validates and registers any adoptable compatibility-gateway remnant under 
 lease, kills every other classified remnant, and cannot enter either legacy-shared or E3-exclusive
 mode until no unclassified descendant exists.
 
-Outside an E3-exclusive epoch, V1 schemas, validation, launch behavior, and wire bytes are unchanged.
+The staged V1 behavior outside an E3-exclusive epoch is subject to the
+[future E3-F greenfield disposition](#e3-f-greenfield-retention-and-replacement--2026-10-21);
+required ordinary capability and counted admission remain.
 During an E3-exclusive epoch, a valid V1 or ordinary execution request receives the new typed
 `UnsupportedSecurityPosture` admission failure; it is never reinterpreted as V2. This is the exact
-mixed-version rule: old servers reject V2, new servers continue to run V1 when the exclusion is idle,
-and new servers fail closed rather than co-running privileged V1 code beside E3 secrets.
+staged mixed-version rule: old servers reject V2; any retained V1 branch runs only when exclusion
+is idle and follows the greenfield purpose decision. No privileged V1 code co-runs beside E3 secrets.
 
 Before serializing an enforcement input, world-service constructs
 `denied_control_probe_targets` only from its already-held accepted-home, realization, cgroup,
@@ -4177,8 +4183,11 @@ expiry and recovery rules.
 
 `ExecuteRequest.member_dispatch` adopts the version wrapper without changing its wire key. A bounded
 top-level `schema_version` discriminator routes to exactly one strict decoder before fields are
-interpreted: absent or 1 selects V1, 2 selects V2, and any other unsigned value is unsupported. The V1
-type, strict `deny_unknown_fields`, default schema 1, validation, and wire bytes remain unchanged. V2
+interpreted: absent or 1 selects V1, 2 selects V2, and any other unsigned value is unsupported. The
+E3-A landing retained the V1 type, strict `deny_unknown_fields`, default schema 1, validation and
+wire bytes. Future E3-F V1 retention/replacement follows the
+[greenfield rule](#e3-f-greenfield-retention-and-replacement--2026-10-21); strict decoding and no
+authority-dropping conversion remain required. V2
 has its own strict definition, requires schema 2 and the non-optional projection carrier, and repeats
 every V1 validation. The wrapper does not probe permissive decoders, ignore unknown fields, or coerce
 schema versions; a duplicate, negative, noninteger, or otherwise malformed discriminator is rejected
@@ -4209,8 +4218,10 @@ The member-runtime admission remains versioned through launch: V1 selects the ex
 `PromptFulfillmentBridge` branch, while V2 must retain and resolve its projection carrier before any
 gateway or child side effect. `convert_member_dispatch_request` likewise returns a strict internal
 V1/V2 enum and may not erase V2's carrier. No V2 value may be down-converted to V1 to reach launch.
-Fixtures must demonstrate that serialized V1 requests, V1 error classification, shared-world
-selection, E2 validation, and legacy UAA invocation are byte/behavior-identical to the baseline.
+The historical E3-A fixtures demonstrate baseline V1 behavior. Future E3-F fixtures must prove
+required shared-world selection, exact E2 validation, strict decoding and capability/security
+semantics, with specific V1/UAA implementation retention or replacement justified under the
+[greenfield rule](#e3-f-greenfield-retention-and-replacement--2026-10-21).
 
 The baseline Lima bridge accepts only `world_api::MemberDispatchRequestV1`, while the transport-side
 field now names the wrapper. Its bounded adapter therefore constructs the same transport V1 value
@@ -4268,13 +4279,58 @@ capability validates and can be adopted independently; D1 later consumes it opaq
 
 ## Compatibility and nonownership wall
 
-The current copied host auth/config path may remain only as
+### E3-F greenfield retention and replacement — 2026-10-21
+
+Substrate is greenfield. For each mechanism retained by the next selected E3-F packet, record the
+required product capability, its existing canonical owner, and a concrete architectural or security
+purpose independent of compatibility. Existing callers/tests, prior support, version names, and
+Codex/Claude/UAA support alone are insufficient. Otherwise name replacement/removal disposition,
+owner, dependent proof and sequencing; out-of-packet disposition is explicit remaining work, not
+permission to delete it or silently retain it forever. Reconcile any conflicting preservation or
+future-fence clause with its canonical owner before dependent source work. This is a bounded
+packet decision, not a repeated capability audit or a new control framework.
+
+This rule qualifies this contract's blanket V1 wire/codec/construction/ordinary-behavior freezes,
+unchanged UAA realization requirements and compatibility-only adapter/test fences **for future
+selected E3-F work**. Earlier E3-A–E subjects, native file modes, proof and valid landing decisions
+remain historical evidence with their original claim ceilings. It does not rename every V1 type as
+obsolete, change a schema implicitly, widen the source catalog, or authorize blind deletion.
+
+- E3 owns strict projection/carrier validation and retained custody; the runtime-family owner owns
+  provider realization and UAA common run/event/cancel/session/capability semantics. Preserve those
+  capabilities through explicit supported realizations. An old V1 wire/construction branch, UAA
+  launcher, adapter, fallback, duplicate lifecycle mechanism or compatibility-only fixture must
+  earn retention separately; multi-agent support does not require its obsolete execution path.
+- I1's required `MemberRuntimeOwnershipV1::{NonE3,E3}` remains binding. NonE3 retains required
+  unprojected-agent capability and counted idle-only security admission; this does not freeze every
+  old launcher/field/wire path. Replace the mandatory common lease/additive-only E3 construction;
+  no optional/dummy common lease, mixed authority or E3 fallback into the obsolete path is allowed.
+- I2's original adapter-to-gateway accounting/custody is unchanged: distinguish per-turn from
+  whole-runtime evidence, retain original-key/ACK-loss retry custody, deny before late cleanup
+  effects, include complete historical process/cgroup registrations, release namespaces before
+  groups and exclusion last. A Codex-only terminal object with a live gateway proves no whole
+  cleanup. Preserve secure credential FD/gateway ownership, immutable identity/policy/E2 joins,
+  accepted-parent/no-redelivery and the prohibition on authority-dropping V2-to-V1 conversion.
+- The current service-wide exclusion and same-world/generation boundary remain mandatory until
+  an explicitly owned safety-equivalent replacement is authorized and proven. Neither new
+  coexistence architecture nor permanent serialization as the final product is selected here.
+
+Broader compatibility reconciliation remains with [A3](../slices/a3-persistence-and-compatibility-split.md)
+for legacy read precedence, [C2](../slices/c2-inbox-and-auto-attach-projections.md) for compatibility
+ingress/migration, and D1's [envelope owner](world-runtime-adapter-execution-envelope-v1.md) for
+compatibility posture variants/V3. Their owners must decide concrete purpose or replacement;
+this correction neither completes that work nor makes it an unrelated E3-F prerequisite.
+
+The inherited copied host auth/config path is replacement/removal debt under E3 gateway adoption
+and the runtime-family owner, with D1/D3 owning their later envelope/joined proof. Its current
+containment, while present, is only
 `CompatibilityCopyBridgeV1 { compatibility_mode_id }`: separately policy-granted per launch,
 prominently logged without secret paths/values, absent from projection authority, excluded from all
 E3 proof, and non-promotable. It cannot create a record/ref/ACK, satisfy a missing or invalid V2
-carrier, or be upgraded by observing successful provider traffic. Retirement requires contract-
-correct managed-gateway proof for every credential-requiring Codex path and a later explicitly
-authorized removal; E3 does not silently delete it.
+carrier, or be upgraded by observing successful provider traffic. For each implicated path, select
+secure managed-gateway replacement and capability/security proof or explicit removal under that
+owner before dependent source work. Prior availability and policy grants do not justify permanent
+retention; this correction itself authorizes no deletion.
 
 E3 does not own or modify:
 
@@ -6037,7 +6093,8 @@ and the [E3-E one-time transfer](managed-gateway-adoption-v1.md#e3-e-activation-
 `WorldService::execute_stream` selects V2 before non-E3 lease acquisition or helper/world side
 effects, validates common placement/E2 bindings, calls `take_for_v2(&request)` once and moves the
 result into crate-visible, field-sealed `MemberRuntimeLaunchAdmissionV2`. Nonstream member dispatch
-still rejects; V1 wire conversion/validation and supported ordinary behavior stay unchanged.
+still rejects. Required ordinary capability and counted security admission remain; exact V1
+wire/construction retention follows the [greenfield rule](#e3-f-greenfield-retention-and-replacement--2026-10-21).
 Private retained ownership construction/routing changes only as specified in the
 [I1/I2 reconciliation](#e3-f-i1i2-ownership-and-accounting-reconciliation). The manager receives the already
 configured projection service, its exact registry and the same exclusion instance; its default
@@ -6238,13 +6295,15 @@ owner of a resource. A private accessor may borrow a variant; it cannot extract 
 The NonE3 branch's independent purpose is ordinary supported unprojected agent/UAA execution while
 E3 exclusion is idle. Its counted admission is an E3-D security obligation, not evidence of E3
 credential/config confinement. The E3 replacement immediately retires the old common-field and
-additive-only construction assumption and any superseded E3 executable fallback. Strict V1 wire
-support remains bounded to ordinary capabilities with that independent purpose; it cannot claim
-E3 or coexist with credential-bearing E3. Removing those ordinary capabilities requires a separately
-selected replacement with equivalent capability/security proof. D1's later V3/envelope is not
-silently implemented here. The old V1 private-construction freeze is qualified only for this
-ownership migration and variant routing, preserving V1 wire bytes, validation and observable
-ordinary behavior. No new simultaneous-agent/turn requirement follows. Existing E3-D same-world/
+additive-only construction assumption and any superseded E3 executable fallback. Required ordinary
+capabilities remain supported through purpose-justified mechanisms; a retained V1 path cannot claim
+E3 or coexist with credential-bearing E3. Replacing their execution mechanisms requires a separately
+selected successor with equivalent capability/security proof. D1's later V3/envelope is not
+silently implemented here. The old V1 private-construction freeze is retired for this
+ownership migration and variant routing. Required ordinary capability/security semantics remain;
+particular wire/launcher/adapter/test retention additionally requires the
+[greenfield purpose decision](#e3-f-greenfield-retention-and-replacement--2026-10-21), not blanket V1
+byte/behavior preservation. No new simultaneous-agent/turn requirement follows. Existing E3-D same-world/
 generation epoch membership and one-turn-per-runtime arbitration remain unchanged; conflicting
 ordinary/E3 acquisition fails immediately before side effects.
 
@@ -6586,7 +6645,9 @@ production host trust modification or acceptance of failed authentication.
 ### E3-F future symbol fence and proof accounting
 
 The following narrow additions qualify the existing catalog only for a later admitted E3-F packet.
-All are ordinary future implementation unless explicitly marked consumed unchanged above:
+All are ordinary future implementation unless explicitly marked consumed unchanged above. Apply
+the [greenfield retention rule](#e3-f-greenfield-retention-and-replacement--2026-10-21) to implicated
+V1/UAA paths and tests before selecting a packet; this catalog is not a blanket preservation order:
 
 - Shell: the three `config_model` visibility changes and one immutable accessor; the two authoring
   functions and the existing retained Spawn/Fork/toolbox/continue-fork preparation, submit/cancel
@@ -6628,7 +6689,10 @@ All are ordinary future implementation unless explicitly marked consumed unchang
   to `crates/config-projection/tests/agent_config_projection_v1.rs` and
   `crates/world-service/tests/e3_config_projection_activation_v1.rs`. The latter owns the bounded
   namespace/TLS responder fixture using existing OS/Python/OpenSSL interfaces, not a new product
-  service, script, dependency or provider hook. Keep V1 fixture values/assertions/skips unchanged.
+  service, script, dependency or provider hook. Preserve capability/security assertions and historical
+  proof; identify compatibility-only fixtures/adapters for purpose or replacement under the
+  [greenfield rule](#e3-f-greenfield-retention-and-replacement--2026-10-21). No weakened safety
+  assertions or invented skips; conflicting exact test fences require owner reconciliation first.
 
 Minimum tests cover every authoring producer/response/submission cancellation path; sealed snapshot
 visibility/lifetime; both stored cancel consumers and event/session/completion normalization;
