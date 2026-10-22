@@ -48,6 +48,1075 @@ mod linux {
         ) -> Result<Option<E3ChildCgroupRegistrationV1>, ConfigProjectionFailureV1>
         + 'a;
 
+    const CODEX_NATIVE_DIRECTORIES: &[&str] = &[
+        "system-empty",
+        "home",
+        "codex-home",
+        "state",
+        "state/sqlite",
+        "state/log",
+        "tmp",
+        "tmp/output-last-message",
+        "immutable",
+        "immutable/codex-home",
+    ];
+    const CODEX_NATIVE_FILES: &[&str] = &[
+        "immutable/codex-home/config.toml",
+        "codex-home/config.toml",
+        "realization-manifest.json",
+    ];
+
+    #[derive(Default)]
+    pub(crate) struct E3CodexNativeProgressV1 {
+        tree: Option<E3CodexNativeTreeV1>,
+        pending_root: Option<E3CodexPendingRootV1>,
+        pinned: Option<E3CodexPinnedInputsV1>,
+        runtime_parent: Option<File>,
+        transferred: bool,
+        transferred_manifest: Option<crate::NativeProjectionRealizationManifestV1>,
+        terminal: Option<E3CodexNativeCleanupV1>,
+    }
+
+    struct E3CodexPendingRootV1 {
+        parent: File,
+        name: String,
+        created_at: Timestamp,
+        root: Option<File>,
+        created_owner: Option<(libc::uid_t, libc::gid_t)>,
+        removed: bool,
+    }
+
+    fn prepare_pending_codex_root_v1(
+        pending: &mut E3CodexPendingRootV1,
+        uid: libc::uid_t,
+        gid: libc::gid_t,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        if pending.removed {
+            return Err(ConfigProjectionFailureV1::Conflict);
+        }
+        if pending.root.is_none() {
+            match open_directory_raw_at(pending.parent.as_fd(), &pending.name) {
+                Err(ConfigProjectionFailureV1::MissingPreparation) => {}
+                _ => return Err(ConfigProjectionFailureV1::Conflict),
+            }
+            let name = CString::new(pending.name.as_str())
+                .map_err(|_| ConfigProjectionFailureV1::Malformed)?;
+            #[cfg(test)]
+            ownership_test_boundary("before_create", pending.parent.as_fd(), &pending.name)?;
+            if unsafe { libc::mkdirat(pending.parent.as_raw_fd(), name.as_ptr(), 0o700) } != 0 {
+                return Err(map_io_error());
+            }
+            // Preserve the original inode before ownership setup or its fallible hooks.
+            // If opening fails, retain the intent and quarantine the occupied name; never adopt it.
+            pending.root = Some(open_directory_raw_at(
+                pending.parent.as_fd(),
+                &pending.name,
+            )?);
+        }
+        if pending.created_owner.is_none() {
+            let metadata = fstat(
+                pending
+                    .root
+                    .as_ref()
+                    .ok_or(ConfigProjectionFailureV1::PartialPublication)?
+                    .as_raw_fd(),
+            )?;
+            if metadata.st_uid != unsafe { libc::geteuid() }
+                || metadata.st_gid != unsafe { libc::getegid() }
+            {
+                return Err(ConfigProjectionFailureV1::WrongBinding);
+            }
+            pending.created_owner = Some((metadata.st_uid, metadata.st_gid));
+        }
+        let root = pending
+            .root
+            .as_ref()
+            .ok_or(ConfigProjectionFailureV1::PartialPublication)?;
+        if verify_owned_entry_with_gid(
+            pending.parent.as_fd(),
+            &pending.name,
+            root,
+            uid,
+            true,
+            Some(gid),
+        )
+        .is_err()
+        {
+            let (creator_uid, creator_gid) = pending
+                .created_owner
+                .ok_or(ConfigProjectionFailureV1::PartialPublication)?;
+            verify_owned_entry_with_gid(
+                pending.parent.as_fd(),
+                &pending.name,
+                root,
+                creator_uid,
+                true,
+                Some(creator_gid),
+            )?;
+            if !list_names(root)?.is_empty() {
+                return Err(ConfigProjectionFailureV1::Conflict);
+            }
+            establish_created_owner_with_gid(
+                pending.parent.as_fd(),
+                &pending.name,
+                root,
+                uid,
+                true,
+                Some(gid),
+            )?;
+        }
+        verify_owned_entry_with_gid(
+            pending.parent.as_fd(),
+            &pending.name,
+            root,
+            uid,
+            true,
+            Some(gid),
+        )?;
+        fsync(root)?;
+        fsync(&pending.parent)
+    }
+
+    fn cleanup_pending_codex_root_v1(
+        pending: &mut E3CodexPendingRootV1,
+        uid: libc::uid_t,
+        gid: libc::gid_t,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        if pending.removed || pending.root.is_none() {
+            return match open_directory_raw_at(pending.parent.as_fd(), &pending.name) {
+                Err(ConfigProjectionFailureV1::MissingPreparation) => fsync(&pending.parent),
+                _ => Err(ConfigProjectionFailureV1::Conflict),
+            };
+        }
+        let root = pending
+            .root
+            .as_ref()
+            .ok_or(ConfigProjectionFailureV1::PartialPublication)?;
+        let observed = fstat(root.as_raw_fd())?;
+        let owner = (observed.st_uid, observed.st_gid);
+        if owner != (uid, gid) && pending.created_owner != Some(owner) {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        verify_owned_entry_with_gid(
+            pending.parent.as_fd(),
+            &pending.name,
+            root,
+            owner.0,
+            true,
+            Some(owner.1),
+        )?;
+        if !list_names(root)?.is_empty() {
+            return Err(ConfigProjectionFailureV1::Conflict);
+        }
+        unlink_directory_at(pending.parent.as_fd(), &pending.name)?;
+        pending.removed = true;
+        #[cfg(test)]
+        ownership_test_boundary("native_removed_root", pending.parent.as_fd(), &pending.name)?;
+        fsync(&pending.parent)
+    }
+
+    pub(crate) struct E3CodexPinnedInputsV1 {
+        pub(crate) record: AgentConfigProjectionRecordV1,
+        pub(crate) source: NativeProjectionSourceManifestV1,
+        pub(crate) wrapper: File,
+        pub(crate) codex: File,
+        pub(crate) source_root: File,
+        pub(crate) source_config: File,
+        pub(crate) workspace: File,
+        original_lease: ConfigProjectionConsumerLeaseV1,
+        activation_ack: crate::ManagedGatewayActivationAckV1,
+    }
+
+    struct E3CodexNativeCleanupV1 {
+        head: ConfigProjectionRefV1,
+        terminal: E3TerminalChildQuiescenceEvidenceV1,
+        boundary: GatewayAccessBoundaryV1,
+        released_at: Timestamp,
+        released: Option<ConfigProjectionConsumerLeaseV1>,
+    }
+
+    pub(crate) struct E3CodexNativeTreeV1 {
+        parent: File,
+        name: String,
+        final_name: String,
+        pub(crate) root: File,
+        directories: BTreeMap<String, File>,
+        files: BTreeMap<String, File>,
+        manifest: crate::NativeProjectionRealizationManifestV1,
+        installed: bool,
+        deleting: bool,
+        root_removed: bool,
+    }
+
+    fn native_child_parent_v1<'a>(
+        root: &'a File,
+        directories: &'a BTreeMap<String, File>,
+        path: &'a str,
+    ) -> Result<(&'a File, &'a str), ConfigProjectionFailureV1> {
+        match path.rsplit_once('/') {
+            Some((parent, leaf)) => Ok((
+                directories
+                    .get(parent)
+                    .ok_or(ConfigProjectionFailureV1::PartialPublication)?,
+                leaf,
+            )),
+            None => Ok((root, path)),
+        }
+    }
+
+    fn reconcile_codex_tree_name_v1(
+        tree: &mut E3CodexNativeTreeV1,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        if tree.installed {
+            return Ok(());
+        }
+        match open_directory_raw_at(tree.parent.as_fd(), &tree.name) {
+            Ok(named) => {
+                if !same_owned_metadata(&fstat(named.as_raw_fd())?, &fstat(tree.root.as_raw_fd())?)
+                {
+                    return Err(ConfigProjectionFailureV1::WrongBinding);
+                }
+            }
+            Err(ConfigProjectionFailureV1::MissingPreparation) => {
+                let final_root = open_directory_raw_at(tree.parent.as_fd(), &tree.final_name)?;
+                if !same_owned_metadata(
+                    &fstat(final_root.as_raw_fd())?,
+                    &fstat(tree.root.as_raw_fd())?,
+                ) {
+                    return Err(ConfigProjectionFailureV1::WrongBinding);
+                }
+                tree.name = tree.final_name.clone();
+                tree.installed = true;
+            }
+            Err(error) => return Err(error),
+        }
+        Ok(())
+    }
+
+    fn validate_codex_tree_v1(
+        tree: &E3CodexNativeTreeV1,
+        source: &NativeProjectionSourceManifestV1,
+        config: &[u8],
+        owner_uid: libc::uid_t,
+        owner_gid: libc::gid_t,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        use ConfigProjectionFailureV1::{Conflict, PartialPublication, WrongBinding};
+        verify_owned_entry_with_gid(
+            tree.parent.as_fd(),
+            &tree.name,
+            &tree.root,
+            owner_uid,
+            true,
+            Some(owner_gid),
+        )?;
+        let manifest = &tree.manifest;
+        if manifest.schema_version != 1
+            || manifest.authority_store_id != source.authority_store_id
+            || manifest.series_id != source.series_id
+            || manifest.fence_id != source.fence_id
+            || manifest.source_manifest_hash != source.manifest_hash
+            || manifest.owner_uid != u64::from(owner_uid)
+            || manifest.owner_gid != u64::from(owner_gid)
+            || !manifest.immutable_config_mount_read_only
+        {
+            return Err(WrongBinding);
+        }
+        let observed = fstat(tree.root.as_raw_fd())?;
+        if manifest.realization_root.physical_identity
+            != (DirectoryPhysicalIdentityV1::Linux {
+                device_id: observed.st_dev,
+                inode: observed.st_ino,
+            })
+            || manifest.realization_root.physical_path
+                != format!(
+                    "/run/substrate/member-config/{}/{}",
+                    source.series_id, source.fence_id,
+                )
+        {
+            return Err(WrongBinding);
+        }
+        validate_timestamp(&manifest.created_at)?;
+        validate_hash_field(
+            &manifest.manifest_hash,
+            hash_omitting(
+                "substrate.e3.native-projection-realization-manifest.v1",
+                "manifest",
+                manifest,
+                "manifest_hash",
+            )?,
+        )?;
+        for path in CODEX_NATIVE_DIRECTORIES {
+            let (parent, name) = native_child_parent_v1(&tree.root, &tree.directories, path)?;
+            let held = tree.directories.get(*path).ok_or(PartialPublication)?;
+            verify_owned_entry_with_gid(
+                parent.as_fd(),
+                name,
+                held,
+                owner_uid,
+                true,
+                Some(owner_gid),
+            )?;
+        }
+        for path in CODEX_NATIVE_FILES {
+            let (parent, name) = native_child_parent_v1(&tree.root, &tree.directories, path)?;
+            let held = tree.files.get(*path).ok_or(PartialPublication)?;
+            verify_owned_entry_with_gid(
+                parent.as_fd(),
+                name,
+                held,
+                owner_uid,
+                false,
+                Some(owner_gid),
+            )?;
+            let (bytes, _) = read_native_source_file(parent.as_fd(), name, owner_uid, owner_gid)?;
+            if *path == "realization-manifest.json" {
+                if ConfigProjectionCodecV1::decode_canonical_json::<
+                    crate::NativeProjectionRealizationManifestV1,
+                >(&bytes)?
+                    != *manifest
+                {
+                    return Err(Conflict);
+                }
+            } else if bytes != config {
+                return Err(Conflict);
+            }
+        }
+        // Before input transfer every writable directory must still be empty, and the
+        // immutable layout must have exactly the names we created, including the manifest.
+        for (path, held) in std::iter::once(("", &tree.root)).chain(
+            tree.directories
+                .iter()
+                .map(|(path, file)| (path.as_str(), file)),
+        ) {
+            let mut expected: Vec<String> = CODEX_NATIVE_DIRECTORIES
+                .iter()
+                .chain(CODEX_NATIVE_FILES)
+                .filter_map(|candidate| {
+                    let (parent, leaf) = candidate.rsplit_once('/').unwrap_or(("", candidate));
+                    (parent == path).then(|| leaf.to_string())
+                })
+                .collect();
+            expected.sort();
+            if list_names(held)? != expected {
+                return Err(Conflict);
+            }
+        }
+        Ok(())
+    }
+
+    fn realize_codex_tree_v1(
+        progress: &mut E3CodexNativeProgressV1,
+        parent: File,
+        source: &NativeProjectionSourceManifestV1,
+        config: &[u8],
+        owner_uid: libc::uid_t,
+        owner_gid: libc::gid_t,
+        created_at: Timestamp,
+    ) -> Result<crate::NativeProjectionRealizationManifestV1, ConfigProjectionFailureV1> {
+        use ConfigProjectionFailureV1::{Conflict, PartialPublication, WrongBinding};
+        validate_timestamp(&created_at)?;
+        validate_prefixed_uuid(&source.series_id, "cps_")?;
+        validate_prefixed_uuid(&source.fence_id, "cpf_")?;
+        if source.ordered_file_hashes != [ordinary_sha256(config)] {
+            return Err(WrongBinding);
+        }
+        if let Some(tree) = &progress.tree {
+            if !same_owned_metadata(
+                &fstat(parent.as_raw_fd())?,
+                &fstat(tree.parent.as_raw_fd())?,
+            ) {
+                return Err(WrongBinding);
+            }
+            // A final name without this original held owner is never adopted.
+            if tree.final_name != source.fence_id {
+                return Err(WrongBinding);
+            }
+        } else {
+            if progress.pending_root.is_none() {
+                if list_names(&parent)?.iter().any(|name| {
+                    name == &source.fence_id || name.starts_with(".e3-native-realization-tmp.")
+                }) {
+                    return Err(Conflict);
+                }
+                let name = format!(".e3-native-realization-tmp.{}", Uuid::now_v7());
+                // Freeze creation intent and its parent before the first filesystem effect.
+                progress.pending_root = Some(E3CodexPendingRootV1 {
+                    parent,
+                    name,
+                    created_at,
+                    root: None,
+                    created_owner: None,
+                    removed: false,
+                });
+            }
+            let pending = progress.pending_root.as_mut().ok_or(PartialPublication)?;
+            prepare_pending_codex_root_v1(pending, owner_uid, owner_gid)?;
+            let root = pending.root.as_ref().ok_or(PartialPublication)?;
+            let observed = fstat(root.as_raw_fd())?;
+            let mut manifest = crate::NativeProjectionRealizationManifestV1 {
+                schema_version: 1,
+                authority_store_id: source.authority_store_id.clone(),
+                series_id: source.series_id.clone(),
+                fence_id: source.fence_id.clone(),
+                source_manifest_hash: source.manifest_hash.clone(),
+                realization_root: CanonicalDirectoryV1 {
+                    physical_path: format!(
+                        "/run/substrate/member-config/{}/{}",
+                        source.series_id, source.fence_id
+                    ),
+                    physical_identity: DirectoryPhysicalIdentityV1::Linux {
+                        device_id: observed.st_dev,
+                        inode: observed.st_ino,
+                    },
+                },
+                owner_uid: u64::from(owner_uid),
+                owner_gid: u64::from(owner_gid),
+                immutable_config_mount_read_only: true,
+                created_at: pending.created_at.clone(),
+                manifest_hash: String::new(),
+            };
+            manifest.manifest_hash = hash_omitting(
+                "substrate.e3.native-projection-realization-manifest.v1",
+                "manifest",
+                &manifest,
+                "manifest_hash",
+            )?;
+            let mut pending = progress.pending_root.take().ok_or(PartialPublication)?;
+            let Some(root) = pending.root.take() else {
+                progress.pending_root = Some(pending);
+                return Err(PartialPublication);
+            };
+            progress.tree = Some(E3CodexNativeTreeV1 {
+                parent: pending.parent,
+                name: pending.name,
+                final_name: source.fence_id.clone(),
+                root,
+                directories: BTreeMap::new(),
+                files: BTreeMap::new(),
+                manifest,
+                installed: false,
+                deleting: false,
+                root_removed: false,
+            });
+            #[cfg(test)]
+            if let Some(tree) = &progress.tree {
+                ownership_test_boundary("native_created", tree.parent.as_fd(), &tree.name)?;
+            }
+        }
+        let tree = progress.tree.as_mut().ok_or(PartialPublication)?;
+        reconcile_codex_tree_name_v1(tree)?;
+        if !tree.installed {
+            for path in CODEX_NATIVE_DIRECTORIES {
+                if tree.directories.contains_key(*path) {
+                    continue;
+                }
+                let (parent, name) = native_child_parent_v1(&tree.root, &tree.directories, path)?;
+                let directory = open_or_create_directory_with_gid(
+                    parent.as_fd(),
+                    name,
+                    owner_uid,
+                    Some(owner_gid),
+                )?;
+                tree.directories.insert(path.to_string(), directory);
+            }
+            for path in CODEX_NATIVE_FILES {
+                if tree.files.contains_key(*path) {
+                    continue;
+                }
+                let (parent, name) = native_child_parent_v1(&tree.root, &tree.directories, path)?;
+                let manifest_bytes;
+                let bytes = if *path == "realization-manifest.json" {
+                    manifest_bytes =
+                        ConfigProjectionCodecV1::encode_canonical_json(&tree.manifest)?;
+                    manifest_bytes.as_slice()
+                } else {
+                    config
+                };
+                match read_native_source_file(parent.as_fd(), name, owner_uid, owner_gid) {
+                    Ok((existing, _)) if existing == bytes => {
+                        // A pre-child write may have completed before its return was lost.
+                        let existing = open_file_at(parent.as_fd(), name, libc::O_RDONLY, 0)?;
+                        fsync(&existing)?;
+                        fsync(parent)?;
+                    }
+                    Ok(_) => return Err(Conflict),
+                    Err(ConfigProjectionFailureV1::MissingPreparation) => {
+                        write_exclusive_file_with_gid(
+                            parent.as_fd(),
+                            name,
+                            bytes,
+                            owner_uid,
+                            Some(owner_gid),
+                        )?;
+                    }
+                    Err(error) => return Err(error),
+                }
+                let file = open_file_at(parent.as_fd(), name, libc::O_RDONLY, 0)?;
+                tree.files.insert(path.to_string(), file);
+            }
+            validate_codex_tree_v1(tree, source, config, owner_uid, owner_gid)?;
+            fsync_directory_tree(&tree.root)?;
+            #[cfg(test)]
+            ownership_test_boundary("native_before_rename", tree.parent.as_fd(), &tree.name)?;
+            rename_noreplace(tree.parent.as_fd(), &tree.name, &tree.final_name)?;
+            #[cfg(test)]
+            ownership_test_boundary("native_after_rename", tree.parent.as_fd(), &tree.name)?;
+            tree.name = tree.final_name.clone();
+            tree.installed = true;
+            #[cfg(test)]
+            ownership_test_boundary("native_installed", tree.parent.as_fd(), &tree.name)?;
+            fsync(&tree.parent)?;
+        }
+        validate_codex_tree_v1(tree, source, config, owner_uid, owner_gid)?;
+        fsync(&tree.parent)?;
+        Ok(tree.manifest.clone())
+    }
+
+    fn open_codex_directory_v1(
+        parent: BorrowedFd<'_>,
+        name: &str,
+        uid: libc::uid_t,
+        gid: libc::gid_t,
+    ) -> Result<File, ConfigProjectionFailureV1> {
+        match open_directory_raw_at(parent, name) {
+            Ok(file) => {
+                verify_owned_entry_with_gid(parent, name, &file, uid, true, Some(gid))?;
+                Ok(file)
+            }
+            Err(ConfigProjectionFailureV1::MissingPreparation) => {
+                open_or_create_directory_with_gid(parent, name, uid, Some(gid))
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    fn pin_codex_artifact_v1(
+        artifact: &crate::DescriptorPinnedArtifactV1,
+    ) -> Result<File, ConfigProjectionFailureV1> {
+        use std::os::unix::fs::FileExt;
+        let path = Path::new(&artifact.configured_absolute_path);
+        let parent = open_absolute_directory(
+            path.parent()
+                .ok_or(ConfigProjectionFailureV1::WrongBinding)?,
+        )?;
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or(ConfigProjectionFailureV1::WrongBinding)?;
+        let file = open_file_at(parent.as_fd(), name, libc::O_RDONLY, 0)?;
+        let before = fstat(file.as_raw_fd())?;
+        if before.st_mode & libc::S_IFMT != libc::S_IFREG
+            || before.st_uid != 0
+            || before.st_nlink != 1
+            || before.st_dev != artifact.device_id
+            || before.st_ino != artifact.inode
+            || before.st_mode & 0o7777 != artifact.mode
+            || before.st_size < 0
+            || before.st_size as u64 != artifact.byte_length
+            || artifact.byte_length > 512 * 1024 * 1024
+        {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        let mut bytes = vec![0; artifact.byte_length as usize];
+        file.read_exact_at(&mut bytes, 0)
+            .map_err(|_| ConfigProjectionFailureV1::PartialPublication)?;
+        if ordinary_sha256(&bytes) != artifact.sha256
+            || crate::LinuxArtifactSourceV1::validate_e3_static_elf_v1(&file)?
+                != artifact.runtime_support.elf_execution_model
+            || !same_owned_metadata(&before, &fstat(file.as_raw_fd())?)
+        {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        Ok(file)
+    }
+
+    fn validate_pinned_codex_inputs_v1(
+        pinned: &E3CodexPinnedInputsV1,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        use std::os::unix::fs::FileExt;
+        let uid = checked_uid(pinned.record.native.root.owner_uid)?;
+        let gid = checked_uid(pinned.record.native.root.owner_gid)?;
+        pinned
+            .source
+            .source_root
+            .revalidate_linux_from_fd(pinned.source_root.as_fd())?;
+        pinned
+            .record
+            .identity
+            .workspace_root
+            .revalidate_linux_from_fd(pinned.workspace.as_fd())?;
+        let codex_home = open_directory_raw_at(pinned.source_root.as_fd(), "codex-home")?;
+        let metadata = verify_owned_entry_with_gid(
+            codex_home.as_fd(),
+            "config.toml",
+            &pinned.source_config,
+            uid,
+            false,
+            Some(gid),
+        )?;
+        let user = pinned
+            .record
+            .native
+            .ambient_closure
+            .inputs
+            .iter()
+            .find(|input| input.layer == "User" && input.relative_path == "config.toml")
+            .ok_or(ConfigProjectionFailureV1::WrongBinding)?;
+        if user.device_id != Some(metadata.st_dev)
+            || user.inode != Some(metadata.st_ino)
+            || user.byte_length != Some(metadata.st_size as u64)
+        {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        let expected = STANDARD
+            .decode(&pinned.record.native.files[0].bytes_base64)
+            .map_err(|_| ConfigProjectionFailureV1::Malformed)?;
+        let mut bytes = vec![0; expected.len()];
+        pinned
+            .source_config
+            .read_exact_at(&mut bytes, 0)
+            .map_err(|_| ConfigProjectionFailureV1::PartialPublication)?;
+        if bytes != expected
+            || !same_owned_metadata(&metadata, &fstat(pinned.source_config.as_raw_fd())?)
+        {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        // Repeat the descriptor/path/content observation immediately before transfer.
+        for (held, artifact) in [
+            (
+                &pinned.wrapper,
+                &pinned.record.identity.runtime_artifacts.world_entry_wrapper,
+            ),
+            (
+                &pinned.codex,
+                &pinned.record.identity.runtime_artifacts.codex,
+            ),
+        ] {
+            let observed = pin_codex_artifact_v1(artifact)?;
+            if !same_owned_metadata(&fstat(held.as_raw_fd())?, &fstat(observed.as_raw_fd())?) {
+                return Err(ConfigProjectionFailureV1::WrongBinding);
+            }
+        }
+        Ok(())
+    }
+
+    fn take_codex_runtime_inputs_v1(
+        progress: &mut E3CodexNativeProgressV1,
+    ) -> Result<crate::E3CodexRuntimeInputsV1, ConfigProjectionFailureV1> {
+        use ConfigProjectionFailureV1::{Conflict, PartialPublication};
+        if progress.transferred || progress.terminal.is_some() {
+            return Err(Conflict);
+        }
+        let tree = progress
+            .tree
+            .as_ref()
+            .filter(|tree| tree.installed)
+            .ok_or(PartialPublication)?;
+        let system_empty = open_directory_raw_at(tree.root.as_fd(), "system-empty")?;
+        let tmp = tree.directories.get("tmp").ok_or(PartialPublication)?;
+        let output_directory = open_directory_raw_at(tmp.as_fd(), "output-last-message")?;
+        for (path, observed) in [
+            ("system-empty", &system_empty),
+            ("tmp/output-last-message", &output_directory),
+        ] {
+            let original = tree.directories.get(path).ok_or(PartialPublication)?;
+            if !same_owned_metadata(&fstat(original.as_raw_fd())?, &fstat(observed.as_raw_fd())?)
+                || !list_names(observed)?.is_empty()
+            {
+                return Err(ConfigProjectionFailureV1::WrongBinding);
+            }
+        }
+        let manifest = tree.manifest.clone();
+        let pinned = progress.pinned.take().ok_or(PartialPublication)?;
+        let Some(tree) = progress.tree.take() else {
+            progress.pinned = Some(pinned);
+            return Err(PartialPublication);
+        };
+        progress.transferred_manifest = Some(manifest.clone());
+        progress.transferred = true;
+        Ok(crate::E3CodexRuntimeInputsV1 {
+            pinned,
+            tree,
+            manifest,
+            system_empty,
+            output_directory,
+        })
+    }
+
+    impl ConfigProjectionRegistryV1 {
+        pub(crate) fn recover_native_realization(
+            &self,
+            publication: &mut crate::E3PreparedRetainedLaunchPublicationV1,
+            capability: &PublishedConfigProjectionCapabilityV1,
+            ready: &ConfigProjectionRefV1,
+        ) -> Result<(), ConfigProjectionFailureV1> {
+            if publication.native_progress.transferred
+                || publication.native_progress.terminal.is_some()
+            {
+                return Err(ConfigProjectionFailureV1::Conflict);
+            }
+            let (record, source, _, _) =
+                self.validate_retained_codex_authority_v1(publication, capability, ready)?;
+            if let Some(tree) = &mut publication.native_progress.tree {
+                reconcile_codex_tree_name_v1(tree)?;
+                // Never adopt a root from a pathname after a child could have owned it.
+                let config = STANDARD
+                    .decode(&record.native.files[0].bytes_base64)
+                    .map_err(|_| ConfigProjectionFailureV1::Malformed)?;
+                if tree.installed {
+                    validate_codex_tree_v1(
+                        tree,
+                        &source,
+                        &config,
+                        checked_uid(record.native.root.owner_uid)?,
+                        checked_uid(record.native.root.owner_gid)?,
+                    )?;
+                } else {
+                    verify_owned_entry_with_gid(
+                        tree.parent.as_fd(),
+                        &tree.name,
+                        &tree.root,
+                        checked_uid(record.native.root.owner_uid)?,
+                        true,
+                        Some(checked_uid(record.native.root.owner_gid)?),
+                    )?;
+                }
+            }
+            Ok(())
+        }
+
+        pub(crate) fn realize_native_root(
+            &self,
+            publication: &mut crate::E3PreparedRetainedLaunchPublicationV1,
+            capability: &PublishedConfigProjectionCapabilityV1,
+            ready: &ConfigProjectionRefV1,
+            now: Timestamp,
+        ) -> Result<crate::E3CodexRuntimeInputsV1, ConfigProjectionFailureV1> {
+            use ConfigProjectionFailureV1::{Conflict, PartialPublication, WrongBinding};
+            if publication.native_progress.transferred
+                || publication.native_progress.terminal.is_some()
+            {
+                return Err(Conflict);
+            }
+            let (record, source, ack, _) =
+                self.validate_retained_codex_authority_v1(publication, capability, ready)?;
+            if record.managed_gateway.posture != ManagedGatewayProjectionPostureV1::ReadyClosed {
+                return Err(WrongBinding);
+            }
+            let uid = checked_uid(record.native.root.owner_uid)?;
+            let gid = checked_uid(record.native.root.owner_gid)?;
+            let config = STANDARD
+                .decode(&record.native.files[0].bytes_base64)
+                .map_err(|_| WrongBinding)?;
+            let original_lease = publication
+                .held_consumer_lease()
+                .ok_or(PartialPublication)?
+                .clone();
+            let progress = &mut publication.native_progress;
+            if progress.pinned.is_none() {
+                let source_root =
+                    open_absolute_directory(Path::new(&source.source_root.physical_path))?;
+                source
+                    .source_root
+                    .revalidate_linux_from_fd(source_root.as_fd())?;
+                let codex_home = open_directory_raw_at(source_root.as_fd(), "codex-home")?;
+                let source_config =
+                    open_file_at(codex_home.as_fd(), "config.toml", libc::O_RDONLY, 0)?;
+                verify_owned_entry_with_gid(
+                    codex_home.as_fd(),
+                    "config.toml",
+                    &source_config,
+                    uid,
+                    false,
+                    Some(gid),
+                )?;
+                let workspace = open_absolute_directory(Path::new(
+                    &record.identity.workspace_root.physical_path,
+                ))?;
+                record
+                    .identity
+                    .workspace_root
+                    .revalidate_linux_from_fd(workspace.as_fd())?;
+                let wrapper =
+                    pin_codex_artifact_v1(&record.identity.runtime_artifacts.world_entry_wrapper)?;
+                let codex = pin_codex_artifact_v1(&record.identity.runtime_artifacts.codex)?;
+                progress.pinned = Some(E3CodexPinnedInputsV1 {
+                    record: record.clone(),
+                    source: source.clone(),
+                    wrapper,
+                    codex,
+                    source_root,
+                    source_config,
+                    workspace,
+                    original_lease,
+                    activation_ack: ack,
+                });
+            }
+            let pinned = progress.pinned.as_ref().ok_or(PartialPublication)?;
+            if pinned.record != record || pinned.source != source {
+                return Err(WrongBinding);
+            }
+            let base = open_absolute_directory(Path::new("/run/substrate/member-config"))?;
+            verify_directory(&base, 0, 0o711)?;
+            verify_group(&base, 0)?;
+            if let Some(held) = &progress.runtime_parent {
+                if !same_owned_metadata(&fstat(held.as_raw_fd())?, &fstat(base.as_raw_fd())?) {
+                    return Err(WrongBinding);
+                }
+            } else {
+                progress.runtime_parent = Some(base);
+            }
+            let base = progress.runtime_parent.as_ref().ok_or(PartialPublication)?;
+            let series = open_codex_directory_v1(base.as_fd(), &source.series_id, uid, gid)?;
+            realize_codex_tree_v1(progress, series, &source, &config, uid, gid, now)?;
+            self.validate_retained_codex_authority_v1(publication, capability, ready)?;
+            let progress = &mut publication.native_progress;
+            let tree = progress.tree.as_ref().ok_or(PartialPublication)?;
+            tree.manifest
+                .realization_root
+                .revalidate_linux_from_fd(tree.root.as_fd())?;
+            validate_pinned_codex_inputs_v1(progress.pinned.as_ref().ok_or(PartialPublication)?)?;
+            take_codex_runtime_inputs_v1(progress)
+        }
+    }
+
+    fn remove_codex_contents_v1(
+        directory: &File,
+        depth: usize,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        if depth > 128 {
+            return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+        }
+        for name in list_names(directory)? {
+            let component =
+                CString::new(name.as_str()).map_err(|_| ConfigProjectionFailureV1::Malformed)?;
+            let mut metadata: libc::stat = unsafe { std::mem::zeroed() };
+            if unsafe {
+                libc::fstatat(
+                    directory.as_raw_fd(),
+                    component.as_ptr(),
+                    &mut metadata,
+                    libc::AT_SYMLINK_NOFOLLOW,
+                )
+            } != 0
+            {
+                return Err(map_io_error());
+            }
+            if metadata.st_mode & libc::S_IFMT == libc::S_IFDIR {
+                let child = open_directory_raw_at(directory.as_fd(), &name)?;
+                let held = fstat(child.as_raw_fd())?;
+                if held.st_dev != metadata.st_dev || held.st_ino != metadata.st_ino {
+                    return Err(ConfigProjectionFailureV1::WrongBinding);
+                }
+                remove_codex_contents_v1(&child, depth + 1)?;
+                let named = open_directory_raw_at(directory.as_fd(), &name)?;
+                if fstat(named.as_raw_fd())?.st_ino != held.st_ino {
+                    return Err(ConfigProjectionFailureV1::WrongBinding);
+                }
+                unlink_directory_at(directory.as_fd(), &name)?;
+            } else {
+                // Unlink an entry, including a symlink, without following its target.
+                unlink_at(directory.as_fd(), &name)?;
+            }
+            fsync(directory)?;
+            #[cfg(test)]
+            ownership_test_boundary("native_deleted_entry", directory.as_fd(), &name)?;
+        }
+        Ok(())
+    }
+
+    fn cleanup_codex_tree_v1(
+        tree: &mut E3CodexNativeTreeV1,
+        uid: libc::uid_t,
+        gid: libc::gid_t,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        if tree.root_removed {
+            return match open_directory_raw_at(tree.parent.as_fd(), &tree.name) {
+                Err(ConfigProjectionFailureV1::MissingPreparation) => fsync(&tree.parent),
+                _ => Err(ConfigProjectionFailureV1::Conflict),
+            };
+        }
+        reconcile_codex_tree_name_v1(tree)?;
+        verify_owned_entry_with_gid(
+            tree.parent.as_fd(),
+            &tree.name,
+            &tree.root,
+            uid,
+            true,
+            Some(gid),
+        )?;
+        if !tree.deleting {
+            for (path, held) in &tree.directories {
+                let (parent, name) = native_child_parent_v1(&tree.root, &tree.directories, path)?;
+                verify_owned_entry_with_gid(parent.as_fd(), name, held, uid, true, Some(gid))?;
+            }
+            for (path, held) in &tree.files {
+                let (parent, name) = native_child_parent_v1(&tree.root, &tree.directories, path)?;
+                verify_owned_entry_with_gid(parent.as_fd(), name, held, uid, false, Some(gid))?;
+            }
+            tree.deleting = true;
+        }
+        remove_codex_contents_v1(&tree.root, 0)?;
+        verify_owned_entry_with_gid(
+            tree.parent.as_fd(),
+            &tree.name,
+            &tree.root,
+            uid,
+            true,
+            Some(gid),
+        )?;
+        unlink_directory_at(tree.parent.as_fd(), &tree.name)?;
+        tree.root_removed = true;
+        #[cfg(test)]
+        ownership_test_boundary("native_removed_root", tree.parent.as_fd(), &tree.name)?;
+        fsync(&tree.parent)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn revoke_codex_native_v1(
+        registry: &ConfigProjectionRegistryV1,
+        publication: &mut crate::E3PreparedRetainedLaunchPublicationV1,
+        capability: &PublishedConfigProjectionCapabilityV1,
+        head: &ConfigProjectionRefV1,
+        terminal: &E3TerminalChildQuiescenceEvidenceV1,
+        boundary: &GatewayAccessBoundaryV1,
+        mut inputs: Option<&mut crate::E3CodexRuntimeInputsV1>,
+        now: Timestamp,
+    ) -> Result<ConfigProjectionConsumerLeaseV1, ConfigProjectionFailureV1> {
+        use ConfigProjectionFailureV1::{PartialPublication, WrongBinding};
+        validate_timestamp(&now)?;
+        let held = publication
+            .held_consumer_lease()
+            .ok_or(PartialPublication)?
+            .clone();
+        if !Arc::ptr_eq(&registry.parent, &capability._parent)
+            || publication.published_head() != Some(&capability._projection_ref)
+            || held != capability._held_lease
+            || terminal.final_projection_ref != *head
+            || boundary.posture != GatewayAccessPostureV1::Revoked
+            || publication.native_progress.transferred != inputs.is_some()
+        {
+            return Err(WrongBinding);
+        }
+        let readback = registry.recover(Some(&capability._identity))?;
+        let Some(ConfigProjectionSubjectReadbackV1::Bound(current)) = readback.subject else {
+            return Err(PartialPublication);
+        };
+        let record = &current.record;
+        if current.projection_ref != *head
+            || record.identity != capability._identity
+            || record.identity.authority_store_id != held.authority_store_id
+            || record.identity.series_id != held.series_id
+        {
+            return Err(WrongBinding);
+        }
+        let fence = match &record.activation.publication_fence {
+            crate::ConfigProjectionPublicationFenceV1::ZeroLiveClosed { fence_id }
+            | crate::ConfigProjectionPublicationFenceV1::Released { fence_id, .. } => fence_id,
+        };
+        let effects: Vec<_> = readback
+            .kernel_effects
+            .iter()
+            .filter(|effect| {
+                effect.intent.series_id == record.identity.series_id
+                    && effect.intent.fence_id == *fence
+                    && effect.intent.preparation_id
+                        == record
+                            .nonsecret_handoff
+                            .credential_source_ref
+                            .preparation_id
+            })
+            .collect();
+        if effects.len() != 4
+            || effects.iter().any(|effect| {
+                effect.projection.as_ref() != Some(record)
+                    || effect.resolution.is_none()
+                    || effect
+                        .terminal_child_evidence
+                        .iter()
+                        .filter(|proof| proof.final_projection_ref == *head)
+                        .collect::<Vec<_>>()
+                        != [terminal]
+            })
+            || effects
+                .iter()
+                .filter_map(|effect| effect.boundary.as_ref())
+                .collect::<Vec<_>>()
+                != [boundary]
+        {
+            return Err(WrongBinding);
+        }
+        if let Some(input) = inputs.as_ref() {
+            if publication.native_progress.transferred_manifest.as_ref() != Some(&input.manifest)
+                || input.pinned.record.identity != record.identity
+                || input.pinned.record.native != record.native
+                || input.manifest.fence_id != *fence
+                || input.pinned.original_lease != held
+                || input.pinned.activation_ack.dormant_projection_ref != capability._projection_ref
+            {
+                return Err(WrongBinding);
+            }
+        }
+        let progress = &mut publication.native_progress;
+        if let Some(frozen) = &progress.terminal {
+            if frozen.head != *head || frozen.terminal != *terminal || frozen.boundary != *boundary
+            {
+                return Err(WrongBinding);
+            }
+        } else {
+            if current.consumer_lease.as_ref() != Some(&held) {
+                return Err(WrongBinding);
+            }
+            progress.terminal = Some(E3CodexNativeCleanupV1 {
+                head: head.clone(),
+                terminal: terminal.clone(),
+                boundary: boundary.clone(),
+                released_at: now,
+                released: None,
+            });
+        }
+        let frozen = progress.terminal.as_mut().ok_or(PartialPublication)?;
+        let mut expected = held.clone();
+        expected.revision = held.revision.checked_add(1).ok_or(WrongBinding)?;
+        expected.predecessor_lease_hash = Some(held.lease_hash.clone());
+        expected.posture = ConfigProjectionConsumerLeasePostureV1::Released;
+        expected.released_at = Some(frozen.released_at.clone());
+        expected.lease_hash = hash_omitting(
+            "substrate.e3.config-projection-consumer-lease.v1",
+            "lease",
+            &expected,
+            "lease_hash",
+        )?;
+        if current.consumer_lease.as_ref() != Some(&held)
+            && current.consumer_lease.as_ref() != Some(&expected)
+        {
+            return Err(WrongBinding);
+        }
+        let released = registry.release_consumer_lease(&held, frozen.released_at.clone())?;
+        if released != expected || frozen.released.as_ref().is_some_and(|old| *old != released) {
+            return Err(WrongBinding);
+        }
+        frozen.released = Some(released.clone());
+        #[cfg(test)]
+        if let Some(tree) = inputs
+            .as_ref()
+            .map(|input| &input.tree)
+            .or(progress.tree.as_ref())
+        {
+            ownership_test_boundary("native_lease_released", tree.parent.as_fd(), &tree.name)?;
+        }
+        let uid = checked_uid(record.native.root.owner_uid)?;
+        let gid = checked_uid(record.native.root.owner_gid)?;
+        if let Some(input) = inputs.as_mut() {
+            cleanup_codex_tree_v1(&mut input.tree, uid, gid)?;
+        } else if let Some(tree) = progress.tree.as_mut() {
+            cleanup_codex_tree_v1(tree, uid, gid)?;
+        } else if let Some(pending) = &mut progress.pending_root {
+            cleanup_pending_codex_root_v1(pending, uid, gid)?;
+        }
+        Ok(released)
+    }
+
     /// Object-safe bridge to shell's sealed HSA parent transaction.
     pub trait ConfigProjectionHsaAuthorityV1: Send + Sync {
         fn with_locked_parent(
@@ -9525,6 +10594,613 @@ mod linux {
         use serde_json::json;
 
         use super::*;
+
+        fn native_source_fixture_v1(parent: &File) -> NativeProjectionSourceManifestV1 {
+            NativeProjectionSourceManifestV1 {
+                schema_version: 1,
+                authority_store_id: id("cpa_"),
+                series_id: id("cps_"),
+                fence_id: id("cpf_"),
+                source_root: CanonicalDirectoryV1::capture_linux_from_fd(parent.as_fd()).unwrap(),
+                native_projection_hash: digest(),
+                ordered_file_hashes: vec![ordinary_sha256(b"config")],
+                created_at: Timestamp("2026-10-21T00:00:00.000000Z".into()),
+                manifest_hash: digest(),
+            }
+        }
+
+        #[test]
+        fn test_e3f_native_cancel_temporary_removal_ack_retry() {
+            let temp = tempfile::tempdir().unwrap();
+            std::fs::set_permissions(temp.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+            let source = native_source_fixture_v1(&File::open(temp.path()).unwrap());
+            let mut progress = E3CodexNativeProgressV1::default();
+            OWNERSHIP_TEST_HOOK.with(|hook| {
+                *hook.borrow_mut() = Some(Box::new(|stage, _, _| {
+                    if stage == "native_created" {
+                        Err(ConfigProjectionFailureV1::PartialPublication)
+                    } else {
+                        Ok(())
+                    }
+                }))
+            });
+            let interrupted = realize_codex_tree_v1(
+                &mut progress,
+                File::open(temp.path()).unwrap(),
+                &source,
+                b"config",
+                unsafe { libc::geteuid() },
+                unsafe { libc::getegid() },
+                source.created_at.clone(),
+            );
+            OWNERSHIP_TEST_HOOK.with(|hook| *hook.borrow_mut() = None);
+            assert!(interrupted.is_err());
+            let tree = progress.tree.as_mut().unwrap();
+            assert!(!tree.installed);
+            OWNERSHIP_TEST_HOOK.with(|hook| {
+                *hook.borrow_mut() = Some(Box::new(|stage, _, _| {
+                    if stage == "native_removed_root" {
+                        Err(ConfigProjectionFailureV1::PartialPublication)
+                    } else {
+                        Ok(())
+                    }
+                }))
+            });
+            let lost =
+                cleanup_codex_tree_v1(tree, unsafe { libc::geteuid() }, unsafe { libc::getegid() });
+            OWNERSHIP_TEST_HOOK.with(|hook| *hook.borrow_mut() = None);
+            assert!(lost.is_err());
+            assert!(tree.root_removed);
+            cleanup_codex_tree_v1(tree, unsafe { libc::geteuid() }, unsafe { libc::getegid() })
+                .unwrap();
+            assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 0);
+        }
+
+        #[test]
+        #[ignore = "explicit root native creation custody test; no process identity switching"]
+        fn test_e3f_native_creator_owned_root_failure_retains_custody() {
+            assert_eq!(unsafe { libc::geteuid() }, 0);
+            for cancel in [false, true] {
+                let temp = tempfile::tempdir().unwrap();
+                std::fs::set_permissions(temp.path(), std::fs::Permissions::from_mode(0o700))
+                    .unwrap();
+                let source = native_source_fixture_v1(&File::open(temp.path()).unwrap());
+                let mut progress = E3CodexNativeProgressV1::default();
+                OWNERSHIP_TEST_HOOK.with(|hook| {
+                    *hook.borrow_mut() = Some(Box::new(|stage, _, _| {
+                        if stage == "created" {
+                            Err(ConfigProjectionFailureV1::PartialPublication)
+                        } else {
+                            Ok(())
+                        }
+                    }))
+                });
+                let interrupted = realize_codex_tree_v1(
+                    &mut progress,
+                    File::open(temp.path()).unwrap(),
+                    &source,
+                    b"config",
+                    1000,
+                    1000,
+                    source.created_at.clone(),
+                );
+                OWNERSHIP_TEST_HOOK.with(|hook| *hook.borrow_mut() = None);
+                assert!(interrupted.is_err());
+                if cancel {
+                    let pending = progress.pending_root.as_mut().unwrap();
+                    assert_eq!(
+                        fstat(pending.root.as_ref().unwrap().as_raw_fd())
+                            .unwrap()
+                            .st_uid,
+                        0
+                    );
+                    OWNERSHIP_TEST_HOOK.with(|hook| {
+                        *hook.borrow_mut() = Some(Box::new(|stage, _, _| {
+                            if stage == "native_removed_root" {
+                                Err(ConfigProjectionFailureV1::PartialPublication)
+                            } else {
+                                Ok(())
+                            }
+                        }))
+                    });
+                    let lost = cleanup_pending_codex_root_v1(pending, 1000, 1000);
+                    OWNERSHIP_TEST_HOOK.with(|hook| *hook.borrow_mut() = None);
+                    assert!(lost.is_err());
+                    assert!(pending.removed);
+                    cleanup_pending_codex_root_v1(pending, 1000, 1000).unwrap();
+                    assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 0);
+                    continue;
+                }
+                let manifest = realize_codex_tree_v1(
+                    &mut progress,
+                    File::open(temp.path()).unwrap(),
+                    &source,
+                    b"config",
+                    1000,
+                    1000,
+                    source.created_at.clone(),
+                )
+                .unwrap();
+                assert_eq!((manifest.owner_uid, manifest.owner_gid), (1000, 1000));
+                cleanup_codex_tree_v1(progress.tree.as_mut().unwrap(), 1000, 1000).unwrap();
+                assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 0);
+            }
+        }
+
+        #[test]
+        fn test_e3f_native_realization_interrupted_publication_and_cleanup() {
+            for stage in [
+                "owned",
+                "native_created",
+                "written",
+                "native_before_rename",
+                "native_after_rename",
+                "native_installed",
+            ] {
+                let temp = tempfile::tempdir().unwrap();
+                std::fs::set_permissions(temp.path(), std::fs::Permissions::from_mode(0o700))
+                    .unwrap();
+                let source = native_source_fixture_v1(&File::open(temp.path()).unwrap());
+                let mut progress = E3CodexNativeProgressV1::default();
+                OWNERSHIP_TEST_HOOK.with(|hook| {
+                    *hook.borrow_mut() = Some(Box::new(move |observed, _, _| {
+                        if observed == stage {
+                            Err(ConfigProjectionFailureV1::PartialPublication)
+                        } else {
+                            Ok(())
+                        }
+                    }))
+                });
+                let result = realize_codex_tree_v1(
+                    &mut progress,
+                    File::open(temp.path()).unwrap(),
+                    &source,
+                    b"config",
+                    unsafe { libc::geteuid() },
+                    unsafe { libc::getegid() },
+                    source.created_at.clone(),
+                );
+                OWNERSHIP_TEST_HOOK.with(|hook| *hook.borrow_mut() = None);
+                assert!(result.is_err(), "fault was not reached: {stage}");
+                assert!(progress.tree.is_some() || progress.pending_root.is_some());
+                let retry = realize_codex_tree_v1(
+                    &mut progress,
+                    File::open(temp.path()).unwrap(),
+                    &source,
+                    b"config",
+                    unsafe { libc::geteuid() },
+                    unsafe { libc::getegid() },
+                    Timestamp("2026-10-22T00:00:00.000000Z".into()),
+                )
+                .unwrap();
+                assert_eq!(retry.created_at, source.created_at, "{stage}");
+                assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 1);
+                let tree = progress.tree.as_mut().unwrap();
+                OWNERSHIP_TEST_HOOK.with(|hook| {
+                    *hook.borrow_mut() = Some(Box::new(|observed, _, _| {
+                        if observed == "native_deleted_entry" {
+                            Err(ConfigProjectionFailureV1::PartialPublication)
+                        } else {
+                            Ok(())
+                        }
+                    }))
+                });
+                let failed = cleanup_codex_tree_v1(tree, unsafe { libc::geteuid() }, unsafe {
+                    libc::getegid()
+                });
+                OWNERSHIP_TEST_HOOK.with(|hook| *hook.borrow_mut() = None);
+                assert!(failed.is_err());
+                assert!(!tree.root_removed);
+                cleanup_codex_tree_v1(tree, unsafe { libc::geteuid() }, unsafe { libc::getegid() })
+                    .unwrap();
+                cleanup_codex_tree_v1(tree, unsafe { libc::geteuid() }, unsafe { libc::getegid() })
+                    .unwrap();
+                assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 0);
+            }
+        }
+
+        #[test]
+        fn test_e3f_native_realization_conflict_has_no_adoption_or_repair() {
+            let temp = tempfile::tempdir().unwrap();
+            std::fs::set_permissions(temp.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+            let source = native_source_fixture_v1(&File::open(temp.path()).unwrap());
+            let mut progress = E3CodexNativeProgressV1::default();
+            realize_codex_tree_v1(
+                &mut progress,
+                File::open(temp.path()).unwrap(),
+                &source,
+                b"config",
+                unsafe { libc::geteuid() },
+                unsafe { libc::getegid() },
+                source.created_at.clone(),
+            )
+            .unwrap();
+            assert!(realize_codex_tree_v1(
+                &mut E3CodexNativeProgressV1::default(),
+                File::open(temp.path()).unwrap(),
+                &source,
+                b"config",
+                unsafe { libc::geteuid() },
+                unsafe { libc::getegid() },
+                source.created_at.clone()
+            )
+            .is_err());
+            let root = temp.path().join(&source.fence_id);
+            std::os::unix::fs::symlink("/", root.join("home/escape")).unwrap();
+            assert!(realize_codex_tree_v1(
+                &mut progress,
+                File::open(temp.path()).unwrap(),
+                &source,
+                b"config",
+                unsafe { libc::geteuid() },
+                unsafe { libc::getegid() },
+                source.created_at.clone()
+            )
+            .is_err());
+            assert!(root
+                .join("home/escape")
+                .symlink_metadata()
+                .unwrap()
+                .file_type()
+                .is_symlink());
+            cleanup_codex_tree_v1(
+                progress.tree.as_mut().unwrap(),
+                unsafe { libc::geteuid() },
+                unsafe { libc::getegid() },
+            )
+            .unwrap();
+            assert!(!root.exists());
+        }
+
+        fn publish_native_cleanup_fixture_v1(
+            registry: &ConfigProjectionRegistryV1,
+            store: &ConfigProjectionStoreV1,
+            fixture: &PreparedGatewayFixture,
+            record: &AgentConfigProjectionRecordV1,
+        ) -> (E3TerminalChildQuiescenceEvidenceV1, GatewayAccessBoundaryV1) {
+            let head = record_ref(record);
+            let mut evidence = terminal_evidence(store, record, &head);
+            evidence.ordered_terminal_processes = registry
+                .recover(None)
+                .unwrap()
+                .kernel_effects
+                .into_iter()
+                .flat_map(|effect| effect.child_processes)
+                .map(|child| crate::E3TerminalProcessObservationV1 {
+                    registration_id: child.registration_id,
+                    registration_hash: child.registration_hash,
+                    role: child.role,
+                    pid: child.pid,
+                    pid_start_time_ticks: child.pid_start_time_ticks,
+                    observation: crate::E3TerminalProcessObservationKindV1::ParentWaitid {
+                        terminal_wait_status: 0,
+                    },
+                })
+                .collect();
+            evidence.ordered_empty_cgroups = fixture
+                .registrations
+                .iter()
+                .map(|registration| crate::E3TerminalCgroupQuiescenceV1 {
+                    cgroup_registration_id: registration.cgroup_registration_id.clone(),
+                    cgroup_registration_hash: registration.cgroup_registration_hash.clone(),
+                    role: registration.role,
+                    cgroup: registration.cgroup.clone(),
+                    cgroup_events_sha256: ordinary_sha256(b"populated 0\n"),
+                    cgroup_procs_sha256: ordinary_sha256(b""),
+                    populated: false,
+                    ordered_live_pids: vec![],
+                })
+                .collect();
+            evidence
+                .ordered_empty_cgroups
+                .sort_by_key(|entry| terminal_role_rank(entry.role));
+            evidence.evidence_hash = hash_omitting(
+                "substrate.e3.terminal-child-quiescence.v1",
+                "evidence",
+                &evidence,
+                "evidence_hash",
+            )
+            .unwrap();
+            registry.publish_terminal_child_evidence(&evidence).unwrap();
+            for effect in registry.recover(None).unwrap().kernel_effects {
+                let mut resolution = E3KernelEffectResolutionV1 {
+                    schema_version: 1,
+                    authority_store_id: store.authority_store_id.clone(),
+                    resolution_id: id("ekr_"),
+                    effect_intent_ref: kernel_effect_intent_ref(&effect.intent),
+                    disposition: E3KernelEffectResolutionDispositionV1::RevertedAndQuiescent,
+                    observed_cgroup: effect
+                        .child_cgroup
+                        .as_ref()
+                        .map(|registration| registration.cgroup.clone()),
+                    observed_nftables_table_handle: effect.boundary.as_ref().map(|_| 1),
+                    resolved_at: now_timestamp(),
+                    resolution_hash: String::new(),
+                };
+                resolution.resolution_hash = hash_omitting(
+                    "substrate.e3.kernel-effect-resolution.v1",
+                    "resolution",
+                    &resolution,
+                    "resolution_hash",
+                )
+                .unwrap();
+                registry
+                    .publish_kernel_effect_resolution(
+                        &resolution,
+                        Some(&mut || {
+                            Ok(effect.boundary.as_ref().map(|boundary| {
+                                successor_boundary(boundary, GatewayAccessPostureV1::Revoked)
+                            }))
+                        }),
+                        Some(&head),
+                    )
+                    .unwrap();
+            }
+            let revoked = registry
+                .recover(None)
+                .unwrap()
+                .kernel_effects
+                .into_iter()
+                .find_map(|effect| effect.boundary)
+                .unwrap();
+            (evidence, revoked)
+        }
+
+        #[test]
+        fn test_e3f_native_cleanup_original_lease_ack_and_partial_deletion() {
+            for transferred in [false, true] {
+                for fault in [
+                    "native_lease_released",
+                    "published",
+                    "native_deleted_entry",
+                    "native_removed_root",
+                ] {
+                    let (_authority_temp, _, registry, store) = test_registry();
+                    let fixture = PreparedGatewayFixture::new(&registry, &store, None);
+                    let dormant = registry
+                        .publish_dormant(&fixture.record, Some(fixture.chain()))
+                        .unwrap();
+                    let (ready, ack, lease) = ready_gateway_fixture_v1(&registry, &fixture);
+                    let Some(ConfigProjectionResolutionV1::Current { capability, .. }) = registry
+                        .resolve(Some((&fixture.record.identity, &lease)), None)
+                        .unwrap()
+                        .0
+                    else {
+                        panic!("capability missing");
+                    };
+                    let mut publication = crate::E3PreparedRetainedLaunchPublicationV1::new(
+                        &fixture.record.identity,
+                        &fixture.gateway,
+                        &fixture.handoff.handoff.credential_source_ref,
+                        fixture.handoff.handoff.handoff_id.clone(),
+                        format!("e3pik_{}", "a".repeat(64)),
+                        fixture.handoff.handoff.created_at.clone(),
+                        fixture.handoff.handoff.expires_at.clone(),
+                    )
+                    .unwrap();
+                    publication
+                        .bind_prepared_chain(
+                            fixture.record.clone(),
+                            fixture.registrations.clone(),
+                            fixture.boundary.clone(),
+                            fixture.intent.clone(),
+                            fixture.input.clone(),
+                        )
+                        .unwrap();
+                    crate::service::test_e3f_retained_publication_fixture(
+                        &mut publication,
+                        dormant.clone(),
+                        lease.clone(),
+                    );
+                    let ready_ref = registry
+                        .publish_ready_closed(&dormant, &ready, &ack, &lease)
+                        .unwrap();
+                    let (_, source, _, _) = registry
+                        .validate_retained_codex_authority_v1(&publication, &capability, &ready_ref)
+                        .unwrap();
+                    let temp = tempfile::tempdir().unwrap();
+                    std::fs::set_permissions(temp.path(), std::fs::Permissions::from_mode(0o700))
+                        .unwrap();
+                    let config = STANDARD
+                        .decode(&ready.native.files[0].bytes_base64)
+                        .unwrap();
+                    realize_codex_tree_v1(
+                        &mut publication.native_progress,
+                        File::open(temp.path()).unwrap(),
+                        &source,
+                        &config,
+                        unsafe { libc::geteuid() },
+                        unsafe { libc::getegid() },
+                        now_timestamp(),
+                    )
+                    .unwrap();
+                    // Non-executable descriptor-custody fixtures; this does not exercise artifact admission or Codex.
+                    publication.native_progress.pinned = Some(E3CodexPinnedInputsV1 {
+                        record: ready.clone(),
+                        source: source.clone(),
+                        wrapper: File::open(&source.source_root.physical_path).unwrap(),
+                        codex: File::open(&source.source_root.physical_path).unwrap(),
+                        source_root: File::open(&source.source_root.physical_path).unwrap(),
+                        source_config: File::open(
+                            Path::new(&source.source_root.physical_path)
+                                .join("codex-home/config.toml"),
+                        )
+                        .unwrap(),
+                        workspace: File::open(&source.source_root.physical_path).unwrap(),
+                        original_lease: lease.clone(),
+                        activation_ack: ack.clone(),
+                    });
+                    let mut inputs = transferred.then(|| {
+                        take_codex_runtime_inputs_v1(&mut publication.native_progress).unwrap()
+                    });
+                    if transferred {
+                        assert!(
+                            take_codex_runtime_inputs_v1(&mut publication.native_progress).is_err()
+                        );
+                    }
+                    let premature = terminal_evidence(&store, &ready, &ready_ref);
+                    assert!(revoke_codex_native_v1(
+                        &registry,
+                        &mut publication,
+                        &capability,
+                        &ready_ref,
+                        &premature,
+                        &fixture.boundary,
+                        inputs.as_mut(),
+                        now_timestamp()
+                    )
+                    .is_err());
+                    assert!(temp.path().join(&source.fence_id).exists());
+                    let (terminal, boundary) =
+                        publish_native_cleanup_fixture_v1(&registry, &store, &fixture, &ready);
+                    if transferred {
+                        assert!(revoke_codex_native_v1(
+                            &registry,
+                            &mut publication,
+                            &capability,
+                            &ready_ref,
+                            &terminal,
+                            &boundary,
+                            None,
+                            now_timestamp()
+                        )
+                        .is_err());
+                    }
+                    OWNERSHIP_TEST_HOOK.with(|hook| {
+                        *hook.borrow_mut() = Some(Box::new(move |stage, _, name| {
+                            if stage == fault && (fault != "published" || name == "head.json") {
+                                Err(ConfigProjectionFailureV1::PartialPublication)
+                            } else {
+                                Ok(())
+                            }
+                        }))
+                    });
+                    let failed = revoke_codex_native_v1(
+                        &registry,
+                        &mut publication,
+                        &capability,
+                        &ready_ref,
+                        &terminal,
+                        &boundary,
+                        inputs.as_mut(),
+                        now_timestamp(),
+                    );
+                    OWNERSHIP_TEST_HOOK.with(|hook| *hook.borrow_mut() = None);
+                    assert!(failed.is_err(), "fault not reached: {fault}");
+                    let frozen_time = publication
+                        .native_progress
+                        .terminal
+                        .as_ref()
+                        .unwrap()
+                        .released_at
+                        .clone();
+                    let released = revoke_codex_native_v1(
+                        &registry,
+                        &mut publication,
+                        &capability,
+                        &ready_ref,
+                        &terminal,
+                        &boundary,
+                        inputs.as_mut(),
+                        Timestamp("2026-10-22T00:00:00.000000Z".into()),
+                    )
+                    .unwrap();
+                    assert_eq!(
+                        released.posture,
+                        ConfigProjectionConsumerLeasePostureV1::Released
+                    );
+                    assert_eq!(released.released_at, Some(frozen_time));
+                    assert_eq!(released.acquired_projection_ref, dormant);
+                    assert_eq!(
+                        revoke_codex_native_v1(
+                            &registry,
+                            &mut publication,
+                            &capability,
+                            &ready_ref,
+                            &terminal,
+                            &boundary,
+                            inputs.as_mut(),
+                            now_timestamp()
+                        )
+                        .unwrap(),
+                        released
+                    );
+                    assert!(!temp.path().join(&source.fence_id).exists());
+                    assert_eq!(
+                        std::fs::read(
+                            Path::new(&source.source_root.physical_path)
+                                .join("codex-home/config.toml")
+                        )
+                        .unwrap(),
+                        config
+                    );
+                    assert!(registry
+                        .recover_native_realization(&mut publication, &capability, &ready_ref)
+                        .is_err());
+                }
+            }
+        }
+
+        #[test]
+        fn test_e3f_native_realization_exact_retry_and_substitution() {
+            let temp = tempfile::tempdir().unwrap();
+            std::fs::set_permissions(temp.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+            let parent = File::open(temp.path()).unwrap();
+            let source = NativeProjectionSourceManifestV1 {
+                schema_version: 1,
+                authority_store_id: id("cpss_"),
+                series_id: id("cps_"),
+                fence_id: id("cpf_"),
+                source_root: CanonicalDirectoryV1::capture_linux_from_fd(parent.as_fd()).unwrap(),
+                native_projection_hash: digest(),
+                ordered_file_hashes: vec![ordinary_sha256(b"config")],
+                created_at: Timestamp("2026-10-21T00:00:00.000000Z".into()),
+                manifest_hash: digest(),
+            };
+            let mut progress = E3CodexNativeProgressV1::default();
+            let first = realize_codex_tree_v1(
+                &mut progress,
+                parent,
+                &source,
+                b"config",
+                unsafe { libc::geteuid() },
+                unsafe { libc::getegid() },
+                source.created_at.clone(),
+            )
+            .unwrap();
+            let retry = realize_codex_tree_v1(
+                &mut progress,
+                File::open(temp.path()).unwrap(),
+                &source,
+                b"config",
+                unsafe { libc::geteuid() },
+                unsafe { libc::getegid() },
+                Timestamp("2026-10-22T00:00:00.000000Z".into()),
+            )
+            .unwrap();
+            assert_eq!(first, retry, "the first frozen timestamp/identity wins");
+            let path = temp
+                .path()
+                .join(&source.fence_id)
+                .join("immutable/codex-home/config.toml");
+            let displaced = path.with_extension("old");
+            std::fs::rename(&path, &displaced).unwrap();
+            std::fs::write(&path, b"config").unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+            assert!(
+                realize_codex_tree_v1(
+                    &mut progress,
+                    File::open(temp.path()).unwrap(),
+                    &source,
+                    b"config",
+                    unsafe { libc::geteuid() },
+                    unsafe { libc::getegid() },
+                    source.created_at.clone(),
+                )
+                .is_err(),
+                "equal bytes on a substituted inode are not an exact retry"
+            );
+        }
 
         struct TestParent {
             authority: PathBuf,

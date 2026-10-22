@@ -144,6 +144,14 @@ deployment, service change or successor session is performed by this documentati
 
 ## Controlling authority correction
 
+**Bounded native prerequisite candidate (2026-10-22):** the separately invoked service-first
+continuation selects only projection-service native input preparation, exact live-owner
+realization/recovery and terminal native cleanup. Its [task evidence](tasks/e3f-native-runtime-inputs.md)
+binds source/component proof, the material review record and limitations. This adds no service V2
+admission, retained adapter, I1/I2 runtime/accounting integration, Active/Registered or installed
+proof. The source still rejects V2; remaining F1–F14 obligations and E3-E closure are unchanged.
+Local review/commit, integration, acceptance and enclosing E3 closure remain separate axes.
+
 E3 owns one accepted-home config-projection registry, deterministic non-secret Codex 0.125
 rendering, adoption of the already-landed gateway secret-FD carrier, and the strict additive V2
 member-dispatch carrier. Because baseline inventory V2 has no model/MCP/feature source, E3 adds

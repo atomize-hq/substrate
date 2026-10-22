@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "packet_id": "E3F-NATIVE-RUNTIME-INPUTS",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:470e760c8805d7de9c228b729378fe3626483f2abdc915708f1bff43b398c89d",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "/home/spenser/__Active_code/review-evidence/e3f-native-runtime-inputs-20261022/discovery-custody-review.txt",
+        "/home/spenser/__Active_code/review-evidence/e3f-native-runtime-inputs-20261022/discovery-authority-review.txt",
+        "/home/spenser/__Active_code/review-evidence/e3f-native-runtime-inputs-20261022/parent-discovery-findings.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "P2-CUSTODY-1",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "P2-PARENT-1",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:df122c5e141e510704597cfbdc08d6039cfd467e3ac5632d7ea00d5bbaf50ef1",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": [
+        "P2-CUSTODY-1",
+        "P2-PARENT-1"
+      ],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "/home/spenser/__Active_code/review-evidence/e3f-native-runtime-inputs-20261022/closure-review.txt",
+        "llm-last-mile/runtime-refactor/review-control/e3f-native-runtime-inputs-review-evidence.md"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}

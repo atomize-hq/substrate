@@ -876,6 +876,23 @@ pub struct NativeProjectionSourceManifestV1 {
     pub manifest_hash: String,
 }
 
+/// Descriptor-observed output identity; this rebuildable tree is never authority.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct NativeProjectionRealizationManifestV1 {
+    pub schema_version: u32,
+    pub authority_store_id: String,
+    pub series_id: String,
+    pub fence_id: String,
+    pub source_manifest_hash: String,
+    pub realization_root: CanonicalDirectoryV1,
+    pub owner_uid: u64,
+    pub owner_gid: u64,
+    pub immutable_config_mount_read_only: bool,
+    pub created_at: Timestamp,
+    pub manifest_hash: String,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayAccessBoundaryRefV1 {

@@ -44,6 +44,73 @@ pub struct AgentConfigProjectionServiceV1 {
     accepted_home: Arc<ConfiguredAcceptedHomeAuthorityV1>,
 }
 
+/// Borrowed, already authenticated E2 material; this tag grants no authority.
+pub enum E3CodexTurnAuthorityV1<'a> {
+    Initial {
+        activation: &'a transport_api_types::E2MemberLaunchActivationCarrierV1,
+        bootstrap_run_id: &'a str,
+        span_id: &'a str,
+    },
+    Resumed {
+        request: &'a transport_api_types::MemberTurnSubmitRequestV1,
+        codex_session_id: &'a str,
+        span_id: &'a str,
+    },
+}
+
+/// Original descriptor custody. No constructor, cloning or owned-FD accessor is exposed.
+///
+/// ```
+/// use config_projection::E3CodexRuntimeInputsV1;
+/// use std::os::fd::BorrowedFd;
+/// fn borrow_codex(inputs: &E3CodexRuntimeInputsV1) -> BorrowedFd<'_> {
+///     inputs.codex_fd()
+/// }
+/// ```
+pub struct E3CodexRuntimeInputsV1 {
+    pub(crate) pinned: crate::registry::E3CodexPinnedInputsV1,
+    pub(crate) tree: crate::registry::E3CodexNativeTreeV1,
+    pub(crate) manifest: crate::NativeProjectionRealizationManifestV1,
+    pub(crate) system_empty: std::fs::File,
+    pub(crate) output_directory: std::fs::File,
+}
+
+impl E3CodexRuntimeInputsV1 {
+    pub fn record(&self) -> &crate::AgentConfigProjectionRecordV1 {
+        &self.pinned.record
+    }
+    pub fn source_manifest(&self) -> &crate::NativeProjectionSourceManifestV1 {
+        &self.pinned.source
+    }
+    pub fn realization_manifest(&self) -> &crate::NativeProjectionRealizationManifestV1 {
+        &self.manifest
+    }
+    pub fn wrapper_fd(&self) -> std::os::fd::BorrowedFd<'_> {
+        std::os::fd::AsFd::as_fd(&self.pinned.wrapper)
+    }
+    pub fn codex_fd(&self) -> std::os::fd::BorrowedFd<'_> {
+        std::os::fd::AsFd::as_fd(&self.pinned.codex)
+    }
+    pub fn source_root_fd(&self) -> std::os::fd::BorrowedFd<'_> {
+        std::os::fd::AsFd::as_fd(&self.pinned.source_root)
+    }
+    pub fn source_config_fd(&self) -> std::os::fd::BorrowedFd<'_> {
+        std::os::fd::AsFd::as_fd(&self.pinned.source_config)
+    }
+    pub fn realization_root_fd(&self) -> std::os::fd::BorrowedFd<'_> {
+        std::os::fd::AsFd::as_fd(&self.tree.root)
+    }
+    pub fn system_empty_fd(&self) -> std::os::fd::BorrowedFd<'_> {
+        std::os::fd::AsFd::as_fd(&self.system_empty)
+    }
+    pub fn workspace_fd(&self) -> std::os::fd::BorrowedFd<'_> {
+        std::os::fd::AsFd::as_fd(&self.pinned.workspace)
+    }
+    pub fn output_directory_fd(&self) -> std::os::fd::BorrowedFd<'_> {
+        std::os::fd::AsFd::as_fd(&self.output_directory)
+    }
+}
+
 #[cfg(test)]
 pub(crate) fn exercise_activation_progress_for_test(
     service: &AgentConfigProjectionServiceV1,
@@ -180,6 +247,53 @@ pub(crate) fn test_e3f_retained_publication_fixture(
 }
 
 impl AgentConfigProjectionServiceV1 {
+    /// Pin and realize the original ReadyClosed attempt, transferring native inputs once.
+    /// This performs no child launch, Active publication or gateway release.
+    pub fn prepare_codex_launch(
+        &self,
+        publication: &mut E3PreparedRetainedLaunchPublicationV1,
+        capability: &crate::PublishedConfigProjectionCapabilityV1,
+        ready: &crate::ConfigProjectionRefV1,
+        turn: &E3CodexTurnAuthorityV1<'_>,
+        now: Timestamp,
+    ) -> Result<E3CodexRuntimeInputsV1, ConfigProjectionFailureV1> {
+        self.accepted_home.revalidate()?;
+        let (record, _, _, _) =
+            self.registry
+                .validate_retained_codex_authority_v1(publication, capability, ready)?;
+        validate_initial_codex_authority_v1(&record, turn)?;
+        self.registry
+            .recover_native_realization(publication, capability, ready)?;
+        self.registry
+            .realize_native_root(publication, capability, ready, now)
+    }
+
+    /// Complete terminal native cleanup only after exact gateway cleanup evidence.
+    /// The original inputs remain borrowed on every error; a Released retry cannot launch.
+    #[allow(clippy::too_many_arguments)]
+    pub fn revoke_retained_runtime(
+        &self,
+        publication: &mut E3PreparedRetainedLaunchPublicationV1,
+        capability: &crate::PublishedConfigProjectionCapabilityV1,
+        head: &crate::ConfigProjectionRefV1,
+        terminal: &crate::E3TerminalChildQuiescenceEvidenceV1,
+        boundary: &crate::GatewayAccessBoundaryV1,
+        inputs: Option<&mut E3CodexRuntimeInputsV1>,
+        now: Timestamp,
+    ) -> Result<crate::ConfigProjectionConsumerLeaseV1, ConfigProjectionFailureV1> {
+        self.accepted_home.revalidate()?;
+        crate::registry::revoke_codex_native_v1(
+            &self.registry,
+            publication,
+            capability,
+            head,
+            terminal,
+            boundary,
+            inputs,
+            now,
+        )
+    }
+
     pub fn new(
         registry: Arc<ConfigProjectionRegistryV1>,
         accepted_home: Arc<ConfiguredAcceptedHomeAuthorityV1>,
@@ -822,8 +936,9 @@ impl AgentConfigProjectionServiceV1 {
     }
 }
 
-/// Nonsecret, attempt-owned publication progress. Live resources stay in world-service.
+/// Attempt-owned publication progress, including native resources before their one-time transfer.
 pub struct E3PreparedRetainedLaunchPublicationV1 {
+    pub(crate) native_progress: crate::registry::E3CodexNativeProgressV1,
     identity: crate::ConfigProjectionIdentityV1,
     gateway: crate::InWorldGatewayIdentityV1,
     prepared_handoff: crate::ConfigProjectionSecretHandoffRevisionV1,
@@ -882,6 +997,7 @@ impl E3PreparedRetainedLaunchPublicationV1 {
             handoff_hash: prepared_handoff.revision_hash.clone(),
         };
         Ok(Self {
+            native_progress: crate::registry::E3CodexNativeProgressV1::default(),
             identity: identity.clone(),
             gateway: gateway.clone(),
             prepared_handoff,
@@ -920,6 +1036,7 @@ impl E3PreparedRetainedLaunchPublicationV1 {
             return Err(ConfigProjectionFailureV1::Conflict);
         }
         let candidate = Self {
+            native_progress: crate::registry::E3CodexNativeProgressV1::default(),
             identity: self.identity.clone(),
             gateway: self.gateway.clone(),
             prepared_handoff: self.prepared_handoff.clone(),
@@ -946,6 +1063,70 @@ impl E3PreparedRetainedLaunchPublicationV1 {
     pub fn held_consumer_lease(&self) -> Option<&crate::ConfigProjectionConsumerLeaseV1> {
         self.held_consumer_lease.as_ref()
     }
+}
+
+fn validate_initial_codex_authority_v1(
+    record: &crate::AgentConfigProjectionRecordV1,
+    turn: &E3CodexTurnAuthorityV1<'_>,
+) -> Result<(), ConfigProjectionFailureV1> {
+    use ConfigProjectionFailureV1::WrongBinding;
+    let E3CodexTurnAuthorityV1::Initial {
+        activation: e2,
+        bootstrap_run_id,
+        span_id,
+    } = turn
+    else {
+        return Err(WrongBinding);
+    };
+    e2.validate().map_err(|_| WrongBinding)?;
+    let identity = &record.identity;
+    let cap = &identity.immutable_launch_cap;
+    let subject = match e2.launch_kind {
+        crate::E2MemberLaunchKindV1::FreshSpawn => {
+            crate::ConfigProjectionE2SubjectV1::RetainedWorkerLaunch {
+                retained_participant_id: e2.retained_participant_id.clone(),
+                bootstrap_run_id: e2.bootstrap_run_id.clone(),
+            }
+        }
+        crate::E2MemberLaunchKindV1::Fork => {
+            crate::ConfigProjectionE2SubjectV1::RetainedWorkerFork {
+                source_participant_id: e2.source_participant_id.clone().ok_or(WrongBinding)?,
+                child_participant_id: e2.retained_participant_id.clone(),
+                bootstrap_run_id: e2.bootstrap_run_id.clone(),
+            }
+        }
+    };
+    if span_id.trim().is_empty()
+        || *bootstrap_run_id != identity.bootstrap_run_id
+        || e2.bootstrap_run_id != identity.bootstrap_run_id
+        || e2.orchestration_session_id != identity.orchestration_session_id
+        || e2.retained_participant_id != identity.retained_participant_id
+        || e2.target_backend_id != identity.backend_id
+        || e2.target_world.world_id != identity.world_id
+        || e2.target_world.world_generation != identity.world_generation
+        || cap.e2_activation_id != e2.activation_id
+        || cap.e2_launch_kind != e2.launch_kind
+        || cap.commitment_subject != subject
+        || cap.commitment_ref != e2.commitment_ref
+        || cap.immutable_worker_cap_ref != e2.immutable_worker_cap_ref
+        || cap.immutable_worker_cap_created_revision != e2.immutable_worker_cap_created_revision
+        || cap.immutable_worker_cap_application_revision
+            != e2.immutable_worker_cap_application_revision
+        || cap.policy_snapshot_ref != e2.policy_snapshot_ref
+        || cap.policy_snapshot_hash != e2.policy_snapshot_hash
+        || cap.policy_snapshot_revision != e2.policy_snapshot_revision
+        || cap.request_id != e2.request_id
+        || cap.idempotency_key != e2.idempotency_key
+        || cap.caller_participant_id != e2.caller_participant_id
+        || cap.caller_backend_id != e2.caller_backend_id
+        || cap.target_backend_id != e2.target_backend_id
+        || cap.target_world != e2.target_world
+        || cap.registry_publication_revision != e2.registry_publication_revision
+        || record.effective.accepted_policy != *cap
+    {
+        return Err(WrongBinding);
+    }
+    Ok(())
 }
 
 fn validate_gateway_activation_publication_v1(
