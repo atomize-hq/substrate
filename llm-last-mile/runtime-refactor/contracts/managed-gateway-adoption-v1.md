@@ -1346,7 +1346,13 @@ file locator, reusable authentication value, or claim that provider credentials 
 
 ## Compatibility and failure behavior
 
-Copied host auth/config remains a separately policy-granted, named, logged
+Apply the projection owner's [greenfield retention and replacement rule](agent-config-projection-v1.md#e3-f-greenfield-retention-and-replacement--2026-10-21)
+to every implicated copied credential/configuration path, fallback, duplicate lifecycle mechanism
+and compatibility-only adapter/test. E3 gateway adoption and the runtime-family owner must name
+its capability, independent architectural/security purpose or secure replacement/removal and proof;
+D1/D3 retain later envelope/joined-proof ownership. Historical support or an additional agent is
+not a retention purpose. This is no blanket deletion or source dispatch. While present, copied
+host auth/config is contained as a separately policy-granted, named, logged
 `CompatibilityCopyBridge` only. It creates no gateway intent/ACK/ref, cannot make a shared loopback
 listener acceptable, cannot satisfy an E3 gate, and is never automatic fallback for missing,
 malformed, newer, legacy, wrong-bound, hash-invalid, stale, partially published, or conflicting E3

@@ -103,6 +103,45 @@ S1/B02/B05 and unrelated B4/C2/E2-RM closure gaps are not invented E3-F prerequi
 D2 side-effect mediation, D3 joined integration and E4 write/sync remain separately owned and require
 applicable predecessor/authorization/proof; this sequence grants no blanket successor admission.
 
+## Greenfield handoff and service-first sequence correction — 2026-10-21
+
+Apply the [projection owner's per-mechanism retention/replacement rule](../contracts/agent-config-projection-v1.md#e3-f-greenfield-retention-and-replacement--2026-10-21)
+and matching [gateway containment rule](../contracts/managed-gateway-adoption-v1.md#compatibility-and-failure-behavior)
+to the next selected packet. These qualify the generic V1/UAA/ordinary preservation wording below
+and in the future fence; required non-E3 capability and counted security admission remain, not a
+blanket freeze on old execution mechanisms. Each retained mechanism needs its capability, existing
+owner and independent architectural/security purpose; otherwise record replacement/removal and
+proof under that owner before dependent source work. I1's required NonE3/E3 ownership tag and I2's
+original accounting/custody, early denial, historical sets, namespace-before-group and exclusion-last
+remain binding. Agent-neutral authority/UAA common semantics and the bounded pinned-Codex security
+lane remain distinct. No new coexistence architecture or final permanent serialization is selected.
+
+The [corrected Linux handoff](../../../docs/guidance/2026-10-21-e3f-linux-service-first-handoff.md)
+is derived guidance, not a new canonical owner or present implementation dispatch. The preserved
+source checkpoint is `eeb17d952edba00a00c336220ccfac7147ce06ae`, tree
+`8b9ecfbac594d403e7c8eb38cb9357e4006ac8ce`, parent
+`c7e08c3a39e69a6b6ba05853a37378a77a11afa6`; its original eight-file source delta retains
+SHA-256 `efcd97c433e33bc8a5182d7fc4a8f7db4a1946625dfeed3ab252291e6785c8c5`.
+This commits preserved work, not its acceptance. Old dirty-candidate/pending-c381 observations are
+historical; reviewed c381 is integrated, not an unresolved design blocker.
+
+Current source still rejects V2 in `WorldService::execute_stream`; service `launch_v2` and the local
+retained Codex adapter are absent. On separate implementation selection, inspect actual native,
+adapter, ownership and accounting dependencies, then select **one** bounded service-owned packet
+with exact prerequisites/proof. No assumed three-file limit or automatic whole-E3-F scope follows.
+Keep V2 unavailable until its real admission/launch/cleanup gates are ready. Removing rejection
+alone proves no completion. Positive production bridge proof is later and requires the actual
+`take_for_v2 -> retained owner -> Active -> Registered` path. Component tests, production wiring,
+installed proof, review, integration, acceptance and closure remain separate claims. All F1–F14
+obligations in the dated table above remain visible until their exact proof is supplied.
+
+A3 legacy reads, C2 compatibility ingress/migration and D1 envelope compatibility-posture/V3
+reconciliation remain with their [existing owners](../contracts/agent-config-projection-v1.md#e3-f-greenfield-retention-and-replacement--2026-10-21),
+not complete and not unrelated E3-F prerequisites. E3-E remains closed; E3-F remains paused,
+unaccepted and unclosed; E3 remains incomplete. P1 stays separately sequenced at
+`E3F-RETAINED-PROOF-RETURN`, with its bytes unchanged. No runtime implementation, installed proof,
+deployment, service change or successor session is performed by this documentation correction.
+
 ## Controlling authority correction
 
 E3 owns one accepted-home config-projection registry, deterministic non-secret Codex 0.125
@@ -145,8 +184,9 @@ owner, parent, maps, membership, and role isolation before exposure. Only non-se
 role-appropriate trusted-tracing validation before prompt release. Substrate leaves host-wide Yama
 policy unchanged and requires no particular value.
 
-`MemberDispatchRequestV1` remains strict with byte-identical codec, fields, and post-admission
-semantics. E3 adds strict
+`MemberDispatchRequestV1` strictness and the original E3-A wire proof remain intact; future E3-F
+retention/replacement of its codec/construction paths follows the
+[greenfield correction](#greenfield-handoff-and-service-first-sequence-correction--2026-10-21). E3 adds strict
 `MemberDispatchRequestV2` with the non-optional projection activation carrier under an untagged
 version wrapper. Because the baseline execute request has no integrated-auth field, the shell first
 publishes only immutable nonsecret authoring inputs and sends the existing transient
@@ -167,8 +207,9 @@ Because baseline non-E3 children can inherit powerful ambient capabilities, a pr
 exclusion lease is mandatory during every credential-bearing E3 epoch. Entry requires zero live
 non-E3 or unclassified descendants; all ordinary execute/PTY, V1/UAA, and compatibility-gateway
 or GC-helper spawns fail before child side effects until every E3 sibling in the exact world generation is revoked
-and reaped. V1 remains strict and behavior-identical whenever that exclusion is idle; it is never
-silently upgraded or allowed to coexist with E3 secrets.
+and reaped. Required ordinary capability and counted admission remain while exclusion is idle; specific V1
+mechanism retention follows the greenfield correction. No implicit upgrade or coexistence with E3
+secrets is permitted.
 
 The gateway's `X-Substrate-*` request headers are identity/audit metadata, not authorization.
 Credential-requiring Linux E3 uses an exact participant-process cgroup plus nftables rule to keep the
@@ -668,7 +709,8 @@ the exact E3-B cross-crate bridge, visibility, and acyclic dependency edges fixe
 [`agent-config-projection-v1.md#hsa-projection-namespace-and-cross-process-lock-protocol`](../contracts/agent-config-projection-v1.md#hsa-projection-namespace-and-cross-process-lock-protocol),
 strict V2/version-wrapper transport plumbing through every currently V1-typed world-service helper;
 exact Spawn/Fork/toolbox/continue-fork carrier paths; the V2-only local Codex adapter and E3-D-owned
-installed `substrate-world-entry` two-stage descriptor helper while V1 keeps UAA; descriptor-pinned gateway
+installed `substrate-world-entry` two-stage descriptor helper, with any retained V1/UAA realization
+subject to the greenfield correction; descriptor-pinned gateway
 start/readiness/access-boundary/ACK symbols; the existing gateway one-time consumer/identity metadata
 points; content-addressed root-owned bootstrap/artifact-source installer surfaces; and the exact Codex placement/version
 assertion. File-wide changes, a new local Codex helper crate, D1 envelope code, receipts, retained
