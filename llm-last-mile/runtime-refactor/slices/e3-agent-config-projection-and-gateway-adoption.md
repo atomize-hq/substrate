@@ -152,6 +152,14 @@ admission, retained adapter, I1/I2 runtime/accounting integration, Active/Regist
 proof. The source still rejects V2; remaining F1–F14 obligations and E3-E closure are unchanged.
 Local review/commit, integration, acceptance and enclosing E3 closure remain separate axes.
 
+**Bounded namespace prerequisite candidate (2026-10-22):** the separately selected
+[E3F-CODEX-NAMESPACE-JOINS component](tasks/e3f-codex-namespace-joins.md) adds only original-gateway-
+lease Codex namespace setup/release and exact binding validation, with bounded real namespace/cgroup
+component proof. Material review and owner acceptance remain pending. It adds no adapter caller,
+I1/I2 accounting or early-denial integration, V2 admission, Active/Registered or installed claim.
+Native custody and existing gateway/probe/revoke behavior remain unchanged; V2 is still rejected.
+All remaining F1–F14 obligations, E3-E closure and incomplete enclosing E3 status are preserved.
+
 E3 owns one accepted-home config-projection registry, deterministic non-secret Codex 0.125
 rendering, adoption of the already-landed gateway secret-FD carrier, and the strict additive V2
 member-dispatch carrier. Because baseline inventory V2 has no model/MCP/feature source, E3 adds

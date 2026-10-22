@@ -1,0 +1,35 @@
+# E3F-CODEX-NAMESPACE-JOINS review evidence
+
+Task owner `01a161d7-d06b-7a63-9a43-2b69a471e8ab` establishes **CLEAN** from one completed fresh material discovery and still-valid required component proof. The [cycle record](e3f-codex-namespace-joins-review-cycle.json) records `discovery-1`, clean, no findings. This is component review process evidence; local commit remains pending.
+
+Actual reviewer `01a16201-f925-77d2-8c7d-196a7f99514a` (`reviewer_v1`, Lovelace) completed the sole material observation and was then closed. The [original response](/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/e3f-retained-next-20261022/evidence/task-01-discovery-review.txt) is retained verbatim, SHA256 `0592e51e40c838dba8f54ec1f24790cd6db80528fa38d59df80435c4192220a8`. Its original result is: **No qualifying P1/P2 blocker was established. No P3/P4 findings are raised.** The owner's separate assessment finds no raw or assessed blocker, no repair, dismissal or confirmation needed, and no advisory requiring an inventory entry. No extra terminal reviewer is authorized.
+
+Baseline HEAD: `c4b22d499cd29b0df5362c909e7b9e9aaf31e037`. Reviewer entry and return, owner inspection and relay readback match material fingerprint `sha256:b0470e67df14682fb8c86ba496121b06900ef119c7ef77fb01411b8fd1ac50bb`. The exact three regular files are:
+
+| Material path | Git mode | SHA256 |
+|---|---|---|
+| `crates/world-service/src/gateway_runtime.rs` | `100644` | `1f758b88553b04271b1b0d6d41220592555280969b9d734a4195e6f4cfb8c3f1` |
+| `llm-last-mile/runtime-refactor/slices/tasks/e3f-codex-namespace-joins.md` | `100644` | `2923a420a9277e7e9c43a7f43f4e043268397a8c7f04cbad6a086b87f23701e0` |
+| `llm-last-mile/runtime-refactor/slices/e3-agent-config-projection-and-gateway-adoption.md` | `100644` | `42b4f3fa91dffc60e49820d44025fe553b2294039355a97106fb34adebbf9ee7` |
+
+Fingerprint method: SHA256 of UTF-8 JSON containing `baseline_head` and the ordered `files` entries (path, native_mode, git_mode, sha256, bytes), with `sort_keys=True` and `separators=(',', ':')`. The [original subject manifest](/home/spenser/__Active_code/review-evidence/e3f-codex-namespace-joins-20261022/owner-inspection-subject.json) binds these entries, retained tree and full-index patch. Its earlier pending-review wording is historical; this record supplies the later owner assessment without rewriting that evidence.
+
+[Required check records](/home/spenser/__Active_code/review-evidence/e3f-codex-namespace-joins-20261022/owner-inspection-checks.json) retain actual commands, explicit cwd, source bindings, exit results, output references and hashes. Owner assessment, separately from reviewer self-report, finds the required component proof satisfied:
+
+| Retained check | Actual result |
+|---|---|
+| Real privileged gateway seam (`--exact --ignored`) | 1 passed, 0 failed, 0 ignored; exit 0 |
+| World-service library | 223 passed, 8 ignored; exit 0 |
+| Config library / integration / docs | 65 passed, 6 ignored / 6 passed / 1 passed; exits 0 |
+| World check, clippy, scoped formatting, final diff checks | Exits 0 |
+| Namespace/process/cgroup cleanup | Seven observed processes and eight captured groups absent |
+
+See [final seam result](/home/spenser/__Active_code/review-evidence/e3f-codex-namespace-joins-20261022/seam-final-result.json) and [cleanup/source binding](/home/spenser/__Active_code/review-evidence/e3f-codex-namespace-joins-20261022/seam-final-cleanup-postcheck.json). The original first seam timeout and missing-method compile RED (exit 101) remain failed evidence, retained through the check records. The RED is interface compilation evidence; no historical behavioral-regression claim is made. Ignored tests are not passes. The concrete skill bar of tests, regression inspection, runtime component behavior and documentation is met for this selected component, per owner assessment.
+
+The [post-observation GitNexus refresh](/home/spenser/__Active_code/review-evidence/e3f-codex-namespace-joins-20261022/owner-gitnexus-refresh.json) ran `npx gitnexus analyze --force --index-only --max-file-size 2048`, exit 0, 40.587 seconds, binding unchanged material and AGENTS.md/CLAUDE.md hashes before/after. Index-only prevented instruction injection; no restoration was needed. [All-change detection](/home/spenser/__Active_code/review-evidence/e3f-codex-namespace-joins-20261022/owner-gitnexus-detect-all.json), exit 0, reports LOW, 2 tracked files, 32 mapped symbols, 0 affected flows; [stdout](/home/spenser/__Active_code/review-evidence/e3f-codex-namespace-joins-20261022/owner-gitnexus-detect-all.stdout.json) is CLI text despite its suffix, with stderr retained alongside. New methods/tests are indexed. Adjacent unchanged `release_exclusion_after_cleanup_v1` appears in hunk mapping; owner pure-addition diff/source inspection confirms no body edit. Graph counts are incomplete safety proof. Staged detection and scoped staging inspection remain for the owner before commit.
+
+Native runtime evidence is separate from the reviewer's statement that effective settings were unexposed: the [task runtime note](/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/e3f-retained-next-20261022/tasks/01.md) records actual parent/role, explicit `fork_context:false`, distinctive loaded reviewer developer instructions and Sol/high/full-access-never turn evidence. Service tier is unexposed; no effective-speed or enforced-isolation claim is made.
+
+[Meta's guide decision](/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/e3f-retained-next-20261022/evidence/privilege-guide-01-decision.md) resolves missing-guide meaning only. `docs/HOWTO_PRIVILEGED_TESTS.md` and the skill reference `references/definition-of-done.md` remain unavailable; no unseen-content compliance is asserted. [Installed diagnostics availability](/home/spenser/__Active_code/review-evidence/e3f-codex-namespace-joins-20261022/installed-diagnostics-availability.json) records commands not executed because the executable target is absent; this is no health pass. Fixture launch metadata and inert descriptors establish no authenticated gateway startup, registry authority, adapter/production/installed operation, I1/I2 accounting, Active/Registered, F14 or E3F acceptance/closure.
+
+These cycle/ledger bytes are post-subject mechanical process evidence, excluded from the three-file material fingerprint under the [repository contract](../contracts/development-review-and-remediation-contract.md#mechanical-changes-and-completion) and [native ledger precedent](e3f-native-runtime-inputs-review-evidence.md). They supersede frozen task/slice pending MATERIAL REVIEW wording only. No source, test, task-evidence or slice text is rewritten; product authority and claims are unchanged. CLEAN is distinct from publication, task acceptance and phase completion. Only the runtime task note will report actual later publication.

@@ -400,6 +400,256 @@ impl Drop for E3GatewayRuntimeAuthorityV1 {
 }
 
 impl E3GatewayRuntimeAuthorityV1 {
+    /// Borrow the original gateway lease for one exact Codex setup. A failed call may
+    /// already own a namespace slot; installation must never be replayed.
+    #[allow(dead_code)] // The separately admitted retained adapter is the production caller.
+    pub(super) fn install_codex_user_namespace_v1(
+        &mut self,
+        parent_setup_socket: &OwnedFd,
+        identity: &config_projection::ConfigProjectionIdentityV1,
+        child: &config_projection::E3ChildProcessRegistrationV1,
+        requirement: &config_projection::E3UserNamespaceRequirementV1,
+    ) -> Result<()> {
+        anyhow::ensure!(
+            self.listening && !self.terminal && !self.revoked && !self.boundary_deleted,
+            "E3 Codex namespace admission is closed"
+        );
+        self.validate_codex_namespace_binding_v1(child)?;
+        let launch = self
+            .launch
+            .as_ref()
+            .context("missing original gateway launch")?;
+        anyhow::ensure!(
+            identity == &launch.identity
+                && requirement == &launch.enforcement.user_namespace_requirement,
+            "E3 Codex namespace setup differs from original launch"
+        );
+        // Reject foreign live registrations before recording a slot or waiting on their socket.
+        // The lease repeats these observations after the namespace handshake.
+        anyhow::ensure!(
+            ManagedGatewayLaunchCapabilityV1::e3_process_start(child.pid)?
+                == child.pid_start_time_ticks
+                && fs::read_to_string(format!("/proc/{}/cgroup", child.pid))?
+                    == format!("0::/{}\n", child.process_cgroup.cgroup_relative_path),
+            "E3 Codex namespace process/start/cgroup changed before setup"
+        );
+        crate::e3_child_security::install_and_validate_e3_child_user_namespace_v1(
+            &mut self._exclusion,
+            parent_setup_socket,
+            identity,
+            child,
+            requirement,
+        )
+    }
+
+    /// Release only the original lease's exact slot, while its group still exists.
+    /// NeverRetained means no namespace was held, not that the child/group is terminal.
+    /// Revoking callers must independently establish early denial before this operation.
+    #[allow(dead_code)] // Later accounting is the sole registered-turn release caller.
+    pub(super) fn release_codex_user_namespace_v1(
+        &mut self,
+        child: &config_projection::E3ChildProcessRegistrationV1,
+    ) -> Result<()> {
+        self.validate_codex_namespace_binding_v1(child)?;
+        self._exclusion
+            .release_terminal_child_user_namespace_v1(child)
+    }
+
+    fn validate_codex_namespace_binding_v1(
+        &self,
+        child: &config_projection::E3ChildProcessRegistrationV1,
+    ) -> Result<()> {
+        use config_projection::{E3KernelEffectKindV1, E3TerminalProcessRoleV1};
+        use std::os::unix::fs::MetadataExt;
+        let launch = self
+            .launch
+            .as_ref()
+            .context("missing original gateway launch")?;
+        let gateway = launch
+            .gateway_registration
+            .as_ref()
+            .context("missing original gateway registration")?;
+        let identity = &launch.identity;
+        let input = &launch.launch_input;
+        anyhow::ensure!(
+            child.schema_version == 1
+                && child.role == E3TerminalProcessRoleV1::Codex
+                && child.pid != 0
+                && child.pid_start_time_ticks != 0
+                && !child.registration_id.is_empty()
+                && child.authority_store_id == identity.authority_store_id
+                && child.series_id == identity.series_id
+                && child.fence_id == gateway.fence_id
+                && child.parent_service_instance_id == gateway.parent_service_instance_id
+                && !child.parent_service_instance_id.is_empty()
+                && child.kernel_boot_id == gateway.kernel_boot_id
+                && child.kernel_boot_id
+                    == fs::read_to_string("/proc/sys/kernel/random/boot_id")?.trim()
+                && gateway.role == E3TerminalProcessRoleV1::ManagedGateway
+                && gateway.authority_store_id == identity.authority_store_id
+                && gateway.series_id == identity.series_id
+                && input.authority_store_id == identity.authority_store_id
+                && input.dormant_projection_ref.authority_store_id == identity.authority_store_id
+                && input.dormant_projection_ref.series_id == identity.series_id
+                && input.config_projection_identity_hash == identity.identity_hash
+                && input.orchestration_session_id == identity.orchestration_session_id
+                && input.retained_participant_id == identity.retained_participant_id
+                && input.backend_id == identity.backend_id
+                && input.world_id == identity.world_id
+                && input.world_generation == identity.world_generation
+                && launch.enforcement.projection_identity_hash == identity.identity_hash
+                && child.registration_hash
+                    == ManagedGatewayLaunchCapabilityV1::e3_seal(
+                        "substrate.e3.child-process-registration.v1",
+                        "registration",
+                        child,
+                        "registration_hash"
+                    )?,
+            "E3 Codex namespace has foreign launch/process binding"
+        );
+        let mut members = self
+            .cgroups
+            .iter()
+            .filter(|(_, _, group, _)| group.role == E3TerminalProcessRoleV1::Codex);
+        let (parent, held, group, intent) =
+            members.next().context("missing original member cgroup")?;
+        anyhow::ensure!(members.next().is_none(), "ambiguous original member cgroup");
+        let (_, _, gateway_group, gateway_intent) = self
+            .cgroups
+            .iter()
+            .find(|(_, _, group, _)| {
+                group.role == E3TerminalProcessRoleV1::ManagedGateway
+                    && group.cgroup_registration_id == gateway.cgroup_registration_id
+                    && group.cgroup_registration_hash == gateway.cgroup_registration_hash
+                    && group.cgroup == gateway.process_cgroup
+            })
+            .context("gateway registration lacks original group/intent")?;
+        let E3KernelEffectKindV1::CreateChildCgroup {
+            cgroup_registration_id,
+            role,
+            parent_cgroup,
+            child_component,
+            expected_relative_path,
+        } = &intent.effect
+        else {
+            anyhow::bail!("member group has wrong original intent")
+        };
+        anyhow::ensure!(
+            group.schema_version == 1
+                && intent.schema_version == 1
+                && group.authority_store_id == identity.authority_store_id
+                && group.series_id == identity.series_id
+                && group.fence_id == child.fence_id
+                && intent.fence_id == child.fence_id
+                && intent.authority_store_id == identity.authority_store_id
+                && intent.series_id == identity.series_id
+                && !intent.preparation_id.is_empty()
+                && intent.preparation_id == gateway_intent.preparation_id
+                && intent.fence_id == gateway_intent.fence_id
+                && gateway_group.fence_id == gateway.fence_id
+                && self.unresolved_intents.iter().any(|owned| owned == intent)
+                && self
+                    .unresolved_intents
+                    .iter()
+                    .any(|owned| owned == gateway_intent)
+                && child.cgroup_registration_id == group.cgroup_registration_id
+                && child.cgroup_registration_hash == group.cgroup_registration_hash
+                && child.process_cgroup == group.cgroup
+                && child.kernel_boot_id == group.kernel_boot_id
+                && cgroup_registration_id == &group.cgroup_registration_id
+                && *role == E3TerminalProcessRoleV1::Codex
+                && group.kernel_effect_intent_ref.authority_store_id == intent.authority_store_id
+                && group.kernel_effect_intent_ref.effect_intent_id == intent.effect_intent_id
+                && group.kernel_effect_intent_ref.intent_hash == intent.intent_hash
+                && expected_relative_path == &group.cgroup.cgroup_relative_path
+                && expected_relative_path
+                    == &format!("{}/{}", parent_cgroup.cgroup_relative_path, child_component)
+                && !child_component.is_empty()
+                && !matches!(child_component.as_str(), "." | "..")
+                && !child_component.contains('/')
+                && !self
+                    .removed_cgroups
+                    .get(&group.cgroup_registration_id)
+                    .copied()
+                    .unwrap_or(false)
+                && group.cgroup_registration_hash
+                    == ManagedGatewayLaunchCapabilityV1::e3_seal(
+                        "substrate.e3.child-cgroup-registration.v1",
+                        "cgroup_registration",
+                        group,
+                        "cgroup_registration_hash"
+                    )?
+                && intent.intent_hash
+                    == ManagedGatewayLaunchCapabilityV1::e3_seal(
+                        "substrate.e3.kernel-effect-intent.v1",
+                        "intent",
+                        intent,
+                        "intent_hash"
+                    )?,
+            "E3 Codex namespace differs from original preparation/member group"
+        );
+        let mount = fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW)
+            .open("/sys/fs/cgroup")?;
+        let mount_meta = mount.metadata()?;
+        let mut filesystem: libc::statfs = unsafe { std::mem::zeroed() };
+        anyhow::ensure!(
+            unsafe { libc::fstatfs(mount.as_raw_fd(), &mut filesystem) } == 0
+                && filesystem.f_type as i128 == 0x6367_7270i128
+                && mount_meta.dev() == parent_cgroup.cgroup_v2_mount_device_id
+                && mount_meta.ino() == parent_cgroup.cgroup_v2_mount_inode
+                && group.cgroup.cgroup_v2_mount_device_id == mount_meta.dev()
+                && group.cgroup.cgroup_v2_mount_inode == mount_meta.ino(),
+            "E3 Codex cgroup mount changed"
+        );
+        let mut named_parent = mount;
+        for component in parent_cgroup.cgroup_relative_path.split('/') {
+            anyhow::ensure!(
+                !component.is_empty() && !matches!(component, "." | ".."),
+                "noncanonical original cgroup parent"
+            );
+            let component = std::ffi::CString::new(component)?;
+            let raw = unsafe {
+                libc::openat(
+                    named_parent.as_raw_fd(),
+                    component.as_ptr(),
+                    libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+                )
+            };
+            anyhow::ensure!(raw >= 0, "original cgroup parent disappeared");
+            named_parent = unsafe { fs::File::from_raw_fd(raw) };
+        }
+        let parent_meta = parent.metadata()?;
+        let named_parent_meta = named_parent.metadata()?;
+        let held_meta = held.metadata()?;
+        let component = std::ffi::CString::new(child_component.as_str())?;
+        let raw = unsafe {
+            libc::openat(
+                parent.as_raw_fd(),
+                component.as_ptr(),
+                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+            )
+        };
+        anyhow::ensure!(raw >= 0, "original member cgroup disappeared");
+        let named = unsafe { fs::File::from_raw_fd(raw) };
+        let named_meta = named.metadata()?;
+        anyhow::ensure!(
+            parent_meta.dev() == parent_cgroup.cgroup_v2_mount_device_id
+                && parent_meta.ino() == parent_cgroup.cgroup_directory_inode
+                && (named_parent_meta.dev(), named_parent_meta.ino())
+                    == (parent_meta.dev(), parent_meta.ino())
+                && held_meta.dev() == group.cgroup.cgroup_v2_mount_device_id
+                && held_meta.ino() == group.cgroup.cgroup_directory_inode
+                && (named_meta.dev(), named_meta.ino()) == (held_meta.dev(), held_meta.ino())
+                && [parent_meta, held_meta, named_meta]
+                    .iter()
+                    .all(|meta| meta.uid() == 0 && meta.mode() & 0o022 == 0),
+            "E3 Codex cgroup descriptor/name/ownership changed"
+        );
+        Ok(())
+    }
+
     pub(crate) fn release_exclusion_after_cleanup_v1(&mut self) -> Result<()> {
         anyhow::ensure!(
             self.revoked
@@ -7997,6 +8247,828 @@ mod tests {
         GatewayApiEnvIntegratedAuthV1, GatewayCliCodexIntegratedAuthV1,
         GatewayIntegratedAuthPayloadV1,
     };
+
+    // Nonsecret equality fixture, following the unchanged E3-D namespace-test precedent.
+    fn e3f_namespace_identity(world_id: &str) -> config_projection::ConfigProjectionIdentityV1 {
+        let digest = "11".repeat(32);
+        let commitment = serde_json::json!({
+            "authority_store_id": "hsa_store",
+            "commitment_id": "dpc_01890f3e-7b8c-7a11-8c55-0242ac120002",
+            "exact_linkage_hash": digest,
+        });
+        let policy = serde_json::json!({
+            "ref_id": format!("ao_{}", "22".repeat(16)),
+            "object_kind": "policy",
+            "schema_version": 1,
+            "commitment": {"kind": "CanonicalSha256", "value": {"digest_hex": digest}},
+        });
+        let cap = serde_json::json!({
+            "e2_activation_id": "e2a_test",
+            "e2_launch_kind": "fresh_spawn",
+            "commitment_ref": commitment,
+            "commitment_subject": {"RetainedWorkerLaunch": {
+                "retained_participant_id": "participant",
+                "bootstrap_run_id": "bootstrap"
+            }},
+            "immutable_worker_cap_ref": commitment,
+            "immutable_worker_cap_created_revision": 1,
+            "immutable_worker_cap_application_revision": 1,
+            "policy_snapshot_ref": policy,
+            "policy_snapshot_hash": digest,
+            "policy_snapshot_revision": "1",
+            "request_id": "request",
+            "idempotency_key": "idempotency",
+            "caller_participant_id": "caller",
+            "caller_backend_id": "cli:codex-world",
+            "target_backend_id": "cli:codex-world",
+            "target_world": {"world_id": world_id, "world_generation": 1},
+            "registry_publication_revision": 1
+        });
+        let support = serde_json::json!({
+            "schema_version": 1,
+            "support_policy_version": 1,
+            "elf_execution_model": "StaticExec",
+            "elf_interpreter": null,
+            "dynamic_loader_cache": null,
+            "ordered_elf_dependencies": [],
+            "ordered_present_common_files": [],
+            "system_config_mount_target": {
+                "absolute_path": "/etc/codex", "device_id": 1, "inode": 2,
+                "mode": 0o755, "owner_uid": 0, "owner_gid": 0,
+                "ordered_entry_names": []
+            },
+            "manifest_hash": digest,
+        });
+        let artifact = |role: &str| {
+            serde_json::json!({
+                "role": role,
+                "configured_absolute_path": "/artifact",
+                "device_id": 1,
+                "inode": 2,
+                "file_type": "regular",
+                "mode": 0o755,
+                "owner_uid": 0,
+                "byte_length": 1,
+                "sha256": digest,
+                "authority_ref": {
+                    "authority_store_id": "test-store", "manifest_id": "ram_test",
+                    "manifest_revision": 1, "manifest_entry_id": "rae_test",
+                    "manifest_hash": digest, "entry_hash": digest
+                },
+                "provenance": {"OfficialCodexRelease": {
+                    "version": "0.125.0", "target_triple": "x86_64-unknown-linux-musl",
+                    "archive_name": "codex.tar.gz", "archive_url": "https://example.invalid/codex",
+                    "archive_sha256": digest, "archive_entry_path": "codex",
+                    "extracted_executable_sha256": digest
+                }},
+                "runtime_support": support,
+            })
+        };
+        let canonical_directory = serde_json::to_value(
+            config_projection::CanonicalDirectoryV1::capture_linux_from_fd(
+                std::os::fd::AsFd::as_fd(&fs::File::open("/tmp").unwrap()),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let identity: config_projection::ConfigProjectionIdentityV1 =
+            serde_json::from_value(serde_json::json!({
+                "schema_version": 1,
+                "authority_store_id": "test-store",
+                "series_id": "test-series",
+                "accepted_home": canonical_directory,
+                "workspace_root": canonical_directory,
+                "orchestration_session_id": "session",
+                "retained_participant_id": "participant",
+                "bootstrap_run_id": "bootstrap",
+                "backend_id": "cli:codex-world",
+                "runtime_family": "codex",
+                "world_id": world_id,
+                "world_generation": 1,
+                "immutable_launch_cap": cap,
+                "runtime_artifacts": {
+                    "codex": artifact("Codex0125"),
+                    "world_entry_wrapper": artifact("WorldEntryWrapper"),
+                    "managed_gateway": artifact("ManagedGateway")
+                },
+                "identity_hash": "identity"
+            }))
+            .unwrap();
+        identity
+    }
+
+    fn e3f_seal<T: Serialize>(domain: &str, key: &str, value: &T, omitted: &str) -> String {
+        ManagedGatewayLaunchCapabilityV1::e3_seal(domain, key, value, omitted).unwrap()
+    }
+
+    fn e3f_group(path: &Path) -> config_projection::CanonicalCgroupIdentityV1 {
+        use std::os::unix::fs::MetadataExt;
+        let mount = fs::metadata("/sys/fs/cgroup").unwrap();
+        let directory = fs::metadata(path).unwrap();
+        config_projection::CanonicalCgroupIdentityV1 {
+            cgroup_v2_mount_device_id: mount.dev(),
+            cgroup_v2_mount_inode: mount.ino(),
+            cgroup_directory_inode: directory.ino(),
+            cgroup_relative_path: path
+                .strip_prefix("/sys/fs/cgroup")
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .into(),
+        }
+    }
+
+    fn e3f_registration(
+        group: &config_projection::E3ChildCgroupRegistrationV1,
+        pid: u32,
+    ) -> config_projection::E3ChildProcessRegistrationV1 {
+        let mut child = config_projection::E3ChildProcessRegistrationV1 {
+            schema_version: 1,
+            authority_store_id: group.authority_store_id.clone(),
+            series_id: group.series_id.clone(),
+            registration_id: format!("epr_{}", uuid::Uuid::now_v7()),
+            cgroup_registration_id: group.cgroup_registration_id.clone(),
+            cgroup_registration_hash: group.cgroup_registration_hash.clone(),
+            fence_id: group.fence_id.clone(),
+            role: group.role,
+            pid,
+            pid_start_time_ticks: ManagedGatewayLaunchCapabilityV1::e3_process_start(pid).unwrap(),
+            process_cgroup: group.cgroup.clone(),
+            kernel_boot_id: group.kernel_boot_id.clone(),
+            parent_service_instance_id: "namespace-fixture-service".into(),
+            registered_at: group.registered_at.clone(),
+            registration_hash: String::new(),
+        };
+        child.registration_hash = e3f_seal(
+            "substrate.e3.child-process-registration.v1",
+            "registration",
+            &child,
+            "registration_hash",
+        );
+        child
+    }
+
+    fn e3f_namespace_owner(
+        parent: &Path,
+        suffix: &str,
+        exclusion: &Arc<E3PrivilegedChildExclusionV1>,
+    ) -> Result<E3GatewayRuntimeAuthorityV1> {
+        use config_projection::*;
+        use std::os::fd::AsFd;
+        let mut identity = e3f_namespace_identity("namespace-fixture-world");
+        identity.authority_store_id = format!("cpa_{}", uuid::Uuid::now_v7());
+        identity.series_id = format!("cps_{}", uuid::Uuid::now_v7());
+        let mut owner = E3GatewayRuntimeAuthorityV1::new(
+            exclusion.acquire_e3_exclusive(&identity.world_id, 1)?,
+        );
+        let now = Timestamp("2026-10-22T00:00:00.000000Z".into());
+        let boot = fs::read_to_string("/proc/sys/kernel/random/boot_id")?
+            .trim()
+            .to_string();
+        for (name, role) in [
+            (
+                format!("gateway-{suffix}"),
+                E3TerminalProcessRoleV1::ManagedGateway,
+            ),
+            (format!("member-{suffix}"), E3TerminalProcessRoleV1::Codex),
+        ] {
+            let path = parent.join(&name);
+            fs::create_dir(&path)?;
+            let mut intent = E3KernelEffectIntentV1 {
+                schema_version: 1,
+                authority_store_id: identity.authority_store_id.clone(),
+                series_id: identity.series_id.clone(),
+                effect_intent_id: format!("eki_{}", uuid::Uuid::now_v7()),
+                preparation_id: format!("preparation-{suffix}"),
+                fence_id: format!("fence-{suffix}"),
+                effect: E3KernelEffectKindV1::CreateChildCgroup {
+                    cgroup_registration_id: format!("ecg_{}", uuid::Uuid::now_v7()),
+                    role,
+                    parent_cgroup: e3f_group(parent),
+                    child_component: name,
+                    expected_relative_path: e3f_group(&path).cgroup_relative_path,
+                },
+                created_at: now.clone(),
+                intent_hash: String::new(),
+            };
+            intent.intent_hash = e3f_seal(
+                "substrate.e3.kernel-effect-intent.v1",
+                "intent",
+                &intent,
+                "intent_hash",
+            );
+            let E3KernelEffectKindV1::CreateChildCgroup {
+                cgroup_registration_id,
+                ..
+            } = &intent.effect
+            else {
+                unreachable!()
+            };
+            let mut registration = E3ChildCgroupRegistrationV1 {
+                schema_version: 1,
+                authority_store_id: identity.authority_store_id.clone(),
+                series_id: identity.series_id.clone(),
+                cgroup_registration_id: cgroup_registration_id.clone(),
+                kernel_effect_intent_ref: E3KernelEffectIntentRefV1 {
+                    authority_store_id: intent.authority_store_id.clone(),
+                    effect_intent_id: intent.effect_intent_id.clone(),
+                    intent_hash: intent.intent_hash.clone(),
+                },
+                fence_id: intent.fence_id.clone(),
+                turn_id: None,
+                role,
+                cgroup: e3f_group(&path),
+                kernel_boot_id: boot.clone(),
+                registered_at: now.clone(),
+                cgroup_registration_hash: String::new(),
+            };
+            registration.cgroup_registration_hash = e3f_seal(
+                "substrate.e3.child-cgroup-registration.v1",
+                "cgroup_registration",
+                &registration,
+                "cgroup_registration_hash",
+            );
+            owner.unresolved_intents.push(intent.clone());
+            owner.cgroups.push((
+                fs::File::open(parent)?,
+                fs::File::open(&path)?,
+                registration,
+                intent,
+            ));
+        }
+        let gateway_registration = e3f_registration(&owner.cgroups[0].2, std::process::id());
+        let directory =
+            CanonicalDirectoryV1::capture_linux_from_fd(fs::File::open(parent)?.as_fd())?;
+        let reference = ConfigProjectionRefV1 {
+            authority_store_id: identity.authority_store_id.clone(),
+            series_id: identity.series_id.clone(),
+            record_id: format!("cpr_{}", uuid::Uuid::now_v7()),
+            revision: 1,
+            record_hash: "1".repeat(64),
+        };
+        let input: ManagedGatewayLaunchInputV1 = serde_json::from_value(serde_json::json!({
+            "schema_version":1,"authority_store_id":identity.authority_store_id,"launch_input_id":"fixture-input",
+            "activation_intent_ref":{"authority_store_id":identity.authority_store_id,"activation_intent_id":format!("gai_{}",uuid::Uuid::now_v7()),"intent_hash":"1".repeat(64)},
+            "dormant_projection_ref":reference,
+            "gateway_ref":{"authority_store_id":identity.authority_store_id,"gateway_instance_id":format!("cgi_{}",uuid::Uuid::now_v7()),"gateway_identity_hash":"1".repeat(64)},
+            "config_projection_identity_hash":identity.identity_hash,
+            "orchestration_session_id":identity.orchestration_session_id,"retained_participant_id":identity.retained_participant_id,
+            "backend_id":identity.backend_id,"world_id":identity.world_id,"world_generation":identity.world_generation,
+            "listener_identity":{"transport":"tcp","address":"127.0.0.1","port":1,"socket_inode":1,"network_namespace_inode":1,"listen_backlog":1,"deny_boundary_effective_before_listen":true,"responses_base_path":"/v1/responses"},
+            "gateway_config":{"root":directory,"relative_path":"config.toml","mode":384,"byte_length":0,"sha256":"1".repeat(64)},
+            "http_surface":{"inherited_listener_only":true,"readiness_method":"GET","readiness_path":"/health","member_method":"POST","member_path":"/v1/responses","auxiliary_listener_count":0},
+            "access_boundary_ref":{"authority_store_id":identity.authority_store_id,"access_boundary_id":"fixture-boundary","revision":1,"boundary_hash":"1".repeat(64)},
+            "secret_handoff_prepared_ref":{"authority_store_id":identity.authority_store_id,"handoff_id":"fixture-handoff","orchestration_session_id":identity.orchestration_session_id,"retained_participant_id":identity.retained_participant_id,"runtime_family":"codex","world_id":identity.world_id,"world_generation":1,"receiving_gateway_identity_hash":"1".repeat(64),"handoff_state_revision":1,"handoff_hash":"1".repeat(64)},
+            "readiness_nonce":"fixture-nonce","launch_input_hash":"1".repeat(64)
+        }))?;
+        let requirement =
+            crate::e3_child_security::bind_e3_service_user_namespace_v1(exclusion, 1000, 1000)?;
+        let enforcement = E3WorldFsEnforcementInputV1 {
+            schema_version: 1,
+            child_role: E3IsolatedChildRoleV1::ManagedGateway,
+            projection_identity_hash: identity.identity_hash.clone(),
+            policy_authority: E3PolicyAuthoritySourceV1::InitialLaunch {
+                e2_activation_id: identity.immutable_launch_cap.e2_activation_id.clone(),
+                commitment_ref: identity.immutable_launch_cap.commitment_ref.clone(),
+            },
+            immutable_worker_cap_ref: identity
+                .immutable_launch_cap
+                .immutable_worker_cap_ref
+                .clone(),
+            policy_snapshot_bytes_base64: String::new(),
+            policy_snapshot_byte_length: 0,
+            policy_snapshot_ref: identity.immutable_launch_cap.policy_snapshot_ref.clone(),
+            policy_snapshot_hash: identity.immutable_launch_cap.policy_snapshot_hash.clone(),
+            policy_snapshot_revision: "1".into(),
+            expected_process_cgroup: owner.cgroups[0].2.cgroup.clone(),
+            kernel_boot_id: boot,
+            user_namespace_requirement: requirement,
+            target_uid: 1000,
+            target_gid: 1000,
+            immutable_config_source: None,
+            private_realization: None,
+            codex_launch_plan_hash: None,
+            executable_artifact: identity.runtime_artifacts.managed_gateway.clone(),
+            denied_control_probe_targets: Vec::new(),
+            support_policy_version: 1,
+            enforcement_input_hash: String::new(),
+        };
+        // Inert descriptor/metadata fields are not gateway startup, artifact or registry proof.
+        // Only original lease, actual group descriptors and namespace/process observations are exercised.
+        owner.launch = Some(ManagedGatewayLaunchCapabilityV1 {
+            deadline: libc::timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            identity,
+            launch_input: input,
+            enforcement,
+            exclusion: Arc::clone(exclusion),
+            wrapper: fs::File::open("/dev/null")?,
+            executable: fs::File::open("/dev/null")?,
+            control_directories: Vec::new(),
+            gateway_pid: None,
+            gateway_pidfd: None,
+            gateway_registration: Some(gateway_registration),
+            gateway_wait_status: None,
+            namespace_setup_started: false,
+            start_gate: None,
+            final_gate: None,
+            auth_writer: None,
+            secret_ready_reader: None,
+            security: None,
+            secret_ready: None,
+            delivery_started: false,
+            delivered_at: None,
+            probe: None,
+            probe_input: None,
+            probe_start_gate: None,
+            probe_request_gate: None,
+            probe_connected_reader: None,
+            probe_result_reader: None,
+            readiness: None,
+        });
+        owner.listening = true;
+        Ok(owner)
+    }
+
+    struct E3FNamespaceChild {
+        pid: u32,
+        pidfd: OwnedFd,
+        setup: OwnedFd,
+        release: fs::File,
+        reaped: bool,
+    }
+
+    impl E3FNamespaceChild {
+        fn spawn(group: &Path, mode: u8) -> Result<Self> {
+            let (parent, child) =
+                crate::e3_child_security::create_e3_child_user_namespace_channel_v1()?;
+            let (release_read, release_write) = create_inherited_auth_bundle_pipe()?;
+            let pid = unsafe { libc::fork() };
+            anyhow::ensure!(pid >= 0, "namespace fixture fork");
+            if pid == 0 {
+                unsafe {
+                    libc::close(parent.as_raw_fd());
+                    libc::close(release_write.as_raw_fd());
+                    if libc::unshare(libc::CLONE_NEWUSER) != 0 {
+                        libc::_exit(120);
+                    }
+                    if mode == 2 {
+                        libc::shutdown(child.as_raw_fd(), libc::SHUT_RD);
+                    }
+                    let marker = if mode == 1 { 0x7f_u8 } else { 0x01_u8 };
+                    if libc::send(
+                        child.as_raw_fd(),
+                        (&marker as *const u8).cast(),
+                        1,
+                        libc::MSG_NOSIGNAL,
+                    ) != 1
+                    {
+                        libc::_exit(121);
+                    }
+                    if mode == 0 {
+                        let mut mapped = 0u8;
+                        if libc::recv(child.as_raw_fd(), (&mut mapped as *mut u8).cast(), 1, 0) != 1
+                            || mapped != 0x02
+                        {
+                            libc::_exit(122);
+                        }
+                    }
+                    let mut gate = 0u8;
+                    if libc::read(release_read.as_raw_fd(), (&mut gate as *mut u8).cast(), 1) != 1
+                        || gate != 1
+                    {
+                        libc::_exit(123);
+                    }
+                    libc::_exit(0);
+                }
+            }
+            drop(child);
+            drop(release_read);
+            let raw = unsafe { libc::syscall(libc::SYS_pidfd_open, pid, 0) } as i32;
+            if raw < 0 {
+                unsafe {
+                    libc::kill(pid, libc::SIGKILL);
+                    libc::waitpid(pid, std::ptr::null_mut(), 0);
+                }
+                anyhow::bail!("namespace fixture pidfd");
+            }
+            let child = Self {
+                pid: pid as u32,
+                pidfd: unsafe { OwnedFd::from_raw_fd(raw) },
+                setup: parent,
+                release: release_write,
+                reaped: false,
+            };
+            fs::write(group.join("cgroup.procs"), pid.to_string())?;
+            eprintln!(
+                "E3F_CHILD pid={} start={} group={}",
+                child.pid,
+                ManagedGatewayLaunchCapabilityV1::e3_process_start(child.pid)?,
+                group.display()
+            );
+            Ok(child)
+        }
+        fn finish(&mut self) -> Result<()> {
+            self.release.write_all(&[1])?;
+            let mut poll = libc::pollfd {
+                fd: self.pidfd.as_raw_fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            };
+            anyhow::ensure!(
+                unsafe { libc::poll(&mut poll, 1, 5_000) } == 1,
+                "namespace child exit deadline"
+            );
+            let mut status = 0;
+            anyhow::ensure!(
+                unsafe { libc::waitpid(self.pid as i32, &mut status, libc::WNOHANG) }
+                    == self.pid as i32,
+                "namespace child wait"
+            );
+            self.reaped = true;
+            anyhow::ensure!(
+                libc::WIFEXITED(status) && libc::WEXITSTATUS(status) == 0,
+                "namespace child failed: {status}"
+            );
+            Ok(())
+        }
+    }
+    impl Drop for E3FNamespaceChild {
+        fn drop(&mut self) {
+            if !self.reaped {
+                unsafe {
+                    libc::syscall(
+                        libc::SYS_pidfd_send_signal,
+                        self.pidfd.as_raw_fd(),
+                        libc::SIGKILL,
+                        std::ptr::null::<libc::siginfo_t>(),
+                        0,
+                    );
+                    libc::waitpid(self.pid as i32, std::ptr::null_mut(), 0);
+                }
+            }
+        }
+    }
+
+    struct E3FMapCapabilities([u32; 6]);
+    impl E3FMapCapabilities {
+        fn read() -> [u32; 6] {
+            let mut header = [0x2008_0522_u32, 0];
+            let mut data = [0u32; 6];
+            assert_eq!(
+                unsafe { libc::syscall(libc::SYS_capget, header.as_mut_ptr(), data.as_mut_ptr()) },
+                0
+            );
+            data
+        }
+        fn park() -> Self {
+            let original = Self::read();
+            assert_eq!(original[1] & 0xc0, 0xc0);
+            let mut data = original;
+            data[0] &= !0xc0;
+            let mut header = [0x2008_0522_u32, 0];
+            assert_eq!(
+                unsafe { libc::syscall(libc::SYS_capset, header.as_mut_ptr(), data.as_ptr()) },
+                0
+            );
+            Self(original)
+        }
+    }
+    impl Drop for E3FMapCapabilities {
+        fn drop(&mut self) {
+            let mut header = [0x2008_0522_u32, 0];
+            if unsafe { libc::syscall(libc::SYS_capset, header.as_mut_ptr(), self.0.as_ptr()) } != 0
+            {
+                std::process::abort();
+            }
+        }
+    }
+
+    fn e3f_namespace_fd_count(device: u64, inode: u64) -> usize {
+        use std::os::unix::fs::MetadataExt;
+        fs::read_dir("/proc/self/fd")
+            .unwrap()
+            .filter_map(|entry| entry.ok().and_then(|entry| fs::metadata(entry.path()).ok()))
+            .filter(|meta| meta.dev() == device && meta.ino() == inode)
+            .count()
+    }
+
+    fn e3f_finish_namespace_owner(mut owner: E3GatewayRuntimeAuthorityV1) -> Result<()> {
+        for (_, _, group, _) in &owner.cgroups {
+            let path = Path::new("/sys/fs/cgroup").join(&group.cgroup.cgroup_relative_path);
+            assert!(fs::read_to_string(path.join("cgroup.procs"))?
+                .trim()
+                .is_empty());
+            fs::remove_dir(path)?;
+        }
+        owner.cgroups.clear();
+        owner.unresolved_intents.clear();
+        owner.launch = None;
+        owner.terminal = true;
+        owner.revoked = true;
+        owner.release_exclusion_after_cleanup_v1()
+    }
+
+    #[test]
+    #[ignore = "requires explicit E3-D privileged controls and disposable cgroup/child cleanup"]
+    fn privileged_e3f_codex_namespace_owner_lifecycle() -> Result<()> {
+        use config_projection::*;
+        use std::os::unix::fs::MetadataExt;
+        assert_eq!(unsafe { libc::geteuid() }, 0);
+        assert_eq!(
+            std::env::var("SUBSTRATE_E3D_PRIVILEGED_TEST")?.as_str(),
+            "1"
+        );
+        assert_eq!(std::env::var("SUBSTRATE_E3D_TARGET_UID")?.as_str(), "1000");
+        assert_eq!(std::env::var("SUBSTRATE_E3D_TARGET_GID")?.as_str(), "1000");
+        let _caps = E3FMapCapabilities::park();
+        let parked = E3FMapCapabilities::read();
+        let root = Path::new("/sys/fs/cgroup").join(format!(
+            "substrate-e3f-namespace-test-{}",
+            std::process::id()
+        ));
+        fs::create_dir(&root)?;
+        let exclusion = finished_child_exclusion();
+        let mut owner = e3f_namespace_owner(&root, "a", &exclusion)?;
+        let mut sibling = e3f_namespace_owner(&root, "b", &exclusion)?;
+        let identity = owner.launch.as_ref().unwrap().identity.clone();
+        let requirement = owner
+            .launch
+            .as_ref()
+            .unwrap()
+            .enforcement
+            .user_namespace_requirement
+            .clone();
+        let group = owner.cgroups[1].2.clone();
+        let path = Path::new("/sys/fs/cgroup").join(&group.cgroup.cgroup_relative_path);
+        let mut child = E3FNamespaceChild::spawn(&path, 1)?;
+        let registration = e3f_registration(&group, child.pid);
+        let (socket, _peer) =
+            crate::e3_child_security::create_e3_child_user_namespace_channel_v1()?;
+        assert!(sibling
+            .install_codex_user_namespace_v1(&socket, &identity, &registration, &requirement)
+            .is_err());
+        assert!(sibling
+            .release_codex_user_namespace_v1(&registration)
+            .is_err());
+        // Alternate closed states must reject before setup, without poisoning the valid attempt.
+        for closed in 0..4 {
+            match closed {
+                0 => owner.listening = false,
+                1 => owner.terminal = true,
+                2 => owner.revoked = true,
+                _ => owner.boundary_deleted = true,
+            };
+            assert!(owner
+                .install_codex_user_namespace_v1(&socket, &identity, &registration, &requirement)
+                .is_err());
+            owner.listening = true;
+            owner.terminal = false;
+            owner.revoked = false;
+            owner.boundary_deleted = false;
+        }
+        // Same bytes/registration cannot substitute either original held directory.
+        let original = std::mem::replace(
+            &mut owner.cgroups[1].1,
+            fs::File::open(root.join("gateway-a"))?,
+        );
+        assert!(owner
+            .install_codex_user_namespace_v1(&socket, &identity, &registration, &requirement)
+            .is_err());
+        owner.cgroups[1].1 = original;
+        let original = std::mem::replace(
+            &mut owner.cgroups[1].0,
+            fs::File::open(root.join("gateway-a"))?,
+        );
+        assert!(owner
+            .install_codex_user_namespace_v1(&socket, &identity, &registration, &requirement)
+            .is_err());
+        owner.cgroups[1].0 = original;
+        let original = owner.cgroups[1].3.preparation_id.clone();
+        owner.cgroups[1].3.preparation_id.push('x');
+        assert!(owner
+            .install_codex_user_namespace_v1(&socket, &identity, &registration, &requirement)
+            .is_err());
+        owner.cgroups[1].3.preparation_id = original;
+        for case in 0..11 {
+            let mut wrong = registration.clone();
+            match case {
+                0 => wrong.authority_store_id.push('x'),
+                1 => wrong.series_id.push('x'),
+                2 => wrong.fence_id.push('x'),
+                3 => wrong.role = E3TerminalProcessRoleV1::ManagedGateway,
+                4 => wrong.cgroup_registration_id.push('x'),
+                5 => wrong.cgroup_registration_hash.push('x'),
+                6 => wrong.process_cgroup.cgroup_directory_inode += 1,
+                7 => wrong.kernel_boot_id.push('x'),
+                8 => wrong.parent_service_instance_id.push('x'),
+                9 => wrong.pid_start_time_ticks += 1,
+                _ => wrong.registration_hash.push('x'),
+            }
+            if case != 10 {
+                wrong.registration_hash = e3f_seal(
+                    "substrate.e3.child-process-registration.v1",
+                    "registration",
+                    &wrong,
+                    "registration_hash",
+                );
+            }
+            assert!(
+                owner
+                    .install_codex_user_namespace_v1(&socket, &identity, &wrong, &requirement)
+                    .is_err(),
+                "foreign case {case}"
+            );
+            assert!(owner.release_codex_user_namespace_v1(&wrong).is_err());
+        }
+        for case in 0..4 {
+            let mut wrong = identity.clone();
+            match case {
+                0 => wrong.world_id.push('x'),
+                1 => wrong.world_generation += 1,
+                2 => wrong.identity_hash.push('x'),
+                _ => wrong.bootstrap_run_id.push('x'),
+            };
+            assert!(owner
+                .install_codex_user_namespace_v1(&socket, &wrong, &registration, &requirement)
+                .is_err());
+        }
+        let mut wrong_requirement = requirement.clone();
+        wrong_requirement.uid_map.inside_id += 1;
+        assert!(owner
+            .install_codex_user_namespace_v1(&socket, &identity, &registration, &wrong_requirement)
+            .is_err());
+        // No previous rejection entered setup: the actual malformed packet is now consumed once.
+        let before = owner.install_codex_user_namespace_v1(
+            &child.setup,
+            &identity,
+            &registration,
+            &requirement,
+        );
+        assert!(before.is_err());
+        assert!(
+            before.unwrap_err().to_string().contains("setup"),
+            "must reach original lease packet validation"
+        );
+        assert!(owner
+            .install_codex_user_namespace_v1(&child.setup, &identity, &registration, &requirement)
+            .is_err());
+        let unretained = fs::metadata(format!("/proc/{}/ns/user", child.pid))?;
+        assert_eq!(
+            e3f_namespace_fd_count(unretained.dev(), unretained.ino()),
+            0
+        );
+        owner.release_codex_user_namespace_v1(&registration)?; // NeverRetained: child remains live.
+        assert!(fs::read_to_string(path.join("cgroup.procs"))?.contains(&child.pid.to_string()));
+        assert!(exclusion.acquire_non_e3_child().is_err());
+        child.finish()?;
+        owner.release_codex_user_namespace_v1(&registration)?;
+        e3f_finish_namespace_owner(sibling)?;
+        assert!(exclusion.acquire_non_e3_child().is_err());
+
+        for mode in [2, 0] {
+            let mut child = E3FNamespaceChild::spawn(&path, mode)?;
+            let registration = e3f_registration(&group, child.pid);
+            let setup = owner.install_codex_user_namespace_v1(
+                &child.setup,
+                &identity,
+                &registration,
+                &requirement,
+            );
+            if mode == 2 {
+                assert!(setup.is_err(), "mapped-reply loss must return an error");
+            } else {
+                setup?;
+            }
+            assert_eq!(E3FMapCapabilities::read(), parked);
+            for name in ["uid_map", "gid_map"] {
+                assert_eq!(
+                    fs::read_to_string(format!("/proc/{}/{name}", child.pid))?
+                        .split_ascii_whitespace()
+                        .collect::<Vec<_>>(),
+                    ["1000", "1000", "1"]
+                );
+            }
+            let namespace = fs::metadata(format!("/proc/{}/ns/user", child.pid))?;
+            assert_ne!(namespace.ino(), fs::metadata("/proc/self/ns/user")?.ino());
+            assert_eq!(
+                e3f_namespace_fd_count(namespace.dev(), namespace.ino()),
+                1,
+                "original lease owns exactly one namespace descriptor"
+            );
+            assert!(owner
+                .install_codex_user_namespace_v1(
+                    &child.setup,
+                    &identity,
+                    &registration,
+                    &requirement
+                )
+                .is_err());
+            assert!(
+                owner
+                    .release_codex_user_namespace_v1(&registration)
+                    .is_err(),
+                "retained namespace cannot release a live child"
+            );
+            let mut wrong = registration.clone();
+            wrong.registration_id.push('x');
+            wrong.registration_hash = e3f_seal(
+                "substrate.e3.child-process-registration.v1",
+                "registration",
+                &wrong,
+                "registration_hash",
+            );
+            assert!(
+                owner.release_codex_user_namespace_v1(&wrong).is_err(),
+                "original lease must reject a self-consistent foreign registration"
+            );
+            assert_eq!(
+                e3f_namespace_fd_count(namespace.dev(), namespace.ino()),
+                1,
+                "failed release retains original namespace"
+            );
+            child.finish()?;
+            if mode == 0 {
+                let descendant = path.join("descendant");
+                fs::create_dir(&descendant)?;
+                let mut extra = E3FNamespaceChild::spawn(&descendant, 1)?;
+                assert!(
+                    owner
+                        .release_codex_user_namespace_v1(&registration)
+                        .is_err(),
+                    "populated descendant tree blocks release"
+                );
+                extra.finish()?;
+                fs::remove_dir(&descendant)?;
+                owner.terminal = true;
+                owner.revoked = true;
+                owner.listening = false;
+                assert!(owner
+                    .install_codex_user_namespace_v1(
+                        &socket,
+                        &identity,
+                        &registration,
+                        &requirement
+                    )
+                    .is_err());
+            }
+            owner.release_codex_user_namespace_v1(&registration)?;
+            assert_eq!(
+                e3f_namespace_fd_count(namespace.dev(), namespace.ino()),
+                0,
+                "namespace released while original group still exists"
+            );
+            // Lost outer ACK: exact retry reuses the existing Released slot and original group.
+            owner.release_codex_user_namespace_v1(&registration)?;
+            assert!(path.is_dir());
+            assert!(exclusion.acquire_non_e3_child().is_err());
+            eprintln!("E3F_NAMESPACE_RELEASED mode={mode} pid={} start={} group_inode={} exclusion_still_held",child.pid,registration.pid_start_time_ticks,group.cgroup.cgroup_directory_inode);
+        }
+        // Every child/namespace is finished before removing the original groups; exclusion last.
+        e3f_finish_namespace_owner(owner)?;
+        fs::remove_dir(&root)?;
+        assert!(exclusion.acquire_non_e3_child().is_ok());
+        assert_eq!(E3FMapCapabilities::read(), parked);
+        eprintln!("E3F_NAMESPACE_COMPONENT_COMPLETE_NO_GATEWAY_STARTUP_CLAIM");
+        Ok(())
+    }
+
+    #[test]
+    fn test_e3f_codex_namespace_missing_attempt_rejects_without_setup() -> Result<()> {
+        let exclusion = finished_child_exclusion();
+        let mut owner =
+            E3GatewayRuntimeAuthorityV1::new(exclusion.acquire_e3_exclusive("namespace-test", 1)?);
+        let child = config_projection::E3ChildProcessRegistrationV1 {
+            schema_version: 1,
+            authority_store_id: "foreign-store".into(),
+            series_id: "foreign-series".into(),
+            registration_id: "unregistered".into(),
+            cgroup_registration_id: "unregistered".into(),
+            cgroup_registration_hash: "1".repeat(64),
+            fence_id: "foreign-fence".into(),
+            role: config_projection::E3TerminalProcessRoleV1::Codex,
+            pid: std::process::id(),
+            pid_start_time_ticks: 1,
+            process_cgroup: config_projection::CanonicalCgroupIdentityV1 {
+                cgroup_v2_mount_device_id: 1,
+                cgroup_v2_mount_inode: 1,
+                cgroup_directory_inode: 1,
+                cgroup_relative_path: "never-created".into(),
+            },
+            kernel_boot_id: "foreign-boot".into(),
+            parent_service_instance_id: "foreign-service".into(),
+            registered_at: config_projection::Timestamp("2026-10-22T00:00:00.000000Z".into()),
+            registration_hash: "1".repeat(64),
+        };
+        assert!(owner.release_codex_user_namespace_v1(&child).is_err());
+        assert!(exclusion.acquire_non_e3_child().is_err());
+        // No setup was entered and no kernel resource exists in this fixture.
+        owner._exclusion.release_after_cleanup_v1()?;
+        assert!(exclusion.acquire_non_e3_child().is_ok());
+        Ok(())
+    }
 
     #[test]
     fn test_e3_readiness_wire_deadlines_are_fixed_with_ample_budget() -> Result<()> {
