@@ -2355,7 +2355,6 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
     use std::path::{Path, PathBuf};
 
-
     #[cfg(target_os = "linux")]
     mod e3f_held_selection_tests {
         use super::*;

@@ -562,7 +562,9 @@ impl E3EffectiveConfigResolutionSnapshotV1<'_> {
         let E3PinnedConfigPatchSourceV1::Global { opened, .. } = &self.global_patch else {
             return Err(user_error("E3 global source posture is malformed"));
         };
-        opened.revalidate().map_err(|error| user_error(error.to_string()))?;
+        opened
+            .revalidate()
+            .map_err(|error| user_error(error.to_string()))?;
         self.workspace_selection.revalidate()
     }
 }
@@ -1536,7 +1538,10 @@ pub(crate) fn resolve_effective_config_with_explain_for_bootstrap_home(
 fn open_e3_workspace_config_source_v1<'authority>(
     cwd: &Path,
     expected_workspace_root: &config_projection::CanonicalDirectoryV1,
-) -> Result<(E3PinnedConfigPatchSourceV1<'authority>, E3WorkspaceConfigSelectionGuardV1)> {
+) -> Result<(
+    E3PinnedConfigPatchSourceV1<'authority>,
+    E3WorkspaceConfigSelectionGuardV1,
+)> {
     use sha2::{Digest, Sha256};
     use std::ffi::CString;
 
@@ -1688,17 +1693,20 @@ fn open_e3_workspace_config_source_v1<'authority>(
     }
     let source_bytes_sha256 = format!("{:x}", Sha256::digest(&source_bytes));
     selection.revalidate()?;
-    Ok((E3PinnedConfigPatchSourceV1::Workspace {
-        source_root,
-        held_source_root,
-        source_relative_path: ".substrate/workspace.yaml".to_string(),
-        held_file,
-        file_device_id: before.dev(),
-        file_inode: before.ino(),
-        file_byte_length: before.len(),
-        source_bytes,
-        source_bytes_sha256,
-    }, selection))
+    Ok((
+        E3PinnedConfigPatchSourceV1::Workspace {
+            source_root,
+            held_source_root,
+            source_relative_path: ".substrate/workspace.yaml".to_string(),
+            held_file,
+            file_device_id: before.dev(),
+            file_inode: before.ino(),
+            file_byte_length: before.len(),
+            source_bytes,
+            source_bytes_sha256,
+        },
+        selection,
+    ))
 }
 
 #[cfg(target_os = "linux")]
@@ -1759,7 +1767,10 @@ pub(super) fn resolve_e3_effective_config_source_v1<'authority>(
         open_e3_workspace_config_source_v1(cwd, expected_workspace_root)?;
     let workspace_layer = match &workspace_patch {
         E3PinnedConfigPatchSourceV1::Workspace {
-            source_root, source_relative_path, source_bytes, ..
+            source_root,
+            source_relative_path,
+            source_bytes,
+            ..
         } => {
             let path = PathBuf::from(&source_root.physical_path).join(source_relative_path);
             let raw = std::str::from_utf8(source_bytes)
@@ -1774,7 +1785,9 @@ pub(super) fn resolve_e3_effective_config_source_v1<'authority>(
     let (effective, explain) = resolve_effective_from_layers(
         &global_patch_value,
         &global_path,
-        workspace_layer.as_ref().map(|(patch, path)| (patch, path.as_path())),
+        workspace_layer
+            .as_ref()
+            .map(|(patch, path)| (patch, path.as_path())),
         &env_overrides,
         &CliConfigOverrides::default(),
         true,
@@ -1783,12 +1796,17 @@ pub(super) fn resolve_e3_effective_config_source_v1<'authority>(
     let explain = explain.ok_or_else(|| user_error("E3 config explanation was not produced"))?;
     if effective.llm.gateway.mode == LlmGatewayMode::HostOnly {
         let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
-            cwd, bootstrap_home,
+            cwd,
+            bootstrap_home,
         )?;
         validate_config_against_policy(&effective, &policy)?;
     }
     let snapshot = E3EffectiveConfigResolutionSnapshotV1 {
-        effective, explain, global_patch, workspace_patch, workspace_selection,
+        effective,
+        explain,
+        global_patch,
+        workspace_patch,
+        workspace_selection,
     };
     snapshot.revalidate()?;
     Ok(snapshot)
@@ -1835,7 +1853,9 @@ pub(super) fn extract_e3_effective_config_source_v1(
         return Err(user_error("E3 config source postures are malformed"));
     };
     if workspace_root != &snapshot.workspace_selection.authenticated_workspace {
-        return Err(user_error("selected workspace root does not match the projection workspace binding"));
+        return Err(user_error(
+            "selected workspace root does not match the projection workspace binding",
+        ));
     }
     opened
         .revalidate()

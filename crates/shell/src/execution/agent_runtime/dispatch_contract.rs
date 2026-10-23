@@ -2452,7 +2452,6 @@ fn persisted_host_attach_mode_label(value: HostAttachModePreference) -> &'static
     }
 }
 
-
 enum InventoryDispatchCandidateV1<'a> {
     Legacy(&'a ProjectedInventoryEntryV1),
     #[cfg(target_os = "linux")]

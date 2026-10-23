@@ -18,6 +18,125 @@ const OPENAI_RESPONSES_REASONING_SUMMARY_METADATA_KEY: &str = "openai_responses_
 const OPENAI_RESPONSES_INCLUDE_METADATA_KEY: &str = "openai_responses_include";
 const OPENAI_RESPONSES_TEXT_VERBOSITY_METADATA_KEY: &str = "openai_responses_text_verbosity";
 
+// GW-A01: real API-key transport, selected by continuation, checks requests only.
+// Streaming output fidelity is deliberately not asserted here (GW-A03 remains open).
+#[tokio::test]
+async fn gwa01_continuation_sends_flat_responses_tools_in_sync_and_stream() {
+    for stream in [false, true] {
+        let mut server = Server::new_async().await;
+        let mock = server.mock("POST", "/v1/responses")
+            .match_header("authorization", "Bearer openai-secret")
+            .match_body(Matcher::Json(json!({
+                "model": "gpt-4.1-mini", "stream": true, "max_output_tokens": 4096,
+                "input": [
+                    {"type": "function_call", "call_id": "call_lookup", "name": "lookup", "arguments": "{}"},
+                    {"type": "function_call_output", "call_id": "call_lookup", "output": "record"}
+                ],
+                "tools": [
+                    {"type": "function", "name": "lookup", "description": "Find a record",
+                     "parameters": {"type": "object", "properties": {"query": {"type": "string"}},
+                                    "required": ["query"], "additionalProperties": false}},
+                    {"type": "function", "name": "finish"}
+                ]
+            })))
+            .with_status(200)
+            .with_body(responses_api_sync_body("gpt-4.1-mini", "ok"))
+            .create_async().await;
+        let harness = build_openai_provider_harness(&server.url(), "gpt-4.1-mini");
+        let response = harness.invoke_responses(HeaderMap::new(), json!({
+            "model": "gateway-default", "stream": stream,
+            "input": [
+                {"type": "function_call", "call_id": "call_lookup", "name": "lookup", "arguments": "{}"},
+                {"type": "function_call_output", "call_id": "call_lookup", "output": "record"}
+            ],
+            "tools": [
+                {"type": "function", "function": {"name": "lookup", "description": "Find a record",
+                 "parameters": {"type": "object", "properties": {"query": {"type": "string"}},
+                                "required": ["query"], "additionalProperties": false}}},
+                {"type": "function", "function": {"name": "finish"}}
+            ]
+        })).await;
+        // Drain the transaction; its output is not evidence of Responses decoding.
+        let _body = response_body_text(response).await;
+        mock.assert_async().await;
+    }
+}
+
+// GW-A02: public ingress -> actual OpenAI provider -> ordinary Chat fallback.
+#[tokio::test]
+async fn gwa02_public_responses_chat_fallback_preserves_wire_controls_and_defaults() {
+    for stream in [false, true] {
+        for parallel in [Some(false), Some(true), None] {
+            for choice in [
+                Some(json!("required")),
+                Some(json!({"type": "function", "function": {"name": "beta"}})),
+                Some(json!("none")),
+                Some(json!("auto")),
+                None,
+            ] {
+                let mut server = Server::new_async().await;
+                let mut request = json!({
+                    "model": "gateway-default", "input": "hello", "stream": stream,
+                    "tools": [
+                        {"type": "function", "function": {"name": "alpha", "description": "First",
+                            "parameters": {"type": "object", "properties": {}, "additionalProperties": false}}},
+                        {"type": "function", "function": {"name": "beta"}}
+                    ]
+                });
+                let mut expected = json!({
+                    "model": "gpt-4.1-mini", "messages": [{"role": "user", "content": "hello"}],
+                    "max_tokens": 4096, "stream": stream,
+                    "tools": [
+                        {"type": "function", "function": {"name": "alpha", "description": "First",
+                            "parameters": {"type": "object", "properties": {}, "additionalProperties": false}}},
+                        {"type": "function", "function": {"name": "beta"}}
+                    ]
+                });
+                if stream {
+                    expected["stream_options"] = json!({"include_usage": true});
+                }
+                if let Some(parallel) = parallel {
+                    request["parallel_tool_calls"] = json!(parallel);
+                    expected["parallel_tool_calls"] = json!(parallel);
+                }
+                if let Some(choice) = choice {
+                    request["tool_choice"] = choice.clone();
+                    expected["tool_choice"] = choice.clone();
+                    if choice == "none" {
+                        expected.as_object_mut().unwrap().remove("tools");
+                    } else if choice.is_object() {
+                        // Preserve the existing ingress selection/filtering policy.
+                        expected["tools"] = json!([
+                            {"type": "function", "function": {"name": "beta"}}
+                        ]);
+                    }
+                }
+                let upstream_body = if stream {
+                    "data: {\"id\":\"chatcmpl_test\",\"model\":\"gpt-4.1-mini\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl_test\",\"model\":\"gpt-4.1-mini\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n".to_string()
+                } else {
+                    json!({"id": "chatcmpl_test", "model": "gpt-4.1-mini",
+                        "choices": [{"message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
+                        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}}).to_string()
+                };
+                let mock = server
+                    .mock("POST", "/v1/chat/completions")
+                    .match_header("authorization", "Bearer openai-secret")
+                    .match_body(Matcher::Json(expected))
+                    .with_status(200)
+                    .with_body(upstream_body)
+                    .create_async()
+                    .await;
+                let harness = build_openai_provider_harness(&server.url(), "gpt-4.1-mini");
+                let response = harness.invoke_responses(HeaderMap::new(), request).await;
+                let status = response.status();
+                let body = response_body_text(response).await;
+                mock.assert_async().await;
+                assert_eq!(status, StatusCode::OK, "{body}");
+            }
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct UsageExpected {
     input_tokens: u32,

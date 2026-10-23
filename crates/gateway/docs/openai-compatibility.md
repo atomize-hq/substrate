@@ -188,7 +188,8 @@ Other rejected cases:
   - `response.output_item.done`
   - `response.completed`
 - `response.completed` carries the final assembled Response object, including usage.
-- `parallel_tool_calls` is preserved into gateway metadata; it does not widen tool support beyond function tools.
+- `parallel_tool_calls` is preserved through OpenAI provider serialization, including the ordinary API-key Chat Completions fallback; it does not widen tool support beyond function tools. Omitted controls stay omitted upstream, retaining upstream defaults (parallel tool calls default to `true`).
+- Accepted `tool_choice` controls survive that Chat Completions fallback, including `"required"` and explicit nested function selection. Existing ingress filtering still removes tools for `"none"` and selects the named tool for explicit selection.
 - Tool continuation uses `function_call_output` items, preserves `call_id`, and accepts either replayed `function_call` history or `previous_response_id` as the continuation anchor.
 
 ### Rejected/unsupported behavior
@@ -259,6 +260,10 @@ For ChatGPT Codex route maintenance, the owned deterministic evidence anchors ar
 - [gateway/tests/openai_shared_parity.rs](../tests/openai_shared_parity.rs)
 - [gateway/src/server/openai_conformance_test_support.rs](../src/server/openai_conformance_test_support.rs)
 - `gateway/tests/fixtures/openai_responses/codex-*.json`
+
+Provider request regressions require flat function definitions (`type`, `name`, optional `description` and `parameters`) on upstream Responses requests and nested `function` definitions on upstream Chat Completions requests. Keep these serializers separate when maintaining tool support.
+
+The request regressions serialize an OAuth provider instance without sending and inspect real API-key provider requests against local HTTP mocks in sync and streaming modes. They verify outbound tool definitions and controls, including the existing continuation route selection and ordinary Chat fallback. They do not establish private OAuth backend acceptance, live provider compatibility, native Codex compatibility, or API-key Responses streaming output fidelity.
 
 Reopen Codex-route review when any of the following drift materially:
 

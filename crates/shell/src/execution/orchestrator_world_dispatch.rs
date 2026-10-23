@@ -4436,7 +4436,6 @@ fn retained_turn_state_revision(state: ActiveRetainedTurnStateV1) -> u64 {
     }
 }
 
-
 #[cfg(target_os = "linux")]
 pub(crate) struct E3ProducerPreparationCustodyV1 {
     authoring_input_ref: config_projection::ConfigProjectionAuthoringInputRefV1,
@@ -4868,7 +4867,9 @@ fn resolve_e2_dispatch_policy(
         Some(policy) => policy,
         None => {
             compatibility_context = match classified_config {
-                Some(config) => resolve_internal_dispatch_context_with_config(workspace_root, config)?,
+                Some(config) => {
+                    resolve_internal_dispatch_context_with_config(workspace_root, config)?
+                }
                 None => resolve_internal_dispatch_context(workspace_root)?,
             };
             &compatibility_context.base_policy
@@ -6848,7 +6849,7 @@ async fn continue_world_worker(
     let fork_bootstrap = continue_world_worker_fork_command_bootstrap_after_delivery(
         &prepared,
         intended_host_principal,
-    None,
+        None,
         None,
     )
     .await?;
@@ -9420,7 +9421,7 @@ fn resolve_continue_e2_policy_carrier(
                 retained_participant_id: target.participant_id.clone(),
             },
             e3_inputs.map(|inputs| inputs.selection.policy()),
-    classification_snapshot.map(|snapshot| snapshot.effective_config()),
+            classification_snapshot.map(|snapshot| snapshot.effective_config()),
         )?;
         if e2_policy.validated_policy_snapshot.snapshot_ref()
             != &authority.current_policy_snapshot_ref
@@ -9533,7 +9534,12 @@ fn build_continue_world_worker_submit_request_with_message(
     classification_snapshot: Option<&config_model::E3EffectiveConfigResolutionSnapshotV1<'_>>,
 ) -> Result<transport_api_types::MemberTurnSubmitRequestV1> {
     if prepared.b_owned_authority.is_some() {
-        let (carrier, _, _) = resolve_continue_e2_policy_carrier(prepared, message_id, e3_inputs, classification_snapshot)?;
+        let (carrier, _, _) = resolve_continue_e2_policy_carrier(
+            prepared,
+            message_id,
+            e3_inputs,
+            classification_snapshot,
+        )?;
         let request = build_continue_world_worker_submit_request_from_authenticated_carrier(
             prepared, carrier,
         )?;
@@ -13968,7 +13974,6 @@ mod tests {
         fs::write(policy_path, policy).expect("write follow-up-enabled world dispatch policy");
     }
 
-
     #[cfg(target_os = "linux")]
     #[test]
     #[serial]
@@ -14043,7 +14048,8 @@ mod tests {
         );
         assert!(!workspace.path().join(".substrate").exists());
         assert!(matches!(
-            prepare_retained_acceptance_submission(&prepared, workspace.path(), None, None).unwrap(),
+            prepare_retained_acceptance_submission(&prepared, workspace.path(), None, None)
+                .unwrap(),
             PreparedRetainedAcceptanceSubmission::Proposed { .. }
         ));
         let workspace_identity = config_projection::CanonicalDirectoryV1::capture_linux_from_fd(
@@ -14313,10 +14319,15 @@ config:
             "legacy inventory route still rejects V3"
         );
         let (initial, _, cap) =
-            resolve_continue_e2_policy_carrier(&prepared, None, Some(&inputs), Some(&snapshot)).unwrap();
-        let proposed =
-            prepare_retained_acceptance_submission(&prepared, workspace.path(), Some(&inputs), Some(&snapshot))
+            resolve_continue_e2_policy_carrier(&prepared, None, Some(&inputs), Some(&snapshot))
                 .unwrap();
+        let proposed = prepare_retained_acceptance_submission(
+            &prepared,
+            workspace.path(),
+            Some(&inputs),
+            Some(&snapshot),
+        )
+        .unwrap();
         let PreparedRetainedAcceptanceSubmission::Proposed {
             proposal,
             submit_request,
@@ -14333,8 +14344,13 @@ config:
             legacy.validated_policy_snapshot.bytes()
         );
         let message = proposal.acceptance_context.message_id.as_deref().unwrap();
-        let (final_carrier, _, final_cap) =
-            resolve_continue_e2_policy_carrier(&prepared, Some(message), Some(&inputs), Some(&snapshot)).unwrap();
+        let (final_carrier, _, final_cap) = resolve_continue_e2_policy_carrier(
+            &prepared,
+            Some(message),
+            Some(&inputs),
+            Some(&snapshot),
+        )
+        .unwrap();
         let mut allocated = initial;
         allocated.subject.message_id = Some(message.into());
         assert_eq!(allocated, final_carrier);
@@ -14371,9 +14387,13 @@ config:
         .unwrap();
         fs::set_permissions(&replacement, fs::Permissions::from_mode(0o600)).unwrap();
         fs::rename(replacement, home.path().join("agents/codex.yaml")).unwrap();
-        assert!(
-            resolve_continue_e2_policy_carrier(&prepared, Some(message), Some(&inputs), Some(&snapshot)).is_err()
-        );
+        assert!(resolve_continue_e2_policy_carrier(
+            &prepared,
+            Some(message),
+            Some(&inputs),
+            Some(&snapshot)
+        )
+        .is_err());
     }
 
     #[cfg(target_os = "linux")]

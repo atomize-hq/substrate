@@ -792,6 +792,39 @@ mod e3_descriptor_tests {
     use nix::libc;
     use std::io::Write;
     use std::os::fd::{AsRawFd, FromRawFd};
+    use std::os::unix::process::CommandExt;
+
+    fn descriptor_test_command(executable: &std::path::Path) -> std::process::Command {
+        let mut command = std::process::Command::new(executable);
+        command.env_clear();
+        // SAFETY: this runs only in our forked test child. The syscall marks
+        // ambient descriptors >= 3 CLOEXEC without closing stdio or the exec
+        // error pipe before exec. No allocation or lock is used after fork.
+        unsafe {
+            command.pre_exec(|| {
+                if libc::syscall(
+                    libc::SYS_close_range,
+                    3u32,
+                    u32::MAX,
+                    libc::CLOSE_RANGE_CLOEXEC,
+                ) == -1
+                {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        command
+    }
+
+    #[test]
+    fn descriptor_test_child_preserves_exec_error_reporting() {
+        let directory = tempfile::tempdir().unwrap();
+        let error = descriptor_test_command(&directory.path().join("missing-executable"))
+            .output()
+            .unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(libc::ENOENT));
+    }
 
     fn pipe() -> (std::fs::File, std::fs::File) {
         let mut fds = [-1; 2];
@@ -815,13 +848,16 @@ mod e3_descriptor_tests {
                 "closed",
                 "alias",
                 "noncanonical",
+                "extra",
             ] {
-                let output = std::process::Command::new(std::env::current_exe().unwrap())
+                let output = descriptor_test_command(&std::env::current_exe().unwrap())
                     .args(["--exact", "launch::e3_descriptor_tests::e3_descriptor_environment_rejects_invalid_aliases_before_auth_read", "--test-threads=1"])
-                    .env_clear().env("E3_DESCRIPTOR_TEST_CASE",case).output().unwrap();
+                    .env("E3_DESCRIPTOR_TEST_CASE",case).output().unwrap();
                 assert!(
                     output.status.success(),
-                    "case {case}: {}",
+                    "case {case}: status={} stdout={} stderr={}",
+                    output.status,
+                    String::from_utf8_lossy(&output.stdout),
                     String::from_utf8_lossy(&output.stderr)
                 );
                 assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
@@ -876,16 +912,46 @@ mod e3_descriptor_tests {
         ] {
             std::env::set_var(name, fd.to_string());
         }
-        if case == "alias" {
+        if case == "extra" {
+            // dup deliberately creates a non-CLOEXEC descriptor after exec;
+            // test-child isolation must not bypass the production rejection.
+            let extra_fd = unsafe { libc::dup(auth_fd) };
+            assert!(extra_fd >= 3);
+            let extra = unsafe { std::fs::File::from_raw_fd(extra_fd) };
+            assert_eq!(unsafe { libc::fcntl(extra_fd, libc::F_GETFD) }, 0);
+            let error = E3GatewayLaunchContractV1::from_environment()
+                .err()
+                .expect("extra descriptor must be rejected");
+            assert_eq!(
+                error.to_string(),
+                "E3 gateway has an extra inherited descriptor"
+            );
+            let mut unread: libc::c_int = 0;
+            assert_eq!(
+                unsafe { libc::ioctl(extra_fd, libc::FIONREAD, &mut unread) },
+                0
+            );
+            assert_eq!(unread as usize, canary.len());
+            for fd in [launch_fd, listener_fd, ready_fd, auth_fd] {
+                assert_eq!(unsafe { libc::fcntl(fd, libc::F_GETFD) }, -1);
+            }
+            drop(extra);
+            assert_eq!(unsafe { libc::fcntl(extra_fd, libc::F_GETFD) }, -1);
+        } else if case == "alias" {
             assert!(E3GatewayLaunchContractV1::from_environment().is_err());
             assert_eq!(unsafe { libc::fcntl(launch_fd, libc::F_GETFD) }, -1);
         } else {
             let mut contract = E3GatewayLaunchContractV1::from_environment()
                 .unwrap()
                 .unwrap();
-            assert!(contract
-                .consume_launch_input(std::path::Path::new("/invalid"))
-                .is_err());
+            let invalid_input = contract.consume_launch_input(std::path::Path::new("/invalid"));
+            assert!(invalid_input.is_err());
+            assert!(matches!(
+                invalid_input
+                    .unwrap_err()
+                    .downcast_ref::<config_projection::ConfigProjectionFailureV1>(),
+                Some(config_projection::ConfigProjectionFailureV1::Malformed)
+            ));
             let mut unread: libc::c_int = 0;
             assert_eq!(
                 unsafe {
@@ -900,6 +966,9 @@ mod e3_descriptor_tests {
             assert_eq!(unread as usize, canary.len());
             drop(contract);
             assert_eq!(unsafe { libc::fcntl(auth_fd, libc::F_GETFD) }, -1);
+            for fd in [launch_fd, listener_fd, ready_fd] {
+                assert_eq!(unsafe { libc::fcntl(fd, libc::F_GETFD) }, -1);
+            }
         }
     }
 }

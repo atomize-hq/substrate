@@ -69,6 +69,8 @@ struct OpenAIRequest {
     tools: Option<Vec<OpenAITool>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parallel_tool_calls: Option<bool>,
 }
 
 /// OpenAI Responses API request format (for Codex models)
@@ -107,7 +109,7 @@ pub(crate) struct OpenAIResponsesRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     text: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<OpenAITool>>,
+    tools: Option<Vec<OpenAIResponsesTool>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<serde_json::Value>,
     // Note: ChatGPT Codex does NOT support max_output_tokens, max_tokens, temperature, top_p, stop
@@ -309,6 +311,17 @@ struct OpenAIFunctionCall {
 struct OpenAITool {
     r#type: String, // "function"
     function: OpenAIFunctionDef,
+}
+
+/// Flat function definition for the Responses endpoint.
+#[derive(Debug, Serialize)]
+struct OpenAIResponsesTool {
+    r#type: String,
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parameters: Option<serde_json::Value>,
 }
 
 /// Function definition
@@ -2176,13 +2189,11 @@ impl OpenAIProvider {
             anthropic_tools
                 .iter()
                 .filter_map(|tool| {
-                    Some(OpenAITool {
+                    Some(OpenAIResponsesTool {
                         r#type: "function".to_string(),
-                        function: OpenAIFunctionDef {
-                            name: tool.name.as_ref()?.clone(),
-                            description: tool.description.clone(),
-                            parameters: tool.input_schema.clone(),
-                        },
+                        name: tool.name.as_ref()?.clone(),
+                        description: tool.description.clone(),
+                        parameters: tool.input_schema.clone(),
                     })
                 })
                 .collect()
@@ -2634,7 +2645,16 @@ impl OpenAIProvider {
             stream: request.stream,
             stream_options,
             tools,
-            tool_choice: None, // TODO: Add tool_choice support if needed
+            tool_choice: request
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get(OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY))
+                .cloned(),
+            parallel_tool_calls: request
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get(OPENAI_PARALLEL_TOOL_CALLS_METADATA_KEY))
+                .and_then(|value| value.as_bool()),
         })
     }
 
@@ -3762,6 +3782,103 @@ mod tests {
         }
     }
 
+    // GW-A01: serialize an actual OAuth instance without sending or resolving auth.
+    #[test]
+    fn gwa01_responses_function_tools_are_flat_and_preserve_optional_fields_and_order() {
+        let mut request = codex_request_with_tool_choice(serde_json::json!("auto"));
+        request.tools = Some(vec![
+            crate::models::Tool {
+                r#type: Some("function".to_string()),
+                name: Some("lookup".to_string()),
+                description: Some("Find a record".to_string()),
+                input_schema: Some(serde_json::json!({
+                    "type": "object", "properties": {"query": {"type": "string"}},
+                    "required": ["query"], "additionalProperties": false
+                })),
+            },
+            crate::models::Tool {
+                r#type: Some("function".to_string()),
+                name: Some("finish".to_string()),
+                description: None,
+                input_schema: None,
+            },
+        ]);
+        for provider in [
+            test_provider(OpenAITransport::OpenAI),
+            test_oauth_provider(),
+        ] {
+            let body =
+                serde_json::to_value(provider.transform_to_responses_request(&request).unwrap())
+                    .unwrap();
+            assert_eq!(
+                body["tools"],
+                serde_json::json!([
+                    {"type": "function", "name": "lookup", "description": "Find a record",
+                     "parameters": {"type": "object", "properties": {"query": {"type": "string"}},
+                                    "required": ["query"], "additionalProperties": false}},
+                    {"type": "function", "name": "finish"}
+                ])
+            );
+            for tool in body["tools"].as_array().unwrap() {
+                assert!(tool.get("function").is_none());
+            }
+            if provider.is_oauth() {
+                assert_eq!(body["stream"], true);
+                assert_eq!(body["store"], false);
+                assert_eq!(body["text"]["format"], serde_json::json!({"type": "text"}));
+            }
+            let mut no_tools = request.clone();
+            no_tools.tools = None;
+            no_tools.metadata = None;
+            let body =
+                serde_json::to_value(provider.transform_to_responses_request(&no_tools).unwrap())
+                    .unwrap();
+            assert!(body.get("tools").is_none());
+        }
+    }
+
+    // GW-A01: the active Chat serializer must keep its separate nested contract.
+    #[test]
+    fn gwa01_chat_function_tools_remain_nested() {
+        let provider = test_provider(OpenAITransport::OpenAI);
+        let request = codex_request_with_tool_choice(serde_json::json!("auto"));
+        let body = serde_json::to_value(provider.transform_request(&request).unwrap()).unwrap();
+        assert_eq!(
+            body["tools"],
+            serde_json::json!([
+                {"type": "function", "function": {"name": "lookup"}}
+            ])
+        );
+        assert!(body["tools"][0].get("name").is_none());
+    }
+
+    #[test]
+    fn gwa02_chat_transform_preserves_controls_and_omits_absent_controls() {
+        let provider = test_provider(OpenAITransport::OpenAI);
+        for choice in [
+            serde_json::json!("required"),
+            serde_json::json!("auto"),
+            serde_json::json!("none"),
+            serde_json::json!({"type": "function", "function": {"name": "lookup"}}),
+        ] {
+            for parallel in [false, true] {
+                let mut request = codex_request_with_tool_choice(choice.clone());
+                request.metadata.as_mut().unwrap().insert(
+                    OPENAI_PARALLEL_TOOL_CALLS_METADATA_KEY.to_string(),
+                    serde_json::json!(parallel),
+                );
+                let body =
+                    serde_json::to_value(provider.transform_request(&request).unwrap()).unwrap();
+                assert_eq!(body["tool_choice"], choice);
+                assert_eq!(body["parallel_tool_calls"], parallel);
+            }
+        }
+        let request = gateway_request_with_parallel_tool_calls(None);
+        let body = serde_json::to_value(provider.transform_request(&request).unwrap()).unwrap();
+        assert!(body.get("tool_choice").is_none());
+        assert!(body.get("parallel_tool_calls").is_none());
+    }
+
     fn test_oauth_provider() -> OpenAIProvider {
         let token_store = TokenStore::new(std::env::temp_dir().join(format!(
             "substrate-gateway-openai-test-{}",
@@ -4764,7 +4881,8 @@ mod tests {
         );
         let tools = serialized["tools"].as_array().expect("tools array");
         assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0]["function"]["name"], serde_json::json!("lookup"));
+        assert_eq!(tools[0]["name"], serde_json::json!("lookup"));
+        assert!(tools[0].get("function").is_none());
     }
 
     #[test]
