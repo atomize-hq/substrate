@@ -842,6 +842,7 @@ async fn supported_route_matrix_controls_are_preserved_in_gateway_request_shape(
         substrate_gateway::models::ContentBlock::Known(
             substrate_gateway::models::KnownContentBlock::Image { source }
         ) if source.url.as_deref() == Some("https://example.com/image.png")
+            && source.detail == Some(substrate_gateway::models::ImageDetail::High)
     ));
 }
 
@@ -1266,4 +1267,167 @@ async fn gwa03_real_responses_errors_and_eof_never_complete_publicly() {
             mock.assert_async().await;
         }
     }
+}
+
+// GW-A06: public Responses ingress -> actual provider -> independently expected wire.
+async fn gwa06_check_real_image_wires(responses: bool) {
+    for detail in [Some("high"), Some("low"), Some("auto"), None] {
+        for image_url in [
+            "https://example.com/image.png",
+            "data:image/png;base64,aW1hZ2U=",
+        ] {
+            for stream in [false, true] {
+                let mut server = Server::new_async().await;
+                let actual_model = if responses {
+                    "gpt-5-codex"
+                } else {
+                    "gpt-4.1-mini"
+                };
+                let mut input_image = json!({"type":"input_image", "image_url":image_url});
+                let mut expected_image = if responses {
+                    json!({"type":"input_image", "image_url":image_url})
+                } else {
+                    json!({"type":"image_url", "image_url":{"url":image_url}})
+                };
+                if let Some(detail) = detail {
+                    input_image["detail"] = json!(detail);
+                    if responses {
+                        expected_image["detail"] = json!(detail);
+                    } else {
+                        expected_image["image_url"]["detail"] = json!(detail);
+                    }
+                }
+                let mut expected = if responses {
+                    json!({"model":"gpt-5-codex", "stream":true, "max_output_tokens":4096,
+                        "input":[{"type":"message", "role":"user", "content":[
+                            {"type":"input_text", "text":"Describe"}, expected_image]}]})
+                } else {
+                    json!({"model":"gpt-4.1-mini", "stream":stream, "max_tokens":4096,
+                        "messages":[{"role":"user", "content":[
+                            {"type":"text", "text":"Describe"}, expected_image]}]})
+                };
+                if stream && !responses {
+                    expected["stream_options"] = json!({"include_usage":true});
+                }
+                let upstream = if responses {
+                    [
+                        json!({"type":"response.output_text.done", "output_index":0, "content_index":0, "text":"ok"}),
+                        json!({"type":"response.output_item.done", "output_index":0, "item":{"type":"message", "content":[{"type":"output_text", "text":"ok"}]}}),
+                        json!({"type":"response.completed", "response":{"id":"resp_image", "status":"completed", "output":[], "usage":{"input_tokens":1,"output_tokens":1}}}),
+                    ].into_iter().map(|p| format!("event: {}\ndata: {p}\n\n", p["type"].as_str().unwrap())).collect()
+                } else if stream {
+                    "data: {\"id\":\"chat_image\",\"model\":\"gpt-4.1-mini\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chat_image\",\"model\":\"gpt-4.1-mini\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n".to_string()
+                } else {
+                    json!({"id":"chat_image", "model":"gpt-4.1-mini", "choices":[{"message":{"role":"assistant", "content":"ok"}, "finish_reason":"stop"}], "usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}).to_string()
+                };
+                let path = if responses {
+                    "/v1/responses"
+                } else {
+                    "/v1/chat/completions"
+                };
+                let mock = server
+                    .mock("POST", path)
+                    .match_header("authorization", "Bearer openai-secret")
+                    .match_body(Matcher::Json(expected))
+                    .with_status(200)
+                    .with_body(upstream)
+                    .create_async()
+                    .await;
+                let harness = build_openai_provider_harness(&server.url(), actual_model);
+                let response = harness
+                    .invoke_responses(
+                        HeaderMap::new(),
+                        json!({
+                            "model":"gateway-default", "stream":stream,
+                            "input":[{"type":"message", "role":"user", "content":[
+                                {"type":"input_text", "text":"Describe"}, input_image]}]
+                        }),
+                    )
+                    .await;
+                let status = response.status();
+                let body = response_body_text(response).await;
+                mock.assert_async().await;
+                assert_eq!(status, StatusCode::OK, "detail={detail:?} {path}: {body}");
+                if stream {
+                    let events = parse_sse_body(&body);
+                    let completed = &events.last().expect("completion").1;
+                    assert_eq!(completed["type"], "response.completed");
+                    assert_eq!(completed["response"]["model"], "gateway-default");
+                    assert_eq!(
+                        completed["response"]["output"][0]["content"][0]["text"],
+                        "ok"
+                    );
+                } else {
+                    let body: Value = serde_json::from_str(&body).unwrap();
+                    assert_eq!(body["model"], "gateway-default");
+                    assert_eq!(body["output"][0]["content"][0]["text"], "ok");
+                }
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn gwa06_real_responses_preserves_image_detail() {
+    gwa06_check_real_image_wires(true).await;
+}
+
+#[tokio::test]
+async fn gwa06_real_chat_fallback_preserves_image_detail() {
+    gwa06_check_real_image_wires(false).await;
+}
+
+#[tokio::test]
+async fn gwa06_invalid_images_reject_before_any_upstream_io() {
+    for detail in [
+        json!(""),
+        json!("medium"),
+        json!("HIGH"),
+        json!(1),
+        json!(true),
+        json!([]),
+        json!({}),
+    ] {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("POST", Matcher::Any)
+            .expect(0)
+            .create_async()
+            .await;
+        let harness = build_openai_provider_harness(&server.url(), "gpt-5-codex");
+        let response = harness.invoke_responses(HeaderMap::new(), json!({
+            "model":"gateway-default", "input":[{"type":"message", "role":"user", "content":[
+                {"type":"input_image", "image_url":"https://example.com/image.png", "detail":detail}]}]
+        })).await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body: Value = serde_json::from_str(&response_body_text(response).await).unwrap();
+        assert_eq!(
+            body,
+            json!({"error":{"type":"error", "class":"route", "message":"Route selection failed"}})
+        );
+        mock.assert_async().await;
+    }
+    let mut server = Server::new_async().await;
+    let mock = server
+        .mock("POST", Matcher::Any)
+        .expect(0)
+        .create_async()
+        .await;
+    let harness = build_openai_provider_harness(&server.url(), "gpt-5-codex");
+    let response = harness
+        .invoke_responses(
+            HeaderMap::new(),
+            json!({
+                "model":"gateway-default", "input":[{"type":"message", "role":"user", "content":[
+                    {"type":"input_image", "image_url":"data:image/png;base64", "detail":"high"}]}]
+            }),
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body: Value = serde_json::from_str(&response_body_text(response).await).unwrap();
+    assert_eq!(
+        body,
+        json!({"error":{"type":"error", "class":"route", "message":"Route selection failed"}})
+    );
+    mock.assert_async().await;
 }

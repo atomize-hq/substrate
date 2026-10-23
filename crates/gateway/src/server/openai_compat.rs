@@ -937,6 +937,7 @@ fn openai_parts_to_blocks(
                             media_type: Some(media_type.to_string()),
                             data: Some(data.to_string()),
                             url: None,
+                            detail: None,
                         }));
                     }
                 } else {
@@ -945,6 +946,7 @@ fn openai_parts_to_blocks(
                         media_type: None,
                         data: None,
                         url: Some(image_url.url),
+                        detail: None,
                     }));
                 }
             }

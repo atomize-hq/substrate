@@ -4,8 +4,8 @@ use crate::auth::{
 };
 use crate::core::{GatewayRequest, GatewayResponse, GatewayStreamResponse, GatewayUsage};
 use crate::models::{
-    ContentBlock, CountTokensRequest, CountTokensResponse, ImageSource, KnownContentBlock,
-    MessageContent,
+    ContentBlock, CountTokensRequest, CountTokensResponse, ImageDetail, ImageSource,
+    KnownContentBlock, MessageContent,
 };
 use async_trait::async_trait;
 use base64::{engine::general_purpose, Engine as _};
@@ -153,7 +153,7 @@ enum OpenAIResponsesInputContentPart {
     InputImage {
         image_url: String,
         #[serde(skip_serializing_if = "Option::is_none")]
-        detail: Option<String>,
+        detail: Option<ImageDetail>,
     },
 }
 
@@ -179,6 +179,8 @@ enum OpenAIContentPart {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct OpenAIImageUrl {
     url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    detail: Option<ImageDetail>,
 }
 
 fn image_url_from_source(source: &ImageSource) -> Option<OpenAIImageUrl> {
@@ -187,12 +189,13 @@ fn image_url_from_source(source: &ImageSource) -> Option<OpenAIImageUrl> {
         let data = source.data.as_deref().unwrap_or("");
         Some(OpenAIImageUrl {
             url: format!("data:{};base64,{}", media_type, data),
+            detail: source.detail,
         })
     } else {
-        source
-            .url
-            .as_ref()
-            .map(|url| OpenAIImageUrl { url: url.clone() })
+        source.url.as_ref().map(|url| OpenAIImageUrl {
+            url: url.clone(),
+            detail: source.detail,
+        })
     }
 }
 
@@ -254,7 +257,7 @@ fn responses_part_from_block(
             responses_image_url_from_source(source).map(|image_url| {
                 OpenAIResponsesInputContentPart::InputImage {
                     image_url,
-                    detail: None,
+                    detail: source.detail,
                 }
             })
         }
@@ -2333,7 +2336,10 @@ impl OpenAIProvider {
                                 };
 
                                 content_parts.push(OpenAIContentPart::ImageUrl {
-                                    image_url: OpenAIImageUrl { url },
+                                    image_url: OpenAIImageUrl {
+                                        url,
+                                        detail: source.detail,
+                                    },
                                 });
                             }
                             ContentBlock::Known(KnownContentBlock::ToolUse { .. }) => {
@@ -3852,6 +3858,7 @@ mod tests {
                         media_type: None,
                         data: None,
                         url: Some("https://example.com/system.png".to_string()),
+                        detail: None,
                     },
                 }),
             ])),
@@ -3901,6 +3908,7 @@ mod tests {
                             media_type: None,
                             data: None,
                             url: Some("https://example.com/image.png".to_string()),
+                            detail: None,
                         },
                     }),
                 ]),
@@ -4361,6 +4369,7 @@ mod tests {
                                 media_type: None,
                                 data: None,
                                 url: Some("https://example.com/system.png".to_string()),
+                                detail: None,
                             },
                         }),
                     ]),
@@ -4375,6 +4384,7 @@ mod tests {
                                 media_type: None,
                                 data: None,
                                 url: Some("https://example.com/developer.png".to_string()),
+                                detail: None,
                             },
                         }),
                     ]),
@@ -6287,5 +6297,81 @@ data: {"type":"response.completed","response":{"id":"resp_stream","status":"comp
             sync.consume_event(event).unwrap();
         }
         assert!(sync.into_gateway_response("model".into()).is_err());
+    }
+
+    #[test]
+    fn gwa06_ordered_and_legacy_system_images_keep_detail_in_both_serializers() {
+        for (detail, expected_detail) in [
+            (Some(ImageDetail::Low), Some("low")),
+            (Some(ImageDetail::High), Some("high")),
+            (Some(ImageDetail::Auto), Some("auto")),
+            (None, None),
+        ] {
+            for url in [
+                "https://example.com/image.png",
+                "data:image/png;base64,aW1hZ2U=",
+            ] {
+                let source = if url.starts_with("data:") {
+                    ImageSource {
+                        r#type: "base64".into(),
+                        media_type: Some("image/png".into()),
+                        data: Some("aW1hZ2U=".into()),
+                        url: None,
+                        detail,
+                    }
+                } else {
+                    ImageSource {
+                        r#type: "url".into(),
+                        media_type: None,
+                        data: None,
+                        url: Some(url.into()),
+                        detail,
+                    }
+                };
+                let image = ContentBlock::image(source);
+                let mut request = gateway_request_with_multimodal_system_prompt();
+                request.model = "gpt-4.1-mini".into();
+                request.system = Some(SystemPrompt::Blocks(vec![image.clone()]));
+                request.messages = ["system", "developer", "user", "assistant"]
+                    .into_iter()
+                    .map(|role| crate::models::Message {
+                        role: role.into(),
+                        content: MessageContent::Blocks(vec![image.clone()]),
+                    })
+                    .collect();
+                let mut chat_image =
+                    serde_json::json!({"type":"image_url", "image_url":{"url":url}});
+                let mut responses_image =
+                    serde_json::json!({"type":"input_image", "image_url":url});
+                if let Some(detail) = expected_detail {
+                    chat_image["image_url"]["detail"] = serde_json::json!(detail);
+                    responses_image["detail"] = serde_json::json!(detail);
+                }
+                let roles = ["system", "system", "developer", "user", "assistant"];
+                let expected_chat: Vec<_> = roles
+                    .iter()
+                    .map(|role| serde_json::json!({"role":role, "content":[chat_image.clone()]}))
+                    .collect();
+                let expected_responses: Vec<_> = roles.iter().map(|role|
+                    serde_json::json!({"type":"message", "role":role, "content":[responses_image.clone()]})).collect();
+                let provider = test_provider(OpenAITransport::OpenAI);
+                let body =
+                    serde_json::to_value(provider.transform_request(&request).unwrap()).unwrap();
+                assert_eq!(body["messages"], serde_json::json!(expected_chat));
+                // OAuth instance shaping is explicitly UNSENT: no auth resolution or HTTP.
+                for provider in [provider, test_oauth_provider()] {
+                    let body = serde_json::to_value(
+                        provider.transform_to_responses_request(&request).unwrap(),
+                    )
+                    .unwrap();
+                    assert_eq!(body["input"], serde_json::json!(expected_responses));
+                    if provider.is_oauth() {
+                        assert_eq!(body["store"], false);
+                        assert_eq!(body["stream"], true);
+                        assert_eq!(body["instructions"], CODEX_INSTRUCTIONS);
+                    }
+                }
+            }
+        }
     }
 }

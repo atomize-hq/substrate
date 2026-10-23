@@ -1,7 +1,7 @@
 use crate::core::{GatewayRequest, GatewayResponse};
 use crate::models::{
-    ContentBlock, ImageSource, KnownContentBlock, Message, MessageContent, RouteType, Tool,
-    ToolResultContent,
+    ContentBlock, ImageDetail, ImageSource, KnownContentBlock, Message, MessageContent, RouteType,
+    Tool, ToolResultContent,
 };
 use crate::providers::streaming::{parse_sse_events, SseEvent};
 use axum::{
@@ -1367,12 +1367,16 @@ fn responses_message_content_to_message_content(
                 blocks.push(ContentBlock::text(text.clone(), None));
             }
             OpenAIResponsesMessageContentPart::InputImage { image_url, detail } => {
-                if let Some(detail) = detail {
-                    if !matches!(detail.as_str(), "low" | "high" | "auto") {
-                        return Err("Unsupported input_image.detail".to_string());
-                    }
-                }
-                blocks.push(ContentBlock::image(image_source_from_url(image_url)?));
+                let detail = match detail.as_deref() {
+                    Some("low") => Some(ImageDetail::Low),
+                    Some("high") => Some(ImageDetail::High),
+                    Some("auto") => Some(ImageDetail::Auto),
+                    None => None,
+                    Some(_) => return Err("Unsupported input_image.detail".to_string()),
+                };
+                let mut source = image_source_from_url(image_url)?;
+                source.detail = detail;
+                blocks.push(ContentBlock::image(source));
             }
         }
     }
@@ -1411,6 +1415,7 @@ fn image_source_from_url(image_url: &str) -> Result<ImageSource, String> {
                 media_type: Some(media_type.to_string()),
                 data: Some(data.to_string()),
                 url: None,
+                detail: None,
             })
         } else {
             Err("Invalid data URL".to_string())
@@ -1421,6 +1426,7 @@ fn image_source_from_url(image_url: &str) -> Result<ImageSource, String> {
             media_type: None,
             data: None,
             url: Some(image_url.to_string()),
+            detail: None,
         })
     }
 }
@@ -2323,5 +2329,79 @@ mod tests {
             assert!(dropped.load(Ordering::SeqCst));
             assert_eq!(polls.load(Ordering::SeqCst), usize::from(!cancel));
         }
+    }
+
+    #[test]
+    fn gwa06_typed_detail_survives_ingress_and_clones_for_all_message_roles() {
+        for (wire, expected) in [
+            (Some(json!("low")), Some(ImageDetail::Low)),
+            (Some(json!("high")), Some(ImageDetail::High)),
+            (Some(json!("auto")), Some(ImageDetail::Auto)),
+            (Some(serde_json::Value::Null), None),
+            (None, None),
+        ] {
+            for url in [
+                "https://example.com/image.png",
+                "data:image/jpeg;base64,anBlZw==",
+            ] {
+                let mut image = json!({"type":"input_image", "image_url":url});
+                if let Some(wire) = &wire {
+                    image["detail"] = wire.clone();
+                }
+                let request: OpenAIResponsesRequest = serde_json::from_value(json!({
+                    "model":"gpt-test", "input":[
+                        {"type":"message", "role":"system", "content":[image.clone()]},
+                        {"type":"message", "role":"developer", "content":[image.clone()]},
+                        {"type":"message", "role":"user", "content":[image.clone()]},
+                        {"type":"message", "role":"assistant", "content":[image]}
+                    ]
+                }))
+                .unwrap();
+                let gateway = transform_openai_to_gateway_request(request).unwrap();
+                let cloned = gateway.clone();
+                for (message, role) in
+                    cloned
+                        .messages
+                        .iter()
+                        .zip(["system", "developer", "user", "assistant"])
+                {
+                    assert_eq!(message.role, role);
+                    let MessageContent::Blocks(blocks) = &message.content else {
+                        panic!("image blocks")
+                    };
+                    let ContentBlock::Known(KnownContentBlock::Image { source }) = &blocks[0]
+                    else {
+                        panic!("image")
+                    };
+                    assert_eq!(source.detail, expected);
+                    if url.starts_with("data:") {
+                        assert_eq!(source.r#type, "base64");
+                        assert_eq!(source.media_type.as_deref(), Some("image/jpeg"));
+                        assert_eq!(source.data.as_deref(), Some("anBlZw=="));
+                        assert!(source.url.is_none());
+                    } else {
+                        assert_eq!(source.r#type, "url");
+                        assert_eq!(source.url.as_deref(), Some(url));
+                        assert!(source.data.is_none());
+                        assert!(source.media_type.is_none());
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn gwa06_invalid_detail_keeps_validation_order_and_error() {
+        let message = OpenAIResponsesMessageItem {
+            role: "user".into(),
+            content: vec![OpenAIResponsesMessageContentPart::InputImage {
+                image_url: "data:malformed".into(),
+                detail: Some("invalid".into()),
+            }],
+        };
+        assert_eq!(
+            responses_message_content_to_message_content(&message).unwrap_err(),
+            "Unsupported input_image.detail"
+        );
     }
 }

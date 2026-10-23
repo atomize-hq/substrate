@@ -191,6 +191,7 @@ Other rejected cases:
 - `parallel_tool_calls` is preserved through OpenAI provider serialization, including the ordinary API-key Chat Completions fallback; it does not widen tool support beyond function tools. Omitted controls stay omitted upstream, retaining upstream defaults (parallel tool calls default to `true`).
 - Accepted `tool_choice` controls survive that Chat Completions fallback, including `"required"` and explicit nested function selection. Existing ingress filtering still removes tools for `"none"` and selects the named tool for explicit selection.
 - Tool continuation uses `function_call_output` items, preserves `call_id`, and accepts either replayed `function_call` history or `previous_response_id` as the continuation anchor.
+- Accepted image input `detail` values (`low`, `high`, `auto`) are preserved per image in OpenAI Responses requests and the ordinary API-key Chat Completions fallback, for both URL and data URLs and sync or streaming requests. Omitted detail stays omitted upstream; explicit `auto` stays explicit. Invalid values still reject before upstream I/O.
 
 ### Rejected/unsupported behavior
 
@@ -262,6 +263,10 @@ For ChatGPT Codex route maintenance, the owned deterministic evidence anchors ar
 - `gateway/tests/fixtures/openai_responses/codex-*.json`
 
 Provider request regressions require flat function definitions (`type`, `name`, optional `description` and `parameters`) on upstream Responses requests and nested `function` definitions on upstream Chat Completions requests. Keep these serializers separate when maintaining tool support.
+
+The shared Rust `ImageSource` now has `detail: Option<ImageDetail>` (`Low`, `High`, `Auto`). Rust struct-literal callers must add `detail: None` when no control was supplied. This is a typed in-memory annotation: request moves and clones preserve it, and the OpenAI endpoint serializers emit it explicitly. Canonical Anthropic-shaped serde intentionally ignores this annotation on both serialization and deserialization, so a canonical serde roundtrip does not retain detail. The legacy message trace uses that same canonical shape and omits detail; it does not feed provider dispatch. Public Chat Completions and Messages input vocabularies are unchanged.
+
+The `gwa06_*` tests check exact independently expected local HTTP bodies for high, low, auto, and omission with URL/data inputs across both OpenAI protocols and sync/stream dispatch, plus typed ingress/clones and rejection before I/O. They also capture actual Anthropic-compatible sync, stream, and count-token requests and Gemini sync/stream requests, verifying unchanged image bodies without OpenAI detail leakage. OAuth serializer coverage is explicitly **unsent**; local HTTP tests prove request translation, not live vision processing, private backend acceptance, native Codex compatibility, or installed/production behavior.
 
 The request regressions serialize an OAuth provider instance without sending and inspect real API-key provider requests against local HTTP mocks in sync and streaming modes. They verify outbound tool definitions and controls, including the existing continuation route selection and ordinary Chat fallback. They do not establish private OAuth backend acceptance, live provider compatibility, native Codex compatibility, or API-key Responses streaming output fidelity.
 

@@ -221,7 +221,46 @@ impl ContentBlock {
     }
 }
 
-/// Image source for vision API
+/// OpenAI image input detail retained by the gateway's typed request path.
+///
+/// ```
+/// use substrate_gateway::models::ImageDetail;
+/// assert_eq!(serde_json::to_value(ImageDetail::Auto)?, "auto");
+/// # Ok::<(), serde_json::Error>(())
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ImageDetail {
+    Low,
+    High,
+    Auto,
+}
+
+/// Image source for vision API.
+///
+/// `detail` is an in-memory OpenAI input annotation: clones retain it, while
+/// canonical Anthropic-shaped serde omits it on serialization and ignores it on
+/// deserialization.
+/// Consequently, serializing and deserializing this type does not retain detail.
+/// Rust struct literals must specify `detail: None` when no control was supplied.
+///
+/// ```
+/// use substrate_gateway::models::{ImageDetail, ImageSource};
+/// let source = ImageSource {
+///     r#type: "url".into(),
+///     media_type: None,
+///     data: None,
+///     url: Some("https://example.com/image.png".into()),
+///     detail: Some(ImageDetail::High),
+/// };
+/// assert_eq!(source.clone().detail, Some(ImageDetail::High));
+/// assert_eq!(serde_json::to_value(&source)?, serde_json::json!({
+///     "type": "url", "url": "https://example.com/image.png"
+/// }));
+/// let restored: ImageSource = serde_json::from_value(serde_json::to_value(source)?)?;
+/// assert_eq!(restored.detail, None);
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ImageSource {
     pub r#type: String, // "base64" or "url"
@@ -231,6 +270,9 @@ pub struct ImageSource {
     pub data: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    /// Optional OpenAI image input control; absent from canonical Anthropic serde.
+    #[serde(skip)]
+    pub detail: Option<ImageDetail>,
 }
 
 /// Tool definition for function calling
@@ -305,6 +347,43 @@ impl std::fmt::Display for RouteType {
             RouteType::Think => write!(f, "think"),
             RouteType::Background => write!(f, "background"),
             RouteType::Default => write!(f, "default"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod image_detail_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn gwa06_canonical_image_serde_remains_unchanged() {
+        for detail in [
+            Some(ImageDetail::Low),
+            Some(ImageDetail::High),
+            Some(ImageDetail::Auto),
+            None,
+        ] {
+            let source = ImageSource {
+                r#type: "url".into(),
+                media_type: None,
+                data: None,
+                url: Some("https://example.com/image.png".into()),
+                detail,
+            };
+            assert_eq!(source.clone().detail, detail);
+            let canonical = json!({"type":"url", "url":"https://example.com/image.png"});
+            assert_eq!(serde_json::to_value(&source).unwrap(), canonical);
+            let restored: ImageSource = serde_json::from_value(canonical).unwrap();
+            assert_eq!(restored.detail, None);
+        }
+        // Unknown canonical fields remain ignored; this is not new Messages ingress vocabulary.
+        for wire in [json!("high"), json!("invalid"), json!({"unknown":true})] {
+            let source: ImageSource = serde_json::from_value(json!({
+                "type":"url", "url":"https://example.com/image.png", "detail":wire
+            }))
+            .unwrap();
+            assert_eq!(source.detail, None);
         }
     }
 }
