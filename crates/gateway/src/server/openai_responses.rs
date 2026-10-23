@@ -956,6 +956,10 @@ where
             return Poll::Ready(Some(Ok(item)));
         }
 
+        if this.finalized {
+            return Poll::Ready(None);
+        }
+
         let mut inner = unsafe { Pin::new_unchecked(&mut this.inner) };
         match inner.as_mut().poll_next(cx) {
             Poll::Ready(Some(Ok(bytes))) => {
@@ -974,7 +978,12 @@ where
                     Poll::Pending
                 }
             }
-            Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err))),
+            Poll::Ready(Some(Err(err))) => {
+                this.finalized = true;
+                this.buffer.clear();
+                this.open_items.clear();
+                Poll::Ready(Some(Err(err)))
+            }
             Poll::Ready(None) => {
                 let events = this.drain_completed_events(true);
                 for event in events {
@@ -2235,5 +2244,84 @@ mod tests {
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].model, "primary-actual");
         assert_eq!(requests[0].stream, Some(true));
+    }
+
+    #[tokio::test]
+    async fn gwa03_public_stream_error_cannot_be_followed_by_completion() {
+        use futures::StreamExt;
+        let source = futures::stream::iter(vec![
+            Err::<Bytes, _>("upstream failed"),
+            Ok(Bytes::from(
+                "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+            )),
+        ]);
+        let mut stream = OpenAIResponsesSseStream::new(source, "model".to_string());
+        assert!(stream
+            .next()
+            .await
+            .unwrap()
+            .unwrap()
+            .starts_with(b"event: response.created"));
+        assert_eq!(stream.next().await.unwrap().unwrap_err(), "upstream failed");
+        assert!(
+            stream.next().await.is_none(),
+            "an error must end the public stream without response.completed"
+        );
+    }
+
+    #[tokio::test]
+    async fn gwa03_public_terminal_and_cancel_do_not_poll_upstream_again() {
+        use futures::StreamExt;
+        use std::sync::{
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+            Arc,
+        };
+        struct Source {
+            polls: Arc<AtomicUsize>,
+            dropped: Arc<AtomicBool>,
+        }
+        impl Stream for Source {
+            type Item = Result<Bytes, &'static str>;
+            fn poll_next(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+                self.polls.fetch_add(1, Ordering::SeqCst);
+                Poll::Ready(Some(Ok(Bytes::from(
+                    "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+                ))))
+            }
+        }
+        impl Drop for Source {
+            fn drop(&mut self) {
+                self.dropped.store(true, Ordering::SeqCst);
+            }
+        }
+        for cancel in [false, true] {
+            let polls = Arc::new(AtomicUsize::new(0));
+            let dropped = Arc::new(AtomicBool::new(false));
+            let source = Source {
+                polls: polls.clone(),
+                dropped: dropped.clone(),
+            };
+            let mut stream = OpenAIResponsesSseStream::new(source, "model".into());
+            assert!(stream
+                .next()
+                .await
+                .unwrap()
+                .unwrap()
+                .starts_with(b"event: response.created"));
+            if !cancel {
+                assert!(stream
+                    .next()
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .starts_with(b"event: response.completed"));
+                assert!(stream.next().await.is_none());
+                assert!(stream.next().await.is_none());
+                assert_eq!(polls.load(Ordering::SeqCst), 1);
+            }
+            drop(stream);
+            assert!(dropped.load(Ordering::SeqCst));
+            assert_eq!(polls.load(Ordering::SeqCst), usize::from(!cancel));
+        }
     }
 }

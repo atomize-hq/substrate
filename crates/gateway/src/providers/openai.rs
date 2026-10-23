@@ -566,10 +566,10 @@ pub(crate) struct OpenAIProviderConfig {
     pub codex_auth_source: Option<CodexAuthSource>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum CodexSemanticItem {
     Message {
-        text: String,
+        text: BTreeMap<usize, String>,
     },
     FunctionCall {
         call_id: String,
@@ -590,14 +590,13 @@ struct CodexSemanticAssemblyState {
 
 #[derive(Debug, Default)]
 struct CodexSemanticStreamState {
-    response_id: Option<String>,
-    response_status: Option<String>,
-    usage: Option<GatewayUsage>,
+    assembly: CodexSemanticAssemblyState,
     message_started: bool,
-    saw_completed: bool,
     text_block_started: HashSet<usize>,
     tool_block_started: HashSet<usize>,
-    open_items: HashMap<usize, CodexSemanticItem>,
+    emitted: HashMap<usize, String>,
+    closed_items: HashSet<usize>,
+    failed: bool,
 }
 
 fn codex_transport_drift(message: impl Into<String>) -> ProviderError {
@@ -636,24 +635,34 @@ fn codex_semantic_output_index(json: &serde_json::Value) -> Result<usize, Provid
         .ok_or_else(|| codex_transport_drift("Codex semantic event missing output index"))
 }
 
-fn codex_semantic_item_text(item: &serde_json::Value) -> String {
-    item.get("content")
-        .and_then(|value| value.as_array())
-        .into_iter()
-        .flat_map(|parts| parts.iter())
-        .filter(|part| part.get("type").and_then(|value| value.as_str()) == Some("output_text"))
-        .filter_map(|part| part.get("text").and_then(|value| value.as_str()))
-        .collect::<Vec<_>>()
-        .join("")
+fn codex_semantic_item_text(
+    item: &serde_json::Value,
+) -> Result<BTreeMap<usize, String>, ProviderError> {
+    let mut text = BTreeMap::new();
+    let Some(content) = item.get("content") else {
+        return Ok(text);
+    };
+    let parts = content
+        .as_array()
+        .ok_or_else(|| codex_transport_drift("Codex semantic message content was not an array"))?;
+    for (index, part) in parts.iter().enumerate() {
+        if part.get("type").and_then(|v| v.as_str()) == Some("output_text") {
+            let value = part.get("text").and_then(|v| v.as_str()).ok_or_else(|| {
+                codex_transport_drift("Codex semantic output_text part missing text")
+            })?;
+            text.insert(index, value.to_string());
+        }
+    }
+    Ok(text)
 }
 
 fn codex_semantic_item_function_call(item: &serde_json::Value) -> Option<(String, String, String)> {
     let call_id = item.get("call_id").and_then(|value| value.as_str())?;
     let name = item.get("name").and_then(|value| value.as_str())?;
-    let arguments = item
-        .get("arguments")
-        .and_then(|value| value.as_str())
-        .unwrap_or_default();
+    let arguments = match item.get("arguments") {
+        Some(value) => value.as_str()?,
+        None => "",
+    };
     Some((call_id.to_string(), name.to_string(), arguments.to_string()))
 }
 
@@ -679,13 +688,14 @@ fn codex_semantic_usage(response: &serde_json::Value) -> GatewayUsage {
 fn codex_semantic_item_from_value(
     item: &serde_json::Value,
 ) -> Result<Option<CodexSemanticItem>, ProviderError> {
-    let Some(item_type) = item.get("type").and_then(|value| value.as_str()) else {
-        return Ok(None);
-    };
+    let item_type = item
+        .get("type")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| codex_transport_drift("Codex semantic item missing type"))?;
 
     match item_type {
         "message" => Ok(Some(CodexSemanticItem::Message {
-            text: codex_semantic_item_text(item),
+            text: codex_semantic_item_text(item)?,
         })),
         "function_call" => {
             let Some((call_id, name, arguments)) = codex_semantic_item_function_call(item) else {
@@ -709,21 +719,18 @@ fn codex_semantic_item_to_content_block(
     item: &CodexSemanticItem,
 ) -> Result<Option<ContentBlock>, ProviderError> {
     match item {
-        CodexSemanticItem::Message { text } => Ok(Some(ContentBlock::text(text.clone(), None))),
+        CodexSemanticItem::Message { text } => Ok(Some(ContentBlock::text(
+            text.values().cloned().collect::<String>(),
+            None,
+        ))),
         CodexSemanticItem::FunctionCall {
             call_id,
             name,
             arguments,
         } => {
-            let input = if arguments.trim().is_empty() {
-                serde_json::json!({})
-            } else {
-                serde_json::from_str(arguments).map_err(|_| {
-                    codex_transport_drift(
-                        "Codex semantic function_call arguments were not valid JSON",
-                    )
-                })?
-            };
+            let input = serde_json::from_str(arguments).map_err(|_| {
+                codex_transport_drift("Codex semantic function_call arguments were not valid JSON")
+            })?;
 
             Ok(Some(ContentBlock::tool_use(
                 call_id.clone(),
@@ -740,6 +747,11 @@ impl CodexSemanticAssemblyState {
         output_index: usize,
         item: Option<CodexSemanticItem>,
     ) -> Result<(), ProviderError> {
+        if self.finalized_items.contains_key(&output_index) {
+            return Err(codex_transport_drift(
+                "Codex semantic item changed after output_item.done",
+            ));
+        }
         if let Some(item) = item {
             self.open_items.insert(output_index, item);
         }
@@ -749,13 +761,13 @@ impl CodexSemanticAssemblyState {
     fn set_response_metadata(&mut self, response: &serde_json::Value) {
         self.response_id = response
             .get("id")
-            .and_then(|value| value.as_str())
-            .map(|value| value.to_string())
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
             .or_else(|| self.response_id.take());
         self.response_status = response
             .get("status")
-            .and_then(|value| value.as_str())
-            .map(|value| value.to_string());
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
         self.usage = Some(codex_semantic_usage(response));
     }
 
@@ -764,188 +776,209 @@ impl CodexSemanticAssemblyState {
         output_index: usize,
         item_value: Option<&serde_json::Value>,
     ) -> Result<(), ProviderError> {
-        if let Some(item) = self.open_items.remove(&output_index) {
-            self.finalized_items.insert(output_index, item);
-            return Ok(());
-        }
-
-        if let Some(item_value) = item_value {
-            if let Some(item) = codex_semantic_item_from_value(item_value)? {
-                self.finalized_items.insert(output_index, item);
+        let authoritative = item_value
+            .map(codex_semantic_item_from_value)
+            .transpose()?
+            .flatten();
+        let current = self
+            .open_items
+            .get(&output_index)
+            .or_else(|| self.finalized_items.get(&output_index));
+        if let (Some(current), Some(done)) = (current, authoritative.as_ref()) {
+            match (current, done) {
+                (CodexSemanticItem::Message { .. }, CodexSemanticItem::Message { .. }) => {}
+                (
+                    CodexSemanticItem::FunctionCall { call_id, name, .. },
+                    CodexSemanticItem::FunctionCall {
+                        call_id: done_id,
+                        name: done_name,
+                        ..
+                    },
+                ) if call_id == done_id && name == done_name => {}
+                _ => {
+                    return Err(codex_transport_drift(
+                        "Codex semantic done item changed type or function identity",
+                    ))
+                }
             }
         }
-
+        if let Some(finalized) = self.finalized_items.get(&output_index) {
+            if authoritative.as_ref().is_some_and(|done| done != finalized) {
+                return Err(codex_transport_drift(
+                    "Codex semantic item changed after output_item.done",
+                ));
+            }
+            return Ok(());
+        }
+        let current = self.open_items.remove(&output_index);
+        if let Some(item) = authoritative.or(current) {
+            self.finalized_items.insert(output_index, item);
+        }
         Ok(())
     }
 
     fn finalize_pending_items(&mut self) -> Result<(), ProviderError> {
-        let pending_indexes = self.open_items.keys().copied().collect::<Vec<_>>();
-        for output_index in pending_indexes {
-            self.finalize_output_index(output_index, None)?;
+        let pending = self.open_items.keys().copied().collect::<Vec<_>>();
+        for index in pending {
+            self.finalize_output_index(index, None)?;
         }
         Ok(())
     }
 
-    fn consume_event(&mut self, event: &SseEvent) -> Result<(), ProviderError> {
-        let Some(name) = event.event.as_deref() else {
-            return Ok(());
+    fn consume_event(&mut self, event: &SseEvent) -> Result<Option<usize>, ProviderError> {
+        if self.saw_completed || event.data.trim() == "[DONE]" {
+            return Ok(None);
+        }
+        let json: serde_json::Value = serde_json::from_str(&event.data)
+            .map_err(|_| codex_transport_drift("Malformed Codex semantic SSE event"))?;
+        let Some(name) = event
+            .event
+            .as_deref()
+            .or_else(|| json.get("type").and_then(|v| v.as_str()))
+        else {
+            return Ok(None);
         };
-
-        let json: serde_json::Value = serde_json::from_str(&event.data).map_err(|_| {
-            codex_transport_drift(format!("Malformed Codex semantic SSE event: {name}"))
-        })?;
-
+        if matches!(name, "error" | "response.failed" | "response.incomplete") {
+            return Err(codex_transport_drift(
+                "Upstream Responses stream did not complete successfully",
+            ));
+        }
+        if matches!(name, "response.created" | "response.in_progress") {
+            if let Some(response) = json.get("response") {
+                self.set_response_metadata(response);
+            }
+            return Ok(None);
+        }
+        if name == "response.completed" {
+            let response = json
+                .get("response")
+                .filter(|v| v.is_object())
+                .ok_or_else(|| {
+                    codex_transport_drift(
+                        "Codex semantic response.completed event missing response envelope",
+                    )
+                })?;
+            if response.get("status").and_then(|v| v.as_str()) == Some("failed") {
+                return Err(codex_transport_drift(
+                    "Upstream Responses stream reported failure",
+                ));
+            }
+            self.set_response_metadata(response);
+            self.finalize_pending_items()?;
+            self.saw_completed = true;
+            return Ok(None);
+        }
+        if !matches!(
+            name,
+            "response.output_item.added"
+                | "response.output_item.done"
+                | "response.content_part.added"
+                | "response.content_part.done"
+                | "response.output_text.delta"
+                | "response.output_text.done"
+                | "response.function_call_arguments.delta"
+                | "response.function_call_arguments.done"
+        ) {
+            return Ok(None);
+        }
+        let index = codex_semantic_output_index(&json)?;
+        if name == "response.output_item.done" {
+            let item = json.get("item").ok_or_else(|| {
+                codex_transport_drift("Codex semantic output_item.done missing item")
+            })?;
+            self.finalize_output_index(index, Some(item))?;
+            return Ok(Some(index));
+        }
+        if self.finalized_items.contains_key(&index) {
+            return Err(codex_transport_drift(
+                "Codex semantic content arrived after output_item.done",
+            ));
+        }
         match name {
             "response.output_item.added" => {
-                let output_index = codex_semantic_output_index(&json)?;
-                if let Some(item) = json.get("item") {
-                    if let Some(item) = codex_semantic_item_from_value(item)? {
-                        self.upsert_open_item(output_index, Some(item))?;
+                let item = json.get("item").ok_or_else(|| {
+                    codex_transport_drift("Codex semantic output_item.added missing item")
+                })?;
+                self.upsert_open_item(index, codex_semantic_item_from_value(item)?)?;
+            }
+            "response.content_part.added"
+            | "response.content_part.done"
+            | "response.output_text.delta"
+            | "response.output_text.done" => {
+                let content_index = json
+                    .get("content_index")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as usize;
+                let (value, delta) = if name.starts_with("response.content_part.") {
+                    let part = json.get("part").ok_or_else(|| {
+                        codex_transport_drift("Codex semantic content_part event missing part")
+                    })?;
+                    if part.get("type").and_then(|v| v.as_str()) != Some("output_text") {
+                        return Ok(None);
                     }
+                    (part.get("text"), false)
+                } else if name == "response.output_text.delta" {
+                    (json.get("delta"), true)
+                } else {
+                    (json.get("text"), false)
+                };
+                let value = value.and_then(|v| v.as_str()).ok_or_else(|| {
+                    codex_transport_drift("Codex semantic text event missing text")
+                })?;
+                let item =
+                    self.open_items
+                        .entry(index)
+                        .or_insert_with(|| CodexSemanticItem::Message {
+                            text: BTreeMap::new(),
+                        });
+                let CodexSemanticItem::Message { text } = item else {
+                    return Err(codex_transport_drift(
+                        "Codex semantic text arrived on a function_call item",
+                    ));
+                };
+                if delta {
+                    text.entry(content_index).or_default().push_str(value);
+                } else {
+                    text.insert(content_index, value.to_string());
                 }
             }
-            "response.content_part.added" => {
-                let output_index = codex_semantic_output_index(&json)?;
-                if let Some(part) = json.get("part") {
-                    if part.get("type").and_then(|value| value.as_str()) == Some("output_text") {
-                        let text = part
-                            .get("text")
-                            .and_then(|value| value.as_str())
-                            .unwrap_or_default();
-                        match self.open_items.get_mut(&output_index) {
-                            Some(CodexSemanticItem::Message { text: current }) => {
-                                current.push_str(text);
-                            }
-                            Some(CodexSemanticItem::FunctionCall { .. }) => {
-                                return Err(codex_transport_drift(
-                                    "Codex semantic text arrived on a function_call item",
-                                ));
-                            }
-                            None => {
-                                self.open_items.insert(
-                                    output_index,
-                                    CodexSemanticItem::Message {
-                                        text: text.to_string(),
-                                    },
-                                );
-                            }
-                        }
-                    }
+            "response.function_call_arguments.delta" | "response.function_call_arguments.done" => {
+                let value = json
+                    .get(if name.ends_with(".delta") {
+                        "delta"
+                    } else {
+                        "arguments"
+                    })
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        codex_transport_drift("Codex semantic arguments event missing arguments")
+                    })?;
+                let Some(CodexSemanticItem::FunctionCall {
+                    call_id, arguments, ..
+                }) = self.open_items.get_mut(&index)
+                else {
+                    return Err(codex_transport_drift(
+                        "Codex semantic arguments arrived before the matching function_call item",
+                    ));
+                };
+                if json
+                    .get("call_id")
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|id| id != call_id)
+                {
+                    return Err(codex_transport_drift(
+                        "Codex semantic arguments changed call_id",
+                    ));
+                }
+                if name.ends_with(".delta") {
+                    arguments.push_str(value);
+                } else {
+                    *arguments = value.to_string();
                 }
             }
-            "response.output_text.delta" => {
-                let output_index = codex_semantic_output_index(&json)?;
-                let delta = json
-                    .get("delta")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or_default();
-                match self.open_items.get_mut(&output_index) {
-                    Some(CodexSemanticItem::Message { text }) => text.push_str(delta),
-                    Some(CodexSemanticItem::FunctionCall { .. }) => {
-                        return Err(codex_transport_drift(
-                            "Codex semantic output_text.delta arrived on a function_call item",
-                        ));
-                    }
-                    None => {
-                        self.open_items.insert(
-                            output_index,
-                            CodexSemanticItem::Message {
-                                text: delta.to_string(),
-                            },
-                        );
-                    }
-                }
-            }
-            "response.output_text.done" => {
-                let output_index = codex_semantic_output_index(&json)?;
-                let text = json
-                    .get("text")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or_default();
-                match self.open_items.get_mut(&output_index) {
-                    Some(CodexSemanticItem::Message { text: current }) => {
-                        if !text.is_empty() {
-                            *current = text.to_string();
-                        }
-                    }
-                    Some(CodexSemanticItem::FunctionCall { .. }) => {
-                        return Err(codex_transport_drift(
-                            "Codex semantic output_text.done arrived on a function_call item",
-                        ));
-                    }
-                    None => {
-                        self.open_items.insert(
-                            output_index,
-                            CodexSemanticItem::Message {
-                                text: text.to_string(),
-                            },
-                        );
-                    }
-                }
-            }
-            "response.function_call_arguments.delta" => {
-                let output_index = codex_semantic_output_index(&json)?;
-                let delta = json
-                    .get("delta")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or_default();
-                match self.open_items.get_mut(&output_index) {
-                    Some(CodexSemanticItem::FunctionCall { arguments, .. }) => {
-                        arguments.push_str(delta);
-                    }
-                    Some(CodexSemanticItem::Message { .. }) => {
-                        return Err(codex_transport_drift(
-                            "Codex semantic function_call_arguments.delta arrived on a message item",
-                        ));
-                    }
-                    None => {
-                        return Err(codex_transport_drift(
-                            "Codex semantic function_call_arguments.delta arrived before the matching function_call item",
-                        ));
-                    }
-                }
-            }
-            "response.function_call_arguments.done" => {
-                let output_index = codex_semantic_output_index(&json)?;
-                let arguments = json
-                    .get("arguments")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or_default();
-                match self.open_items.get_mut(&output_index) {
-                    Some(CodexSemanticItem::FunctionCall {
-                        arguments: current, ..
-                    }) => {
-                        if !arguments.is_empty() {
-                            *current = arguments.to_string();
-                        }
-                    }
-                    Some(CodexSemanticItem::Message { .. }) => {
-                        return Err(codex_transport_drift(
-                            "Codex semantic function_call_arguments.done arrived on a message item",
-                        ));
-                    }
-                    None => {
-                        return Err(codex_transport_drift(
-                            "Codex semantic function_call_arguments.done arrived before the matching function_call item",
-                        ));
-                    }
-                }
-            }
-            "response.output_item.done" => {
-                let output_index = codex_semantic_output_index(&json)?;
-                self.finalize_output_index(output_index, json.get("item"))?;
-            }
-            "response.completed" => {
-                if let Some(response) = json.get("response") {
-                    self.set_response_metadata(response);
-                    self.saw_completed = true;
-                    self.finalize_pending_items()?;
-                }
-            }
-            _ => {}
+            _ => unreachable!(),
         }
-
-        Ok(())
+        Ok(Some(index))
     }
 
     fn into_gateway_response(self, model: String) -> Result<GatewayResponse, ProviderError> {
@@ -954,21 +987,14 @@ impl CodexSemanticAssemblyState {
                 "Codex semantic SSE stream ended without response.completed",
             ));
         }
-
-        let mut content = Vec::new();
-        for item in self.finalized_items.values() {
-            if let Some(block) = codex_semantic_item_to_content_block(item)? {
-                content.push(block);
-            }
-        }
-
-        let usage = self.usage.unwrap_or(GatewayUsage {
-            input_tokens: 0,
-            output_tokens: 0,
-            cache_creation_input_tokens: None,
-            cache_read_input_tokens: None,
-        });
-
+        let content = self
+            .finalized_items
+            .values()
+            .map(codex_semantic_item_to_content_block)
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect();
         Ok(GatewayResponse {
             id: self
                 .response_id
@@ -977,12 +1003,21 @@ impl CodexSemanticAssemblyState {
             role: "assistant".to_string(),
             content,
             model,
-            stop_reason: Some(match self.response_status.as_deref() {
-                Some("incomplete") => "max_tokens".to_string(),
-                _ => "end_turn".to_string(),
-            }),
+            stop_reason: Some(
+                if self.response_status.as_deref() == Some("incomplete") {
+                    "max_tokens"
+                } else {
+                    "end_turn"
+                }
+                .to_string(),
+            ),
             stop_sequence: None,
-            usage,
+            usage: self.usage.unwrap_or(GatewayUsage {
+                input_tokens: 0,
+                output_tokens: 0,
+                cache_creation_input_tokens: None,
+                cache_read_input_tokens: None,
+            }),
         })
     }
 }
@@ -992,424 +1027,193 @@ impl CodexSemanticStreamState {
         if self.message_started {
             return;
         }
-
         self.message_started = true;
-        let response_id = self
-            .response_id
-            .clone()
-            .unwrap_or_else(|| format!("codex_{}", uuid::Uuid::new_v4()));
-        let message_start = serde_json::json!({
-            "type": "message_start",
-            "message": {
-                "id": response_id,
-                "type": "message",
-                "role": "assistant",
-                "content": [],
-                "model": model,
-                "stop_reason": null,
-                "stop_sequence": null,
-                "usage": {
-                    "input_tokens": 0,
-                    "output_tokens": 0
-                }
-            }
-        });
-        OpenAIProvider::push_sse_event(output, "message_start", message_start);
-    }
-
-    fn ensure_text_block(&mut self, output: &mut String, output_index: usize) {
-        if self.text_block_started.contains(&output_index) {
-            return;
-        }
-
-        self.text_block_started.insert(output_index);
         OpenAIProvider::push_sse_event(
             output,
-            "content_block_start",
+            "message_start",
             serde_json::json!({
-                "type": "content_block_start",
-                "index": output_index,
-                "content_block": {
-                    "type": "text",
-                    "text": ""
+                "type":"message_start","message":{
+                    "id":self.assembly.response_id.clone().unwrap_or_else(|| format!("codex_{}",uuid::Uuid::new_v4())),
+                    "type":"message","role":"assistant","content":[],"model":model,
+                    "stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":0,"output_tokens":0}
                 }
             }),
         );
     }
 
-    fn ensure_tool_block(
-        &mut self,
-        output: &mut String,
-        output_index: usize,
-        call_id: &str,
-        name: &str,
-    ) {
-        if self.tool_block_started.contains(&output_index) {
-            return;
-        }
-
-        self.tool_block_started.insert(output_index);
-        OpenAIProvider::push_sse_event(
-            output,
-            "content_block_start",
-            serde_json::json!({
-                "type": "content_block_start",
-                "index": output_index,
-                "content_block": {
-                    "type": "tool_use",
-                    "id": call_id,
-                    "name": name,
-                    "input": {}
-                }
-            }),
-        );
-    }
-
-    fn close_text_block(&mut self, output: &mut String, output_index: usize) {
-        if self.text_block_started.remove(&output_index) {
+    fn ensure_text_block(&mut self, output: &mut String, index: usize) {
+        if self.text_block_started.insert(index) {
             OpenAIProvider::push_sse_event(
                 output,
-                "content_block_stop",
+                "content_block_start",
                 serde_json::json!({
-                    "type": "content_block_stop",
-                    "index": output_index
+                    "type":"content_block_start","index":index,"content_block":{"type":"text","text":""}
                 }),
             );
         }
     }
 
-    fn close_tool_block(&mut self, output: &mut String, output_index: usize) {
-        if self.tool_block_started.remove(&output_index) {
+    fn ensure_tool_block(&mut self, output: &mut String, index: usize, call_id: &str, name: &str) {
+        if self.tool_block_started.insert(index) {
+            OpenAIProvider::push_sse_event(
+                output,
+                "content_block_start",
+                serde_json::json!({
+                    "type":"content_block_start","index":index,"content_block":{"type":"tool_use","id":call_id,"name":name,"input":{}}
+                }),
+            );
+        }
+    }
+
+    fn close_text_block(&mut self, output: &mut String, index: usize) {
+        if self.text_block_started.remove(&index) {
             OpenAIProvider::push_sse_event(
                 output,
                 "content_block_stop",
-                serde_json::json!({
-                    "type": "content_block_stop",
-                    "index": output_index
-                }),
+                serde_json::json!({"type":"content_block_stop","index":index}),
+            );
+        }
+    }
+
+    fn close_tool_block(&mut self, output: &mut String, index: usize) {
+        if self.tool_block_started.remove(&index) {
+            OpenAIProvider::push_sse_event(
+                output,
+                "content_block_stop",
+                serde_json::json!({"type":"content_block_stop","index":index}),
             );
         }
     }
 
     fn emit_message_stop(&mut self, output: &mut String) {
-        let usage = self.usage.clone().unwrap_or(GatewayUsage {
-            input_tokens: 0,
-            output_tokens: 0,
-            cache_creation_input_tokens: None,
-            cache_read_input_tokens: None,
-        });
-        let message_delta = serde_json::json!({
-            "type": "message_delta",
-            "delta": {
-                "stop_reason": match self.response_status.as_deref() {
-                    Some("incomplete") => "max_tokens",
-                    _ => "end_turn",
-                },
-                "stop_sequence": null
-            },
-            "usage": {
-                "input_tokens": usage.input_tokens,
-                "output_tokens": usage.output_tokens
-            }
-        });
-        OpenAIProvider::push_sse_event(output, "message_delta", message_delta);
+        let usage = self.assembly.usage.as_ref();
+        OpenAIProvider::push_sse_event(
+            output,
+            "message_delta",
+            serde_json::json!({
+                "type":"message_delta","delta":{"stop_reason":if self.assembly.response_status.as_deref() == Some("incomplete") {"max_tokens"} else {"end_turn"},"stop_sequence":null},
+                "usage":{"input_tokens":usage.map_or(0,|u|u.input_tokens),"output_tokens":usage.map_or(0,|u|u.output_tokens)}
+            }),
+        );
         OpenAIProvider::push_sse_event(
             output,
             "message_stop",
-            serde_json::json!({
-                "type": "message_stop"
-            }),
+            serde_json::json!({"type":"message_stop"}),
         );
     }
 
-    fn consume_event(&mut self, event: &SseEvent, model: &str) -> Result<String, ProviderError> {
-        let mut output = String::new();
-        let Some(name) = event.event.as_deref() else {
-            return Ok(output);
+    fn emit_item(
+        &mut self,
+        output: &mut String,
+        index: usize,
+        model: &str,
+    ) -> Result<(), ProviderError> {
+        let Some(item) = self
+            .assembly
+            .finalized_items
+            .get(&index)
+            .or_else(|| self.assembly.open_items.get(&index))
+            .cloned()
+        else {
+            return Ok(());
         };
+        let value = match &item {
+            CodexSemanticItem::Message { text } => text.values().cloned().collect::<String>(),
+            CodexSemanticItem::FunctionCall { arguments, .. } => arguments.clone(),
+        };
+        let prior = self.emitted.get(&index).map(String::as_str).unwrap_or("");
+        let suffix = value
+            .strip_prefix(prior)
+            .ok_or_else(|| {
+                codex_transport_drift(
+                    "Codex semantic done payload conflicts with already emitted content",
+                )
+            })?
+            .to_string();
+        if self.closed_items.contains(&index) {
+            if !suffix.is_empty() {
+                return Err(codex_transport_drift(
+                    "Codex semantic content changed after normalized block stop",
+                ));
+            }
+            return Ok(());
+        }
+        let first = !self.emitted.contains_key(&index);
+        self.ensure_message_start(output, model);
+        let delta = match item {
+            CodexSemanticItem::Message { .. } => {
+                self.ensure_text_block(output, index);
+                serde_json::json!({"type":"text_delta","text":suffix})
+            }
+            CodexSemanticItem::FunctionCall { call_id, name, .. } => {
+                self.ensure_tool_block(output, index, &call_id, &name);
+                serde_json::json!({"type":"input_json_delta","partial_json":suffix})
+            }
+        };
+        if first || !suffix.is_empty() {
+            OpenAIProvider::push_sse_event(
+                output,
+                "content_block_delta",
+                serde_json::json!({"type":"content_block_delta","index":index,"delta":delta}),
+            );
+        }
+        self.emitted.insert(index, value);
+        Ok(())
+    }
 
-        let json: serde_json::Value = serde_json::from_str(&event.data).map_err(|_| {
-            codex_transport_drift(format!("Malformed Codex semantic SSE event: {name}"))
-        })?;
+    fn close_item(&mut self, output: &mut String, index: usize) -> Result<(), ProviderError> {
+        if let Some(item @ CodexSemanticItem::FunctionCall { .. }) =
+            self.assembly.finalized_items.get(&index)
+        {
+            codex_semantic_item_to_content_block(item)?;
+        }
+        self.close_text_block(output, index);
+        self.close_tool_block(output, index);
+        self.closed_items.insert(index);
+        Ok(())
+    }
 
-        match name {
-            "response.output_item.added" => {
-                let output_index = codex_semantic_output_index(&json)?;
-                if let Some(item) = json.get("item") {
-                    if let Some(item) = codex_semantic_item_from_value(item)? {
-                        self.open_items.insert(output_index, item.clone());
-                        match item {
-                            CodexSemanticItem::Message { text } => {
-                                self.ensure_message_start(&mut output, model);
-                                if !text.is_empty() {
-                                    self.ensure_text_block(&mut output, output_index);
-                                    OpenAIProvider::push_sse_event(
-                                        &mut output,
-                                        "content_block_delta",
-                                        serde_json::json!({
-                                            "type": "content_block_delta",
-                                            "index": output_index,
-                                            "delta": {
-                                                "type": "text_delta",
-                                                "text": text
-                                            }
-                                        }),
-                                    );
-                                }
-                            }
-                            CodexSemanticItem::FunctionCall {
-                                call_id,
-                                name,
-                                arguments,
-                            } => {
-                                self.ensure_message_start(&mut output, model);
-                                self.ensure_tool_block(&mut output, output_index, &call_id, &name);
-                                if !arguments.is_empty() {
-                                    OpenAIProvider::push_sse_event(
-                                        &mut output,
-                                        "content_block_delta",
-                                        serde_json::json!({
-                                            "type": "content_block_delta",
-                                            "index": output_index,
-                                            "delta": {
-                                                "type": "input_json_delta",
-                                                "partial_json": arguments
-                                            }
-                                        }),
-                                    );
-                                }
-                            }
-                        }
-                    }
+    fn consume_event(&mut self, event: &SseEvent, model: &str) -> Result<String, ProviderError> {
+        if self.failed || self.assembly.saw_completed {
+            return Ok(String::new());
+        }
+        let result = (|| {
+            let index = self.assembly.consume_event(event)?;
+            let mut output = String::new();
+            if let Some(index) = index {
+                self.emit_item(&mut output, index, model)?;
+                if self.assembly.finalized_items.contains_key(&index) {
+                    self.close_item(&mut output, index)?;
                 }
             }
-            "response.content_part.added" => {
-                let output_index = codex_semantic_output_index(&json)?;
-                let Some(part) = json.get("part") else {
-                    return Ok(output);
-                };
-                if part.get("type").and_then(|value| value.as_str()) == Some("output_text") {
-                    let text = part
-                        .get("text")
-                        .and_then(|value| value.as_str())
-                        .unwrap_or_default();
-                    self.ensure_message_start(&mut output, model);
-                    self.ensure_text_block(&mut output, output_index);
-                    if !text.is_empty() {
-                        OpenAIProvider::push_sse_event(
-                            &mut output,
-                            "content_block_delta",
-                            serde_json::json!({
-                                "type": "content_block_delta",
-                                "index": output_index,
-                                "delta": {
-                                    "type": "text_delta",
-                                    "text": text
-                                }
-                            }),
-                        );
-                    }
+            if self.assembly.saw_completed {
+                let indexes = self
+                    .assembly
+                    .finalized_items
+                    .keys()
+                    .copied()
+                    .collect::<Vec<_>>();
+                for index in indexes {
+                    self.emit_item(&mut output, index, model)?;
+                    self.close_item(&mut output, index)?;
                 }
-            }
-            "response.output_text.delta" => {
-                let output_index = codex_semantic_output_index(&json)?;
-                let delta = json
-                    .get("delta")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or_default();
                 self.ensure_message_start(&mut output, model);
-                self.ensure_text_block(&mut output, output_index);
-                if let Some(CodexSemanticItem::Message { text }) =
-                    self.open_items.get_mut(&output_index)
-                {
-                    text.push_str(delta);
-                } else {
-                    self.open_items.entry(output_index).or_insert_with(|| {
-                        CodexSemanticItem::Message {
-                            text: delta.to_string(),
-                        }
-                    });
-                }
-                if !delta.is_empty() {
-                    OpenAIProvider::push_sse_event(
-                        &mut output,
-                        "content_block_delta",
-                        serde_json::json!({
-                            "type": "content_block_delta",
-                            "index": output_index,
-                            "delta": {
-                                "type": "text_delta",
-                                "text": delta
-                            }
-                        }),
-                    );
-                }
-            }
-            "response.output_text.done" => {
-                let output_index = codex_semantic_output_index(&json)?;
-                self.close_text_block(&mut output, output_index);
-                if let Some(CodexSemanticItem::Message { text }) =
-                    self.open_items.get_mut(&output_index)
-                {
-                    let done_text = json
-                        .get("text")
-                        .and_then(|value| value.as_str())
-                        .unwrap_or_default();
-                    if !done_text.is_empty() {
-                        *text = done_text.to_string();
-                    }
-                }
-            }
-            "response.function_call_arguments.delta" => {
-                let output_index = codex_semantic_output_index(&json)?;
-                let delta = json
-                    .get("delta")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or_default();
-                let Some(CodexSemanticItem::FunctionCall {
-                    call_id,
-                    name,
-                    arguments,
-                }) = self.open_items.get_mut(&output_index)
-                else {
-                    return Err(codex_transport_drift(
-                        "Codex semantic function_call_arguments.delta arrived before the matching function_call item",
-                    ));
-                };
-                let call_id = call_id.clone();
-                let name = name.clone();
-                arguments.push_str(delta);
-                self.ensure_message_start(&mut output, model);
-                self.ensure_tool_block(&mut output, output_index, &call_id, &name);
-                if !delta.is_empty() {
-                    OpenAIProvider::push_sse_event(
-                        &mut output,
-                        "content_block_delta",
-                        serde_json::json!({
-                            "type": "content_block_delta",
-                            "index": output_index,
-                            "delta": {
-                                "type": "input_json_delta",
-                                "partial_json": delta
-                            }
-                        }),
-                    );
-                }
-            }
-            "response.function_call_arguments.done" => {
-                let output_index = codex_semantic_output_index(&json)?;
-                let Some(CodexSemanticItem::FunctionCall {
-                    call_id,
-                    name,
-                    arguments,
-                }) = self.open_items.get_mut(&output_index)
-                else {
-                    return Err(codex_transport_drift(
-                        "Codex semantic function_call_arguments.done arrived before the matching function_call item",
-                    ));
-                };
-                let done_arguments = json
-                    .get("arguments")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or_default();
-                if !done_arguments.is_empty() {
-                    *arguments = done_arguments.to_string();
-                }
-                let call_id = call_id.clone();
-                let name = name.clone();
-                self.ensure_message_start(&mut output, model);
-                self.ensure_tool_block(&mut output, output_index, &call_id, &name);
-            }
-            "response.output_item.done" => {
-                let output_index = codex_semantic_output_index(&json)?;
-                if let Some(item) = self.open_items.remove(&output_index) {
-                    match item {
-                        CodexSemanticItem::Message { .. } => {
-                            self.ensure_message_start(&mut output, model);
-                            self.close_text_block(&mut output, output_index);
-                        }
-                        CodexSemanticItem::FunctionCall { .. } => {
-                            self.ensure_message_start(&mut output, model);
-                            self.close_tool_block(&mut output, output_index);
-                        }
-                    }
-                } else if let Some(item_value) = json.get("item") {
-                    if let Some(item) = codex_semantic_item_from_value(item_value)? {
-                        self.ensure_message_start(&mut output, model);
-                        match item {
-                            CodexSemanticItem::Message { .. } => {
-                                self.close_text_block(&mut output, output_index);
-                            }
-                            CodexSemanticItem::FunctionCall {
-                                call_id,
-                                name,
-                                arguments,
-                            } => {
-                                self.ensure_tool_block(&mut output, output_index, &call_id, &name);
-                                if !arguments.is_empty() {
-                                    OpenAIProvider::push_sse_event(
-                                        &mut output,
-                                        "content_block_delta",
-                                        serde_json::json!({
-                                            "type": "content_block_delta",
-                                            "index": output_index,
-                                            "delta": {
-                                                "type": "input_json_delta",
-                                                "partial_json": arguments
-                                            }
-                                        }),
-                                    );
-                                }
-                                self.close_tool_block(&mut output, output_index);
-                            }
-                        }
-                    }
-                }
-            }
-            "response.completed" => {
-                let Some(response) = json.get("response") else {
-                    return Err(codex_transport_drift(
-                        "Codex semantic response.completed event missing response envelope",
-                    ));
-                };
-                self.ensure_message_start(&mut output, model);
-                self.response_id = response
-                    .get("id")
-                    .and_then(|value| value.as_str())
-                    .map(|value| value.to_string())
-                    .or_else(|| self.response_id.take());
-                self.response_status = response
-                    .get("status")
-                    .and_then(|value| value.as_str())
-                    .map(|value| value.to_string());
-                self.usage = Some(codex_semantic_usage(response));
-                self.saw_completed = true;
-
-                let pending_text = self.text_block_started.iter().copied().collect::<Vec<_>>();
-                for output_index in pending_text {
-                    self.close_text_block(&mut output, output_index);
-                }
-
-                let pending_tools = self.tool_block_started.iter().copied().collect::<Vec<_>>();
-                for output_index in pending_tools {
-                    self.close_tool_block(&mut output, output_index);
-                }
-
                 self.emit_message_stop(&mut output);
             }
-            _ => {}
+            Ok(output)
+        })();
+        if result.is_err() {
+            self.failed = true;
         }
-
-        Ok(output)
+        result
     }
 
     fn finalize(&self, _model: &str) -> Result<String, ProviderError> {
-        if !self.saw_completed {
+        if self.failed || !self.assembly.saw_completed {
             return Err(codex_transport_drift(
                 "Codex semantic SSE stream ended without response.completed",
             ));
         }
-
         Ok(String::new())
     }
 }
@@ -3161,24 +2965,27 @@ impl super::GatewayProvider for OpenAIProvider {
                 });
             }
 
-            let response_text = response.text().await?;
+            let response_bytes = response.bytes().await?;
+            let response_text = std::str::from_utf8(&response_bytes)
+                .map_err(|_| codex_transport_drift("Invalid UTF-8 in upstream SSE stream"))?;
             tracing::debug!("Responses API response body: {}", response_text);
 
-            if self.is_oauth() {
-                let events = parse_sse_events(&response_text);
-                let mut state = CodexSemanticAssemblyState::default();
-
-                for event in &events {
-                    state.consume_event(event)?;
-                }
-
+            let events = parse_sse_events(response_text);
+            let mut state = CodexSemanticAssemblyState::default();
+            for event in &events {
+                state.consume_event(event)?;
+            }
+            if self.is_oauth() || !state.finalized_items.is_empty() {
                 return state.into_gateway_response(request.model.clone());
             }
+            // Retain API-key producers that send only a completed output snapshot.
+            // The same lifecycle validation still rejects error/truncated drains.
+            state.into_gateway_response(request.model.clone())?;
 
             // Parse SSE (Server-Sent Events) format
             // Format: event: xxx\ndata: {...}\n\n
             // This extracts both reasoning (converted to thinking) and message blocks
-            let content_blocks = Self::parse_sse_response(&response_text)?;
+            let content_blocks = Self::parse_sse_response(response_text)?;
 
             // Return direct response (SSE doesn't need transform)
             Ok(GatewayResponse {
@@ -3407,58 +3214,37 @@ impl super::GatewayProvider for OpenAIProvider {
 
         let model_name = request.model.clone();
         let stream_model_name = model_name.clone();
-        let cleanup_model_name = model_name.clone();
 
         let finalized_stream: std::pin::Pin<
             Box<dyn futures::stream::Stream<Item = Result<Bytes, ProviderError>> + Send>,
-        > = if self.is_oauth() {
-            let state = Arc::new(Mutex::new(CodexSemanticStreamState::default()));
-            let state_for_cleanup = state.clone();
-            let provider_name = self.name.clone();
-
-            let transformed_stream = SseStream::new(response.bytes_stream())
-                .then(move |result| {
-                    let state = state.clone();
-                    let model_name = stream_model_name.clone();
-                    let provider_name = provider_name.clone();
-
+        > = if use_responses_api {
+            let sse = SseStream::new(response.bytes_stream());
+            Box::pin(futures::stream::unfold(
+                (sse, CodexSemanticStreamState::default(), false),
+                move |(mut sse, mut state, ended)| {
+                    let model = stream_model_name.clone();
                     async move {
-                        match result {
-                            Ok(sse_event) => {
-                                let mut state = state.lock().unwrap();
-                                match state.consume_event(&sse_event, &model_name) {
-                                    Ok(output) => Ok(Bytes::from(output)),
-                                    Err(err) => {
-                                        tracing::error!(
-                                            "❌ {} failed to assemble Codex semantic SSE: {}",
-                                            provider_name,
-                                            err
-                                        );
-                                        Err(err)
-                                    }
+                        if ended {
+                            return None;
+                        }
+                        loop {
+                            let result = match sse.next().await {
+                                Some(Ok(event)) => {
+                                    state.consume_event(&event, &model).map(Bytes::from)
                                 }
-                            }
-                            Err(e) => {
-                                tracing::error!("💥 Stream error: {}", e);
-                                Err(ProviderError::HttpError(e))
+                                Some(Err(error)) => Err(error),
+                                None => state.finalize(&model).map(Bytes::from),
+                            };
+                            let ended = result.is_err() || state.assembly.saw_completed;
+                            match result {
+                                Ok(bytes) if bytes.is_empty() && !ended => continue,
+                                Ok(bytes) if bytes.is_empty() => return None,
+                                result => return Some((result, (sse, state, ended))),
                             }
                         }
                     }
-                })
-                .try_filter(|bytes| futures::future::ready(!bytes.is_empty()));
-
-            Box::pin(
-                transformed_stream
-                    .chain(futures::stream::once(async move {
-                        let state = state_for_cleanup.lock().unwrap();
-                        match state.finalize(&cleanup_model_name) {
-                            Ok(output) if !output.is_empty() => Ok(Bytes::from(output)),
-                            Ok(_) => Ok(Bytes::new()),
-                            Err(err) => Err(err),
-                        }
-                    }))
-                    .try_filter(|bytes| futures::future::ready(!bytes.is_empty())),
-            )
+                },
+            ))
         } else {
             // Transform OpenAI SSE format to Anthropic SSE format
             let message_id = format!("msg_{}", uuid::Uuid::new_v4());
@@ -3566,7 +3352,7 @@ impl super::GatewayProvider for OpenAIProvider {
                             }
                             Err(e) => {
                                 tracing::error!("💥 Stream error: {}", e);
-                                Err(ProviderError::HttpError(e))
+                                Err(e)
                             }
                         }
                     }
@@ -3651,6 +3437,21 @@ impl super::GatewayProvider for OpenAIProvider {
                     .try_filter(|bytes| futures::future::ready(!bytes.is_empty())),
             )
         };
+
+        // An error is terminal even if an upstream adapter has EOF cleanup pending.
+        let finalized_stream = futures::stream::unfold(
+            (finalized_stream, false),
+            |(mut stream, failed)| async move {
+                if failed {
+                    return None;
+                }
+                stream.next().await.map(|result| {
+                    let failed = result.is_err();
+                    (result, (stream, failed))
+                })
+            },
+        )
+        .fuse();
 
         // Wrap with logging stream to capture token stats
         use crate::providers::streaming::LoggingSseStream;
@@ -6055,7 +5856,7 @@ data: {"type":"response.output_text.delta","output_index":1,"content_index":0,"d
 
 "#,
             r#"event: response.output_item.added
-data: {"type":"response.output_item.added","output_index":2,"item":{"type":"function_call","call_id":"call_2","name":"lookup","arguments":"{}"}}
+data: {"type":"response.output_item.added","output_index":2,"item":{"type":"function_call","call_id":"call_2","name":"lookup","arguments":""}}
 
 "#,
             r#"event: response.function_call_arguments.delta
@@ -6088,5 +5889,403 @@ data: {"type":"response.completed","response":{"id":"resp_stream","status":"comp
         assert!(names.contains(&"content_block_delta"));
         assert!(names.contains(&"message_delta"));
         assert!(names.contains(&"message_stop"));
+        let arguments = parsed_events
+            .iter()
+            .filter(|event| event.event.as_deref() == Some("content_block_delta"))
+            .map(|event| serde_json::from_str::<serde_json::Value>(&event.data).unwrap())
+            .filter_map(|value| value["delta"]["partial_json"].as_str().map(str::to_string))
+            .collect::<String>();
+        assert_eq!(arguments, "{\"path\":\"README.md\"}");
+    }
+
+    // GW-A04: UNSENT semantic fixtures exercise the actual OAuth-shared parser.
+    fn gwa_semantic_events(mut payloads: Vec<serde_json::Value>) -> Vec<SseEvent> {
+        payloads.push(serde_json::json!({"type":"response.completed","response":{
+            "id":"resp_gwa","status":"completed","output":[],
+            "usage":{"input_tokens":7,"output_tokens":3}
+        }}));
+        payloads
+            .into_iter()
+            .map(|payload| SseEvent {
+                event: Some(payload["type"].as_str().unwrap().to_string()),
+                data: payload.to_string(),
+            })
+            .collect()
+    }
+
+    fn gwa_assert_semantic_output(payloads: Vec<serde_json::Value>, expected: &str, tool: bool) {
+        let events = gwa_semantic_events(payloads);
+        let mut sync = CodexSemanticAssemblyState::default();
+        let mut stream = CodexSemanticStreamState::default();
+        let mut normalized = String::new();
+        for event in &events {
+            sync.consume_event(event).unwrap();
+            normalized.push_str(&stream.consume_event(event, "fixture-model").unwrap());
+        }
+        let response = sync.into_gateway_response("fixture-model".into()).unwrap();
+        assert_eq!(response.content.len(), 1);
+        if tool {
+            assert!(
+                matches!(&response.content[0], ContentBlock::Known(KnownContentBlock::ToolUse {id,name,input,..})
+                if id == "call_gwa" && name == "lookup" && input == &serde_json::from_str::<serde_json::Value>(expected).unwrap())
+            );
+        } else {
+            assert!(
+                matches!(&response.content[0], ContentBlock::Known(KnownContentBlock::Text {text,..}) if text == expected)
+            );
+        }
+        let parsed = parse_sse_events(&normalized);
+        let reconstructed = parsed
+            .iter()
+            .filter(|event| event.event.as_deref() == Some("content_block_delta"))
+            .map(|event| serde_json::from_str::<serde_json::Value>(&event.data).unwrap())
+            .filter_map(|payload| {
+                payload["delta"][if tool { "partial_json" } else { "text" }]
+                    .as_str()
+                    .map(str::to_string)
+            })
+            .collect::<String>();
+        assert_eq!(
+            reconstructed, expected,
+            "normalized deltas must reconstruct the authoritative bytes exactly"
+        );
+        assert_eq!(
+            parsed
+                .iter()
+                .filter(|event| event.event.as_deref() == Some("message_stop"))
+                .count(),
+            1
+        );
+        assert_eq!(
+            parsed
+                .iter()
+                .filter(|event| event.event.as_deref() == Some("content_block_stop"))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn gwa04_done_only_arguments_reach_normalized_output() {
+        gwa_assert_semantic_output(
+            vec![
+                serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{
+                "type":"function_call","call_id":"call_gwa","name":"lookup","arguments":""}}),
+                serde_json::json!({"type":"response.function_call_arguments.done","output_index":0,"arguments":"{\"city\":\"café 漢 🙂\"}"}),
+            ],
+            "{\"city\":\"café 漢 🙂\"}",
+            true,
+        );
+    }
+
+    #[test]
+    fn gwa04_delta_and_done_arguments_do_not_duplicate() {
+        gwa_assert_semantic_output(
+            vec![
+                serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{
+                "type":"function_call","call_id":"call_gwa","name":"lookup","arguments":""}}),
+                serde_json::json!({"type":"response.function_call_arguments.delta","output_index":0,"delta":"{\"city\":\"ca"}),
+                serde_json::json!({"type":"response.function_call_arguments.done","output_index":0,"arguments":"{\"city\":\"café 漢 🙂\"}"}),
+                serde_json::json!({"type":"response.output_item.done","output_index":0,"item":{
+                "type":"function_call","call_id":"call_gwa","name":"lookup","arguments":"{\"city\":\"café 漢 🙂\"}"}}),
+            ],
+            "{\"city\":\"café 漢 🙂\"}",
+            true,
+        );
+    }
+
+    #[test]
+    fn gwa04_text_done_supplies_missing_suffix() {
+        gwa_assert_semantic_output(
+            vec![
+                serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"type":"message","content":[]}}),
+                serde_json::json!({"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"ca"}),
+                serde_json::json!({"type":"response.output_text.done","output_index":0,"content_index":0,"text":"café 漢 🙂"}),
+            ],
+            "café 漢 🙂",
+            false,
+        );
+    }
+
+    #[test]
+    fn gwa04_content_part_done_is_authoritative() {
+        gwa_assert_semantic_output(
+            vec![
+                serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"type":"message","content":[]}}),
+                serde_json::json!({"type":"response.content_part.done","output_index":0,"content_index":0,
+                "part":{"type":"output_text","text":"café 漢 🙂"}}),
+            ],
+            "café 漢 🙂",
+            false,
+        );
+    }
+
+    #[test]
+    fn gwa04_output_item_done_overrides_empty_added_item() {
+        gwa_assert_semantic_output(
+            vec![
+                serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"type":"message","content":[]}}),
+                serde_json::json!({"type":"response.output_item.done","output_index":0,
+                "item":{"type":"message","content":[{"type":"output_text","text":"café 漢 🙂"}]}}),
+            ],
+            "café 漢 🙂",
+            false,
+        );
+    }
+
+    #[test]
+    fn gwa04_complete_deltas_and_repeated_done_emit_once() {
+        gwa_assert_semantic_output(
+            vec![
+                serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","call_id":"call_gwa","name":"lookup","arguments":""}}),
+                serde_json::json!({"type":"response.function_call_arguments.delta","output_index":0,"delta":"{\"city\":\"café 漢 🙂\"}"}),
+                serde_json::json!({"type":"response.function_call_arguments.done","output_index":0,"arguments":"{\"city\":\"café 漢 🙂\"}"}),
+                serde_json::json!({"type":"response.function_call_arguments.done","output_index":0,"arguments":"{\"city\":\"café 漢 🙂\"}"}),
+                serde_json::json!({"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","call_id":"call_gwa","name":"lookup","arguments":"{\"city\":\"café 漢 🙂\"}"}}),
+                serde_json::json!({"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","call_id":"call_gwa","name":"lookup","arguments":"{\"city\":\"café 漢 🙂\"}"}}),
+            ],
+            "{\"city\":\"café 漢 🙂\"}",
+            true,
+        );
+    }
+
+    #[test]
+    fn gwa04_item_done_only_tool_and_authoritative_empty_text() {
+        gwa_assert_semantic_output(
+            vec![
+                serde_json::json!({"type":"response.output_item.done","output_index":0,"item":{
+            "type":"function_call","call_id":"call_gwa","name":"lookup","arguments":"{\"city\":\"café 漢 🙂\"}"}}),
+            ],
+            "{\"city\":\"café 漢 🙂\"}",
+            true,
+        );
+        gwa_assert_semantic_output(
+            vec![
+                serde_json::json!({"type":"response.output_text.done","output_index":0,"content_index":0,"text":""}),
+            ],
+            "",
+            false,
+        );
+    }
+
+    #[test]
+    fn gwa04_content_parts_and_initial_snapshot_are_not_duplicated() {
+        gwa_assert_semantic_output(
+            vec![
+                serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"type":"message","content":[{"type":"output_text","text":"café"}]}}),
+                serde_json::json!({"type":"response.content_part.added","output_index":0,"content_index":0,"part":{"type":"output_text","text":"café"}}),
+                serde_json::json!({"type":"response.output_text.done","output_index":0,"content_index":0,"text":"café"}),
+                serde_json::json!({"type":"response.content_part.done","output_index":0,"content_index":0,"part":{"type":"output_text","text":"café"}}),
+                serde_json::json!({"type":"response.content_part.added","output_index":0,"content_index":1,"part":{"type":"output_text","text":""}}),
+                serde_json::json!({"type":"response.output_text.delta","output_index":0,"content_index":1,"delta":" 漢"}),
+                serde_json::json!({"type":"response.content_part.done","output_index":0,"content_index":1,"part":{"type":"output_text","text":" 漢 🙂"}}),
+                serde_json::json!({"type":"response.output_item.done","output_index":0,"item":{"type":"message","content":[{"type":"output_text","text":"café"},{"type":"output_text","text":" 漢 🙂"}]}}),
+            ],
+            "café 漢 🙂",
+            false,
+        );
+    }
+
+    #[test]
+    fn gwa04_conflicting_done_and_malformed_arguments_fail_truthfully() {
+        let events = gwa_semantic_events(vec![
+            serde_json::json!({"type":"response.output_text.delta","output_index":0,"delta":"old"}),
+            serde_json::json!({"type":"response.output_text.done","output_index":0,"text":"replacement"}),
+        ]);
+        let mut stream = CodexSemanticStreamState::default();
+        assert!(!stream
+            .consume_event(&events[0], "model")
+            .unwrap()
+            .is_empty());
+        assert!(stream.consume_event(&events[1], "model").is_err());
+        assert!(stream
+            .consume_event(&events[2], "model")
+            .unwrap()
+            .is_empty());
+        assert!(stream.finalize("model").is_err());
+        // Preserve rejection of the invalid concatenation formerly present in the synthetic fixture.
+        let events = gwa_semantic_events(vec![
+            serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","call_id":"bad","name":"lookup","arguments":"{}"}}),
+            serde_json::json!({"type":"response.function_call_arguments.delta","output_index":0,"delta":"{\"path\":\"README.md\"}"}),
+        ]);
+        let mut stream = CodexSemanticStreamState::default();
+        let mut sync = CodexSemanticAssemblyState::default();
+        for event in &events[..2] {
+            stream.consume_event(event, "model").unwrap();
+            sync.consume_event(event).unwrap();
+        }
+        assert!(stream
+            .consume_event(&events[2], "model")
+            .unwrap_err()
+            .to_string()
+            .contains("valid JSON"));
+        sync.consume_event(&events[2]).unwrap();
+        assert!(sync.into_gateway_response("model".into()).is_err());
+    }
+
+    #[test]
+    fn gwa03_semantic_error_eof_metadata_and_terminal_are_truthful() {
+        for payload in [
+            serde_json::json!({"type":"error","message":"upstream secret must not be copied"}),
+            serde_json::json!({"type":"response.failed","response":{"status":"failed"}}),
+            serde_json::json!({"type":"response.incomplete","response":{"status":"incomplete"}}),
+            serde_json::json!({"type":"response.completed"}),
+            serde_json::json!({"type":"response.output_item.done","output_index":0}),
+            serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{}}),
+            serde_json::json!({"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","call_id":"bad","name":"lookup","arguments":7}}),
+            serde_json::json!({"type":"response.output_item.done","output_index":0,"item":{"type":"message","content":[{"type":"output_text","text":7}]}}),
+            serde_json::json!({"type":"response.output_text.delta","output_index":0}),
+            serde_json::json!({"type":"response.function_call_arguments.delta","output_index":0,"delta":"{}"}),
+        ] {
+            let events = gwa_semantic_events(vec![payload]);
+            let mut stream = CodexSemanticStreamState::default();
+            let error = stream.consume_event(&events[0], "model").unwrap_err();
+            assert!(!error.to_string().contains("upstream secret"));
+            assert!(stream
+                .consume_event(&events[1], "model")
+                .unwrap()
+                .is_empty());
+            assert!(stream.finalize("model").is_err());
+        }
+        let mut stream = CodexSemanticStreamState::default();
+        assert!(stream.finalize("model").is_err());
+        let events = gwa_semantic_events(vec![]);
+        let output = stream.consume_event(&events[0], "model").unwrap();
+        assert!(output.contains("message_stop"));
+        assert!(stream
+            .consume_event(&events[0], "model")
+            .unwrap()
+            .is_empty());
+        assert!(stream.finalize("model").unwrap().is_empty());
+        let event = SseEvent {event:Some("response.completed".into()), data:serde_json::json!({"response":{"id":"resp_incomplete","status":"incomplete","usage":{"input_tokens":2,"output_tokens":1}}}).to_string()};
+        let mut stream = CodexSemanticStreamState::default();
+        let output = stream.consume_event(&event, "model").unwrap();
+        assert!(output.contains("max_tokens"));
+        assert!(!output.contains("end_turn"));
+    }
+
+    #[tokio::test]
+    async fn gwa03_real_provider_drop_and_terminal_release_upstream_connection() {
+        use futures::StreamExt;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        for complete in [false, true] {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let peer = tokio::spawn(async move {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut request = Vec::new();
+                let mut buffer = [0; 2048];
+                loop {
+                    let size = socket.read(&mut buffer).await.unwrap();
+                    assert!(size > 0);
+                    request.extend_from_slice(&buffer[..size]);
+                    if let Some(header_end) = request.windows(4).position(|w| w == b"\r\n\r\n") {
+                        let headers = std::str::from_utf8(&request[..header_end]).unwrap();
+                        assert!(headers.starts_with("POST /v1/responses HTTP/1.1"));
+                        let length = headers
+                            .lines()
+                            .find_map(|line| {
+                                line.to_ascii_lowercase()
+                                    .strip_prefix("content-length: ")
+                                    .map(str::to_string)
+                            })
+                            .unwrap()
+                            .parse::<usize>()
+                            .unwrap();
+                        if request.len() >= header_end + 4 + length {
+                            break;
+                        }
+                    }
+                }
+                let mut payload = "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"output_index\":0,\"delta\":\"café 漢 🙂\"}\n\n".to_string();
+                if complete {
+                    payload.push_str("event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[]}}\n\n");
+                }
+                socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n").await.unwrap();
+                socket
+                    .write_all(format!("{:x}\r\n{payload}\r\n", payload.len()).as_bytes())
+                    .await
+                    .unwrap();
+                socket.flush().await.unwrap();
+                // Deliberately leave the HTTP body open: completion/drop must release it.
+                let mut byte = [0];
+                tokio::time::timeout(std::time::Duration::from_secs(3), socket.read(&mut byte))
+                    .await
+                    .unwrap()
+                    .unwrap()
+            });
+            let mut provider = test_provider(OpenAITransport::OpenAI);
+            provider.base_url = format!("http://{address}/v1");
+            let request: GatewayRequest = serde_json::from_value(serde_json::json!({
+                "model":"gpt-5-codex","messages":[{"role":"user","content":"hello"}],"max_output_tokens":32,"stream":true
+            })).unwrap();
+            let mut response = provider.send_message_stream(request).await.unwrap();
+            let first = response.stream.next().await.unwrap().unwrap();
+            assert!(std::str::from_utf8(&first).unwrap().contains("café 漢 🙂"));
+            assert!(!std::str::from_utf8(&first)
+                .unwrap()
+                .contains("message_stop"));
+            if complete {
+                let terminal = response.stream.next().await.unwrap().unwrap();
+                assert_eq!(
+                    std::str::from_utf8(&terminal)
+                        .unwrap()
+                        .matches("event: message_stop")
+                        .count(),
+                    1
+                );
+                assert!(response.stream.next().await.is_none());
+                assert!(response.stream.next().await.is_none());
+            }
+            drop(response);
+            assert_eq!(
+                peer.await.unwrap(),
+                0,
+                "owned upstream connection must close on drop or semantic completion"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn gwa05_real_chat_invalid_bytes_end_without_synthetic_success() {
+        use futures::StreamExt;
+        let mut server = mockito::Server::new_async().await;
+        let mut body = b"data: ".to_vec();
+        body.push(0xff);
+        body.extend_from_slice(b"\n\ndata: [DONE]\n\n");
+        let mock = server
+            .mock("POST", "/v1/chat/completions")
+            .with_status(200)
+            .with_body(body)
+            .create_async()
+            .await;
+        let mut provider = test_provider(OpenAITransport::OpenAI);
+        provider.base_url = format!("{}/v1", server.url());
+        let request: GatewayRequest = serde_json::from_value(serde_json::json!({
+            "model":"gpt-4.1-mini","messages":[{"role":"user","content":"hello"}],"max_output_tokens":32,"stream":true
+        })).unwrap();
+        let response = provider.send_message_stream(request).await.unwrap();
+        let chunks = response.stream.collect::<Vec<_>>().await;
+        assert_eq!(chunks.len(), 1);
+        assert!(matches!(
+            &chunks[0],
+            Err(ProviderError::ApiError { status: 502, .. })
+        ));
+        mock.assert_async().await;
+    }
+
+    #[test]
+    fn gwa04_empty_final_tool_arguments_fail_as_invalid_json() {
+        let events = gwa_semantic_events(vec![serde_json::json!({
+            "type":"response.output_item.done","output_index":0,
+            "item":{"type":"function_call","call_id":"empty","name":"lookup","arguments":""}
+        })]);
+        let mut stream = CodexSemanticStreamState::default();
+        assert!(stream.consume_event(&events[0], "model").is_err());
+        let mut sync = CodexSemanticAssemblyState::default();
+        for event in &events {
+            sync.consume_event(event).unwrap();
+        }
+        assert!(sync.into_gateway_response("model".into()).is_err());
     }
 }

@@ -1067,3 +1067,203 @@ async fn codex_route_negative_requests_return_redacted_gateway_envelopes() {
         );
     }
 }
+
+// GW-A03: public adapter -> existing OpenAIProvider -> local HTTP Responses SSE.
+#[tokio::test]
+async fn gwa03_real_provider_responses_stream_preserves_exact_done_payloads() {
+    for actual_model in ["gpt-5-codex", "gpt-4.1-mini"] {
+        let mut server = Server::new_async().await;
+        let upstream = [
+            json!({"type":"response.output_item.added","output_index":0,"item":{"type":"message","content":[]}}),
+            json!({"type":"response.output_text.done","output_index":0,"content_index":0,"text":"café 漢 🙂"}),
+            json!({"type":"response.output_item.done","output_index":0,"item":{"type":"message","content":[{"type":"output_text","text":"café 漢 🙂"}]}}),
+            json!({"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","call_id":"call_gwa","name":"lookup","arguments":""}}),
+            json!({"type":"response.function_call_arguments.done","output_index":1,"arguments":"{\"city\":\"café 漢 🙂\"}"}),
+            json!({"type":"response.output_item.done","output_index":1,"item":{"type":"function_call","call_id":"call_gwa","name":"lookup","arguments":"{\"city\":\"café 漢 🙂\"}"}}),
+            json!({"type":"response.completed","response":{"id":"resp_gwa","status":"completed","output":[],"usage":{"input_tokens":7,"output_tokens":3}}}),
+        ].into_iter().map(|payload| format!("event: {}\ndata: {payload}\n\n",payload["type"].as_str().unwrap())).collect::<String>();
+        let mock = server
+            .mock("POST", "/v1/responses")
+            .match_header("authorization", "Bearer openai-secret")
+            .match_body(Matcher::PartialJson(
+                json!({"model":actual_model,"stream":true}),
+            ))
+            .with_status(200)
+            .with_header("content-type", "text/event-stream")
+            .with_body(upstream)
+            .create_async()
+            .await;
+        let harness = build_openai_provider_harness(&server.url(), actual_model);
+        let mut request = json!({"model":"gateway-default","input":"hello","stream":true});
+        if actual_model == "gpt-4.1-mini" {
+            request["input"] = json!([
+                {"type":"function_call","call_id":"prior_call","name":"lookup","arguments":"{}"},
+                {"type":"function_call_output","call_id":"prior_call","output":"record"}
+            ]);
+        }
+        let response = harness.invoke_responses(HeaderMap::new(), request).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_body_text(response).await;
+        mock.assert_async().await;
+        let events = parse_sse_body(&body);
+        let completed = events
+            .iter()
+            .find(|(name, _)| name == "response.completed")
+            .expect("completed event");
+        assert_eq!(
+            completed.1["response"]["output"][0]["content"][0]["text"], "café 漢 🙂",
+            "{actual_model}: {body}"
+        );
+        assert_eq!(completed.1["response"]["output"][1]["call_id"], "call_gwa");
+        assert_eq!(
+            completed.1["response"]["output"][1]["arguments"],
+            "{\"city\":\"café 漢 🙂\"}"
+        );
+        let text = events
+            .iter()
+            .filter(|(name, _)| name == "response.output_text.delta")
+            .map(|(_, p)| p["delta"].as_str().unwrap())
+            .collect::<String>();
+        let arguments = events
+            .iter()
+            .filter(|(name, _)| name == "response.function_call_arguments.delta")
+            .map(|(_, p)| p["delta"].as_str().unwrap())
+            .collect::<String>();
+        assert_eq!(text, "café 漢 🙂");
+        assert_eq!(arguments, "{\"city\":\"café 漢 🙂\"}");
+    }
+}
+
+#[tokio::test]
+async fn gwa03_real_provider_semantic_sync_and_observed_tool_continuation() {
+    let mut server = Server::new_async().await;
+    let tool_body = concat!(
+        "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":{\"type\":\"function_call\",\"call_id\":\"observed_call\",\"name\":\"lookup\",\"arguments\":\"\"}}\n\n",
+        "event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"output_index\":0,\"arguments\":\"{\\\"city\\\":\\\"café 漢 🙂\\\"}\"}\n\n",
+        "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"observed_response\",\"status\":\"completed\",\"output\":[],\"usage\":{\"input_tokens\":7,\"output_tokens\":3}}}\n\n"
+    );
+    let first = server.mock("POST","/v1/responses")
+        .match_body(Matcher::PartialJson(json!({"model":"gpt-5-codex","input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}]})))
+        .with_status(200).with_body(tool_body).create_async().await;
+    let harness = build_openai_provider_harness(&server.url(), "gpt-5-codex");
+    let response = harness
+        .invoke_responses(
+            HeaderMap::new(),
+            json!({"model":"gateway-default","input":"hello","stream":false}),
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let response: Value = serde_json::from_str(&response_body_text(response).await).unwrap();
+    assert_eq!(response["output"][0]["call_id"], "observed_call");
+    assert_eq!(response["output"][0]["name"], "lookup");
+    assert_eq!(
+        response["output"][0]["arguments"],
+        "{\"city\":\"café 漢 🙂\"}"
+    );
+    assert_eq!(response["usage"]["input_tokens"], 7);
+    assert_eq!(response["usage"]["output_tokens"], 3);
+    first.assert_async().await;
+    let observed = &response["output"][0];
+    let followup = server.mock("POST","/v1/responses")
+        .match_header("authorization","Bearer openai-secret")
+        .match_body(Matcher::PartialJson(json!({"model":"gpt-4.1-mini","stream":true,"input":[
+            {"type":"function_call","call_id":"observed_call","name":"lookup","arguments":"{\"city\":\"café 漢 🙂\"}"},
+            {"type":"function_call_output","call_id":"observed_call","output":"found"}
+        ]})))
+        .with_status(200).with_body(concat!(
+            "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"output_index\":0,\"content_index\":0,\"part\":{\"type\":\"output_text\",\"text\":\"Found café 漢 🙂\"}}\n\n",
+            "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"followup\",\"status\":\"completed\",\"output\":[]}}\n\n"
+        )).create_async().await;
+    let harness = build_openai_provider_harness(&server.url(), "gpt-4.1-mini");
+    let response = harness.invoke_responses(HeaderMap::new(),json!({"model":"gateway-default","stream":true,"input":[
+        {"type":"function_call","call_id":observed["call_id"],"name":observed["name"],"arguments":observed["arguments"]},
+        {"type":"function_call_output","call_id":observed["call_id"],"output":"found"}
+    ]})).await;
+    let body = response_body_text(response).await;
+    let events = parse_sse_body(&body);
+    let completed = &events.last().unwrap().1["response"];
+    assert_eq!(
+        completed["output"][0]["content"][0]["text"],
+        "Found café 漢 🙂"
+    );
+    assert_eq!(completed["status"], "completed");
+    followup.assert_async().await;
+}
+
+#[tokio::test]
+async fn gwa03_real_chat_decoder_preserves_text_and_exact_function_arguments() {
+    let mut server = Server::new_async().await;
+    let body = [
+        json!({"id":"chat_gwa","model":"gpt-4.1-mini","choices":[{"index":0,"delta":{"content":"café 漢 🙂","tool_calls":[{"index":0,"id":"chat_call","type":"function","function":{"name":"lookup","arguments":"{\"city\":\""}}]},"finish_reason":null}]}),
+        json!({"id":"chat_gwa","model":"gpt-4.1-mini","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"café 漢 🙂\"}"}}]},"finish_reason":null}]}),
+        json!({"id":"chat_gwa","model":"gpt-4.1-mini","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":2,"completion_tokens":3,"total_tokens":5}}),
+    ].into_iter().map(|p|format!("data: {p}\n\n")).collect::<String>()+"data: [DONE]\n\n";
+    let mock = server.mock("POST","/v1/chat/completions")
+        .match_body(Matcher::PartialJson(json!({"model":"gpt-4.1-mini","stream":true,"tools":[{"type":"function","function":{"name":"lookup"}}]})))
+        .with_status(200).with_body(body).create_async().await;
+    let harness = build_openai_provider_harness(&server.url(), "gpt-4.1-mini");
+    let response = harness.invoke_responses(HeaderMap::new(),json!({"model":"gateway-default","input":"hello","stream":true,"tools":[{"type":"function","function":{"name":"lookup"}}]})).await;
+    let body = response_body_text(response).await;
+    let events = parse_sse_body(&body);
+    let output = &events.last().unwrap().1["response"]["output"];
+    assert_eq!(output[0]["content"][0]["text"], "café 漢 🙂");
+    assert_eq!(output[1]["call_id"], "chat_call");
+    assert_eq!(output[1]["arguments"], "{\"city\":\"café 漢 🙂\"}");
+    mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn gwa03_real_responses_errors_and_eof_never_complete_publicly() {
+    use futures::StreamExt;
+    let cases = [
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"output_index\":0,\"delta\":\"partial\"}\n\n",
+        "event: error\ndata: {\"type\":\"error\",\"message\":\"private-canary\"}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n",
+        "event: response.failed\ndata: {\"type\":\"response.failed\",\"response\":{\"status\":\"failed\"}}\n\n",
+        "event: response.incomplete\ndata: {\"type\":\"response.incomplete\",\"response\":{\"status\":\"incomplete\"}}\n\n",
+        "event: response.output_text.delta\ndata: malformed-json\n\n",
+    ];
+    let mut cases = cases.map(|case| case.as_bytes().to_vec()).to_vec();
+    cases.push(b"event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"output_index\":0,\"text\":\"\xff\"}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[]}}\n\n".to_vec());
+    for (case, upstream) in cases.into_iter().enumerate() {
+        for stream in [false, true] {
+            let mut server = Server::new_async().await;
+            let mock = server
+                .mock("POST", "/v1/responses")
+                .with_status(200)
+                .with_body(&upstream)
+                .create_async()
+                .await;
+            let harness = build_openai_provider_harness(&server.url(), "gpt-5-codex");
+            let response = harness
+                .invoke_responses(
+                    HeaderMap::new(),
+                    json!({"model":"gateway-default","input":"hello","stream":stream}),
+                )
+                .await;
+            if stream {
+                assert_eq!(response.status(), StatusCode::OK);
+                let mut body = response.into_body().into_data_stream();
+                let mut visible = String::new();
+                let mut errors = 0;
+                while let Some(chunk) = body.next().await {
+                    match chunk {
+                        Ok(bytes) => visible.push_str(std::str::from_utf8(&bytes).unwrap()),
+                        Err(_) => errors += 1,
+                    }
+                }
+                assert_eq!(errors, 1, "case={case}: {visible}");
+                assert!(
+                    !visible.contains("event: response.completed"),
+                    "case={case}: {visible}"
+                );
+                assert!(!visible.contains("private-canary"));
+            } else {
+                assert_eq!(response.status(), StatusCode::BAD_GATEWAY, "case={case}");
+                let body = response_body_text(response).await;
+                assert!(!body.contains("private-canary"));
+                assert!(body.contains("transport_drift"), "{body}");
+            }
+            mock.assert_async().await;
+        }
+    }
+}

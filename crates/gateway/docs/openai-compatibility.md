@@ -265,6 +265,12 @@ Provider request regressions require flat function definitions (`type`, `name`, 
 
 The request regressions serialize an OAuth provider instance without sending and inspect real API-key provider requests against local HTTP mocks in sync and streaming modes. They verify outbound tool definitions and controls, including the existing continuation route selection and ordinary Chat fallback. They do not establish private OAuth backend acceptance, live provider compatibility, native Codex compatibility, or API-key Responses streaming output fidelity.
 
+Responses streams select their decoder from the actual upstream endpoint for both API-key and OAuth requests. Supported item, text, content-part, and function-argument done payloads reconcile the same semantic assembly used for sync drains. Streaming emits each missing suffix once before closing its normalized block; a final payload that contradicts already emitted content fails as transport drift. OAuth completion envelopes supply lifecycle/usage only. API-key sync producers that send only a completed output snapshot retain that compatibility path after terminal validation.
+
+The shared SSE adapter frames bytes before UTF-8 decoding, including characters split across transport chunks. Invalid or truncated UTF-8 fails explicitly. Its exported Rust `SseStream` helper now yields the existing `ProviderError` rather than `reqwest::Error`: transport errors use `HttpError`, and invalid bytes use `ApiError` with status `502`. The two OpenAI consumers propagate that error; public HTTP schemas remain the same. Streams end on their first error or semantic completion, and caller drop releases the owned upstream stream without creating a completion event.
+
+The `gwa03_*`, `gwa04_*`, and `gwa05_*` regressions cover exact public/normalized text and arguments, semantic done/delta reconciliation, real API-key Responses and Chat requests against local HTTP servers, continuation from observed function-call provenance, all byte splits around representative 2/3/4-byte characters, malformed input, error/EOF, and component drop/terminal polling. OAuth-shared parser fixtures are unsent; local adapter tests do not establish live OAuth/private-backend acceptance, native Codex compatibility, installed behavior, or retained production behavior.
+
 Reopen Codex-route review when any of the following drift materially:
 
 - the Codex route compatibility matrix or supported-control classification changes

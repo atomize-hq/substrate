@@ -1,3 +1,4 @@
+use crate::providers::error::ProviderError;
 use bytes::Bytes;
 use futures::stream::Stream;
 use pin_project::pin_project;
@@ -65,12 +66,31 @@ pub fn parse_sse_events(input: &str) -> Vec<SseEvent> {
     events
 }
 
-/// Stream adapter that converts a reqwest Response stream into SSE events
+/// Stream adapter that converts a reqwest response body into SSE events.
+///
+/// Transport errors become [`ProviderError::HttpError`]; invalid or truncated
+/// UTF-8 becomes a `502` [`ProviderError::ApiError`]. The stream ends after its
+/// first error. Bytes split inside a valid UTF-8 code point are retained.
+///
+/// ```
+/// use bytes::Bytes;
+/// use futures::StreamExt;
+/// use substrate_gateway::providers::error::ProviderError;
+/// use substrate_gateway::providers::streaming::{SseEvent, SseStream};
+///
+/// let chunks = futures::stream::iter([
+///     Ok::<_, reqwest::Error>(Bytes::from_static(b"data: hello\n\n")),
+/// ]);
+/// let events: Vec<Result<SseEvent, ProviderError>> =
+///     futures::executor::block_on(SseStream::new(chunks).collect());
+/// assert_eq!(events[0].as_ref().unwrap().data, "hello");
+/// ```
 #[pin_project]
 pub struct SseStream<S> {
     #[pin]
     inner: S,
-    buffer: String,
+    buffer: Vec<u8>,
+    ended: bool,
     /// Queue of parsed events waiting to be emitted
     event_queue: std::collections::VecDeque<SseEvent>,
 }
@@ -79,7 +99,8 @@ impl<S> SseStream<S> {
     pub fn new(stream: S) -> Self {
         Self {
             inner: stream,
-            buffer: String::new(),
+            buffer: Vec::new(),
+            ended: false,
             event_queue: std::collections::VecDeque::new(),
         }
     }
@@ -89,69 +110,67 @@ impl<S> Stream for SseStream<S>
 where
     S: Stream<Item = Result<Bytes, reqwest::Error>>,
 {
-    type Item = Result<SseEvent, reqwest::Error>;
+    type Item = Result<SseEvent, ProviderError>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let this = self.project();
-
-        // First, check if we have queued events to emit
+        let mut this = self.project();
         if let Some(event) = this.event_queue.pop_front() {
             return Poll::Ready(Some(Ok(event)));
         }
+        if *this.ended {
+            return Poll::Ready(None);
+        }
 
-        // Poll the inner stream for new data
-        match this.inner.poll_next(cx) {
-            Poll::Ready(Some(Ok(bytes))) => {
-                // Add new bytes to buffer
-                if let Ok(text) = std::str::from_utf8(&bytes) {
-                    this.buffer.push_str(text);
-
-                    // Try to parse complete events from buffer
-                    // Note: We only clear buffer up to the last complete event
-                    if let Some(last_event_end) = this.buffer.rfind("\n\n") {
-                        let complete_portion = &this.buffer[..last_event_end + 2];
-                        let events = parse_sse_events(complete_portion);
-
-                        // Add all parsed events to queue
-                        for event in events {
-                            this.event_queue.push_back(event);
-                        }
-
-                        // Keep only the incomplete portion in buffer
-                        *this.buffer = this.buffer[last_event_end + 2..].to_string();
-
-                        // Return the first queued event if available
-                        if let Some(event) = this.event_queue.pop_front() {
-                            return Poll::Ready(Some(Ok(event)));
-                        }
+        loop {
+            let end = match this.inner.as_mut().poll_next(cx) {
+                Poll::Ready(Some(Ok(bytes))) => {
+                    this.buffer.extend_from_slice(&bytes);
+                    // Delimiters are ASCII: frame bytes before attempting UTF-8 decoding.
+                    let lf = this
+                        .buffer
+                        .windows(2)
+                        .rposition(|w| w == b"\n\n")
+                        .map(|i| i + 2);
+                    let crlf = this
+                        .buffer
+                        .windows(4)
+                        .rposition(|w| w == b"\r\n\r\n")
+                        .map(|i| i + 4);
+                    match lf.into_iter().chain(crlf).max() {
+                        Some(end) => end,
+                        None => continue,
                     }
                 }
-
-                // If no complete event yet, continue polling
-                cx.waker().wake_by_ref();
-                Poll::Pending
-            }
-            Poll::Ready(Some(Err(e))) => Poll::Ready(Some(Err(e))),
-            Poll::Ready(None) => {
-                // Stream ended - check if buffer has remaining data
-                if !this.buffer.is_empty() {
-                    let events = parse_sse_events(this.buffer);
-                    *this.buffer = String::new();
-
-                    // Add all parsed events to queue
-                    for event in events {
-                        this.event_queue.push_back(event);
-                    }
+                Poll::Ready(Some(Err(error))) => {
+                    *this.ended = true;
+                    this.buffer.clear();
+                    return Poll::Ready(Some(Err(ProviderError::HttpError(error))));
                 }
-
-                // Return next queued event, or None if queue is empty
-                if let Some(event) = this.event_queue.pop_front() {
-                    return Poll::Ready(Some(Ok(event)));
+                Poll::Ready(None) => {
+                    *this.ended = true;
+                    this.buffer.len()
                 }
-
-                Poll::Ready(None)
+                Poll::Pending => return Poll::Pending,
+            };
+            let events = match std::str::from_utf8(&this.buffer[..end]) {
+                Ok(text) => parse_sse_events(text),
+                Err(_) => {
+                    *this.ended = true;
+                    this.buffer.clear();
+                    return Poll::Ready(Some(Err(ProviderError::ApiError {
+                        status: 502,
+                        message: "Invalid UTF-8 in upstream SSE stream".to_string(),
+                    })));
+                }
+            };
+            this.buffer.drain(..end);
+            this.event_queue.extend(events);
+            if let Some(event) = this.event_queue.pop_front() {
+                return Poll::Ready(Some(Ok(event)));
             }
-            Poll::Pending => Poll::Pending,
+            if *this.ended {
+                return Poll::Ready(None);
+            }
         }
     }
 }
@@ -366,5 +385,162 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert!(events[0].event.is_none());
         assert_eq!(events[0].data, "plain data");
+    }
+
+    #[tokio::test]
+    async fn gwa05_utf8_survives_every_byte_split_and_one_byte_chunks() {
+        use futures::StreamExt;
+        let fixture = "event: response.output_text.delta\ndata: {\"delta\":\"café 漢 🙂\"}\n\nevent: response.function_call_arguments.done\ndata: {\"arguments\":\"{\\\"city\\\":\\\"café 漢 🙂\\\"}\"}\n\n";
+        let expected = parse_sse_events(fixture);
+        for split in 0..=fixture.len() {
+            let chunks = vec![
+                Ok(Bytes::copy_from_slice(&fixture.as_bytes()[..split])),
+                Ok(Bytes::copy_from_slice(&fixture.as_bytes()[split..])),
+            ];
+            let actual = SseStream::new(futures::stream::iter(chunks))
+                .collect::<Vec<_>>()
+                .await;
+            let actual = actual.into_iter().map(Result::unwrap).collect::<Vec<_>>();
+            assert_eq!(actual.len(), expected.len(), "split={split}");
+            for (actual, expected) in actual.iter().zip(&expected) {
+                assert_eq!(actual.event, expected.event, "split={split}");
+                assert_eq!(actual.data, expected.data, "split={split}");
+            }
+        }
+        let chunks = fixture
+            .as_bytes()
+            .iter()
+            .map(|byte| Ok(Bytes::copy_from_slice(&[*byte])))
+            .collect::<Vec<_>>();
+        let actual = SseStream::new(futures::stream::iter(chunks))
+            .collect::<Vec<_>>()
+            .await;
+        assert_eq!(actual.len(), 2);
+        assert_eq!(
+            actual[0].as_ref().unwrap().data,
+            "{\"delta\":\"café 漢 🙂\"}"
+        );
+        assert_eq!(
+            actual[1].as_ref().unwrap().data,
+            "{\"arguments\":\"{\\\"city\\\":\\\"café 漢 🙂\\\"}\"}"
+        );
+    }
+
+    #[tokio::test]
+    async fn gwa05_crlf_multiline_and_unterminated_eof_preserve_existing_framing() {
+        use futures::StreamExt;
+        let input = "event: delta\r\ndata: café\r\ndata: 漢 🙂\r\n\r\nevent: final\ndata: done";
+        for split in 0..=input.len() {
+            let chunks = [
+                Ok(Bytes::copy_from_slice(&input.as_bytes()[..split])),
+                Ok(Bytes::copy_from_slice(&input.as_bytes()[split..])),
+            ];
+            let events = SseStream::new(futures::stream::iter(chunks))
+                .collect::<Vec<_>>()
+                .await;
+            assert_eq!(events.len(), 2, "split={split}");
+            assert_eq!(
+                events[0].as_ref().unwrap().data,
+                "café\n漢 🙂",
+                "split={split}"
+            );
+            assert_eq!(events[1].as_ref().unwrap().data, "done", "split={split}");
+        }
+    }
+
+    #[tokio::test]
+    async fn gwa05_invalid_and_truncated_utf8_fail_once_without_replacement() {
+        use futures::StreamExt;
+        for input in [&b"data: \xff\n\n"[..], &b"data: \xf0\x9f"[..]] {
+            let source = futures::stream::iter([
+                Ok(Bytes::copy_from_slice(input)),
+                Ok(Bytes::from_static(b"data: false success\n\n")),
+            ]);
+            let mut stream = SseStream::new(source);
+            let error = stream
+                .next()
+                .await
+                .expect("one explicit error")
+                .unwrap_err();
+            assert!(matches!(error, ProviderError::ApiError { status: 502, .. }));
+            assert!(stream.next().await.is_none());
+            assert!(stream.next().await.is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn gwa05_transport_error_fuses_and_drop_releases_source() {
+        use futures::StreamExt;
+        use std::sync::{
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+            Arc,
+        };
+        struct Source {
+            error: Option<reqwest::Error>,
+            polls: Arc<AtomicUsize>,
+            dropped: Arc<AtomicBool>,
+        }
+        impl Stream for Source {
+            type Item = Result<Bytes, reqwest::Error>;
+            fn poll_next(
+                mut self: Pin<&mut Self>,
+                _: &mut Context<'_>,
+            ) -> Poll<Option<Self::Item>> {
+                self.polls.fetch_add(1, Ordering::SeqCst);
+                Poll::Ready(self.error.take().map(Err))
+            }
+        }
+        impl Drop for Source {
+            fn drop(&mut self) {
+                self.dropped.store(true, Ordering::SeqCst);
+            }
+        }
+        let error = reqwest::Client::new()
+            .get("http://[")
+            .send()
+            .await
+            .unwrap_err();
+        let polls = Arc::new(AtomicUsize::new(0));
+        let dropped = Arc::new(AtomicBool::new(false));
+        let source = Source {
+            error: Some(error),
+            polls: polls.clone(),
+            dropped: dropped.clone(),
+        };
+        let mut stream = SseStream::new(source);
+        assert!(matches!(
+            stream.next().await.unwrap(),
+            Err(ProviderError::HttpError(_))
+        ));
+        assert!(stream.next().await.is_none());
+        assert_eq!(polls.load(Ordering::SeqCst), 1);
+        drop(stream);
+        assert!(dropped.load(Ordering::SeqCst));
+        let source = Source {
+            error: None,
+            polls: polls.clone(),
+            dropped: dropped.clone(),
+        };
+        dropped.store(false, Ordering::SeqCst);
+        drop(SseStream::new(source));
+        assert!(dropped.load(Ordering::SeqCst));
+        assert_eq!(
+            polls.load(Ordering::SeqCst),
+            1,
+            "drop/cancel must not poll the source"
+        );
+    }
+
+    #[tokio::test]
+    async fn gwa05_truncated_codepoint_at_eof_is_an_explicit_error() {
+        use futures::StreamExt;
+        let mut stream = SseStream::new(futures::stream::iter([Ok(Bytes::from_static(
+            b"data: \xf0\x9f",
+        ))]));
+        assert!(matches!(
+            stream.next().await.unwrap(),
+            Err(ProviderError::ApiError { status: 502, .. })
+        ));
+        assert!(stream.next().await.is_none());
     }
 }
