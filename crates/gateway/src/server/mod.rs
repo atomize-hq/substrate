@@ -1,3 +1,5 @@
+#[cfg(target_os = "linux")]
+mod codex_search;
 mod oauth_handlers;
 mod openai_compat;
 pub mod openai_conformance_test_support;
@@ -2921,6 +2923,7 @@ fn build_e3_in_world_app(
     secret_ready_attestation_hash: String,
     readiness_consumed: Arc<std::sync::atomic::AtomicBool>,
 ) -> AxumRouter {
+    let search = Arc::new(codex_search::SearchState::new(&state.snapshot()));
     AxumRouter::new()
         .route(
             "/v1/responses",
@@ -2930,6 +2933,15 @@ fn build_e3_in_world_app(
                     e3_validate_member_identity,
                 ),
             ),
+        )
+        .route(
+            "/v1/alpha/search",
+            post(codex_search::handle_codex_search)
+                .layer(axum::Extension(search))
+                .route_layer(axum::middleware::from_fn_with_state(
+                    Arc::clone(&input),
+                    e3_validate_member_identity,
+                )),
         )
         .route(
             "/health",

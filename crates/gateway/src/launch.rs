@@ -536,6 +536,8 @@ impl E3GatewayLaunchContractV1 {
                 && input.http_surface.auxiliary_listener_count == 0
                 && input.http_surface.readiness_method == "GET"
                 && input.http_surface.readiness_path == "/health"
+                // Model-route fields remain exact; the admitted artifact owns
+                // the additional fixed, identically gated search route.
                 && input.http_surface.member_method == "POST"
                 && input.http_surface.member_path == "/v1/responses"
                 && input.gateway_ref.authority_store_id == input.authority_store_id
@@ -974,7 +976,7 @@ mod e3_descriptor_tests {
 }
 
 #[cfg(all(test, target_os = "linux"))]
-mod e3_readiness_tests {
+pub(crate) mod e3_readiness_tests {
     use super::E3GatewayLaunchContractV1;
     use config_projection::*;
     use nix::libc;
@@ -994,7 +996,7 @@ mod e3_readiness_tests {
         }
     }
 
-    fn input(listener: &std::net::TcpListener) -> ManagedGatewayLaunchInputV1 {
+    pub(crate) fn input(listener: &std::net::TcpListener) -> ManagedGatewayLaunchInputV1 {
         let uuid = "019f3946-ec00-7000-8000-000000000001";
         let store = format!("cpa_{uuid}");
         let root = std::fs::File::open("/proc/self").unwrap();
@@ -1137,11 +1139,13 @@ actual_model = "codex-mini-latest"
             }
             assert_eq!(client.head(format!("http://127.0.0.1:{port}/health")).send().await.unwrap().status(),405);
             assert_eq!(client.get(format!("http://127.0.0.1:{port}/health")).header("X-Substrate-E3-Readiness-Nonce",&expected.readiness_nonce).send().await.unwrap().status(),403);
-            let mut denied=tokio::net::TcpStream::connect(("127.0.0.1",port)).await.unwrap();
-            denied.write_all(format!("POST /v1/responses HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 1000\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
-            let mut reply=[0;512];
-            let length=tokio::time::timeout(std::time::Duration::from_secs(2),denied.read(&mut reply)).await.unwrap().unwrap();
-            assert!(reply[..length].starts_with(b"HTTP/1.1 403"));
+            for path in ["/v1/responses", "/v1/alpha/search"] {
+                let mut denied=tokio::net::TcpStream::connect(("127.0.0.1",port)).await.unwrap();
+                denied.write_all(format!("POST {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 3000000\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
+                let mut reply=[0;512];
+                let length=tokio::time::timeout(std::time::Duration::from_secs(2),denied.read(&mut reply)).await.unwrap().unwrap();
+                assert!(reply[..length].starts_with(b"HTTP/1.1 403"), "{path}: {}", String::from_utf8_lossy(&reply[..length]));
+            }
             serving.abort();
             assert!(serving.await.unwrap_err().is_cancelled());
         });

@@ -99,8 +99,8 @@ struct GatewayHttpSurfaceV1 {
     inherited_listener_only: bool, // exactly true
     readiness_method: String, // exactly "GET"
     readiness_path: String, // exactly "/health"
-    member_method: String, // exactly "POST"
-    member_path: String, // exactly "/v1/responses"
+    member_method: String, // model route: exactly "POST"
+    member_path: String, // model route: exactly "/v1/responses"
     auxiliary_listener_count: u32, // exactly 0
 }
 
@@ -980,17 +980,25 @@ the gateway/member cgroups are empty and the boundary is durably revoked; a stri
 execute, PTY, or compatibility-gateway request cannot race into this credential-bearing interval.
 
 The launch capability selects a dedicated E3 router, not baseline `build_app`. Its complete
-method/path allowlist is exactly `GET /health` and `POST /v1/responses`; all other methods or paths are
+method/path allowlist is exactly `GET /health`, `POST /v1/responses`, and `POST /v1/alpha/search`; all other methods or paths are
 unregistered and return the framework's non-handler 404/405 without touching OAuth, tokens,
 messages, chat completions, structured events, count-tokens, routing, or provider state. `GET
 /health` must pass the exact readiness-nonce validator before it returns the schema below and is
-intended only for the descriptor-pinned probe. `POST /v1/responses` must pass the exact three-field E3
+intended only for the descriptor-pinned probe. Both member POST routes must pass the exact three-field E3
 identity validator before body parsing, tracing, routing, or provider access. No member-accessible
-route omits that validator. Both handlers first repeat the gateway's
+route omits that validator. The readiness handler and member middleware first repeat the gateway's
 `PR_GET_DUMPABLE=0`/soft-and-hard-`RLIMIT_CORE=0` readback; a mismatch terminates the gateway without
 parsing a request or returning success. The existing general `build_app`, OAuth routes, token mutation routes,
 main bind, and port-1455 callback bind remain unchanged only for non-E3 gateway launches and are
 unreachable from the sealed E3 launch capability.
+
+`GatewayHttpSurfaceV1.member_method` and `member_path` identify the exact model route;
+they are neither a prefix nor an exhaustive member-route grant. The newly admitted gateway
+artifact identity binds this fixed additional search route. Old immutable artifact identities
+do not silently gain routes. Search uses only the selected held Codex OAuth account and exact
+`https://chatgpt.com/backend-api/codex/alpha/search` destination; standalone listeners do not
+register it. Component tests and UNSENT request construction do not establish private-service
+entitlement, retained native .156 adoption, or broader E3 production qualification.
 
 The launch-input pipe is non-secret transport, not durable authority; its accepted-home immutable
 launch-input object, the intent, and dormant projection are authoritative, and the ACK records its
@@ -1295,7 +1303,7 @@ X-Substrate-Projection
 ```
 
 They are non-secret correlation metadata. The gateway exact-compares them to its active projection
-before parsing every `POST /v1/responses` request and rejects missing, duplicate, or mismatched
+before parsing every `POST /v1/responses` or `POST /v1/alpha/search` request and rejects missing, duplicate, or mismatched
 values; `X-Substrate-Projection` is exactly the stable
 `ConfigProjectionIdentityV1.identity_hash`, not a revision-specific record ID or hash. Matching values
 do not authorize a connection. The kernel cgroup/nftables access boundary authorizes connectivity

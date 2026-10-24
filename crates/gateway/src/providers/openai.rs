@@ -552,6 +552,7 @@ pub struct OpenAIProvider {
     transport: OpenAITransport,
     client: Client,
     responses_client: Client,
+    search_http: SearchHttpTransport,
     models: Vec<String>,
     custom_headers: Vec<(String, String)>,
     /// OAuth provider ID (if using OAuth instead of API key)
@@ -1517,7 +1518,166 @@ impl CodexSemanticStreamState {
     }
 }
 
+const CODEX_SEARCH_URL: &str = "https://chatgpt.com/backend-api/codex/alpha/search";
+
+// One private, operation-specific transport. Production has no destination override.
+// The cfg(test) loopback seam runs the same execute/read/status/parser path using
+// synthetic credentials, while production construction is separately proved UNSENT.
+struct SearchHttpTransport {
+    client: Client,
+    #[cfg(test)]
+    loopback: Option<url::Url>,
+}
+impl SearchHttpTransport {
+    fn new() -> Self {
+        Self {
+            client: Client::builder()
+                .no_proxy()
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .timeout(std::time::Duration::from_secs(60))
+                .retry(reqwest::retry::never())
+                .pool_max_idle_per_host(0)
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .expect("search HTTP client configuration"),
+            #[cfg(test)]
+            loopback: None,
+        }
+    }
+
+    async fn execute(
+        &self,
+        request: reqwest::Request,
+    ) -> Result<crate::models::search::SearchResponse, crate::models::search::SearchError> {
+        use crate::models::search::{preflight_json, SearchError, RESPONSE_LIMIT};
+        use futures::StreamExt;
+        // Check the original production authority even in local transport tests.
+        if request.method() != reqwest::Method::POST || request.url().as_str() != CODEX_SEARCH_URL {
+            return Err(SearchError::Unsupported);
+        }
+        #[cfg(test)]
+        let request = {
+            let mut request = request;
+            if let Some(destination) = &self.loopback {
+                *request.url_mut() = destination.clone();
+            }
+            request
+        };
+        let response = self
+            .client
+            .execute(request)
+            .await
+            .map_err(search_http_error)?;
+        match response.status().as_u16() {
+            200 => {}
+            401 | 403 => return Err(SearchError::UpstreamDenied),
+            429 => return Err(SearchError::RateLimited),
+            _ => return Err(SearchError::Upstream),
+        }
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split(';').next());
+        if content_type.map(str::trim) != Some("application/json") {
+            return Err(SearchError::InvalidResponse);
+        }
+        if response
+            .content_length()
+            .is_some_and(|n| n > RESPONSE_LIMIT as u64)
+        {
+            return Err(SearchError::Limit);
+        }
+        let mut stream = response.bytes_stream();
+        let mut bytes = Vec::new();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(search_http_error)?;
+            if bytes
+                .len()
+                .checked_add(chunk.len())
+                .is_none_or(|n| n > RESPONSE_LIMIT)
+            {
+                return Err(SearchError::Limit);
+            }
+            bytes
+                .try_reserve_exact(chunk.len())
+                .map_err(|_| SearchError::Limit)?;
+            bytes.extend_from_slice(&chunk);
+        }
+        preflight_json(&bytes, RESPONSE_LIMIT)?;
+        let parsed = serde_json::from_slice(&bytes).map_err(|_| SearchError::InvalidResponse)?;
+        // Drop the aggregate raw body before public serialization allocates bytes.
+        drop(bytes);
+        Ok(parsed)
+    }
+}
+fn search_http_error(error: reqwest::Error) -> crate::models::search::SearchError {
+    if error.is_timeout() {
+        crate::models::search::SearchError::Deadline
+    } else {
+        crate::models::search::SearchError::Transport
+    }
+}
+
 impl OpenAIProvider {
+    fn build_search_request(
+        &self,
+        request: crate::models::search::SearchRequest,
+    ) -> Result<reqwest::Request, crate::models::search::SearchError> {
+        use crate::auth::codex_auth_context::CodexAuthMode;
+        use crate::auth::CodexAuthSource;
+        use crate::models::search::{bounded_json, SearchError, REQUEST_LIMIT};
+        if self.transport != OpenAITransport::OpenAI
+            || !self.is_oauth()
+            || !matches!(self.codex_auth_source, Some(CodexAuthSource::Integrated))
+            || !self.custom_headers.is_empty()
+        {
+            return Err(SearchError::Unsupported);
+        }
+        if !self.models.iter().any(|model| model == &request.model) {
+            return Err(SearchError::Unsupported);
+        }
+        let context = self
+            .resolve_codex_auth_context()
+            .map_err(|_| SearchError::Authentication)?;
+        if context.mode != CodexAuthMode::Integrated
+            || context.account_id.is_empty()
+            || context.account_id.len() > 1024
+            || context.access_token.expose_secret().is_empty()
+            || context.access_token.expose_secret().len() > 16384
+        {
+            return Err(SearchError::Authentication);
+        }
+        let mut bearer = reqwest::header::HeaderValue::from_str(&format!(
+            "Bearer {}",
+            context.access_token.expose_secret()
+        ))
+        .map_err(|_| SearchError::Authentication)?;
+        bearer.set_sensitive(true);
+        let mut account = reqwest::header::HeaderValue::from_str(&context.account_id)
+            .map_err(|_| SearchError::Authentication)?;
+        account.set_sensitive(true);
+        let bytes = bounded_json(&request, REQUEST_LIMIT)?;
+        drop(request);
+        self.search_http
+            .client
+            .post(CODEX_SEARCH_URL)
+            .header(reqwest::header::AUTHORIZATION, bearer)
+            .header("ChatGPT-Account-ID", account)
+            .header(reqwest::header::ACCEPT, "application/json")
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(bytes)
+            .build()
+            .map_err(|_| SearchError::InvalidRequest)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_search_loopback_for_test(&mut self, destination: url::Url) {
+        assert_eq!(destination.scheme(), "http");
+        assert_eq!(destination.host_str(), Some("127.0.0.1"));
+        self.search_http.loopback = Some(destination);
+    }
+
     /// Check if the model is a Codex model that requires /v1/responses endpoint
     fn is_codex_model(model: &str) -> bool {
         model.to_lowercase().contains("codex")
@@ -2367,6 +2527,7 @@ impl OpenAIProvider {
             base_url: normalized_base_url,
             transport,
             client: Client::new(),
+            search_http: SearchHttpTransport::new(),
             responses_client: Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
@@ -3162,6 +3323,14 @@ impl OpenAIProvider {
 
 #[async_trait]
 impl super::GatewayProvider for OpenAIProvider {
+    async fn send_search(
+        &self,
+        request: crate::models::search::SearchRequest,
+    ) -> Result<crate::models::search::SearchResponse, crate::models::search::SearchError> {
+        let request = self.build_search_request(request)?;
+        self.search_http.execute(request).await
+    }
+
     fn supports_request(&self, _request: &GatewayRequest) -> bool {
         true
     }
@@ -3934,6 +4103,7 @@ mod tests {
             base_url: "https://example.invalid".to_string(),
             transport,
             client: Client::new(),
+            search_http: SearchHttpTransport::new(),
             responses_client: Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
@@ -4058,6 +4228,7 @@ mod tests {
             base_url: "https://example.invalid".to_string(),
             transport: OpenAITransport::OpenAI,
             client: Client::new(),
+            search_http: SearchHttpTransport::new(),
             responses_client: Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
@@ -4537,6 +4708,7 @@ mod tests {
             base_url: "https://example.azure.com/openai/v1".to_string(),
             transport: OpenAITransport::AzureOpenAI,
             client: Client::new(),
+            search_http: SearchHttpTransport::new(),
             responses_client: Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
@@ -4595,6 +4767,7 @@ mod tests {
             base_url: "https://example.invalid".to_string(),
             transport: OpenAITransport::OpenAI,
             client: Client::new(),
+            search_http: SearchHttpTransport::new(),
             responses_client: Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
@@ -6860,5 +7033,121 @@ data: {"type":"response.completed","response":{"id":"resp_stream","status":"comp
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod search_tests {
+    use super::*;
+    use crate::auth::codex_auth_context::{
+        integrated_codex_auth_test_lock, CodexIntegratedAuthHandoff, InstalledHandoffGuard,
+    };
+    use crate::models::search::{SearchError, SearchRequest};
+    use crate::providers::GatewayProvider;
+    use serde_json::json;
+
+    fn provider() -> OpenAIProvider {
+        OpenAIProvider::with_headers(OpenAIProviderConfig {
+            name: "held-provider".into(),
+            api_key: "unused-api-key-sentinel".into(),
+            base_url: "http://unselected.invalid".into(),
+            models: vec!["inference-slug".into()],
+            custom_headers: Vec::new(),
+            oauth_provider: Some("held-provider".into()),
+            token_store: None,
+            codex_auth_source: Some(CodexAuthSource::Integrated),
+        })
+    }
+    fn request() -> SearchRequest {
+        serde_json::from_value(json!({"id":"native-id","model":"inference-slug","input":"native text","commands":{"search_query":[{"q":"literal"}]}})).unwrap()
+    }
+    #[test]
+    fn search_production_oauth_request_is_exact_and_unsent() {
+        let _lock = integrated_codex_auth_test_lock().blocking_lock();
+        let _auth = InstalledHandoffGuard::set(Some(CodexIntegratedAuthHandoff::new(
+            Some("synthetic-account".into()),
+            secrecy::SecretString::new("synthetic-token".into()),
+        )));
+        let provider = provider();
+        // UNSENT: construction proof is deliberately separate from local HTTP.
+        let built = provider.build_search_request(request()).unwrap();
+        assert_eq!(built.method(), reqwest::Method::POST);
+        assert_eq!(
+            built.url().as_str(),
+            "https://chatgpt.com/backend-api/codex/alpha/search"
+        );
+        assert_eq!(built.headers().len(), 4);
+        assert_eq!(built.headers()["authorization"], "Bearer synthetic-token");
+        assert_eq!(built.headers()["chatgpt-account-id"], "synthetic-account");
+        assert_eq!(built.headers()["accept"], "application/json");
+        assert_eq!(built.headers()["content-type"], "application/json");
+        assert!(built.headers()["authorization"].is_sensitive());
+        assert!(built.headers()["chatgpt-account-id"].is_sensitive());
+        let body: serde_json::Value =
+            serde_json::from_slice(built.body().unwrap().as_bytes().unwrap()).unwrap();
+        assert_eq!(
+            body,
+            json!({"id":"native-id","model":"inference-slug","input":"native text","commands":{"search_query":[{"q":"literal"}]}})
+        );
+    }
+    #[tokio::test]
+    async fn search_provider_credential_model_and_origin_fail_closed_before_io() {
+        let _lock = integrated_codex_auth_test_lock().lock().await;
+        let _auth = InstalledHandoffGuard::set(None);
+        let mut provider = provider();
+        assert_eq!(
+            provider.send_search(request()).await.unwrap_err(),
+            SearchError::Authentication
+        );
+        provider.oauth_provider = None;
+        assert_eq!(
+            provider.send_search(request()).await.unwrap_err(),
+            SearchError::Unsupported
+        );
+        provider.oauth_provider = Some("held-provider".into());
+        provider.transport = OpenAITransport::AzureOpenAI;
+        assert_eq!(
+            provider.send_search(request()).await.unwrap_err(),
+            SearchError::Unsupported
+        );
+        provider.transport = OpenAITransport::OpenAI;
+        provider.codex_auth_source = Some(CodexAuthSource::StandaloneLocal {
+            path: "/must-not-be-opened/auth.json".into(),
+        });
+        assert_eq!(
+            provider.send_search(request()).await.unwrap_err(),
+            SearchError::Unsupported
+        );
+        provider.codex_auth_source = Some(CodexAuthSource::Integrated);
+        provider.custom_headers = vec![("Authorization".into(), "override-sentinel".into())];
+        assert_eq!(
+            provider.send_search(request()).await.unwrap_err(),
+            SearchError::Unsupported
+        );
+        provider.custom_headers.clear();
+        let mut wrong = request();
+        wrong.model = "other-model".into();
+        assert_eq!(
+            provider.send_search(wrong).await.unwrap_err(),
+            SearchError::Unsupported
+        );
+        let raw = provider
+            .search_http
+            .client
+            .post("http://127.0.0.1:1/wrong")
+            .build()
+            .unwrap();
+        assert_eq!(
+            provider.search_http.execute(raw).await.unwrap_err(),
+            SearchError::Unsupported
+        );
+        let _auth = InstalledHandoffGuard::set(Some(CodexIntegratedAuthHandoff::new(
+            Some("bad\r\naccount".into()),
+            secrecy::SecretString::new("synthetic-token".into()),
+        )));
+        assert_eq!(
+            provider.send_search(request()).await.unwrap_err(),
+            SearchError::Authentication
+        );
     }
 }

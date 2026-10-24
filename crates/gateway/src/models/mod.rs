@@ -1,4 +1,5 @@
 pub mod response_transport;
+pub mod search;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;

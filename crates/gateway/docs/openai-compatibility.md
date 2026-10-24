@@ -247,3 +247,59 @@ The repo now ships:
 OpenAI token counting remains unexposed; only `/v1/messages/count_tokens` exists. The closed component exclusions and native/private/installed/retained/production proof ceilings above remain material limits.
 
 The `openai_codex_0156_roundtrip` target exercises the real local handler/core/router/OpenAIProvider path with independent literal requests/events, tool/result/next/replayed history, Lite instructions, strict/custom/namespaces/discovery, default completed opaque/summary, typed cache fields/usage, terminal states, safe sinks, limits, redirects/fallback, and cancellation. Existing provider suites protect actual Chat nesting, Anthropic caching/signed thinking, Azure, Kimi, and Gemini semantics. No pending test count or clean/live-provider result is asserted here. Pinned source evidence is `openai/codex` `rust-v0.156.1` commit `b412ff32c417f855c2b2d1581b77058eed87c84b`, tree `0a0b0bf9acf2f45e9239e7a52ef79f7702aa5799`; this is not binary/runtime authenticity. Current [OpenAI reasoning guidance](https://developers.openai.com/api/docs/guides/reasoning) describes default encrypted continuation with store=false/ZDR and optional explicit include, not private backend acceptance. Local cache preservation is not cached-token/latency effectiveness proof.
+
+## Managed standalone search component
+
+The managed E3 router additionally registers exactly `POST /v1/alpha/search` behind the
+same connection authority and three-field member middleware as Responses, before reading
+any body. The standalone router does not register search. `GatewayHttpSurfaceV1` still
+identifies the exact model route; the newly admitted immutable gateway artifact binds this
+fixed additional route. Older artifact identities do not acquire it automatically.
+
+Search snapshots the configured default model's first mapping and holds that exact provider
+instance. The request model must equal the mapping's actual inference slug and the provider's
+admitted model list. It is forwarded unchanged; member aliases, prompt routing, provider/auth/
+account/base headers, Origin, retries and fallback are not used. Only the selected integrated
+Codex OAuth credential can construct the exact private destination
+`https://chatgpt.com/backend-api/codex/alpha/search`; redirects are refused. The gateway does
+not resolve command URLs or fetch images, files or result references itself.
+
+The closed pinned `b412ff32c417f855c2b2d1581b77058eed87c84b` command/settings vocabulary,
+empty commands, optional reasoning, body ID, ordered native message input and named opaque
+response fields are handled separately from Responses IR. Unknown/unsupported fields and
+explicit null request options are rejected. The input array population is the Message items
+emitted by pinned `recent_input`; unrelated general ResponseItem variants are not admitted.
+The exact native `internal_chat_message_metadata_passthrough` fields are preserved only on
+Message items: turn_id, create_time, content_item_kinds, cell_id, executed_tool_calls and
+tool_calls_complete. Each call has typed name and tool_result_sources[{type,id}], with opaque
+JSON authorized only at arguments and tool_result_metadata. Explicit null is retained at those
+opaque leaves; other typed optional request fields omit None and reject null. Native
+truncation/omission markers pass unchanged. Received metadata is untrusted transport data,
+never verified host provenance, execution/completion evidence, identity, authorization,
+routing, headers or executable instructions. Native skip_deserializing does not apply to this
+transport decoder; no field is discarded to imitate native harness trust semantics.
+
+Search IDs/reference IDs are body data, with no new remote-state isolation or durability claim.
+
+Limits are 2 MiB request wire, 16 MiB cumulative response wire, four owned concurrent permits,
+10 seconds connect and 60 seconds for request read through public serialization. A conservative
+64 MiB logical payload preflight charges three wire representations, 256 bytes per JSON token/
+node and 8 MiB for the outbound request plus fixed metadata. It runs before typed/opaque
+parsing; bounded serialization checks before copying. Dense trees can fail below the wire
+limit. This accounts application payloads, not allocator capacity, HTTP/TLS buffers or RSS.
+The copy graph is request chunks -> bounded raw -> typed request -> owned HTTP bytes, then
+response chunks -> bounded raw -> typed result -> bounded public bytes. Raw aggregates are
+dropped before the next public serialization. The permit stays owned by the response body
+until consumption/drop, including after the single data chunk is yielded. Handler cancellation,
+deadline or errors drop network futures, buffers and permits with no detached drain.
+
+Failures use fixed safe envelopes; raw prompts, upstream errors, credentials, opaque results
+and encrypted output are not logged or used in error text. One gateway send is not exactly-once:
+the pinned native client may retry a source request up to five times. Disconnect/deadline drops
+local work and cannot prove remote cancellation, rollback or absence of billed work.
+
+Local protected-handler/actual-provider/HTTP tests prove component transport, reference
+continuation, limits and cleanup with synthetic credentials. Exact production OAuth request
+construction is separately **UNSENT**. Neither establishes actual private-service entitlement,
+real pinned native execution, .156 renderer/artifact adoption or broad E3 production success.
+Image operations, actor issuance, native/UAA execution and lifecycle remain outside this packet.

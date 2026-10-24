@@ -25,6 +25,24 @@ pub(crate) enum OpenAITransport {
 /// Main provider trait - all providers must implement this.
 #[async_trait]
 pub trait GatewayProvider: Send + Sync {
+    /// Send the closed managed search operation. Other providers deny by default.
+    /// No model routing, credential fallback, or generic operation proxy is implied.
+    ///
+    /// ```
+    /// use substrate_gateway::models::search::SearchRequest;
+    /// use substrate_gateway::providers::GatewayProvider;
+    /// async fn search(provider: &dyn GatewayProvider, request: SearchRequest) {
+    ///     // Unsupported providers return a fixed safe error.
+    ///     let _ = provider.send_search(request).await;
+    /// }
+    /// ```
+    async fn send_search(
+        &self,
+        _request: crate::models::search::SearchRequest,
+    ) -> Result<crate::models::search::SearchResponse, crate::models::search::SearchError> {
+        Err(crate::models::search::SearchError::Unsupported)
+    }
+
     /// New Responses state is rejected unless the selected provider explicitly owns it.
     fn supports_request(&self, request: &GatewayRequest) -> bool {
         !request.requires_responses()
