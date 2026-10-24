@@ -1,3 +1,4 @@
+pub mod response_transport;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -29,14 +30,14 @@ pub struct AnthropicMessagesRequest {
 }
 
 /// Message in the conversation
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Message {
     pub role: String,
     pub content: MessageContent,
 }
 
 /// Message content can be string or array of content blocks
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum MessageContent {
     Text(String),
@@ -44,7 +45,7 @@ pub enum MessageContent {
 }
 
 /// System prompt can be string or array of content blocks.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum SystemPrompt {
     Text(String),
@@ -76,16 +77,25 @@ impl SystemPrompt {
 }
 
 /// Tool result content can be string or array of content blocks
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum ToolResultContent {
     Text(String),
     Blocks(Vec<ToolResultBlock>),
+    ResponseItems {
+        items: Vec<response_transport::InputContent>,
+    },
+    DiscoveredTools {
+        tools: Vec<response_transport::ToolDefinition>,
+    },
 }
 
 impl fmt::Display for ToolResultContent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            ToolResultContent::ResponseItems { .. } | ToolResultContent::DiscoveredTools { .. } => {
+                f.write_str("[Responses result]")
+            }
             ToolResultContent::Text(s) => f.write_str(s),
             ToolResultContent::Blocks(blocks) => f.write_str(
                 &blocks
@@ -106,14 +116,14 @@ impl fmt::Display for ToolResultContent {
 
 /// Content blocks allowed in tool results.
 /// Uses untagged enum to handle unknown types (like tool_reference) gracefully.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum ToolResultBlock {
     Known(KnownToolResultBlock),
     Unknown(serde_json::Value),
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(tag = "type")]
 pub enum KnownToolResultBlock {
     #[serde(rename = "text")]
@@ -131,7 +141,7 @@ pub enum KnownToolResultBlock {
 /// This allows the proxy to handle new content types (like "document" for PDFs,
 /// or future types Anthropic may add) without failing to parse. Unknown types
 /// are passed through unchanged to the backend provider.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum ContentBlock {
     /// Known content types with structured parsing
@@ -141,7 +151,7 @@ pub enum ContentBlock {
 }
 
 /// Known content block types that we parse specifically
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(tag = "type")]
 pub enum KnownContentBlock {
     #[serde(rename = "text")]
@@ -151,21 +161,32 @@ pub enum KnownContentBlock {
         cache_control: Option<serde_json::Value>,
     },
     #[serde(rename = "image")]
-    Image { source: ImageSource },
+    Image {
+        #[serde(with = "core_image_source")]
+        source: ImageSource,
+    },
     #[serde(rename = "tool_use")]
     ToolUse {
         id: String,
         name: String,
         input: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        transport: Option<response_transport::ToolTransport>,
     },
     #[serde(rename = "tool_result")]
     ToolResult {
         tool_use_id: String,
         content: ToolResultContent,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        transport: Option<response_transport::ToolTransport>,
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         is_error: bool,
         #[serde(skip_serializing_if = "Option::is_none")]
         cache_control: Option<serde_json::Value>,
+    },
+    #[serde(rename = "gateway_response_item")]
+    ResponseItem {
+        item: Box<response_transport::ResponseItem>,
     },
     /// Thinking block - stored as raw JSON to preserve exact signature.
     #[serde(rename = "thinking")]
@@ -189,7 +210,12 @@ impl ContentBlock {
     }
 
     pub fn tool_use(id: String, name: String, input: serde_json::Value) -> Self {
-        ContentBlock::Known(KnownContentBlock::ToolUse { id, name, input })
+        ContentBlock::Known(KnownContentBlock::ToolUse {
+            id,
+            name,
+            input,
+            transport: None,
+        })
     }
 
     pub fn thinking(raw: serde_json::Value) -> Self {
@@ -234,6 +260,7 @@ pub enum ImageDetail {
     Low,
     High,
     Auto,
+    Original,
 }
 
 /// Image source for vision API.
@@ -242,6 +269,8 @@ pub enum ImageDetail {
 /// canonical Anthropic-shaped serde omits it on serialization and ignores it on
 /// deserialization.
 /// Consequently, serializing and deserializing this type does not retain detail.
+/// Core content-block serde retains the annotation; endpoint-owned Anthropic
+/// serialization uses this external DTO projection and omits it.
 /// Rust struct literals must specify `detail: None` when no control was supplied.
 ///
 /// ```
@@ -257,6 +286,12 @@ pub enum ImageDetail {
 /// assert_eq!(serde_json::to_value(&source)?, serde_json::json!({
 ///     "type": "url", "url": "https://example.com/image.png"
 /// }));
+/// let block = substrate_gateway::models::ContentBlock::image(source.clone());
+/// let block: substrate_gateway::models::ContentBlock =
+///     serde_json::from_value(serde_json::to_value(block)?)?;
+/// assert!(matches!(block, substrate_gateway::models::ContentBlock::Known(
+///     substrate_gateway::models::KnownContentBlock::Image { source }
+/// ) if source.detail == Some(ImageDetail::High)));
 /// let restored: ImageSource = serde_json::from_value(serde_json::to_value(source)?)?;
 /// assert_eq!(restored.detail, None);
 /// # Ok::<(), serde_json::Error>(())
@@ -275,8 +310,46 @@ pub struct ImageSource {
     pub detail: Option<ImageDetail>,
 }
 
+// The core owns history serialization; the external ImageSource DTO retains its
+// canonical Anthropic shape. Both projections use the same authoritative detail.
+mod core_image_source {
+    use super::{ImageDetail, ImageSource};
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    pub fn serialize<S: Serializer>(
+        source: &ImageSource,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        #[derive(Serialize)]
+        struct View<'a> {
+            #[serde(flatten)]
+            source: &'a ImageSource,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            detail: Option<ImageDetail>,
+        }
+        View {
+            source,
+            detail: source.detail,
+        }
+        .serialize(serializer)
+    }
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<ImageSource, D::Error> {
+        #[derive(Deserialize)]
+        struct View {
+            #[serde(flatten)]
+            source: ImageSource,
+            #[serde(default)]
+            detail: Option<ImageDetail>,
+        }
+        let mut view = View::deserialize(deserializer)?;
+        view.source.detail = view.detail;
+        Ok(view.source)
+    }
+}
+
 /// Tool definition for function calling
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Tool {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub r#type: Option<String>,
@@ -348,6 +421,54 @@ impl std::fmt::Display for RouteType {
             RouteType::Background => write!(f, "background"),
             RouteType::Default => write!(f, "default"),
         }
+    }
+}
+
+impl std::fmt::Debug for ContentBlock {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ContentBlock([payload omitted])")
+    }
+}
+
+impl std::fmt::Debug for KnownContentBlock {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("KnownContentBlock([payload omitted])")
+    }
+}
+
+impl std::fmt::Debug for ToolResultContent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ToolResultContent([payload omitted])")
+    }
+}
+
+impl std::fmt::Debug for ToolResultBlock {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ToolResultBlock([payload omitted])")
+    }
+}
+
+impl std::fmt::Debug for KnownToolResultBlock {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("KnownToolResultBlock([payload omitted])")
+    }
+}
+
+impl std::fmt::Debug for MessageContent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("MessageContent([payload omitted])")
+    }
+}
+
+impl std::fmt::Debug for Message {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Message([payload omitted])")
+    }
+}
+
+impl std::fmt::Debug for SystemPrompt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SystemPrompt([payload omitted])")
     }
 }
 

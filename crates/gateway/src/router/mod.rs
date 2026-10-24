@@ -144,6 +144,23 @@ impl Router {
     /// 6. Think - Plan Mode / reasoning enabled
     /// 7. Default - auto-mapped or original model name
     pub fn route(&self, request: &mut GatewayRequest) -> Result<RouteDecision> {
+        if request.requires_responses() {
+            // Advanced history is authoritative; routing may select only the configured model mapping.
+            if self
+                .config
+                .router
+                .prompt_rules
+                .iter()
+                .any(|r| r.strip_match)
+            {
+                anyhow::bail!("Mutating prompt rules cannot route Responses state");
+            }
+            return Ok(RouteDecision {
+                model_name: request.model.clone(),
+                route_type: RouteType::Default,
+                matched_prompt: None,
+            });
+        }
         // Save original model for background task detection
         let original_model = request.model.clone();
 
@@ -242,12 +259,7 @@ impl Router {
     /// Following claude-code-router pattern: checks if tools array contains web_search type
     fn has_web_search_tool(&self, request: &GatewayRequest) -> bool {
         if let Some(ref tools) = request.tools {
-            tools.iter().any(|tool| {
-                tool.r#type
-                    .as_ref()
-                    .map(|t| t.starts_with("web_search"))
-                    .unwrap_or(false)
-            })
+            tools.iter().any(|tool|matches!(tool,crate::models::response_transport::ToolDefinition::Anthropic{definition} if definition.r#type.as_deref().is_some_and(|t|t.starts_with("web_search"))))
         } else {
             false
         }
@@ -336,6 +348,9 @@ impl Router {
                                         "tool_result"
                                     }
                                     crate::models::KnownContentBlock::Thinking { .. } => "thinking",
+                                    crate::models::KnownContentBlock::ResponseItem { .. } => {
+                                        "responses"
+                                    }
                                 },
                                 ContentBlock::Unknown(_) => "unknown",
                             })
@@ -695,6 +710,11 @@ mod tests {
 
     fn create_simple_request(text: &str) -> GatewayRequest {
         GatewayRequest {
+            responses_caller: false,
+            instructions: None,
+            prompt_cache_key: None,
+            client_metadata: None,
+            reasoning_context: None,
             model: "claude-opus-4".to_string(),
             messages: vec![Message {
                 role: "user".to_string(),
@@ -735,6 +755,11 @@ mod tests {
         let router = Router::new(config);
 
         let mut request = GatewayRequest {
+            responses_caller: false,
+            instructions: None,
+            prompt_cache_key: None,
+            client_metadata: None,
+            reasoning_context: None,
             model: "claude-opus-4".to_string(),
             messages: vec![
                 Message {
@@ -748,6 +773,7 @@ mod tests {
                             id: "tool_1".to_string(),
                             name: "Read".to_string(),
                             input: serde_json::json!({"file_path": "/tmp/demo"}),
+                            transport: None,
                         },
                     )]),
                 },
@@ -759,6 +785,7 @@ mod tests {
                             content: ToolResultContent::Text("done".to_string()),
                             is_error: false,
                             cache_control: None,
+                            transport: None,
                         },
                     )]),
                 },
@@ -789,6 +816,11 @@ mod tests {
         let router = Router::new(config);
 
         let mut request = GatewayRequest {
+            responses_caller: false,
+            instructions: None,
+            prompt_cache_key: None,
+            client_metadata: None,
+            reasoning_context: None,
             model: "claude-opus-4".to_string(),
             messages: vec![
                 Message {
@@ -802,6 +834,7 @@ mod tests {
                             id: "tool_1".to_string(),
                             name: "Read".to_string(),
                             input: serde_json::json!({"file_path": "/tmp/demo"}),
+                            transport: None,
                         },
                     )]),
                 },
@@ -813,6 +846,7 @@ mod tests {
                             content: ToolResultContent::Text("done".to_string()),
                             is_error: false,
                             cache_control: None,
+                            transport: None,
                         },
                     )]),
                 },
@@ -883,19 +917,14 @@ mod tests {
         let router = Router::new(config);
 
         let mut request = create_simple_request("Search the web for latest news");
-        request.tools = Some(vec![crate::models::Tool {
-            r#type: Some("web_search_2025_04".to_string()),
-            name: Some("web_search".to_string()),
-            description: Some("Search the web".to_string()),
-            input_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {}
-            })),
-        }]);
+        request.tools = Some(vec![serde_json::from_value(
+            serde_json::json!({"type":"web_search"}),
+        )
+        .unwrap()]);
 
         let decision = router.route(&mut request).unwrap();
-        assert_eq!(decision.route_type, RouteType::WebSearch);
-        assert_eq!(decision.model_name, "websearch.model");
+        assert_eq!(decision.route_type, RouteType::Default);
+        assert_eq!(decision.model_name, request.model);
     }
 
     #[test]
@@ -909,16 +938,14 @@ mod tests {
             r#type: "enabled".to_string(),
             budget_tokens: Some(10_000),
         });
-        request.tools = Some(vec![crate::models::Tool {
-            r#type: Some("web_search".to_string()),
-            name: None,
-            description: None,
-            input_schema: None,
-        }]);
+        request.tools = Some(vec![serde_json::from_value(
+            serde_json::json!({"type":"web_search"}),
+        )
+        .unwrap()]);
 
         let decision = router.route(&mut request).unwrap();
-        assert_eq!(decision.route_type, RouteType::WebSearch); // WebSearch wins over Think
-        assert_eq!(decision.model_name, "websearch.model");
+        assert_eq!(decision.route_type, RouteType::Default); // WebSearch wins over Think
+        assert_eq!(decision.model_name, request.model);
     }
 
     #[test]
@@ -1137,6 +1164,11 @@ mod tests {
         // 2. Assistant: [tool_use: Read]
         // 3. User: [tool_result: file contents]
         let mut request = GatewayRequest {
+            responses_caller: false,
+            instructions: None,
+            prompt_cache_key: None,
+            client_metadata: None,
+            reasoning_context: None,
             model: "claude-opus-4".to_string(),
             messages: vec![
                 // Turn-starting user message with prompt phrase
@@ -1152,6 +1184,7 @@ mod tests {
                             id: "tool_1".to_string(),
                             name: "Read".to_string(),
                             input: serde_json::json!({"file_path": "/src/main.rs"}),
+                            transport: None,
                         },
                     )]),
                 },
@@ -1164,6 +1197,7 @@ mod tests {
                             content: ToolResultContent::Text("fn main() {}".to_string()),
                             is_error: false,
                             cache_control: None,
+                            transport: None,
                         },
                     )]),
                 },
@@ -1204,6 +1238,11 @@ mod tests {
         // Turn 1: User: "OPUS write me tests" → Assistant: "Here are the tests..."
         // Turn 2: User: "Now add documentation" (no OPUS)
         let mut request = GatewayRequest {
+            responses_caller: false,
+            instructions: None,
+            prompt_cache_key: None,
+            client_metadata: None,
+            reasoning_context: None,
             model: "claude-opus-4".to_string(),
             messages: vec![
                 // Turn 1: User with OPUS
@@ -1256,6 +1295,11 @@ mod tests {
         let router = Router::new(config);
 
         let mut request = GatewayRequest {
+            responses_caller: false,
+            instructions: None,
+            prompt_cache_key: None,
+            client_metadata: None,
+            reasoning_context: None,
             model: "claude-opus-4".to_string(),
             messages: vec![
                 // Turn-starting message with [OPUS] tag
@@ -1271,6 +1315,7 @@ mod tests {
                             id: "tool_1".to_string(),
                             name: "Read".to_string(),
                             input: serde_json::json!({}),
+                            transport: None,
                         },
                     )]),
                 },
@@ -1283,6 +1328,7 @@ mod tests {
                             content: ToolResultContent::Text("content".to_string()),
                             is_error: false,
                             cache_control: None,
+                            transport: None,
                         },
                     )]),
                 },

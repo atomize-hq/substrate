@@ -463,7 +463,6 @@ mod tests {
                     priority: 1,
                     provider: "provider-a".to_string(),
                     actual_model: "actual-model-1".to_string(),
-                    inject_continuation_prompt: false,
                 }],
             },
             crate::cli::ModelConfig {
@@ -472,7 +471,6 @@ mod tests {
                     priority: 1,
                     provider: "provider-b".to_string(),
                     actual_model: "actual-model-2".to_string(),
-                    inject_continuation_prompt: false,
                 }],
             },
         ];
@@ -514,7 +512,6 @@ mod tests {
                 priority: 1,
                 provider: "azure-kimi".to_string(),
                 actual_model: "kimi-k2-thinking".to_string(),
-                inject_continuation_prompt: false,
             }],
         }];
 

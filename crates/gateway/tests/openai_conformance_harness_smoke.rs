@@ -23,7 +23,7 @@ async fn openai_chat_completions_harness_runs_sync_and_stream_offline() {
         fixture.provider_response.clone(),
         fixture.provider_stream_chunks.clone(),
     );
-    let harness = ConformanceHarness::single_provider(provider, "primary-actual", false);
+    let harness = ConformanceHarness::single_provider(provider, "primary-actual");
     let captured_requests = harness.captured_requests();
 
     let sync_response = harness

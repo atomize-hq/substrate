@@ -9,10 +9,10 @@ It freezes the shared invariants that all OpenAI-facing public endpoints must fo
 
 ## Canonical Sources Of Truth
 
-- [ADR 0008](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/adr/0008-expand-openai-side-support-via-chat-completions-and-responses.md) (Shared Behavior + Adapter Boundaries sections).
+- [ADR 0008](../adr/0008-expand-openai-side-support-via-chat-completions-and-responses.md) (Shared Behavior + Adapter Boundaries sections).
 - Core request/response types:
-  - [core.rs](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/gateway/src/core.rs)
-  - [models/mod.rs](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/gateway/src/models/mod.rs)
+  - [core.rs](../../src/core.rs)
+  - [models/mod.rs](../../src/models/mod.rs)
 
 ## Invariants
 
@@ -22,7 +22,7 @@ All OpenAI-facing public endpoints MUST:
 
 - parse into the same internal `GatewayRequest` shape used by routing and providers
 - emit responses from the same internal `GatewayResponse` and normalized stream model
-- avoid introducing endpoint-only runtime behavior, parallel core models, or provider-conditional public semantics
+- avoid introducing endpoint-only runtime behavior, parallel core models, or uncontracted provider-conditional public semantics
 
 ### Tool Semantics Are Internal Content Blocks
 
@@ -33,21 +33,21 @@ Public OpenAI requests and responses MUST map to the internal tool representatio
 
 ID mapping rule:
 
-- OpenAI `tool_call_id` / `call_id` MUST be preserved as the internal `tool_use.id`/`tool_use_id` so continuation can round-trip deterministically.
+- Supplied OpenAI `tool_call_id` / `call_id` MUST be preserved as the internal `tool_use.id`/`tool_use_id` so continuation can round-trip deterministically. Admitted client-search calls with absent optional IDs remain absent/inert and cannot anchor results; no ID is invented.
 
-### Function Tools Only
+### Endpoint-owned typed tool contracts
 
-OpenAI-side public ingress supports **function tools only**:
+Chat Completions retains function-only nested declarations and JSON-string arguments. Responses uses the [C-11 closed typed subset](openai-side-responses-c11-contract.md): flat function/custom/namespace/client-search declarations, loaded definitions, Lite additional tools, admitted history/opaque/hosted activity, and exact call/result identity and order. Function JSON Strings and custom raw Strings retain their distinct representations. No raw `Unknown` or metadata bypass is permitted.
 
-- built-in tools and non-function tool call types MUST be rejected with `400` and the gateway error envelope
-- tool-call arguments MUST round-trip as JSON strings in the OpenAI-shaped public contract
+Each serializer preserves its actual contracted protocol. Advanced unsupported combinations reject before provider I/O; routing does not strip state or downgrade model/auth/tool mode to make them fit. Anthropic signed-thinking/caching and Azure/Kimi/Gemini endpoint semantics remain owned by their functional serializers.
 
 ### Chain-Of-Thought Suppression
 
 Public OpenAI outputs MUST NOT expose chain-of-thought or provider "thinking" material as user-visible text.
 
-- Internal `thinking` blocks (or equivalent provider-specific reasoning content) MUST be dropped from OpenAI-facing output transforms.
-- A short reasoning summary MAY be exposed only if the upstream protocol provides one explicitly and it is safe to surface.
+- Private plaintext reasoning, `Reasoning.content`, `reasoning_text`, and private metadata MUST NOT become public OpenAI text or diagnostics.
+- Approved typed completed continuation, including exact opaque bytes and its required upstream `summary_text` Vec, may return on Responses to the same connected permitted caller under C-11. Empty and nonempty summaries retain their source shape; neither becomes generic text/log content.
+- Include omission/empty/explicit and optional effort do not change that completed-item policy. Other public endpoint outputs do not acquire OpenAI opaque state; transport serde and diagnostic projections remain distinct.
 
 ### Model Echo
 
@@ -58,7 +58,7 @@ The gateway MUST echo the original request `model` string in OpenAI-facing respo
 Optional request header: `X-Provider: <provider_name>`
 
 - when present: routing MUST constrain to that provider or fail routing
-- when absent: routing MUST follow configured provider priority/fallback
+- when absent: ordinary representable requests follow configured provider priority/fallback. Advanced Responses requests pin the selected backend/account/model per request and fail without fallback or stripping. Responses redirects fail safely rather than automatically forwarding.
 
 ### Error Envelope
 
@@ -94,7 +94,14 @@ Streaming adapters MUST be pure transforms over the provider-normalized stream:
 
 - do `/v1/chat/completions` and `/v1/responses` both parse into `GatewayRequest` and emit from `GatewayResponse`/normalized streaming
 - are tool requests/results represented as internal `tool_use`/`tool_result` content blocks with stable id mapping
-- are non-function tools rejected at the public boundary, with no fallback behavior that silently widens scope
-- do OpenAI-facing transforms suppress chain-of-thought content deterministically
+- are each endpoint’s admitted typed tools preserved, with unsupported combinations rejected before I/O and no silent fallback, stripping, or `Unknown` bypass
+- do OpenAI-facing transforms exclude private reasoning and diagnostics while preserving the approved typed Responses continuation/summary contract
 - do streaming handlers avoid provider-specific public stream parsing and instead transform normalized output
 
+### Instructions, cache, and terminal ownership
+
+Supplied Responses instructions preserve missing/empty/nonempty and reject null/wrong types. Ordered roles and Lite placement stay intact; no bundled prompt fallback/overwrite or invented todo/warmup instruction is introduced. Typed source-native `prompt_cache_key` and `client_metadata` survive initial/subsequent/replayed requests, along with actual cache controls and usage when present. This is transport preservation, not evidence of cache effectiveness.
+
+The internal `gateway.response_terminal` and `GatewayResponse.end_turn` preserve absent/null/false/true independently of stop reason (wrong types fail). Public Responses emits the optional completed member; other serializers consume the internal terminal. False cannot produce a misleading conversational `Final`; error/EOF/cancel/incomplete cannot fabricate success. Native owns follow-up and durable history.
+
+`responses_caller` is serde-skipped adapter-origin bookkeeping, never caller metadata or authentication. Same-connected-caller transport introduces no new native-session/ciphertext attestation, persistence, key, or ledger. Existing managed access and credential ownership remain required; local component tests do not qualify standalone exposure.

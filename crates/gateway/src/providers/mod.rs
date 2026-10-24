@@ -25,6 +25,10 @@ pub(crate) enum OpenAITransport {
 /// Main provider trait - all providers must implement this.
 #[async_trait]
 pub trait GatewayProvider: Send + Sync {
+    /// New Responses state is rejected unless the selected provider explicitly owns it.
+    fn supports_request(&self, request: &GatewayRequest) -> bool {
+        !request.requires_responses()
+    }
     /// Send a message request to the provider
     /// Must transform to/from provider format as needed
     async fn send_message(&self, request: GatewayRequest)

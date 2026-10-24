@@ -152,7 +152,9 @@ fn sanitize_tool_use_ids(request: &mut GatewayRequest, is_anthropic_target: bool
         if let MessageContent::Blocks(blocks) = &mut message.content {
             for block in blocks.iter_mut() {
                 match block {
-                    ContentBlock::Known(KnownContentBlock::ToolUse { id, name, input }) => {
+                    ContentBlock::Known(KnownContentBlock::ToolUse {
+                        id, name, input, ..
+                    }) => {
                         let sanitized = sanitize_tool_id(id);
                         if sanitized != *id {
                             tracing::debug!("🔧 Sanitized tool_use.id: {} → {}", id, sanitized);
@@ -165,6 +167,7 @@ fn sanitize_tool_use_ids(request: &mut GatewayRequest, is_anthropic_target: bool
                         content,
                         is_error,
                         cache_control,
+                        ..
                     }) => {
                         let sanitized = sanitize_tool_id(tool_use_id);
                         if sanitized != *tool_use_id {
@@ -178,6 +181,7 @@ fn sanitize_tool_use_ids(request: &mut GatewayRequest, is_anthropic_target: bool
                                 content: content.clone(),
                                 is_error: *is_error,
                                 cache_control: cache_control.clone(),
+                                transport: None,
                             });
                             sanitized_count += 1;
                         }
@@ -400,7 +404,10 @@ impl AnthropicCompatibleProvider {
             req_builder = req_builder.header(key, value);
         }
 
-        let response = req_builder.json(request).send().await?;
+        let response = req_builder
+            .json(&anthropic_request_body(request)?)
+            .send()
+            .await?;
 
         if !response.status().is_success() {
             let status = response.status().as_u16();
@@ -415,18 +422,24 @@ impl AnthropicCompatibleProvider {
 
             return Err(ProviderError::ApiError {
                 status,
-                message: format!("{} API error: {}", self.name, error_text),
+                message: if error_text.contains("signature") {
+                    "upstream signature rejection".into()
+                } else {
+                    "upstream request rejected".into()
+                },
             });
         }
 
         let response_text = response.text().await?;
-        tracing::debug!("{} provider response body: {}", self.name, response_text);
+        tracing::debug!("Provider payload diagnostic omitted");
 
         let provider_response: GatewayResponse =
-            serde_json::from_str(&response_text).map_err(|e| {
-                tracing::error!("Failed to parse {} response: {}", self.name, e);
-                tracing::error!("Response body was: {}", response_text);
-                e
+            serde_json::from_str(&response_text).map_err(|_| {
+                tracing::error!("Failed to parse Anthropic-compatible response");
+                ProviderError::ApiError {
+                    status: 502,
+                    message: "Malformed upstream Anthropic-compatible response".into(),
+                }
             })?;
 
         Ok(provider_response)
@@ -457,7 +470,10 @@ impl AnthropicCompatibleProvider {
             req_builder = req_builder.header(key, value);
         }
 
-        let response = req_builder.json(request).send().await?;
+        let response = req_builder
+            .json(&anthropic_request_body(request)?)
+            .send()
+            .await?;
 
         if !response.status().is_success() {
             let status = response.status().as_u16();
@@ -474,7 +490,11 @@ impl AnthropicCompatibleProvider {
 
             return Err(ProviderError::ApiError {
                 status,
-                message: format!("{} API error: {}", self.name, error_text),
+                message: if error_text.contains("signature") {
+                    "upstream signature rejection".into()
+                } else {
+                    "upstream request rejected".into()
+                },
             });
         }
 
@@ -488,6 +508,11 @@ impl super::GatewayProvider for AnthropicCompatibleProvider {
         &self,
         request: GatewayRequest,
     ) -> Result<GatewayResponse, ProviderError> {
+        if request.requires_responses() {
+            return Err(ProviderError::ConfigError(
+                "Selected provider cannot represent Responses state".into(),
+            ));
+        }
         let url = format!("{}/v1/messages", self.base_url);
 
         // Sanitize request for Anthropic targets
@@ -519,8 +544,9 @@ impl super::GatewayProvider for AnthropicCompatibleProvider {
 
     async fn count_tokens(
         &self,
-        request: CountTokensRequest,
+        mut request: CountTokensRequest,
     ) -> Result<CountTokensResponse, ProviderError> {
+        project_anthropic_images(&mut request.messages, &mut request.system);
         // For Anthropic native, use their count_tokens endpoint
         if self.name == "anthropic" {
             let url = format!("{}/v1/messages/count_tokens", self.base_url);
@@ -607,6 +633,11 @@ impl super::GatewayProvider for AnthropicCompatibleProvider {
     ) -> Result<GatewayStreamResponse, ProviderError> {
         use futures::stream::TryStreamExt;
 
+        if request.requires_responses() {
+            return Err(ProviderError::ConfigError(
+                "Selected provider cannot represent Responses state".into(),
+            ));
+        }
         let url = format!("{}/v1/messages", self.base_url);
 
         // Sanitize request for Anthropic targets
@@ -659,5 +690,61 @@ impl super::GatewayProvider for AnthropicCompatibleProvider {
 
     fn supports_model(&self, model: &str) -> bool {
         self.models.iter().any(|m| m.eq_ignore_ascii_case(model))
+    }
+}
+
+fn anthropic_request_body(request: &GatewayRequest) -> Result<serde_json::Value, ProviderError> {
+    if request.requires_responses() {
+        return Err(ProviderError::ConfigError(
+            "Responses state unsupported by Anthropic".into(),
+        ));
+    }
+    let mut endpoint = request.clone();
+    project_anthropic_images(&mut endpoint.messages, &mut endpoint.system);
+    let mut value = serde_json::to_value(endpoint)?;
+    if let Some(tools) = &request.tools {
+        let tools = tools
+            .iter()
+            .map(|t| t.legacy())
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(ProviderError::ConfigError)?;
+        value["tools"] = serde_json::to_value(tools)?;
+    }
+    Ok(value)
+}
+
+// OpenAI detail is retained by core history and belongs to the OpenAI wire only.
+fn project_anthropic_images(
+    messages: &mut [crate::models::Message],
+    system: &mut Option<crate::models::SystemPrompt>,
+) {
+    fn blocks(items: &mut [ContentBlock]) {
+        for block in items {
+            match block {
+                ContentBlock::Known(KnownContentBlock::Image { source }) => source.detail = None,
+                ContentBlock::Known(KnownContentBlock::ToolResult {
+                    content: crate::models::ToolResultContent::Blocks(items),
+                    ..
+                }) => {
+                    for item in items {
+                        if let crate::models::ToolResultBlock::Known(
+                            crate::models::KnownToolResultBlock::Image { source },
+                        ) = item
+                        {
+                            source.detail = None;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    for message in messages {
+        if let MessageContent::Blocks(items) = &mut message.content {
+            blocks(items);
+        }
+    }
+    if let Some(crate::models::SystemPrompt::Blocks(items)) = system {
+        blocks(items);
     }
 }

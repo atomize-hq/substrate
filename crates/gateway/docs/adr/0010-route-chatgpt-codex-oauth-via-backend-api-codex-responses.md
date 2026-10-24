@@ -5,7 +5,7 @@
 
 ## Context
 
-The gateway already has a partially specialized OpenAI OAuth path in [gateway/src/providers/openai.rs](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/gateway/src/providers/openai.rs):
+The gateway already has a partially specialized OpenAI OAuth path in [gateway/src/providers/openai.rs](../../src/providers/openai.rs):
 
 - OAuth-backed OpenAI providers switch their effective base URL to `https://chatgpt.com/backend-api`
 - OAuth-backed requests are forced onto the Responses-family path
@@ -13,7 +13,7 @@ The gateway already has a partially specialized OpenAI OAuth path in [gateway/sr
 
 That is close to the desired ChatGPT Codex transport, but it is not yet a correct or complete implementation of the upstream contract.
 
-### Current repo mismatches
+### Historical repo mismatches (2026-04-11)
 
 The current implementation still has material drift from the live ChatGPT Codex backend:
 
@@ -34,7 +34,9 @@ The current implementation still has material drift from the live ChatGPT Codex 
    - the stored auth material already contains a stable `account_id`
    - JWT parsing is a fallback technique, not the strongest source of truth
 
-### Live upstream evidence
+### Historical live upstream evidence (2026-04-11)
+
+These observations retain their original April probe scope; they do not prove current private-backend acceptance of the pinned `0.156.1` component. Normative component amendments are in the Decision section and the [route contract](../contracts/chatgpt-codex-route-contract.md).
 
 On 2026-04-11, a set of direct probes against `https://chatgpt.com/backend-api/codex/responses` using a local Codex OAuth token and `ChatGPT-Account-ID` established the following behavior:
 
@@ -112,23 +114,11 @@ Live streams emit a semantic Responses event flow including:
 - `response.output_item.done`
 - `response.completed`
 
-For this ADR, reasoning is enabled on this route only when `reasoning.effort` is present and its
-value is not `"none"`.
-
-When reasoning is enabled and `include = ["reasoning.encrypted_content"]`, the stream also emits
-reasoning output items with encrypted payloads before the final answer item.
-
-`reasoning.summary` does not enable reasoning by itself on this route; it only refines upstream
-reasoning behavior when the enabled predicate above is already true.
-
-This `reasoning.summary` gate is a route-local gateway normalization and validation rule for the
-ChatGPT Codex transport. Official OpenAI Responses documentation grounds encrypted reasoning items
-and stateless `include = ["reasoning.encrypted_content"]` behavior, but does not by itself define
-this exact `reasoning.summary` predicate for this route.
+The original gateway policy gated reasoning assembly on non-none effort plus explicit encrypted include, and gated summary requests on that effort. That historical gateway policy is superseded below. It is not a private-backend or native `0.156.1` acceptance result.
 
 For this route, streamed tool-call argument assembly depends on the Responses function-call argument event family (`response.function_call_arguments.delta` / `response.function_call_arguments.done`) that the gateway already treats as part of the supported semantic event surface.
 
-Reasoning items remain upstream/internal transport state for this route unless a separate decision explicitly allows them to be surfaced; they MUST NOT become public OpenAI-visible reasoning text on this route merely because they appear in the upstream stream.
+The historical probes do not authorize exposing private reasoning as public text. The adopted completed-item/summary policy below is a distinct typed Responses transport decision.
 
 This upstream event surface aligns with a Responses-style semantic stream, but not with the repo's current OAuth sync parser assumption that `response.completed.response.output` contains the assembled answer.
 
@@ -172,9 +162,9 @@ Sync SSE-drain failure rule:
 
 This route-specific owner line inherits, and does not replace, the canonical boundary posture already established by:
 
-- [ADR 0005: Present a Single Backend Identity to Substrate](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/gateway/docs/adr/0005-present-a-single-backend-identity-to-substrate.md)
-- [ADR 0006: Preserve an In-World-Compatible Deployment Boundary](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/gateway/docs/adr/0006-preserve-an-in-world-compatible-deployment-boundary.md)
-- [Substrate Boundary `C-05`](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/gateway/docs/foundation/substrate-boundary-c05-contract.md)
+- [ADR 0005: Present a Single Backend Identity to Substrate](0005-present-a-single-backend-identity-to-substrate.md)
+- [ADR 0006: Preserve an In-World-Compatible Deployment Boundary](0006-preserve-an-in-world-compatible-deployment-boundary.md)
+- [Substrate Boundary `C-05`](../foundation/substrate-boundary-c05-contract.md)
 
 This ADR applies those boundary rules to the ChatGPT Codex OAuth route; it does not define a second deployment model or a second public backend-identity contract.
 
@@ -210,131 +200,17 @@ Allowed compatibility fallback:
 
 ### 4. Emit a ChatGPT Codex-specific allowlist of upstream fields
 
-For this transport, the gateway MUST send only the verified-supported subset:
+The [ChatGPT Codex route contract](../contracts/chatgpt-codex-route-contract.md) owns the current `pass | translate | force | reject` matrix. This amendment adopts the closed [C-11](../foundation/openai-side-responses-c11-contract.md) typed model-Responses component, not generic Responses parity or new private-backend qualification.
 
-- `model`
-- `instructions`
-- `input`
-  - typed `message` items
-  - text content parts
-  - image content parts
-    - public gateway image inputs remain supported on this route
-    - image inputs MUST be carried inside typed `message` items and translated into upstream image content items that use `image_url` with optional `detail`
-    - supported public `detail` values on this route are `low`, `high`, and `auto`
-    - host-local image-path semantics like the standalone Codex app's `localImage` input are out of scope for the gateway public contract unless a later ADR adds them explicitly
-  - `function_call`
-  - `function_call_output`
-- `reasoning`
-  - `effort`
-  - optional `summary`
-- `parallel_tool_calls`
-- `text`
-  - `format.type = "text"`
-  - optional `verbosity`
-- optional `include`
-- flat function `tools`
-- flat `tool_choice`
-- `stream = true`
-- `store = false`
+- Preserve supplied missing/empty/nonempty instructions (null/wrong types reject), ordered roles, and native Lite developer additional-tools/base-prefix placement. Remove bundled-version fallback/overwrite on every ingress and invented todo/warmup instructions. Factual cross-API result-error translation describes the error flag as data.
+- Preserve flat function/custom/namespace/client-search declarations, loaded definitions, strict false versus omission, exact raw/structured call/result payloads, media/provenance, compaction, and hosted Responses WebSearch activity within C-11. Nested Chat aliases reject on Responses; actual Chat nesting remains functional protocol translation.
+- Typed `prompt_cache_key: string` and `client_metadata: object<string,string>` are source-mandatory in the pinned producer and preserve supplied values in initial/replayed requests. Retain actual cache controls/usage when present; no fabricated hit/effectiveness claim. These fields are distinct from the rejected generic `metadata` control.
+- Effort is optional (`none`, `minimal`, `low`, `medium`, `high`, `xhigh` when supplied). Admitted summary (`auto`, `concise`, `detailed`; `none` translates to omission) and context (`current_turn`, `all_turns`) do not require non-none effort solely to transport continuation.
+- Include omission, `[]`, and `["reasoning.encrypted_content"]` use the same actual completed-item validation/recipient/budget policy. Other include values, duplicates, and mixed sets reject. Include is not authentication or a guarantee that no opaque item returns.
+- Preserve supplied `parallel_tool_calls` and admitted `text.verbosity` (`low`, `medium`, `high`). Keep `text.format.type = "text"`, `stream = true`, and `store = false` route invariants. Non-text formats reject rather than silently changing the requested output.
+- Continue rejecting `max_output_tokens`, generic `metadata`, `truncation`, `previous_response_id`, `temperature`, `top_p`, `user`, unverified `service_tier`, and `stream_options`. `tool_choice` none/auto and admitted flat explicit selection preserve their semantics; required remains a route reject. Unsupported selected controls fail before I/O, without stripping or default/downgrade.
 
-The gateway MUST NOT forward the following generic Responses fields on this transport unless a later ADR revalidates them:
-
-- `max_output_tokens`
-- `metadata`
-- `truncation`
-- `previous_response_id`
-- `temperature`
-- `top_p`
-- `user`
-- nested Chat Completions-style tool or tool-choice shapes
-- unverified `service_tier` overrides
-
-When routing selects ChatGPT Codex OAuth, the gateway MUST apply a provider-conditional compatibility overlay between the normalized `GatewayRequest` and the Codex-specific upstream serializer.
-
-That overlay MUST classify each normalized/public request control as exactly one of:
-
-- `pass`
-  - preserve the caller-visible semantics and forward the normalized value to the upstream request
-- `translate`
-  - reshape the request into the Codex-specific wire form while preserving the same caller-visible semantics
-- `force`
-  - override the normalized value because this transport has a stricter invariant than the generic OpenAI-side contract
-- `reject`
-  - fail the request before the upstream call because the caller-visible semantics cannot be preserved on this route
-
-Compatibility rules for this route:
-
-- `stream = true` and `store = false` are `force`
-- bare upstream-compatible `message` objects, typed `message` items, image content parts, flat function-tool definitions, flat `tool_choice`, and sync drain over the upstream SSE transport are `translate`
-- fields whose public semantics are compatible with the verified Codex subset are `pass`
-- fields whose public semantics are not supported by this transport and do not have an explicitly defined translation are `reject`
-
-Bare-message ingress rule for this route:
-
-- bare upstream-compatible message objects are accepted at ingress on this route
-- accepted bare message objects are `translate`, not `pass`
-- the adapter MUST translate accepted bare message objects into typed `message` items before upstream submission
-- that translation MUST preserve the same role and content semantics as the accepted bare message object
-- the route's canonical outbound form remains typed `message` items only
-
-Remaining supported-control matrix for this route:
-
-- `reasoning.effort` is `pass`
-  - allowed values: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`
-  - route-local enabled predicate: reasoning is enabled only when this field is present and not
-    equal to `"none"`
-  - any other value is `reject`
-- `reasoning.summary` is `pass`
-  - allowed values: `auto`, `concise`, `detailed`, `none`
-  - `none` means the gateway omits the upstream summary field rather than sending a non-standard value
-  - any non-`none` summary value is legal only when `reasoning.effort` is present and not equal to
-    `"none"`
-  - this enabled-gate for non-`none` summaries is a route-local gateway policy for the Codex route,
-    not a claimed public OpenAI Responses invariant
-  - `reasoning.summary` alone does not enable reasoning, reasoning-item assembly, or public
-    reasoning output on this route
-  - any other value is `reject`
-- `parallel_tool_calls` is `pass`
-  - allowed values: `true`, `false`
-- `text.format.type` is `force`
-  - the only supported value on this route is `"text"`
-  - any non-text output format request is `reject`
-  - this output-format rule does not restrict supported input modalities; image inputs remain allowed through typed `message` items as described above
-- `text.verbosity` is `pass`
-  - allowed values: `low`, `medium`, `high`
-  - any other value is `reject`
-- `include` is `pass` with restriction
-  - allowed values are `[]` and `["reasoning.encrypted_content"]`
-  - `["reasoning.encrypted_content"]` is legal only when `reasoning.effort` is present and not
-    equal to `"none"`
-  - `include = ["reasoning.encrypted_content"]` is the only predicate that intentionally requests
-    encrypted reasoning items on this route
-  - any other include entry, duplicate entry, or mixed include set is `reject` unless a later route-specific ADR revalidates it
-- `stream_options` is `reject`
-  - no `stream_options` member is part of the verified-supported ChatGPT Codex subset for this route
-  - public Responses `stream_options.include_obfuscation` does not have a verified Codex-route equivalent with the same caller-visible semantics
-  - the gateway MUST reject `stream_options` on this route rather than silently stripping, ignoring, or degrading it
-  - future route-specific ADRs MAY widen this only by naming the accepted member(s), the preserved semantics, and the verification coverage
-
-`tool_choice` compatibility matrix for this route:
-
-- public `tool_choice = "none"` is `pass`
-- public `tool_choice = "auto"` is `pass`
-- public explicit function selection is `translate`
-  - public OpenAI-side form: `{ "type": "function", "function": { "name": "..." } }`
-  - Codex upstream form: `{ "type": "function", "name": "..." }`
-- public `tool_choice = "required"` is `reject` unless a later route-specific ADR verifies a Codex-native equivalent with the same caller-visible semantics
-
-The gateway MUST NOT silently collapse `tool_choice = "required"` into `"auto"` or explicit-function selection on this route.
-
-For the avoidance of doubt, the gateway MUST NOT silently strip, ignore, or degrade a caller-visible control when ChatGPT Codex OAuth is the selected route unless this ADR or a later route-specific ADR explicitly defines that behavior.
-
-This ADR intentionally chooses strict compatibility over silent best-effort behavior:
-
-- if a public OpenAI-side field is valid at ingress but cannot be preserved on the Codex route, the request MUST fail explicitly instead of being forwarded with reduced semantics
-- future adapters MAY widen compatibility by adding explicit route-specific `pass` or `translate` rules
-- future adapters MUST NOT widen compatibility by silently changing or dropping semantics
-- capability-aware rerouting onto a different provider is out of scope for this ADR and requires a separate decision
+Before I/O, select and pin backend/endpoint, resolved account/credential context, and actual model within the request. Advanced opaque requests do not fall back to a different context or retry with stripped state. Responses disables automatic redirects and treats 3xx as a safe failure; local destination-counter proof does not establish DNS/IP/TLS/world confinement or historical ciphertext provenance.
 
 ### 5. Canonicalize on typed message items for gateway emission
 
@@ -349,86 +225,34 @@ Rationale:
 - they reduce ambiguity at the adapter boundary
 - upstream tolerance for bare message objects does not widen the gateway's emitted wire contract for this route
 
-### 6. Preserve tool continuation through `function_call` + `function_call_output`
+### 6. Preserve exact typed continuation and history
 
-Tool continuation for this upstream transport MUST use Responses-style continuation items:
+The closed C-11 component carries function/custom/client-search call/result kinds, exact IDs, namespaces, payload representation, and history order. Native/client executes and persists; the gateway introduces no executor, registry, durable history, keys, or cross-request session binding. Loaded definitions and Lite additional-tools stay in their source positions for subsequent/reconstructed requests.
 
-1. emit `function_call` items when the model asks for tools
-2. emit `function_call_output` items when the caller provides tool results
-3. preserve `call_id` exactly across the round trip
+Each result needs an earlier authoritative same-kind call; optional call IDs remain absent/inert when absent, and cannot anchor a result. Supplied name/namespace must agree. Identical repeated complete calls may coalesce at their first authoritative position; conflicting duplicates reject. The ordinary normalized function path may emit a missing wire call only from actual normalized ID/name/arguments, immediately before its result. Caller-supplied complete calls are never replaced by placeholders or reordered into a detached prelude. OAuth rejects `previous_response_id`.
 
-Caller-supplied `function_call` rule:
+### 7. Assemble semantic output and preserve completed continuation
 
-- caller-supplied `function_call` items are legal on this route only in the canonical flat Responses shape:
-  - `{ "type": "function_call", "call_id": "...", "name": "...", "arguments": "..." }`
-- valid caller-supplied `function_call` items are preserved as the authoritative continuation item for that `call_id`; the adapter MUST NOT regenerate or replace them solely because synthesis is available
-- the adapter MAY synthesize a `function_call` item only when no valid caller-supplied `function_call` item for that `call_id` is already present in the current request body
-- the adapter MUST NOT emit duplicate `function_call` items for the same `call_id`
+One provider-owned semantic parser serves sync and streaming. Output-item/content-part/text/function-argument events assemble output; `response.completed` supplies terminal lifecycle/usage and MUST NOT be assumed to contain the full answer snapshot. Complete `response.output_item.done` owns opaque replay and replaces provisional added state without concatenating ciphertext.
 
-Authoritative provenance rule:
+Approved completed reasoning items preserve exact opaque bytes, optional ID, order, and required upstream-labelled `summary_text` Vec to the same connected Responses caller under the actual access boundary. Empty remains empty; nonempty summaries are preserved. Include omission/empty/explicit and optional effort do not change this policy. Request-side private plaintext reasoning rejects; private output `Reasoning.content`, `reasoning_text`, and private metadata are excluded from typed public projection and all diagnostics. No generic public text/thinking/annotation or other endpoint acquires this state.
 
-- the gateway MAY synthesize an upstream `function_call` item only when it already has authoritative normalized provenance for that same `call_id`
-- authoritative normalized provenance means prior normalized `tool_use` state that already carries the tool `id`, `name`, and input payload needed to reproduce the upstream `function_call`
-- when synthesis is allowed, the synthesized upstream `function_call.name` and serialized `function_call.arguments` MUST be copied from that authoritative normalized provenance rather than invented ad hoc
+Adapter-owned serde-skipped `responses_caller` records endpoint origin; caller metadata cannot establish it. It is not authentication, a native principal, or cross-request ciphertext attestation. Preserve actual managed access and account/credential ownership; standalone network access and local transport tests do not establish stronger deployment isolation.
 
-When the normalized gateway request contains a tool result without a corresponding prior upstream `function_call` item in the current request body, the gateway MUST synthesize the matching `function_call` item before the `function_call_output`.
+Core/normalized/public Responses preserve `end_turn` independently of stop reason: absent/null becomes None/omission, false/true remain explicit, wrong types fail. Other serializers consume the internal terminal. False cannot become conversational `Final`; true/absence cannot cancel pending native follow-up. Errors, incomplete, malformed/oversize, EOF, or cancellation cannot synthesize completed/Final success. First valid terminal fuses the stream; caller drop releases upstream state without detached drain/retry. C-11 bounds cover preparse/extension, live state, copies, and queues without truncating history; normal native fit and RSS are not claimed.
 
-If the gateway does not have authoritative normalized provenance for the referenced `call_id`, it MUST reject the continuation before the upstream call rather than fabricating placeholder tool metadata.
-
-The gateway MUST NOT send a lone `function_call_output` item to this upstream transport.
-
-Mixed-continuation ordering rule:
-
-- the upstream `input` array for this route MUST preserve normalized conversation-history order as the primary ordering key
-- when a `function_call_output` item requires synthesis of a missing prior `function_call`, the synthesized `function_call` MUST be inserted immediately before its matching `function_call_output`
-- when a matching `function_call` item is already present earlier in the serialized request body, the gateway MUST preserve that earlier item and emit only the `function_call_output`
-- when multiple tool continuations appear in one request, the gateway MUST preserve their normalized-history order; it MUST NOT reorder them by `call_id`, tool name, or synthesis status
-- the gateway MUST perform only the minimum local repair needed to make each continuation legal for this upstream transport; it MUST NOT create a detached prelude or globally reshuffle the request body
-
-### 7. Assemble answers from semantic stream events, not from `response.completed.output`
-
-The ChatGPT Codex adapter MUST treat the event stream as the source of truth.
-
-Specifically, it MUST assemble output from:
-
-- `response.output_item.added`
-- `response.output_item.done`
-- `response.content_part.added`
-- `response.content_part.done`
-- `response.output_text.delta`
-- `response.output_text.done`
-- `response.function_call_arguments.delta`
-- `response.function_call_arguments.done`
-- reasoning items only when `reasoning.effort` is present and not `"none"` and
-  `include = ["reasoning.encrypted_content"]`
-
-`response.completed` remains the terminal lifecycle event and usage source, but MUST NOT be assumed to contain the full assembled `output` payload.
-
-Route-local reasoning visibility rule:
-
-- encrypted reasoning items are internal transport state only on this route
-- the gateway MUST NOT convert encrypted reasoning items into public OpenAI-visible reasoning text,
-  public `thinking` blocks, public `message.content` parts, or public annotations on this route
-- `reasoning.summary` does not widen that visibility rule; it is request-shaping state only unless a
-  later route-specific ADR explicitly permits a public reasoning-summary surface
-
-Grounding note:
-
-- official OpenAI Responses docs validate encrypted reasoning items, stateless `store = false`
-  operation, and `include = ["reasoning.encrypted_content"]` as public API behavior
-- this ADR's stricter `reasoning.summary` acceptance predicate remains a route-local Codex transport
-  policy derived from gateway normalization goals and route verification scope
+Public-current [OpenAI reasoning guidance](https://developers.openai.com/api/docs/guides/reasoning) describes default encrypted continuation for stateless store=false/ZDR and the optional explicit include token. This supports handling actual returned state independently of include; it does not establish private OAuth acceptance. Pinned native source `b412ff32c417f855c2b2d1581b77058eed87c84b` (`rust-v0.156.1`, tree `0a0b0bf9acf2f45e9239e7a52ef79f7702aa5799`) grounds this closed producer population, not source-binary/runtime authenticity.
 
 ### 8. Keep public ingress surfaces thin over the normalized core
 
-Public ingress does not change:
+Public ingress continues to use the shared normalized core for:
 
 - `/v1/messages`
 - `/v1/chat/completions`
 - `/v1/responses`
 
 All of them continue to normalize into the shared internal request model first.
-Only the provider-side upstream transport changes when the routed provider is ChatGPT Codex OAuth.
+The provider-side transport follows this route contract when ChatGPT Codex OAuth is selected; the closed Responses ingress/type amendments remain defined by C-11.
 
 ## Contract-Ready Gap List
 
@@ -444,8 +268,7 @@ route-contract ownership work below is completed.
 - that contract freezes the `function_call` / `function_call_output` continuation contract for this
   route, including authoritative normalized provenance requirements for any synthesized
   `function_call`
-- that contract states the route-specific reasoning visibility rule so encrypted/internal reasoning
-  remains non-public unless a later explicit decision widens exposure
+- that contract states the adopted typed completed opaque/summary transport policy and excludes private reasoning from public text and diagnostics
 - that contract names the verification surfaces that own implementation proof for this route,
   including the provider adapter, normalized models, and deterministic fixtures/regressions
 - a dedicated Substrate-owned auth-handoff contract note is authored and linked from this ADR as
@@ -509,7 +332,7 @@ Negative:
 - do not bypass `GatewayRequest` / normalized stream handling to special-case one public route
 - do not send nested Chat Completions tool shapes to this upstream transport
 - do not rely on `response.completed.response.output` as the assembled answer source
-- do not surface encrypted reasoning content on public OpenAI-compatible routes unless a separate decision explicitly permits it
+- preserve only the adopted typed completed Responses continuation/summary surface; never expose private reasoning as generic public text or diagnostics
 - do not silently strip, ignore, or downgrade unsupported caller-visible controls on the Codex route unless a route-specific ADR explicitly allows that behavior
 - do not make gateway-local token persistence, local auth files, or admin mutation state into required trust inputs for Substrate-managed in-world operation
 - do not keep or introduce placeholder synthesized `function_call` metadata such as fallback tool names or empty `{}` arguments when authoritative normalized provenance is unavailable
@@ -544,11 +367,11 @@ This ADR is complete when:
    - no caller-visible control is silently stripped or degraded on the Codex route without an explicit compatibility rule
    - public gateway image inputs remain supported on the Codex route through typed `message` items with upstream `image_url` content items
    - `reasoning.effort`, `reasoning.summary`, `parallel_tool_calls`, `text.format.type`, `text.verbosity`, and `include` follow the route-specific compatibility matrix and reject unverified values
-   - reasoning is enabled on this route only when `reasoning.effort` is present and not `"none"`
-   - non-`none` `reasoning.summary` is rejected unless reasoning is enabled on this route, as a
-     route-local Codex validation rule rather than a claimed public OpenAI Responses invariant
-   - `include = ["reasoning.encrypted_content"]` is rejected unless reasoning is enabled on this route
-   - encrypted reasoning items are assembled only under that exact predicate and never surface as public OpenAI-visible reasoning output on this route
+   - optional effort, admitted summary/context, and include omission/empty/explicit obey the same completed-item policy without forced effort
+   - authoritative done items preserve exact opaque bytes and required summary Vec through Clone/transport serde/history while private content stays out of text and diagnostics
+   - typed source-mandatory cache key/client metadata and actual cache usage survive; omission-only tests do not prove native preservation
+   - end_turn absent/null/false/true remains independent of stop reason, and errors/EOF/cancel cannot fabricate completed/Final
+   - destination pin, safe 3xx rejection, resource limits, cancellation, and no-fallback behavior have local component proof with explicit deployment/native/private limits
    - `stream_options` is rejected deterministically on the Codex route unless a later route-specific ADR explicitly adds a verified equivalent
    - flat function tool serialization
    - conversational turns on the Codex route serialize as typed `message` items rather than bare message objects

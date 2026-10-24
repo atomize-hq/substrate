@@ -36,37 +36,31 @@
     "tools": [
       {
         "type": "function",
-        "function": {
-          "name": "lookup",
-          "description": "Look something up",
-          "parameters": {
-            "type": "object",
-            "properties": {
-              "query": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "query"
-            ]
-          }
+        "name": "lookup",
+        "description": "Look something up",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "query"
+          ]
         }
       },
       {
         "type": "function",
-        "function": {
-          "name": "ignored",
-          "parameters": {
-            "type": "object"
-          }
+        "name": "ignored",
+        "parameters": {
+          "type": "object"
         }
       }
     ],
     "tool_choice": {
       "type": "function",
-      "function": {
-        "name": "lookup"
-      }
+      "name": "lookup"
     }
   }
 }

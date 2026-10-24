@@ -1,8 +1,10 @@
 use crate::core::{GatewayRequest, GatewayResponse};
-use crate::models::{
-    ContentBlock, ImageDetail, ImageSource, KnownContentBlock, Message, MessageContent, RouteType,
-    Tool, ToolResultContent,
+use crate::models::response_transport::{
+    self as transport, payload_size, ResponseItem, ToolDefinition, PAYLOAD_LIMIT,
 };
+use crate::models::{ContentBlock, KnownContentBlock, Message, MessageContent};
+#[cfg(test)]
+use crate::models::{ImageDetail, ImageSource, ToolResultContent};
 use crate::providers::streaming::{parse_sse_events, SseEvent};
 use axum::{
     body::Body,
@@ -22,9 +24,8 @@ use std::task::{Context, Poll};
 use uuid::Uuid;
 
 use super::{
-    classify_provider_error, inject_continuation_text, prefer_failure_class,
-    should_inject_continuation, write_routing_info, AppError, AppState, FailureClass,
-    StructuredEventTracingStream,
+    classify_provider_error, prefer_failure_class, write_routing_info, AppError, AppState,
+    FailureClass, StructuredEventTracingStream,
 };
 
 const OPENAI_PUBLIC_RESPONSES_METADATA_KEY: &str = "openai_public_responses";
@@ -47,11 +48,23 @@ const OPENAI_RESPONSES_SERVICE_TIER_METADATA_KEY: &str = "openai_responses_servi
 #[allow(dead_code)]
 struct OpenAIResponsesRequest {
     model: String,
-    input: OpenAIResponsesInput,
+    input: serde_json::Value,
+    #[serde(default, deserialize_with = "strict_some")]
+    instructions: Option<String>,
+    #[serde(default, deserialize_with = "strict_some")]
+    prompt_cache_key: Option<String>,
+    #[serde(default, deserialize_with = "strict_some")]
+    client_metadata: Option<HashMap<String, String>>,
+    #[serde(default, deserialize_with = "strict_some")]
+    store: Option<bool>,
+    #[serde(default, deserialize_with = "strict_some")]
+    access_programs: Option<serde_json::Value>,
+    #[serde(default, deserialize_with = "strict_some")]
+    context_management: Option<serde_json::Value>,
     #[serde(default)]
-    tools: Option<Vec<OpenAIResponsesTool>>,
+    tools: Option<Vec<serde_json::Value>>,
     #[serde(default)]
-    tool_choice: Option<OpenAIResponsesToolChoice>,
+    tool_choice: Option<serde_json::Value>,
     #[serde(default)]
     parallel_tool_calls: Option<bool>,
     #[serde(default)]
@@ -84,30 +97,15 @@ struct OpenAIResponsesRequest {
     service_tier: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum OpenAIResponsesInput {
-    Text(String),
-    Items(Vec<OpenAIResponsesInputItem>),
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type")]
-enum OpenAIResponsesInputItem {
-    #[serde(rename = "message")]
-    Message(OpenAIResponsesMessageItem),
-    #[serde(rename = "function_call")]
-    FunctionCall(OpenAIResponsesFunctionCallItem),
-    #[serde(rename = "function_call_output")]
-    FunctionCallOutput(OpenAIResponsesFunctionCallOutputItem),
-}
-
+#[cfg(test)]
 #[derive(Debug, Deserialize)]
 struct OpenAIResponsesMessageItem {
-    role: String,
+    #[serde(rename = "role")]
+    _role: String,
     content: Vec<OpenAIResponsesMessageContentPart>,
 }
 
+#[cfg(test)]
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
 enum OpenAIResponsesMessageContentPart {
@@ -119,54 +117,6 @@ enum OpenAIResponsesMessageContentPart {
         #[serde(default)]
         detail: Option<String>,
     },
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAIResponsesFunctionCallOutputItem {
-    call_id: String,
-    output: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAIResponsesFunctionCallItem {
-    call_id: String,
-    name: String,
-    arguments: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAIResponsesTool {
-    #[serde(rename = "type")]
-    r#type: String,
-    function: OpenAIResponsesToolFunction,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAIResponsesToolFunction {
-    name: String,
-    #[serde(default)]
-    description: Option<String>,
-    #[serde(default)]
-    parameters: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(untagged)]
-enum OpenAIResponsesToolChoice {
-    String(String),
-    Object(OpenAIResponsesToolChoiceObject),
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct OpenAIResponsesToolChoiceObject {
-    #[serde(rename = "type")]
-    r#type: String,
-    function: OpenAIResponsesToolChoiceFunction,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct OpenAIResponsesToolChoiceFunction {
-    name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -185,7 +135,10 @@ struct OpenAIResponsesTextFormat {
 
 #[derive(Debug, Deserialize)]
 struct OpenAIResponsesReasoning {
-    effort: String,
+    #[serde(default)]
+    effort: Option<String>,
+    #[serde(default)]
+    context: Option<String>,
     #[serde(default)]
     summary: Option<String>,
 }
@@ -206,13 +159,17 @@ struct OpenAIResponsesResponse {
     model: String,
     output: Vec<OpenAIResponsesOutputItem>,
     usage: OpenAIResponsesUsage,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    end_turn: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct OpenAIResponsesUsage {
     input_tokens: u32,
     output_tokens: u32,
-    total_tokens: u32,
+    total_tokens: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    input_tokens_details: Option<OpenAICachedTokens>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -229,6 +186,8 @@ enum OpenAIResponsesOutputItem {
         name: String,
         arguments: String,
     },
+    #[serde(untagged)]
+    Transport(ResponseItem),
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -248,91 +207,78 @@ fn transform_openai_to_gateway_request(
     let (tools, tool_names) = parse_function_tools(openai_req.tools.as_ref())?;
     let tool_choice = openai_req.tool_choice.as_ref();
     let tools = apply_tool_choice(tools, &tool_names, tool_choice)?;
-
-    let mut messages = Vec::new();
-
-    match openai_req.input {
-        OpenAIResponsesInput::Text(text) => {
-            messages.push(Message {
-                role: "user".to_string(),
-                content: MessageContent::Text(text),
-            });
-        }
-        OpenAIResponsesInput::Items(items) => {
-            let mut prior_function_call_ids = HashSet::new();
-
-            for item in items {
-                match item {
-                    OpenAIResponsesInputItem::Message(message) => {
-                        let content = responses_message_content_to_message_content(&message)?;
-                        match message.role.as_str() {
-                            "system" | "developer" | "user" | "assistant" => {
-                                messages.push(Message {
-                                    role: message.role,
-                                    content,
-                                });
-                            }
-                            other => return Err(format!("Unsupported message role: {other}")),
-                        }
-                    }
-                    OpenAIResponsesInputItem::FunctionCall(function_call) => {
-                        let call_id = function_call.call_id.trim();
-                        if call_id.is_empty() {
-                            return Err("function_call.call_id must not be empty".to_string());
-                        }
-                        let name = function_call.name.trim();
-                        if name.is_empty() {
-                            return Err("function_call.name must not be empty".to_string());
-                        }
-
-                        let arguments =
-                            parse_responses_function_call_arguments(&function_call.arguments)?;
-                        prior_function_call_ids.insert(call_id.to_string());
-
-                        messages.push(Message {
-                            role: "assistant".to_string(),
-                            content: MessageContent::Blocks(vec![ContentBlock::Known(
-                                KnownContentBlock::ToolUse {
-                                    id: call_id.to_string(),
-                                    name: name.to_string(),
-                                    input: arguments,
-                                },
-                            )]),
-                        });
-                    }
-                    OpenAIResponsesInputItem::FunctionCallOutput(function_call_output) => {
-                        if function_call_output.call_id.trim().is_empty() {
-                            return Err(
-                                "function_call_output.call_id must not be empty".to_string()
-                            );
-                        }
-                        if !prior_function_call_ids.contains(function_call_output.call_id.trim())
-                            && !allows_previous_response_continuation
-                        {
-                            return Err(
-                                "function_call_output.call_id must reference a prior function_call item"
-                                    .to_string(),
-                            );
-                        }
-
-                        messages.push(Message {
-                            role: "user".to_string(),
-                            content: MessageContent::Blocks(vec![ContentBlock::Known(
-                                KnownContentBlock::ToolResult {
-                                    tool_use_id: function_call_output.call_id,
-                                    content: ToolResultContent::Text(function_call_output.output),
-                                    is_error: false,
-                                    cache_control: None,
-                                },
-                            )]),
-                        });
-                    }
+    if allows_previous_response_continuation
+        && (openai_req.instructions.is_some()
+            || openai_req.prompt_cache_key.is_some()
+            || openai_req.client_metadata.is_some()
+            || openai_req
+                .reasoning
+                .as_ref()
+                .is_some_and(|r| r.context.is_some())
+            || tools
+                .as_ref()
+                .is_some_and(|ts| ts.iter().any(|t| t.legacy().is_err())))
+    {
+        return Err("Advanced Responses require full stateless history".into());
+    }
+    let messages = if let Some(text) = openai_req.input.as_str() {
+        vec![Message {
+            role: "user".into(),
+            content: MessageContent::Text(text.into()),
+        }]
+    } else {
+        let mut raw = openai_req
+            .input
+            .as_array()
+            .ok_or("Invalid Responses input")?
+            .clone();
+        for item in &mut raw {
+            if item.get("type").is_none() && item.get("role").is_some() {
+                item["type"] = "message".into();
+            }
+            if item.get("type").and_then(|v| v.as_str()) == Some("message") {
+                if let Some(text) = item
+                    .get("content")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_owned)
+                {
+                    item["content"] = serde_json::json!([{"type":"input_text","text":text}]);
                 }
             }
         }
-    }
+        let items: Vec<ResponseItem> = serde_json::from_value(serde_json::Value::Array(raw))
+            .map_err(|_| "Unsupported Responses history shape")?;
+        if allows_previous_response_continuation
+            && items.iter().any(|item| {
+                !matches!(
+                    item,
+                    ResponseItem::Message {
+                        id: None,
+                        phase: None,
+                        ..
+                    } | ResponseItem::FunctionCall { .. }
+                        | ResponseItem::FunctionCallOutput { .. }
+                )
+            })
+        {
+            return Err("Advanced Responses require full stateless history".into());
+        }
+        transport::validate_history(&items, allows_previous_response_continuation)?;
+        let mut seen = HashSet::new();
+        items
+            .into_iter()
+            .filter(|i| {
+                i.call()
+                    .is_none_or(|(_, id, ..)| seen.insert(id.to_string()))
+            })
+            .map(ResponseItem::into_message)
+            .collect()
+    };
 
     let mut metadata = HashMap::new();
+    if let Some(store) = openai_req.store {
+        metadata.insert("openai_responses_store".into(), store.into());
+    }
     metadata.insert(
         OPENAI_PUBLIC_RESPONSES_METADATA_KEY.to_string(),
         serde_json::Value::Bool(true),
@@ -392,10 +338,12 @@ fn transform_openai_to_gateway_request(
         );
     }
     if let Some(reasoning) = &openai_req.reasoning {
-        metadata.insert(
-            OPENAI_RESPONSES_REASONING_EFFORT_METADATA_KEY.to_string(),
-            serde_json::Value::String(reasoning.effort.clone()),
-        );
+        if let Some(effort) = &reasoning.effort {
+            metadata.insert(
+                OPENAI_RESPONSES_REASONING_EFFORT_METADATA_KEY.to_string(),
+                effort.clone().into(),
+            );
+        }
         if let Some(summary) = &reasoning.summary {
             metadata.insert(
                 OPENAI_RESPONSES_REASONING_SUMMARY_METADATA_KEY.to_string(),
@@ -415,6 +363,20 @@ fn transform_openai_to_gateway_request(
             ),
         );
     }
+    if openai_req.access_programs.is_some() || openai_req.context_management.is_some() {
+        return Err("Unsupported Responses control".into());
+    }
+    if openai_req.store == Some(true) {
+        return Err("Stored advanced Responses are unsupported".into());
+    }
+    if let Some(r) = &openai_req.reasoning {
+        if r.context
+            .as_ref()
+            .is_some_and(|s| !matches!(s.as_str(), "current_turn" | "all_turns"))
+        {
+            return Err("Unsupported reasoning context".into());
+        }
+    }
     if let Some(text) = &openai_req.text {
         if let Some(verbosity) = &text.verbosity {
             metadata.insert(
@@ -425,6 +387,14 @@ fn transform_openai_to_gateway_request(
     }
 
     Ok(GatewayRequest {
+        responses_caller: true,
+        instructions: openai_req.instructions,
+        prompt_cache_key: openai_req.prompt_cache_key,
+        client_metadata: openai_req.client_metadata,
+        reasoning_context: openai_req
+            .reasoning
+            .as_ref()
+            .and_then(|r| r.context.clone()),
         model: openai_req.model,
         messages,
         max_output_tokens: openai_req.max_output_tokens.unwrap_or(4096),
@@ -432,7 +402,7 @@ fn transform_openai_to_gateway_request(
             .reasoning
             .as_ref()
             .map(|reasoning| crate::core::ReasoningConfig {
-                r#type: if reasoning.effort == "none" {
+                r#type: if reasoning.effort.as_deref() == Some("none") {
                     "disabled".to_string()
                 } else {
                     "enabled".to_string()
@@ -475,6 +445,11 @@ fn transform_gateway_response_to_openai_response(
         };
 
     for block in &gateway_response.content {
+        if let Some(item) = ResponseItem::from_block(block) {
+            flush_pending_text(&mut output, &mut pending_text_parts);
+            output.push(OpenAIResponsesOutputItem::Transport(item));
+            continue;
+        }
         match block {
             ContentBlock::Known(KnownContentBlock::Text { text, .. }) if !text.is_empty() => {
                 pending_text_parts.push(OpenAIResponsesOutputContentPart {
@@ -483,7 +458,9 @@ fn transform_gateway_response_to_openai_response(
                     annotations: Vec::new(),
                 });
             }
-            ContentBlock::Known(KnownContentBlock::ToolUse { id, name, input }) => {
+            ContentBlock::Known(KnownContentBlock::ToolUse {
+                id, name, input, ..
+            }) => {
                 flush_pending_text(&mut output, &mut pending_text_parts);
                 output.push(OpenAIResponsesOutputItem::FunctionCall {
                     call_id: id.clone(),
@@ -499,6 +476,7 @@ fn transform_gateway_response_to_openai_response(
     flush_pending_text(&mut output, &mut pending_text_parts);
 
     OpenAIResponsesResponse {
+        end_turn: gateway_response.end_turn,
         id: gateway_response.id,
         object_type: "response".to_string(),
         status: match gateway_response.stop_reason.as_deref() {
@@ -510,10 +488,14 @@ fn transform_gateway_response_to_openai_response(
         model,
         output,
         usage: OpenAIResponsesUsage {
+            input_tokens_details: gateway_response
+                .usage
+                .cache_read_input_tokens
+                .map(|cached_tokens| OpenAICachedTokens { cached_tokens }),
             input_tokens: gateway_response.usage.input_tokens,
             output_tokens: gateway_response.usage.output_tokens,
-            total_tokens: gateway_response.usage.input_tokens
-                + gateway_response.usage.output_tokens,
+            total_tokens: u64::from(gateway_response.usage.input_tokens)
+                + u64::from(gateway_response.usage.output_tokens),
         },
     }
 }
@@ -531,9 +513,12 @@ struct OpenAIResponsesSseStream<S> {
     usage: OpenAIResponsesUsage,
     status: String,
     finalized: bool,
+    end_turn: Option<bool>,
+    failure: Option<crate::providers::error::ProviderError>,
+    queued_bytes: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 enum StreamingOutputItem {
     Text {
         text: String,
@@ -548,51 +533,79 @@ enum StreamingOutputItem {
 impl<S> OpenAIResponsesSseStream<S> {
     fn new(stream: S, model: String) -> Self {
         let response_id = format!("resp_{}", Uuid::new_v4());
-        let mut queue = VecDeque::new();
-
         let created_response = OpenAIResponsesResponse {
+            end_turn: None,
             id: response_id.clone(),
             object_type: "response".to_string(),
             status: "in_progress".to_string(),
             model: model.clone(),
             output: Vec::new(),
             usage: OpenAIResponsesUsage {
+                input_tokens_details: None,
                 input_tokens: 0,
                 output_tokens: 0,
                 total_tokens: 0,
             },
         };
-        queue.push_back(build_sse_event(
-            "response.created",
-            serde_json::json!({
-                "response": created_response,
-            }),
-        ));
-
-        Self {
+        let mut state = Self {
             inner: stream,
             buffer: String::new(),
-            queue,
+            queue: VecDeque::new(),
             model,
             response_id,
             output_items: BTreeMap::new(),
             open_items: HashMap::new(),
             usage: OpenAIResponsesUsage {
+                input_tokens_details: None,
                 input_tokens: 0,
                 output_tokens: 0,
                 total_tokens: 0,
             },
             status: "completed".to_string(),
             finalized: false,
-        }
+            end_turn: None,
+            failure: None,
+            queued_bytes: 0,
+        };
+        state.enqueue_event(
+            "response.created",
+            serde_json::json!({"response":created_response}),
+        );
+        state
     }
 
     fn enqueue_event(&mut self, event_type: &str, payload: serde_json::Value) {
-        self.queue.push_back(build_sse_event(event_type, payload));
+        if self.failure.is_some() {
+            return;
+        }
+        let size = match payload_size(
+            &payload,
+            PAYLOAD_LIMIT.saturating_sub(2 * event_type.len() + 40),
+        ) {
+            Ok(n) => n + 2 * event_type.len() + 40,
+            Err(_) => {
+                self.failure = Some(crate::providers::error::ProviderError::ApiError {
+                    status: 502,
+                    message: "Responses public frame limit exceeded".into(),
+                });
+                return;
+            }
+        };
+        if transport::bounded_add(self.queued_bytes, size, transport::QUEUE_LIMIT).is_err() {
+            self.failure = Some(crate::providers::error::ProviderError::ApiError {
+                status: 502,
+                message: "Responses output queue limit exceeded".into(),
+            });
+            return;
+        }
+        let bytes = build_sse_event(event_type, payload);
+        self.queued_bytes += bytes.len();
+        self.queue.push_back(bytes);
     }
 
     fn response_snapshot(&self, status: &str) -> OpenAIResponsesResponse {
         OpenAIResponsesResponse {
+            end_turn: self.end_turn,
             id: self.response_id.clone(),
             object_type: "response".to_string(),
             status: status.to_string(),
@@ -667,10 +680,163 @@ impl<S> OpenAIResponsesSseStream<S> {
     }
 
     fn consume_sse_event(&mut self, event: &SseEvent) {
+        if self.failure.is_some() {
+            return;
+        }
+        let current = payload_size(
+            &(
+                &self.open_items,
+                &self.output_items,
+                &self.model,
+                &self.response_id,
+                &self.usage,
+                &self.status,
+                self.end_turn,
+            ),
+            PAYLOAD_LIMIT,
+        );
+        if current.is_err()
+            || transport::bounded_add(
+                current.unwrap_or(PAYLOAD_LIMIT),
+                event.data.len(),
+                2 * PAYLOAD_LIMIT,
+            )
+            .is_err()
+        {
+            self.failure = Some(crate::providers::error::ProviderError::ApiError {
+                status: 502,
+                message: "Responses public state limit exceeded".into(),
+            });
+            return;
+        }
+        self.consume_sse_event_inner(event);
+        if payload_size(
+            &(
+                &self.open_items,
+                &self.output_items,
+                &self.model,
+                &self.response_id,
+                &self.usage,
+                &self.status,
+                self.end_turn,
+            ),
+            PAYLOAD_LIMIT,
+        )
+        .is_err()
+        {
+            self.failure = Some(crate::providers::error::ProviderError::ApiError {
+                status: 502,
+                message: "Responses public state limit exceeded".into(),
+            });
+        }
+    }
+    fn consume_sse_event_inner(&mut self, event: &SseEvent) {
         let Some(name) = event.event.as_deref() else {
             return;
         };
 
+        if name == "gateway.response_terminal" {
+            let Ok(value) = serde_json::from_str::<serde_json::Value>(&event.data) else {
+                self.failure = Some(crate::providers::error::ProviderError::ApiError {
+                    status: 502,
+                    message: "Invalid normalized terminal".into(),
+                });
+                return;
+            };
+            if value.get("status").and_then(|v| v.as_str()) != Some("completed")
+                || value.as_object().is_none_or(|o| {
+                    o.keys()
+                        .any(|k| !matches!(k.as_str(), "type" | "status" | "end_turn"))
+                })
+            {
+                self.failure = Some(crate::providers::error::ProviderError::ApiError {
+                    status: 502,
+                    message: "Invalid normalized terminal".into(),
+                });
+                return;
+            }
+            self.end_turn = match value.get("end_turn") {
+                None | Some(serde_json::Value::Null) => None,
+                Some(serde_json::Value::Bool(b)) => Some(*b),
+                _ => {
+                    self.failure = Some(crate::providers::error::ProviderError::ApiError {
+                        status: 502,
+                        message: "Invalid normalized end_turn".into(),
+                    });
+                    return;
+                }
+            };
+            return;
+        }
+        if name == "gateway.response_item" {
+            let parsed = serde_json::from_str::<serde_json::Value>(&event.data).ok();
+            let Some(value) = parsed else {
+                self.failure = Some(crate::providers::error::ProviderError::ApiError {
+                    status: 502,
+                    message: "Invalid normalized Responses item".into(),
+                });
+                return;
+            };
+            if value.as_object().is_none_or(|o| {
+                o.keys()
+                    .any(|k| !matches!(k.as_str(), "type" | "index" | "item"))
+            }) {
+                self.failure = Some(crate::providers::error::ProviderError::ApiError {
+                    status: 502,
+                    message: "Invalid normalized Responses item".into(),
+                });
+                return;
+            }
+            let Some(index) = value
+                .get("index")
+                .and_then(|v| v.as_u64())
+                .map(|n| n as usize)
+            else {
+                self.failure = Some(crate::providers::error::ProviderError::ApiError {
+                    status: 502,
+                    message: "Invalid normalized Responses item index".into(),
+                });
+                return;
+            };
+            let item = value
+                .get("item")
+                .cloned()
+                .and_then(|v| serde_json::from_value::<ResponseItem>(v).ok())
+                .filter(|item| item.validate().is_ok());
+            let Some(item) = item else {
+                self.failure = Some(crate::providers::error::ProviderError::ApiError {
+                    status: 502,
+                    message: "Invalid normalized Responses item".into(),
+                });
+                return;
+            };
+            let old = self
+                .output_items
+                .get(&index)
+                .map(|i| payload_size(i, PAYLOAD_LIMIT).unwrap_or(PAYLOAD_LIMIT))
+                .unwrap_or(0);
+            let current = payload_size(&self.output_items, PAYLOAD_LIMIT).unwrap_or(PAYLOAD_LIMIT);
+            let size = payload_size(&item, PAYLOAD_LIMIT).unwrap_or(PAYLOAD_LIMIT + 1);
+            if current
+                .saturating_sub(old)
+                .checked_add(size)
+                .is_none_or(|n| n > PAYLOAD_LIMIT)
+            {
+                self.failure = Some(crate::providers::error::ProviderError::ApiError {
+                    status: 502,
+                    message: "Responses public state limit exceeded".into(),
+                });
+                return;
+            }
+            self.open_items.remove(&index);
+            if !self.output_items.contains_key(&index) {
+                self.enqueue_event("response.output_item.added",serde_json::json!({"response_id":self.response_id,"output_index":index,"item":item}));
+            }
+            self.enqueue_event("response.output_item.done",serde_json::json!({"response_id":self.response_id,"output_index":index,"item":item}));
+            self.output_items
+                .insert(index, OpenAIResponsesOutputItem::Transport(item));
+            return;
+        }
         match name {
             "content_block_start" => {
                 let Ok(json) = serde_json::from_str::<serde_json::Value>(&event.data) else {
@@ -801,9 +967,15 @@ impl<S> OpenAIResponsesSseStream<S> {
                     if let (Some(input_tokens), Some(output_tokens)) = (input_tokens, output_tokens)
                     {
                         self.usage = OpenAIResponsesUsage {
+                            input_tokens_details: json
+                                .get("usage")
+                                .and_then(|u| u.get("cache_read_input_tokens"))
+                                .and_then(|v| v.as_u64())
+                                .and_then(|n| u32::try_from(n).ok())
+                                .map(|cached_tokens| OpenAICachedTokens { cached_tokens }),
                             input_tokens: input_tokens as u32,
                             output_tokens: output_tokens as u32,
-                            total_tokens: (input_tokens + output_tokens) as u32,
+                            total_tokens: input_tokens + output_tokens,
                         };
                     }
                 }
@@ -918,28 +1090,22 @@ impl<S> OpenAIResponsesSseStream<S> {
     }
 
     fn drain_completed_events(&mut self, flush_all: bool) -> Vec<SseEvent> {
-        let parse_upto = if flush_all {
-            if self.buffer.is_empty() {
-                None
-            } else {
-                Some(self.buffer.len())
-            }
-        } else {
-            self.buffer.rfind("\n\n").map(|idx| idx + 2)
-        };
-
-        let Some(end) = parse_upto else {
+        let end = self
+            .buffer
+            .find("\n\n")
+            .map(|n| n + 2)
+            .or_else(|| (flush_all && !self.buffer.is_empty()).then_some(self.buffer.len()));
+        let Some(end) = end else { return Vec::new() };
+        if end > PAYLOAD_LIMIT {
+            self.failure = Some(crate::providers::error::ProviderError::ApiError {
+                status: 502,
+                message: "Normalized frame limit exceeded".into(),
+            });
             return Vec::new();
-        };
-
-        let complete_portion = self.buffer[..end].to_string();
-        if flush_all {
-            self.buffer.clear();
-        } else {
-            self.buffer = self.buffer[end..].to_string();
         }
-
-        parse_sse_events(&complete_portion)
+        let frame = self.buffer[..end].to_string();
+        self.buffer.drain(..end);
+        parse_sse_events(&frame)
     }
 }
 
@@ -947,12 +1113,20 @@ impl<S, E> Stream for OpenAIResponsesSseStream<S>
 where
     S: Stream<Item = Result<Bytes, E>>,
 {
-    type Item = Result<Bytes, E>;
+    type Item = Result<Bytes, crate::providers::error::ProviderError>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = unsafe { self.get_unchecked_mut() };
 
+        if let Some(error) = this.failure.take() {
+            this.finalized = true;
+            this.queue.clear();
+            this.open_items.clear();
+            this.buffer.clear();
+            return Poll::Ready(Some(Err(error)));
+        }
         if let Some(item) = this.queue.pop_front() {
+            this.queued_bytes = this.queued_bytes.saturating_sub(item.len());
             return Poll::Ready(Some(Ok(item)));
         }
 
@@ -960,38 +1134,86 @@ where
             return Poll::Ready(None);
         }
 
+        // Parse one frame before asking the provider for more bytes. The normalized
+        // bundle stays bounded and never becomes a queue of copied event payloads.
+        if this.buffer.contains("\n\n") {
+            for event in this.drain_completed_events(false) {
+                this.consume_sse_event(&event);
+            }
+            cx.waker().wake_by_ref();
+            return Poll::Pending;
+        }
         let mut inner = unsafe { Pin::new_unchecked(&mut this.inner) };
         match inner.as_mut().poll_next(cx) {
             Poll::Ready(Some(Ok(bytes))) => {
+                if transport::bounded_add(
+                    this.buffer.len(),
+                    bytes.len(),
+                    transport::NORMALIZED_LIMIT,
+                )
+                .is_err()
+                {
+                    this.failure = Some(crate::providers::error::ProviderError::ApiError {
+                        status: 502,
+                        message: "Normalized stream limit exceeded".into(),
+                    });
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
                 if let Ok(text) = std::str::from_utf8(bytes.as_ref()) {
                     this.buffer.push_str(text);
                     let events = this.drain_completed_events(false);
                     for event in events {
                         this.consume_sse_event(&event);
+                        if this.failure.is_some() {
+                            break;
+                        }
                     }
                 }
 
+                if this.failure.is_some() {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
                 if let Some(item) = this.queue.pop_front() {
+                    this.queued_bytes = this.queued_bytes.saturating_sub(item.len());
                     Poll::Ready(Some(Ok(item)))
                 } else {
                     cx.waker().wake_by_ref();
                     Poll::Pending
                 }
             }
-            Poll::Ready(Some(Err(err))) => {
+            Poll::Ready(Some(Err(_))) => {
                 this.finalized = true;
                 this.buffer.clear();
                 this.open_items.clear();
-                Poll::Ready(Some(Err(err)))
+                Poll::Ready(Some(Err(
+                    crate::providers::error::ProviderError::ApiError {
+                        status: 502,
+                        message: "Normalized provider stream failed".into(),
+                    },
+                )))
             }
             Poll::Ready(None) => {
                 let events = this.drain_completed_events(true);
                 for event in events {
                     this.consume_sse_event(&event);
                 }
-                this.finalize_once();
+                if !this.finalized {
+                    this.failure = Some(crate::providers::error::ProviderError::ApiError {
+                        status: 502,
+                        message: "Normalized provider stream ended without terminal".into(),
+                    });
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
 
+                if this.failure.is_some() {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
                 if let Some(item) = this.queue.pop_front() {
+                    this.queued_bytes = this.queued_bytes.saturating_sub(item.len());
                     Poll::Ready(Some(Ok(item)))
                 } else {
                     Poll::Ready(None)
@@ -1020,10 +1242,10 @@ fn build_sse_event(event_type: &str, mut payload: serde_json::Value) -> Bytes {
 pub async fn handle_openai_responses(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(request_json): Json<serde_json::Value>,
+    ResponsesBody(request_json): ResponsesBody,
 ) -> Result<Response, AppError> {
     let openai_request: OpenAIResponsesRequest = serde_json::from_value(request_json)
-        .map_err(|e| AppError::Routing(format!("Invalid request format: {}", e)))?;
+        .map_err(|_| AppError::Routing("Invalid Responses request format".to_string()))?;
 
     let model = openai_request.model.clone();
     let start_time = std::time::Instant::now();
@@ -1033,6 +1255,7 @@ pub async fn handle_openai_responses(
     let mut gateway_request =
         transform_openai_to_gateway_request(openai_request).map_err(AppError::Routing)?;
 
+    payload_size(&gateway_request, PAYLOAD_LIMIT).map_err(AppError::Routing)?;
     let decision = inner
         .router
         .route(&mut gateway_request)
@@ -1050,7 +1273,9 @@ pub async fn handle_openai_responses(
         .iter()
         .find(|m| m.name.eq_ignore_ascii_case(&decision.model_name))
     {
-        let mut sorted_mappings = model_config.mappings.clone();
+        // Selection owns only references: unused configured model/provider strings
+        // must not become per-request payload copies before admission.
+        let mut sorted_mappings: Vec<_> = model_config.mappings.iter().collect();
 
         if let Some(ref provider_name) = forced_provider {
             sorted_mappings.retain(|m| m.provider == *provider_name);
@@ -1066,19 +1291,28 @@ pub async fn handle_openai_responses(
 
         let mut last_failure_class = None;
 
-        for (idx, mapping) in sorted_mappings.iter().enumerate() {
+        let mapping_limit = if gateway_request.requires_responses() {
+            1
+        } else {
+            usize::MAX
+        };
+        for (idx, mapping) in sorted_mappings.iter().take(mapping_limit).enumerate() {
+            transport::bounded_add(
+                mapping.actual_model.len(),
+                mapping.provider.len(),
+                PAYLOAD_LIMIT,
+            )
+            .map_err(|_| {
+                AppError::Routing("Configured Responses destination exceeds payload limit".into())
+            })?;
             if let Some(provider) = inner.provider_registry.get_provider(&mapping.provider) {
                 let mut routed_request = gateway_request.clone();
                 routed_request.model = mapping.actual_model.clone();
-
-                if mapping.inject_continuation_prompt
-                    && decision.route_type != RouteType::Background
-                {
-                    if let Some(last_msg) = routed_request.messages.last_mut() {
-                        if should_inject_continuation(last_msg) {
-                            inject_continuation_text(last_msg);
-                        }
-                    }
+                payload_size(&routed_request, PAYLOAD_LIMIT).map_err(AppError::Routing)?;
+                if !provider.supports_request(&routed_request) {
+                    return Err(AppError::Routing(
+                        "Selected provider cannot represent Responses state".into(),
+                    ));
                 }
 
                 if idx == 0 {
@@ -1106,6 +1340,12 @@ pub async fn handle_openai_responses(
                                 traced_provider_stream,
                                 model.clone(),
                             );
+                            if responses_stream.failure.is_some() {
+                                return Err(AppError::provider_class(
+                                    FailureClass::TransportDrift,
+                                    "Responses public frame limit exceeded",
+                                ));
+                            }
                             let body_stream =
                                 responses_stream.map_err(|e| std::io::Error::other(e.to_string()));
                             let body = Body::from_stream(body_stream);
@@ -1156,6 +1396,12 @@ pub async fn handle_openai_responses(
                                 response,
                                 model.clone(),
                             );
+                            payload_size(&openai_response, PAYLOAD_LIMIT).map_err(|_| {
+                                AppError::provider_class(
+                                    FailureClass::TransportDrift,
+                                    "Responses output limit exceeded",
+                                )
+                            })?;
                             return Ok(Json(openai_response).into_response());
                         }
                         Err(err) => {
@@ -1209,6 +1455,14 @@ pub async fn handle_openai_responses(
         };
 
         if let Some((provider_name, provider)) = direct_provider {
+            transport::bounded_add(
+                decision.model_name.len(),
+                provider_name.len(),
+                PAYLOAD_LIMIT,
+            )
+            .map_err(|_| {
+                AppError::Routing("Selected Responses destination exceeds payload limit".into())
+            })?;
             tracing::info!(
                 "📦 Using provider from registry (direct lookup): {}/{}",
                 provider_name,
@@ -1216,7 +1470,18 @@ pub async fn handle_openai_responses(
             );
 
             let mut routed_request = gateway_request.clone();
+            if decision.model_name.len() > PAYLOAD_LIMIT {
+                return Err(AppError::Routing(
+                    "Selected Responses model exceeds payload limit".into(),
+                ));
+            }
             routed_request.model = decision.model_name.clone();
+            payload_size(&routed_request, PAYLOAD_LIMIT).map_err(AppError::Routing)?;
+            if !provider.supports_request(&routed_request) {
+                return Err(AppError::Routing(
+                    "Selected provider cannot represent Responses state".into(),
+                ));
+            }
 
             if routed_request.stream == Some(true) {
                 let stream_response =
@@ -1240,6 +1505,12 @@ pub async fn handle_openai_responses(
                     ))
                 };
                 let responses_stream = OpenAIResponsesSseStream::new(traced_provider_stream, model);
+                if responses_stream.failure.is_some() {
+                    return Err(AppError::provider_class(
+                        FailureClass::TransportDrift,
+                        "Responses public frame limit exceeded",
+                    ));
+                }
                 let body_stream =
                     responses_stream.map_err(|e| std::io::Error::other(e.to_string()));
                 let body = Body::from_stream(body_stream);
@@ -1261,6 +1532,12 @@ pub async fn handle_openai_responses(
 
                 let openai_response =
                     transform_gateway_response_to_openai_response(response, model);
+                payload_size(&openai_response, PAYLOAD_LIMIT).map_err(|_| {
+                    AppError::provider_class(
+                        FailureClass::TransportDrift,
+                        "Responses output limit exceeded",
+                    )
+                })?;
                 Ok(Json(openai_response).into_response())
             }
         } else {
@@ -1287,75 +1564,68 @@ fn reject_known_unsupported_request_state(
 }
 
 fn parse_function_tools(
-    tools: Option<&Vec<OpenAIResponsesTool>>,
-) -> Result<(Option<Vec<Tool>>, HashSet<String>), String> {
+    tools: Option<&Vec<serde_json::Value>>,
+) -> Result<(Option<Vec<ToolDefinition>>, HashSet<String>), String> {
     let Some(tools) = tools else {
         return Ok((None, HashSet::new()));
     };
-
-    let mut out = Vec::new();
-    let mut names = HashSet::new();
-
-    for tool in tools {
-        if tool.r#type != "function" {
-            return Err("Only function tools are supported".to_string());
-        }
-
-        names.insert(tool.function.name.clone());
-        out.push(Tool {
-            r#type: Some("function".to_string()),
-            name: Some(tool.function.name.clone()),
-            description: tool.function.description.clone(),
-            input_schema: tool.function.parameters.clone(),
-        });
+    let tools = tools
+        .iter()
+        .cloned()
+        .map(|v| {
+            serde_json::from_value::<ToolDefinition>(v)
+                .map_err(|_| "Unsupported Responses tool definition".to_string())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    for tool in &tools {
+        tool.validate()?;
     }
-
-    Ok((Some(out), names))
+    let names = tools
+        .iter()
+        .filter_map(|t| t.name().map(str::to_owned))
+        .collect();
+    Ok((Some(tools), names))
 }
-
 fn apply_tool_choice(
-    tools: Option<Vec<Tool>>,
-    tool_names: &HashSet<String>,
-    tool_choice: Option<&OpenAIResponsesToolChoice>,
-) -> Result<Option<Vec<Tool>>, String> {
-    let Some(tool_choice) = tool_choice else {
-        return Ok(tools);
-    };
-
-    match tool_choice {
-        OpenAIResponsesToolChoice::String(choice) => match choice.as_str() {
-            "none" => Ok(None),
-            "auto" => Ok(tools),
-            "required" => {
-                if tools.as_ref().map(|t| t.is_empty()).unwrap_or(true) {
-                    Err("tool_choice=\"required\" requires tools to be non-empty".to_string())
-                } else {
-                    Ok(tools)
-                }
+    tools: Option<Vec<ToolDefinition>>,
+    names: &HashSet<String>,
+    choice: Option<&serde_json::Value>,
+) -> Result<Option<Vec<ToolDefinition>>, String> {
+    if let Some(choice) = choice {
+        if let Some(text) = choice.as_str() {
+            if !matches!(text, "auto" | "none" | "required") {
+                return Err("Unsupported tool choice".into());
             }
-            _ => Err("Unsupported tool_choice string".to_string()),
-        },
-        OpenAIResponsesToolChoice::Object(obj) => {
-            if obj.r#type != "function" {
-                return Err("Only function tool_choice is supported".to_string());
+            if text == "required" && tools.as_ref().is_none_or(Vec::is_empty) {
+                return Err("Required choice needs tools".into());
             }
-
-            if !tool_names.contains(&obj.function.name) {
-                return Err("tool_choice requested unknown function".to_string());
+        } else {
+            let obj = choice.as_object().ok_or("Invalid tool choice")?;
+            if obj.len() != 2
+                || !matches!(
+                    obj.get("type").and_then(|v| v.as_str()),
+                    Some("function" | "custom")
+                )
+                || !obj
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|n| names.contains(n))
+            {
+                return Err("Unsupported flat tool choice".into());
             }
-
-            let filtered_tools = tools.map(|tools| {
-                tools
-                    .into_iter()
-                    .filter(|tool| tool.name.as_deref() == Some(obj.function.name.as_str()))
-                    .collect::<Vec<_>>()
-            });
-
-            Ok(filtered_tools)
         }
     }
+    Ok(tools)
+}
+fn strict_some<'de, D, T>(d: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(d).map(Some)
 }
 
+#[cfg(test)]
 fn responses_message_content_to_message_content(
     message: &OpenAIResponsesMessageItem,
 ) -> Result<MessageContent, String> {
@@ -1388,11 +1658,7 @@ fn responses_message_content_to_message_content(
     }
 }
 
-fn parse_responses_function_call_arguments(arguments: &str) -> Result<serde_json::Value, String> {
-    serde_json::from_str(arguments)
-        .map_err(|_| "function_call.arguments must be a JSON string".to_string())
-}
-
+#[cfg(test)]
 fn image_source_from_url(image_url: &str) -> Result<ImageSource, String> {
     if image_url.starts_with("data:") {
         if let Some(comma_idx) = image_url.find(',') {
@@ -1433,6 +1699,11 @@ fn image_source_from_url(image_url: &str) -> Result<ImageSource, String> {
 
 #[cfg(test)]
 mod tests {
+    fn parsed_input(v: &serde_json::Value) -> serde_json::Value {
+        v.as_str()
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or_else(|| v.clone())
+    }
     use super::*;
     use crate::cli::ModelMapping;
     use crate::providers::ProviderRegistry;
@@ -1576,10 +1847,10 @@ mod tests {
             MessageContent::Blocks(ref blocks)
                 if matches!(
                     &blocks[0],
-                    ContentBlock::Known(KnownContentBlock::ToolUse { id, name, input })
+                    ContentBlock::Known(KnownContentBlock::ToolUse { id, name, input, .. })
                     if id == "call_123"
                         && name == "lookup"
-                        && input == &serde_json::json!({"query":"question"})
+                        && parsed_input(input) == serde_json::json!({"query":"question"})
                 )
         ));
 
@@ -1691,30 +1962,54 @@ mod tests {
     #[test]
     fn tool_choice_validation_filters_and_rejects_unknown_functions() {
         let request: OpenAIResponsesRequest = serde_json::from_value(json!({
-            "model": "gpt-test",
-            "input": "hello",
-            "tools": [
-                { "type": "function", "function": { "name": "alpha", "parameters": {"type":"object"} } },
-                { "type": "function", "function": { "name": "beta", "parameters": {"type":"object"} } }
-            ],
-            "tool_choice": {"type":"function","function":{"name":"beta"}}
+          "model": "gpt-test",
+          "input": "hello",
+          "tools": [
+            {
+              "type": "function",
+              "name": "alpha",
+              "parameters": {
+                "type": "object"
+              }
+            },
+            {
+              "type": "function",
+              "name": "beta",
+              "parameters": {
+                "type": "object"
+              }
+            }
+          ],
+          "tool_choice": {
+            "type": "function",
+            "name": "beta"
+          }
         }))
         .unwrap();
 
         let gateway_request = transform_openai_to_gateway_request(request).unwrap();
-        assert_eq!(gateway_request.tools.as_ref().unwrap().len(), 1);
+        assert_eq!(gateway_request.tools.as_ref().unwrap().len(), 2);
         assert_eq!(
-            gateway_request.tools.as_ref().unwrap()[0].name.as_deref(),
+            gateway_request.tools.as_ref().unwrap()[1].name(),
             Some("beta")
         );
 
         let rejected: OpenAIResponsesRequest = serde_json::from_value(json!({
-            "model": "gpt-test",
-            "input": "hello",
-            "tools": [
-                { "type": "function", "function": { "name": "alpha", "parameters": {"type":"object"} } }
-            ],
-            "tool_choice": {"type":"function","function":{"name":"missing"}}
+          "model": "gpt-test",
+          "input": "hello",
+          "tools": [
+            {
+              "type": "function",
+              "name": "alpha",
+              "parameters": {
+                "type": "object"
+              }
+            }
+          ],
+          "tool_choice": {
+            "type": "function",
+            "name": "missing"
+          }
         }))
         .unwrap();
         assert!(transform_openai_to_gateway_request(rejected).is_err());
@@ -1723,17 +2018,30 @@ mod tests {
     #[test]
     fn generic_public_responses_controls_remain_accepted_at_ingress() {
         let request: OpenAIResponsesRequest = serde_json::from_value(json!({
-            "model": "gpt-test",
-            "input": "hello",
-            "max_output_tokens": 128,
-            "temperature": 0.2,
-            "top_p": 0.8,
-            "stop": ["halt"],
-            "stream_options": { "include_obfuscation": true },
-            "tools": [
-                { "type": "function", "function": { "name": "lookup", "parameters": {"type":"object"} } }
-            ],
-            "tool_choice": {"type":"function","function":{"name":"lookup"}}
+          "model": "gpt-test",
+          "input": "hello",
+          "max_output_tokens": 128,
+          "temperature": 0.2,
+          "top_p": 0.8,
+          "stop": [
+            "halt"
+          ],
+          "stream_options": {
+            "include_obfuscation": true
+          },
+          "tools": [
+            {
+              "type": "function",
+              "name": "lookup",
+              "parameters": {
+                "type": "object"
+              }
+            }
+          ],
+          "tool_choice": {
+            "type": "function",
+            "name": "lookup"
+          }
         }))
         .unwrap();
 
@@ -1969,13 +2277,11 @@ mod tests {
                     priority: 1,
                     provider: "primary".to_string(),
                     actual_model: "primary-actual".to_string(),
-                    inject_continuation_prompt: false,
                 },
                 ModelMapping {
                     priority: 2,
                     provider: "secondary".to_string(),
                     actual_model: "secondary-actual".to_string(),
-                    inject_continuation_prompt: false,
                 },
             ],
         );
@@ -1990,7 +2296,7 @@ mod tests {
             "stream": false
         });
 
-        let response = handle_openai_responses(State(state), headers, Json(request))
+        let response = handle_openai_responses(State(state), headers, ResponsesBody(request))
             .await
             .unwrap();
 
@@ -2037,7 +2343,6 @@ mod tests {
                 priority: 1,
                 provider: "primary".to_string(),
                 actual_model: "primary-actual".to_string(),
-                inject_continuation_prompt: false,
             }],
         );
         let state = harness.state();
@@ -2048,9 +2353,10 @@ mod tests {
             "stream": true
         });
 
-        let response = handle_openai_responses(State(state), HeaderMap::new(), Json(request))
-            .await
-            .unwrap();
+        let response =
+            handle_openai_responses(State(state), HeaderMap::new(), ResponsesBody(request))
+                .await
+                .unwrap();
 
         assert_eq!(response.status(), axum::http::StatusCode::OK);
         assert_eq!(
@@ -2101,10 +2407,10 @@ mod tests {
             MessageContent::Blocks(ref blocks)
                 if matches!(
                     &blocks[0],
-                    ContentBlock::Known(KnownContentBlock::ToolUse { id, name, input })
+                    ContentBlock::Known(KnownContentBlock::ToolUse { id, name, input, .. })
                     if id == &fixture.expected_tool_use_id
                         && name == &fixture.expected_tool_name
-                        && input == &fixture.expected_arguments
+                        && parsed_input(input) == fixture.expected_arguments
                 )
         ));
         assert!(matches!(
@@ -2210,7 +2516,6 @@ mod tests {
                 priority: 1,
                 provider: "primary".to_string(),
                 actual_model: "primary-actual".to_string(),
-                inject_continuation_prompt: false,
             }],
         );
         let state = harness.state();
@@ -2218,7 +2523,7 @@ mod tests {
         let response = handle_openai_responses(
             State(state),
             HeaderMap::new(),
-            Json(fixture.request.clone()),
+            ResponsesBody(fixture.request.clone()),
         )
         .await
         .unwrap();
@@ -2268,7 +2573,10 @@ mod tests {
             .unwrap()
             .unwrap()
             .starts_with(b"event: response.created"));
-        assert_eq!(stream.next().await.unwrap().unwrap_err(), "upstream failed");
+        assert!(matches!(
+            stream.next().await.unwrap().unwrap_err(),
+            crate::providers::error::ProviderError::ApiError { status: 502, .. }
+        ));
         assert!(
             stream.next().await.is_none(),
             "an error must end the public stream without response.completed"
@@ -2328,6 +2636,37 @@ mod tests {
             drop(stream);
             assert!(dropped.load(Ordering::SeqCst));
             assert_eq!(polls.load(Ordering::SeqCst), usize::from(!cancel));
+        }
+    }
+
+    #[test]
+    fn responses_intro_and_known_metadata_have_closed_budgeted_admission() {
+        let stream =
+            futures::stream::empty::<Result<Bytes, crate::providers::error::ProviderError>>();
+        let state = OpenAIResponsesSseStream::new(stream, "m".repeat(PAYLOAD_LIMIT));
+        assert!(state.failure.is_some());
+        assert!(state.queue.is_empty());
+        assert_eq!(state.queued_bytes, 0);
+        for (name, data) in [
+            ("gateway.response_item", "not-json"),
+            (
+                "gateway.response_item",
+                r#"{"item":{"type":"reasoning","summary":[]}}"#,
+            ),
+            (
+                "gateway.response_terminal",
+                r#"{"status":"failed","end_turn":true}"#,
+            ),
+        ] {
+            let stream =
+                futures::stream::empty::<Result<Bytes, crate::providers::error::ProviderError>>();
+            let mut state = OpenAIResponsesSseStream::new(stream, "model".into());
+            state.consume_sse_event(&SseEvent {
+                event: Some(name.into()),
+                data: data.into(),
+            });
+            assert!(state.failure.is_some());
+            assert!(!state.finalized);
         }
     }
 
@@ -2393,7 +2732,7 @@ mod tests {
     #[test]
     fn gwa06_invalid_detail_keeps_validation_order_and_error() {
         let message = OpenAIResponsesMessageItem {
-            role: "user".into(),
+            _role: "user".into(),
             content: vec![OpenAIResponsesMessageContentPart::InputImage {
                 image_url: "data:malformed".into(),
                 detail: Some("invalid".into()),
@@ -2404,4 +2743,27 @@ mod tests {
             "Unsupported input_image.detail"
         );
     }
+}
+
+/// Bounded Responses entity extractor; malformed bodies use a fixed safe envelope.
+pub struct ResponsesBody(pub serde_json::Value);
+#[async_trait::async_trait]
+impl<S: Send + Sync> axum::extract::FromRequest<S> for ResponsesBody {
+    type Rejection = AppError;
+    async fn from_request(
+        request: axum::extract::Request,
+        _state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        let bytes = axum::body::to_bytes(request.into_body(), PAYLOAD_LIMIT)
+            .await
+            .map_err(|_| AppError::Routing("Responses entity limit exceeded".into()))?;
+        let value = serde_json::from_slice(&bytes)
+            .map_err(|_| AppError::Routing("Invalid Responses JSON".into()))?;
+        Ok(Self(value))
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct OpenAICachedTokens {
+    cached_tokens: u32,
 }

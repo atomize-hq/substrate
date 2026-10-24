@@ -3,6 +3,9 @@ use crate::auth::{
     CodexAuthSource, OAuthClient, OAuthConfig, ResolvedCodexAuthContext, TokenStore,
 };
 use crate::core::{GatewayRequest, GatewayResponse, GatewayStreamResponse, GatewayUsage};
+use crate::models::response_transport::{
+    self as transport, payload_size, ResponseItem, ToolDefinition, PAYLOAD_LIMIT,
+};
 use crate::models::{
     ContentBlock, CountTokensRequest, CountTokensResponse, ImageDetail, ImageSource,
     KnownContentBlock, MessageContent,
@@ -17,9 +20,12 @@ use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use crate::providers::streaming::{parse_sse_events, SseEvent, SseStream};
+#[cfg(test)]
+use crate::providers::streaming::parse_sse_events;
+use crate::providers::streaming::{SseEvent, SseStream};
 
 const OPENAI_PARALLEL_TOOL_CALLS_METADATA_KEY: &str = "parallel_tool_calls";
+#[cfg(test)]
 const OPENAI_PUBLIC_RESPONSES_METADATA_KEY: &str = "openai_public_responses";
 const OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY: &str = "openai_responses_tool_choice";
 const OPENAI_RESPONSES_REASONING_EFFORT_METADATA_KEY: &str = "openai_responses_reasoning_effort";
@@ -35,10 +41,6 @@ const OPENAI_RESPONSES_PREVIOUS_RESPONSE_ID_METADATA_KEY: &str =
 const OPENAI_RESPONSES_USER_METADATA_KEY: &str = "openai_responses_user";
 const OPENAI_RESPONSES_STREAM_OPTIONS_METADATA_KEY: &str = "openai_responses_stream_options";
 const OPENAI_RESPONSES_SERVICE_TIER_METADATA_KEY: &str = "openai_responses_service_tier";
-
-/// Official Codex instructions from OpenAI
-/// Source: https://github.com/openai/codex (rust-v0.58.0)
-const CODEX_INSTRUCTIONS: &str = include_str!("codex_instructions.md");
 
 /// OpenAI stream_options for requesting usage in streaming responses
 #[derive(Debug, Serialize)]
@@ -81,6 +83,14 @@ pub(crate) struct OpenAIResponsesRequest {
     /// System instructions for the model (required for ChatGPT Codex)
     #[serde(skip_serializing_if = "Option::is_none")]
     instructions: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    prompt_cache_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    client_metadata: Option<HashMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    top_p: Option<f32>,
     /// Whether to store the conversation (must be false for ChatGPT backend)
     #[serde(skip_serializing_if = "Option::is_none")]
     store: Option<bool>,
@@ -109,10 +119,10 @@ pub(crate) struct OpenAIResponsesRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     text: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<OpenAIResponsesTool>>,
+    tools: Option<Vec<ToolDefinition>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<serde_json::Value>,
-    // Note: ChatGPT Codex does NOT support max_output_tokens, max_tokens, temperature, top_p, stop
+    // OAuth Codex rejects sampling controls; API-key Responses supports temperature/top_p, not stop.
 }
 
 /// Input for Responses API can be string or array of messages
@@ -140,6 +150,8 @@ enum OpenAIResponsesInputItem {
     },
     #[serde(rename = "function_call_output")]
     FunctionCallOutput { call_id: String, output: String },
+    #[serde(untagged)]
+    Transport(ResponseItem),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -316,17 +328,6 @@ struct OpenAITool {
     function: OpenAIFunctionDef,
 }
 
-/// Flat function definition for the Responses endpoint.
-#[derive(Debug, Serialize)]
-struct OpenAIResponsesTool {
-    r#type: String,
-    name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    parameters: Option<serde_json::Value>,
-}
-
 /// Function definition
 #[derive(Debug, Serialize, Deserialize)]
 struct OpenAIFunctionDef {
@@ -467,14 +468,16 @@ struct OpenAIStreamDelta {
 struct OpenAIStreamError {
     #[serde(default)]
     status_code: Option<u16>,
-    error: OpenAIErrorDetail,
+    #[serde(rename = "error")]
+    _error: OpenAIErrorDetail,
 }
 
 #[derive(Debug, Deserialize)]
 struct OpenAIErrorDetail {
-    message: String,
-    #[serde(default)]
-    r#type: Option<String>,
+    #[serde(rename = "message")]
+    _message: String,
+    #[serde(default, rename = "type")]
+    _type: Option<String>,
 }
 
 /// State for OpenAI → Anthropic SSE transformation
@@ -548,6 +551,7 @@ pub struct OpenAIProvider {
     base_url: String,
     transport: OpenAITransport,
     client: Client,
+    responses_client: Client,
     models: Vec<String>,
     custom_headers: Vec<(String, String)>,
     /// OAuth provider ID (if using OAuth instead of API key)
@@ -569,8 +573,9 @@ pub(crate) struct OpenAIProviderConfig {
     pub codex_auth_source: Option<CodexAuthSource>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Serialize)]
 enum CodexSemanticItem {
+    Transport(ResponseItem),
     Message {
         text: BTreeMap<usize, String>,
     },
@@ -581,7 +586,7 @@ enum CodexSemanticItem {
     },
 }
 
-#[derive(Debug, Default)]
+#[derive(Default, Clone, Serialize)]
 struct CodexSemanticAssemblyState {
     response_id: Option<String>,
     response_status: Option<String>,
@@ -589,9 +594,11 @@ struct CodexSemanticAssemblyState {
     open_items: HashMap<usize, CodexSemanticItem>,
     finalized_items: BTreeMap<usize, CodexSemanticItem>,
     saw_completed: bool,
+    opaque_pending: HashSet<usize>,
+    end_turn: Option<bool>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 struct CodexSemanticStreamState {
     assembly: CodexSemanticAssemblyState,
     message_started: bool,
@@ -600,6 +607,7 @@ struct CodexSemanticStreamState {
     emitted: HashMap<usize, String>,
     closed_items: HashSet<usize>,
     failed: bool,
+    response_transport: bool,
 }
 
 fn codex_transport_drift(message: impl Into<String>) -> ProviderError {
@@ -641,6 +649,28 @@ fn codex_semantic_output_index(json: &serde_json::Value) -> Result<usize, Provid
 fn codex_semantic_item_text(
     item: &serde_json::Value,
 ) -> Result<BTreeMap<usize, String>, ProviderError> {
+    if item
+        .get("role")
+        .is_some_and(|v| v.as_str() != Some("assistant"))
+    {
+        return Err(codex_transport_drift("Invalid output message role"));
+    }
+    if item.as_object().is_some_and(|o| {
+        o.keys().any(|k| {
+            !matches!(
+                k.as_str(),
+                "type"
+                    | "id"
+                    | "role"
+                    | "content"
+                    | "phase"
+                    | "status"
+                    | "internal_chat_message_metadata_passthrough"
+            )
+        })
+    }) {
+        return Err(codex_transport_drift("Unsupported output message field"));
+    }
     let mut text = BTreeMap::new();
     let Some(content) = item.get("content") else {
         return Ok(text);
@@ -649,6 +679,20 @@ fn codex_semantic_item_text(
         .as_array()
         .ok_or_else(|| codex_transport_drift("Codex semantic message content was not an array"))?;
     for (index, part) in parts.iter().enumerate() {
+        if part.get("type").and_then(|v| v.as_str()) != Some("output_text")
+            || part.as_object().is_none_or(|o| {
+                o.keys()
+                    .any(|k| !matches!(k.as_str(), "type" | "text" | "annotations" | "logprobs"))
+            })
+        {
+            return Err(codex_transport_drift("Unsupported output content"));
+        }
+        if part
+            .get("annotations")
+            .is_some_and(|v| v.as_array().is_none_or(|a| !a.is_empty()))
+        {
+            return Err(codex_transport_drift("Citation annotations unsupported"));
+        }
         if part.get("type").and_then(|v| v.as_str()) == Some("output_text") {
             let value = part.get("text").and_then(|v| v.as_str()).ok_or_else(|| {
                 codex_transport_drift("Codex semantic output_text part missing text")
@@ -669,23 +713,26 @@ fn codex_semantic_item_function_call(item: &serde_json::Value) -> Option<(String
     Some((call_id.to_string(), name.to_string(), arguments.to_string()))
 }
 
-fn codex_semantic_usage(response: &serde_json::Value) -> GatewayUsage {
+fn codex_semantic_usage(response: &serde_json::Value) -> Result<GatewayUsage, ProviderError> {
     let usage = response.get("usage");
-    let input_tokens = usage
-        .and_then(|value| value.get("input_tokens"))
-        .and_then(|value| value.as_u64())
-        .unwrap_or(0) as u32;
-    let output_tokens = usage
-        .and_then(|value| value.get("output_tokens"))
-        .and_then(|value| value.as_u64())
-        .unwrap_or(0) as u32;
-
-    GatewayUsage {
-        input_tokens,
-        output_tokens,
+    let count = |value: Option<&serde_json::Value>| -> Result<u32, ProviderError> {
+        match value {
+            None => Ok(0),
+            Some(v) => v
+                .as_u64()
+                .and_then(|n| u32::try_from(n).ok())
+                .ok_or_else(|| codex_transport_drift("Invalid Responses usage")),
+        }
+    };
+    let cached = usage
+        .and_then(|u| u.get("input_tokens_details"))
+        .and_then(|d| d.get("cached_tokens"));
+    Ok(GatewayUsage {
+        input_tokens: count(usage.and_then(|u| u.get("input_tokens")))?,
+        output_tokens: count(usage.and_then(|u| u.get("output_tokens")))?,
         cache_creation_input_tokens: None,
-        cache_read_input_tokens: None,
-    }
+        cache_read_input_tokens: cached.map(|v| count(Some(v))).transpose()?,
+    })
 }
 
 fn codex_semantic_item_from_value(
@@ -713,8 +760,11 @@ fn codex_semantic_item_from_value(
                 arguments,
             }))
         }
-        "reasoning" => Ok(None),
-        _ => Ok(None),
+        "reasoning" | "custom_tool_call" | "tool_search_call" | "web_search_call" => {
+            let item = completed_transport_item(item)?;
+            Ok(Some(CodexSemanticItem::Transport(item)))
+        }
+        _ => Err(codex_transport_drift("Unsupported Responses output item")),
     }
 }
 
@@ -722,6 +772,10 @@ fn codex_semantic_item_to_content_block(
     item: &CodexSemanticItem,
 ) -> Result<Option<ContentBlock>, ProviderError> {
     match item {
+        CodexSemanticItem::Transport(item) => match item.clone().into_message().content {
+            MessageContent::Blocks(mut b) => Ok(b.pop()),
+            _ => unreachable!(),
+        },
         CodexSemanticItem::Message { text } => Ok(Some(ContentBlock::text(
             text.values().cloned().collect::<String>(),
             None,
@@ -761,7 +815,7 @@ impl CodexSemanticAssemblyState {
         Ok(())
     }
 
-    fn set_response_metadata(&mut self, response: &serde_json::Value) {
+    fn set_response_metadata(&mut self, response: &serde_json::Value) -> Result<(), ProviderError> {
         self.response_id = response
             .get("id")
             .and_then(|v| v.as_str())
@@ -771,7 +825,10 @@ impl CodexSemanticAssemblyState {
             .get("status")
             .and_then(|v| v.as_str())
             .map(str::to_string);
-        self.usage = Some(codex_semantic_usage(response));
+        if response.get("usage").is_some() {
+            self.usage = Some(codex_semantic_usage(response)?);
+        }
+        Ok(())
     }
 
     fn finalize_output_index(
@@ -780,7 +837,18 @@ impl CodexSemanticAssemblyState {
         item_value: Option<&serde_json::Value>,
     ) -> Result<(), ProviderError> {
         let authoritative = item_value
-            .map(codex_semantic_item_from_value)
+            .map(|item| {
+                if matches!(
+                    item.get("type").and_then(|v| v.as_str()),
+                    Some("function_call")
+                ) || (item.get("type").and_then(|v| v.as_str()) == Some("message")
+                    && (item.get("id").is_some() || item.get("phase").is_some()))
+                {
+                    completed_transport_item(item).map(|i| Some(CodexSemanticItem::Transport(i)))
+                } else {
+                    codex_semantic_item_from_value(item)
+                }
+            })
             .transpose()?
             .flatten();
         let current = self
@@ -798,6 +866,19 @@ impl CodexSemanticAssemblyState {
                         ..
                     },
                 ) if call_id == done_id && name == done_name => {}
+                (
+                    CodexSemanticItem::FunctionCall { call_id, name, .. },
+                    CodexSemanticItem::Transport(ResponseItem::FunctionCall {
+                        call_id: done_id,
+                        name: done_name,
+                        ..
+                    }),
+                ) if call_id == done_id && name == done_name => {}
+                (
+                    CodexSemanticItem::Message { .. },
+                    CodexSemanticItem::Transport(ResponseItem::Message { .. }),
+                ) => {}
+                (CodexSemanticItem::Transport(_), CodexSemanticItem::Transport(_)) => {}
                 _ => {
                     return Err(codex_transport_drift(
                         "Codex semantic done item changed type or function identity",
@@ -814,6 +895,22 @@ impl CodexSemanticAssemblyState {
             return Ok(());
         }
         let current = self.open_items.remove(&output_index);
+        if let Some(CodexSemanticItem::Transport(new)) = authoritative.as_ref() {
+            if let Some((_, id, ..)) = new.call() {
+                for existing in self.finalized_items.values() {
+                    if let CodexSemanticItem::Transport(old) = existing {
+                        if old.call().is_some_and(|(_, old_id, ..)| old_id == id) {
+                            if old == new {
+                                return Ok(());
+                            }
+                            return Err(codex_transport_drift(
+                                "Conflicting duplicate call identity",
+                            ));
+                        }
+                    }
+                }
+            }
+        }
         if let Some(item) = authoritative.or(current) {
             self.finalized_items.insert(output_index, item);
         }
@@ -829,11 +926,29 @@ impl CodexSemanticAssemblyState {
     }
 
     fn consume_event(&mut self, event: &SseEvent) -> Result<Option<usize>, ProviderError> {
+        // Bound the temporary candidate before cloning or extending. The current state and
+        // frame each fit B; the candidate is at most their sum and is checked at B before commit.
+        let current = payload_size(self, PAYLOAD_LIMIT).map_err(codex_transport_drift)?;
+        if event.data.len() > PAYLOAD_LIMIT
+            || transport::bounded_add(current, event.data.len(), 2 * PAYLOAD_LIMIT).is_err()
+        {
+            return Err(codex_transport_drift("Responses state limit exceeded"));
+        }
+        let mut next = self.clone();
+        let result = next.consume_event_inner(event)?;
+        payload_size(&next, PAYLOAD_LIMIT).map_err(codex_transport_drift)?;
+        *self = next;
+        Ok(result)
+    }
+    fn consume_event_inner(&mut self, event: &SseEvent) -> Result<Option<usize>, ProviderError> {
         if self.saw_completed || event.data.trim() == "[DONE]" {
             return Ok(None);
         }
         let json: serde_json::Value = serde_json::from_str(&event.data)
             .map_err(|_| codex_transport_drift("Malformed Codex semantic SSE event"))?;
+        if json.get("end_turn").is_some() {
+            return Err(codex_transport_drift("Misplaced Responses end_turn"));
+        }
         let Some(name) = event
             .event
             .as_deref()
@@ -848,7 +963,7 @@ impl CodexSemanticAssemblyState {
         }
         if matches!(name, "response.created" | "response.in_progress") {
             if let Some(response) = json.get("response") {
-                self.set_response_metadata(response);
+                self.set_response_metadata(response)?;
             }
             return Ok(None);
         }
@@ -861,12 +976,50 @@ impl CodexSemanticAssemblyState {
                         "Codex semantic response.completed event missing response envelope",
                     )
                 })?;
-            if response.get("status").and_then(|v| v.as_str()) == Some("failed") {
+            if response
+                .get("status")
+                .and_then(|v| v.as_str())
+                .is_some_and(|s| s != "completed")
+            {
                 return Err(codex_transport_drift(
                     "Upstream Responses stream reported failure",
                 ));
             }
-            self.set_response_metadata(response);
+            self.end_turn = match response.get("end_turn") {
+                None | Some(serde_json::Value::Null) => None,
+                Some(serde_json::Value::Bool(v)) => Some(*v),
+                _ => return Err(codex_transport_drift("Invalid Responses end_turn")),
+            };
+            if !self.opaque_pending.is_empty() {
+                return Err(codex_transport_drift(
+                    "Responses item missing authoritative done",
+                ));
+            }
+            if let Some(output) = response.get("output").and_then(|v| v.as_array()) {
+                for (index, item) in output.iter().enumerate() {
+                    if let Some(finalized) = self.finalized_items.get(&index) {
+                        if let CodexSemanticItem::Transport(done) = finalized {
+                            if completed_transport_item(item)? != *done {
+                                return Err(codex_transport_drift(
+                                    "Conflicting completed snapshot",
+                                ));
+                            }
+                        }
+                    } else {
+                        // Snapshot-only ordinary text/function producers remain checked by this owner.
+                        if !matches!(
+                            item.get("type").and_then(|v| v.as_str()),
+                            Some("message" | "function_call")
+                        ) {
+                            return Err(codex_transport_drift(
+                                "Completed snapshot cannot supply opaque state",
+                            ));
+                        }
+                        self.finalize_output_index(index, Some(item))?;
+                    }
+                }
+            }
+            self.set_response_metadata(response)?;
             self.finalize_pending_items()?;
             self.saw_completed = true;
             return Ok(None);
@@ -890,6 +1043,7 @@ impl CodexSemanticAssemblyState {
                 codex_transport_drift("Codex semantic output_item.done missing item")
             })?;
             self.finalize_output_index(index, Some(item))?;
+            self.opaque_pending.remove(&index);
             return Ok(Some(index));
         }
         if self.finalized_items.contains_key(&index) {
@@ -902,7 +1056,22 @@ impl CodexSemanticAssemblyState {
                 let item = json.get("item").ok_or_else(|| {
                     codex_transport_drift("Codex semantic output_item.added missing item")
                 })?;
-                self.upsert_open_item(index, codex_semantic_item_from_value(item)?)?;
+                match item.get("type").and_then(|v| v.as_str()) {
+                    Some(
+                        "reasoning" | "custom_tool_call" | "tool_search_call" | "web_search_call"
+                        | "compaction" | "context_compaction",
+                    ) => {
+                        self.opaque_pending.insert(index);
+                    }
+                    Some("message" | "function_call") => {
+                        self.upsert_open_item(index, codex_semantic_item_from_value(item)?)?
+                    }
+                    _ => {
+                        return Err(codex_transport_drift(
+                            "Unsupported provisional Responses item",
+                        ))
+                    }
+                }
             }
             "response.content_part.added"
             | "response.content_part.done"
@@ -999,6 +1168,7 @@ impl CodexSemanticAssemblyState {
             .flatten()
             .collect();
         Ok(GatewayResponse {
+            end_turn: self.end_turn,
             id: self
                 .response_id
                 .unwrap_or_else(|| "codex-semantic-response".to_string()),
@@ -1007,7 +1177,12 @@ impl CodexSemanticAssemblyState {
             content,
             model,
             stop_reason: Some(
-                if self.response_status.as_deref() == Some("incomplete") {
+                if self.finalized_items.values().any(|i| {
+                    matches!(i, CodexSemanticItem::FunctionCall { .. })
+                        || matches!(i,CodexSemanticItem::Transport(t) if t.call().is_some())
+                }) {
+                    "tool_use"
+                } else if self.response_status.as_deref() == Some("incomplete") {
                     "max_tokens"
                 } else {
                     "end_turn"
@@ -1026,12 +1201,57 @@ impl CodexSemanticAssemblyState {
 }
 
 impl CodexSemanticStreamState {
+    fn retained_payload(&self, model: &str) -> Result<usize, ProviderError> {
+        let state = payload_size(&self.assembly, PAYLOAD_LIMIT).map_err(codex_transport_drift)?;
+        let prefixes = payload_size(
+            &(
+                &self.emitted,
+                &self.closed_items,
+                &self.text_block_started,
+                &self.tool_block_started,
+            ),
+            PAYLOAD_LIMIT,
+        )
+        .map_err(codex_transport_drift)?;
+        transport::bounded_add(state, prefixes, 2 * PAYLOAD_LIMIT)
+            .and_then(|n| transport::bounded_add(n, model.len(), 2 * PAYLOAD_LIMIT))
+            .map_err(codex_transport_drift)
+    }
+    fn retain_prefix(
+        &mut self,
+        index: usize,
+        value: &str,
+        model: &str,
+    ) -> Result<(), ProviderError> {
+        let used = self.retained_payload(model)?;
+        // Subtract only raw prior bytes, conservatively retaining its escaped/key overhead.
+        let old = self.emitted.get(&index).map_or(0, String::len);
+        let new = payload_size(value, PAYLOAD_LIMIT).map_err(codex_transport_drift)?;
+        transport::bounded_add(used.saturating_sub(old), new, 2 * PAYLOAD_LIMIT)
+            .map_err(codex_transport_drift)?;
+        self.emitted.insert(index, value.to_owned());
+        Ok(())
+    }
+    fn push_event(&mut self, output: &mut String, event: &str, data: serde_json::Value) {
+        if self.failed {
+            return;
+        }
+        let size = payload_size(&data, PAYLOAD_LIMIT.saturating_sub(event.len() + 16))
+            .and_then(|n| transport::bounded_add(n, event.len() + 16, transport::NORMALIZED_LIMIT))
+            .and_then(|n| transport::bounded_add(output.len(), n, transport::NORMALIZED_LIMIT));
+        if size.is_err() {
+            self.failed = true;
+            return;
+        }
+        OpenAIProvider::push_sse_event(output, event, data);
+    }
+
     fn ensure_message_start(&mut self, output: &mut String, model: &str) {
         if self.message_started {
             return;
         }
         self.message_started = true;
-        OpenAIProvider::push_sse_event(
+        self.push_event(
             output,
             "message_start",
             serde_json::json!({
@@ -1046,7 +1266,7 @@ impl CodexSemanticStreamState {
 
     fn ensure_text_block(&mut self, output: &mut String, index: usize) {
         if self.text_block_started.insert(index) {
-            OpenAIProvider::push_sse_event(
+            self.push_event(
                 output,
                 "content_block_start",
                 serde_json::json!({
@@ -1058,7 +1278,7 @@ impl CodexSemanticStreamState {
 
     fn ensure_tool_block(&mut self, output: &mut String, index: usize, call_id: &str, name: &str) {
         if self.tool_block_started.insert(index) {
-            OpenAIProvider::push_sse_event(
+            self.push_event(
                 output,
                 "content_block_start",
                 serde_json::json!({
@@ -1070,7 +1290,7 @@ impl CodexSemanticStreamState {
 
     fn close_text_block(&mut self, output: &mut String, index: usize) {
         if self.text_block_started.remove(&index) {
-            OpenAIProvider::push_sse_event(
+            self.push_event(
                 output,
                 "content_block_stop",
                 serde_json::json!({"type":"content_block_stop","index":index}),
@@ -1080,7 +1300,7 @@ impl CodexSemanticStreamState {
 
     fn close_tool_block(&mut self, output: &mut String, index: usize) {
         if self.tool_block_started.remove(&index) {
-            OpenAIProvider::push_sse_event(
+            self.push_event(
                 output,
                 "content_block_stop",
                 serde_json::json!({"type":"content_block_stop","index":index}),
@@ -1089,16 +1309,24 @@ impl CodexSemanticStreamState {
     }
 
     fn emit_message_stop(&mut self, output: &mut String) {
+        {
+            let mut terminal =
+                serde_json::json!({"type":"gateway.response_terminal","status":"completed"});
+            if let Some(end_turn) = self.assembly.end_turn {
+                terminal["end_turn"] = end_turn.into();
+            }
+            self.push_event(output, "gateway.response_terminal", terminal);
+        }
         let usage = self.assembly.usage.as_ref();
-        OpenAIProvider::push_sse_event(
+        self.push_event(
             output,
             "message_delta",
             serde_json::json!({
-                "type":"message_delta","delta":{"stop_reason":if self.assembly.response_status.as_deref() == Some("incomplete") {"max_tokens"} else {"end_turn"},"stop_sequence":null},
-                "usage":{"input_tokens":usage.map_or(0,|u|u.input_tokens),"output_tokens":usage.map_or(0,|u|u.output_tokens)}
+                "type":"message_delta","delta":{"stop_reason":if self.assembly.finalized_items.values().any(|i|matches!(i,CodexSemanticItem::FunctionCall{..}) || matches!(i,CodexSemanticItem::Transport(t) if t.call().is_some())) {"tool_use"} else {"end_turn"},"stop_sequence":null},
+                "usage":{"input_tokens":usage.map_or(0,|u|u.input_tokens),"output_tokens":usage.map_or(0,|u|u.output_tokens),"cache_read_input_tokens":usage.and_then(|u|u.cache_read_input_tokens)}
             }),
         );
-        OpenAIProvider::push_sse_event(
+        self.push_event(
             output,
             "message_stop",
             serde_json::json!({"type":"message_stop"}),
@@ -1120,9 +1348,66 @@ impl CodexSemanticStreamState {
         else {
             return Ok(());
         };
+        if let CodexSemanticItem::Transport(item) = &item {
+            if self.closed_items.contains(&index) {
+                return Ok(());
+            }
+            self.ensure_message_start(output, model);
+            match item {
+                ResponseItem::FunctionCall {
+                    call_id,
+                    name,
+                    arguments,
+                    ..
+                } => {
+                    self.ensure_tool_block(output, index, call_id, name);
+                    let prior = self.emitted.get(&index).map(String::as_str).unwrap_or("");
+                    let suffix = arguments
+                        .strip_prefix(prior)
+                        .ok_or_else(|| codex_transport_drift("Conflicting complete arguments"))?;
+                    self.push_event(output,"content_block_delta",serde_json::json!({"type":"content_block_delta","index":index,"delta":{"type":"input_json_delta","partial_json":suffix}}));
+                    self.retain_prefix(index, arguments, model)?;
+                }
+                ResponseItem::Message { content, .. } => {
+                    let text = content
+                        .iter()
+                        .filter_map(|p| match p {
+                            transport::InputContent::OutputText { text }
+                            | transport::InputContent::InputText { text } => Some(text.as_str()),
+                            _ => None,
+                        })
+                        .collect::<String>();
+                    let prior = self.emitted.get(&index).map(String::as_str).unwrap_or("");
+                    let suffix = text
+                        .strip_prefix(prior)
+                        .ok_or_else(|| codex_transport_drift("Conflicting complete text"))?
+                        .to_string();
+                    self.ensure_text_block(output, index);
+                    self.push_event(output,"content_block_delta",serde_json::json!({"type":"content_block_delta","index":index,"delta":{"type":"text_delta","text":suffix}}));
+                    self.retain_prefix(index, &text, model)?;
+                }
+                ResponseItem::Reasoning { .. }
+                | ResponseItem::Compaction { .. }
+                | ResponseItem::ContextCompaction { .. } => {}
+                _ if !self.response_transport => {
+                    return Err(codex_transport_drift(
+                        "Advanced output unsupported by legacy endpoint",
+                    ))
+                }
+                _ => {}
+            }
+            if self.response_transport {
+                let payload =
+                    serde_json::json!({"type":"gateway.response_item","index":index,"item":item});
+                payload_size(&payload, PAYLOAD_LIMIT).map_err(codex_transport_drift)?;
+                self.push_event(output, "gateway.response_item", payload);
+            }
+            return Ok(());
+        }
         let value = match &item {
             CodexSemanticItem::Message { text } => text.values().cloned().collect::<String>(),
             CodexSemanticItem::FunctionCall { arguments, .. } => arguments.clone(),
+            CodexSemanticItem::Transport(_) => unreachable!(),
         };
         let prior = self.emitted.get(&index).map(String::as_str).unwrap_or("");
         let suffix = value
@@ -1144,6 +1429,7 @@ impl CodexSemanticStreamState {
         let first = !self.emitted.contains_key(&index);
         self.ensure_message_start(output, model);
         let delta = match item {
+            CodexSemanticItem::Transport(_) => unreachable!(),
             CodexSemanticItem::Message { .. } => {
                 self.ensure_text_block(output, index);
                 serde_json::json!({"type":"text_delta","text":suffix})
@@ -1154,13 +1440,13 @@ impl CodexSemanticStreamState {
             }
         };
         if first || !suffix.is_empty() {
-            OpenAIProvider::push_sse_event(
+            self.push_event(
                 output,
                 "content_block_delta",
                 serde_json::json!({"type":"content_block_delta","index":index,"delta":delta}),
             );
         }
-        self.emitted.insert(index, value);
+        self.retain_prefix(index, &value, model)?;
         Ok(())
     }
 
@@ -1181,7 +1467,9 @@ impl CodexSemanticStreamState {
             return Ok(String::new());
         }
         let result = (|| {
+            self.retained_payload(model)?;
             let index = self.assembly.consume_event(event)?;
+            self.retained_payload(model)?;
             let mut output = String::new();
             if let Some(index) = index {
                 self.emit_item(&mut output, index, model)?;
@@ -1203,6 +1491,14 @@ impl CodexSemanticStreamState {
                 self.ensure_message_start(&mut output, model);
                 self.emit_message_stop(&mut output);
             }
+            self.retained_payload(model)?;
+            if self.failed {
+                return Err(codex_transport_drift(
+                    "Responses normalized output limit exceeded",
+                ));
+            }
+            transport::bounded_add(0, output.len(), transport::NORMALIZED_LIMIT)
+                .map_err(codex_transport_drift)?;
             Ok(output)
         })();
         if result.is_err() {
@@ -1232,12 +1528,7 @@ impl OpenAIProvider {
     }
 
     fn uses_public_responses_api(request: &GatewayRequest) -> bool {
-        request
-            .metadata
-            .as_ref()
-            .and_then(|metadata| metadata.get(OPENAI_PUBLIC_RESPONSES_METADATA_KEY))
-            .and_then(|value| value.as_bool())
-            .unwrap_or(false)
+        request.responses_caller
     }
 
     fn request_contains_tool_results(request: &GatewayRequest) -> bool {
@@ -1260,7 +1551,8 @@ impl OpenAIProvider {
             return true;
         }
 
-        Self::is_codex_model(&request.model)
+        request.requires_responses()
+            || Self::is_codex_model(&request.model)
             || (Self::uses_public_responses_api(request)
                 && Self::request_contains_tool_results(request))
     }
@@ -1633,85 +1925,6 @@ impl OpenAIProvider {
     }
 
     /// Parse SSE (Server-Sent Events) response from ChatGPT Codex
-    fn parse_sse_response(sse_text: &str) -> Result<Vec<ContentBlock>, ProviderError> {
-        // Find the response.completed event and extract both reasoning and message
-        let lines: Vec<&str> = sse_text.lines().collect();
-
-        for (i, line) in lines.iter().enumerate() {
-            if line.starts_with("event: response.completed") {
-                // Next line should be data: {...}
-                if i + 1 < lines.len() {
-                    let data_line = lines[i + 1];
-                    if let Some(json_str) = data_line.strip_prefix("data: ") {
-                        // Skip "data: "
-                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(json_str) {
-                            // Extract both reasoning and message from response.output array
-                            // Note: Codex models have reasoning at output[0], message at output[1]
-                            if let Some(response) = json.get("response") {
-                                if let Some(output) =
-                                    response.get("output").and_then(|v| v.as_array())
-                                {
-                                    let mut content_blocks = Vec::new();
-
-                                    // Extract reasoning and message in order
-                                    for output_item in output {
-                                        if let Some(output_type) =
-                                            output_item.get("type").and_then(|v| v.as_str())
-                                        {
-                                            if let Some(content) = output_item
-                                                .get("content")
-                                                .and_then(|v| v.as_array())
-                                            {
-                                                if let Some(first_content) = content.first() {
-                                                    if let Some(text) = first_content
-                                                        .get("text")
-                                                        .and_then(|v| v.as_str())
-                                                    {
-                                                        match output_type {
-                                                            "reasoning" => {
-                                                                // Unsigned thinking block (no signature field)
-                                                                content_blocks.push(
-                                                                    ContentBlock::thinking(
-                                                                        serde_json::json!({
-                                                                            "thinking": text
-                                                                        }),
-                                                                    ),
-                                                                );
-                                                            }
-                                                            "message" => {
-                                                                content_blocks.push(
-                                                                    ContentBlock::text(
-                                                                        text.to_string(),
-                                                                        None,
-                                                                    ),
-                                                                );
-                                                            }
-                                                            _ => {}
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    if !content_blocks.is_empty() {
-                                        return Ok(content_blocks);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Err(ProviderError::ApiError {
-            status: 500,
-            message: "Failed to parse SSE response: no content found".to_string(),
-        })
-    }
-
-    /// Transform Anthropic request to OpenAI Responses API format
     pub(crate) fn transform_to_responses_request(
         &self,
         request: &GatewayRequest,
@@ -1821,20 +2034,6 @@ impl OpenAIProvider {
                         "Unsupported reasoning.summary on the Codex route".to_string(),
                     ));
                 }
-                let reasoning_enabled = request
-                    .metadata
-                    .as_ref()
-                    .and_then(|metadata| {
-                        metadata.get(OPENAI_RESPONSES_REASONING_EFFORT_METADATA_KEY)
-                    })
-                    .and_then(|value| value.as_str())
-                    .is_some_and(|effort| effort != "none");
-                if reasoning_summary != "none" && !reasoning_enabled {
-                    return Err(ProviderError::ConfigError(
-                        "reasoning.summary requires reasoning.effort to be enabled on the Codex route"
-                            .to_string(),
-                    ));
-                }
             }
             if let Some(include) = request
                 .metadata
@@ -1852,20 +2051,6 @@ impl OpenAIProvider {
                         "Unsupported include value on the Codex route".to_string(),
                     ));
                 }
-                let reasoning_enabled = request
-                    .metadata
-                    .as_ref()
-                    .and_then(|metadata| {
-                        metadata.get(OPENAI_RESPONSES_REASONING_EFFORT_METADATA_KEY)
-                    })
-                    .and_then(|value| value.as_str())
-                    .is_some_and(|effort| effort != "none");
-                if !include_values.is_empty() && !reasoning_enabled {
-                    return Err(ProviderError::ConfigError(
-                        "include reasoning.encrypted_content requires reasoning.effort to be enabled on the Codex route"
-                            .to_string(),
-                    ));
-                }
             }
             if let Some(verbosity) = request
                 .metadata
@@ -1879,6 +2064,12 @@ impl OpenAIProvider {
                     ));
                 }
             }
+        }
+
+        if request.stop_sequences.is_some() {
+            return Err(ProviderError::ConfigError(
+                "stop_sequences is not supported on the Responses route".into(),
+            ));
         }
 
         let allows_previous_response_continuation = request
@@ -1913,6 +2104,15 @@ impl OpenAIProvider {
                     let mut content_parts = Vec::new();
 
                     for block in blocks {
+                        if let Some(item) = ResponseItem::from_block(block) {
+                            Self::flush_responses_message_item(
+                                &mut items,
+                                &msg.role,
+                                &mut content_parts,
+                            );
+                            items.push(OpenAIResponsesInputItem::Transport(item));
+                            continue;
+                        }
                         match block {
                             ContentBlock::Known(KnownContentBlock::Text { .. })
                             | ContentBlock::Known(KnownContentBlock::Image { .. }) => {
@@ -1920,7 +2120,12 @@ impl OpenAIProvider {
                                     content_parts.push(part);
                                 }
                             }
-                            ContentBlock::Known(KnownContentBlock::ToolUse { id, name, input }) => {
+                            ContentBlock::Known(KnownContentBlock::ToolUse {
+                                id,
+                                name,
+                                input,
+                                ..
+                            }) => {
                                 Self::flush_responses_message_item(
                                     &mut items,
                                     &msg.role,
@@ -1967,13 +2172,11 @@ impl OpenAIProvider {
                                 }
                                 let output = if *is_error {
                                     tracing::debug!(
-                                        "🚨 Tool result is_error=true for {}, prefixing content",
+                                        "🚨 Tool result is_error=true for {}, preserving error flag",
                                         tool_use_id
                                     );
-                                    format!(
-                                        "[SYSTEM: Tools are disabled during warmup. Do NOT call any tools. Wait for the next user message before attempting any tool use.]\n{}",
-                                        content
-                                    )
+                                    serde_json::json!({"is_error":true,"content":content})
+                                        .to_string()
                                 } else {
                                     content.to_string()
                                 };
@@ -1983,6 +2186,7 @@ impl OpenAIProvider {
                                 });
                             }
                             ContentBlock::Known(KnownContentBlock::Thinking { .. })
+                            | ContentBlock::Known(KnownContentBlock::ResponseItem { .. })
                             | ContentBlock::Unknown(_) => {}
                         }
                     }
@@ -1992,19 +2196,24 @@ impl OpenAIProvider {
             }
         }
 
-        let tools = request.tools.as_ref().map(|anthropic_tools| {
-            anthropic_tools
-                .iter()
-                .filter_map(|tool| {
-                    Some(OpenAIResponsesTool {
-                        r#type: "function".to_string(),
-                        name: tool.name.as_ref()?.clone(),
-                        description: tool.description.clone(),
-                        parameters: tool.input_schema.clone(),
-                    })
-                })
-                .collect()
-        });
+        let wire_history: Vec<ResponseItem> = items
+            .iter()
+            .map(|item| serde_json::to_value(item).and_then(serde_json::from_value))
+            .collect::<Result<_, _>>()
+            .map_err(|_| ProviderError::ConfigError("Unsupported Responses history".into()))?;
+        transport::validate_history(&wire_history, allows_previous_response_continuation)
+            .map_err(ProviderError::ConfigError)?;
+        let tools = request
+            .tools
+            .as_ref()
+            .map(|tools| {
+                tools
+                    .iter()
+                    .map(ToolDefinition::native)
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .transpose()
+            .map_err(ProviderError::ConfigError)?;
 
         let tool_choice = request
             .metadata
@@ -2022,13 +2231,18 @@ impl OpenAIProvider {
             .as_ref()
             .and_then(|metadata| metadata.get(OPENAI_RESPONSES_REASONING_SUMMARY_METADATA_KEY))
             .and_then(|value| value.as_str());
-        let reasoning = reasoning_effort.map(|effort| {
+        let reasoning = (reasoning_effort.is_some()
+            || reasoning_summary.is_some()
+            || request.reasoning_context.is_some())
+        .then(|| {
             let mut reasoning = serde_json::Map::new();
-            reasoning.insert(
-                "effort".to_string(),
-                serde_json::Value::String(effort.to_string()),
-            );
-            if let Some(summary) = reasoning_summary {
+            if let Some(effort) = reasoning_effort {
+                reasoning.insert("effort".into(), effort.into());
+            }
+            if let Some(context) = &request.reasoning_context {
+                reasoning.insert("context".into(), context.clone().into());
+            }
+            if let Some(summary) = reasoning_summary.filter(|s| *s != "none") {
                 reasoning.insert(
                     "summary".to_string(),
                     serde_json::Value::String(summary.to_string()),
@@ -2106,8 +2320,20 @@ impl OpenAIProvider {
         Ok(OpenAIResponsesRequest {
             model: request.model.clone(),
             input: OpenAIResponsesInput::Items(items),
-            instructions: self.is_oauth().then_some(CODEX_INSTRUCTIONS.to_string()),
-            store: self.is_oauth().then_some(false),
+            instructions: request.instructions.clone(),
+            prompt_cache_key: request.prompt_cache_key.clone(),
+            client_metadata: request.client_metadata.clone(),
+            temperature: request.temperature,
+            top_p: request.top_p,
+            store: if self.is_oauth() {
+                Some(false)
+            } else {
+                request
+                    .metadata
+                    .as_ref()
+                    .and_then(|m| m.get("openai_responses_store"))
+                    .and_then(|v| v.as_bool())
+            },
             stream: true,
             parallel_tool_calls: request
                 .metadata
@@ -2141,6 +2367,10 @@ impl OpenAIProvider {
             base_url: normalized_base_url,
             transport,
             client: Client::new(),
+            responses_client: Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .expect("Responses HTTP client configuration"),
             models: config.models,
             custom_headers: config.custom_headers,
             oauth_provider: config.oauth_provider,
@@ -2245,6 +2475,11 @@ impl OpenAIProvider {
     /// - Anthropic: `{ name, description, input_schema }`
     /// - OpenAI: `{ type: "function", function: { name, description, parameters } }`
     fn transform_request(&self, request: &GatewayRequest) -> Result<OpenAIRequest, ProviderError> {
+        if request.requires_responses() {
+            return Err(ProviderError::ConfigError(
+                "Request requires Responses transport".into(),
+            ));
+        }
         let mut openai_messages = Vec::new();
 
         // Add system message if present
@@ -2277,9 +2512,9 @@ impl OpenAIProvider {
                         .filter_map(|block| {
                             if let ContentBlock::Known(KnownContentBlock::ToolResult { tool_use_id, content, is_error, .. }) = block {
                                 let result_content = if *is_error {
-                                    // Prefix error content so models know not to retry
-                                    tracing::debug!("🚨 Tool result is_error=true for {}, prefixing content", tool_use_id);
-                                    format!("[SYSTEM: Tools are disabled during warmup. Do NOT call any tools. Wait for the next user message before attempting any tool use.]\n{}", content)
+                                    // Carry the actual error flag as result data
+                                    tracing::debug!("🚨 Tool result is_error=true for {}, preserving error flag", tool_use_id);
+                                    serde_json::json!({"is_error":true,"content":content}).to_string()
                                 } else {
                                     content.to_string()
                                 };
@@ -2298,6 +2533,7 @@ impl OpenAIProvider {
                                 id,
                                 name,
                                 input,
+                                ..
                             }) = block
                             {
                                 Some(OpenAIToolCall {
@@ -2350,6 +2586,11 @@ impl OpenAIProvider {
                             }
                             ContentBlock::Known(KnownContentBlock::Thinking { .. }) => {
                                 // OpenAI doesn't have thinking blocks, skip
+                            }
+                            ContentBlock::Known(KnownContentBlock::ResponseItem { .. }) => {
+                                return Err(ProviderError::ConfigError(
+                                    "Responses state unsupported".into(),
+                                ))
                             }
                             ContentBlock::Unknown(_) => {
                                 // Unknown content types - skip when converting to OpenAI
@@ -2418,8 +2659,9 @@ impl OpenAIProvider {
         let tools = request.tools.as_ref().map(|anthropic_tools| {
             anthropic_tools
                 .iter()
-                .filter_map(|tool| {
-                    // Anthropic tools have name, description, input_schema
+                .filter_map(|definition| {
+                    let tool = definition.legacy().ok()?;
+                    // Endpoint-owned nested Chat Completions shape.
                     Some(OpenAITool {
                         r#type: "function".to_string(),
                         function: OpenAIFunctionDef {
@@ -2430,6 +2672,28 @@ impl OpenAIProvider {
                     })
                 })
                 .collect()
+        });
+
+        let choice = request
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get(OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY));
+        let tools = if choice.is_some_and(|v| v == "none") {
+            None
+        } else if let Some(name) = choice.and_then(|v| v.get("name")).and_then(|v| v.as_str()) {
+            tools.map(|v: Vec<OpenAITool>| {
+                v.into_iter().filter(|t| t.function.name == name).collect()
+            })
+        } else {
+            tools
+        };
+        let tool_choice = choice.map(|v| {
+            if v.get("type").and_then(|v| v.as_str()) == Some("function") && v.get("name").is_some()
+            {
+                serde_json::json!({"type":"function","function":{"name":v["name"]}})
+            } else {
+                v.clone()
+            }
         });
 
         // Request usage data in streaming responses
@@ -2455,11 +2719,7 @@ impl OpenAIProvider {
             stream: request.stream,
             stream_options,
             tools,
-            tool_choice: request
-                .metadata
-                .as_ref()
-                .and_then(|metadata| metadata.get(OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY))
-                .cloned(),
+            tool_choice,
             parallel_tool_calls: request
                 .metadata
                 .as_ref()
@@ -2561,6 +2821,7 @@ impl OpenAIProvider {
         });
 
         GatewayResponse {
+            end_turn: None,
             id: response.id,
             r#type: "message".to_string(),
             role: "assistant".to_string(),
@@ -2596,6 +2857,7 @@ impl OpenAIProvider {
             .join("\n");
 
         GatewayResponse {
+            end_turn: None,
             id: response.id,
             r#type: "message".to_string(),
             role: "assistant".to_string(),
@@ -2900,6 +3162,9 @@ impl OpenAIProvider {
 
 #[async_trait]
 impl super::GatewayProvider for OpenAIProvider {
+    fn supports_request(&self, _request: &GatewayRequest) -> bool {
+        true
+    }
     async fn send_message(
         &self,
         request: GatewayRequest,
@@ -2935,7 +3200,7 @@ impl super::GatewayProvider for OpenAIProvider {
             let (auth_header_name, auth_header_value) =
                 self.auth_header_parts(&auth_value, self.is_oauth());
             let mut req_builder = self
-                .client
+                .responses_client
                 .post(&url)
                 .header(auth_header_name, auth_header_value)
                 .header("Content-Type", "application/json");
@@ -2956,59 +3221,29 @@ impl super::GatewayProvider for OpenAIProvider {
                 }
             }
 
+            payload_size(&responses_request, PAYLOAD_LIMIT).map_err(codex_transport_drift)?;
             let response = req_builder.json(&responses_request).send().await?;
-
             if !response.status().is_success() {
-                let status = response.status().as_u16();
-                let error_text = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unknown error".to_string());
-                tracing::error!("Responses API error ({}): {}", status, error_text);
                 return Err(ProviderError::ApiError {
-                    status,
-                    message: error_text,
+                    status: response.status().as_u16(),
+                    message: "Upstream Responses request rejected".into(),
                 });
             }
-
-            let response_bytes = response.bytes().await?;
-            let response_text = std::str::from_utf8(&response_bytes)
-                .map_err(|_| codex_transport_drift("Invalid UTF-8 in upstream SSE stream"))?;
-            tracing::debug!("Responses API response body: {}", response_text);
-
-            let events = parse_sse_events(response_text);
+            use futures::StreamExt;
+            let mut events = SseStream::responses(response.bytes_stream());
             let mut state = CodexSemanticAssemblyState::default();
-            for event in &events {
-                state.consume_event(event)?;
+            while let Some(event) = events.next().await {
+                state.consume_event(&event?)?;
+                if state.saw_completed {
+                    break;
+                }
             }
-            if self.is_oauth() || !state.finalized_items.is_empty() {
-                return state.into_gateway_response(request.model.clone());
+            let response = state.into_gateway_response(request.model.clone())?;
+            if Self::uses_public_responses_api(&request) {
+                Ok(response)
+            } else {
+                legacy_response(response)
             }
-            // Retain API-key producers that send only a completed output snapshot.
-            // The same lifecycle validation still rejects error/truncated drains.
-            state.into_gateway_response(request.model.clone())?;
-
-            // Parse SSE (Server-Sent Events) format
-            // Format: event: xxx\ndata: {...}\n\n
-            // This extracts both reasoning (converted to thinking) and message blocks
-            let content_blocks = Self::parse_sse_response(response_text)?;
-
-            // Return direct response (SSE doesn't need transform)
-            Ok(GatewayResponse {
-                id: "sse-response".to_string(),
-                r#type: "message".to_string(),
-                role: "assistant".to_string(),
-                content: content_blocks,
-                model: request.model.clone(),
-                stop_reason: Some("end_turn".to_string()),
-                stop_sequence: None,
-                usage: GatewayUsage {
-                    input_tokens: 0, // SSE doesn't provide token counts
-                    output_tokens: 0,
-                    cache_creation_input_tokens: None,
-                    cache_read_input_tokens: None,
-                },
-            })
         } else {
             // Use standard /v1/chat/completions endpoint for non-Codex models
             let auth_value = self.get_auth_header().await?;
@@ -3051,26 +3286,25 @@ impl super::GatewayProvider for OpenAIProvider {
 
             if !response.status().is_success() {
                 let status = response.status().as_u16();
-                let error_text = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unknown error".to_string());
+
                 return Err(ProviderError::ApiError {
                     status,
-                    message: error_text,
+                    message: "Upstream request rejected".into(),
                 });
             }
 
             // Get response body as text for debugging
             let response_text = response.text().await?;
-            tracing::debug!("OpenAI provider response body: {}", response_text);
+            tracing::debug!("Provider payload diagnostic omitted");
 
             // Try to parse the response
             let openai_response: OpenAIResponse =
-                serde_json::from_str(&response_text).map_err(|e| {
-                    tracing::error!("Failed to parse OpenAI response: {}", e);
-                    tracing::error!("Response body was: {}", response_text);
-                    e
+                serde_json::from_str(&response_text).map_err(|_| {
+                    tracing::error!("Failed to parse OpenAI response");
+                    ProviderError::ApiError {
+                        status: 502,
+                        message: "Malformed upstream OpenAI response".into(),
+                    }
                 })?;
 
             Ok(self.transform_response(openai_response))
@@ -3169,8 +3403,12 @@ impl super::GatewayProvider for OpenAIProvider {
         // Send streaming request
         let (auth_header_name, auth_header_value) =
             self.auth_header_parts(&auth_value, self.is_oauth());
-        let mut req_builder = self
-            .client
+        let transport_client = if use_responses_api {
+            &self.responses_client
+        } else {
+            &self.client
+        };
+        let mut req_builder = transport_client
             .post(&url)
             .header(auth_header_name, auth_header_value)
             .header("Content-Type", "application/json");
@@ -3200,18 +3438,18 @@ impl super::GatewayProvider for OpenAIProvider {
             }
         }
 
+        if use_responses_api {
+            payload_size(&request_body, PAYLOAD_LIMIT).map_err(codex_transport_drift)?;
+        }
         let response = req_builder.json(&request_body).send().await?;
 
         // Check for errors
         if !response.status().is_success() {
             let status = response.status().as_u16();
-            let error_text = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unknown error".to_string());
+
             return Err(ProviderError::ApiError {
                 status,
-                message: error_text,
+                message: "Upstream request rejected".into(),
             });
         }
 
@@ -3224,9 +3462,16 @@ impl super::GatewayProvider for OpenAIProvider {
         let finalized_stream: std::pin::Pin<
             Box<dyn futures::stream::Stream<Item = Result<Bytes, ProviderError>> + Send>,
         > = if use_responses_api {
-            let sse = SseStream::new(response.bytes_stream());
+            let sse = SseStream::responses(response.bytes_stream());
             Box::pin(futures::stream::unfold(
-                (sse, CodexSemanticStreamState::default(), false),
+                (
+                    Some(sse),
+                    CodexSemanticStreamState {
+                        response_transport: Self::uses_public_responses_api(&request),
+                        ..Default::default()
+                    },
+                    false,
+                ),
                 move |(mut sse, mut state, ended)| {
                     let model = stream_model_name.clone();
                     async move {
@@ -3234,14 +3479,19 @@ impl super::GatewayProvider for OpenAIProvider {
                             return None;
                         }
                         loop {
-                            let result = match sse.next().await {
-                                Some(Ok(event)) => {
-                                    state.consume_event(&event, &model).map(Bytes::from)
-                                }
-                                Some(Err(error)) => Err(error),
-                                None => state.finalize(&model).map(Bytes::from),
-                            };
+                            let result =
+                                match sse.as_mut().expect("active Responses body").next().await {
+                                    Some(Ok(event)) => {
+                                        state.consume_event(&event, &model).map(Bytes::from)
+                                    }
+                                    Some(Err(error)) => Err(error),
+                                    None => state.finalize(&model).map(Bytes::from),
+                                };
                             let ended = result.is_err() || state.assembly.saw_completed;
+                            if ended {
+                                // Release the body now, even if the consumer never polls again.
+                                sse.take();
+                            }
                             match result {
                                 Ok(bytes) if bytes.is_empty() && !ended => continue,
                                 Ok(bytes) if bytes.is_empty() => return None,
@@ -3266,14 +3516,11 @@ impl super::GatewayProvider for OpenAIProvider {
             let sse_stream = SseStream::new(response.bytes_stream());
 
             // Capture provider/model names for logging
-            let provider_name = self.name.clone();
-
             // Transform OpenAI SSE events to Anthropic format
             let transformed_stream = sse_stream
                 .then(move |result| {
                     let message_id = message_id.clone();
                     let state = state.clone();
-                    let provider_name = provider_name.clone();
 
                     async move {
                         match result {
@@ -3284,7 +3531,7 @@ impl super::GatewayProvider for OpenAIProvider {
                                     return Ok(Bytes::new());
                                 }
 
-                                tracing::debug!("📦 Received SSE chunk: {}", sse_event.data);
+                                tracing::debug!("Provider payload diagnostic omitted");
 
                                 // Skip empty data
                                 if sse_event.data.trim().is_empty() {
@@ -3302,21 +3549,10 @@ impl super::GatewayProvider for OpenAIProvider {
                                     serde_json::from_str::<OpenAIStreamError>(&sse_event.data)
                                 {
                                     let status = error_response.status_code.unwrap_or(500);
-                                    let error_type =
-                                        error_response.error.r#type.as_deref().unwrap_or("unknown");
-                                    tracing::error!(
-                                        "❌ {} upstream error ({}): {} [type={}]",
-                                        provider_name,
-                                        status,
-                                        error_response.error.message,
-                                        error_type
-                                    );
+                                    tracing::error!("Provider payload diagnostic omitted");
                                     return Err(ProviderError::ApiError {
                                         status,
-                                        message: format!(
-                                            "{}: {}",
-                                            provider_name, error_response.error.message
-                                        ),
+                                        message: "Upstream stream rejected".into(),
                                     });
                                 }
 
@@ -3345,13 +3581,8 @@ impl super::GatewayProvider for OpenAIProvider {
                                         // Return as raw bytes (already SSE-formatted)
                                         Ok(Bytes::from(sse_output))
                                     }
-                                    Err(e) => {
-                                        tracing::warn!(
-                                            "❌ {} failed to parse chunk: {} - Data: {}",
-                                            provider_name,
-                                            e,
-                                            sse_event.data
-                                        );
+                                    Err(_) => {
+                                        tracing::warn!("Provider payload diagnostic omitted");
                                         Ok(Bytes::new())
                                     }
                                 }
@@ -3459,6 +3690,19 @@ impl super::GatewayProvider for OpenAIProvider {
         )
         .fuse();
 
+        if use_responses_api {
+            // Catch failure before public headers, and avoid the generic logging parser's
+            // extra opaque payload copies. Dropping this stream drops the network body.
+            let mut stream = Box::pin(finalized_stream);
+            let first =
+                stream.next().await.transpose()?.ok_or_else(|| {
+                    codex_transport_drift("Responses stream produced no terminal")
+                })?;
+            return Ok(GatewayStreamResponse {
+                stream: Box::pin(futures::stream::once(async move { Ok(first) }).chain(stream)),
+                headers: HashMap::new(),
+            });
+        }
         // Wrap with logging stream to capture token stats
         use crate::providers::streaming::LoggingSseStream;
         let logging_stream = LoggingSseStream::new(finalized_stream, self.name.clone(), model_name);
@@ -3474,8 +3718,117 @@ impl super::GatewayProvider for OpenAIProvider {
     }
 }
 
+fn completed_transport_item(value: &serde_json::Value) -> Result<ResponseItem, ProviderError> {
+    let mut value = value.clone();
+    let object = value
+        .as_object_mut()
+        .ok_or_else(|| codex_transport_drift("Invalid complete Responses item"))?;
+    // A completed function item's lifecycle is transport envelope data. Native
+    // replay retains call identity and arguments, not this upstream lifecycle tag.
+    if object.get("type").and_then(|v| v.as_str()) == Some("function_call") {
+        if object
+            .get("status")
+            .is_some_and(|status| status.as_str() != Some("completed"))
+        {
+            return Err(codex_transport_drift(
+                "Invalid completed function lifecycle",
+            ));
+        }
+        object.remove("status");
+    }
+    // These are explicitly private upstream fields, never part of replay projection.
+    object.remove("internal_chat_message_metadata_passthrough");
+    if object.get("type").and_then(|v| v.as_str()) == Some("reasoning") {
+        object.remove("content");
+        object.remove("reasoning_text");
+    }
+    if object.get("type").and_then(|v| v.as_str()) == Some("message") {
+        object.remove("status");
+        if let Some(parts) = object.get_mut("content").and_then(|v| v.as_array_mut()) {
+            for part in parts {
+                if part
+                    .get("annotations")
+                    .is_some_and(|v| v.as_array().is_none_or(|a| !a.is_empty()))
+                {
+                    return Err(codex_transport_drift("Citation annotations unsupported"));
+                }
+                if let Some(p) = part.as_object_mut() {
+                    p.remove("annotations");
+                    p.remove("logprobs");
+                }
+            }
+        }
+    }
+    let item: ResponseItem = serde_json::from_value(value)
+        .map_err(|_| codex_transport_drift("Unsupported complete Responses item"))?;
+    item.validate()
+        .map_err(|_| codex_transport_drift("Invalid complete Responses item"))?;
+    Ok(item)
+}
+
+fn legacy_response(mut response: GatewayResponse) -> Result<GatewayResponse, ProviderError> {
+    let mut content = Vec::new();
+    for block in response.content {
+        if let Some(item) = ResponseItem::from_block(&block) {
+            match item {
+                ResponseItem::FunctionCall {
+                    call_id,
+                    name,
+                    arguments,
+                    ..
+                } => content.push(ContentBlock::tool_use(
+                    call_id,
+                    name,
+                    serde_json::from_str(&arguments)
+                        .map_err(|_| codex_transport_drift("Invalid tool arguments"))?,
+                )),
+                ResponseItem::Message { content: parts, .. } => {
+                    for part in parts {
+                        if let transport::InputContent::OutputText { text } = part {
+                            content.push(ContentBlock::text(text, None));
+                        }
+                    }
+                }
+                ResponseItem::Reasoning { .. }
+                | ResponseItem::Compaction { .. }
+                | ResponseItem::ContextCompaction { .. } => {}
+                _ => {
+                    return Err(codex_transport_drift(
+                        "Advanced output unsupported by legacy endpoint",
+                    ))
+                }
+            }
+        } else {
+            content.push(block)
+        }
+    }
+    response.content = content;
+    Ok(response)
+}
+
+impl std::fmt::Debug for CodexSemanticAssemblyState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("CodexSemanticAssemblyState([payload omitted])")
+    }
+}
+impl std::fmt::Debug for CodexSemanticStreamState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("CodexSemanticStreamState([payload omitted])")
+    }
+}
+impl std::fmt::Debug for CodexSemanticItem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("CodexSemanticItem([payload omitted])")
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    fn parsed_input(v: &serde_json::Value) -> serde_json::Value {
+        v.as_str()
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or_else(|| v.clone())
+    }
     use super::*;
     use crate::auth::codex_auth_context::{
         integrated_codex_auth_test_lock, CodexAccountIdSource, CodexAuthMode,
@@ -3537,10 +3890,10 @@ mod tests {
 
         assert_eq!(error.status_code, Some(500));
         assert_eq!(
-            error.error.message,
+            error._error._message,
             "Encountered a server error, please try again."
         );
-        assert_eq!(error.error.r#type, Some("server_error".to_string()));
+        assert_eq!(error._error._type, Some("server_error".to_string()));
     }
 
     #[test]
@@ -3564,8 +3917,8 @@ mod tests {
         let error: OpenAIStreamError = serde_json::from_str(error_json).unwrap();
 
         assert_eq!(error.status_code, None);
-        assert_eq!(error.error.message, "Rate limit exceeded");
-        assert_eq!(error.error.r#type, Some("rate_limit_error".to_string()));
+        assert_eq!(error._error._message, "Rate limit exceeded");
+        assert_eq!(error._error._type, Some("rate_limit_error".to_string()));
     }
 
     /// Helper: parse a JSON string as an OpenAIStreamChunk and transform it
@@ -3581,6 +3934,10 @@ mod tests {
             base_url: "https://example.invalid".to_string(),
             transport,
             client: Client::new(),
+            responses_client: Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .unwrap(),
             models: Vec::new(),
             custom_headers: Vec::new(),
             oauth_provider: None,
@@ -3602,13 +3959,15 @@ mod tests {
                     "type": "object", "properties": {"query": {"type": "string"}},
                     "required": ["query"], "additionalProperties": false
                 })),
-            },
+            }
+            .into(),
             crate::models::Tool {
                 r#type: Some("function".to_string()),
                 name: Some("finish".to_string()),
                 description: None,
                 input_schema: None,
-            },
+            }
+            .into(),
         ]);
         for provider in [
             test_provider(OpenAITransport::OpenAI),
@@ -3699,6 +4058,10 @@ mod tests {
             base_url: "https://example.invalid".to_string(),
             transport: OpenAITransport::OpenAI,
             client: Client::new(),
+            responses_client: Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .unwrap(),
             models: Vec::new(),
             custom_headers: Vec::new(),
             oauth_provider: Some("test-oauth-provider".to_string()),
@@ -3770,6 +4133,11 @@ mod tests {
         );
 
         GatewayRequest {
+            responses_caller: false,
+            instructions: None,
+            prompt_cache_key: None,
+            client_metadata: None,
+            reasoning_context: None,
             model: "gpt-test".to_string(),
             messages: vec![crate::models::Message {
                 role: "user".to_string(),
@@ -3789,7 +4157,8 @@ mod tests {
                 name: Some("lookup".to_string()),
                 description: None,
                 input_schema: None,
-            }]),
+            }
+            .into()]),
         }
     }
 
@@ -3804,6 +4173,11 @@ mod tests {
         });
 
         GatewayRequest {
+            responses_caller: false,
+            instructions: None,
+            prompt_cache_key: None,
+            client_metadata: None,
+            reasoning_context: None,
             model: "gpt-test".to_string(),
             messages: vec![crate::models::Message {
                 role: "user".to_string(),
@@ -3823,12 +4197,18 @@ mod tests {
                 name: Some("lookup".to_string()),
                 description: None,
                 input_schema: None,
-            }]),
+            }
+            .into()]),
         }
     }
 
     fn gateway_request_with_multimodal_system_prompt() -> GatewayRequest {
         GatewayRequest {
+            responses_caller: false,
+            instructions: None,
+            prompt_cache_key: None,
+            client_metadata: None,
+            reasoning_context: None,
             model: "gpt-test".to_string(),
             messages: vec![crate::models::Message {
                 role: "user".to_string(),
@@ -3897,6 +4277,11 @@ mod tests {
         );
 
         GatewayRequest {
+            responses_caller: false,
+            instructions: None,
+            prompt_cache_key: None,
+            client_metadata: None,
+            reasoning_context: None,
             model: "gpt-4.1-mini".to_string(),
             messages: vec![crate::models::Message {
                 role: "user".to_string(),
@@ -3934,7 +4319,8 @@ mod tests {
                     "properties": { "query": { "type": "string" } },
                     "required": ["query"]
                 })),
-            }]),
+            }
+            .into()]),
         }
     }
 
@@ -3946,6 +4332,11 @@ mod tests {
         );
 
         GatewayRequest {
+            responses_caller: true,
+            instructions: None,
+            prompt_cache_key: None,
+            client_metadata: None,
+            reasoning_context: None,
             model: "gpt-4.1-mini".to_string(),
             messages: vec![
                 crate::models::Message {
@@ -3961,6 +4352,7 @@ mod tests {
                             input: serde_json::json!({
                                 "query": "x"
                             }),
+                            transport: None,
                         },
                     )]),
                 },
@@ -3974,6 +4366,7 @@ mod tests {
                             ),
                             is_error: false,
                             cache_control: None,
+                            transport: None,
                         },
                     )]),
                 },
@@ -4028,6 +4421,11 @@ mod tests {
         );
 
         GatewayRequest {
+            responses_caller: true,
+            instructions: None,
+            prompt_cache_key: None,
+            client_metadata: None,
+            reasoning_context: None,
             model: "gpt-4.1-mini".to_string(),
             messages: vec![crate::models::Message {
                 role: "user".to_string(),
@@ -4058,6 +4456,11 @@ mod tests {
         );
 
         GatewayRequest {
+            responses_caller: true,
+            instructions: None,
+            prompt_cache_key: None,
+            client_metadata: None,
+            reasoning_context: None,
             model: "gpt-4.1-mini".to_string(),
             messages: vec![crate::models::Message {
                 role: "user".to_string(),
@@ -4069,6 +4472,7 @@ mod tests {
                         ),
                         is_error: false,
                         cache_control: None,
+                        transport: None,
                     },
                 )]),
             }],
@@ -4093,6 +4497,11 @@ mod tests {
         );
 
         GatewayRequest {
+            responses_caller: true,
+            instructions: None,
+            prompt_cache_key: None,
+            client_metadata: None,
+            reasoning_context: None,
             model: "gpt-4.1-mini".to_string(),
             messages: vec![crate::models::Message {
                 role: "user".to_string(),
@@ -4104,6 +4513,7 @@ mod tests {
                         ),
                         is_error: false,
                         cache_control: None,
+                        transport: None,
                     },
                 )]),
             }],
@@ -4127,6 +4537,10 @@ mod tests {
             base_url: "https://example.azure.com/openai/v1".to_string(),
             transport: OpenAITransport::AzureOpenAI,
             client: Client::new(),
+            responses_client: Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .unwrap(),
             models: Vec::new(),
             custom_headers: Vec::new(),
             oauth_provider: None,
@@ -4181,6 +4595,10 @@ mod tests {
             base_url: "https://example.invalid".to_string(),
             transport: OpenAITransport::OpenAI,
             client: Client::new(),
+            responses_client: Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .unwrap(),
             models: Vec::new(),
             custom_headers: Vec::new(),
             oauth_provider: Some("test-oauth-provider".to_string()),
@@ -4341,10 +4759,7 @@ mod tests {
             .and_then(|value| value.as_array())
             .expect("system content array");
 
-        assert_eq!(
-            serialized["instructions"],
-            serde_json::json!(CODEX_INSTRUCTIONS)
-        );
+        assert_eq!(serialized["instructions"], serde_json::Value::Null);
         assert_eq!(serialized["store"], serde_json::json!(false));
         assert!(content.iter().any(|part| {
             part.get("type").and_then(|value| value.as_str()) == Some("input_image")
@@ -4357,6 +4772,11 @@ mod tests {
     fn transform_to_responses_request_preserves_ordered_instruction_roles_in_message_items() {
         let provider = test_provider(OpenAITransport::OpenAI);
         let request = GatewayRequest {
+            responses_caller: false,
+            instructions: None,
+            prompt_cache_key: None,
+            client_metadata: None,
+            reasoning_context: None,
             model: "gpt-4.1-mini".to_string(),
             messages: vec![
                 crate::models::Message {
@@ -4527,6 +4947,11 @@ mod tests {
         );
 
         let request = GatewayRequest {
+            responses_caller: false,
+            instructions: None,
+            prompt_cache_key: None,
+            client_metadata: None,
+            reasoning_context: None,
             model: "gpt-4.1-mini".to_string(),
             messages: vec![
                 crate::models::Message {
@@ -4540,6 +4965,7 @@ mod tests {
                             id: "call_1".to_string(),
                             name: "lookup".to_string(),
                             input: serde_json::json!({"query":"a"}),
+                            transport: None,
                         },
                     )]),
                 },
@@ -4553,6 +4979,7 @@ mod tests {
                             ),
                             is_error: false,
                             cache_control: None,
+                            transport: None,
                         },
                     )]),
                 },
@@ -4567,6 +4994,7 @@ mod tests {
                             id: "call_2".to_string(),
                             name: "lookup".to_string(),
                             input: serde_json::json!({"query":"b"}),
+                            transport: None,
                         },
                     )]),
                 },
@@ -4580,6 +5008,7 @@ mod tests {
                             ),
                             is_error: false,
                             cache_control: None,
+                            transport: None,
                         },
                     )]),
                 },
@@ -5053,6 +5482,11 @@ mod tests {
     fn azure_gpt5_chat_requests_use_max_completion_tokens() {
         let provider = test_azure_provider();
         let request = GatewayRequest {
+            responses_caller: false,
+            instructions: None,
+            prompt_cache_key: None,
+            client_metadata: None,
+            reasoning_context: None,
             model: "gpt-5.4-mini".to_string(),
             ..gateway_request_with_parallel_tool_calls(None)
         };
@@ -5301,13 +5735,13 @@ mod tests {
                 ContentBlock::Known(KnownContentBlock::Text { text, .. }) => {
                     Some(SimplifiedEvent::Text(text.clone()))
                 }
-                ContentBlock::Known(KnownContentBlock::ToolUse { id, name, input }) => {
-                    Some(SimplifiedEvent::Tool {
-                        id: id.clone(),
-                        name: name.clone(),
-                        input: input.clone(),
-                    })
-                }
+                ContentBlock::Known(KnownContentBlock::ToolUse {
+                    id, name, input, ..
+                }) => Some(SimplifiedEvent::Tool {
+                    id: id.clone(),
+                    name: name.clone(),
+                    input: input.clone(),
+                }),
                 _ => None,
             })
             .collect()
@@ -5758,6 +6192,54 @@ mod tests {
     }
 
     #[test]
+    fn responses_retained_partition_counts_model_and_prefixes() {
+        let mut stream = CodexSemanticStreamState::default();
+        stream.emitted.insert(0, "saved prefix".into());
+        let base = stream.retained_payload("").unwrap();
+        for target in [
+            2 * PAYLOAD_LIMIT - 1,
+            2 * PAYLOAD_LIMIT,
+            2 * PAYLOAD_LIMIT + 1,
+        ] {
+            let model = "m".repeat(target - base);
+            if target > 2 * PAYLOAD_LIMIT {
+                assert!(stream.retained_payload(&model).is_err());
+            } else {
+                assert_eq!(stream.retained_payload(&model).unwrap(), target);
+            }
+        }
+    }
+
+    #[test]
+    fn responses_assembly_state_boundaries_preserve_pre_failure_state() {
+        for target in [PAYLOAD_LIMIT - 1, PAYLOAD_LIMIT, PAYLOAD_LIMIT + 1] {
+            let mut state = CodexSemanticAssemblyState::default();
+            let first=SseEvent{event:Some("response.output_item.done".into()),data:serde_json::json!({"type":"response.output_item.done","output_index":0,"item":{"type":"reasoning","summary":[],"encrypted_content":"x".repeat(PAYLOAD_LIMIT/2)}}).to_string()};
+            state.consume_event(&first).unwrap();
+            let before = serde_json::to_value(&state).unwrap();
+            let mut candidate = state.clone();
+            candidate.finalized_items.insert(
+                1,
+                CodexSemanticItem::Transport(ResponseItem::Reasoning {
+                    id: None,
+                    summary: vec![],
+                    encrypted_content: Some(transport::Opaque(String::new())),
+                }),
+            );
+            let padding = target - payload_size(&candidate, usize::MAX).unwrap();
+            let second=SseEvent{event:Some("response.output_item.done".into()),data:serde_json::json!({"type":"response.output_item.done","output_index":1,"item":{"type":"reasoning","summary":[],"encrypted_content":"y".repeat(padding)}}).to_string()};
+            let result = state.consume_event(&second);
+            if target > PAYLOAD_LIMIT {
+                assert!(result.is_err());
+                assert_eq!(serde_json::to_value(&state).unwrap(), before);
+            } else {
+                result.unwrap();
+                assert_eq!(payload_size(&state, usize::MAX).unwrap(), target);
+            }
+        }
+    }
+
+    #[test]
     fn codex_semantic_sync_assembles_text_and_tools_from_event_family() {
         let sse_text = [
             r#"event: response.output_item.added
@@ -5816,7 +6298,7 @@ data: {"type":"response.completed","response":{"id":"resp_codex","status":"compl
 
         assert_eq!(response.id, "resp_codex");
         assert_eq!(response.model, "gateway-default");
-        assert_eq!(response.stop_reason.as_deref(), Some("end_turn"));
+        assert_eq!(response.stop_reason.as_deref(), Some("tool_use"));
         assert_eq!(response.usage.input_tokens, 7);
         assert_eq!(response.usage.output_tokens, 2);
         assert_eq!(response.content.len(), 2);
@@ -5827,7 +6309,7 @@ data: {"type":"response.completed","response":{"id":"resp_codex","status":"compl
         assert!(matches!(
             &response.content[1],
             ContentBlock::Known(KnownContentBlock::ToolUse { id, name, input, .. })
-            if id == "call_1" && name == "lookup" && input == &serde_json::json!({"path":"README.md"})
+            if id == "call_1" && name == "lookup" && parsed_input(input) == serde_json::json!({"path":"README.md"})
         ));
     }
 
@@ -5855,6 +6337,10 @@ data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"d
         let sse_text = [
             r#"event: response.output_item.added
 data: {"type":"response.output_item.added","output_index":0,"item":{"type":"reasoning","content":[{"type":"output_text","text":"secret reasoning"}]}}
+
+"#,
+            r#"event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":0,"item":{"type":"reasoning","summary":[],"content":[{"type":"reasoning_text","text":"secret reasoning"}]}}
 
 "#,
             r#"event: response.output_item.added
@@ -5937,7 +6423,7 @@ data: {"type":"response.completed","response":{"id":"resp_stream","status":"comp
         if tool {
             assert!(
                 matches!(&response.content[0], ContentBlock::Known(KnownContentBlock::ToolUse {id,name,input,..})
-                if id == "call_gwa" && name == "lookup" && input == &serde_json::from_str::<serde_json::Value>(expected).unwrap())
+                if id == "call_gwa" && name == "lookup" && parsed_input(input) == serde_json::from_str::<serde_json::Value>(expected).unwrap())
             );
         } else {
             assert!(
@@ -6124,11 +6610,10 @@ data: {"type":"response.completed","response":{"id":"resp_stream","status":"comp
             stream.consume_event(event, "model").unwrap();
             sync.consume_event(event).unwrap();
         }
-        assert!(stream
-            .consume_event(&events[2], "model")
-            .unwrap_err()
-            .to_string()
-            .contains("valid JSON"));
+        assert!(matches!(
+            stream.consume_event(&events[2], "model"),
+            Err(ProviderError::ApiError { status: 502, .. })
+        ));
         sync.consume_event(&events[2]).unwrap();
         assert!(sync.into_gateway_response("model".into()).is_err());
     }
@@ -6169,9 +6654,10 @@ data: {"type":"response.completed","response":{"id":"resp_stream","status":"comp
         assert!(stream.finalize("model").unwrap().is_empty());
         let event = SseEvent {event:Some("response.completed".into()), data:serde_json::json!({"response":{"id":"resp_incomplete","status":"incomplete","usage":{"input_tokens":2,"output_tokens":1}}}).to_string()};
         let mut stream = CodexSemanticStreamState::default();
-        let output = stream.consume_event(&event, "model").unwrap();
-        assert!(output.contains("max_tokens"));
-        assert!(!output.contains("end_turn"));
+        assert!(matches!(
+            stream.consume_event(&event, "model"),
+            Err(ProviderError::ApiError { status: 502, .. })
+        ));
     }
 
     #[tokio::test]
@@ -6293,9 +6779,10 @@ data: {"type":"response.completed","response":{"id":"resp_stream","status":"comp
         let mut stream = CodexSemanticStreamState::default();
         assert!(stream.consume_event(&events[0], "model").is_err());
         let mut sync = CodexSemanticAssemblyState::default();
-        for event in &events {
-            sync.consume_event(event).unwrap();
-        }
+        assert!(matches!(
+            sync.consume_event(&events[0]),
+            Err(ProviderError::ApiError { status: 502, .. })
+        ));
         assert!(sync.into_gateway_response("model".into()).is_err());
     }
 
@@ -6368,7 +6855,7 @@ data: {"type":"response.completed","response":{"id":"resp_stream","status":"comp
                     if provider.is_oauth() {
                         assert_eq!(body["store"], false);
                         assert_eq!(body["stream"], true);
-                        assert_eq!(body["instructions"], CODEX_INSTRUCTIONS);
+                        assert!(body.get("instructions").is_none());
                     }
                 }
             }

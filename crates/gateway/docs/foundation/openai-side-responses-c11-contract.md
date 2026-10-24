@@ -1,222 +1,92 @@
 # OpenAI-Side Responses `C-11` Contract
 
-## Purpose
+## Purpose and boundary
 
-This note is the canonical landing artifact for `C-11`.
-It defines the gateway's **public** OpenAI-compatible `POST /v1/responses` subset, with explicit compatibility boundaries so the endpoint remains a thin adapter over the normalized core.
+This is the normative public `POST /v1/responses` contract. The endpoint is a thin adapter over the existing `GatewayRequest`, router, provider, `GatewayResponse`, and normalized stream. The closed component covers typed declarations, model calls, client results, subsequent requests, and reconstructed history over HTTP/SSE. It does not introduce an executor, native driver, session registry, or durable gateway history.
 
-This contract is intentionally narrow:
+Native/client code owns tool execution, history persistence, cancellation, and conversational follow-up. Hosted Responses WebSearch executes upstream. Local component evidence is not full native `0.156.1`, private OAuth backend, installed, retained, production, or F14 qualification.
 
-- it defines the accepted request subset, tool loop, and response shapes for `/v1/responses`
-- it defines the minimum streaming guarantees, including event sequencing and payload conventions
-- it defines the reject/ignore posture needed for deterministic compatibility
+Canonical companions:
 
-It does not define:
+- [ADR 0008](../adr/0008-expand-openai-side-support-via-chat-completions-and-responses.md)
+- [Shared adapter invariants (`C-12`)](openai-side-adapter-invariants-c12-contract.md)
+- [ChatGPT Codex route](../contracts/chatgpt-codex-route-contract.md)
+- [OpenAI semantic streaming guide](https://developers.openai.com/api/docs/guides/streaming-responses)
 
-- provider parsing or upstream OpenAI API nuances beyond the frozen subset
-- a second execution engine or endpoint-specific runtime semantics
-- built-in tools, schema outputs, or non-function tool call types
+## Request and admission
 
-## Canonical Sources Of Truth
+`model: string` and `input: string | array` are required. String input is shorthand for one user `input_text`. Ordered typed items are the authoritative history representation; named bare-message input converts to typed messages without changing role, content, or order.
 
-- Normative public contract: [ADR 0008](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/adr/0008-expand-openai-side-support-via-chat-completions-and-responses.md) (Responses section).
-- Shared adapter invariants: [openai-side-adapter-invariants-c12-contract.md](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/foundation/openai-side-adapter-invariants-c12-contract.md).
-- Upstream reference for event semantics: [OpenAI Streaming API responses guide](https://developers.openai.com/api/docs/guides/streaming-responses).
+- `instructions` preserves missing, empty, and nonempty distinctly; null and wrong types reject. Ordered system/developer history remains distinct from top-level instructions. Native Lite developer `additional_tools`, prefix IDs, and the separate developer base-instruction message retain their original placement and omissions.
+- No bundled-version fallback/overwrite or invented todo/warmup instruction is added on any ingress. A factual cross-API tool-error flag may be represented as typed result data; it is not model instruction text.
+- `prompt_cache_key: string` and `client_metadata: object<string, string>` are explicit typed fields. They are source-mandatory in the pinned native producer and MUST survive initial, subsequent, and replayed requests when supplied; omission-only fixtures do not establish native acceptance.
+- Optional `reasoning.effort`, admitted `reasoning.summary`, and `reasoning.context` (`current_turn` or `all_turns`) are independent controls. Missing effort is not filled in to transport continuation.
+- `include` omission, `[]`, and `["reasoning.encrypted_content"]` follow the same completed-item admission, recipient, and resource policy. Include does not gate accounting or handling of encrypted items actually returned upstream.
+- `parallel_tool_calls` preserves supplied true/false and omission. Omission retains upstream defaults. `tool_choice` admits `none`, `auto`, `required`, or an admitted flat explicit selection, subject to the selected route's stricter controls.
+- `text.format.type = "text"`, admitted verbosity, `max_output_tokens`, `stream`, and `stream_options` remain subject to selected-provider admission. Actual API-key Responses requests MUST preserve supplied supported `temperature` and `top_p`. The actual Responses endpoint has no `stop` field: supplied stop sequences MUST reject before I/O on that path. Ordinary accepted Chat Completions translation retains its stop/sampling controls; OAuth restrictions remain in the route contract. No accepted control may be silently stripped or a different route selected to hide unsupported semantics.
+- `previous_response_id` remains an ordinary API-key stored-continuation anchor only. The advanced component uses complete stateless history; OAuth rejects `previous_response_id`.
 
-If a detail is not derivable from the shared adapter invariants and the frozen subset in ADR 0008, it is not part of `C-11`.
+Unknown top-level ignore does not apply to recognized unsupported native semantics. Known unsupported types, controls, selected-provider combinations, and malformed typed members reject before upstream I/O with the safe gateway envelope. An `Unknown` content block or generic metadata MUST NOT bypass admission.
 
-## Request Contract (Supported Subset)
+## Closed tool and history population
 
-The gateway accepts the following top-level fields:
+Responses definitions and explicit selection use the flat Responses shape; nested Chat Completions aliases reject here. Chat Completions keeps its actual nested wire shape.
 
-- `model: string` (required)
-- `input: string | array` (required)
-- `tools: array` (optional; function tools only)
-- `tool_choice: "none"|"auto"|"required"|object` (optional)
-- `parallel_tool_calls: boolean` (optional; default `true`)
-- `text: { format: { type: "text" } }` (optional; default text)
-- `max_output_tokens: integer` (optional)
-- `temperature: number` (optional)
-- `top_p: number` (optional)
-- `stop: string[]` (optional)
-- `stream: boolean` (optional; default `false`)
-- `stream_options: { include_obfuscation?: boolean }` (optional; only meaningful when `stream=true`)
+| Population | Required preservation and admission |
+| --- | --- |
+| Flat function | Name, description, input schema, declaration order, optional `strict` and `defer_loading`; explicit `strict: false` differs from omission. Arguments remain the original validated JSON String, without parse/reserialize mutation. An upstream complete function item accepts absent status or `status: "completed"`; supplied status must validate as completed and is normalized away before closed native replay because pinned native FunctionCall does not retain that lifecycle field. Null, wrong-type, unknown, or noncompleted status on a complete item fails; identity, namespace, and raw arguments remain exact. Pinned native `output_schema` is serde-skipped source state, not a new wire field. |
+| Custom and namespace | Text/raw custom input and Lark grammar format/definition; namespace/member order, exact names, IDs, status, and namespace identity. No dotted-name flattening or tool execution. |
+| Client `tool_search` | `execution = "client"`, structured arguments, optional call/item IDs, status, ordered loaded definitions and defer flags. Missing call ID stays absent/inert and cannot anchor a result. Native returns loaded tools for the next request; no gateway registry or hosted discovery substitution. |
+| Lite `additional_tools` | Developer role, exact prefix ID, definition placement/order, separate base message, top-level omissions, and parallel/store controls. |
+| Messages | Ordered role, optional ID and phase; `input_text` and assistant `output_text`. Inline URL/data images preserve absent/auto/low/high/original detail in the admitted Responses population. No image fetch, upload, or local-path conversion. |
+| Function/custom result | Exact nonempty call ID, call kind, supplied name/namespace, and Text versus ordered ContentItems; admitted inline media and encrypted result members remain typed. |
+| Reasoning | Completed item with optional ID, required `summary` Vec of upstream-labelled `summary_text`, and admitted opaque `encrypted_content`. Empty stays empty; nonempty summaries are preserved under the approved typed Responses policy. |
+| Compaction | History-only `compaction` requires an encrypted String; `context_compaction` preserves absent versus String, including empty. Preserve position and optional ID. Null/wrong type, `compaction_summary` aliases, and private triggers/controls reject. |
+| Hosted Responses WebSearch | Named access, filter/location, context-size/content-type options and activity action/status/ID/order, plus assistant text and activity history. Selected destination must admit the requested option. This is not standalone search or a fake client call/result. |
 
-### Input
+A result MUST reference an earlier same-request authoritative call of the same kind; supplied name/namespace MUST agree. Identity spelling and raw payload bytes are preserved. Identical repeated complete calls may be coalesced at their first authoritative position; conflicting duplicates reject. Ordinary stored API-key continuation retains its separate supported anchor. Normalized provenance may supply a missing ordinary function-call wire item only when it contains the actual ID, name, and arguments; placeholders are forbidden.
 
-`input` supports:
+Explicitly excluded: standalone search/images, WebSocket parity, audio, image/file-reference input, encrypted agent messages/function arguments, internal chat passthrough/private controls, final-answer JSON schema, and citation-annotation fidelity. Other unlisted built-ins are unsupported. Exclusions fail explicitly; no model/auth/tool-mode downgrade or state stripping manufactures completion.
 
-- `string` shorthand, which is treated as a single user `input_text`
-- `array` of items, with the following supported item types:
-  - `message`
-  - `function_call`
-  - `function_call_output`
+## Completed continuation and safe projection
 
-`message` items support:
+Authoritative `response.output_item.done` replaces provisional added state for opaque replay; ciphertext and summary snapshots are not concatenated. Clone and normalized transport serde MUST retain exact admitted state for the next request and reconstructed history. Normalized `ToolResultContent::ResponseItems { items }` uses an object wrapper to distinguish typed Responses result arrays on reload; public Responses arrays stay arrays, and ordinary Anthropic empty result arrays keep their meaning. Private `Reasoning.content`, `reasoning_text`, and private metadata never become public text, tool arguments, logs, traces, Debug/Display output, or error messages.
 
-- `role: "system"|"developer"|"user"|"assistant"`
-- `content: array`
+Approved completed opaque items and their required summary Vec may return as typed Responses items to the same connected Responses caller under the actual access boundary. They are not generic message text, annotations, or reasoning deltas. Other public endpoints do not acquire this OpenAI continuation state. Diagnostic projections are separate from authoritative wire/history serializers.
 
-`message.content` parts support:
+Adapter-owned `GatewayRequest.responses_caller` is serde-skipped endpoint-origin bookkeeping. It is not caller metadata, authentication, a native principal, or ciphertext-origin attestation. Native remains the durable history owner. No gateway persistence, keys, cross-request ledger, or stronger session/member/cryptographic binding is introduced; standalone network access does not establish those assurances.
 
-- `{ "type": "input_text", "text": string }`
-- `{ "type": "input_image", "image_url": string, "detail"?: "low"|"high"|"auto" }`
+Before I/O, select and pin one backend/endpoint, account/credential context, and actual model for the request. Unsupported advanced combinations fail. No failure may trigger a different destination or retry with stripped opaque state. Responses transport disables automatic redirects and fails 3xx safely. This does not prove DNS/IP/TLS/world confinement or cross-request ciphertext provenance.
 
-`function_call` items support:
+## Response and streaming contract
 
-- `{ "type": "function_call", "call_id": string, "name": string, "arguments": string }`
-- `call_id` and `name` MUST be non-empty strings.
-- `arguments` MUST be a string containing valid JSON.
+Non-streaming returns `object: "response"`, the original public model name, ordered admitted output items, applicable usage/cache usage, and a truthful status (`completed`, `in_progress`, `failed`, or `incomplete`). No cache hit or effectiveness is fabricated.
 
-`function_call_output` items support:
+SSE uses named `response.*` events whose JSON `data.type` matches the event name. The semantic subset includes:
 
-- `{ "type": "function_call_output", "call_id": string, "output": string }`
-- `function_call_output.call_id` MUST either reference a prior `function_call` item in the same request or be anchored by `previous_response_id` for a valid follow-up continuation request.
+- `response.created`, preceding public output
+- `response.output_item.added` and `response.output_item.done`
+- text `response.content_part.added`, `response.output_text.delta`, `response.output_text.done`, and `response.content_part.done`
+- function `response.function_call_arguments.delta` and `response.function_call_arguments.done`
+- typed completed custom-call, history, and activity items
+- terminal `response.completed`, carrying the final assembled public Response and usage
 
-## Tooling
+Item added precedes its deltas/done events; text content-part done and function-argument done precede the corresponding item done. Item/call IDs and output ordering permit reconstruction without provider framing. The provider owns semantic assembly for sync and streaming; public handlers transform normalized output only. OAuth completed envelopes supply lifecycle/usage, not an assumed answer snapshot.
 
-Function tools only:
+`response.completed.response.end_turn` is independent of `stop_reason`: absent/null maps to None and is omitted publicly; false and true remain explicit; wrong types fail. Core, Clone, normalized serde, and the internal `gateway.response_terminal` preserve it. Other endpoint serializers consume the internal terminal rather than exposing it. False cannot become a conversational `Final`; true/absence cannot erase pending native follow-up.
 
-- `tools[]` entries MUST be function tool definitions.
-- Any non-function tool definition MUST be rejected with `400` and the gateway error envelope.
+Sync success requires a valid terminal. Error, incomplete, conflicting done payload, invalid UTF-8, missing terminal/EOF, oversize, or cancellation MUST NOT synthesize completed/Final success. Before headers, provider failures use safe 502 errors as applicable; after streaming starts, fail/close the body without a success terminal. The first valid terminal fuses the stream. Consumer drop releases owned upstream state with no detached drain or retry; it does not promise rollback or at-most-once remote execution.
 
-`tool_choice`:
+## Engineering ceilings
 
-- string values are accepted per the subset: `"none"|"auto"|"required"`
-- object form is accepted only for explicit function selection:
-  - `{ "type": "function", "function": { "name": string } }`
+The component uses 2 MiB encoded ingress entity, SSE frame, and assembled semantic-state ceilings; 16 MiB cumulative upstream wire; and 64 MiB accounted simultaneous working payload with reserved partitions, including a 6 MiB normalized bundle and 8 MiB public queue. See `models/response_transport.rs` for constants and the implementation's accounting sites. Bounds apply before parse/extension and to held state, copies, and queued payload; default encrypted returns count too. Mapping selection MUST borrow configuration entries rather than clone all mapping Strings; selected model/provider identifier payload must be admitted before owned copies are created, including directly reached selection diagnostics.
 
-`parallel_tool_calls`:
+These are engineering admission limits, not upstream maxima, measured normal-history capacity, allocator/RSS bounds, or concurrency/deployment qualification. Transport may already own a received chunk. Over-limit handling fails and drops/cancels without truncation, ciphertext rewriting, fallback, lost-history success, or detached draining. Representative native workload fit remains unproved.
 
-- defaults to `true`
-- MUST be preserved as part of the public request contract
-- MUST NOT widen scope to non-function tool execution
+## Verification anchors and limits
 
-Tool-loop continuation:
+- [Public adapter](../../src/server/openai_responses.rs), [core](../../src/core.rs), [typed transport](../../src/models/response_transport.rs)
+- [OpenAI provider](../../src/providers/openai.rs) and [framing](../../src/providers/streaming.rs)
+- [Complete component regressions](../../tests/openai_codex_0156_roundtrip.rs), [Responses conformance](../../tests/openai_responses_conformance.rs), and [shared parity](../../tests/openai_shared_parity.rs)
 
-1. Client sends a request.
-2. Gateway emits `function_call` output items.
-3. Client executes tools and sends a follow-up request that either:
-   - preserves the authoritative prior `function_call` item and appends one `function_call_output` item per tool call, or
-   - supplies `previous_response_id` and appends one `function_call_output` item per tool call without replaying the prior `function_call`.
-4. `function_call_output.call_id` MUST match the emitted tool id exactly.
-5. `function_call_output.output` MUST be a string.
-6. Orphaned `function_call_output` items reject before any upstream call; the gateway MUST NOT fabricate placeholder tool metadata.
-
-## Ignore vs Reject Posture
-
-Forward-compat posture:
-
-- Unknown top-level fields MUST be ignored.
-
-Deterministic rejection posture:
-
-- The following known-but-unsupported behaviors MUST be rejected with `400`:
-  - built-in tools
-  - non-function tool call types
-  - any `text.format.type` value other than `"text"`; JSON-schema output requests remain out of scope
-
-Notes:
-
-- `text.format.type` is frozen to `text`; JSON schema outputs remain out of scope until a later ADR.
-- Expanding the explicit reject list is allowed, but must be done deliberately with fixtures and conformance coverage so behavior does not drift silently.
-
-## Response Contract (Non-Streaming)
-
-The gateway returns an OpenAI-compatible Response object:
-
-- `object: "response"`
-- `status: "completed"|"in_progress"|"failed"|"incomplete"`
-- `model` MUST echo the request `model` even if a different provider model is used internally
-- `output: array` containing zero or more output items
-- `usage` MUST be present when the provider returns token usage
-
-Supported output item types:
-
-- `message`
-  - `{ "type": "message", "role": "assistant", "content": [ { "type": "output_text", "text": string, "annotations": [] } ] }`
-- `function_call`
-  - `{ "type": "function_call", "call_id": string, "name": string, "arguments": string }`
-
-Mapping rules:
-
-- text-only results MAY produce a single assistant `message`
-- tool-request results MUST produce `function_call` output items
-- mixed results MUST preserve stable item ordering
-- `function_call.arguments` MUST remain a JSON string
-- `finish` / status semantics MUST stay within the contracted `status` set and reflect completion, in-progress, failure, or incompleteness without inventing endpoint-specific states
-
-## Response Contract (Streaming)
-
-When `stream=true`, the gateway returns `text/event-stream` using OpenAI Responses streaming events.
-
-OpenAI's current Responses documentation describes streaming as a semantic event surface with typed events, not one universal event trace that every stream must contain. This contract follows that posture by freezing one supported event subset plus ordering rules for the events that actually occur in a given stream.
-
-Supported streaming event subset:
-
-- lifecycle events:
-  - `response.created`
-  - `response.completed`
-- output-item events:
-  - `response.output_item.added`
-  - `response.output_item.done`
-- text-content events, when the streamed item is assistant text:
-  - `response.content_part.added`
-  - `response.output_text.delta`
-  - `response.output_text.done`
-  - `response.content_part.done`
-- function-call argument events, when the streamed item is a function call:
-  - `response.function_call_arguments.delta`
-  - `response.function_call_arguments.done`
-- each SSE `data:` payload MUST be a JSON object with a `type` string that exactly matches the event name
-- `response.output_text.delta` MUST carry text delta payloads only, with enough information for client-side reconstruction of the text stream
-- `response.function_call_arguments.delta` / `response.function_call_arguments.done` MUST carry `call_id` continuity plus tool-argument delta/completion payloads for function calls
-- `response.completed` MUST carry the final Response object
-- required payload fields MUST be sufficient for client-side assembly of output items without consulting provider-specific framing
-
-Ordering guarantees:
-
-- `response.created` MUST precede all other public output events
-- when text content is streamed, `response.output_item.added` MUST precede `response.content_part.added`, `response.output_text.delta`, `response.output_text.done`, `response.content_part.done`, and `response.output_item.done` for that item
-- when function-call arguments are streamed, `response.output_item.added` MUST precede `response.function_call_arguments.delta`, `response.function_call_arguments.done`, and `response.output_item.done` for that item
-- when text content is streamed, `response.content_part.done` MUST precede `response.output_item.done`
-- when function-call arguments are streamed, `response.function_call_arguments.done` MUST precede `response.output_item.done`
-- `response.completed` MUST be the terminal event before stream termination
-
-## Thin Adapter Boundary
-
-Public `/v1/responses` MUST:
-
-- parse into the same internal `GatewayRequest` shape used by routing and providers
-- represent tool requests as internal `tool_use` blocks and tool results as `tool_result` blocks
-- convert from internal `GatewayResponse` plus the normalized stream model back into OpenAI-shaped output objects
-- keep streaming adapters as pure transforms over the provider-normalized stream
-
-The public handler MUST NOT:
-
-- parse provider-specific streaming framing
-- create a second execution engine
-- introduce endpoint-specific semantics that bypass the normalized core
-
-## Verification Checklist
-
-`C-11` is complete only if a reviewer can answer yes to all of the following without reading provider parsing code:
-
-- is the request subset allowlisted, with unknown top-level fields ignored and known unsupported built-in/tool-call behavior rejected deterministically
-- are `input` shorthand, `message`, and `function_call_output` shapes frozen with explicit `call_id` threading rules
-- are non-function tools rejected deterministically with the contracted gateway error envelope
-- do non-streaming responses return `object: "response"` with the right `status`, `output` item mapping, `model` echo, and usage behavior
-- do streaming responses emit the contracted `response.*` events that apply to the streamed output, with `data.type` matches, payload minimums, ordering guarantees, tool-argument deltas/done when function calls are streamed, and terminal `response.completed`
-- does the response always suppress chain-of-thought content
-- do `/v1/responses` handlers remain thin adapters over `GatewayRequest` / `GatewayResponse` / normalized stream output
-
-## Verification Anchors
-
-These anchors are the repo surfaces later slices should use for fixtures, regression coverage, and closeout evidence:
-
-- request parsing and route wiring: `gateway/src/server/mod.rs`
-- shared boundary types: `gateway/src/core.rs`
-- internal tool/content block shapes: `gateway/src/models/mod.rs`
-- Responses fixtures and regressions: `gateway/tests/`
-- adapter invariant baseline: `docs/foundation/openai-side-adapter-invariants-c12-contract.md`
-- policy baseline: `docs/adr/0008-expand-openai-side-support-via-chat-completions-and-responses.md`
+Required proof uses independent literal local HTTP/SSE through handler/core/router/OpenAIProvider, subsequent/history replay, mandatory cache fields, exact kinds/IDs/raw payloads, default opaque/summary handling, safe sinks, terminal states, budgets, redirects, and cancellation. Existing Chat/Anthropic signed-thinking and caching/Azure/Kimi/Gemini protocol regressions remain meaningful. Local transport preservation is not actual native execution/resume, private OAuth acceptance, or cache-effectiveness proof; OAuth serializer-only checks remain UNSENT.

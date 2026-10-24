@@ -354,7 +354,9 @@ fn test_tool_use_and_tool_result_blocks_ignore_cache_control() {
 
             // Tool use block
             match &blocks[1] {
-                ContentBlock::Known(KnownContentBlock::ToolUse { id, name, input }) => {
+                ContentBlock::Known(KnownContentBlock::ToolUse {
+                    id, name, input, ..
+                }) => {
                     assert_eq!(id, "tool_123");
                     assert_eq!(name, "test_tool");
                     assert_eq!(input.get("param").unwrap(), "value");

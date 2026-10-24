@@ -107,12 +107,37 @@ pub fn normalized_events_from_provider_response(
             ContentBlock::Known(KnownContentBlock::Text { text, .. }) => {
                 visible_text.push(text.clone());
             }
-            ContentBlock::Known(KnownContentBlock::ToolUse { id, name, input }) => {
+            ContentBlock::Known(KnownContentBlock::ToolUse {
+                id,
+                name,
+                input,
+                transport,
+            }) => {
+                if transport.as_ref().is_some_and(|t| t.absent_call_id) {
+                    continue;
+                }
+                let name = if transport.as_ref().is_some_and(|t| {
+                    t.kind == crate::models::response_transport::CallKind::ClientSearch
+                }) {
+                    "tool_search"
+                } else {
+                    name.as_str()
+                };
+                let input = if transport.as_ref().is_some_and(|t| {
+                    t.kind == crate::models::response_transport::CallKind::Function
+                }) {
+                    input
+                        .as_str()
+                        .and_then(|s| serde_json::from_str::<Value>(s).ok())
+                        .unwrap_or_else(|| input.clone())
+                } else {
+                    input.clone()
+                };
                 flush_as_action(&mut events, &mut visible_text);
                 events.push(NormalizedEvent::tool_intent(
                     id.clone(),
-                    name.clone(),
-                    Some(input.clone()),
+                    name.to_string(),
+                    Some(input),
                 ));
             }
             _ => {}
@@ -121,7 +146,7 @@ pub fn normalized_events_from_provider_response(
 
     // End-of-response handling: only emit final when the response is terminal.
     let stop_reason = response.stop_reason.as_deref().unwrap_or("");
-    if stop_reason == "end_turn" {
+    if stop_reason == "end_turn" && response.end_turn!=Some(false) && !response.content.iter().any(|b|matches!(b,ContentBlock::Known(KnownContentBlock::ToolUse{transport,..}) if !transport.as_ref().is_some_and(|t|t.absent_call_id))) {
         flush_as_final(&mut events, &mut visible_text);
     }
 
@@ -140,6 +165,8 @@ pub struct AnthropicSseNormalizedEventExtractor {
     sse_buffer: String,
     visible_text: String,
     tool_blocks: HashMap<usize, StreamToolBlock>,
+    end_turn: Option<bool>,
+    had_tool_intent: bool,
 }
 
 impl AnthropicSseNormalizedEventExtractor {
@@ -216,6 +243,40 @@ impl AnthropicSseNormalizedEventExtractor {
         };
 
         match name {
+            "gateway.response_terminal" => {
+                self.end_turn = serde_json::from_str::<Value>(&evt.data)
+                    .ok()
+                    .and_then(|v| v.get("end_turn").and_then(Value::as_bool));
+            }
+            "gateway.response_item" => {
+                let Ok(value) = serde_json::from_str::<Value>(&evt.data) else {
+                    return;
+                };
+                let Some(item) = value.get("item") else {
+                    return;
+                };
+                let kind = item.get("type").and_then(Value::as_str);
+                if matches!(kind, Some("custom_tool_call" | "tool_search_call")) {
+                    self.flush_visible_text_as_action(out);
+                    let id = item.get("call_id").and_then(Value::as_str);
+                    if let Some(id) = id {
+                        self.had_tool_intent = true;
+                        let name = if kind == Some("tool_search_call") {
+                            "tool_search"
+                        } else {
+                            item.get("name").and_then(Value::as_str).unwrap_or("")
+                        };
+                        let input = item
+                            .get(if kind == Some("tool_search_call") {
+                                "arguments"
+                            } else {
+                                "input"
+                            })
+                            .cloned();
+                        out.push(NormalizedEvent::tool_intent(id.into(), name.into(), input));
+                    }
+                }
+            }
             "content_block_start" => {
                 let Ok(json) = serde_json::from_str::<Value>(&evt.data) else {
                     return;
@@ -243,6 +304,7 @@ impl AnthropicSseNormalizedEventExtractor {
                 // Any visible text accumulated before tool_use is an "action" event.
                 self.flush_visible_text_as_action(out);
 
+                self.had_tool_intent = true;
                 self.tool_blocks.insert(
                     index as usize,
                     StreamToolBlock {
@@ -317,7 +379,11 @@ impl AnthropicSseNormalizedEventExtractor {
                     return;
                 }
 
-                if stop_reason != "tool_use" {
+                if stop_reason == "end_turn"
+                    && self.end_turn != Some(false)
+                    && self.tool_blocks.is_empty()
+                    && !self.had_tool_intent
+                {
                     self.flush_visible_text_as_final(out);
                 }
             }
@@ -513,6 +579,7 @@ mod tests {
         };
 
         GatewayResponse {
+            end_turn: None,
             id: "msg_fixture".to_string(),
             r#type: "message".to_string(),
             role: "assistant".to_string(),

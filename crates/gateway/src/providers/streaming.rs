@@ -40,9 +40,8 @@ pub fn parse_sse_events(input: &str) -> Vec<SseEvent> {
             if !current_data.is_empty() {
                 events.push(SseEvent {
                     event: current_event.take(),
-                    data: current_data.clone(),
+                    data: std::mem::take(&mut current_data),
                 });
-                current_data.clear();
             }
         } else if let Some(data) = line.strip_prefix("data: ") {
             if !current_data.is_empty() {
@@ -91,16 +90,28 @@ pub struct SseStream<S> {
     inner: S,
     buffer: Vec<u8>,
     ended: bool,
+    limits: bool,
+    wire_bytes: usize,
+    pending: Bytes,
     /// Queue of parsed events waiting to be emitted
     event_queue: std::collections::VecDeque<SseEvent>,
 }
 
 impl<S> SseStream<S> {
+    /// Responses-local bounded byte framing. Other protocol construction is unchanged.
+    pub fn responses(stream: S) -> Self {
+        let mut value = Self::new(stream);
+        value.limits = true;
+        value
+    }
     pub fn new(stream: S) -> Self {
         Self {
             inner: stream,
             buffer: Vec::new(),
             ended: false,
+            limits: false,
+            wire_bytes: 0,
+            pending: Bytes::new(),
             event_queue: std::collections::VecDeque::new(),
         }
     }
@@ -121,6 +132,94 @@ where
             return Poll::Ready(None);
         }
 
+        if *this.limits {
+            use crate::models::response_transport::{PAYLOAD_LIMIT, WIRE_LIMIT};
+            loop {
+                if !this.pending.is_empty() {
+                    // One frame at a time: a huge transport chunk never becomes a huge
+                    // copied buffer or an unbounded event queue.
+                    while !this.pending.is_empty() {
+                        let count = this
+                            .pending
+                            .iter()
+                            .position(|b| *b == b'\n')
+                            .map_or(this.pending.len(), |i| i + 1);
+                        if crate::models::response_transport::bounded_add(
+                            this.buffer.len(),
+                            count,
+                            PAYLOAD_LIMIT,
+                        )
+                        .is_err()
+                        {
+                            *this.ended = true;
+                            this.buffer.clear();
+                            *this.pending = Bytes::new();
+                            return Poll::Ready(Some(Err(ProviderError::ApiError {
+                                status: 502,
+                                message: "Responses frame limit exceeded".into(),
+                            })));
+                        }
+                        this.buffer.extend_from_slice(&this.pending[..count]);
+                        *this.pending = this.pending.slice(count..);
+                        if this.buffer.ends_with(b"\n\n") || this.buffer.ends_with(b"\r\n\r\n") {
+                            let events = match std::str::from_utf8(this.buffer) {
+                                Ok(text) => parse_sse_events(text),
+                                Err(_) => {
+                                    *this.ended = true;
+                                    this.buffer.clear();
+                                    return Poll::Ready(Some(Err(ProviderError::ApiError {
+                                        status: 502,
+                                        message: "Invalid Responses UTF-8".into(),
+                                    })));
+                                }
+                            };
+                            this.buffer.clear();
+                            if let Some(event) = events.into_iter().next() {
+                                return Poll::Ready(Some(Ok(event)));
+                            }
+                        }
+                    }
+                }
+                match this.inner.as_mut().poll_next(cx) {
+                    Poll::Ready(Some(Ok(bytes))) => {
+                        let Ok(total) = crate::models::response_transport::bounded_add(
+                            *this.wire_bytes,
+                            bytes.len(),
+                            WIRE_LIMIT,
+                        ) else {
+                            *this.ended = true;
+                            this.buffer.clear();
+                            return Poll::Ready(Some(Err(ProviderError::ApiError {
+                                status: 502,
+                                message: "Responses wire limit exceeded".into(),
+                            })));
+                        };
+                        *this.wire_bytes = total;
+                        *this.pending = bytes;
+                    }
+                    Poll::Ready(Some(Err(_))) => {
+                        *this.ended = true;
+                        this.buffer.clear();
+                        return Poll::Ready(Some(Err(ProviderError::ApiError {
+                            status: 502,
+                            message: "Responses body transport failed".into(),
+                        })));
+                    }
+                    Poll::Ready(None) => {
+                        *this.ended = true;
+                        if !this.buffer.is_empty() {
+                            this.buffer.clear();
+                            return Poll::Ready(Some(Err(ProviderError::ApiError {
+                                status: 502,
+                                message: "Truncated Responses frame".into(),
+                            })));
+                        }
+                        return Poll::Ready(None);
+                    }
+                    Poll::Pending => return Poll::Pending,
+                }
+            }
+        }
         loop {
             let end = match this.inner.as_mut().poll_next(cx) {
                 Poll::Ready(Some(Ok(bytes))) => {

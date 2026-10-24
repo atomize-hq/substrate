@@ -281,6 +281,7 @@ pub fn transform_openai_to_gateway_request(
                             content: ToolResultContent::Text(text),
                             is_error: false,
                             cache_control: None,
+                            transport: None,
                         },
                     )]),
                 });
@@ -290,6 +291,11 @@ pub fn transform_openai_to_gateway_request(
     }
 
     Ok(GatewayRequest {
+        responses_caller: false,
+        instructions: None,
+        prompt_cache_key: None,
+        client_metadata: None,
+        reasoning_context: None,
         model: openai_req.model,
         messages,
         max_output_tokens: openai_req.max_tokens.unwrap_or(4096),
@@ -301,7 +307,7 @@ pub fn transform_openai_to_gateway_request(
         stream: openai_req.stream,
         metadata: None,
         system: None,
-        tools,
+        tools: tools.map(|ts| ts.into_iter().map(Into::into).collect()),
     })
 }
 
@@ -319,7 +325,9 @@ pub fn transform_gateway_response_to_openai(
             ContentBlock::Known(KnownContentBlock::Text { text, .. }) if !text.is_empty() => {
                 text_parts.push(text.clone());
             }
-            ContentBlock::Known(KnownContentBlock::ToolUse { id, name, input }) => {
+            ContentBlock::Known(KnownContentBlock::ToolUse {
+                id, name, input, ..
+            }) => {
                 let arguments = serde_json::to_string(input).unwrap_or_else(|_| "{}".to_string());
                 tool_calls.push(OpenAIToolCallOut {
                     id: id.clone(),
@@ -1208,7 +1216,7 @@ mod tests {
         let gw = transform_openai_to_gateway_request(req_ok).unwrap();
         let tools = gw.tools.expect("expected filtered tools");
         assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].name.as_deref(), Some("f1"));
+        assert_eq!(tools[0].name(), Some("f1"));
     }
 
     #[test]
@@ -1303,6 +1311,7 @@ mod tests {
     #[test]
     fn sync_response_suppresses_thinking_and_maps_tool_use_to_tool_calls_and_finish_reason() {
         let resp = GatewayResponse {
+            end_turn: None,
             id: "resp_1".to_string(),
             r#type: "message".to_string(),
             role: "assistant".to_string(),

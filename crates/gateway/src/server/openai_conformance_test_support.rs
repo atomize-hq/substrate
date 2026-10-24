@@ -190,11 +190,7 @@ impl ConformanceHarness {
         }
     }
 
-    pub fn single_provider(
-        provider: StubProvider,
-        actual_model: impl Into<String>,
-        inject_continuation_prompt: bool,
-    ) -> Self {
+    pub fn single_provider(provider: StubProvider, actual_model: impl Into<String>) -> Self {
         let captured_requests = provider.captured_requests();
         let mut provider_registry = ProviderRegistry::new();
         provider_registry.insert_provider_for_tests("test-provider", Box::new(provider));
@@ -208,7 +204,6 @@ impl ConformanceHarness {
                     priority: 1,
                     provider: "test-provider".to_string(),
                     actual_model: actual_model.into(),
-                    inject_continuation_prompt,
                 }],
             }],
         );
@@ -230,6 +225,7 @@ impl ConformanceHarness {
 
     pub fn router(&self) -> AxumRouter {
         AxumRouter::new()
+            .route("/v1/messages", post(super::handle_messages))
             .route(
                 "/v1/chat/completions",
                 post(super::handle_openai_chat_completions),
@@ -266,7 +262,7 @@ impl ConformanceHarness {
         match super::openai_responses::handle_openai_responses(
             State(self.state.clone()),
             headers,
-            Json(request_json),
+            super::openai_responses::ResponsesBody(request_json),
         )
         .await
         {
@@ -307,6 +303,9 @@ impl StubProvider {
 
 #[async_trait]
 impl GatewayProvider for StubProvider {
+    fn supports_request(&self, _request: &GatewayRequest) -> bool {
+        true
+    }
     async fn send_message(
         &self,
         request: GatewayRequest,
@@ -337,6 +336,7 @@ impl GatewayProvider for StubProvider {
 
 pub fn response_text_response(text: &str, model: &str) -> GatewayResponse {
     GatewayResponse {
+        end_turn: None,
         id: "resp_1".to_string(),
         r#type: "message".to_string(),
         role: "assistant".to_string(),
@@ -355,6 +355,7 @@ pub fn response_text_response(text: &str, model: &str) -> GatewayResponse {
 
 pub fn response_with_text_and_tool(model: &str) -> GatewayResponse {
     GatewayResponse {
+        end_turn: None,
         id: "resp_2".to_string(),
         r#type: "message".to_string(),
         role: "assistant".to_string(),
@@ -367,6 +368,7 @@ pub fn response_with_text_and_tool(model: &str) -> GatewayResponse {
                 id: "call_1".to_string(),
                 name: "lookup".to_string(),
                 input: serde_json::json!({"query":"x"}),
+                transport: None,
             }),
             ContentBlock::text("after".to_string(), None),
         ],
@@ -384,6 +386,7 @@ pub fn response_with_text_and_tool(model: &str) -> GatewayResponse {
 
 pub fn response_with_tool_use(action: &str, model: &str) -> GatewayResponse {
     GatewayResponse {
+        end_turn: None,
         id: "msg_test".to_string(),
         r#type: "message".to_string(),
         role: "assistant".to_string(),

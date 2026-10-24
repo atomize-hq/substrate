@@ -52,7 +52,7 @@ fn load_fixture<T: DeserializeOwned>(name: &str) -> T {
 }
 
 fn build_harness(provider: StubProvider) -> ConformanceHarness {
-    ConformanceHarness::single_provider(provider, "primary-actual", false)
+    ConformanceHarness::single_provider(provider, "primary-actual")
 }
 
 fn request_model(request: &Value) -> &str {
@@ -312,7 +312,7 @@ async fn explicit_function_tool_choice_filters_tools_to_the_selected_function() 
     assert_eq!(requests.len(), 1);
     let tools = requests[0].tools.as_ref().expect("filtered tools");
     assert_eq!(tools.len(), 1);
-    assert_eq!(tools[0].name.as_deref(), Some("beta"));
+    assert_eq!(tools[0].name(), Some("beta"));
 }
 
 #[tokio::test]

@@ -182,9 +182,6 @@ pub struct ModelMapping {
     pub provider: String,
     /// Actual model name to use with the provider
     pub actual_model: String,
-    /// Inject continuation prompt after tool results (for models that stop prematurely)
-    #[serde(default)]
-    pub inject_continuation_prompt: bool,
 }
 
 impl ModelConfig {}

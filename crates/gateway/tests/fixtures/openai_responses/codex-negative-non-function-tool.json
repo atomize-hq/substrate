@@ -11,7 +11,7 @@
       }
     ]
   },
-  "expected_error_contains": "Only function tools are supported",
+  "expected_error_contains": "Unsupported Responses tool definition",
   "expected_status": 400,
   "expected_error_class": "route",
   "expected_error_message": "Route selection failed"

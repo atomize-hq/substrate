@@ -63,7 +63,7 @@ This section is the **normative, implementable** contract for OpenAI-side public
 Notes:
 
 - The current repo already exposes `/v1/chat/completions`, but its implementation may lag this contract while it is expanded.
-- `/v1/responses` may not exist yet; this contract freezes what it must look like once added.
+- `/v1/responses` is implemented; its closed typed component is specified by [C-11](../foundation/openai-side-responses-c11-contract.md).
 - Both endpoints MUST remain thin adapters over the same internal request/response core (see “Adapter Boundaries” below).
 
 ### Shared Behavior (Both Endpoints)
@@ -71,11 +71,11 @@ Notes:
 #### Model, routing, and provider selection
 
 - `model` is a **public gateway model name** used for routing and mapping.
-- The gateway MAY map `model` to provider-specific deployments/models with fallback.
+- The gateway MAY map `model` to provider-specific deployments/models with fallback for ordinary representable requests. Advanced Responses requests pin backend/account/model within the request and fail without fallback or state stripping.
 - The gateway MUST echo the original request `model` back in the response payload (even if a different provider model is used internally).
 - Optional header: `X-Provider: <provider_name>`
   - When present, the gateway MUST constrain provider selection to that provider (or fail routing).
-  - When absent, the gateway MUST follow configured provider priority/fallback.
+  - When absent, ordinary requests follow configured provider priority/fallback; advanced Responses admission preserves the destination pin above.
 
 #### Error envelope
 
@@ -99,17 +99,11 @@ Status code mapping (contracted):
 #### Content constraints and safety
 
 - The gateway MUST NOT return chain-of-thought content (provider “thinking”, “reasoning_content”, etc.) as user-visible text.
-- The gateway MAY expose a short “reasoning summary” only if the upstream protocol provides one explicitly and it is safe to surface.
+- Approved typed completed Responses continuation preserves opaque state and the exact required upstream-labelled `summary_text` Vec to the same connected permitted Responses caller under C-11. Private reasoning content and metadata never become public text or diagnostics; other endpoints do not acquire this state.
 
 #### Tooling compatibility scope
 
-For OpenAI-side public ingress, the gateway supports **function tools only**:
-
-- Accept function tools in request `tools`.
-- Emit function calls in the response as OpenAI-compatible tool/function call objects.
-- Accept tool outputs from the caller and continue the conversation.
-
-Built-in tools (web search, file search, code interpreter, MCP, etc.) are out of scope for this gateway contract unless a later ADR adds them.
+Chat Completions supports function tools with its actual nested declarations and JSON-string call arguments. Responses admits the closed C-11 function/custom/namespace/client-search/loaded-definition/Lite/hosted-activity population, with exact typed call/result/history preservation. Unlisted built-ins reject. Native/client code executes client tools; the gateway does not acquire an executor or registry.
 
 ### Endpoint: `POST /v1/chat/completions` (Compatibility Surface)
 
@@ -196,87 +190,29 @@ This endpoint is the preferred OpenAI-facing surface for tool use, richer respon
 
 The gateway’s `/v1/responses` contract is based on OpenAI’s Responses API, with an explicit compatibility subset.
 
-#### Request (supported fields)
+#### Request, tools, and history
 
-- `model: string` (required)
-- `input: string | array` (required)
-  - `string` is shorthand for a single user `input_text`.
-  - `array` MUST be an array of **items**. Supported item types:
-    - `message` (input messages):
-      - `{ "type": "message", "role": "system"|"developer"|"user"|"assistant", "content": [ ... ] }`
-      - Content parts supported:
-        - `{ "type": "input_text", "text": string }`
-        - `{ "type": "input_image", "image_url": string, "detail"?: "low"|"high"|"auto" }` (URL or `data:` URL)
-    - `function_call_output` (tool outputs provided by the caller):
-      - `{ "type": "function_call_output", "call_id": string, "output": string }`
-- Tool calling:
-  - `tools: array` (optional) — function tool definitions only
-  - `tool_choice: "none"|"auto"|"required"|object` (optional)
-  - `parallel_tool_calls: boolean` (optional; default `true`)
-- Output shape:
-  - `text: { format: { type: "text" } }` (optional; default text)
-  - JSON schema outputs are NOT supported unless a later ADR adds them.
-- Sampling/limits:
-  - `max_output_tokens: integer` (optional)
-  - `temperature: number` (optional)
-  - `top_p: number` (optional)
-  - `stop: string[]` (optional)
-- Streaming:
-  - `stream: boolean` (optional; default `false`)
-  - `stream_options: { include_obfuscation?: boolean }` (optional)
+[C-11](../foundation/openai-side-responses-c11-contract.md) is the normative field/item admission and streaming contract for this endpoint. Its closed subset supersedes the original function-only Responses scope of this ADR:
 
-Unsupported/ignored fields:
+- `model` and `input` are required; shorthand/bare messages convert to ordered typed items without changing roles or content.
+- Instructions preserve missing/empty/nonempty and reject null/wrong types; ordered system/developer history and native Lite additional-tools/base-prefix placement remain intact. No bundled-version instruction fallback/overwrite or invented todo/warmup instruction is added on any ingress.
+- Flat function/custom/namespace/client-search declarations and explicit choices preserve kind, IDs, namespaces, order, optional strict false versus omission, and raw versus structured payloads. Pinned native tool `output_schema` is serde-skipped source state, not a wire feature.
+- Typed loaded definitions, messages/media, function/custom results, reasoning/compaction history, and hosted Responses WebSearch activity follow the closed C-11 admission and provenance rules. Results need an earlier same-kind authoritative call; placeholders and `Unknown` bypasses are forbidden.
+- Source-native `prompt_cache_key: string` and `client_metadata: object<string,string>` preserve supplied values through initial, subsequent, and serialized-history requests. Actual cache controls/usage are preserved when present; this is not a cache-effectiveness claim.
+- Optional effort/context/summary controls and include omission/empty/explicit remain independent. All admitted completed opaque returns use the same validation, disclosure, and budget policy.
+- Ordinary API-key stored continuation may use its supported `previous_response_id` anchor. The advanced component uses complete stateless history; OAuth rejects that field and other unsupported controls under the [route contract](../contracts/chatgpt-codex-route-contract.md).
 
-- Unknown top-level fields MUST be ignored (forward-compat posture).
-- Known but unsupported built-in tools and tool call types MUST be rejected with a `400` error unless explicitly supported by a later ADR.
+Unknown top-level ignore MUST NOT discard known unsupported native semantics. Unsupported type/control/provider combinations fail before I/O, without silently changing model, auth, tool mode, or history. Final-answer JSON schema, other built-ins, standalone search/images, WebSockets, audio/file references, private controls, and citation fidelity remain excluded.
 
-#### Response (non-streaming)
+#### Output and terminal semantics
 
-The gateway MUST return an OpenAI-compatible Response object:
+Responses output uses `object: "response"`, public model echo, ordered admitted typed items, truthful status, and provider usage including cache usage when present. The existing normalized core/provider owns semantic assembly for both sync and SSE; the public handler does not parse upstream framing.
 
-- `object: "response"`
-- `status: "completed"|"in_progress"|"failed"|"incomplete"` (the gateway will normally return `completed` for synchronous mode)
-- `output: array` containing zero or more output items
-  - Supported output item types:
-    - `message` (assistant output):
-      - `{ "type": "message", "role": "assistant", "content": [ { "type": "output_text", "text": string, "annotations": [] } ] }`
-    - `function_call` (assistant tool request):
-      - `{ "type": "function_call", "call_id": string, "name": string, "arguments": string }`
-- `usage` MUST be present when the provider returns token usage.
+Named SSE events have matching `data.type`. Item-added precedes applicable text/function deltas and done events; content/argument done precedes item done; `response.completed` is the successful terminal carrying the assembled public response. Authoritative complete `output_item.done` replaces provisional opaque state; exact required summary Vec and opaque bytes survive Clone and transport serde. Private reasoning remains excluded from public text and diagnostics.
 
-#### Response (streaming)
+`end_turn` absent/null maps to None; false/true remain explicit, independently of stop reason. Wrong types fail. Core and normalized terminal preserve it; Responses emits the optional member, and other endpoints consume the internal terminal. False cannot become a conversational `Final`; true/absence cannot clear pending native follow-up. Error, incomplete, malformed/oversize, EOF without terminal, and cancel cannot fabricate successful completion. First terminal fuses the stream; caller drop releases upstream ownership without detached drain or retry.
 
-If `stream=true`, the gateway MUST return `text/event-stream` using OpenAI Responses streaming events.
-
-The gateway MUST support the following minimum event set (in typical order):
-
-- `event: response.created`
-- `event: response.output_item.added`
-- `event: response.content_part.added`
-- `event: response.output_text.delta` (for text streaming)
-- `event: response.output_text.done`
-- `event: response.content_part.done`
-- `event: response.output_item.done`
-- `event: response.completed` (final response object)
-
-Tool streaming MUST be supported via:
-
-- `event: response.function_call_arguments.delta`
-- `event: response.function_call_arguments.done`
-
-Every SSE `data:` payload MUST be a JSON object with a `type` string that matches the event name (e.g. `{"type":"response.output_text.delta", ...}`).
-
-#### Tool loop contract (responses)
-
-Tool continuation MUST be performed using `function_call` plus `function_call_output` input items:
-
-1. Client sends a request.
-2. Gateway emits `function_call` output items (non-streaming: in `output`; streaming: via events).
-3. Client executes tools, then sends a follow-up `/v1/responses` request whose `input` preserves the authoritative `function_call` item for each continued tool call and appends one `function_call_output` item per tool call:
-   - `function_call` MUST use the flat Responses shape: `{ "type": "function_call", "call_id": string, "name": string, "arguments": string }`.
-   - `call_id` MUST match the tool call id emitted by the model.
-   - `output` MUST be a string (the client is responsible for serializing structured outputs).
-4. Orphaned `function_call_output` items without authoritative prior `function_call` provenance MUST be rejected before any upstream call; the gateway MUST NOT synthesize placeholder tool names or `{}` arguments.
+Native owns execution, follow-up, and durable history. Adapter-origin bookkeeping is not authentication or native/ciphertext attestation. This component adds no persistence, key, session registry, or stronger cross-request binding. Responses disables automatic redirects with safe 3xx failure; this does not prove network confinement. C-11 engineering ceilings are admission budgets, not upstream/RSS maxima or validated normal-history capacity.
 
 ### Adapter Boundaries (Implementation Constraints)
 

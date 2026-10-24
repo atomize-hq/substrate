@@ -10,6 +10,11 @@ use tempfile::NamedTempFile;
 
 fn sample_request(model: &str) -> GatewayRequest {
     GatewayRequest {
+        responses_caller: false,
+        instructions: None,
+        prompt_cache_key: None,
+        client_metadata: None,
+        reasoning_context: None,
         model: model.to_string(),
         messages: vec![Message {
             role: "user".to_string(),

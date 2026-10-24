@@ -112,7 +112,7 @@ fn routing_header(provider: &str) -> HeaderMap {
 }
 
 fn build_single_provider_harness(provider: StubProvider) -> ConformanceHarness {
-    ConformanceHarness::single_provider(provider, "primary-actual", false)
+    ConformanceHarness::single_provider(provider, "primary-actual")
 }
 
 fn build_codex_oauth_provider_harness(
@@ -134,7 +134,6 @@ fn build_codex_oauth_provider_harness(
             priority: 1,
             provider: "codex-auth-probe".to_string(),
             actual_model: actual_model.to_string(),
-            inject_continuation_prompt: false,
         }],
     )
 }
@@ -158,13 +157,11 @@ fn build_multi_provider_harness(
                 priority: 1,
                 provider: "primary".to_string(),
                 actual_model: "primary-actual".to_string(),
-                inject_continuation_prompt: false,
             },
             substrate_gateway::cli::ModelMapping {
                 priority: 2,
                 provider: "secondary".to_string(),
                 actual_model: "secondary-actual".to_string(),
-                inject_continuation_prompt: false,
             },
         ],
     );
@@ -204,6 +201,7 @@ fn make_auth_failure_provider() -> FailingProvider {
 
 fn reasoning_sync_response() -> GatewayResponse {
     GatewayResponse {
+        end_turn: None,
         id: "resp_reasoning_sync".to_string(),
         r#type: "message".to_string(),
         role: "assistant".to_string(),
@@ -461,7 +459,7 @@ async fn model_echo_is_shared_across_endpoints() {
     let responses_fixture = responses_sync_fixture();
     let responses_provider = StubProvider::new(responses_fixture.provider_response.clone(), vec![]);
     let responses_harness =
-        ConformanceHarness::single_provider(responses_provider, "primary-actual", false);
+        ConformanceHarness::single_provider(responses_provider, "primary-actual");
 
     let responses_response = responses_harness
         .invoke_responses(HeaderMap::new(), responses_sync_request())
@@ -487,13 +485,28 @@ async fn responses_sync_and_stream_requests_preserve_explicit_tool_choice_metada
     ));
 
     let base_request = serde_json::json!({
-        "model": "gateway-default",
-        "input": "hello",
-        "tools": [
-            { "type": "function", "function": { "name": "alpha", "parameters": {"type":"object"} } },
-            { "type": "function", "function": { "name": "beta", "parameters": {"type":"object"} } }
-        ],
-        "tool_choice": { "type": "function", "function": { "name": "beta" } }
+      "model": "gateway-default",
+      "input": "hello",
+      "tools": [
+        {
+          "type": "function",
+          "name": "alpha",
+          "parameters": {
+            "type": "object"
+          }
+        },
+        {
+          "type": "function",
+          "name": "beta",
+          "parameters": {
+            "type": "object"
+          }
+        }
+      ],
+      "tool_choice": {
+        "type": "function",
+        "name": "beta"
+      }
     });
 
     let sync_response = harness
@@ -524,17 +537,11 @@ async fn responses_sync_and_stream_requests_preserve_explicit_tool_choice_metada
                 .metadata
                 .as_ref()
                 .and_then(|metadata| metadata.get(OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY)),
-            Some(&serde_json::json!({
-                "type": "function",
-                "function": { "name": "beta" }
-            }))
+            Some(&serde_json::json!({"type":"function","name":"beta"}))
         );
-        assert_eq!(captured.tools.as_ref().map(|tools| tools.len()), Some(1));
+        assert_eq!(captured.tools.as_ref().map(|tools| tools.len()), Some(2));
         assert_eq!(
-            captured
-                .tools
-                .as_ref()
-                .and_then(|tools| tools[0].name.as_deref()),
+            captured.tools.as_ref().and_then(|tools| tools[1].name()),
             Some("beta")
         );
     }
@@ -590,6 +597,7 @@ async fn chat_direct_fallback_honors_x_provider_and_rejects_missing_provider() {
         StubProvider::new(chat_fixture.provider_response.clone(), vec![]),
         StubProvider::new(
             GatewayResponse {
+                end_turn: None,
                 model: "gateway-direct".to_string(),
                 ..chat_fixture.provider_response.clone()
             },
@@ -678,6 +686,7 @@ async fn responses_direct_fallback_honors_x_provider_and_rejects_missing_provide
         StubProvider::new(responses_fixture.provider_response.clone(), vec![]),
         StubProvider::new(
             GatewayResponse {
+                end_turn: None,
                 model: "gateway-direct".to_string(),
                 ..responses_fixture.provider_response.clone()
             },
@@ -832,6 +841,7 @@ async fn x_provider_forcing_is_shared_and_misses_reject_consistently() {
         StubProvider::new(chat_fixture.provider_response.clone(), vec![]),
         StubProvider::new(
             GatewayResponse {
+                end_turn: None,
                 model: "secondary-actual".to_string(),
                 ..chat_fixture.provider_response.clone()
             },
@@ -855,6 +865,7 @@ async fn x_provider_forcing_is_shared_and_misses_reject_consistently() {
         StubProvider::new(responses_fixture.provider_response.clone(), vec![]),
         StubProvider::new(
             GatewayResponse {
+                end_turn: None,
                 model: "secondary-actual".to_string(),
                 ..responses_fixture.provider_response.clone()
             },
@@ -911,7 +922,6 @@ async fn provider_failure_maps_to_shared_502_envelope() {
             priority: 1,
             provider: "test-provider".to_string(),
             actual_model: "primary-actual".to_string(),
-            inject_continuation_prompt: false,
         }],
     );
 
@@ -936,7 +946,6 @@ async fn provider_failure_maps_to_shared_502_envelope() {
             priority: 1,
             provider: "test-provider".to_string(),
             actual_model: "primary-actual".to_string(),
-            inject_continuation_prompt: false,
         }],
     );
 
@@ -974,7 +983,6 @@ async fn provider_auth_failure_maps_to_shared_auth_envelope() {
             priority: 1,
             provider: "test-provider".to_string(),
             actual_model: "primary-actual".to_string(),
-            inject_continuation_prompt: false,
         }],
     );
 
@@ -1314,7 +1322,6 @@ async fn reasoning_is_suppressed_in_sync_outputs_for_both_endpoints() {
     let responses_harness = ConformanceHarness::single_provider(
         StubProvider::new(sync_response, vec![]),
         "primary-actual",
-        false,
     );
     let responses_response = responses_harness
         .invoke_responses(HeaderMap::new(), responses_sync_request())
@@ -1330,6 +1337,7 @@ async fn reasoning_is_suppressed_in_sync_outputs_for_both_endpoints() {
 async fn reasoning_is_suppressed_in_stream_outputs_for_both_endpoints() {
     let chat_harness = build_single_provider_harness(StubProvider::new(
         GatewayResponse {
+            end_turn: None,
             id: "resp_stream_chat".to_string(),
             r#type: "message".to_string(),
             role: "assistant".to_string(),
@@ -1374,6 +1382,7 @@ async fn reasoning_is_suppressed_in_stream_outputs_for_both_endpoints() {
     let responses_harness = ConformanceHarness::single_provider(
         StubProvider::new(
             GatewayResponse {
+                end_turn: None,
                 id: "resp_stream_responses".to_string(),
                 r#type: "message".to_string(),
                 role: "assistant".to_string(),
@@ -1394,7 +1403,6 @@ async fn reasoning_is_suppressed_in_stream_outputs_for_both_endpoints() {
             reasoning_stream_chunks(),
         ),
         "primary-actual",
-        false,
     );
     let mut request = responses_stream_fixture_request();
     request["stream"] = json!(true);

@@ -670,6 +670,55 @@ impl futures::stream::Stream for StructuredEventTracingStream {
     }
 }
 
+// Native semantic streams emit this complete private frame atomically. Consume it
+// after tracing, before the Messages wire. Ordinary provider bytes pass unchanged.
+fn consume_native_terminal(bytes: bytes::Bytes) -> bytes::Bytes {
+    let marker = b"event: gateway.response_terminal\n";
+    let Some(start) = bytes.windows(marker.len()).position(|w| w == marker) else {
+        return bytes;
+    };
+    let Some(end) = bytes[start..]
+        .windows(2)
+        .position(|w| w == b"\n\n")
+        .map(|n| start + n + 2)
+    else {
+        return bytes;
+    };
+    let mut visible = Vec::with_capacity(bytes.len() - (end - start));
+    visible.extend_from_slice(&bytes[..start]);
+    visible.extend_from_slice(&bytes[end..]);
+    bytes::Bytes::from(visible)
+}
+
+fn reject_messages_responses_tools(request: &serde_json::Value) -> Result<(), AppError> {
+    if request
+        .get("tools")
+        .and_then(|v| v.as_array())
+        .is_some_and(|tools| {
+            tools.iter().any(|tool| {
+                tool.as_object().is_some_and(|o| {
+                    o.keys().any(|k| {
+                        matches!(
+                            k.as_str(),
+                            "format"
+                                | "tools"
+                                | "execution"
+                                | "defer_loading"
+                                | "strict"
+                                | "parameters"
+                        )
+                    })
+                })
+            })
+        })
+    {
+        return Err(AppError::Routing(
+            "Responses declarations are not Messages tools".into(),
+        ));
+    }
+    Ok(())
+}
+
 /// Health check endpoint
 async fn health_check() -> impl IntoResponse {
     Json(serde_json::json!({
@@ -781,20 +830,7 @@ async fn handle_openai_chat_completions(
                 // Update model to actual model name
                 gateway_request.model = mapping.actual_model.clone();
 
-                // Inject continuation prompt if configured (skip for background tasks)
-                if mapping.inject_continuation_prompt
-                    && decision.route_type != RouteType::Background
-                {
-                    if let Some(last_msg) = gateway_request.messages.last_mut() {
-                        if should_inject_continuation(last_msg) {
-                            info!(
-                                "💉 Injecting continuation prompt for model: {}",
-                                mapping.actual_model
-                            );
-                            inject_continuation_text(last_msg);
-                        }
-                    }
-                }
+                // Preserve caller-owned ordered history.
 
                 // Write routing info immediately on first attempt
                 if idx == 0 {
@@ -1004,49 +1040,6 @@ async fn handle_openai_chat_completions(
     }
 }
 
-/// Check if message has tool results but no text content
-/// (indicates model should continue after tool execution)
-fn should_inject_continuation(msg: &crate::models::Message) -> bool {
-    use crate::models::MessageContent;
-    let has_tool_results = match &msg.content {
-        MessageContent::Blocks(blocks) => blocks.iter().any(|b| b.is_tool_result()),
-        _ => false,
-    };
-
-    let has_text = match &msg.content {
-        MessageContent::Text(text) => !text.trim().is_empty(),
-        MessageContent::Blocks(blocks) => blocks
-            .iter()
-            .any(|b| b.as_text().map(|t| !t.trim().is_empty()).unwrap_or(false)),
-    };
-
-    // Inject if message has tool results but no text
-    has_tool_results && !has_text
-}
-
-/// Inject continuation text into the last user message
-/// Prepends a text block to the existing message content (doesn't create a new message)
-fn inject_continuation_text(msg: &mut crate::models::Message) {
-    use crate::models::{ContentBlock, MessageContent};
-
-    let continuation = "<system-reminder>If you have an active todo list, remember to mark items complete and continue to the next. Do not mention this reminder.</system-reminder>";
-
-    match &mut msg.content {
-        MessageContent::Text(text) => {
-            // Convert to Blocks and prepend continuation
-            let original_text = text.clone();
-            msg.content = MessageContent::Blocks(vec![
-                ContentBlock::text(continuation.to_string(), None),
-                ContentBlock::text(original_text, None),
-            ]);
-        }
-        MessageContent::Blocks(blocks) => {
-            // Prepend continuation text to existing blocks
-            blocks.insert(0, ContentBlock::text(continuation.to_string(), None));
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1055,10 +1048,7 @@ mod tests {
         AppConfig, ModelConfig, ModelMapping, RouterConfig, ServerConfig, TracingConfig,
     };
     use crate::core::{GatewayRequest, GatewayResponse, GatewayStreamResponse, GatewayUsage};
-    use crate::models::{
-        ContentBlock, CountTokensRequest, CountTokensResponse, KnownContentBlock, Message,
-        MessageContent, ToolResultContent,
-    };
+    use crate::models::{ContentBlock, CountTokensRequest, CountTokensResponse, MessageContent};
     use crate::providers::error::ProviderError;
     use crate::providers::{GatewayProvider, ProviderRegistry};
     use async_trait::async_trait;
@@ -1072,85 +1062,6 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use tempfile::TempDir;
     use tokio::net::TcpListener;
-
-    fn tool_result_message(content: ToolResultContent) -> Message {
-        Message {
-            role: "user".to_string(),
-            content: MessageContent::Blocks(vec![ContentBlock::Known(
-                KnownContentBlock::ToolResult {
-                    tool_use_id: "tool_1".to_string(),
-                    content,
-                    is_error: false,
-                    cache_control: None,
-                },
-            )]),
-        }
-    }
-
-    #[test]
-    fn should_inject_continuation_for_tool_result_only_message() {
-        let msg = tool_result_message(ToolResultContent::Text("done".to_string()));
-        assert!(should_inject_continuation(&msg));
-    }
-
-    #[test]
-    fn should_not_inject_continuation_when_tool_result_turn_already_has_text() {
-        let msg = Message {
-            role: "user".to_string(),
-            content: MessageContent::Blocks(vec![
-                ContentBlock::Known(KnownContentBlock::ToolResult {
-                    tool_use_id: "tool_1".to_string(),
-                    content: ToolResultContent::Text("done".to_string()),
-                    is_error: false,
-                    cache_control: None,
-                }),
-                ContentBlock::text("keep going".to_string(), None),
-            ]),
-        };
-
-        assert!(!should_inject_continuation(&msg));
-    }
-
-    #[test]
-    fn inject_continuation_text_prepends_the_internal_reminder() {
-        let mut msg = Message {
-            role: "user".to_string(),
-            content: MessageContent::Text("continue".to_string()),
-        };
-
-        inject_continuation_text(&mut msg);
-
-        match msg.content {
-            MessageContent::Blocks(blocks) => {
-                assert_eq!(blocks.len(), 2);
-                assert_eq!(
-                    blocks[0].as_text(),
-                    Some("<system-reminder>If you have an active todo list, remember to mark items complete and continue to the next. Do not mention this reminder.</system-reminder>")
-                );
-                assert_eq!(blocks[1].as_text(), Some("continue"));
-            }
-            _ => panic!("continuation injection should convert text into blocks"),
-        }
-    }
-
-    #[test]
-    fn inject_continuation_text_prepends_to_existing_blocks() {
-        let mut msg = tool_result_message(ToolResultContent::Text("done".to_string()));
-
-        inject_continuation_text(&mut msg);
-
-        match msg.content {
-            MessageContent::Blocks(blocks) => {
-                assert_eq!(blocks.len(), 2);
-                assert_eq!(
-                    blocks[0].as_text(),
-                    Some("<system-reminder>If you have an active todo list, remember to mark items complete and continue to the next. Do not mention this reminder.</system-reminder>")
-                );
-                assert_eq!(blocks[1].as_text(), None);
-            }
-            _ => panic!("continuation injection should keep blocks"),
-        }
-    }
 
     struct StubProvider {
         response: GatewayResponse,
@@ -1399,13 +1310,11 @@ mod tests {
                         priority: 1,
                         provider: "missing-provider".to_string(),
                         actual_model: "kimi-k2-actual".to_string(),
-                        inject_continuation_prompt: false,
                     },
                     ModelMapping {
                         priority: 2,
                         provider: "test-provider".to_string(),
                         actual_model: "kimi-k2-actual".to_string(),
-                        inject_continuation_prompt: false,
                     },
                 ],
             }],
@@ -1459,7 +1368,6 @@ mod tests {
     fn create_test_state(
         temp_dir: &TempDir,
         provider: StubProvider,
-        inject_continuation_prompt: bool,
     ) -> (Arc<AppState>, Arc<Mutex<Vec<GatewayRequest>>>) {
         let captured_requests = provider.captured_requests();
         let mut registry = ProviderRegistry::new();
@@ -1495,7 +1403,6 @@ mod tests {
                         priority: 1,
                         provider: "test-provider".to_string(),
                         actual_model: "kimi-k2-actual".to_string(),
-                        inject_continuation_prompt,
                     }],
                 },
                 ModelConfig {
@@ -1504,7 +1411,6 @@ mod tests {
                         priority: 1,
                         provider: "test-provider".to_string(),
                         actual_model: "kimi-k2-thinking-actual".to_string(),
-                        inject_continuation_prompt: false,
                     }],
                 },
             ],
@@ -1533,7 +1439,7 @@ mod tests {
             final_only_response("unused", "kimi-k2-actual", "end_turn"),
             vec![],
         );
-        let (state, _) = create_test_state(&temp_dir, provider, false);
+        let (state, _) = create_test_state(&temp_dir, provider);
         let app = build_app(state);
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -1571,7 +1477,7 @@ mod tests {
             final_only_response("unused", "kimi-k2-actual", "end_turn"),
             vec![],
         );
-        let (state, _) = create_test_state(&temp_dir, provider, false);
+        let (state, _) = create_test_state(&temp_dir, provider);
         let app = build_app(state);
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -1606,6 +1512,7 @@ mod tests {
 
     fn final_only_response(text: &str, model: &str, stop_reason: &str) -> GatewayResponse {
         GatewayResponse {
+            end_turn: None,
             id: "msg_test".to_string(),
             r#type: "message".to_string(),
             role: "assistant".to_string(),
@@ -1624,6 +1531,7 @@ mod tests {
 
     fn action_and_tool_response(action: &str) -> GatewayResponse {
         GatewayResponse {
+            end_turn: None,
             id: "msg_test".to_string(),
             r#type: "message".to_string(),
             role: "assistant".to_string(),
@@ -1654,7 +1562,7 @@ mod tests {
             final_only_response("All done.", "kimi-k2-actual", "end_turn"),
             vec![],
         );
-        let (state, captured_requests) = create_test_state(&temp_dir, provider, false);
+        let (state, captured_requests) = create_test_state(&temp_dir, provider);
 
         let request = json!({
             "model": "claude-sonnet-4-5",
@@ -1693,13 +1601,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn handle_messages_injects_continuation_for_tool_result_follow_up() {
+    async fn handle_messages_preserves_caller_tool_result_without_synthetic_instruction() {
         let temp_dir = TempDir::new().unwrap();
         let provider = StubProvider::new(
             final_only_response("Continuing.", "kimi-k2-actual", "end_turn"),
             vec![],
         );
-        let (state, captured_requests) = create_test_state(&temp_dir, provider, true);
+        let (state, captured_requests) = create_test_state(&temp_dir, provider);
 
         let request = json!({
             "model": "claude-sonnet-4-5",
@@ -1748,16 +1656,10 @@ mod tests {
             .expect("expected tool-result follow-up");
         match &last_message.content {
             MessageContent::Blocks(blocks) => {
-                assert_eq!(
-                    blocks[0].as_text(),
-                    Some("<system-reminder>If you have an active todo list, remember to mark items complete and continue to the next. Do not mention this reminder.</system-reminder>")
-                );
-                assert!(blocks[1].is_tool_result());
+                assert_eq!(blocks.len(), 1);
+                assert!(blocks[0].is_tool_result());
             }
-            other => panic!(
-                "expected blocks after continuation injection, got {:?}",
-                other
-            ),
+            other => panic!("expected original caller result blocks, got {:?}", other),
         }
     }
 
@@ -1768,7 +1670,7 @@ mod tests {
             final_only_response("Smoke ok.", "unused-provider-model", "end_turn"),
             vec![],
         );
-        let (state, captured_requests) = create_test_state(&temp_dir, provider, true);
+        let (state, captured_requests) = create_test_state(&temp_dir, provider);
 
         let normal_request = json!({
             "model": "claude-sonnet-4-5",
@@ -1864,14 +1766,11 @@ mod tests {
             .expect("expected continuation follow-up");
         match &last_message.content {
             MessageContent::Blocks(blocks) => {
-                assert_eq!(
-                    blocks[0].as_text(),
-                    Some("<system-reminder>If you have an active todo list, remember to mark items complete and continue to the next. Do not mention this reminder.</system-reminder>")
-                );
-                assert!(blocks[1].is_tool_result());
+                assert_eq!(blocks.len(), 1);
+                assert!(blocks[0].is_tool_result());
             }
             other => panic!(
-                "expected continuation request blocks after prompt injection, got {:?}",
+                "expected original caller continuation blocks, got {:?}",
                 other
             ),
         }
@@ -1889,7 +1788,7 @@ mod tests {
                 "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n".to_string(),
             ],
         );
-        let (state, captured_requests) = create_test_state(&temp_dir, provider, false);
+        let (state, captured_requests) = create_test_state(&temp_dir, provider);
 
         let request = json!({
             "model": "claude-sonnet-4-5",
@@ -1940,7 +1839,7 @@ mod tests {
                 "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n".to_string(),
             ],
         );
-        let (state, captured_requests) = create_test_state(&temp_dir, provider, false);
+        let (state, captured_requests) = create_test_state(&temp_dir, provider);
 
         let request = json!({
             "model": "claude-sonnet-4-5",
@@ -1983,7 +1882,7 @@ mod tests {
     async fn handle_structured_events_returns_events_json() {
         let temp_dir = TempDir::new().unwrap();
         let provider = StubProvider::new(action_and_tool_response("Let me check."), vec![]);
-        let (state, _captured_requests) = create_test_state(&temp_dir, provider, false);
+        let (state, _captured_requests) = create_test_state(&temp_dir, provider);
 
         let request = json!({
             "model": "claude-sonnet-4-5",
@@ -2026,7 +1925,7 @@ mod tests {
                 "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n".to_string(),
             ],
         );
-        let (state, _captured_requests) = create_test_state(&temp_dir, provider, false);
+        let (state, _captured_requests) = create_test_state(&temp_dir, provider);
 
         let request = json!({
             "model": "claude-sonnet-4-5",
@@ -2060,7 +1959,7 @@ mod tests {
     fn create_test_state_with_tracing(
         temp_dir: &TempDir,
         provider: StubProvider,
-        inject_continuation_prompt: bool,
+
         tracing_enabled: bool,
     ) -> Arc<AppState> {
         let mut registry = ProviderRegistry::new();
@@ -2096,7 +1995,6 @@ mod tests {
                         priority: 1,
                         provider: "test-provider".to_string(),
                         actual_model: "kimi-k2-actual".to_string(),
-                        inject_continuation_prompt,
                     }],
                 },
                 ModelConfig {
@@ -2105,7 +2003,6 @@ mod tests {
                         priority: 1,
                         provider: "test-provider".to_string(),
                         actual_model: "kimi-k2-thinking-actual".to_string(),
-                        inject_continuation_prompt: false,
                     }],
                 },
             ],
@@ -2129,7 +2026,7 @@ mod tests {
     async fn tracing_writes_evt_entries_with_monotonic_seq() {
         let temp_dir = TempDir::new().unwrap();
         let provider = StubProvider::new(action_and_tool_response("Let me check."), vec![]);
-        let state = create_test_state_with_tracing(&temp_dir, provider, false, true);
+        let state = create_test_state_with_tracing(&temp_dir, provider, true);
 
         let request = json!({
             "model": "claude-sonnet-4-5",
@@ -2180,6 +2077,7 @@ async fn handle_structured_events(
     headers: HeaderMap,
     Json(request_json): Json<serde_json::Value>,
 ) -> Result<Response, AppError> {
+    reject_messages_responses_tools(&request_json)?;
     let model = request_json
         .get("model")
         .and_then(|m| m.as_str())
@@ -2197,7 +2095,7 @@ async fn handle_structured_events(
         .map_err(|e| AppError::Parse(format!("Invalid request format: {}", e)))?;
     let original_public_model = ingress_request.model.clone();
     let mut request_for_routing: GatewayRequest =
-        ingress_request.try_into().map_err(AppError::Parse)?;
+        ingress_request.try_into().map_err(AppError::Routing)?;
 
     // 2. Route the request (may modify system prompt to remove CCM-SUBAGENT-MODEL tag)
     let decision = inner
@@ -2248,16 +2146,7 @@ async fn handle_structured_events(
                 // Update model to actual model name
                 gateway_request.model = mapping.actual_model.clone();
 
-                // Inject continuation prompt if configured (skip for background tasks)
-                if mapping.inject_continuation_prompt
-                    && decision.route_type != RouteType::Background
-                {
-                    if let Some(last_msg) = gateway_request.messages.last_mut() {
-                        if should_inject_continuation(last_msg) {
-                            inject_continuation_text(last_msg);
-                        }
-                    }
-                }
+                // Preserve caller-owned ordered history.
 
                 let is_streaming = gateway_request.stream == Some(true);
 
@@ -2466,6 +2355,7 @@ async fn handle_messages(
     headers: HeaderMap,
     Json(request_json): Json<serde_json::Value>,
 ) -> Result<Response, AppError> {
+    reject_messages_responses_tools(&request_json)?;
     let model = request_json
         .get("model")
         .and_then(|m| m.as_str())
@@ -2478,29 +2368,12 @@ async fn handle_messages(
     // Generate trace ID for correlating request/response
     let trace_id = state.message_tracer.new_trace_id();
 
-    // DEBUG: Log request body for debugging
-    if let Ok(json_str) = serde_json::to_string_pretty(&request_json) {
-        tracing::debug!("📥 Incoming request body:\n{}", json_str);
-    }
-
-    // 1. Parse ingress request and convert to gateway core format for routing
+    // Parse errors are controlled diagnostics: caller payloads may contain private transport.
     let ingress_request: AnthropicMessagesRequest = serde_json::from_value(request_json.clone())
-        .map_err(|e| {
-            // Log the full request on parse failure for debugging
-            if let Ok(pretty) = serde_json::to_string_pretty(&request_json) {
-                tracing::error!(
-                    "❌ Failed to parse request: {}\n📋 Request body:\n{}",
-                    e,
-                    pretty
-                );
-            } else {
-                tracing::error!("❌ Failed to parse request: {}", e);
-            }
-            AppError::Parse(format!("Invalid request format: {}", e))
-        })?;
+        .map_err(|_| AppError::Parse("Invalid request format".into()))?;
     let original_public_model = ingress_request.model.clone();
     let mut request_for_routing: GatewayRequest =
-        ingress_request.try_into().map_err(AppError::Parse)?;
+        ingress_request.try_into().map_err(AppError::Routing)?;
 
     // 2. Route the request (may modify system prompt to remove CCM-SUBAGENT-MODEL tag)
     let decision = inner
@@ -2562,20 +2435,7 @@ async fn handle_messages(
                 // Update model to actual model name
                 gateway_request.model = mapping.actual_model.clone();
 
-                // Inject continuation prompt if configured (skip for background tasks)
-                if mapping.inject_continuation_prompt
-                    && decision.route_type != RouteType::Background
-                {
-                    if let Some(last_msg) = gateway_request.messages.last_mut() {
-                        if should_inject_continuation(last_msg) {
-                            info!(
-                                "💉 Injecting continuation prompt for model: {}",
-                                mapping.actual_model
-                            );
-                            inject_continuation_text(last_msg);
-                        }
-                    }
-                }
+                // Preserve caller-owned ordered history.
 
                 // Check if streaming is requested
                 let is_streaming = gateway_request.stream == Some(true);
@@ -2664,10 +2524,11 @@ async fn handle_messages(
                                 ))
                             };
 
-                            let body_stream = traced_stream.map_err(|e| {
-                                error!("Stream error: {}", e);
-                                std::io::Error::other(e.to_string())
-                            });
+                            let body_stream =
+                                traced_stream.map_ok(consume_native_terminal).map_err(|e| {
+                                    error!("Stream error: {}", e);
+                                    std::io::Error::other(e.to_string())
+                                });
 
                             let body = Body::from_stream(body_stream);
                             let mut response_builder = Response::builder()
@@ -2740,6 +2601,7 @@ async fn handle_messages(
                                 );
                             }
 
+                            response.end_turn = None;
                             return Ok(Json(response).into_response());
                         }
                         Err(e) => {
@@ -2810,6 +2672,7 @@ async fn handle_messages(
             provider_response.model = original_model;
 
             // Return provider response
+            provider_response.end_turn = None;
             return Ok(Json(provider_response).into_response());
         }
 
@@ -2845,6 +2708,11 @@ async fn handle_count_tokens(
 
     // 2. Create a minimal GatewayRequest for routing
     let mut routing_request = GatewayRequest {
+        responses_caller: false,
+        instructions: None,
+        prompt_cache_key: None,
+        client_metadata: None,
+        reasoning_context: None,
         model: count_request.model.clone(),
         messages: count_request.messages.clone(),
         max_output_tokens: 1024, // Dummy value for routing
@@ -2856,7 +2724,10 @@ async fn handle_count_tokens(
         stream: None,
         metadata: None,
         system: count_request.system.clone(),
-        tools: count_request.tools.clone(),
+        tools: count_request
+            .tools
+            .clone()
+            .map(|ts| ts.into_iter().map(Into::into).collect()),
     };
     let decision = inner
         .router

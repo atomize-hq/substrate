@@ -5,7 +5,7 @@ This gateway now exposes two public OpenAI-shaped surfaces:
 - `POST /v1/chat/completions`
 - `POST /v1/responses`
 
-Both are implemented as thin adapters over the same internal gateway core. They share routing, model mapping, provider fallback, reasoning suppression, and the same redacted error envelope.
+Both are implemented as thin adapters over the same internal gateway core. They share routing, model mapping, a normalized core, private-reasoning suppression, and the same redacted error envelope. Ordinary representable requests retain configured fallback; advanced Responses requests pin their selected backend/account/model and fail without fallback or stripped history.
 
 `/v1/messages` remains the primary Claude Code-facing surface. The OpenAI routes exist for OpenAI-compatible clients and SDKs.
 
@@ -14,16 +14,16 @@ Both are implemented as thin adapters over the same internal gateway core. They 
 | Surface | Status | Notes |
 | --- | --- | --- |
 | `POST /v1/chat/completions` | Implemented | Supports sync + streaming, function tools, tool continuation, images, model echo, `X-Provider` forcing |
-| `POST /v1/responses` | Implemented | Supports sync + streaming, function tools, `function_call_output` continuation, images, model echo, `X-Provider` forcing |
+| `POST /v1/responses` | Implemented | Supports sync + streaming and the closed typed declaration/call/result/next/history component in C-11, admitted inline media, model echo, `X-Provider` forcing |
 | OpenAI-side token counting | Not yet exposed | `POST /v1/messages/count_tokens` exists today; ADR 0009 sets direction for ingress-wide token counting, but no OpenAI count-tokens route has landed yet |
 
 Repo anchors:
 
-- [ADR 0008](../../docs/adr/0008-expand-openai-side-support-via-chat-completions-and-responses.md)
-- [Chat Completions contract (`C-10`)](../../docs/foundation/openai-side-chat-completions-c10-contract.md)
-- [Responses contract (`C-11`)](../../docs/foundation/openai-side-responses-c11-contract.md)
-- [Shared adapter invariants (`C-12`)](../../docs/foundation/openai-side-adapter-invariants-c12-contract.md)
-- [Conformance suite contract (`C-13`)](../../docs/foundation/openai-side-conformance-suite-c13-contract.md)
+- [ADR 0008](./adr/0008-expand-openai-side-support-via-chat-completions-and-responses.md)
+- [Chat Completions contract (`C-10`)](./foundation/openai-side-chat-completions-c10-contract.md)
+- [Responses contract (`C-11`)](./foundation/openai-side-responses-c11-contract.md)
+- [Shared adapter invariants (`C-12`)](./foundation/openai-side-adapter-invariants-c12-contract.md)
+- [Conformance suite contract (`C-13`)](./foundation/openai-side-conformance-suite-c13-contract.md)
 
 ## Shared Behavior
 
@@ -31,9 +31,9 @@ These behaviors are shared across both OpenAI endpoints:
 
 - `model` is a public gateway model name. The gateway may route to a different provider model internally, but the response echoes the original request `model`.
 - Optional `X-Provider: <provider_name>` constrains routing to one configured provider. If the named provider is missing or unmapped for the requested model, the request fails with a route error.
-- Routing still uses the configured model mappings and provider fallback order when `X-Provider` is not set.
-- Public OpenAI output suppresses internal/provider reasoning blocks (`thinking`, hidden reasoning markers, etc.). Reasoning content is not surfaced as user-visible text.
-- Unknown top-level request fields are ignored unless they are part of the gateway's explicit reject list for that endpoint.
+- Ordinary representable requests use configured model mappings and fallback when `X-Provider` is absent. Advanced Responses requests reject unsupported destinations and preserve the per-request backend/account/model pin; no fallback or state stripping.
+- Private provider reasoning never becomes public text or diagnostics. Approved completed opaque continuation and required upstream summary Vec may return as typed Responses items to the same connected permitted caller under C-11; other endpoints do not acquire that state.
+- Unknown top-level ignore does not apply to recognized unsupported native semantics. Known unsupported typed items/controls/provider combinations fail before I/O; generic metadata or `Unknown` blocks cannot bypass admission.
 
 ## Error Envelope
 
@@ -54,7 +54,7 @@ Status behavior:
 - `400` for invalid request shape, unsupported public fields, invalid tool-loop continuation, or route selection failures
 - `502` for provider failures after routing succeeds
 
-The public `message` value is intentionally redacted to the stable gateway summary, not the raw upstream/provider error text.
+The public `message` value is intentionally redacted to the stable gateway summary, not the raw upstream/provider error text. Reached malformed-success/error diagnostics must use fixed finite classifications rather than raw decoder errors, full CodeAssist request dumps, or raw 404 bodies. Local API-key observations and UNSENT OAuth/CodeAssist source or pure-helper checks have distinct proof scopes; this is not universal log/security qualification.
 
 ## `POST /v1/chat/completions`
 
@@ -136,95 +136,37 @@ Other rejected cases:
 
 ## `POST /v1/responses`
 
-### Supported request subset
+### Closed supported component
 
-- `model`
-- `input`
-  - string shorthand
-  - array of items
-- message input items:
-  - `{ "type": "message", "role": "...", "content": [...] }`
-  - roles: `system`, `developer`, `user`, `assistant`
-  - content parts:
-    - `{ "type": "input_text", "text": "..." }`
-    - `{ "type": "input_image", "image_url": "...", "detail": "low|high|auto" }`
-    - `data:` image URLs are also accepted
-- tool continuation input items:
-  - `{ "type": "function_call_output", "call_id": "...", "output": "..." }`
-- `previous_response_id`
-- `tools`
-  - function tools only
-- `tool_choice`
-  - `"none"`, `"auto"`, `"required"`
-  - `{ "type": "function", "function": { "name": "..." } }`
-- `parallel_tool_calls`
-- `text.format.type = "text"`
-- `max_output_tokens`
-- `temperature`
-- `top_p`
-- `stop`
-- `stream`
+[C-11](foundation/openai-side-responses-c11-contract.md) specifies the normative subset: flat function/custom/namespace/client-search and loaded definitions, Lite developer additional-tools placement, exact model call/client result/subsequent request/serialized history, admitted inline media/detail, completed opaque/summary and compaction history, and hosted Responses WebSearch activity. Function JSON Strings, custom raw Strings, structured discovery arguments, IDs/kinds/namespaces, optional strict false versus omission, and history order remain distinct. Native owns client execution and durable history; the gateway adds no executor or registry.
 
-### Implemented behavior
+Supplied instructions preserve missing/empty/nonempty; null/wrong types reject. Ordered system/developer/Lite base-prefix history stays intact. Bundled-version fallback/overwrite and invented todo/warmup prompt injection are removed across ingresses; factual result-error translation remains data. Typed source-native `prompt_cache_key: string` and `client_metadata: object<string,string>` preserve supplied values through initial/replayed requests; actual cache controls/usage remain when present. No cache hit/effectiveness is invented.
 
-- Non-streaming responses return an OpenAI `response` object.
-- Sync `status` is currently:
-  - `completed` for normal responses
-  - `incomplete` when the provider stop reason is `max_tokens`
-  - `failed` when the provider stop reason is `error`
-- Sync output items currently include:
-  - `message` with `output_text`
-  - `function_call`
-- Streaming responses return `text/event-stream` with named `event:` frames and matching `data.type` values.
-- The current streaming event subset is:
-  - `response.created`
-  - `response.output_item.added`
-  - `response.content_part.added`
-  - `response.output_text.delta`
-  - `response.output_text.done`
-  - `response.content_part.done`
-  - `response.function_call_arguments.delta`
-  - `response.function_call_arguments.done`
-  - `response.output_item.done`
-  - `response.completed`
-- `response.completed` carries the final assembled Response object, including usage.
-- `parallel_tool_calls` is preserved through OpenAI provider serialization, including the ordinary API-key Chat Completions fallback; it does not widen tool support beyond function tools. Omitted controls stay omitted upstream, retaining upstream defaults (parallel tool calls default to `true`).
-- Accepted `tool_choice` controls survive that Chat Completions fallback, including `"required"` and explicit nested function selection. Existing ingress filtering still removes tools for `"none"` and selects the named tool for explicit selection.
-- Tool continuation uses `function_call_output` items, preserves `call_id`, and accepts either replayed `function_call` history or `previous_response_id` as the continuation anchor.
-- Accepted image input `detail` values (`low`, `high`, `auto`) are preserved per image in OpenAI Responses requests and the ordinary API-key Chat Completions fallback, for both URL and data URLs and sync or streaming requests. Omitted detail stays omitted upstream; explicit `auto` stays explicit. Invalid values still reject before upstream I/O.
+Responses declarations/explicit choices are flat; Chat retains actual nesting. The ordinary API-key stored-continuation and representable Chat translation subset retains its actual controls and image semantics; advanced state cannot be dropped to use it. OAuth keeps its endpoint/account/minimal-header rules, stream=true/store=false/text format invariants, and explicit unsupported-control rejects in the [route contract](contracts/chatgpt-codex-route-contract.md). Optional effort does not gate admitted summary/context/include transport. Include omission, empty, and explicit encrypted include share the same actual completed-item policy.
 
-### Rejected/unsupported behavior
+Actual API-key Responses serialization must preserve supplied supported `temperature` and `top_p`, including requests that select Responses through instructions or advanced state. Stop sequences reject before upstream I/O on actual Responses because that endpoint schema has no `stop` field. Ordinary accepted Chat translation keeps its stop/sampling controls, and OAuth keeps its existing unsupported-control rejects; no silent stripping or route substitution is an equivalent result.
 
-The route rejects these cases with `400`:
+The provider's semantic parser serves both sync and streaming. Authoritative complete output-item done replaces provisional opaque state and preserves exact opaque bytes plus required upstream `summary_text` Vec; empty/nonempty summaries remain intact. Private reasoning content/private metadata is excluded from text, logs, traces, errors, and other endpoint outputs. Safe projections are separate from wire/history serde.
 
-- built-in tools or any non-function tool type
-- non-function `tool_choice`
-- `tool_choice="required"` with no tools
-- `tool_choice` selecting an unknown function
-- `text.format.type` other than `"text"`
-- empty `function_call_output.call_id`
-- `input_image.detail` values outside `low`, `high`, or `auto`
+An upstream complete function-call item may omit lifecycle status or supply `status: "completed"`. The completed-item parser must validate a supplied status and normalize it away before closed native replay: pinned native FunctionCall retains exact identity/kind/namespace/raw arguments and history, but does not retain that envelope lifecycle member. Null, wrong-type, unknown, and noncompleted status at a complete-item boundary fail. This is a narrow upstream-envelope normalization, not an open schema or new durable lifecycle field.
 
-JSON schema output, built-in tools, and non-function tool calls are not implemented on this public surface.
+Responses emits the assembled public response/usage and optional `end_turn` at completion. Absent/null becomes omission, false/true remain explicit, wrong types fail independently of stop reason. Other serializers consume the internal terminal. False cannot become conversational `Final`; errors/incomplete/EOF/cancel cannot manufacture completion. First terminal fuses the stream, and drop releases upstream ownership without detached drain/retry. Responses rejects automatic redirects safely; this and the destination pin do not establish DNS/IP/TLS/world confinement.
 
-### ChatGPT Codex route maintenance note
+Known excluded forms fail explicitly: standalone search/images, WebSockets, audio/file references, private controls/passthrough, final-answer JSON schema, unlisted built-ins, and citation fidelity. No model/auth/tool-mode downgrade or truncation hides these populations. This is a closed model-Responses HTTP/SSE component, not full ordinary native `0.156.1` or private-backend support.
 
-This page describes the generic public `/v1/responses` surface. When that surface routes through the ChatGPT Codex OAuth backend, maintainers must revalidate against the Codex route contracts instead of assuming the generic route description applies unchanged.
+### API, serialization, and resource costs
 
-On the Codex route specifically:
+Public Rust request/response fields and typed tool/item variants change struct literals and exhaustive matches; direct callers must adopt the shared types. Normalized transport Clone/serde preserves admitted instructions, cache fields, call/result/history, opaque state, and terminal metadata. `GatewayRequest.responses_caller` is serde-skipped adapter-origin bookkeeping, set again by the Responses adapter, never caller metadata/authentication/native identity. No dependency version change is required. The shared `ImageDetail` adds the admitted Responses original detail. `KnownContentBlock::Image` uses `core_image_source` serde to retain the same authoritative `ImageSource.detail` through `Message`/`GatewayRequest` history reload. Direct `ImageSource` serde still omits/ignores detail; endpoint serializers preserve their own vocabularies.
 
-- `stream = true` is forced upstream
-- `store = false` is forced upstream
-- `text.format.type = "text"` is forced on the route
-- bare messages, supported image inputs, flat function tools, explicit function `tool_choice`, and sync-drain execution follow route-specific translate rules
-- `reasoning.effort`, `reasoning.summary`, `parallel_tool_calls`, `text.verbosity`, `include = []`, `include = ["reasoning.encrypted_content"]`, `tool_choice = "none"`, and `tool_choice = "auto"` are route-specific pass cases subject to the published constraints
-- `max_output_tokens`, `metadata`, `truncation`, `previous_response_id`, `temperature`, `top_p`, `user`, unverified `service_tier` overrides, nested Chat Completions-style tool definitions, nested Chat Completions-style `tool_choice`, `tool_choice = "required"`, and `stream_options` are explicit Codex-route rejects
+Normalized Responses result arrays use the distinct `ToolResultContent::ResponseItems { items }` object shape (`{"items": [...]}`) so serde reload cannot reinterpret them as generic Anthropic result blocks. Public native Responses result arrays remain arrays; ordinary Anthropic empty `[]` retains its endpoint-owned meaning. Discovered definitions likewise use their typed wrapper. These are normalized/public Rust interface costs, not migration profiles or a second history store.
 
-Codex route maintenance should use these canonical references:
+Typed completed opaque/summary return is an explicit HTTP disclosure/admission surface to the same connected Responses caller under the actual access boundary. Native remains the durable history owner. No gateway persistence/key/session registry or stronger cross-request/member/ciphertext attestation is introduced; actual managed access checks remain, and standalone network access is not that stronger assurance.
 
-- [`chatgpt-codex-route-contract.md`](contracts/chatgpt-codex-route-contract.md)
-- [`chatgpt-codex-auth-handoff-contract.md`](contracts/chatgpt-codex-auth-handoff-contract.md)
-- [`chatgpt-codex-conformance-and-drift-guard.md`](contracts/chatgpt-codex-conformance-and-drift-guard.md)
+Engineering ceilings are 2 MiB encoded entity/SSE frame/semantic state, 16 MiB cumulative upstream wire, and 64 MiB accounted simultaneous working payload with reserved partitions (6 MiB normalized bundle, 8 MiB public queue). [Transport constants](../src/models/response_transport.rs), bounded preparse/pre-extension paths, held state/copy/queue accounting, and one-frame-per-poll framing define the mechanism. These figures do not bound RSS, headers/TLS/allocator/concurrency or establish upstream maxima/normal native-history fit. Over-limit handling fails safely without lost-history success, ciphertext rewriting, fallback, or detached drain. Final source accounting and boundary tests own proof of the implementation. Mapping selection must borrow configuration entries instead of cloning every mapping String, including unused entries. Chosen model/provider identifier payload must be admitted before owned copies or directly reached payload-bearing selection diagnostics; routing priorities, forcing, ordinary fallback, and the advanced one-destination pin retain their contracted behavior.
+
+### ChatGPT Codex route maintenance
+
+Use the [route contract](contracts/chatgpt-codex-route-contract.md), [auth handoff](contracts/chatgpt-codex-auth-handoff-contract.md), and existing [drift guard](contracts/chatgpt-codex-conformance-and-drift-guard.md). Historical probes and old fixtures retain their dated population; neither public-current docs nor new local source tests establish private OAuth acceptance.
 
 ### Minimal example
 
@@ -238,11 +180,12 @@ Codex route maintenance should use these canonical references:
 
 ## Conformance Coverage
 
-The current implementation is guarded by targeted offline conformance tests:
+The implementation has these targeted offline conformance surfaces (their presence is not a claim that current candidate gates have passed):
 
 - [gateway/tests/openai_chat_completions_conformance.rs](../tests/openai_chat_completions_conformance.rs)
 - [gateway/tests/openai_responses_conformance.rs](../tests/openai_responses_conformance.rs)
 - [gateway/tests/openai_shared_parity.rs](../tests/openai_shared_parity.rs)
+- [gateway/tests/openai_codex_0156_roundtrip.rs](../tests/openai_codex_0156_roundtrip.rs)
 
 Those tests cover, among other things:
 
@@ -264,13 +207,19 @@ For ChatGPT Codex route maintenance, the owned deterministic evidence anchors ar
 
 Provider request regressions require flat function definitions (`type`, `name`, optional `description` and `parameters`) on upstream Responses requests and nested `function` definitions on upstream Chat Completions requests. Keep these serializers separate when maintaining tool support.
 
-The shared Rust `ImageSource` now has `detail: Option<ImageDetail>` (`Low`, `High`, `Auto`). Rust struct-literal callers must add `detail: None` when no control was supplied. This is a typed in-memory annotation: request moves and clones preserve it, and the OpenAI endpoint serializers emit it explicitly. Canonical Anthropic-shaped serde intentionally ignores this annotation on both serialization and deserialization, so a canonical serde roundtrip does not retain detail. The legacy message trace uses that same canonical shape and omits detail; it does not feed provider dispatch. Public Chat Completions and Messages input vocabularies are unchanged.
+The earlier A06 evidence covered the following original scope; the new component adds admitted Responses original-detail and typed transport-serde behavior rather than treating that evidence as proof of them.
+
+The shared Rust `ImageSource` in that earlier scope had `detail: Option<ImageDetail>` (`Low`, `High`, `Auto`). Rust struct-literal callers must add `detail: None` when no control was supplied. Request moves and clones preserve the annotation, and OpenAI endpoint serializers emit it explicitly. The historical A06 serde limitation applies to direct `ImageSource` serialization/deserialization, whose canonical Anthropic-shaped DTO still omits/ignores detail. Current core image blocks use `core_image_source` serde to retain that same field through `Message`/`GatewayRequest` history reload; the historical direct-DTO limitation is not a current core-history limitation. `AnthropicCompatibleProvider` clears the OpenAI-only annotation in endpoint-owned request/count-token projections for message, system, and result images; Chat and Gemini retain their actual wire semantics. Safe traces remain separate from authoritative history. Public Chat Completions and Messages input vocabularies are unchanged.
+
+The `image_detail_survives_core_history_reload_and_actual_responses_wire` regression in `openai_codex_0156_roundtrip` covers absent/auto/low/high/original detail with URL/data images through public HTTP and reloaded core history sent by the actual provider. Existing `image_detail_provider_isolation` literal regressions retain their endpoint-isolation role. These are source/test anchors, not a claim that final candidate gates have passed.
 
 The `gwa06_*` tests check exact independently expected local HTTP bodies for high, low, auto, and omission with URL/data inputs across both OpenAI protocols and sync/stream dispatch, plus typed ingress/clones and rejection before I/O. They also capture actual Anthropic-compatible sync, stream, and count-token requests and Gemini sync/stream requests, verifying unchanged image bodies without OpenAI detail leakage. OAuth serializer coverage is explicitly **unsent**; local HTTP tests prove request translation, not live vision processing, private backend acceptance, native Codex compatibility, or installed/production behavior.
 
 The request regressions serialize an OAuth provider instance without sending and inspect real API-key provider requests against local HTTP mocks in sync and streaming modes. They verify outbound tool definitions and controls, including the existing continuation route selection and ordinary Chat fallback. They do not establish private OAuth backend acceptance, live provider compatibility, native Codex compatibility, or API-key Responses streaming output fidelity.
 
-Responses streams select their decoder from the actual upstream endpoint for both API-key and OAuth requests. Supported item, text, content-part, and function-argument done payloads reconcile the same semantic assembly used for sync drains. Streaming emits each missing suffix once before closing its normalized block; a final payload that contradicts already emitted content fails as transport drift. OAuth completion envelopes supply lifecycle/usage only. API-key sync producers that send only a completed output snapshot retain that compatibility path after terminal validation.
+The accepted A03–A05 evidence established the following earlier ordinary subset; new typed/default-opaque/history behavior requires the component regressions above.
+
+Responses streams select their decoder from the actual upstream endpoint for both API-key and OAuth requests. Supported item, text, content-part, and function-argument done payloads reconcile the same semantic assembly used for sync drains. Streaming emits each missing suffix once before closing its normalized block; a final payload that contradicts already emitted content fails as transport drift. OAuth completion envelopes supply lifecycle/usage only. The ordinary API-key completed-snapshot path remains subject to terminal validation; it cannot bypass authoritative done requirements for observed opaque items.
 
 The shared SSE adapter frames bytes before UTF-8 decoding, including characters split across transport chunks. Invalid or truncated UTF-8 fails explicitly. Its exported Rust `SseStream` helper now yields the existing `ProviderError` rather than `reqwest::Error`: transport errors use `HttpError`, and invalid bytes use `ApiError` with status `502`. The two OpenAI consumers propagate that error; public HTTP schemas remain the same. Streams end on their first error or semantic completion, and caller drop releases the owned upstream stream without creating a completion event.
 
@@ -295,4 +244,6 @@ The repo now ships:
 - public `responses`
 - shared OpenAI-side invariants and conformance coverage
 
-The main remaining OpenAI-side gap is token counting: the ADR direction is in place, but only `/v1/messages/count_tokens` is exposed today.
+OpenAI token counting remains unexposed; only `/v1/messages/count_tokens` exists. The closed component exclusions and native/private/installed/retained/production proof ceilings above remain material limits.
+
+The `openai_codex_0156_roundtrip` target exercises the real local handler/core/router/OpenAIProvider path with independent literal requests/events, tool/result/next/replayed history, Lite instructions, strict/custom/namespaces/discovery, default completed opaque/summary, typed cache fields/usage, terminal states, safe sinks, limits, redirects/fallback, and cancellation. Existing provider suites protect actual Chat nesting, Anthropic caching/signed thinking, Azure, Kimi, and Gemini semantics. No pending test count or clean/live-provider result is asserted here. Pinned source evidence is `openai/codex` `rust-v0.156.1` commit `b412ff32c417f855c2b2d1581b77058eed87c84b`, tree `0a0b0bf9acf2f45e9239e7a52ef79f7702aa5799`; this is not binary/runtime authenticity. Current [OpenAI reasoning guidance](https://developers.openai.com/api/docs/guides/reasoning) describes default encrypted continuation with store=false/ZDR and optional explicit include, not private backend acceptance. Local cache preservation is not cached-token/latency effectiveness proof.

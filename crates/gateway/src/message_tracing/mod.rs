@@ -17,7 +17,6 @@ use uuid::Uuid;
 
 /// Message tracer that writes to JSONL file
 pub struct MessageTracer {
-    config: TracingConfig,
     file: Option<Mutex<File>>,
     seq_by_trace: DashMap<String, u64>,
 }
@@ -65,7 +64,7 @@ struct EventTrace {
     dir: &'static str,
     id: String,
     seq: u64,
-    event: NormalizedEvent,
+    event: serde_json::Value,
 }
 
 impl MessageTracer {
@@ -73,7 +72,6 @@ impl MessageTracer {
     pub fn new(config: TracingConfig) -> Self {
         if !config.enabled {
             return Self {
-                config,
                 file: None,
                 seq_by_trace: DashMap::new(),
             };
@@ -87,7 +85,6 @@ impl MessageTracer {
             if let Err(e) = std::fs::create_dir_all(parent) {
                 tracing::error!("Failed to create tracing directory: {}", e);
                 return Self {
-                    config,
                     file: None,
                     seq_by_trace: DashMap::new(),
                 };
@@ -99,7 +96,6 @@ impl MessageTracer {
             Ok(file) => {
                 tracing::info!("📝 Message tracing enabled: {}", path.display());
                 Self {
-                    config,
                     file: Some(Mutex::new(file)),
                     seq_by_trace: DashMap::new(),
                 }
@@ -107,7 +103,6 @@ impl MessageTracer {
             Err(e) => {
                 tracing::error!("Failed to open trace file: {}", e);
                 Self {
-                    config,
                     file: None,
                     seq_by_trace: DashMap::new(),
                 }
@@ -137,15 +132,7 @@ impl MessageTracer {
             return;
         };
 
-        // Build messages JSON, optionally omitting system prompt
-        let messages = if self.config.omit_system_prompt {
-            // Clone request and clear system prompt
-            let mut req_clone = request.clone();
-            req_clone.system = None;
-            serde_json::to_value(&req_clone.messages).unwrap_or_default()
-        } else {
-            serde_json::to_value(&request.messages).unwrap_or_default()
-        };
+        let messages = serde_json::json!({"message_count":request.messages.len()});
 
         let trace = RequestTrace {
             ts: Utc::now(),
@@ -176,14 +163,14 @@ impl MessageTracer {
             stop_reason: response.stop_reason.clone().unwrap_or_default(),
             input_tokens: response.usage.input_tokens,
             output_tokens: response.usage.output_tokens,
-            content: serde_json::to_value(&response.content).unwrap_or_default(),
+            content: serde_json::json!({"block_count":response.content.len()}),
         };
 
         self.write_trace(&trace, file_mutex);
     }
 
     /// Trace an error
-    pub fn trace_error(&self, id: &str, error: &str) {
+    pub fn trace_error(&self, id: &str, _error: &str) {
         let Some(ref file_mutex) = self.file else {
             return;
         };
@@ -192,7 +179,7 @@ impl MessageTracer {
             ts: Utc::now(),
             dir: "err",
             id: id.to_string(),
-            error: error.to_string(),
+            error: "provider request failed".to_string(),
         };
 
         self.write_trace(&trace, file_mutex);
@@ -217,7 +204,7 @@ impl MessageTracer {
             dir: "evt",
             id: id.to_string(),
             seq,
-            event: event.clone(),
+            event: serde_json::json!({"event_kind":event.event_kind,"source_origin":event.source_origin}),
         };
 
         self.write_trace(&trace, file_mutex);

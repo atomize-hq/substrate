@@ -251,7 +251,8 @@ impl GeminiProvider {
                 let mut gemini_tools = Vec::new();
                 let mut function_declarations = Vec::new();
 
-                for tool in anthropic_tools {
+                for definition in anthropic_tools {
+                    let tool = definition.legacy().expect("validated simple tool");
                     let tool_name = tool.name.as_deref().unwrap_or("");
 
                     match tool_name {
@@ -350,6 +351,7 @@ impl GeminiProvider {
         };
 
         Ok(GatewayResponse {
+            end_turn: None,
             id: format!("gemini-{}", chrono::Utc::now().timestamp_millis()),
             r#type: "message".to_string(),
             role: "assistant".to_string(),
@@ -399,14 +401,14 @@ impl GeminiProvider {
                         );
                         return Err(ProviderError::ApiError {
                             status: 429,
-                            message: error_text,
+                            message: "Upstream Gemini request rejected".into(),
                         });
                     }
                 } else {
                     // No retry delay found, return error
                     return Err(ProviderError::ApiError {
                         status: 429,
-                        message: error_text,
+                        message: "Upstream Gemini request rejected".into(),
                     });
                 }
             }
@@ -422,6 +424,11 @@ impl super::GatewayProvider for GeminiProvider {
         &self,
         request: GatewayRequest,
     ) -> Result<GatewayResponse, ProviderError> {
+        if request.requires_responses() {
+            return Err(ProviderError::ConfigError(
+                "Responses state unsupported by Gemini".into(),
+            ));
+        }
         let model = request.model.clone();
 
         // Check if using OAuth (Code Assist API)
@@ -472,12 +479,7 @@ impl super::GatewayProvider for GeminiProvider {
             // Code Assist API endpoint: https://cloudcode-pa.googleapis.com/v1internal:generateContent
             let url = format!("{}:generateContent", self.base_url);
 
-            tracing::debug!("🔐 Using OAuth Code Assist API: {}", url);
-
-            // Debug: Log the request payload
-            if let Ok(json_str) = serde_json::to_string_pretty(&code_assist_request) {
-                tracing::debug!("📤 Code Assist Request:\n{}", json_str);
-            }
+            tracing::debug!("Using OAuth Code Assist API; request payload omitted");
 
             // Clone necessary data for the retry closure
             let client = self.client.clone();
@@ -509,43 +511,27 @@ impl super::GatewayProvider for GeminiProvider {
 
             if !response.status().is_success() {
                 let status = response.status().as_u16();
-                let error_text = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unknown error".to_string());
-
-                // Special handling for 404 errors (model not found)
                 if status == 404 {
-                    let model_name = &model;
-                    let user_friendly_msg = if model_name.contains("gemini-3")
-                        || model_name.contains("preview")
-                    {
-                        format!(
-                            "Model '{}' is not available. This may be a preview model that requires special access. \n                            Try using gemini-2.5-pro or gemini-2.0-flash-exp instead. \n                            Original error: {}",
-                            model_name, error_text
-                        )
-                    } else {
-                        format!(
-                            "Model '{}' not found. Original error: {}",
-                            model_name, error_text
-                        )
-                    };
-                    tracing::warn!("⚠️ Model not found (404): {}", user_friendly_msg);
+                    tracing::warn!("Code Assist model request returned HTTP404");
                     return Err(ProviderError::ApiError {
                         status,
-                        message: user_friendly_msg,
+                        message: "Upstream Code Assist model unavailable".into(),
                     });
                 }
 
-                tracing::error!("Code Assist API error ({}): {}", status, error_text);
+                tracing::error!("Provider payload diagnostic omitted");
                 return Err(ProviderError::ApiError {
                     status,
-                    message: error_text,
+                    message: "Upstream Gemini request rejected".into(),
                 });
             }
 
             // Parse Code Assist response
-            let code_assist_response: CodeAssistResponse = response.json().await?;
+            let code_assist_response: CodeAssistResponse =
+                response.json().await.map_err(|_| ProviderError::ApiError {
+                    status: 502,
+                    message: "Malformed upstream Code Assist response".into(),
+                })?;
             self.transform_response(code_assist_response.response, model)
         } else {
             // Use public Gemini API or Vertex AI
@@ -603,18 +589,18 @@ impl super::GatewayProvider for GeminiProvider {
 
             if !response.status().is_success() {
                 let status = response.status().as_u16();
-                let error_text = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unknown error".to_string());
-                tracing::error!("Gemini API error ({}): {}", status, error_text);
+                tracing::error!("Provider payload diagnostic omitted");
                 return Err(ProviderError::ApiError {
                     status,
-                    message: error_text,
+                    message: "Upstream Gemini request rejected".into(),
                 });
             }
 
-            let gemini_response: GeminiResponse = response.json().await?;
+            let gemini_response: GeminiResponse =
+                response.json().await.map_err(|_| ProviderError::ApiError {
+                    status: 502,
+                    message: "Malformed upstream Gemini response".into(),
+                })?;
             self.transform_response(gemini_response, model)
         }
     }
@@ -623,6 +609,11 @@ impl super::GatewayProvider for GeminiProvider {
         &self,
         request: GatewayRequest,
     ) -> Result<GatewayStreamResponse, ProviderError> {
+        if request.requires_responses() {
+            return Err(ProviderError::ConfigError(
+                "Responses state unsupported by Gemini".into(),
+            ));
+        }
         use futures::TryStreamExt;
 
         let model = request.model.clone();
@@ -694,18 +685,10 @@ impl super::GatewayProvider for GeminiProvider {
 
             if !response.status().is_success() {
                 let status = response.status().as_u16();
-                let error_text = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unknown error".to_string());
-                tracing::error!(
-                    "Code Assist API streaming error ({}): {}",
-                    status,
-                    error_text
-                );
+                tracing::error!("Provider payload diagnostic omitted");
                 return Err(ProviderError::ApiError {
                     status,
-                    message: error_text,
+                    message: "Upstream Gemini request rejected".into(),
                 });
             }
 
@@ -763,14 +746,10 @@ impl super::GatewayProvider for GeminiProvider {
 
             if !response.status().is_success() {
                 let status = response.status().as_u16();
-                let error_text = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unknown error".to_string());
-                tracing::error!("Gemini API streaming error ({}): {}", status, error_text);
+                tracing::error!("Provider payload diagnostic omitted");
                 return Err(ProviderError::ApiError {
                     status,
-                    message: error_text,
+                    message: "Upstream Gemini request rejected".into(),
                 });
             }
 
