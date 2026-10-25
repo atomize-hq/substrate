@@ -970,6 +970,37 @@ async fn member_runtime_clean_bootstrap_exit_with_session_handle_requires_later_
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn member_runtime_two_sequential_turns_resume_exact_bootstrap_session() {
+    let Some(harness) = launch_clean_bootstrap_exit_harness().await else {
+        return;
+    };
+    for index in 2..=3 {
+        let prompt = format!("sequential retained prompt {index}");
+        let summary = submit_turn_summary(
+            &harness,
+            &format!("run-member-runtime-sequential-{index}"),
+            &prompt,
+        )
+        .await;
+        assert_eq!(summary.exit, Some(0), "{:?}", summary.frames);
+        assert_eq!(read_invocation_count(&harness.count_path), index);
+        let fixture_dir = harness.count_path.parent().expect("fixture directory");
+        let args = fs::read_to_string(fixture_dir.join(format!("member-runtime-{index}.args")))
+            .expect("actual resumed invocation arguments");
+        let args = args.lines().collect::<Vec<_>>();
+        assert!(
+            args.windows(2)
+                .any(|pair| pair == ["resume", "thread-member-retained"]),
+            "each turn must resume the exact bootstrap conversation: {args:?}"
+        );
+        assert!(!args.contains(&"--last"));
+        let stdin = fs::read_to_string(fixture_dir.join(format!("member-runtime-{index}.stdin")))
+            .expect("actual resumed invocation prompt");
+        assert!(stdin.contains(&prompt), "{stdin:?}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn e2_retained_turn_carrier_drives_actual_per_turn_landlock_without_accumulation() {
     let fixture_id = uuid::Uuid::now_v7();
     let orchestration_session_id =

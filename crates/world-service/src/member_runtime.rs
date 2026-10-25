@@ -645,7 +645,7 @@ impl MemberRuntimeManager {
         let prompt_fulfillment = PromptFulfillmentBridge::for_member_backend(
             &active.backend_kind,
             turn_policy_launcher.as_ref().map_or_else(
-                || active.binary_path.clone(),
+                || active.launcher_dir.join("world-entry.sh"),
                 |launcher| launcher.path.clone(),
             ),
         );
@@ -3314,6 +3314,330 @@ fn should_preserve_retained_member_after_clean_bootstrap(
 mod tests {
     use super::*;
     use std::fs;
+
+    // These exercise the consumed UAA adapters and generated launcher, using only
+    // a test-owned regular file. They prove attachment-step composition, not
+    // kernel cgroup membership or native/provider behavior.
+    struct ResumeLauncherHarness {
+        temp: tempfile::TempDir,
+        manager: MemberRuntimeManager,
+        request: MemberTurnSubmitRequestV1,
+        placement: LinuxWorldPlacementContext,
+    }
+
+    async fn resume_launcher_frames(response: Response) -> Vec<serde_json::Value> {
+        let bytes = tokio::time::timeout(
+            std::time::Duration::from_secs(15),
+            hyper::body::to_bytes(response.into_body()),
+        )
+        .await
+        .expect("member stream must terminate")
+        .expect("read member stream");
+        String::from_utf8(bytes.to_vec())
+            .expect("UTF-8 stream")
+            .lines()
+            .filter(|line| !line.is_empty())
+            .map(|line| serde_json::from_str(line).expect("stream frame"))
+            .collect()
+    }
+
+    async fn launch_resume_launcher_fixture(
+        backend: MemberRuntimeBackendKindV1,
+    ) -> ResumeLauncherHarness {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().expect("fixture directory");
+        let cgroup_path = temp.path().join("test-owned-cgroup-surrogate");
+        fs::create_dir(&cgroup_path).expect("surrogate directory");
+        fs::write(cgroup_path.join("cgroup.procs"), "").expect("surrogate target");
+        let placement = LinuxWorldPlacementContext {
+            working_dir: temp.path().to_path_buf(),
+            cgroup_path,
+            require_cgroup_attach: true,
+        };
+        let binary = temp.path().join("fixture-runtime.sh");
+        let backend_name = match backend {
+            MemberRuntimeBackendKindV1::Codex => "codex",
+            MemberRuntimeBackendKindV1::ClaudeCode => "claude",
+        };
+        let script = r##"#!/bin/sh
+set -eu
+case "${1-}" in
+  --version|--help|features)
+    printf '%s %s\n' "$$" "$*" >> "$FIXTURE_DIR/probes"
+    case "$1" in
+      --version) printf 'codex 1.2.3\n' ;;
+      --help) printf 'Usage: --add-dir --allow-dangerously-skip-permissions\n' ;;
+      features) printf '{"features":["add_dir"]}\n' ;;
+    esac
+    exit 0 ;;
+esac
+count=0
+if [ -f "$FIXTURE_DIR/count" ]; then count=$(cat "$FIXTURE_DIR/count"); fi
+count=$((count + 1))
+printf '%s' "$count" > "$FIXTURE_DIR/count"
+printf '%s\n' "$@" > "$FIXTURE_DIR/args-$count"
+attached=$(cat "$SUBSTRATE_WORLD_ENTRY_CGROUP_PROCS_PATH" 2>/dev/null || true)
+printf '%s:%s\n' "$$" "$attached" >> "$FIXTURE_DIR/work"
+pwd > "$FIXTURE_DIR/cwd-$count"
+if [ "$FIXTURE_BACKEND" = codex ]; then
+  cat > "$FIXTURE_DIR/stdin-$count"
+  if [ "$count" -eq 1 ]; then event=thread.started; else event=thread.resumed; fi
+  printf '{"type":"%s","thread_id":"thread-launcher-fixture"}\n' "$event"
+  printf '{"type":"turn.started","thread_id":"thread-launcher-fixture","turn_id":"turn-%s"}\n' "$count"
+  printf '{"type":"turn.completed","thread_id":"thread-launcher-fixture","turn_id":"turn-%s"}\n' "$count"
+else
+  printf '{"type":"system","subtype":"init","session_id":"thread-launcher-fixture"}\n'
+  printf '{"type":"result","subtype":"success","is_error":false,"result":"fixture success","session_id":"thread-launcher-fixture","duration_ms":1,"duration_api_ms":1,"num_turns":1,"total_cost_usd":0}\n'
+fi
+"##;
+        fs::write(&binary, script).expect("fixture executable");
+        fs::set_permissions(&binary, fs::Permissions::from_mode(0o755))
+            .expect("fixture permissions");
+        let seed = temp.path().join("seed");
+        fs::create_dir(&seed).expect("seed directory");
+        fs::write(
+            seed.join("auth.json"),
+            r#"{"OPENAI_API_KEY":"fixture-only"}"#,
+        )
+        .expect("fixture auth seed");
+        fs::write(seed.join("config.toml"), "model = \"gpt-5.4\"\n")
+            .expect("fixture startup config");
+        let mut dispatch = sample_authority_managed_dispatch();
+        dispatch.participant_id = "ash_member".to_string();
+        dispatch.retained_worker_launch_authority = None;
+        dispatch.e2_launch_activation = None;
+        dispatch.resolved_runtime.backend_kind = backend;
+        dispatch.resolved_runtime.binary_path = binary.display().to_string();
+        dispatch.backend_id = match backend {
+            MemberRuntimeBackendKindV1::Codex => "cli:codex",
+            MemberRuntimeBackendKindV1::ClaudeCode => "cli:claude_code",
+        }
+        .to_string();
+        let mut request = sample_submit_turn_request();
+        request.backend_id = dispatch.backend_id.clone();
+        let env = HashMap::from([
+            ("FIXTURE_DIR".to_string(), temp.path().display().to_string()),
+            ("FIXTURE_BACKEND".to_string(), backend_name.to_string()),
+            (
+                SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
+                seed.display().to_string(),
+            ),
+        ]);
+        let manager = MemberRuntimeManager::new();
+        let response = manager
+            .launch(
+                "fixture-agent".to_string(),
+                env,
+                "spn_fixture_bootstrap".to_string(),
+                MemberRuntimeLaunchAdmissionV1 {
+                    dispatch,
+                    acceptance_context: None,
+                    policy_snapshot: sample_e2_submit_turn_request()
+                        .policy_snapshot_carrier
+                        .expect("snapshot carrier")
+                        .policy_snapshot()
+                        .expect("snapshot"),
+                },
+                sample_world_binding(),
+                placement.clone(),
+            )
+            .await
+            .expect("real manager bootstrap");
+        let frames = resume_launcher_frames(response).await;
+        assert!(
+            frames
+                .iter()
+                .any(|frame| frame["type"] == "exit" && frame["exit"] == 0),
+            "{frames:?}"
+        );
+        let active = manager
+            .find_submit_target(&request)
+            .expect("retained member");
+        assert_eq!(
+            active.uaa_session_id().as_deref(),
+            Some("thread-launcher-fixture")
+        );
+        assert!(active.launcher_dir.join("world-entry.sh").is_file());
+        assert_eq!(fs::read_to_string(temp.path().join("count")).unwrap(), "1");
+        ResumeLauncherHarness {
+            temp,
+            manager,
+            request,
+            placement,
+        }
+    }
+
+    async fn assert_sequential_resume_launcher_attachment(backend: MemberRuntimeBackendKindV1) {
+        let mut harness = launch_resume_launcher_fixture(backend).await;
+        for index in 2..=3 {
+            fs::write(harness.placement.cgroup_procs_path(), "").expect("reset surrogate");
+            harness.request.run_id = format!("run_fixture_{index}");
+            harness.request.prompt = format!("fixture prompt {index}");
+            let frames = resume_launcher_frames(
+                harness
+                    .manager
+                    .submit_turn(harness.request.clone())
+                    .await
+                    .expect("resume"),
+            )
+            .await;
+            assert!(
+                frames
+                    .iter()
+                    .any(|frame| frame["type"] == "exit" && frame["exit"] == 0),
+                "{frames:?}"
+            );
+            let args =
+                fs::read_to_string(harness.temp.path().join(format!("args-{index}"))).unwrap();
+            let args = args.lines().collect::<Vec<_>>();
+            let resume_flag = if backend == MemberRuntimeBackendKindV1::Codex {
+                "resume"
+            } else {
+                "--resume"
+            };
+            assert!(
+                args.windows(2)
+                    .any(|pair| pair == [resume_flag, "thread-launcher-fixture"]),
+                "{args:?}"
+            );
+            assert!(!args
+                .iter()
+                .any(|arg| matches!(*arg, "--fork-session" | "--last")));
+            let prompt = if backend == MemberRuntimeBackendKindV1::Codex {
+                fs::read_to_string(harness.temp.path().join(format!("stdin-{index}"))).unwrap()
+            } else {
+                args.last().unwrap().to_string()
+            };
+            assert!(prompt.contains(&harness.request.prompt), "{prompt:?}");
+            assert_eq!(
+                fs::read_to_string(harness.temp.path().join(format!("cwd-{index}")))
+                    .unwrap()
+                    .trim(),
+                harness.placement.working_dir.to_str().unwrap()
+            );
+            assert_eq!(
+                harness
+                    .manager
+                    .find_submit_target(&harness.request)
+                    .unwrap()
+                    .uaa_session_id()
+                    .as_deref(),
+                Some("thread-launcher-fixture")
+            );
+        }
+        let work = fs::read_to_string(harness.temp.path().join("work")).unwrap();
+        let rows = work
+            .lines()
+            .map(|line| line.split_once(':').unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(rows.len(), 3, "bootstrap and exactly two resumes: {work}");
+        let mut pids = std::collections::HashSet::new();
+        for (pid, attached) in rows {
+            assert!(
+                pids.insert(pid),
+                "actual work PIDs must be distinct: {work}"
+            );
+            assert_eq!(
+                pid, attached,
+                "actual work must follow launcher attachment, independently of probes: {work}"
+            );
+        }
+        eprintln!("{backend:?} actual-work pid:observed-surrogate-pid (composition only): {work}");
+        if let Ok(probes) = fs::read_to_string(harness.temp.path().join("probes")) {
+            eprintln!("{backend:?} separate capability probes: {probes}");
+            for probe in probes.lines() {
+                assert!(!pids.contains(probe.split_whitespace().next().unwrap()));
+            }
+        }
+        harness
+            .manager
+            .unregister_member(&harness.request.participant_id);
+    }
+
+    async fn assert_missing_resume_launcher_target_rejects(backend: MemberRuntimeBackendKindV1) {
+        let mut harness = launch_resume_launcher_fixture(backend).await;
+        let before = fs::read_to_string(harness.temp.path().join("work")).unwrap();
+        // This is exclusively our temporary regular file, never a kernel control file.
+        fs::remove_file(harness.placement.cgroup_procs_path()).expect("remove surrogate");
+        harness.request.run_id = "run_fixture_missing_target".to_string();
+        match harness.manager.submit_turn(harness.request.clone()).await {
+            Ok(response) => {
+                let frames = resume_launcher_frames(response).await;
+                assert!(
+                    !frames
+                        .iter()
+                        .any(|frame| frame["type"] == "exit" && frame["exit"] == 0),
+                    "missing required target must reject: {frames:?}"
+                );
+            }
+            Err(error) => eprintln!("{backend:?} rejected before stream: {error:#}"),
+        }
+        assert_eq!(
+            fs::read_to_string(harness.temp.path().join("work")).unwrap(),
+            before,
+            "missing attachment target must reject before actual work"
+        );
+        assert!(
+            !harness.placement.cgroup_procs_path().exists(),
+            "launcher must not recreate target"
+        );
+        assert_eq!(
+            harness
+                .manager
+                .find_submit_target(&harness.request)
+                .unwrap()
+                .uaa_session_id()
+                .as_deref(),
+            Some("thread-launcher-fixture")
+        );
+        fs::write(harness.placement.cgroup_procs_path(), "").expect("restore surrogate");
+        harness.request.run_id = "run_fixture_recovery".to_string();
+        let frames = resume_launcher_frames(
+            harness
+                .manager
+                .submit_turn(harness.request.clone())
+                .await
+                .expect("recovery resume"),
+        )
+        .await;
+        assert!(
+            frames
+                .iter()
+                .any(|frame| frame["type"] == "exit" && frame["exit"] == 0),
+            "{frames:?}"
+        );
+        assert_eq!(
+            fs::read_to_string(harness.temp.path().join("count")).unwrap(),
+            "2",
+            "one bootstrap, no rejected work, exactly one recovery"
+        );
+        let args = fs::read_to_string(harness.temp.path().join("args-2")).unwrap();
+        assert!(args.contains("thread-launcher-fixture"), "{args}");
+        harness
+            .manager
+            .unregister_member(&harness.request.participant_id);
+    }
+
+    #[tokio::test]
+    async fn codex_resume_launcher_attaches_bootstrap_and_two_same_session_turns() {
+        assert_sequential_resume_launcher_attachment(MemberRuntimeBackendKindV1::Codex).await;
+    }
+
+    #[tokio::test]
+    async fn claude_resume_launcher_attaches_bootstrap_and_two_same_session_turns() {
+        assert_sequential_resume_launcher_attachment(MemberRuntimeBackendKindV1::ClaudeCode).await;
+    }
+
+    #[tokio::test]
+    async fn codex_resume_launcher_missing_target_rejects_before_work() {
+        assert_missing_resume_launcher_target_rejects(MemberRuntimeBackendKindV1::Codex).await;
+    }
+
+    #[tokio::test]
+    async fn claude_resume_launcher_missing_target_rejects_before_work() {
+        assert_missing_resume_launcher_target_rejects(MemberRuntimeBackendKindV1::ClaudeCode).await;
+    }
 
     fn sample_e2_launch_activation(
         participant_id: &str,
