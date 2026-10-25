@@ -152,7 +152,7 @@ An upstream complete function-call item may omit lifecycle status or supply `sta
 
 Responses emits the assembled public response/usage and optional `end_turn` at completion. Absent/null becomes omission, false/true remain explicit, wrong types fail independently of stop reason. Other serializers consume the internal terminal. False cannot become conversational `Final`; errors/incomplete/EOF/cancel cannot manufacture completion. First terminal fuses the stream, and drop releases upstream ownership without detached drain/retry. Responses rejects automatic redirects safely; this and the destination pin do not establish DNS/IP/TLS/world confinement.
 
-Known excluded forms fail explicitly: standalone search/images, WebSockets, audio/file references, private controls/passthrough, final-answer JSON schema, unlisted built-ins, and citation fidelity. No model/auth/tool-mode downgrade or truncation hides these populations. This is a closed model-Responses HTTP/SSE component, not full ordinary native `0.156.1` or private-backend support.
+Known excluded forms on the Responses route fail explicitly: standalone search/image request envelopes, WebSockets, audio/file references, private controls/passthrough, final-answer JSON schema, unlisted built-ins, and citation fidelity. No model/auth/tool-mode downgrade or truncation hides these populations. This is a closed model-Responses HTTP/SSE component, not full ordinary native `0.156.1` or private-backend support.
 
 ### API, serialization, and resource costs
 
@@ -303,3 +303,24 @@ continuation, limits and cleanup with synthetic credentials. Exact production OA
 construction is separately **UNSENT**. Neither establishes actual private-service entitlement,
 real pinned native execution, .156 renderer/artifact adoption or broad E3 production success.
 Image operations, actor issuance, native/UAA execution and lifecycle remain outside this packet.
+
+
+## Managed image generation and editing
+
+Managed E3 adds exact `POST /v1/images/generations` and `POST /v1/images/edits`
+behind the existing member/connection gate. Standalone listeners remain closed.
+The paired operations use held integrated Codex OAuth and fixed private HTTPS
+paths; image model `gpt-image-2` does not participate in inference model routing.
+The selected profile preserves native auto/omission defaults, ordered references,
+original decoded PNG results, response null/omission semantics and named untrusted
+IDs. Inline edits admit real PNG/JPEG/WebP; HTTP(S) references are never fetched
+locally. Unknown request options and unsupported controls fail explicitly.
+
+See the [complete paired image contract](contracts/chatgpt-codex-route-contract.md#managed-paired-image-component)
+for media/copy/concurrency/deadline bounds and proof limits. The safe image error
+envelope is `{ "error": { "code": "fixed_image_code", "message": "fixed summary" } }`:
+400 malformed request, 403 unadmitted provider/model/options or upstream denial,
+413 limits, 429 occupied capacity/upstream rate limit, 503 unavailable held auth,
+502 invalid/lost upstream reply, and 504 deadline. These operations send once with
+no retry/fallback; cancellation or lost reply does not establish remote rollback.
+No native tool eligibility, live service or installed artifact claim is implied.

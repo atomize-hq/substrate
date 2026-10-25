@@ -980,11 +980,12 @@ the gateway/member cgroups are empty and the boundary is durably revoked; a stri
 execute, PTY, or compatibility-gateway request cannot race into this credential-bearing interval.
 
 The launch capability selects a dedicated E3 router, not baseline `build_app`. Its complete
-method/path allowlist is exactly `GET /health`, `POST /v1/responses`, and `POST /v1/alpha/search`; all other methods or paths are
+method/path allowlist is exactly `GET /health`, `POST /v1/responses`, `POST /v1/alpha/search`,
+`POST /v1/images/generations`, and `POST /v1/images/edits`; all other methods or paths are
 unregistered and return the framework's non-handler 404/405 without touching OAuth, tokens,
 messages, chat completions, structured events, count-tokens, routing, or provider state. `GET
 /health` must pass the exact readiness-nonce validator before it returns the schema below and is
-intended only for the descriptor-pinned probe. Both member POST routes must pass the exact three-field E3
+intended only for the descriptor-pinned probe. All member POST routes must pass the exact three-field E3
 identity validator before body parsing, tracing, routing, or provider access. No member-accessible
 route omits that validator. The readiness handler and member middleware first repeat the gateway's
 `PR_GET_DUMPABLE=0`/soft-and-hard-`RLIMIT_CORE=0` readback; a mismatch terminates the gateway without
@@ -994,10 +995,14 @@ unreachable from the sealed E3 launch capability.
 
 `GatewayHttpSurfaceV1.member_method` and `member_path` identify the exact model route;
 they are neither a prefix nor an exhaustive member-route grant. The newly admitted gateway
-artifact identity binds this fixed additional search route. Old immutable artifact identities
+artifact identity binds these fixed additional search/image routes. Old immutable artifact identities
 do not silently gain routes. Search uses only the selected held Codex OAuth account and exact
 `https://chatgpt.com/backend-api/codex/alpha/search` destination; standalone listeners do not
-register it. Component tests and UNSENT request construction do not establish private-service
+register it. Paired images use that same selected held account and only fixed
+`https://chatgpt.com/backend-api/codex/images/generations` or `/images/edits`, with the
+closed [image contract](../../../crates/gateway/docs/contracts/chatgpt-codex-route-contract.md#managed-paired-image-component).
+The operation model is independent of inference model mapping. No additional operation grant
+schema or `GatewayHttpSurfaceV1` layout change is introduced. Component tests and UNSENT request construction do not establish private-service
 entitlement, retained native .156 adoption, or broader E3 production qualification.
 
 The launch-input pipe is non-secret transport, not durable authority; its accepted-home immutable
@@ -1303,7 +1308,8 @@ X-Substrate-Projection
 ```
 
 They are non-secret correlation metadata. The gateway exact-compares them to its active projection
-before parsing every `POST /v1/responses` or `POST /v1/alpha/search` request and rejects missing, duplicate, or mismatched
+before parsing every member POST request (`/v1/responses`, `/v1/alpha/search`,
+`/v1/images/generations`, `/v1/images/edits`) and rejects missing, duplicate, or mismatched
 values; `X-Substrate-Projection` is exactly the stable
 `ConfigProjectionIdentityV1.identity_hash`, not a revision-specific record ID or hash. Matching values
 do not authorize a connection. The kernel cgroup/nftables access boundary authorizes connectivity

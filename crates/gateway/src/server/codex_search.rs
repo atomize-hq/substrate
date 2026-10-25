@@ -623,8 +623,6 @@ actual_model = "actual-inference-slug"
                 "/v1/alpha/search/",
                 "/v1/alpha/search/extra",
                 "/alpha/search",
-                "/v1/images/generations",
-                "/v1/images/edits",
                 "/v1/messages",
                 "/api/oauth/tokens",
             ] {

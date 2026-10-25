@@ -137,3 +137,100 @@ continuation, limits and cleanup with synthetic credentials. Exact production OA
 construction is separately **UNSENT**. Neither establishes actual private-service entitlement,
 real pinned native execution, .156 renderer/artifact adoption or broad E3 production success.
 Image operations, actor issuance, native/UAA execution and lifecycle remain outside this packet.
+
+
+## Managed paired image component
+
+The managed E3 artifact also owns exact `POST /v1/images/generations` and
+`POST /v1/images/edits`, with the same connection authority, kernel readback, and
+three-field member admission before body extraction. Neither route is registered
+on the standalone router. `GatewayHttpSurfaceV1` continues to identify the model
+route; each newly admitted artifact binds its actual additional fixed surface.
+Older artifact identities gain no operations automatically.
+
+The selected default mapping supplies only the held provider/account. The image
+operation model is exactly `gpt-image-2`, independent of inference aliases/slugs or
+`provider.models`. Only selected OpenAI integrated Codex OAuth is admitted; other
+providers default-deny. The exact upstream is HTTPS
+`https://chatgpt.com/backend-api/codex/images/generations` or `/images/edits`.
+Caller credentials, account/provider/destination/Origin/actor overrides are
+rejected; configured provider base URLs and API keys cannot replace held auth.
+The private image client has no proxy, redirects, retries, idle connection pool,
+or fallback. It sends once; lost replies, deadline or cancellation can leave an
+unknown remote outcome. There is no exactly-once or rollback claim.
+
+The closed unary JSON request matches pinned native
+`b412ff32c417f855c2b2d1581b77058eed87c84b`: required prompt/model; background,
+quality and size are either omitted or `auto`; `n` must be omitted. Explicit null,
+unknown fields, expanded options, multipart, masks, file IDs and streaming are
+rejected. Edit takes one through five ordered `images:[{image_url:string}]`.
+PNG/JPEG/WebP data URLs must genuinely decode; bounded HTTP(S) URLs are forwarded
+literally, never locally fetched. Local paths and URL userinfo are rejected.
+No gateway artifact writer or native tool capability/retry change is included.
+
+Only single-valued `x-codex-image-turn-id` and `originator` request labels are
+forwarded. The only consumed response header is `x-codex-imagegen-request-id`;
+source-shaped missing/empty header values yield no public ID. These labels and
+`generation_id` are untrusted correlation data, never member/account authority or
+an edit lookup ledger. Required `created:u64` and nonempty ordered `data` contain
+original `b64_json` and optional nullable `generation_id`. Optional native
+background/quality/size retain omission versus explicit null. Bounded unconsumed
+response extensions (including usage) are ignored under the named native field
+projection, never passed through. All admitted results must genuinely decode as
+PNG, including entries the native client would not select. Original base64/bytes
+are retained without transcoding or fabricated IDs.
+
+Engineering limits are 96MiB request wire, 48MiB cumulative upstream wire,
+32MiB per compressed file, 64MiB aggregate inline edit input and 32MiB aggregate
+output; 16,777,216 pixels, 16,384 per axis and 64MiB actual raster bytes per image.
+Prompt is at most 1MiB, HTTP(S) reference URL 16KiB, and named labels/IDs 1KiB.
+Data URLs use image budgets separately from the HTTP URL limit. Checked base64
+length/padding/alphabet admission precedes allocation; real decoder validation
+and independent dimensions/pixel/raster checks precede the owned raster buffer.
+PNG/JPEG/WebP are the only enabled `image=0.25.10` features, with defaults off.
+Before constructing that decoder for WebP, a nonallocating safety preflight checks
+exact RIFF size, checked chunk ranges and padding, canvas/inner VP8/VP8L geometry,
+and every ANMF rectangle/nested image geometry. Inner still dimensions must match
+the canvas; nested image dimensions must match their bounded frame, which must
+fit the bounded canvas. Optional ALPH must precede its VP8 immediately. Duplicate
+or ambiguous carriers, truncated/out-of-range chunks, inconsistent dimensions and
+geometry exceeding the same pixel/axis/raster bounds fail before decoder entry.
+Unknown metadata remains bounded and skipped. Valid lossy/lossless/extended/alpha
+WebP still passes through genuine mature pixel decoding; animation retains the
+existing first-raster decode, without an animation fidelity claim. These checks
+close IMG-R1's small-canvas/large-inner-frame allocation bypass; they do not claim
+a complete handwritten decoder, general format conformance or hard internal RSS.
+
+The logical application payload ceiling is 512MiB, not allocator capacity or RSS.
+Before typed parsing, a checked preflight charges three wire representations,
+256 bytes per non-whitespace outside-string byte, a maximum nesting depth of 32,
+and 128MiB scratch (two compressed copies, including the JPEG wrapper's input
+copy, plus one raster). Response stages additionally reserve 192MiB for retained
+outbound HTTP copies. The dry serialization pass charges these costs before
+reserving its exact wire size. Dense trees can fail below wire limits.
+
+The copy graph is bounded request chunks -> raw JSON -> typed strings -> owned
+HTTP bytes; bounded response chunks -> raw JSON -> typed result -> public bytes.
+Raw aggregates are dropped before the next large representation. Each inline
+image decodes sequentially into compressed scratch and a raster, both released
+before the next image. Decoder-internal buffers, HTTP/TLS and allocator overhead
+are outside the logical ceiling. Decoder `max_alloc` is best effort, including
+codec-specific limitations; it is never claimed to bound hard RSS.
+
+One owned permit is shared by both routes and remains with a successful public
+body until consumption/drop, even after yielding its data chunk. Connect is 10s;
+operation is 180s through public serialization. Decode stays synchronous and
+request-owned: checks before/after bounded work and yields prevent late success,
+but a single bounded decode can delay deadline/cancellation observation. No
+instant CPU preemption or hard wall-clock response bound is claimed. Errors and
+dropped futures release socket/buffers/permit without detached drain/work.
+
+`codex_images_conformance` supplies literal DTO, projection, real pixel and other
+provider denial checks; colocated private handler/provider tests exercise the
+actual protected managed router -> selected OpenAI provider -> production-shared
+local HTTP transport for both operations, with real media, retained inline reuse,
+wire/aggregate limits, malformed media/bombs, EOF/status/redirect refusal,
+body-held capacity, deadline, and actual socket disconnect/reuse. Production
+OAuth request construction is proved separately and UNSENT. These are local
+component checks, not private-service entitlement, live account/billing, native
+eligibility, installed/retained artifact adoption, or full E3/F14 qualification.

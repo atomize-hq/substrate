@@ -537,7 +537,7 @@ impl E3GatewayLaunchContractV1 {
                 && input.http_surface.readiness_method == "GET"
                 && input.http_surface.readiness_path == "/health"
                 // Model-route fields remain exact; the admitted artifact owns
-                // the additional fixed, identically gated search route.
+                // the additional fixed, identically gated search and image routes.
                 && input.http_surface.member_method == "POST"
                 && input.http_surface.member_path == "/v1/responses"
                 && input.gateway_ref.authority_store_id == input.authority_store_id
@@ -1139,7 +1139,7 @@ actual_model = "codex-mini-latest"
             }
             assert_eq!(client.head(format!("http://127.0.0.1:{port}/health")).send().await.unwrap().status(),405);
             assert_eq!(client.get(format!("http://127.0.0.1:{port}/health")).header("X-Substrate-E3-Readiness-Nonce",&expected.readiness_nonce).send().await.unwrap().status(),403);
-            for path in ["/v1/responses", "/v1/alpha/search"] {
+            for path in ["/v1/responses", "/v1/alpha/search", "/v1/images/generations", "/v1/images/edits"] {
                 let mut denied=tokio::net::TcpStream::connect(("127.0.0.1",port)).await.unwrap();
                 denied.write_all(format!("POST {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 3000000\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
                 let mut reply=[0;512];

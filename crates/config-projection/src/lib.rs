@@ -1043,8 +1043,9 @@ pub struct GatewayRuntimeConfigIdentityV1 {
 /// Fixed managed HTTP surface descriptor. `member_method`/`member_path` identify
 /// the model route, not an exhaustive route grant or a path prefix. An admitted
 /// gateway artifact binds its compiled fixed surface: GET /health, POST
-/// /v1/responses, and POST /v1/alpha/search. Older artifact identities do not
-/// silently acquire the additional search route. Both member routes require
+/// /v1/responses, POST /v1/alpha/search, POST /v1/images/generations and POST
+/// /v1/images/edits. Older artifact identities do not silently acquire additional
+/// routes. All member routes require
 /// the same connection authority and correlation middleware before body parsing.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]

@@ -553,6 +553,7 @@ pub struct OpenAIProvider {
     client: Client,
     responses_client: Client,
     search_http: SearchHttpTransport,
+    image_http: ImageHttpTransport,
     models: Vec<String>,
     custom_headers: Vec<(String, String)>,
     /// OAuth provider ID (if using OAuth instead of API key)
@@ -1515,6 +1516,213 @@ impl CodexSemanticStreamState {
             ));
         }
         Ok(String::new())
+    }
+}
+
+// Closed image operations use a separate client: no model/search retry changes.
+#[derive(Clone, Copy)]
+enum ImageOperation {
+    Generate,
+    Edit,
+}
+impl ImageOperation {
+    fn url(self) -> &'static str {
+        match self {
+            Self::Generate => "https://chatgpt.com/backend-api/codex/images/generations",
+            Self::Edit => "https://chatgpt.com/backend-api/codex/images/edits",
+        }
+    }
+}
+struct ImageHttpTransport {
+    client: Client,
+    #[cfg(test)]
+    loopback: Option<url::Url>,
+}
+impl ImageHttpTransport {
+    fn new() -> Self {
+        Self {
+            client: Client::builder()
+                .no_proxy()
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .timeout(std::time::Duration::from_secs(180))
+                .retry(reqwest::retry::never())
+                .pool_max_idle_per_host(0)
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .expect("image HTTP client configuration"),
+            #[cfg(test)]
+            loopback: None,
+        }
+    }
+    async fn execute(
+        &self,
+        operation: ImageOperation,
+        request: reqwest::Request,
+        deadline: tokio::time::Instant,
+    ) -> Result<crate::models::images::ImageResult, crate::models::images::ImageError> {
+        use crate::models::images::{
+            check_deadline, checked_add, preflight_json, validate_label, ImageError, ImageResponse,
+            ImageResult, REQUEST_ID_HEADER, RESPONSE_LIMIT,
+        };
+        use futures::StreamExt;
+        // Verify production authority before the synthetic loopback seam.
+        if request.method() != reqwest::Method::POST || request.url().as_str() != operation.url() {
+            return Err(ImageError::Unsupported);
+        }
+        check_deadline(deadline)?;
+        #[cfg(test)]
+        let request = {
+            let mut request = request;
+            if let Some(destination) = &self.loopback {
+                let mut destination = destination.clone();
+                destination.set_path(request.url().path());
+                *request.url_mut() = destination;
+            }
+            request
+        };
+        let response = self
+            .client
+            .execute(request)
+            .await
+            .map_err(image_http_error)?;
+        match response.status().as_u16() {
+            200 => {}
+            401 | 403 => return Err(ImageError::UpstreamDenied),
+            429 => return Err(ImageError::RateLimited),
+            _ => return Err(ImageError::Upstream),
+        }
+        let headers = response.headers();
+        let content_type = headers
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split(';').next());
+        if content_type.map(str::trim) != Some("application/json") {
+            return Err(ImageError::InvalidResponse);
+        }
+        let mut ids = headers.get_all(REQUEST_ID_HEADER).iter();
+        let request_id = if let Some(id) = ids.next() {
+            if ids.next().is_some() {
+                return Err(ImageError::InvalidResponse);
+            }
+            let id = id.to_str().map_err(|_| ImageError::InvalidResponse)?;
+            validate_label(id)?;
+            if id.is_empty() {
+                None
+            } else {
+                Some(id.to_owned())
+            }
+        } else {
+            None
+        };
+        if response
+            .content_length()
+            .is_some_and(|n| n > RESPONSE_LIMIT as u64)
+        {
+            return Err(ImageError::Limit);
+        }
+        let mut stream = response.bytes_stream();
+        let mut bytes = Vec::new();
+        while let Some(chunk) = stream.next().await {
+            check_deadline(deadline)?;
+            let chunk = chunk.map_err(image_http_error)?;
+            checked_add(bytes.len(), chunk.len(), RESPONSE_LIMIT)?;
+            bytes
+                .try_reserve_exact(chunk.len())
+                .map_err(|_| ImageError::Limit)?;
+            bytes.extend_from_slice(&chunk);
+        }
+        preflight_json(&bytes, true).map_err(|e| {
+            if e == ImageError::InvalidRequest {
+                ImageError::InvalidResponse
+            } else {
+                e
+            }
+        })?;
+        check_deadline(deadline)?;
+        let parsed: ImageResponse =
+            serde_json::from_slice(&bytes).map_err(|_| ImageError::InvalidResponse)?;
+        drop(bytes);
+        check_deadline(deadline)?;
+        parsed.validate(deadline).await?;
+        Ok(ImageResult {
+            response: parsed,
+            request_id,
+        })
+    }
+}
+fn image_http_error(error: reqwest::Error) -> crate::models::images::ImageError {
+    if error.is_timeout() {
+        crate::models::images::ImageError::Deadline
+    } else {
+        crate::models::images::ImageError::Transport
+    }
+}
+impl OpenAIProvider {
+    fn build_image_request<T: Serialize>(
+        &self,
+        operation: ImageOperation,
+        request: &T,
+        context: &crate::models::images::ImageContext,
+    ) -> Result<reqwest::Request, crate::models::images::ImageError> {
+        use crate::auth::{codex_auth_context::CodexAuthMode, CodexAuthSource};
+        use crate::models::images::{bounded_json, ImageError};
+        if self.transport != OpenAITransport::OpenAI
+            || !self.is_oauth()
+            || !matches!(self.codex_auth_source, Some(CodexAuthSource::Integrated))
+            || !self.custom_headers.is_empty()
+        {
+            return Err(ImageError::Unsupported);
+        }
+        // Deliberately no provider.models/inference-slug check: gpt-image-2 is
+        // the fixed image operation model, validated by both typed entrypoints.
+        context.validate()?;
+        let auth = self
+            .resolve_codex_auth_context()
+            .map_err(|_| ImageError::Authentication)?;
+        if auth.mode != CodexAuthMode::Integrated
+            || auth.account_id.trim().is_empty()
+            || auth.account_id.len() > 1024
+            || auth.access_token.expose_secret().trim().is_empty()
+            || auth.access_token.expose_secret().len() > 16384
+        {
+            return Err(ImageError::Authentication);
+        }
+        let mut bearer = reqwest::header::HeaderValue::from_str(&format!(
+            "Bearer {}",
+            auth.access_token.expose_secret()
+        ))
+        .map_err(|_| ImageError::Authentication)?;
+        bearer.set_sensitive(true);
+        let mut account = reqwest::header::HeaderValue::from_str(&auth.account_id)
+            .map_err(|_| ImageError::Authentication)?;
+        account.set_sensitive(true);
+        let bytes = bounded_json(request, false)?;
+        let mut builder = self
+            .image_http
+            .client
+            .post(operation.url())
+            .header(reqwest::header::AUTHORIZATION, bearer)
+            .header("ChatGPT-Account-ID", account)
+            .header(reqwest::header::ACCEPT, "application/json")
+            .header(reqwest::header::CONTENT_TYPE, "application/json");
+        for (name, value) in [
+            ("x-codex-image-turn-id", &context.turn_id),
+            ("originator", &context.originator),
+        ] {
+            if let Some(value) = value {
+                builder = builder.header(name, value);
+            }
+        }
+        builder
+            .body(bytes)
+            .build()
+            .map_err(|_| ImageError::InvalidRequest)
+    }
+    #[cfg(all(test, target_os = "linux"))]
+    pub(crate) fn set_images_loopback_for_test(&mut self, destination: url::Url) {
+        assert_eq!(destination.scheme(), "http");
+        assert_eq!(destination.host_str(), Some("127.0.0.1"));
+        self.image_http.loopback = Some(destination);
     }
 }
 
@@ -2528,6 +2736,7 @@ impl OpenAIProvider {
             transport,
             client: Client::new(),
             search_http: SearchHttpTransport::new(),
+            image_http: ImageHttpTransport::new(),
             responses_client: Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
@@ -3323,6 +3532,40 @@ impl OpenAIProvider {
 
 #[async_trait]
 impl super::GatewayProvider for OpenAIProvider {
+    async fn generate_image(
+        &self,
+        request: crate::models::images::ImageGenerationRequest,
+        context: crate::models::images::ImageContext,
+    ) -> Result<crate::models::images::ImageResult, crate::models::images::ImageError> {
+        tokio::time::timeout_at(context.deadline, async {
+            request.validate()?;
+            let built = self.build_image_request(ImageOperation::Generate, &request, &context)?;
+            drop(request);
+            self.image_http
+                .execute(ImageOperation::Generate, built, context.deadline)
+                .await
+        })
+        .await
+        .map_err(|_| crate::models::images::ImageError::Deadline)?
+    }
+
+    async fn edit_image(
+        &self,
+        request: crate::models::images::ImageEditRequest,
+        context: crate::models::images::ImageContext,
+    ) -> Result<crate::models::images::ImageResult, crate::models::images::ImageError> {
+        tokio::time::timeout_at(context.deadline, async {
+            request.validate(context.deadline).await?;
+            let built = self.build_image_request(ImageOperation::Edit, &request, &context)?;
+            drop(request);
+            self.image_http
+                .execute(ImageOperation::Edit, built, context.deadline)
+                .await
+        })
+        .await
+        .map_err(|_| crate::models::images::ImageError::Deadline)?
+    }
+
     async fn send_search(
         &self,
         request: crate::models::search::SearchRequest,
@@ -4104,6 +4347,7 @@ mod tests {
             transport,
             client: Client::new(),
             search_http: SearchHttpTransport::new(),
+            image_http: ImageHttpTransport::new(),
             responses_client: Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
@@ -4229,6 +4473,7 @@ mod tests {
             transport: OpenAITransport::OpenAI,
             client: Client::new(),
             search_http: SearchHttpTransport::new(),
+            image_http: ImageHttpTransport::new(),
             responses_client: Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
@@ -4709,6 +4954,7 @@ mod tests {
             transport: OpenAITransport::AzureOpenAI,
             client: Client::new(),
             search_http: SearchHttpTransport::new(),
+            image_http: ImageHttpTransport::new(),
             responses_client: Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
@@ -4768,6 +5014,7 @@ mod tests {
             transport: OpenAITransport::OpenAI,
             client: Client::new(),
             search_http: SearchHttpTransport::new(),
+            image_http: ImageHttpTransport::new(),
             responses_client: Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
@@ -7148,6 +7395,181 @@ mod search_tests {
         assert_eq!(
             provider.send_search(request()).await.unwrap_err(),
             SearchError::Authentication
+        );
+    }
+}
+
+#[cfg(test)]
+mod image_tests {
+    use super::*;
+    use crate::auth::codex_auth_context::{
+        integrated_codex_auth_test_lock, CodexIntegratedAuthHandoff, InstalledHandoffGuard,
+    };
+    use crate::models::images::{
+        ImageContext, ImageEditRequest, ImageError, ImageGenerationRequest,
+    };
+    use crate::providers::GatewayProvider;
+    fn provider() -> OpenAIProvider {
+        OpenAIProvider::with_headers(OpenAIProviderConfig {
+            name: "held-provider".into(),
+            api_key: "must-not-use".into(),
+            base_url: "http://must-not-use.invalid".into(),
+            models: vec!["inference-only-slug".into()],
+            custom_headers: vec![],
+            oauth_provider: Some("held-provider".into()),
+            token_store: None,
+            codex_auth_source: Some(CodexAuthSource::Integrated),
+        })
+    }
+    fn context() -> ImageContext {
+        ImageContext::new(tokio::time::Instant::now() + std::time::Duration::from_secs(180))
+    }
+    fn request() -> ImageGenerationRequest {
+        serde_json::from_str(r#"{"model":"gpt-image-2","prompt":"draw","background":"auto","quality":"auto","size":"auto"}"#).unwrap()
+    }
+    fn edit() -> ImageEditRequest {
+        serde_json::from_str(r#"{"model":"gpt-image-2","prompt":"edit","images":[{"image_url":"https://example.test/b"},{"image_url":"https://example.test/a"}]}"#).unwrap()
+    }
+    #[test]
+    fn image_production_oauth_requests_are_exact_unsent_and_ignore_inference_catalogue() {
+        let _lock = integrated_codex_auth_test_lock().blocking_lock();
+        let _auth = InstalledHandoffGuard::set(Some(CodexIntegratedAuthHandoff::new(
+            Some("synthetic-account".into()),
+            secrecy::SecretString::new("synthetic-token".into()),
+        )));
+        let provider = provider();
+        let mut c = context();
+        c.turn_id = Some("turn-label".into());
+        c.originator = Some("codex_cli_rs".into());
+        for (op, built, expected_url, expected) in [
+            (
+                ImageOperation::Generate,
+                provider
+                    .build_image_request(ImageOperation::Generate, &request(), &c)
+                    .unwrap(),
+                "https://chatgpt.com/backend-api/codex/images/generations",
+                serde_json::json!({"model":"gpt-image-2","prompt":"draw","background":"auto","quality":"auto","size":"auto"}),
+            ),
+            (
+                ImageOperation::Edit,
+                provider
+                    .build_image_request(ImageOperation::Edit, &edit(), &c)
+                    .unwrap(),
+                "https://chatgpt.com/backend-api/codex/images/edits",
+                serde_json::json!({"model":"gpt-image-2","prompt":"edit","images":[{"image_url":"https://example.test/b"},{"image_url":"https://example.test/a"}]}),
+            ),
+        ] {
+            assert_eq!(op.url(), expected_url);
+            assert_eq!(built.url().as_str(), expected_url);
+            assert_eq!(built.method(), reqwest::Method::POST);
+            assert_eq!(built.headers().len(), 6);
+            assert_eq!(built.headers()["authorization"], "Bearer synthetic-token");
+            assert_eq!(built.headers()["chatgpt-account-id"], "synthetic-account");
+            assert_eq!(built.headers()["content-type"], "application/json");
+            assert_eq!(built.headers()["accept"], "application/json");
+            assert_eq!(built.headers()["x-codex-image-turn-id"], "turn-label");
+            assert_eq!(built.headers()["originator"], "codex_cli_rs");
+            assert!(built.headers()["authorization"].is_sensitive());
+            assert!(built.headers()["chatgpt-account-id"].is_sensitive());
+            assert_eq!(
+                serde_json::from_slice::<serde_json::Value>(
+                    built.body().unwrap().as_bytes().unwrap()
+                )
+                .unwrap(),
+                expected
+            );
+        }
+    }
+    #[tokio::test]
+    async fn image_provider_credentials_origin_and_operation_fail_before_io() {
+        let _lock = integrated_codex_auth_test_lock().lock().await;
+        let _noauth = InstalledHandoffGuard::set(None);
+        let mut p = provider();
+        for mode in 0..5 {
+            p.transport = OpenAITransport::OpenAI;
+            p.oauth_provider = Some("held-provider".into());
+            p.codex_auth_source = Some(CodexAuthSource::Integrated);
+            p.custom_headers.clear();
+            match mode {
+                0 => {}
+                1 => p.transport = OpenAITransport::AzureOpenAI,
+                2 => p.oauth_provider = None,
+                3 => {
+                    p.codex_auth_source = Some(CodexAuthSource::StandaloneLocal {
+                        path: "/must-not-open/auth.json".into(),
+                    })
+                }
+                _ => p.custom_headers = vec![("X-Anything".into(), "sentinel".into())],
+            }
+            let expected = if mode == 0 {
+                ImageError::Authentication
+            } else {
+                ImageError::Unsupported
+            };
+            assert_eq!(
+                p.generate_image(request(), context()).await.unwrap_err(),
+                expected
+            );
+            assert_eq!(p.edit_image(edit(), context()).await.unwrap_err(), expected);
+        }
+        p = provider();
+        for (account, token) in [
+            (None, "synthetic"),
+            (Some(""), "synthetic"),
+            (Some("bad\r\naccount"), "synthetic"),
+            (Some("account"), ""),
+            (Some("account"), "bad\r\ntoken"),
+        ] {
+            let _auth = InstalledHandoffGuard::set(Some(CodexIntegratedAuthHandoff::new(
+                account.map(str::to_owned),
+                secrecy::SecretString::new(token.into()),
+            )));
+            assert_eq!(
+                p.generate_image(request(), context()).await.unwrap_err(),
+                ImageError::Authentication
+            );
+            assert_eq!(
+                p.edit_image(edit(), context()).await.unwrap_err(),
+                ImageError::Authentication
+            );
+        }
+        let _auth = InstalledHandoffGuard::set(Some(CodexIntegratedAuthHandoff::new(
+            Some("account".into()),
+            secrecy::SecretString::new("synthetic".into()),
+        )));
+        for url in [
+            "http://127.0.0.1:1/wrong",
+            "https://chatgpt.com/backend-api/codex/images/edits",
+            "https://chatgpt.com/backend-api/codex/images/generations?override=1",
+            "https://other.invalid/backend-api/codex/images/generations",
+        ] {
+            let built = p.image_http.client.post(url).build().unwrap();
+            assert_eq!(
+                p.image_http
+                    .execute(ImageOperation::Generate, built, context().deadline)
+                    .await
+                    .unwrap_err(),
+                ImageError::Unsupported
+            );
+        }
+        let built = p
+            .image_http
+            .client
+            .get(ImageOperation::Generate.url())
+            .build()
+            .unwrap();
+        assert_eq!(
+            p.image_http
+                .execute(ImageOperation::Generate, built, context().deadline)
+                .await
+                .unwrap_err(),
+            ImageError::Unsupported
+        );
+        let mut wrong = request();
+        wrong.model = "inference-only-slug".into();
+        assert_eq!(
+            p.generate_image(wrong, context()).await.unwrap_err(),
+            ImageError::Unsupported
         );
     }
 }

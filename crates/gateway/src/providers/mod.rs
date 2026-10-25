@@ -43,6 +43,43 @@ pub trait GatewayProvider: Send + Sync {
         Err(crate::models::search::SearchError::Unsupported)
     }
 
+    /// Generate a bounded PNG using the selected held Codex account. Unsupported
+    /// providers deny by default; inference model support does not enable images.
+    ///
+    /// ```
+    /// use substrate_gateway::{models::images::*, providers::GatewayProvider};
+    /// async fn generate(p: &dyn GatewayProvider) {
+    ///     let r = serde_json::from_str::<ImageGenerationRequest>(
+    ///         r#"{"model":"gpt-image-2","prompt":"red square"}"#).unwrap();
+    ///     let c = ImageContext::new(tokio::time::Instant::now() + std::time::Duration::from_secs(180));
+    ///     let _ = p.generate_image(r, c).await;
+    /// }
+    /// ```
+    async fn generate_image(
+        &self,
+        _request: crate::models::images::ImageGenerationRequest,
+        _context: crate::models::images::ImageContext,
+    ) -> Result<crate::models::images::ImageResult, crate::models::images::ImageError> {
+        Err(crate::models::images::ImageError::Unsupported)
+    }
+
+    /// Edit ordered inline/remote references. No local URL/file fetch, artifact
+    /// write, provider fallback or retry is implied. Unsupported providers deny.
+    ///
+    /// ```
+    /// use substrate_gateway::{models::images::*, providers::GatewayProvider};
+    /// async fn edit(p: &dyn GatewayProvider, r: ImageEditRequest, c: ImageContext) {
+    ///     let _ = p.edit_image(r, c).await;
+    /// }
+    /// ```
+    async fn edit_image(
+        &self,
+        _request: crate::models::images::ImageEditRequest,
+        _context: crate::models::images::ImageContext,
+    ) -> Result<crate::models::images::ImageResult, crate::models::images::ImageError> {
+        Err(crate::models::images::ImageError::Unsupported)
+    }
+
     /// New Responses state is rejected unless the selected provider explicitly owns it.
     fn supports_request(&self, request: &GatewayRequest) -> bool {
         !request.requires_responses()

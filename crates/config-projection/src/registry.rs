@@ -2974,7 +2974,7 @@ mod linux {
             .map_err(|_| ConfigProjectionFailureV1::Malformed)?;
         validate_boundary_ref(&input.access_boundary_ref)?;
         // These fields bind the fixed model route, not a prefix or exhaustive
-        // member-route grant. Additional fixed search access is bound by the
+        // member-route grant. Additional fixed search/image access is bound by the
         // newly admitted gateway artifact identity and identical member gate.
         let surface = &input.http_surface;
         let listener = &input.listener_identity;

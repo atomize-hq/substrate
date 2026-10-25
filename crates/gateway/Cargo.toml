@@ -69,6 +69,7 @@ uuid = { workspace = true, features = ["v4", "serde"] }  # UUID generation for s
 
 # OAuth & Auth
 oauth2 = "4"               # OAuth 2.0 client
+image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
 base64 = "0.22"            # Base64 encoding
 sha2 = { workspace = true }              # SHA-256 for PKCE
 rand = "0.8"               # Random generation for PKCE

@@ -1,4 +1,6 @@
 #[cfg(target_os = "linux")]
+mod codex_images;
+#[cfg(target_os = "linux")]
 mod codex_search;
 mod oauth_handlers;
 mod openai_compat;
@@ -2924,6 +2926,7 @@ fn build_e3_in_world_app(
     readiness_consumed: Arc<std::sync::atomic::AtomicBool>,
 ) -> AxumRouter {
     let search = Arc::new(codex_search::SearchState::new(&state.snapshot()));
+    let images = Arc::new(codex_images::ImageState::new(&state.snapshot()));
     AxumRouter::new()
         .route(
             "/v1/responses",
@@ -2938,6 +2941,24 @@ fn build_e3_in_world_app(
             "/v1/alpha/search",
             post(codex_search::handle_codex_search)
                 .layer(axum::Extension(search))
+                .route_layer(axum::middleware::from_fn_with_state(
+                    Arc::clone(&input),
+                    e3_validate_member_identity,
+                )),
+        )
+        .route(
+            "/v1/images/generations",
+            post(codex_images::generate)
+                .layer(axum::Extension(Arc::clone(&images)))
+                .route_layer(axum::middleware::from_fn_with_state(
+                    Arc::clone(&input),
+                    e3_validate_member_identity,
+                )),
+        )
+        .route(
+            "/v1/images/edits",
+            post(codex_images::edit)
+                .layer(axum::Extension(images))
                 .route_layer(axum::middleware::from_fn_with_state(
                     Arc::clone(&input),
                     e3_validate_member_identity,

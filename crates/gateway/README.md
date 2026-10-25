@@ -288,3 +288,12 @@ These are convenience surfaces for development and smoke, not architectural comm
 ## License
 
 MIT
+
+
+Managed E3 additionally exposes paired `POST /v1/images/generations` and
+`POST /v1/images/edits` under the existing member/connection gate, using only the
+selected held Codex account. These are closed unary `gpt-image-2` operations,
+independent of inference model routing, with real PNG output and PNG/JPEG/WebP
+inline edit validation. Standalone listeners do not expose them. See the
+[paired image contract](docs/contracts/chatgpt-codex-route-contract.md#managed-paired-image-component)
+for limits, send-once cancellation semantics and the local-only proof ceiling.
