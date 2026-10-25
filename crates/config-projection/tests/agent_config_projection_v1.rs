@@ -51,7 +51,7 @@ fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
-fn registry_fixture() -> (
+pub(crate) fn registry_fixture() -> (
     tempfile::TempDir,
     ConfigProjectionRegistryV1,
     ConfigProjectionStoreV1,
@@ -178,6 +178,23 @@ fn native_projection(
     series_id: &str,
     fence_id: &str,
 ) -> Codex0125ProjectionPlanV1 {
+    let (identity, effective, gateway, root, inputs) = native_inputs(store, series_id, fence_id);
+    Codex0125ProjectionV1::render(&identity, &effective, &gateway, root, fence_id, inputs).unwrap()
+}
+
+pub(crate) type NativeInputsFixtureV1 = (
+    ConfigProjectionIdentityV1,
+    EffectiveAgentConfigProjectionV1,
+    ManagedGatewayProjectionV1,
+    NativeProjectionRootV1,
+    Vec<CodexLoaderInputAttestationV1>,
+);
+
+pub(crate) fn native_inputs(
+    store: &ConfigProjectionStoreV1,
+    series_id: &str,
+    fence_id: &str,
+) -> NativeInputsFixtureV1 {
     let digest = "11".repeat(32);
     let commitment = serde_json::json!({
         "authority_store_id": "hsa_store",
@@ -366,7 +383,7 @@ fn native_projection(
             sha256: None,
         })
         .collect();
-    Codex0125ProjectionV1::render(&identity, &effective, &gateway, root, fence_id, inputs).unwrap()
+    (identity, effective, gateway, root, inputs)
 }
 
 #[test]

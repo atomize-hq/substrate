@@ -239,9 +239,8 @@ pub(crate) fn codex_runtime_install_script_template_v1() -> &'static str {
     r#"#!/usr/bin/env bash
 set -euo pipefail
 
-# Verified Packet 2 runtime posture: the official Codex musl release is self-contained
-# in the guest for `codex --version`, so this package installs only the Codex binary and
-# does not widen into a Node/npm runtime bundle.
+# Stock Codex156 consists of independently authenticated main and code-mode host.
+# The native pair needs no Node/npm runtime bundle.
 world_deps_root="/var/lib/substrate/world-deps"
 world_deps_bin="${world_deps_root}/bin"
 package_root="${world_deps_root}/__SUBSTRATE_CODEX_PACKAGE_NAME__"
@@ -249,78 +248,113 @@ package_bin="${package_root}/bin"
 downloads_root="${package_root}/downloads"
 installed_binary="${package_bin}/codex"
 archive_name="__SUBSTRATE_CODEX_ARCHIVE_NAME__"
-archive_path="${downloads_root}/${archive_name}"
 archive_url="__SUBSTRATE_CODEX_ARCHIVE_URL__"
 archive_sha256="__SUBSTRATE_CODEX_ARCHIVE_SHA256__"
 archive_entry_path="__SUBSTRATE_CODEX_ARCHIVE_ENTRY_PATH__"
 executable_sha256="__SUBSTRATE_CODEX_EXECUTABLE_SHA256__"
 codex_version="__SUBSTRATE_CODEX_VERSION__"
 target_triple="__SUBSTRATE_CODEX_TARGET_TRIPLE__"
-
+release_bundle='__SUBSTRATE_CODEX_RELEASE_BUNDLE_V1__'
+trusted_installer_uid="$(id -u)"
+for directory in "${world_deps_root}" "${world_deps_bin}" "${package_root}" "${downloads_root}" "${package_bin}"; do
+  if [ -e "${directory}" ] || [ -L "${directory}" ]; then
+    [ -d "${directory}" ] && [ ! -L "${directory}" ] && [ "$(stat -c %u "${directory}")" = "${trusted_installer_uid}" ] || exit 1
+  fi
+done
+mkdir -p "${world_deps_bin}" "${downloads_root}"
+for directory in "${world_deps_root}" "${world_deps_bin}" "${package_root}" "${downloads_root}"; do
+  [ -d "${directory}" ] && [ ! -L "${directory}" ] && [ "$(stat -c %u "${directory}")" = "${trusted_installer_uid}" ] || exit 1
+done
+chmod 0755 "${world_deps_root}" "${world_deps_bin}" "${package_root}"
+if [ -d "${package_bin}" ]; then chmod 0755 "${package_bin}"; fi
+stage_dir="$(mktemp -d "${package_root}/.stage.${target_triple}.XXXXXX")"
+trap 'rm -rf "${stage_dir}"' EXIT
+mkdir "${stage_dir}/bin"
+chmod 0755 "${stage_dir}/bin"
 run_download_with_timeout() {
   local max_seconds="$1"
   shift
-  if command -v timeout >/dev/null 2>&1; then
-    timeout "${max_seconds}" "$@"
-  else
-    "$@"
-  fi
+  if command -v timeout >/dev/null 2>&1; then timeout "${max_seconds}" "$@"; else "$@"; fi
 }
-
-mkdir -p "${world_deps_bin}" "${package_bin}" "${downloads_root}"
-
-if [ ! -f "${archive_path}" ] || ! echo "${archive_sha256}  ${archive_path}" | sha256sum -c - >/dev/null 2>&1; then
-  tmp_archive="${archive_path}.tmp"
-  rm -f "${tmp_archive}"
-  if [[ "${archive_url}" == file://* ]]; then
-    echo "substrate: staging Codex runtime ${codex_version} for ${target_triple} from ${archive_url}" >&2
-    cp "${archive_url#file://}" "${tmp_archive}"
-  elif command -v wget >/dev/null 2>&1; then
-    echo "substrate: downloading Codex runtime ${codex_version} for ${target_triple} from ${archive_url} with wget" >&2
-    run_download_with_timeout 900 wget --tries=4 --timeout=15 --waitretry=5 --output-document "${tmp_archive}" "${archive_url}"
-  elif command -v python3 >/dev/null 2>&1; then
-    echo "substrate: downloading Codex runtime ${codex_version} for ${target_triple} from ${archive_url} with python3" >&2
-    run_download_with_timeout 900 python3 - "${archive_url}" "${tmp_archive}" <<'PY'
-import shutil
-import socket
-import sys
-import urllib.request
-
-url, destination = sys.argv[1], sys.argv[2]
+stage_verified_member() {
+  local name="$1" url="$2" digest="$3" member="$4" executable_digest="$5" archive_length="$6" executable_length="$7" destination="$8"
+  local archive_path="${downloads_root}/${codex_version}-${name}"
+  if [ -L "${archive_path}" ]; then echo "unsafe archive cache" >&2; exit 1; fi
+  if [ ! -f "${archive_path}" ] || ! echo "${digest}  ${archive_path}" | sha256sum -c - >/dev/null 2>&1; then
+    local tmp_archive="${archive_path}.tmp"
+    rm -f "${tmp_archive}"
+    if [[ "${url}" == file://* ]]; then
+      cp "${url#file://}" "${tmp_archive}"
+    elif command -v wget >/dev/null 2>&1; then
+      echo "substrate: downloading Codex runtime ${codex_version} for ${target_triple}: ${name} with wget" >&2
+      run_download_with_timeout 900 wget --tries=4 --timeout=15 --waitretry=5 --output-document "${tmp_archive}" "${url}"
+    elif command -v python3 >/dev/null 2>&1; then
+      echo "substrate: downloading Codex runtime ${codex_version} for ${target_triple}: ${name} with python3" >&2
+      run_download_with_timeout 900 python3 - "${url}" "${tmp_archive}" <<'PYDOWNLOAD'
+import shutil, socket, sys, urllib.request
 socket.setdefaulttimeout(15)
-with urllib.request.urlopen(url, timeout=15) as response, open(destination, "wb") as out:
+with urllib.request.urlopen(sys.argv[1], timeout=15) as response, open(sys.argv[2], "wb") as out:
     shutil.copyfileobj(response, out)
-PY
-  else
-    echo "substrate: downloading Codex runtime ${codex_version} for ${target_triple} from ${archive_url} with curl" >&2
-    curl -fsSL --retry 3 --connect-timeout 15 --speed-time 30 --speed-limit 1024 --max-time 900 --location "${archive_url}" -o "${tmp_archive}"
+PYDOWNLOAD
+    else
+      echo "substrate: downloading Codex runtime ${codex_version} for ${target_triple}: ${name} with curl" >&2
+      curl -fsSL --retry 3 --connect-timeout 15 --speed-time 30 --speed-limit 1024 --max-time 900 --location "${url}" -o "${tmp_archive}"
+    fi
+    echo "${digest}  ${tmp_archive}" | sha256sum -c -
+    mv "${tmp_archive}" "${archive_path}"
   fi
-  echo "${archive_sha256}  ${tmp_archive}" | sha256sum -c -
-  mv "${tmp_archive}" "${archive_path}"
-fi
-
-stage_dir="$(mktemp -d "${package_root}/.stage.${target_triple}.XXXXXX")"
-trap 'rm -rf "${stage_dir}"' EXIT
-mapfile -t archive_entries < <(tar -tzf "${archive_path}")
-if [ "${#archive_entries[@]}" -ne 1 ] || [ "${archive_entries[0]}" != "${archive_entry_path}" ]; then
-  echo "substrate: world deps package '__SUBSTRATE_CODEX_PACKAGE_NAME__' did not contain the one pinned Codex archive entry ${archive_entry_path}" >&2
-  exit 1
-fi
-tar --no-same-owner --no-same-permissions -xzf "${archive_path}" -C "${stage_dir}" -- "${archive_entry_path}"
-resolved_binary="${stage_dir}/${archive_entry_path}"
-if [ ! -f "${resolved_binary}" ] || [ -L "${resolved_binary}" ]; then
-  echo "substrate: pinned Codex archive entry is not one regular file" >&2
-  exit 1
-fi
-echo "${executable_sha256}  ${resolved_binary}" | sha256sum -c -
-
-echo "substrate: installing Codex runtime ${codex_version} for ${target_triple}" >&2
-install_tmp="${package_bin}/.codex-install.$$.tmp"
-install -m 0755 "${resolved_binary}" "${install_tmp}"
-sync "${install_tmp}"
-mv -f "${install_tmp}" "${installed_binary}"
-sync "${package_bin}"
-echo "${executable_sha256}  ${installed_binary}" | sha256sum -c -
+  [ "$(stat -c %s "${archive_path}")" = "${archive_length}" ]
+  echo "substrate: staging Codex runtime ${codex_version} for ${target_triple}: ${name}" >&2
+  # tarfile verifies exact count and regular type before extraction (no links/devices).
+  python3 - "${archive_path}" "${member}" "${stage_dir}/${destination}" <<'PYEXTRACT'
+import sys, tarfile
+archive, member, destination = sys.argv[1:]
+with tarfile.open(archive, "r:gz") as source:
+    entries = source.getmembers()
+    if len(entries) != 1 or entries[0].name != member or not entries[0].isreg():
+        raise RuntimeError("archive must contain exactly one pinned regular member")
+    with source.extractfile(entries[0]) as incoming, open(destination, "xb") as out:
+        import shutil
+        shutil.copyfileobj(incoming, out)
+PYEXTRACT
+  [ "$(stat -c %s "${stage_dir}/${destination}")" = "${executable_length}" ]
+  echo "${executable_digest}  ${stage_dir}/${destination}" | sha256sum -c -
+  chmod 0755 "${stage_dir}/${destination}"
+  sync "${stage_dir}/${destination}"
+}
+stage_verified_member "${archive_name}" "${archive_url}" "${archive_sha256}" "${archive_entry_path}" "${executable_sha256}" "__SUBSTRATE_CODEX_MAIN_ARCHIVE_LENGTH__" "__SUBSTRATE_CODEX_MAIN_EXTRACTED_LENGTH__" "bin/codex"
+stage_verified_member "__SUBSTRATE_CODEX_HOST_ARCHIVE_NAME__" "__SUBSTRATE_CODEX_HOST_ARCHIVE_URL__" "__SUBSTRATE_CODEX_HOST_ARCHIVE_SHA256__" "__SUBSTRATE_CODEX_HOST_ARCHIVE_ENTRY_PATH__" "__SUBSTRATE_CODEX_HOST_EXECUTABLE_SHA256__" "__SUBSTRATE_CODEX_HOST_ARCHIVE_LENGTH__" "__SUBSTRATE_CODEX_HOST_EXTRACTED_LENGTH__" "bin/codex-code-mode-host"
+__SUBSTRATE_CODEX_SOURCE_LOCK_V1__
+echo "substrate: installing Codex runtime ${codex_version} for ${target_triple}: main and code-mode host pair" >&2
+# Physical directory publication keeps the two exact sibling paths coherent.
+python3 - "${stage_dir}/bin" "${package_bin}" "${release_bundle}" <<'PYPAIR'
+import ctypes, hashlib, os, stat, sys
+staged, installed, bundle = sys.argv[1:]
+import json
+bundle = json.loads(bundle)
+def complete():
+    if not os.path.lexists(installed): return False
+    if not stat.S_ISDIR(os.stat(installed, follow_symlinks=False).st_mode): raise RuntimeError("unsafe installed bin")
+    for name, pin in [("codex", bundle["main"]), ("codex-code-mode-host", bundle["code_mode_host"])]:
+        path = os.path.join(installed, name)
+        if not os.path.lexists(path): return False
+        info = os.stat(path, follow_symlinks=False)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) != 0o755 or info.st_uid != os.geteuid(): return False
+        with open(path, "rb") as source:
+            if hashlib.sha256(source.read()).hexdigest() != pin["extracted_executable_sha256"]: return False
+    return True
+if not complete():
+    if os.path.lexists(installed):
+        libc = ctypes.CDLL(None, use_errno=True)
+        if libc.renameat2(-100, os.fsencode(staged), -100, os.fsencode(installed), 2):
+            raise OSError(ctypes.get_errno(), "atomic Codex pair exchange failed")
+    else:
+        os.rename(staged, installed)
+    descriptor = os.open(os.path.dirname(installed), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try: os.fsync(descriptor)
+    finally: os.close(descriptor)
+if not complete(): raise RuntimeError("installed Codex pair readback mismatch")
+PYPAIR
 ln -sf "${installed_binary}" "${world_deps_bin}/codex"
 __SUBSTRATE_CODEX_INSTALLER_ARTIFACT_SOURCE_V1__
 "#
@@ -328,12 +362,12 @@ __SUBSTRATE_CODEX_INSTALLER_ARTIFACT_SOURCE_V1__
 
 pub(crate) fn render_codex_installer_artifact_source_v1() -> &'static str {
     r#"artifact_source_root="${world_deps_root}/runtime-artifacts-v1"
-install -d -m 0750 "${artifact_source_root}" "${artifact_source_root}/records" "${artifact_source_root}/records/codex-0.125.0-x86_64-unknown-linux-musl" "${artifact_source_root}/heads"
+install -d -m 0750 "${artifact_source_root}" "${artifact_source_root}/records" "${artifact_source_root}/records/codex-${codex_version}-x86_64-unknown-linux-musl" "${artifact_source_root}/heads"
 touch "${artifact_source_root}/lock"
 chmod 0640 "${artifact_source_root}/lock"
 exec 9<>"${artifact_source_root}/lock"
 flock -x 9
-python3 - "${artifact_source_root}" "${installed_binary}" "${archive_name}" "${archive_url}" "${archive_sha256}" "${archive_entry_path}" "${executable_sha256}" <<'PY'
+python3 - "${artifact_source_root}" "${installed_binary}" "${archive_name}" "${archive_url}" "${archive_sha256}" "${archive_entry_path}" "${executable_sha256}" "${release_bundle}" <<'PY'
 import datetime
 import grp
 import hashlib
@@ -347,8 +381,12 @@ import sys
 import time
 import uuid
 
-root, executable, archive_name, archive_url, archive_sha256, archive_entry, executable_sha256 = sys.argv[1:]
-stream_name = "codex-0.125.0-x86_64-unknown-linux-musl"
+root, executable, archive_name, archive_url, archive_sha256, archive_entry, executable_sha256 = sys.argv[1:8]
+bundle = json.loads(sys.argv[8])
+if (archive_name, archive_url, archive_sha256, archive_entry, executable_sha256) != tuple(bundle["main"][name] for name in ("archive_name", "archive_url", "archive_sha256", "archive_entry_path", "extracted_executable_sha256")):
+    raise RuntimeError("main archive identity differs from the release bundle")
+source_stream = "Codex0156OfficialArchives"
+stream_name = "codex-0.156.1-x86_64-unknown-linux-musl"
 
 def canonical(value):
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
@@ -419,7 +457,7 @@ def validate_store_value(value):
     )
 
 def validate_support_value(value):
-    if not isinstance(value, dict) or set(value) != {"schema_version", "support_policy_version", "elf_execution_model", "elf_interpreter", "dynamic_loader_cache", "ordered_elf_dependencies", "ordered_present_common_files", "system_config_mount_target", "manifest_hash"}:
+    if not isinstance(value, dict) or set(value) != {"schema_version", "support_policy_version", "elf_execution_model", "elf_interpreter", "dynamic_loader_cache", "ordered_elf_dependencies", "ordered_present_common_files", "system_config_mount_target", "manifest_hash"} | ({"code_mode_host"} if "code_mode_host" in value else set()):
         return False
     model = value.get("elf_execution_model")
     if model != "StaticExec":
@@ -440,7 +478,7 @@ def validate_support_value(value):
     target = value.get("system_config_mount_target")
     if not isinstance(target, dict) or set(target) != {"absolute_path", "device_id", "inode", "mode", "owner_uid", "owner_gid", "ordered_entry_names"} or target.get("absolute_path") != "/etc/codex" or not valid_u64(target.get("device_id")) or target["device_id"] <= 0 or not valid_u64(target.get("inode")) or target["inode"] <= 0 or not valid_u32(target.get("mode")) or target["mode"] != 0o755 or not valid_u64(target.get("owner_uid")) or target["owner_uid"] != 0 or not valid_u64(target.get("owner_gid")) or target["owner_gid"] != 0 or target.get("ordered_entry_names") != []:
         return False
-    return valid_u32(value.get("schema_version")) and value["schema_version"] == 1 and valid_u32(value.get("support_policy_version")) and value["support_policy_version"] == 1 and value.get("elf_interpreter") is None and value.get("dynamic_loader_cache") is None and value.get("ordered_elf_dependencies") == [] and value.get("manifest_hash") == domain_hash("substrate.e3.runtime-support-manifest.v1", "manifest", value, "manifest_hash")
+    return valid_u32(value.get("schema_version")) and value["schema_version"] == 1 and valid_u32(value.get("support_policy_version")) and value["support_policy_version"] == (2 if "code_mode_host" in value else 1) and value.get("elf_interpreter") is None and value.get("dynamic_loader_cache") is None and value.get("ordered_elf_dependencies") == [] and value.get("manifest_hash") == domain_hash("substrate.e3.runtime-support-manifest.v1", "manifest", value, "manifest_hash")
 
 def validate_entry_value(value):
     return (
@@ -459,8 +497,28 @@ def validate_entry_value(value):
         and value.get("entry_hash") == domain_hash("substrate.e3.installer-artifact-source-entry.v1", "entry", value, "entry_hash")
     )
 
+def provenance(pin):
+    return {"OfficialCodexRelease": {"version": bundle["version"], "target_triple": bundle["target_triple"], **{name: pin[name] for name in ("archive_name", "archive_url", "archive_sha256", "archive_entry_path", "extracted_executable_sha256")}}}
+
+def validate_release_entries(entries):
+    if not isinstance(entries, list) or len(entries) != 2 or not validate_entry_value(entries[0]): return False
+    main, host = entries
+    pin = bundle["code_mode_host"]
+    support = main["runtime_support"].get("code_mode_host", {})
+    if not isinstance(support, dict) or set(support) != {"file", "owner_uid", "elf_execution_model", "provenance"}: return False
+    expected_file = {"absolute_path": os.path.join(os.path.dirname(executable), "codex-code-mode-host"), **{name: host.get(name) for name in ("device_id", "inode", "mode", "byte_length", "sha256")}}
+    return (main["byte_length"] == bundle["main"]["extracted_byte_length"] and main["sha256"] == bundle["main"]["extracted_executable_sha256"]
+        and set(host) == set(main) and host.get("component") == "codex-code-mode-host"
+        and host.get("installed_absolute_path") == expected_file["absolute_path"]
+        and host.get("file_type") == "regular" and host.get("owner_uid") == 0
+        and valid_u64(host.get("device_id")) and host["device_id"] > 0
+        and valid_u64(host.get("inode")) and host["inode"] > 0 and host.get("mode") == 0o755
+        and host.get("byte_length") == pin["extracted_byte_length"] and host.get("sha256") == pin["extracted_executable_sha256"]
+        and validate_support_value(host.get("runtime_support")) and "code_mode_host" not in host["runtime_support"]
+        and host.get("entry_hash") == domain_hash("substrate.e3.installer-artifact-source-entry.v1", "entry", host, "entry_hash")
+        and support == {"file": expected_file, "owner_uid": 0, "elf_execution_model": host["runtime_support"]["elf_execution_model"], "provenance": provenance(pin)})
+
 def validate_record_value(value, source_store_id, expected_reference=None):
-    build = value.get("build_input", {}).get("CodexOfficialArchive", {}) if isinstance(value, dict) else {}
     reference_matches = expected_reference is None or (
         value.get("source_store_id") == expected_reference.get("source_store_id")
         and value.get("source_record_id") == expected_reference.get("source_record_id")
@@ -483,14 +541,11 @@ def validate_record_value(value, source_store_id, expected_reference=None):
         and valid_u32(value.get("schema_version")) and value["schema_version"] == 1
         and value.get("source_store_id") == source_store_id
         and valid_id(value.get("source_record_id"), "iar_")
-        and value.get("source_stream") == "Codex0125OfficialArchive"
+        and value.get("source_stream") == source_stream
         and valid_u64(value.get("revision")) and value["revision"] > 0
         and predecessor_valid
-        and set(value.get("build_input", {})) == {"CodexOfficialArchive"}
-        and set(build) == {"version", "target_triple", "archive_name", "archive_url", "archive_sha256", "archive_entry_path", "extracted_executable_sha256"}
-        and build == {"version": "0.125.0", "target_triple": "x86_64-unknown-linux-musl", "archive_name": archive_name, "archive_url": archive_url, "archive_sha256": archive_sha256, "archive_entry_path": archive_entry, "extracted_executable_sha256": executable_sha256}
-        and valid_digest(build.get("archive_sha256")) and valid_digest(build.get("extracted_executable_sha256"))
-        and isinstance(value.get("entries"), list) and len(value["entries"]) == 1 and validate_entry_value(value["entries"][0])
+        and value.get("build_input") == {"Codex0156OfficialArchives": bundle}
+        and validate_release_entries(value.get("entries"))
         and valid_timestamp(value.get("created_at"))
         and value.get("record_hash") == domain_hash("substrate.e3.installer-artifact-source-record.v1", "record", value, "record_hash")
         and reference_matches
@@ -504,7 +559,7 @@ def validate_head_shape(value, source_store_id):
         and set(value) == {"schema_version", "source_store_id", "source_stream", "head_ref", "head_revision", "predecessor_head_hash", "updated_at", "head_hash"}
         and valid_u32(value.get("schema_version")) and value["schema_version"] == 1
         and value.get("source_store_id") == source_store_id
-        and value.get("source_stream") == "Codex0125OfficialArchive"
+        and value.get("source_stream") == source_stream
         and isinstance(reference, dict) and set(reference) == {"source_store_id", "source_record_id", "revision", "record_hash"}
         and reference.get("source_store_id") == source_store_id
         and valid_id(reference.get("source_record_id"), "iar_")
@@ -1018,15 +1073,31 @@ entry = {
     "entry_hash": "",
 }
 entry["entry_hash"] = domain_hash("substrate.e3.installer-artifact-source-entry.v1", "entry", entry, "entry_hash")
-build_input = {"CodexOfficialArchive": {
-    "version": "0.125.0",
-    "target_triple": "x86_64-unknown-linux-musl",
-    "archive_name": archive_name,
-    "archive_url": archive_url,
-    "archive_sha256": archive_sha256,
-    "archive_entry_path": archive_entry,
-    "extracted_executable_sha256": executable_sha256,
-}}
+build_input = {"Codex0156OfficialArchives": bundle}
+entries = [entry]
+if True:
+    import copy
+    host_path = os.path.join(os.path.dirname(executable), "codex-code-mode-host")
+    host_stat = os.stat(host_path, follow_symlinks=False)
+    host_file = file_support(host_path)
+    pin = bundle["code_mode_host"]
+    if (not stat.S_ISREG(host_stat.st_mode) or host_stat.st_nlink != 1 or host_stat.st_uid != 0 or stat.S_IMODE(host_stat.st_mode) != 0o755
+        or host_stat.st_size != pin["extracted_byte_length"] or host_file["sha256"] != pin["extracted_executable_sha256"] or os.listxattr(host_path, follow_symlinks=False)):
+        raise RuntimeError("installed stock code-mode host identity mismatch")
+    host_support = copy.deepcopy(support)
+    host_support["elf_execution_model"] = elf_model(host_path)
+    host_support["manifest_hash"] = domain_hash("substrate.e3.runtime-support-manifest.v1", "manifest", host_support, "manifest_hash")
+    host = {**entry, "component": "codex-code-mode-host", "installed_absolute_path": host_path,
+        "device_id": host_stat.st_dev, "inode": host_stat.st_ino, "byte_length": host_stat.st_size,
+        "sha256": host_file["sha256"], "runtime_support": host_support}
+    host["entry_hash"] = domain_hash("substrate.e3.installer-artifact-source-entry.v1", "entry", host, "entry_hash")
+    support["support_policy_version"] = 2
+    support["code_mode_host"] = {"file": host_file, "owner_uid": 0, "elf_execution_model": host_support["elf_execution_model"], "provenance": provenance(pin)}
+    support["manifest_hash"] = domain_hash("substrate.e3.runtime-support-manifest.v1", "manifest", support, "manifest_hash")
+    entry["entry_hash"] = domain_hash("substrate.e3.installer-artifact-source-entry.v1", "entry", entry, "entry_hash")
+    entries.append(host)
+    build_input = {"Codex0156OfficialArchives": bundle}
+    if not validate_release_entries(entries): raise RuntimeError("incoherent installed Codex pair")
 head_path = os.path.join(root, "heads", stream_name + ".json")
 prior_head = None
 prior_head_bytes = None
@@ -1045,7 +1116,7 @@ if os.path.exists(head_path):
     if canonical(prior_record) != prior_record_bytes:
         raise RuntimeError("Codex installer source record is not canonical")
     validate_complete_record_chain(prior_head)
-    if prior_record["build_input"] == build_input and prior_record["entries"] == [entry]:
+    if prior_record["build_input"] == build_input and prior_record["entries"] == entries:
         sys.exit(0)
 else:
     validate_complete_record_chain(None)
@@ -1055,11 +1126,11 @@ record = {
     "schema_version": 1,
     "source_store_id": store["source_store_id"],
     "source_record_id": "iar_" + uuid7(),
-    "source_stream": "Codex0125OfficialArchive",
+    "source_stream": source_stream,
     "revision": revision,
     "predecessor_ref": None if prior_head is None else prior_head["head_ref"],
     "build_input": build_input,
-    "entries": [entry],
+    "entries": entries,
     "created_at": timestamp(),
     "record_hash": "",
 }
@@ -1074,7 +1145,7 @@ reference = {
 head = {
     "schema_version": 1,
     "source_store_id": store["source_store_id"],
-    "source_stream": "Codex0125OfficialArchive",
+    "source_stream": source_stream,
     "head_ref": reference,
     "head_revision": revision,
     "predecessor_head_hash": None if prior_head is None else prior_head["head_hash"],
@@ -1646,6 +1717,17 @@ mod e3c_tests {
     use std::path::PathBuf;
     use std::process::Command;
 
+    fn codex_main_fixture_args_v1() -> Vec<String> {
+        let pin = config_projection::Codex0156ReleaseBundleV1::pinned().main;
+        vec![
+            pin.archive_name,
+            pin.archive_url,
+            pin.archive_sha256,
+            pin.archive_entry_path,
+            pin.extracted_executable_sha256,
+        ]
+    }
+
     fn minimal_static_exec() -> Vec<u8> {
         let mut bytes = vec![0_u8; 120];
         bytes[..16].copy_from_slice(b"\x7fELF\x02\x01\x01\0\0\0\0\0\0\0\0\0");
@@ -1690,10 +1772,10 @@ with open(store_temp, "wb") as destination:
 os.chmod(store_temp, 0o640)
 recover_publication()
 assert os.path.exists(os.path.join(root, "source-store.json"))
-record = {"schema_version": 1, "source_store_id": store["source_store_id"], "source_record_id": "iar_018f0892-cc48-7a56-b711-9f17a2a81587", "source_stream": "Codex0125OfficialArchive", "revision": 1, "predecessor_ref": None, "build_input": {}, "entries": [], "created_at": "2026-09-11T12:00:00.000000Z", "record_hash": ""}
+record = {"schema_version": 1, "source_store_id": store["source_store_id"], "source_record_id": "iar_018f0892-cc48-7a56-b711-9f17a2a81587", "source_stream": "Codex0156OfficialArchives", "revision": 1, "predecessor_ref": None, "build_input": {}, "entries": [], "created_at": "2026-09-11T12:00:00.000000Z", "record_hash": ""}
 record["record_hash"] = domain_hash("substrate.e3.installer-artifact-source-record.v1", "record", record, "record_hash")
 reference = {"source_store_id": store["source_store_id"], "source_record_id": record["source_record_id"], "revision": 1, "record_hash": record["record_hash"]}
-head = {"schema_version": 1, "source_store_id": store["source_store_id"], "source_stream": "Codex0125OfficialArchive", "head_ref": reference, "head_revision": 1, "predecessor_head_hash": None, "updated_at": "2026-09-11T12:00:00.000000Z", "head_hash": ""}
+head = {"schema_version": 1, "source_store_id": store["source_store_id"], "source_stream": "Codex0156OfficialArchives", "head_ref": reference, "head_revision": 1, "predecessor_head_hash": None, "updated_at": "2026-09-11T12:00:00.000000Z", "head_hash": ""}
 head["head_hash"] = domain_hash("substrate.e3.installer-artifact-source-head.v1", "head", head, "head_hash")
 record_path = os.path.join(root, "records", stream_name, f"{record['revision']:020d}-{record['source_record_id']}.json")
 head_path = os.path.join(root, "heads", stream_name + ".json")
@@ -1708,14 +1790,12 @@ assert os.path.exists(record_path) and os.path.exists(head_path)
             .arg("-c")
             .arg(program)
             .arg(root.path())
-            .args([
-                "/tmp/codex",
-                "archive",
-                "url",
-                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                "entry",
-                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            ])
+            .arg("/tmp/codex")
+            .args(codex_main_fixture_args_v1())
+            .arg(
+                serde_json::to_string(&config_projection::Codex0156ReleaseBundleV1::pinned())
+                    .unwrap(),
+            )
             .output()
             .expect("run publisher recovery simulation");
         assert!(
@@ -1759,11 +1839,22 @@ support = {"schema_version": 1, "support_policy_version": 1, "elf_execution_mode
 support["manifest_hash"] = domain_hash("substrate.e3.runtime-support-manifest.v1", "manifest", support, "manifest_hash")
 entry = {"component": "codex", "installed_absolute_path": executable, "device_id": 1, "inode": 30, "file_type": "regular", "mode": 0o755, "owner_uid": 0, "byte_length": 1, "sha256": executable_sha256, "runtime_support": support, "entry_hash": ""}
 entry["entry_hash"] = domain_hash("substrate.e3.installer-artifact-source-entry.v1", "entry", entry, "entry_hash")
-build = {"CodexOfficialArchive": {"version": "0.125.0", "target_triple": "x86_64-unknown-linux-musl", "archive_name": archive_name, "archive_url": archive_url, "archive_sha256": archive_sha256, "archive_entry_path": archive_entry, "extracted_executable_sha256": executable_sha256}}
-record = {"schema_version": 1, "source_store_id": store["source_store_id"], "source_record_id": "iar_018f0892-cc48-7a56-b711-9f17a2a81587", "source_stream": "Codex0125OfficialArchive", "revision": 1, "predecessor_ref": None, "build_input": build, "entries": [entry], "created_at": "2026-09-11T12:00:00.000000Z", "record_hash": ""}
+import copy
+pin = bundle["code_mode_host"]
+host_support = copy.deepcopy(support)
+host = {**entry, "component": "codex-code-mode-host", "installed_absolute_path": os.path.join(os.path.dirname(executable), "codex-code-mode-host"), "inode": 31, "byte_length": pin["extracted_byte_length"], "sha256": pin["extracted_executable_sha256"], "runtime_support": host_support}
+host["entry_hash"] = domain_hash("substrate.e3.installer-artifact-source-entry.v1", "entry", host, "entry_hash")
+support["support_policy_version"] = 2
+support["code_mode_host"] = {"file": {"absolute_path": host["installed_absolute_path"], **{name: host[name] for name in ("device_id", "inode", "mode", "byte_length", "sha256")}}, "owner_uid": 0, "elf_execution_model": "StaticExec", "provenance": provenance(pin)}
+support["manifest_hash"] = domain_hash("substrate.e3.runtime-support-manifest.v1", "manifest", support, "manifest_hash")
+entry["byte_length"] = bundle["main"]["extracted_byte_length"]
+entry["sha256"] = bundle["main"]["extracted_executable_sha256"]
+entry["entry_hash"] = domain_hash("substrate.e3.installer-artifact-source-entry.v1", "entry", entry, "entry_hash")
+build = {"Codex0156OfficialArchives": bundle}
+record = {"schema_version": 1, "source_store_id": store["source_store_id"], "source_record_id": "iar_018f0892-cc48-7a56-b711-9f17a2a81587", "source_stream": "Codex0156OfficialArchives", "revision": 1, "predecessor_ref": None, "build_input": build, "entries": [entry, host], "created_at": "2026-09-11T12:00:00.000000Z", "record_hash": ""}
 record["record_hash"] = domain_hash("substrate.e3.installer-artifact-source-record.v1", "record", record, "record_hash")
 reference = {"source_store_id": store["source_store_id"], "source_record_id": record["source_record_id"], "revision": 1, "record_hash": record["record_hash"]}
-head = {"schema_version": 1, "source_store_id": store["source_store_id"], "source_stream": "Codex0125OfficialArchive", "head_ref": reference, "head_revision": 1, "predecessor_head_hash": None, "updated_at": "2026-09-11T12:00:00.000000Z", "head_hash": ""}
+head = {"schema_version": 1, "source_store_id": store["source_store_id"], "source_stream": "Codex0156OfficialArchives", "head_ref": reference, "head_revision": 1, "predecessor_head_hash": None, "updated_at": "2026-09-11T12:00:00.000000Z", "head_hash": ""}
 head["head_hash"] = domain_hash("substrate.e3.installer-artifact-source-head.v1", "head", head, "head_hash")
 record_path = os.path.join(root, "records", stream_name, f"{record['revision']:020d}-{record['source_record_id']}.json")
 head_path = os.path.join(root, "heads", stream_name + ".json")
@@ -1793,7 +1884,7 @@ broken["source_record_id"] = "iar_018f0892-cc48-7a56-b711-9f17a2a81589"
 broken["predecessor_ref"] = {"source_store_id": store["source_store_id"], "source_record_id": "iar_018f0892-cc48-7a56-b711-9f17a2a81590", "revision": 1, "record_hash": "f" * 64}
 broken["record_hash"] = domain_hash("substrate.e3.installer-artifact-source-record.v1", "record", broken, "record_hash")
 broken_reference = {"source_store_id": store["source_store_id"], "source_record_id": broken["source_record_id"], "revision": 2, "record_hash": broken["record_hash"]}
-broken_head = {"schema_version": 1, "source_store_id": store["source_store_id"], "source_stream": "Codex0125OfficialArchive", "head_ref": broken_reference, "head_revision": 2, "predecessor_head_hash": head["head_hash"], "updated_at": "2026-09-11T12:00:01.000000Z", "head_hash": ""}
+broken_head = {"schema_version": 1, "source_store_id": store["source_store_id"], "source_stream": "Codex0156OfficialArchives", "head_ref": broken_reference, "head_revision": 2, "predecessor_head_hash": head["head_hash"], "updated_at": "2026-09-11T12:00:01.000000Z", "head_hash": ""}
 broken_head["head_hash"] = domain_hash("substrate.e3.installer-artifact-source-head.v1", "head", broken_head, "head_hash")
 broken_path = os.path.join(root, "records", stream_name, f"{broken['revision']:020d}-{broken['source_record_id']}.json")
 broken_record_temporary, _ = stage_publication(broken_path, broken, "record")
@@ -1814,7 +1905,7 @@ boolean_record["entries"][0]["owner_uid"] = False
 boolean_record["entries"][0]["entry_hash"] = domain_hash("substrate.e3.installer-artifact-source-entry.v1", "entry", boolean_record["entries"][0], "entry_hash")
 boolean_record["record_hash"] = domain_hash("substrate.e3.installer-artifact-source-record.v1", "record", boolean_record, "record_hash")
 boolean_reference = {"source_store_id": store["source_store_id"], "source_record_id": boolean_record["source_record_id"], "revision": 2, "record_hash": boolean_record["record_hash"]}
-boolean_head = {"schema_version": 1, "source_store_id": store["source_store_id"], "source_stream": "Codex0125OfficialArchive", "head_ref": boolean_reference, "head_revision": 2, "predecessor_head_hash": head["head_hash"], "updated_at": "2026-09-11T12:00:02.000000Z", "head_hash": ""}
+boolean_head = {"schema_version": 1, "source_store_id": store["source_store_id"], "source_stream": "Codex0156OfficialArchives", "head_ref": boolean_reference, "head_revision": 2, "predecessor_head_hash": head["head_hash"], "updated_at": "2026-09-11T12:00:02.000000Z", "head_hash": ""}
 boolean_head["head_hash"] = domain_hash("substrate.e3.installer-artifact-source-head.v1", "head", boolean_head, "head_hash")
 boolean_path = os.path.join(root, "records", stream_name, f"{boolean_record['revision']:020d}-{boolean_record['source_record_id']}.json")
 boolean_record_temporary, _ = stage_publication(boolean_path, boolean_record, "record")
@@ -1849,14 +1940,12 @@ with open(record_path, "rb") as source:
             .arg("-c")
             .arg(program)
             .arg(root.path())
-            .args([
-                "/tmp/codex",
-                "codex-x86_64-unknown-linux-musl.tar.gz",
-                "https://example.invalid/codex.tar.gz",
-                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                "codex-x86_64-unknown-linux-musl",
-                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            ])
+            .arg("/tmp/codex")
+            .args(codex_main_fixture_args_v1())
+            .arg(
+                serde_json::to_string(&config_projection::Codex0156ReleaseBundleV1::pinned())
+                    .unwrap(),
+            )
             .output()
             .expect("run strict publisher recovery simulation");
         assert!(
@@ -2350,7 +2439,11 @@ for candidate, message in ((executable, "extra symbols"), (os.environ["MALFORMED
             .env("MALFORMED_ELF", malformed.path())
             .arg(root.path())
             .arg(artifact.path())
-            .args(["archive", "url", "a", "entry", "b"])
+            .args(codex_main_fixture_args_v1())
+            .arg(
+                serde_json::to_string(&config_projection::Codex0156ReleaseBundleV1::pinned())
+                    .unwrap(),
+            )
             .output()
             .expect("run Codex ELF helper");
         assert!(

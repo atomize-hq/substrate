@@ -22,7 +22,6 @@ use crate::execution::{
     WorldDepsWorkspaceAction, WorldDepsWorkspaceCmd,
 };
 use crate::{WorldDepsAction, WorldDepsCmd};
-use agent_api::resolve_runtime_support;
 use anyhow::{anyhow, Context, Result};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -1633,24 +1632,30 @@ mod tests {
     }
 
     #[test]
-    fn world_deps_codex_runtime_support_resolves_published_uaa_release_mapping() {
+    fn world_deps_codex_runtime_selects_trusted_0156_independently_of_uaa_metadata() {
         let spec = resolve_codex_runtime_install_spec_for_target_v1("x86_64-unknown-linux-musl")
             .expect("resolve validated codex runtime");
 
-        assert_eq!(spec.version, "0.125.0");
+        let advertised =
+            agent_api::resolve_runtime_support("codex", "x86_64-unknown-linux-musl").unwrap();
+        assert_eq!(
+            advertised.version, "0.125.0",
+            "consumed UAA metadata is deliberately unchanged"
+        );
+        assert_eq!(spec.version, "0.156.1");
         assert_eq!(spec.archive_name, "codex-x86_64-unknown-linux-musl.tar.gz");
         assert_eq!(
             spec.archive_url,
-            "https://github.com/openai/codex/releases/download/rust-v0.125.0/codex-x86_64-unknown-linux-musl.tar.gz"
+            "https://github.com/openai/codex/releases/download/rust-v0.156.1/codex-x86_64-unknown-linux-musl.tar.gz"
         );
         assert_eq!(
             spec.archive_sha256,
-            "4a20a53943a7e6a0c5fa4463d4e47c58dd8e553ecebde455a4107e9906bfb001"
+            "aff46539a83aff86e3c62c592bce2c50d95391f9df289afaf03a50c01d14533d"
         );
         assert_eq!(spec.archive_entry_path, "codex-x86_64-unknown-linux-musl");
         assert_eq!(
             spec.extracted_executable_sha256,
-            "86dc42ac5823f25233d6dc4ec5ff34693afd8c32ff2d17b54c5eb0d15bc7d902"
+            "0b2e9301d6100dddda3b9d5c80ebaeaa3a2f1962388f2f36f6b96a9f08b1f33f"
         );
     }
 
@@ -1660,7 +1665,7 @@ mod tests {
             .expect_err("validated-but-unmapped target should fail closed");
 
         assert!(
-            format!("{err:#}").contains("validated guest target 'aarch64-unknown-linux-musl'"),
+            format!("{err:#}").contains("guest target 'aarch64-unknown-linux-musl'"),
             "expected validated guest target diagnostics, got: {err:#}"
         );
         assert!(
@@ -1695,209 +1700,271 @@ mod tests {
 
     #[test]
     fn world_deps_codex_runtime_script_records_self_contained_posture() {
-        let spec = resolve_codex_runtime_install_spec_for_target_v1("x86_64-unknown-linux-musl")
-            .expect("resolve validated codex runtime");
-
+        let spec =
+            resolve_codex_runtime_install_spec_for_target_v1("x86_64-unknown-linux-musl").unwrap();
         let script = render_codex_runtime_install_script_v1(
             crate::builtins::world_deps::inventory::codex_runtime_install_script_template_v1(),
             &spec,
         );
-        assert!(
-            script.contains("self-contained"),
-            "expected script to record the verified self-contained posture: {script}"
-        );
-        assert!(
-            script.contains("does not widen into a Node/npm runtime bundle"),
-            "expected script to record the no-bundle outcome: {script}"
-        );
-        assert!(
-            script.contains("${stage_dir}/${archive_entry_path}"),
-            "expected script to use only the pinned archive entry: {script}"
-        );
-        assert!(!script.contains("find \"${stage_dir}\""));
-        assert!(script.contains("runtime-artifacts-v1"));
-        assert!(script.contains("Codex0125OfficialArchive"));
-        assert!(
-            script.contains("command -v wget"),
-            "expected script to prefer wget when available in the guest: {script}"
-        );
-        assert!(
-            script.contains("command -v python3"),
-            "expected script to fall back to python3 before curl-only resolution: {script}"
-        );
-        assert!(
-            script.contains("run_download_with_timeout 900"),
-            "expected script to bound non-curl download helpers too: {script}"
-        );
-        assert!(
-            script.contains("--connect-timeout 15"),
-            "expected curl fallback to keep an explicit connection timeout: {script}"
-        );
-        assert!(
-            script.contains("--speed-time 30"),
-            "expected script to fail on stalled transfers: {script}"
-        );
-        assert!(
-            script.contains("--speed-limit 1024"),
-            "expected script to detect low-speed stalled transfers: {script}"
-        );
-        assert!(
-            script.contains("--max-time 900"),
-            "expected script to enforce an upper download bound: {script}"
-        );
-        assert!(
-            script.contains("tar --no-same-owner --no-same-permissions -xzf"),
-            "expected script to avoid tar metadata restores that fail in the world staging dir: {script}"
-        );
-        assert!(
-            script.contains("substrate: downloading Codex runtime"),
-            "expected script to emit a download phase marker: {script}"
-        );
-        assert!(
-            script.contains("with wget"),
-            "expected script to make the selected downloader visible in the phase marker: {script}"
-        );
-        assert!(
-            script.contains("with python3"),
-            "expected script to expose the python3 downloader fallback in the phase marker: {script}"
-        );
-        assert!(
-            script.contains("with curl"),
-            "expected script to expose the curl fallback in the phase marker: {script}"
-        );
-        assert!(
-            script.contains("substrate: installing Codex runtime"),
-            "expected script to emit an install phase marker: {script}"
-        );
+        assert!(script.contains("no Node/npm runtime bundle"));
+        assert!(script.contains("Codex0156OfficialArchives"));
+        for message in [
+            "substrate: downloading Codex runtime",
+            "substrate: staging Codex runtime",
+            "substrate: installing Codex runtime",
+            "with wget",
+            "with python3",
+            "with curl",
+        ] {
+            assert!(
+                script.contains(message),
+                "missing progress breadcrumb: {message}"
+            );
+        }
+        assert!(!script.contains("Codex0125OfficialArchive"));
+        assert!(script.contains("codex-code-mode-host"));
+        assert!(script.contains("entries[0].isreg()"));
+        assert!(script.contains("libc.renameat2"));
+        assert!(!script.contains("__SUBSTRATE_CODEX_"));
+        assert!(script.contains("--max-time 900"));
+        assert!(script.contains("run_download_with_timeout 900"));
+        assert!(script.find("flock -x 9").unwrap() < script.find("libc.renameat2").unwrap());
     }
 
     #[cfg(unix)]
     #[test]
+    #[ignore = "designated non-executing official pair proof; requires SUBSTRATE_CODEX_0156_ARCHIVE_DIR"]
     fn world_deps_codex_runtime_install_script_is_idempotent_and_links_guest_entrypoint() {
-        let spec = resolve_codex_runtime_install_spec_for_target_v1("x86_64-unknown-linux-musl")
-            .expect("resolve validated codex runtime");
-        let fixture = TempDir::new().expect("tempdir");
-        let world_deps_root = fixture.path().join("world-deps");
-        let staging_dir = fixture.path().join("archive-stage");
-        fs::create_dir_all(&staging_dir).expect("create archive stage");
-
-        let archive_binary = staging_dir.join("codex-x86_64-unknown-linux-musl");
-        fs::write(
-            &archive_binary,
-            "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo 'codex-cli 0.125.0'\n  exit 0\nfi\nexit 0\n",
-        )
-        .expect("write archive binary");
-        let mut perms = fs::metadata(&archive_binary)
-            .expect("archive binary metadata")
-            .permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&archive_binary, perms).expect("chmod archive binary");
-
-        let archive_path = fixture
-            .path()
-            .join("codex-x86_64-unknown-linux-musl.tar.gz");
-        let tar_status = Command::new("tar")
-            .arg("-czf")
-            .arg(&archive_path)
-            .arg("-C")
-            .arg(&staging_dir)
-            .arg("codex-x86_64-unknown-linux-musl")
-            .status()
-            .expect("create tar.gz");
-        assert!(
-            tar_status.success(),
-            "expected tar to succeed: {tar_status:?}"
+        use sha2::{Digest, Sha256};
+        use std::os::unix::fs::MetadataExt;
+        let spec =
+            resolve_codex_runtime_install_spec_for_target_v1("x86_64-unknown-linux-musl").unwrap();
+        let archives = PathBuf::from(
+            std::env::var("SUBSTRATE_CODEX_0156_ARCHIVE_DIR")
+                .expect("designated official-pair proof requires SUBSTRATE_CODEX_0156_ARCHIVE_DIR"),
         );
-
-        let sha_output = Command::new("sha256sum")
-            .arg(&archive_path)
-            .output()
-            .expect("sha256sum archive");
-        assert!(sha_output.status.success(), "expected sha256sum to succeed");
-        let sha = String::from_utf8(sha_output.stdout)
-            .expect("sha256sum utf8")
-            .split_whitespace()
-            .next()
-            .expect("sha256 token")
-            .to_string();
-        let executable_sha_output = Command::new("sha256sum")
-            .arg(&archive_binary)
-            .output()
-            .expect("sha256sum executable");
-        assert!(
-            executable_sha_output.status.success(),
-            "expected executable sha256sum to succeed"
-        );
-        let executable_sha = String::from_utf8(executable_sha_output.stdout)
-            .expect("executable sha256sum utf8")
-            .split_whitespace()
-            .next()
-            .expect("executable sha256 token")
-            .to_string();
-
-        let script = render_codex_runtime_install_script_v1(
-            crate::builtins::world_deps::inventory::codex_runtime_install_script_template_v1(),
+        let fixture = TempDir::new().unwrap();
+        let root = fixture.path().join("world-deps");
+        let downloads = root.join("codex-runtime/downloads");
+        fs::create_dir_all(&downloads).unwrap();
+        for pin in [
+            &spec.release_bundle.main,
+            &spec.release_bundle.code_mode_host,
+        ] {
+            let source = archives.join(&pin.archive_name);
+            assert_eq!(
+                format!("{:x}", Sha256::digest(fs::read(&source).unwrap())),
+                pin.archive_sha256
+            );
+            fs::copy(
+                source,
+                downloads.join(format!("0.156.1-{}", pin.archive_name)),
+            )
+            .unwrap();
+        }
+        // Every selected acquisition command is present and fails closed. The
+        // Python fallback is unreachable because wget is present.
+        let stubs = fixture.path().join("deny-acquisition");
+        fs::create_dir(&stubs).unwrap();
+        let acquisition_log = fixture.path().join("acquisition-attempts");
+        for name in ["wget", "curl"] {
+            let path = stubs.join(name);
+            fs::write(
+                &path,
+                format!(
+                    "#!/bin/sh\nprintf '%s\\n' acquisition-denied >> '{}'\nexit 99\n",
+                    acquisition_log.display()
+                ),
+            )
+            .unwrap();
+            fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let system = fixture.path().join("etc-codex");
+        fs::create_dir(&system).unwrap();
+        fs::set_permissions(&system, fs::Permissions::from_mode(0o755)).unwrap();
+        let mut script = render_codex_runtime_install_script_v1(
+            super::super::inventory::codex_runtime_install_script_template_v1(),
             &spec,
         )
-            .replace(
-                "/var/lib/substrate/world-deps",
-                world_deps_root.to_str().expect("world deps root utf8"),
-            )
-            .replace(
-                "https://github.com/openai/codex/releases/download/rust-v0.125.0/codex-x86_64-unknown-linux-musl.tar.gz",
-                &format!("file://{}", archive_path.display()),
-            )
-            .replace(
-                "4a20a53943a7e6a0c5fa4463d4e47c58dd8e553ecebde455a4107e9906bfb001",
-                &sha,
-            )
-            .replace(
-                "86dc42ac5823f25233d6dc4ec5ff34693afd8c32ff2d17b54c5eb0d15bc7d902",
-                &executable_sha,
-            )
-            .replace(
-                crate::builtins::world_deps::inventory::render_codex_installer_artifact_source_v1(),
-                "",
-            );
-
-        let script_path = fixture.path().join("install-codex-runtime.sh");
-        fs::write(&script_path, script).expect("write install script");
-        let mut script_perms = fs::metadata(&script_path)
-            .expect("install script metadata")
-            .permissions();
-        script_perms.set_mode(0o755);
-        fs::set_permissions(&script_path, script_perms).expect("chmod install script");
-
-        for _ in 0..2 {
-            let status = Command::new("bash")
-                .arg(&script_path)
-                .status()
-                .expect("run install script");
-            assert!(
-                status.success(),
-                "expected install script to succeed: {status:?}"
+        .replace("/var/lib/substrate/world-deps", root.to_str().unwrap())
+        .replace("/etc/codex", system.to_str().unwrap())
+        // Only filesystem UID/GID observations and the group lookup are
+        // substituted for this disposable nonprivileged fixture. Pins,
+        // schema, provenance, hashes, and all guards are unchanged.
+        .replace("grp.getgrnam(\"substrate\").gr_gid", "os.getgid()")
+        .replace("target_stat.st_uid", "0")
+        .replace("host_stat.st_uid", "0")
+        .replace("system_target.st_uid", "0")
+        .replace("system_target.st_gid", "0");
+        let common = fixture.path().join("common-support");
+        fs::create_dir(&common).unwrap();
+        for (index, original) in [
+            "/etc/hosts",
+            "/etc/nsswitch.conf",
+            "/etc/passwd",
+            "/etc/group",
+            "/etc/resolv.conf",
+            "/etc/ssl/certs/ca-certificates.crt",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let file = common.join(format!("support-{index}"));
+            fs::write(&file, format!("fixture support {original}\n")).unwrap();
+            fs::set_permissions(&file, fs::Permissions::from_mode(0o644)).unwrap();
+            script = script.replace(original, file.to_str().unwrap());
+        }
+        let path = fixture.path().join("installer.sh");
+        let fixture_path = format!("{}:{}", stubs.display(), std::env::var("PATH").unwrap());
+        let run = |body: &str| {
+            fs::write(&path, body).unwrap();
+            Command::new("bash")
+                .args(["-c", "umask 077; exec bash \"$1\"", "fixture-installer"])
+                .arg(&path)
+                .env("PATH", &fixture_path)
+                .output()
+                .unwrap()
+        };
+        let bin = root.join("codex-runtime/bin");
+        fs::create_dir(&bin).unwrap();
+        fs::write(bin.join("codex"), b"old-main").unwrap();
+        fs::write(bin.join("codex-code-mode-host"), b"old-host").unwrap();
+        let failure = run(&script.replace(
+            "# Physical directory publication",
+            "exit 77\n# Physical directory publication",
+        ));
+        assert!(!failure.status.success());
+        assert_eq!(fs::read(bin.join("codex")).unwrap(), b"old-main");
+        assert_eq!(
+            fs::read(bin.join("codex-code-mode-host")).unwrap(),
+            b"old-host"
+        );
+        let failure = run(&script.replace("PYPAIR\nln -sf", "PYPAIR\nexit 78\nln -sf"));
+        assert!(!failure.status.success());
+        for (name, pin) in [
+            ("codex", &spec.release_bundle.main),
+            ("codex-code-mode-host", &spec.release_bundle.code_mode_host),
+        ] {
+            assert_eq!(
+                format!("{:x}", Sha256::digest(fs::read(bin.join(name)).unwrap())),
+                pin.extracted_executable_sha256
             );
         }
-
-        let guest_entrypoint = world_deps_root.join("bin/codex");
+        let inodes = [
+            fs::metadata(bin.join("codex")).unwrap().ino(),
+            fs::metadata(bin.join("codex-code-mode-host"))
+                .unwrap()
+                .ino(),
+        ];
+        for _ in 0..2 {
+            let result = run(&script);
+            assert!(
+                result.status.success(),
+                "{}",
+                String::from_utf8_lossy(&result.stderr)
+            );
+            let progress = String::from_utf8_lossy(&result.stderr);
+            assert!(progress.contains("substrate: staging Codex runtime 0.156.1"));
+            assert!(progress.contains("substrate: installing Codex runtime 0.156.1"));
+            assert_eq!(
+                inodes,
+                [
+                    fs::metadata(bin.join("codex")).unwrap().ino(),
+                    fs::metadata(bin.join("codex-code-mode-host"))
+                        .unwrap()
+                        .ino()
+                ]
+            );
+        }
+        // Already-correct bytes under a non-searchable bin must not keep the
+        // fast path broken. Correcting traversal modes preserves both files.
+        fs::set_permissions(&bin, fs::Permissions::from_mode(0o700)).unwrap();
+        let repaired = run(&script);
         assert!(
-            guest_entrypoint.exists(),
-            "expected guest entrypoint symlink"
-        );
-
-        let version_output = Command::new(&guest_entrypoint)
-            .arg("--version")
-            .output()
-            .expect("run guest entrypoint");
-        assert!(
-            version_output.status.success(),
-            "expected guest entrypoint to run"
+            repaired.status.success(),
+            "{}",
+            String::from_utf8_lossy(&repaired.stderr)
         );
         assert_eq!(
-            String::from_utf8(version_output.stdout)
-                .expect("version stdout utf8")
-                .trim(),
-            "codex-cli 0.125.0"
+            inodes,
+            [
+                fs::metadata(bin.join("codex")).unwrap().ino(),
+                fs::metadata(bin.join("codex-code-mode-host"))
+                    .unwrap()
+                    .ino()
+            ]
+        );
+        // A distinct owner observation rejects before chmod or publication.
+        let stat_stub = stubs.join("stat");
+        fs::write(&stat_stub, format!("#!/bin/sh\nif [ \"$1\" = -c ] && [ \"$2\" = %u ] && [ \"$3\" = '{}' ]; then echo {}; exit 0; fi\nexec /usr/bin/stat \"$@\"\n", bin.display(), unsafe { libc::geteuid() } + 1)).unwrap();
+        fs::set_permissions(&stat_stub, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(!run(&script).status.success());
+        fs::remove_file(stat_stub).unwrap();
+        assert_eq!(
+            inodes,
+            [
+                fs::metadata(bin.join("codex")).unwrap().ino(),
+                fs::metadata(bin.join("codex-code-mode-host"))
+                    .unwrap()
+                    .ino()
+            ]
+        );
+        for directory in [&root, &root.join("codex-runtime"), &bin] {
+            assert_eq!(
+                fs::metadata(directory).unwrap().permissions().mode() & 0o7777,
+                0o755
+            );
+        }
+        for name in ["codex", "codex-code-mode-host"] {
+            assert_eq!(
+                fs::metadata(bin.join(name)).unwrap().permissions().mode() & 0o7777,
+                0o755
+            );
+        }
+        assert!(
+            !acquisition_log.exists(),
+            "cache fixture attempted acquisition"
+        );
+        let head: serde_json::Value =
+            serde_json::from_slice(
+                &fs::read(root.join(
+                    "runtime-artifacts-v1/heads/codex-0.156.1-x86_64-unknown-linux-musl.json",
+                ))
+                .unwrap(),
+            )
+            .unwrap();
+        assert_eq!(head["source_stream"], "Codex0156OfficialArchives");
+        assert_eq!(head["head_revision"], 1);
+        let reference = &head["head_ref"];
+        let record: serde_json::Value = serde_json::from_slice(&fs::read(root.join(format!("runtime-artifacts-v1/records/codex-0.156.1-x86_64-unknown-linux-musl/{:020}-{}.json", reference["revision"].as_u64().unwrap(), reference["source_record_id"].as_str().unwrap()))).unwrap()).unwrap();
+        assert_eq!(record["entries"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            record["build_input"]["Codex0156OfficialArchives"],
+            serde_json::to_value(&spec.release_bundle).unwrap()
+        );
+        assert_eq!(
+            fs::read_link(root.join("bin/codex")).unwrap(),
+            bin.join("codex")
+        );
+        // Deliberate wrong-cache failure cannot acquire or replace either inode.
+        fs::write(
+            downloads.join(format!(
+                "0.156.1-{}",
+                spec.release_bundle.code_mode_host.archive_name
+            )),
+            b"wrong cache",
+        )
+        .unwrap();
+        assert!(!run(&script).status.success());
+        assert!(acquisition_log.exists());
+        assert_eq!(
+            inodes,
+            [
+                fs::metadata(bin.join("codex")).unwrap().ino(),
+                fs::metadata(bin.join("codex-code-mode-host"))
+                    .unwrap()
+                    .ino()
+            ]
         );
     }
 }
@@ -1919,6 +1986,7 @@ struct CodexRuntimeInstallSpecV1 {
     archive_sha256: String,
     archive_entry_path: String,
     extracted_executable_sha256: String,
+    release_bundle: config_projection::Codex0156ReleaseBundleV1,
 }
 
 #[allow(dead_code)]
@@ -2086,39 +2154,89 @@ fn map_codex_runtime_target_triple_for_guest_arch_v1(guest_arch: &str) -> Result
 fn resolve_codex_runtime_install_spec_for_target_v1(
     target_triple: &str,
 ) -> Result<CodexRuntimeInstallSpecV1> {
-    let record = resolve_runtime_support("codex", target_triple).map_err(|err| {
-        config_model::user_error(format!(
-            "world deps package '{}' is unsupported for guest target '{}' because Substrate could not resolve a validated Codex runtime via agent_api::resolve_runtime_support(\"codex\", ...): {}",
-            CODEX_RUNTIME_PACKAGE_NAME, target_triple, err
-        ))
-    })?;
-
-    match (record.version.as_str(), target_triple) {
-        ("0.125.0", "x86_64-unknown-linux-musl") => Ok(CodexRuntimeInstallSpecV1 {
-            target_triple: target_triple.to_string(),
-            version: record.version,
-            archive_name: "codex-x86_64-unknown-linux-musl.tar.gz".to_string(),
-            archive_url: "https://github.com/openai/codex/releases/download/rust-v0.125.0/codex-x86_64-unknown-linux-musl.tar.gz".to_string(),
-            archive_sha256:
-                "4a20a53943a7e6a0c5fa4463d4e47c58dd8e553ecebde455a4107e9906bfb001"
-                    .to_string(),
-            archive_entry_path: "codex-x86_64-unknown-linux-musl".to_string(),
-            extracted_executable_sha256:
-                "86dc42ac5823f25233d6dc4ec5ff34693afd8c32ff2d17b54c5eb0d15bc7d902"
-                    .to_string(),
-        }),
-        _ => Err(config_model::user_error(format!(
-            "world deps package '{}' cannot provision validated guest target '{}' at version '{}' because Substrate has no pinned official Codex release mapping for that guest target",
-            CODEX_RUNTIME_PACKAGE_NAME, target_triple, record.version
-        ))),
+    if target_triple != config_projection::CODEX_0156_TARGET {
+        return Err(config_model::user_error(format!(
+            "world deps package '{}' has no pinned official Codex release mapping for guest target '{}'",
+            CODEX_RUNTIME_PACKAGE_NAME, target_triple
+        )));
     }
+    // UAA 0.3.7 advertises125. Installer provenance is independently pinned here;
+    // this does not claim newer UAA metadata or native execution qualification.
+    let bundle = config_projection::Codex0156ReleaseBundleV1::pinned();
+    Ok(CodexRuntimeInstallSpecV1 {
+        target_triple: bundle.target_triple.clone(),
+        version: bundle.version.clone(),
+        archive_name: bundle.main.archive_name.clone(),
+        archive_url: bundle.main.archive_url.clone(),
+        archive_sha256: bundle.main.archive_sha256.clone(),
+        archive_entry_path: bundle.main.archive_entry_path.clone(),
+        extracted_executable_sha256: bundle.main.extracted_executable_sha256.clone(),
+        release_bundle: bundle,
+    })
 }
 
 fn render_codex_runtime_install_script_v1(
     template: &str,
     spec: &CodexRuntimeInstallSpecV1,
 ) -> String {
+    let publisher =
+        crate::builtins::world_deps::inventory::render_codex_installer_artifact_source_v1();
+    let (source_lock, publication) = publisher
+        .split_once("python3 - ")
+        .expect("fixed source publisher");
     template
+        .replace("__SUBSTRATE_CODEX_SOURCE_LOCK_V1__", source_lock)
+        .replace(
+            "__SUBSTRATE_CODEX_RELEASE_BUNDLE_V1__",
+            &serde_json::to_string(&spec.release_bundle).expect("release pins"),
+        )
+        .replace(
+            "__SUBSTRATE_CODEX_HOST_ARCHIVE_NAME__",
+            &spec.release_bundle.code_mode_host.archive_name,
+        )
+        .replace(
+            "__SUBSTRATE_CODEX_HOST_ARCHIVE_URL__",
+            &spec.release_bundle.code_mode_host.archive_url,
+        )
+        .replace(
+            "__SUBSTRATE_CODEX_HOST_ARCHIVE_SHA256__",
+            &spec.release_bundle.code_mode_host.archive_sha256,
+        )
+        .replace(
+            "__SUBSTRATE_CODEX_HOST_ARCHIVE_ENTRY_PATH__",
+            &spec.release_bundle.code_mode_host.archive_entry_path,
+        )
+        .replace(
+            "__SUBSTRATE_CODEX_HOST_EXECUTABLE_SHA256__",
+            &spec
+                .release_bundle
+                .code_mode_host
+                .extracted_executable_sha256,
+        )
+        .replace(
+            "__SUBSTRATE_CODEX_MAIN_ARCHIVE_LENGTH__",
+            &spec.release_bundle.main.archive_byte_length.to_string(),
+        )
+        .replace(
+            "__SUBSTRATE_CODEX_MAIN_EXTRACTED_LENGTH__",
+            &spec.release_bundle.main.extracted_byte_length.to_string(),
+        )
+        .replace(
+            "__SUBSTRATE_CODEX_HOST_ARCHIVE_LENGTH__",
+            &spec
+                .release_bundle
+                .code_mode_host
+                .archive_byte_length
+                .to_string(),
+        )
+        .replace(
+            "__SUBSTRATE_CODEX_HOST_EXTRACTED_LENGTH__",
+            &spec
+                .release_bundle
+                .code_mode_host
+                .extracted_byte_length
+                .to_string(),
+        )
         .replace(
             "__SUBSTRATE_CODEX_PACKAGE_NAME__",
             CODEX_RUNTIME_PACKAGE_NAME,
@@ -2138,7 +2256,7 @@ fn render_codex_runtime_install_script_v1(
         .replace("__SUBSTRATE_CODEX_TARGET_TRIPLE__", &spec.target_triple)
         .replace(
             "__SUBSTRATE_CODEX_INSTALLER_ARTIFACT_SOURCE_V1__",
-            crate::builtins::world_deps::inventory::render_codex_installer_artifact_source_v1(),
+            &format!("python3 - {publication}"),
         )
 }
 

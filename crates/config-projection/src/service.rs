@@ -394,7 +394,10 @@ impl AgentConfigProjectionServiceV1 {
         for (artifact, role) in [
             (
                 &identity.runtime_artifacts.codex,
-                crate::RuntimeArtifactAuthorityRoleV1::Codex0125,
+                codex_authority_role_v1(
+                    &identity.runtime_artifacts.codex.role,
+                    &record.native.renderer.codex_version,
+                )?,
             ),
             (
                 &identity.runtime_artifacts.world_entry_wrapper,
@@ -1736,7 +1739,11 @@ fn validate_prepared_retained_launch_publication_v1(
             serde_json::to_value(&record.effective),
         ),
         (
-            "substrate.e3.native-config-projection.v1",
+            if record.native.renderer.codex_version == "0.156.1" {
+                "substrate.e3.codex-0.156-native-config-projection.v1"
+            } else {
+                "substrate.e3.native-config-projection.v1"
+            },
             "projection",
             "projection_hash",
             serde_json::to_value(&record.native),
@@ -1856,4 +1863,40 @@ fn build_prepared_response_v1(
         .validate()
         .map_err(|_| ConfigProjectionFailureV1::WrongBinding)?;
     Ok(response)
+}
+
+fn codex_authority_role_v1(
+    role: &crate::ConfigProjectionArtifactRoleV1,
+    native_version: &str,
+) -> Result<crate::RuntimeArtifactAuthorityRoleV1, ConfigProjectionFailureV1> {
+    match (role, native_version) {
+        (crate::ConfigProjectionArtifactRoleV1::Codex0125, "0.125.0") => {
+            Ok(crate::RuntimeArtifactAuthorityRoleV1::Codex0125)
+        }
+        (crate::ConfigProjectionArtifactRoleV1::Codex0156, "0.156.1") => {
+            Ok(crate::RuntimeArtifactAuthorityRoleV1::Codex0156)
+        }
+        _ => Err(ConfigProjectionFailureV1::WrongBinding),
+    }
+}
+
+#[test]
+fn codex0156_authoring_reconciliation_discriminates_exact_native_and_artifact_versions() {
+    use crate::{ConfigProjectionArtifactRoleV1 as A, RuntimeArtifactAuthorityRoleV1 as R};
+    assert_eq!(
+        codex_authority_role_v1(&A::Codex0156, "0.156.1"),
+        Ok(R::Codex0156)
+    );
+    assert_eq!(
+        codex_authority_role_v1(&A::Codex0125, "0.125.0"),
+        Ok(R::Codex0125)
+    );
+    for (role, version) in [
+        (A::Codex0156, "0.125.0"),
+        (A::Codex0125, "0.156.1"),
+        (A::Codex0156CodeModeHost, "0.156.1"),
+        (A::ManagedGateway, "0.156.1"),
+    ] {
+        assert!(codex_authority_role_v1(&role, version).is_err());
+    }
 }

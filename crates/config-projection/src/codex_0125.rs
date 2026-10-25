@@ -20,6 +20,7 @@ pub struct Codex0125ProjectionV1;
 /// The accepted-home source does not exist when this is constructed, so this
 /// carries no identity or layer attestation for that future source.
 pub struct Codex0125ProjectionPlanV1 {
+    pub(crate) is_0156: bool,
     identity: ConfigProjectionIdentityV1,
     effective: EffectiveAgentConfigProjectionV1,
     managed_gateway: ManagedGatewayProjectionV1,
@@ -294,6 +295,44 @@ impl Codex0125ProjectionV1 {
         fence_id: &str,
         project_loader_inputs: Vec<CodexLoaderInputAttestationV1>,
     ) -> Result<Codex0125ProjectionPlanV1, ConfigProjectionFailureV1> {
+        if identity
+            .runtime_artifacts
+            .codex
+            .runtime_support
+            .code_mode_host
+            .is_some()
+            || identity
+                .runtime_artifacts
+                .codex
+                .runtime_support
+                .support_policy_version
+                != 1
+            || identity.runtime_artifacts.codex.role
+                != crate::ConfigProjectionArtifactRoleV1::Codex0125
+        {
+            return Err(ConfigProjectionFailureV1::UnsupportedRuntimeVersion);
+        }
+        Self::render_for_release_v1(
+            identity,
+            effective,
+            managed_gateway,
+            root,
+            fence_id,
+            project_loader_inputs,
+            false,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_for_release_v1(
+        identity: &ConfigProjectionIdentityV1,
+        effective: &EffectiveAgentConfigProjectionV1,
+        managed_gateway: &ManagedGatewayProjectionV1,
+        root: NativeProjectionRootV1,
+        fence_id: &str,
+        project_loader_inputs: Vec<CodexLoaderInputAttestationV1>,
+        is_0156: bool,
+    ) -> Result<Codex0125ProjectionPlanV1, ConfigProjectionFailureV1> {
         if effective.model != "codex"
             || effective.provider.provider_id != "substrate-managed-gateway"
             || effective.provider.wire_api != "responses"
@@ -471,8 +510,8 @@ impl Codex0125ProjectionV1 {
 
         let renderer = NativeRendererIdentityV1 {
             renderer_id: "substrate.codex.config-renderer".to_string(),
-            renderer_schema_version: 1,
-            codex_version: "0.125.0".to_string(),
+            renderer_schema_version: if is_0156 { 2 } else { 1 },
+            codex_version: if is_0156 { "0.156.1" } else { "0.125.0" }.to_string(),
         };
         let invocation = CodexNativeInvocationV1 {
             wrapper_argv: vec!["substrate-world-entry".to_string()],
@@ -493,6 +532,7 @@ impl Codex0125ProjectionV1 {
             ],
         };
         Ok(Codex0125ProjectionPlanV1 {
+            is_0156,
             identity: identity.clone(),
             effective: effective.clone(),
             managed_gateway: managed_gateway.clone(),
@@ -613,7 +653,11 @@ impl Codex0125ProjectionV1 {
             ),
             (
                 "CloudRequirements",
-                "cloud-requirements-cache.json",
+                if plan.is_0156 {
+                    "cloud-config-bundle-cache.json"
+                } else {
+                    "cloud-requirements-cache.json"
+                },
                 CodexLoaderInputDispositionV1::DisabledByNoEphemeralAuthAndProvenAbsent,
             ),
         ] {
@@ -625,6 +669,7 @@ impl Codex0125ProjectionV1 {
             ));
         }
         let loader_source = CodexLoaderSourceIdentityV1 {
+            codex_0156_sources: None,
             codex_version: "0.125.0".to_string(),
             upstream_tag: "rust-v0.125.0".to_string(),
             config_loader_source_sha256:
@@ -643,8 +688,25 @@ impl Codex0125ProjectionV1 {
                 "927c2a72b29136a5d8f627450a1f85a91173bc76e863351fd7233664b5ee32e4".to_string(),
             validator_schema_version: 1,
         };
+        if plan.is_0156 {
+            inputs.push(absent(
+                "ModelsCache",
+                &observation.codex_home,
+                "models_cache.json",
+                CodexLoaderInputDispositionV1::ProvenAbsent,
+            ));
+        }
+        let loader_source = if plan.is_0156 {
+            crate::codex_0156::pinned_loader_source_v1()
+        } else {
+            loader_source
+        };
         let fingerprint = ConfigProjectionCodecV1::domain_sha256(
-            "substrate.e3.codex-0.125-loader-inputs.v1",
+            if plan.is_0156 {
+                "substrate.e3.codex-0.156-loader-inputs.v1"
+            } else {
+                "substrate.e3.codex-0.125-loader-inputs.v1"
+            },
             &json!({"inputs": inputs, "loader_source": loader_source}),
         )?;
         let ambient_closure = CodexAmbientConfigClosureV1 {
@@ -709,7 +771,7 @@ impl Codex0125ProjectionV1 {
         native.projection_hash = ConfigProjectionCodecV1::domain_sha256(
             "",
             &json!({
-                "domain": "substrate.e3.native-config-projection.v1",
+                "domain": if plan.is_0156 { "substrate.e3.codex-0.156-native-config-projection.v1" } else { "substrate.e3.native-config-projection.v1" },
                 "projection": value,
             }),
         )?;
@@ -720,6 +782,7 @@ impl Codex0125ProjectionV1 {
         closure: &CodexAmbientConfigClosureV1,
     ) -> Result<(), ConfigProjectionFailureV1> {
         let pinned_source = CodexLoaderSourceIdentityV1 {
+            codex_0156_sources: None,
             codex_version: "0.125.0".to_string(),
             upstream_tag: "rust-v0.125.0".to_string(),
             config_loader_source_sha256:
@@ -990,6 +1053,7 @@ mod tests {
 
     fn pinned_loader_source() -> CodexLoaderSourceIdentityV1 {
         CodexLoaderSourceIdentityV1 {
+            codex_0156_sources: None,
             codex_version: "0.125.0".to_string(),
             upstream_tag: "rust-v0.125.0".to_string(),
             config_loader_source_sha256:

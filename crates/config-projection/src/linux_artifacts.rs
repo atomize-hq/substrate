@@ -23,6 +23,46 @@ use crate::{
 
 pub struct LinuxArtifactSourceV1;
 
+#[cfg(test)]
+thread_local! {
+    // Private component-test observation boundary. Authenticated paths, release
+    // pins and schema stay production-exact; only the physical root/owner vary.
+    static ARTIFACT_FIXTURE_V1: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
+}
+
+fn artifact_observed_root_v1() -> PathBuf {
+    #[cfg(test)]
+    if let Some(root) = ARTIFACT_FIXTURE_V1.with(|fixture| fixture.borrow().clone()) {
+        return root;
+    }
+    PathBuf::from("/")
+}
+
+fn artifact_observed_owner_v1() -> u32 {
+    #[cfg(test)]
+    if ARTIFACT_FIXTURE_V1.with(|fixture| fixture.borrow().is_some()) {
+        return unsafe { libc::geteuid() };
+    }
+    0
+}
+
+fn artifact_canonical_owner_v1(owner: u32) -> u32 {
+    if owner == artifact_observed_owner_v1() {
+        0
+    } else {
+        owner
+    }
+}
+
+fn artifact_observed_path_v1(path: &Path) -> PathBuf {
+    let root = artifact_observed_root_v1();
+    if root != Path::new("/") && !path.starts_with(&root) {
+        root.join(path.strip_prefix("/").unwrap_or(path))
+    } else {
+        path.to_path_buf()
+    }
+}
+
 struct HeldAbsoluteDirectoryV1 {
     descriptor: File,
     path: PathBuf,
@@ -57,6 +97,8 @@ fn open_absolute_directory_v1(
     if !path.is_absolute() {
         return Err(ConfigProjectionFailureV1::WrongBinding);
     }
+    let observed_path = artifact_observed_path_v1(path);
+    let path = observed_path.as_path();
     let mut descriptor = OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW)
@@ -213,7 +255,7 @@ fn resolve_exact_installed_ca_bundle_v1(
             .metadata()
             .map_err(|_| ConfigProjectionFailureV1::UnsupportedSecurityPosture)?;
         if !metadata.is_dir()
-            || metadata.uid() != 0
+            || metadata.uid() != artifact_observed_owner_v1()
             || metadata.mode() & 0o022 != 0
             || boundary_device.is_some_and(|device| metadata.dev() != device)
             || boundary_mount_id.is_some_and(|id| mount_id(&descriptor).ok() != Some(id))
@@ -268,7 +310,7 @@ fn resolve_exact_installed_ca_bundle_v1(
         if !before.is_file()
             || before.dev() != boundary_device
             || mount_id(&descriptor)? != boundary_mount_id
-            || before.uid() != 0
+            || before.uid() != artifact_observed_owner_v1()
             || before.nlink() != 1
             || before.mode() & 0o022 != 0
             || before.len() > MAX_SUPPORT_BYTES
@@ -339,7 +381,7 @@ fn resolve_exact_installed_ca_bundle_v1(
             return open_trusted_endpoint(&certs, LOGICAL_LEAF, boundary_device, boundary_mount_id);
         }
         if leaf.st_mode & libc::S_IFMT != libc::S_IFLNK
-            || leaf.st_uid != 0
+            || leaf.st_uid != artifact_observed_owner_v1()
             || leaf.st_dev != boundary_device
         {
             return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
@@ -452,7 +494,7 @@ impl LinuxArtifactSourceV1 {
             if !metadata.is_file()
                 || metadata.nlink() != 1
                 || metadata.mode() & 0o7777 != 0o640
-                || metadata.uid() != 0
+                || metadata.uid() != artifact_observed_owner_v1()
                 || metadata.gid() != expected_gid
                 || metadata.len() > 16 * 1024 * 1024
             {
@@ -559,6 +601,10 @@ impl LinuxArtifactSourceV1 {
                 return Err(ConfigProjectionFailureV1::WrongBinding);
             }
             let expected_entries: &[(&str, &str)] = match expected_stream {
+                InstallerArtifactSourceStreamV1::Codex0156OfficialArchives => &[
+                    ("codex", crate::CODEX_0156_MAIN_PATH),
+                    ("codex-code-mode-host", crate::CODEX_0156_HOST_PATH),
+                ],
                 InstallerArtifactSourceStreamV1::SubstrateSourceBuild => &[
                     (
                         "substrate-gateway",
@@ -581,7 +627,11 @@ impl LinuxArtifactSourceV1 {
             for (entry, (component, installed_path)) in
                 record.entries.iter().zip(expected_entries.iter())
             {
-                if entry.component != *component
+                if (entry.runtime_support.code_mode_host.is_some()
+                    != (expected_stream
+                        == InstallerArtifactSourceStreamV1::Codex0156OfficialArchives
+                        && *component == "codex"))
+                    || entry.component != *component
                     || entry.installed_absolute_path != *installed_path
                     || !paths.insert(entry.installed_absolute_path.as_str())
                     || entry.file_type != "regular"
@@ -591,7 +641,8 @@ impl LinuxArtifactSourceV1 {
                     || entry.inode == 0
                     || !digest(&entry.sha256)
                     || entry.runtime_support.schema_version != 1
-                    || entry.runtime_support.support_policy_version != 1
+                    || crate::codex_0156::validate_support_version_v1(&entry.runtime_support)
+                        .is_err()
                     || entry.runtime_support.elf_interpreter.is_some()
                     || entry.runtime_support.dynamic_loader_cache.is_some()
                     || !entry.runtime_support.ordered_elf_dependencies.is_empty()
@@ -652,6 +703,7 @@ impl LinuxArtifactSourceV1 {
                 }
             }
             match (&expected_stream, &record.build_input) {
+                (InstallerArtifactSourceStreamV1::Codex0156OfficialArchives, InstallerArtifactBuildInputV1::Codex0156OfficialArchives(_)) => crate::codex_0156::validate_release_source_v1(record)?,
                 (
                     InstallerArtifactSourceStreamV1::Codex0125OfficialArchive,
                     InstallerArtifactBuildInputV1::CodexOfficialArchive {
@@ -700,7 +752,7 @@ impl LinuxArtifactSourceV1 {
         if !root_meta.is_dir()
             || root_meta.mode() & 0o7777 != 0o750
             || root_meta.mode() & 0o022 != 0
-            || root_meta.uid() != 0
+            || root_meta.uid() != artifact_observed_owner_v1()
         {
             return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
         }
@@ -711,7 +763,7 @@ impl LinuxArtifactSourceV1 {
         if !lock_meta.is_file()
             || lock_meta.nlink() != 1
             || lock_meta.mode() & 0o7777 != 0o640
-            || lock_meta.uid() != 0
+            || lock_meta.uid() != artifact_observed_owner_v1()
             || lock_meta.gid() != root_meta.gid()
         {
             return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
@@ -742,6 +794,9 @@ impl LinuxArtifactSourceV1 {
                 return Err(ConfigProjectionFailureV1::WrongBinding);
             }
             let stream_name = match expected_stream {
+                InstallerArtifactSourceStreamV1::Codex0156OfficialArchives => {
+                    "codex-0.156.1-x86_64-unknown-linux-musl"
+                }
                 InstallerArtifactSourceStreamV1::SubstrateSourceBuild => "substrate-source-build",
                 InstallerArtifactSourceStreamV1::Codex0125OfficialArchive => {
                     "codex-0.125.0-x86_64-unknown-linux-musl"
@@ -896,6 +951,10 @@ impl LinuxArtifactSourceV1 {
                 return Ok(false);
             }
             let expected_entries: &[(&str, &str)] = match expected_stream {
+                InstallerArtifactSourceStreamV1::Codex0156OfficialArchives => &[
+                    ("codex", crate::CODEX_0156_MAIN_PATH),
+                    ("codex-code-mode-host", crate::CODEX_0156_HOST_PATH),
+                ],
                 InstallerArtifactSourceStreamV1::SubstrateSourceBuild => &[
                     (
                         "substrate-gateway",
@@ -918,7 +977,11 @@ impl LinuxArtifactSourceV1 {
                 record.entries.iter().zip(expected_entries.iter())
             {
                 let support = &entry.runtime_support;
-                if entry.component != *component
+                if (entry.runtime_support.code_mode_host.is_some()
+                    != (expected_stream
+                        == InstallerArtifactSourceStreamV1::Codex0156OfficialArchives
+                        && *component == "codex"))
+                    || entry.component != *component
                     || entry.installed_absolute_path != *installed_path
                     || entry.file_type != "regular"
                     || entry.mode != 0o755
@@ -927,7 +990,7 @@ impl LinuxArtifactSourceV1 {
                     || entry.inode == 0
                     || !digest(&entry.sha256)
                     || support.schema_version != 1
-                    || support.support_policy_version != 1
+                    || crate::codex_0156::validate_support_version_v1(support).is_err()
                     || support.elf_interpreter.is_some()
                     || support.dynamic_loader_cache.is_some()
                     || !support.ordered_elf_dependencies.is_empty()
@@ -978,6 +1041,7 @@ impl LinuxArtifactSourceV1 {
                 }
             }
             let build_is_exact = match (&expected_stream, &record.build_input) {
+                (InstallerArtifactSourceStreamV1::Codex0156OfficialArchives, InstallerArtifactBuildInputV1::Codex0156OfficialArchives(_)) => crate::codex_0156::validate_release_source_v1(record).is_ok(),
                 (
                     InstallerArtifactSourceStreamV1::SubstrateSourceBuild,
                     InstallerArtifactBuildInputV1::SubstrateSourceBuild {
@@ -1040,6 +1104,9 @@ impl LinuxArtifactSourceV1 {
             return Err(ConfigProjectionFailureV1::Conflict);
         }
         let stream_name = match expected_stream {
+            InstallerArtifactSourceStreamV1::Codex0156OfficialArchives => {
+                "codex-0.156.1-x86_64-unknown-linux-musl"
+            }
             InstallerArtifactSourceStreamV1::SubstrateSourceBuild => "substrate-source-build",
             InstallerArtifactSourceStreamV1::Codex0125OfficialArchive => {
                 "codex-0.125.0-x86_64-unknown-linux-musl"
@@ -1075,7 +1142,7 @@ impl LinuxArtifactSourceV1 {
                 if !metadata.is_file()
                     || metadata.nlink() != 1
                     || metadata.mode() & 0o7777 != 0o640
-                    || metadata.uid() != 0
+                    || metadata.uid() != artifact_observed_owner_v1()
                     || metadata.gid() != root_metadata.gid()
                     || metadata.len() > 16 * 1024 * 1024
                 {
@@ -1106,6 +1173,27 @@ impl LinuxArtifactSourceV1 {
         created_at: Timestamp,
         publish: impl FnOnce(&TrustedRuntimeArtifactManifestV1) -> Result<T, ConfigProjectionFailureV1>,
     ) -> Result<T, ConfigProjectionFailureV1> {
+        if substrate_store_root != Path::new("/var/lib/substrate/runtime-artifacts-v1")
+            || codex_store_root != Path::new("/var/lib/substrate/world-deps/runtime-artifacts-v1")
+        {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        Self::import_manifest_core(
+            substrate_store_root,
+            codex_store_root,
+            authority_store_id,
+            created_at,
+            publish,
+        )
+    }
+
+    fn import_manifest_core<T>(
+        substrate_store_root: &Path,
+        codex_store_root: &Path,
+        authority_store_id: &str,
+        created_at: Timestamp,
+        publish: impl FnOnce(&TrustedRuntimeArtifactManifestV1) -> Result<T, ConfigProjectionFailureV1>,
+    ) -> Result<T, ConfigProjectionFailureV1> {
         fn hold_shared_lock(
             root: &HeldAbsoluteDirectoryV1,
         ) -> Result<File, ConfigProjectionFailureV1> {
@@ -1120,7 +1208,7 @@ impl LinuxArtifactSourceV1 {
             if !metadata.is_file()
                 || metadata.nlink() != 1
                 || metadata.mode() & 0o7777 != 0o640
-                || metadata.uid() != 0
+                || metadata.uid() != artifact_observed_owner_v1()
                 || metadata.gid() != root_metadata.gid()
             {
                 return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
@@ -1181,7 +1269,7 @@ impl LinuxArtifactSourceV1 {
             if !metadata.is_file()
                 || metadata.nlink() != 1
                 || metadata.mode() & 0o7777 != 0o755
-                || metadata.uid() != 0
+                || metadata.uid() != artifact_observed_owner_v1()
             {
                 return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
             }
@@ -1309,11 +1397,6 @@ impl LinuxArtifactSourceV1 {
         {
             return Err(ConfigProjectionFailureV1::Malformed);
         }
-        if substrate_store_root != Path::new("/var/lib/substrate/runtime-artifacts-v1")
-            || codex_store_root != Path::new("/var/lib/substrate/world-deps/runtime-artifacts-v1")
-        {
-            return Err(ConfigProjectionFailureV1::WrongBinding);
-        }
         let substrate_source_root = open_absolute_directory_v1(substrate_store_root)?;
         let codex_source_root = open_absolute_directory_v1(codex_store_root)?;
         let _substrate_lock = hold_shared_lock(&substrate_source_root)?;
@@ -1324,7 +1407,7 @@ impl LinuxArtifactSourceV1 {
         )?;
         let (codex_store, _, codex) = Self::validate_store(
             codex_store_root,
-            InstallerArtifactSourceStreamV1::Codex0125OfficialArchive,
+            InstallerArtifactSourceStreamV1::Codex0156OfficialArchives,
         )?;
         let DirectoryPhysicalIdentityV1::Linux {
             device_id: substrate_device,
@@ -1344,7 +1427,7 @@ impl LinuxArtifactSourceV1 {
         let filesystem_root = OpenOptions::new()
             .read(true)
             .custom_flags(libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW)
-            .open("/")
+            .open(artifact_observed_root_v1())
             .map_err(|_| ConfigProjectionFailureV1::MissingPreparation)?;
         let mut held_support_files = Vec::new();
         let mut common_files = Vec::new();
@@ -1372,20 +1455,19 @@ impl LinuxArtifactSourceV1 {
         {
             return Err(ConfigProjectionFailureV1::PartialPublication);
         }
+        let bundle = crate::Codex0156ReleaseBundleV1::pinned();
         let ordered = [
             (
-                RuntimeArtifactAuthorityRoleV1::Codex0125,
+                RuntimeArtifactAuthorityRoleV1::Codex0156,
                 &codex.entries[0],
                 source_ref(&codex),
-                RuntimeArtifactProvenanceV1::OfficialCodexRelease {
-                    version: "0.125.0".to_string(),
-                    target_triple: "x86_64-unknown-linux-musl".to_string(),
-                    archive_name: "codex-x86_64-unknown-linux-musl.tar.gz".to_string(),
-                    archive_url: "https://github.com/openai/codex/releases/download/rust-v0.125.0/codex-x86_64-unknown-linux-musl.tar.gz".to_string(),
-                    archive_sha256: "4a20a53943a7e6a0c5fa4463d4e47c58dd8e553ecebde455a4107e9906bfb001".to_string(),
-                    archive_entry_path: "codex-x86_64-unknown-linux-musl".to_string(),
-                    extracted_executable_sha256: "86dc42ac5823f25233d6dc4ec5ff34693afd8c32ff2d17b54c5eb0d15bc7d902".to_string(),
-                },
+                bundle.main.provenance(),
+            ),
+            (
+                RuntimeArtifactAuthorityRoleV1::Codex0156CodeModeHost,
+                &codex.entries[1],
+                source_ref(&codex),
+                bundle.code_mode_host.provenance(),
             ),
             (
                 RuntimeArtifactAuthorityRoleV1::ManagedGateway,
@@ -1394,15 +1476,23 @@ impl LinuxArtifactSourceV1 {
                 RuntimeArtifactProvenanceV1::SubstrateSourceBuild {
                     component: "substrate-gateway".to_string(),
                     source_commit: match &substrate.build_input {
-                        InstallerArtifactBuildInputV1::SubstrateSourceBuild { source_commit, .. } => source_commit.clone(),
+                        InstallerArtifactBuildInputV1::SubstrateSourceBuild {
+                            source_commit,
+                            ..
+                        } => source_commit.clone(),
                         _ => return Err(ConfigProjectionFailureV1::WrongBinding),
                     },
                     source_tree: match &substrate.build_input {
-                        InstallerArtifactBuildInputV1::SubstrateSourceBuild { source_tree, .. } => source_tree.clone(),
+                        InstallerArtifactBuildInputV1::SubstrateSourceBuild {
+                            source_tree, ..
+                        } => source_tree.clone(),
                         _ => return Err(ConfigProjectionFailureV1::WrongBinding),
                     },
                     cargo_lock_sha256: match &substrate.build_input {
-                        InstallerArtifactBuildInputV1::SubstrateSourceBuild { cargo_lock_sha256, .. } => cargo_lock_sha256.clone(),
+                        InstallerArtifactBuildInputV1::SubstrateSourceBuild {
+                            cargo_lock_sha256,
+                            ..
+                        } => cargo_lock_sha256.clone(),
                         _ => return Err(ConfigProjectionFailureV1::WrongBinding),
                     },
                     target_triple: "x86_64-unknown-linux-musl".to_string(),
@@ -1417,15 +1507,23 @@ impl LinuxArtifactSourceV1 {
                 RuntimeArtifactProvenanceV1::SubstrateSourceBuild {
                     component: "substrate-world-entry".to_string(),
                     source_commit: match &substrate.build_input {
-                        InstallerArtifactBuildInputV1::SubstrateSourceBuild { source_commit, .. } => source_commit.clone(),
+                        InstallerArtifactBuildInputV1::SubstrateSourceBuild {
+                            source_commit,
+                            ..
+                        } => source_commit.clone(),
                         _ => return Err(ConfigProjectionFailureV1::WrongBinding),
                     },
                     source_tree: match &substrate.build_input {
-                        InstallerArtifactBuildInputV1::SubstrateSourceBuild { source_tree, .. } => source_tree.clone(),
+                        InstallerArtifactBuildInputV1::SubstrateSourceBuild {
+                            source_tree, ..
+                        } => source_tree.clone(),
                         _ => return Err(ConfigProjectionFailureV1::WrongBinding),
                     },
                     cargo_lock_sha256: match &substrate.build_input {
-                        InstallerArtifactBuildInputV1::SubstrateSourceBuild { cargo_lock_sha256, .. } => cargo_lock_sha256.clone(),
+                        InstallerArtifactBuildInputV1::SubstrateSourceBuild {
+                            cargo_lock_sha256,
+                            ..
+                        } => cargo_lock_sha256.clone(),
                         _ => return Err(ConfigProjectionFailureV1::WrongBinding),
                     },
                     target_triple: "x86_64-unknown-linux-musl".to_string(),
@@ -1441,8 +1539,34 @@ impl LinuxArtifactSourceV1 {
                 file_identity(&filesystem_root, &source.installed_absolute_path)?;
             let elf_execution_model = Self::validate_e3_static_elf_v1(&file)?;
             let mut recomputed_support = crate::E3RuntimeSupportManifestV1 {
+                code_mode_host: if role == RuntimeArtifactAuthorityRoleV1::Codex0156 {
+                    let (host_file, metadata, sha256) =
+                        file_identity(&filesystem_root, crate::CODEX_0156_HOST_PATH)?;
+                    let identity = crate::Codex0156CodeModeHostV1 {
+                        file: crate::RuntimeSupportFileV1 {
+                            absolute_path: crate::CODEX_0156_HOST_PATH.to_string(),
+                            device_id: metadata.dev(),
+                            inode: metadata.ino(),
+                            mode: metadata.mode() & 0o7777,
+                            byte_length: metadata.len(),
+                            sha256,
+                        },
+                        owner_uid: u64::from(artifact_canonical_owner_v1(metadata.uid())),
+                        elf_execution_model: Self::validate_e3_static_elf_v1(&host_file)?,
+                        provenance: bundle.code_mode_host.provenance(),
+                    };
+                    identity.validate()?;
+                    held_support_files.push(host_file);
+                    Some(identity)
+                } else {
+                    None
+                },
                 schema_version: 1,
-                support_policy_version: 1,
+                support_policy_version: if role == RuntimeArtifactAuthorityRoleV1::Codex0156 {
+                    2
+                } else {
+                    1
+                },
                 elf_execution_model,
                 elf_interpreter: None,
                 dynamic_loader_cache: None,
@@ -1459,7 +1583,7 @@ impl LinuxArtifactSourceV1 {
             )?;
             if metadata.dev() != source.device_id
                 || metadata.ino() != source.inode
-                || metadata.uid() as u64 != source.owner_uid
+                || u64::from(artifact_canonical_owner_v1(metadata.uid())) != source.owner_uid
                 || metadata.len() != source.byte_length
                 || sha256 != source.sha256
                 || recomputed_support != source.runtime_support
@@ -1505,7 +1629,29 @@ impl LinuxArtifactSourceV1 {
             &manifest,
             "manifest_hash",
         )?;
+        let validate_named_executables = || -> Result<(), ConfigProjectionFailureV1> {
+            for (entry, held) in manifest.entries.iter().zip(&held_executables) {
+                let (named, metadata, sha256) =
+                    file_identity(&filesystem_root, &entry.configured_absolute_path)?;
+                let original = held
+                    .metadata()
+                    .map_err(|_| ConfigProjectionFailureV1::PartialPublication)?;
+                if metadata.dev() != original.dev()
+                    || metadata.ino() != original.ino()
+                    || metadata.dev() != entry.device_id
+                    || metadata.ino() != entry.inode
+                    || metadata.len() != entry.byte_length
+                    || sha256 != entry.sha256
+                {
+                    return Err(ConfigProjectionFailureV1::PartialPublication);
+                }
+                drop(named);
+            }
+            Ok(())
+        };
+        validate_named_executables()?;
         let result = publish(&manifest);
+        validate_named_executables()?;
         revalidate_absolute_directory_v1(&substrate_source_root)?;
         revalidate_absolute_directory_v1(&codex_source_root)?;
         revalidate_absolute_directory_v1(&held_system_config_mount_target)?;
@@ -1920,7 +2066,7 @@ impl LinuxArtifactSourceV1 {
         let root = OpenOptions::new()
             .read(true)
             .custom_flags(libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW)
-            .open("/")
+            .open(artifact_observed_root_v1())
             .map_err(|_| ConfigProjectionFailureV1::MissingPreparation)?;
         let open_directory =
             |parent: &File, name: &str| -> Result<File, ConfigProjectionFailureV1> {
@@ -1945,8 +2091,13 @@ impl LinuxArtifactSourceV1 {
             .metadata()
             .map_err(|_| ConfigProjectionFailureV1::UnsupportedSecurityPosture)?;
         if !metadata.is_dir()
-            || metadata.uid() != 0
-            || metadata.gid() != 0
+            || metadata.uid() != artifact_observed_owner_v1()
+            || metadata.gid()
+                != if artifact_observed_root_v1() == Path::new("/") {
+                    0
+                } else {
+                    unsafe { libc::getegid() }
+                }
             || metadata.mode() & 0o7777 != 0o755
             || metadata.dev()
                 != etc
@@ -2043,6 +2194,367 @@ mod tests {
     use super::*;
 
     #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "designated actual official pair import proof; requires SUBSTRATE_CODEX_0156_ARCHIVE_DIR"]
+    fn codex0156_actual_pair_import_rejects_missing_mixed_and_substituted_helpers() {
+        use crate::*;
+        use std::os::unix::fs::PermissionsExt;
+        fn sealed(
+            mut value: serde_json::Value,
+            domain: &str,
+            member: &str,
+            hash_field: &str,
+        ) -> serde_json::Value {
+            value.as_object_mut().unwrap().remove(hash_field);
+            let digest = ConfigProjectionCodecV1::domain_sha256(
+                "",
+                &json!({"domain": domain, member: value}),
+            )
+            .unwrap();
+            value[hash_field] = json!(digest);
+            value
+        }
+        fn write_json(path: &Path, value: &serde_json::Value) {
+            std::fs::write(
+                path,
+                ConfigProjectionCodecV1::encode_canonical_json(value).unwrap(),
+            )
+            .unwrap();
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o640)).unwrap();
+        }
+        fn source_store(
+            root: &Path,
+            stream: &str,
+            stream_name: &str,
+            build: serde_json::Value,
+            entries: Vec<serde_json::Value>,
+        ) {
+            std::fs::create_dir_all(root.join("records").join(stream_name)).unwrap();
+            std::fs::create_dir_all(root.join("heads")).unwrap();
+            std::fs::set_permissions(root, std::fs::Permissions::from_mode(0o750)).unwrap();
+            std::fs::write(root.join("lock"), []).unwrap();
+            std::fs::set_permissions(root.join("lock"), std::fs::Permissions::from_mode(0o640))
+                .unwrap();
+            let metadata = root.metadata().unwrap();
+            let store_id = format!("ias_{}", Uuid::now_v7());
+            let record_id = format!("iar_{}", Uuid::now_v7());
+            let now = "2026-10-25T12:00:00.000000Z";
+            let store = sealed(
+                json!({"schema_version":1,"source_store_id":store_id,"root":{"physical_path": root,"physical_identity":{"Linux":{"device_id":metadata.dev(),"inode":metadata.ino()}}},"created_at":now}),
+                "substrate.e3.installer-artifact-source-store.v1",
+                "store",
+                "store_hash",
+            );
+            write_json(&root.join("source-store.json"), &store);
+            let record = sealed(
+                json!({"schema_version":1,"source_store_id":store_id,"source_record_id":record_id,"source_stream":stream,"revision":1,"predecessor_ref":null,"build_input":build,"entries":entries,"created_at":now}),
+                "substrate.e3.installer-artifact-source-record.v1",
+                "record",
+                "record_hash",
+            );
+            write_json(
+                &root
+                    .join("records")
+                    .join(stream_name)
+                    .join(format!("{:020}-{record_id}.json", 1)),
+                &record,
+            );
+            let reference = json!({"source_store_id":store_id,"source_record_id":record_id,"revision":1,"record_hash":record["record_hash"]});
+            let head = sealed(
+                json!({"schema_version":1,"source_store_id":store_id,"source_stream":stream,"head_ref":reference,"head_revision":1,"predecessor_head_hash":null,"updated_at":now}),
+                "substrate.e3.installer-artifact-source-head.v1",
+                "head",
+                "head_hash",
+            );
+            write_json(
+                &root.join("heads").join(format!("{stream_name}.json")),
+                &head,
+            );
+        }
+        let archives = PathBuf::from(
+            std::env::var("SUBSTRATE_CODEX_0156_ARCHIVE_DIR")
+                .expect("actual pair proof requires retained artifacts"),
+        );
+        let fixture = tempfile::tempdir().unwrap();
+        let root = fixture.path();
+        ARTIFACT_FIXTURE_V1.with(|slot| *slot.borrow_mut() = Some(root.to_path_buf()));
+        struct Reset;
+        impl Drop for Reset {
+            fn drop(&mut self) {
+                ARTIFACT_FIXTURE_V1.with(|slot| *slot.borrow_mut() = None);
+            }
+        }
+        let _reset = Reset;
+        let physical = |path: &str| root.join(path.trim_start_matches('/'));
+        let pins = Codex0156ReleaseBundleV1::pinned();
+        for (name, path, pin) in [
+            ("extracted-main-codex", CODEX_0156_MAIN_PATH, &pins.main),
+            (
+                "extracted-code-mode-host",
+                CODEX_0156_HOST_PATH,
+                &pins.code_mode_host,
+            ),
+        ] {
+            let source = archives.join(name);
+            assert_eq!(
+                format!("{:x}", Sha256::digest(std::fs::read(&source).unwrap())),
+                pin.extracted_executable_sha256
+            );
+            let target = physical(path);
+            std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+            std::fs::copy(source, &target).unwrap();
+            std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o755)).unwrap();
+            LinuxArtifactSourceV1::validate_e3_static_elf_v1(&File::open(target).unwrap()).unwrap();
+        }
+        let mut elf = vec![0u8; 120];
+        elf[..16].copy_from_slice(b"\x7fELF\x02\x01\x01\0\0\0\0\0\0\0\0\0");
+        elf[16..18].copy_from_slice(&2u16.to_le_bytes());
+        elf[18..20].copy_from_slice(&62u16.to_le_bytes());
+        elf[20..24].copy_from_slice(&1u32.to_le_bytes());
+        elf[24..32].copy_from_slice(&0x400000u64.to_le_bytes());
+        elf[32..40].copy_from_slice(&64u64.to_le_bytes());
+        elf[52..54].copy_from_slice(&64u16.to_le_bytes());
+        elf[54..56].copy_from_slice(&56u16.to_le_bytes());
+        elf[56..58].copy_from_slice(&1u16.to_le_bytes());
+        elf[64..68].copy_from_slice(&1u32.to_le_bytes());
+        elf[68..72].copy_from_slice(&5u32.to_le_bytes());
+        elf[80..88].copy_from_slice(&0x400000u64.to_le_bytes());
+        elf[96..104].copy_from_slice(&120u64.to_le_bytes());
+        elf[104..112].copy_from_slice(&120u64.to_le_bytes());
+        elf[112..120].copy_from_slice(&0x1000u64.to_le_bytes());
+        for path in [
+            "/usr/local/lib/substrate/e3/substrate-gateway",
+            "/usr/local/lib/substrate/e3/substrate-world-entry",
+        ] {
+            let target = physical(path);
+            std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+            std::fs::write(&target, &elf).unwrap();
+            std::fs::set_permissions(target, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let support_paths = [
+            "/etc/hosts",
+            "/etc/nsswitch.conf",
+            "/etc/passwd",
+            "/etc/group",
+            "/etc/resolv.conf",
+            "/etc/ssl/certs/ca-certificates.crt",
+        ];
+        for path in support_paths {
+            let target = physical(path);
+            std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+            std::fs::write(target, path).unwrap();
+        }
+        std::fs::create_dir(physical("/etc/codex")).unwrap();
+        std::fs::set_permissions(
+            physical("/etc/codex"),
+            std::fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+        let file_identity = |path: &str| {
+            let file = physical(path);
+            let metadata = file.metadata().unwrap();
+            json!({"absolute_path":path,"device_id":metadata.dev(),"inode":metadata.ino(),"mode":metadata.mode()&0o7777,"byte_length":metadata.len(),"sha256":format!("{:x}",Sha256::digest(std::fs::read(file).unwrap()))})
+        };
+        let common = support_paths.map(file_identity);
+        let system = physical("/etc/codex").metadata().unwrap();
+        let support = |path: &str, host: Option<serde_json::Value>| {
+            let model = LinuxArtifactSourceV1::validate_e3_static_elf_v1(
+                &File::open(physical(path)).unwrap(),
+            )
+            .unwrap();
+            let mut value = json!({"schema_version":1,"support_policy_version":if host.is_some(){2}else{1},"elf_execution_model":model,"elf_interpreter":null,"dynamic_loader_cache":null,"ordered_elf_dependencies":[],"ordered_present_common_files":common,"system_config_mount_target":{"absolute_path":"/etc/codex","device_id":system.dev(),"inode":system.ino(),"mode":0o755,"owner_uid":0,"owner_gid":0,"ordered_entry_names":[]}});
+            if let Some(host) = host {
+                value["code_mode_host"] = host;
+            }
+            sealed(
+                value,
+                "substrate.e3.runtime-support-manifest.v1",
+                "manifest",
+                "manifest_hash",
+            )
+        };
+        let entry = |component: &str, path: &str, host: Option<serde_json::Value>| {
+            let file = file_identity(path);
+            sealed(
+                json!({"component":component,"installed_absolute_path":path,"device_id":file["device_id"],"inode":file["inode"],"file_type":"regular","mode":0o755,"owner_uid":0,"byte_length":file["byte_length"],"sha256":file["sha256"],"runtime_support":support(path,host)}),
+                "substrate.e3.installer-artifact-source-entry.v1",
+                "entry",
+                "entry_hash",
+            )
+        };
+        let substrate = physical("/var/lib/substrate/runtime-artifacts-v1");
+        let codex = physical("/var/lib/substrate/world-deps/runtime-artifacts-v1");
+        source_store(
+            &substrate,
+            "SubstrateSourceBuild",
+            "substrate-source-build",
+            json!({"SubstrateSourceBuild":{"source_commit":"1".repeat(40),"source_tree":"2".repeat(40),"cargo_lock_sha256":"3".repeat(64),"rustc_version":"fixture","target_triple":CODEX_0156_TARGET,"profile":"release"}}),
+            vec![
+                entry(
+                    "substrate-gateway",
+                    "/usr/local/lib/substrate/e3/substrate-gateway",
+                    None,
+                ),
+                entry(
+                    "substrate-world-entry",
+                    "/usr/local/lib/substrate/e3/substrate-world-entry",
+                    None,
+                ),
+            ],
+        );
+        // Execute the actual source publisher, then feed its exact output to
+        // the production importer. Only filesystem root/UID/GID/group observations
+        // are substituted; archive identities, bytes, schema and hashes are intact.
+        std::fs::create_dir_all(codex.join("records/codex-0.156.1-x86_64-unknown-linux-musl"))
+            .unwrap();
+        std::fs::create_dir_all(codex.join("heads")).unwrap();
+        std::fs::write(codex.join("lock"), []).unwrap();
+        std::fs::set_permissions(codex.join("lock"), std::fs::Permissions::from_mode(0o640))
+            .unwrap();
+        let publisher_source = include_str!("../../shell/src/builtins/world_deps/inventory.rs");
+        let publisher_source = &publisher_source[publisher_source
+            .find("pub(crate) fn render_codex_installer_artifact_source_v1")
+            .unwrap()..];
+        let python_start = publisher_source.find("<<'PY'\n").unwrap() + 7;
+        let python_end = publisher_source[python_start..].find("\nPY\"#").unwrap() + python_start;
+        let prelude = r#"
+import builtins, os, stat
+fixture_root=os.environ["SUBSTRATE_ARTIFACT_FIXTURE_ROOT"]
+def physical(path):
+    path=os.fspath(path)
+    if path.startswith(("/etc/","/var/lib/substrate/","/usr/local/lib/substrate/")):
+        return os.path.join(fixture_root,path.lstrip("/"))
+    return path
+original_stat=os.stat
+original_open=builtins.open
+original_listdir=os.listdir
+original_listxattr=os.listxattr
+def observed_stat(path,*args,**kwargs):
+    value=list(original_stat(physical(path),*args,**kwargs))
+    value[4]=0
+    value[5]=0
+    return os.stat_result(value)
+os.stat=observed_stat
+builtins.open=lambda path,*args,**kwargs:original_open(physical(path),*args,**kwargs)
+os.listdir=lambda path:original_listdir(physical(path))
+os.listxattr=lambda path,*args,**kwargs:original_listxattr(physical(path),*args,**kwargs)
+"#;
+        let program = format!(
+            "{prelude}{}",
+            publisher_source[python_start..python_end]
+                .replace("grp.getgrnam(\"substrate\").gr_gid", "os.getgid()")
+        );
+        let output = std::process::Command::new("python3")
+            .arg("-c")
+            .arg(program)
+            .env("SUBSTRATE_ARTIFACT_FIXTURE_ROOT", root)
+            .arg(&codex)
+            .arg(CODEX_0156_MAIN_PATH)
+            .args([
+                &pins.main.archive_name,
+                &pins.main.archive_url,
+                &pins.main.archive_sha256,
+                &pins.main.archive_entry_path,
+                &pins.main.extracted_executable_sha256,
+            ])
+            .arg(serde_json::to_string(&pins).unwrap())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "actual source publisher failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let authority = format!("cpa_{}", Uuid::now_v7());
+        let import = || {
+            LinuxArtifactSourceV1::import_manifest_core(
+                &substrate,
+                &codex,
+                &authority,
+                Timestamp("2026-10-25T12:00:00.000000Z".into()),
+                |manifest| Ok(manifest.clone()),
+            )
+        };
+        let (_, _, record) = LinuxArtifactSourceV1::validate_store(
+            &codex,
+            InstallerArtifactSourceStreamV1::Codex0156OfficialArchives,
+        )
+        .unwrap();
+        for mutation in 0..4 {
+            let mut changed = record.clone();
+            match mutation {
+                0 => {
+                    changed.entries.pop();
+                }
+                1 => {
+                    changed.entries.push(changed.entries[1].clone());
+                }
+                2 => {
+                    changed.entries.swap(0, 1);
+                }
+                _ => {
+                    if let InstallerArtifactBuildInputV1::Codex0156OfficialArchives(bundle) =
+                        &mut changed.build_input
+                    {
+                        bundle.version = "0.125.0".into();
+                    }
+                }
+            }
+            assert!(crate::codex_0156::validate_release_source_v1(&changed).is_err());
+        }
+        let imported = import().unwrap();
+        assert_eq!(imported.entries.len(), 4);
+        assert_eq!(
+            imported.entries[0].authority_role,
+            RuntimeArtifactAuthorityRoleV1::Codex0156
+        );
+        assert_eq!(
+            imported.entries[1].authority_role,
+            RuntimeArtifactAuthorityRoleV1::Codex0156CodeModeHost
+        );
+        assert_eq!(
+            imported.entries[0].installer_source_ref,
+            imported.entries[1].installer_source_ref
+        );
+        let host_path = physical(CODEX_0156_HOST_PATH);
+        let retained = physical("/held-host");
+        std::fs::rename(&host_path, &retained).unwrap();
+        assert!(import().is_err());
+        std::os::unix::fs::symlink(&retained, &host_path).unwrap();
+        assert!(import().is_err());
+        std::fs::remove_file(&host_path).unwrap();
+        std::fs::copy(&retained, &host_path).unwrap();
+        std::fs::set_permissions(&host_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(
+            import().is_err(),
+            "same bytes on a replacement inode must reject"
+        );
+        std::fs::remove_file(&host_path).unwrap();
+        std::fs::rename(&retained, &host_path).unwrap();
+        assert!(import().is_ok());
+        let changed_during_publication = LinuxArtifactSourceV1::import_manifest_core(
+            &substrate,
+            &codex,
+            &authority,
+            Timestamp("2026-10-25T12:00:00.000000Z".into()),
+            |_| {
+                std::fs::rename(&host_path, &retained).unwrap();
+                std::fs::copy(&retained, &host_path).unwrap();
+                std::fs::set_permissions(&host_path, std::fs::Permissions::from_mode(0o755))
+                    .unwrap();
+                Ok(())
+            },
+        );
+        assert!(
+            changed_during_publication.is_err(),
+            "post-publication named inode readback must reject substitution"
+        );
+        std::fs::remove_file(&host_path).unwrap();
+        std::fs::rename(&retained, &host_path).unwrap();
+        std::fs::write(&host_path, b"wrong helper").unwrap();
+        assert!(import().is_err());
+    }
+
     #[test]
     fn e3d_exact_ca_resolver_accepts_only_direct_or_observed_symlink_layouts() {
         use std::os::unix::fs::{symlink, PermissionsExt};

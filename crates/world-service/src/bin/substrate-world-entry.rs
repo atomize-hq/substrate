@@ -300,7 +300,13 @@ fn main() -> Result<()> {
         descriptors.fd("SUBSTRATE_WORLD_ENTRY_BINARY_FD")?,
         &input.executable_artifact,
         match descriptors.role {
-            WrapperRoleV1::Codex => ConfigProjectionArtifactRoleV1::Codex0125,
+            WrapperRoleV1::Codex => {
+                if input.executable_artifact.role == ConfigProjectionArtifactRoleV1::Codex0156 {
+                    ConfigProjectionArtifactRoleV1::Codex0156
+                } else {
+                    ConfigProjectionArtifactRoleV1::Codex0125
+                }
+            }
             WrapperRoleV1::ManagedGateway => ConfigProjectionArtifactRoleV1::ManagedGateway,
             WrapperRoleV1::ManagedGatewayReadinessProbe => unreachable!(),
         },
@@ -314,7 +320,14 @@ fn main() -> Result<()> {
         None
     };
 
+    let held_host = hold_code_mode_host_v1(&input.executable_artifact)?;
     let (namespace, retained_ca) = prepare_private_child_namespace(&descriptors, &input)?;
+    if let (Some(held), Some(expected)) = (
+        &held_host,
+        &input.executable_artifact.runtime_support.code_mode_host,
+    ) {
+        mount_code_mode_host_v1(held.as_raw_fd(), expected)?;
+    }
     let derived =
         apply_authenticated_world_fs_enforcement(&descriptors, &input, codex_plan.as_ref())?;
     drop(retained_ca);
@@ -681,6 +694,11 @@ fn apply_authenticated_world_fs_enforcement(
             .map(str::to_string),
         );
         support_read_paths.push(input.executable_artifact.configured_absolute_path.clone());
+        append_code_mode_host_support_paths_v1(
+            &input.executable_artifact,
+            &mut support_read_paths,
+            &mut support_execute_paths,
+        )?;
         support_write_paths.push("/dev/null".to_string());
     }
     if let Some(directory) = &input.private_realization {
@@ -1477,6 +1495,19 @@ fn validate_pinned_target_artifact_descriptor(
         bail!("pinned E3-D target artifact role or path mismatch");
     }
     match (&artifact.role, &artifact.provenance) {
+        (ConfigProjectionArtifactRoleV1::Codex0156, provenance)
+            if *provenance
+                == config_projection::Codex0156ReleaseBundleV1::pinned()
+                    .main
+                    .provenance()
+                && artifact.sha256
+                    == config_projection::Codex0156ReleaseBundleV1::pinned()
+                        .main
+                        .extracted_executable_sha256
+                && artifact.byte_length
+                    == config_projection::Codex0156ReleaseBundleV1::pinned()
+                        .main
+                        .extracted_byte_length => {}
         (
             ConfigProjectionArtifactRoleV1::Codex0125,
             RuntimeArtifactProvenanceV1::OfficialCodexRelease {
@@ -1592,6 +1623,123 @@ fn validate_artifact_descriptor_bytes(
     Ok(())
 }
 
+fn code_mode_host_support_path_v1(artifact: &DescriptorPinnedArtifactV1) -> Result<Option<String>> {
+    match (
+        artifact.role.clone(),
+        &artifact.runtime_support.code_mode_host,
+    ) {
+        (ConfigProjectionArtifactRoleV1::Codex0156, Some(host)) => {
+            host.validate()?;
+            if artifact.configured_absolute_path != config_projection::CODEX_0156_MAIN_PATH {
+                bail!("stock helper is not the exact main executable sibling");
+            }
+            Ok(Some(host.file.absolute_path.clone()))
+        }
+        (ConfigProjectionArtifactRoleV1::Codex0156, None) | (_, Some(_)) => {
+            bail!("missing or wrong-version stock code-mode host")
+        }
+        (_, None) => Ok(None),
+    }
+}
+
+fn append_code_mode_host_support_paths_v1(
+    artifact: &DescriptorPinnedArtifactV1,
+    read: &mut Vec<String>,
+    execute: &mut Vec<String>,
+) -> Result<()> {
+    if let Some(path) = code_mode_host_support_path_v1(artifact)? {
+        read.push(path.clone());
+        execute.push(path);
+    }
+    Ok(())
+}
+
+fn check_code_mode_host_descriptor_v1(
+    fd: RawFd,
+    expected: &config_projection::Codex0156CodeModeHostV1,
+    check_owner: bool,
+) -> Result<()> {
+    expected.validate()?;
+    let mut metadata: libc::stat = unsafe { zeroed() };
+    if unsafe { libc::fstat(fd, &mut metadata) } != 0 {
+        return Err(std::io::Error::last_os_error()).context("stat held stock code-mode host");
+    }
+    if metadata.st_mode & libc::S_IFMT != libc::S_IFREG
+        || metadata.st_nlink != 1
+        || metadata.st_dev != expected.file.device_id
+        || metadata.st_ino != expected.file.inode
+        || metadata.st_mode & 0o7777 != expected.file.mode
+        || (check_owner && metadata.st_uid != 0)
+        || metadata.st_size < 0
+        || metadata.st_size as u64 != expected.file.byte_length
+        || hash_descriptor(fd)? != expected.file.sha256
+        || unsafe { libc::flistxattr(fd, std::ptr::null_mut(), 0) } != 0
+    {
+        bail!("held stock code-mode host identity drifted");
+    }
+    let duplicated = unsafe { libc::fcntl(fd, libc::F_DUPFD_CLOEXEC, 3) };
+    if duplicated < 0 {
+        return Err(std::io::Error::last_os_error()).context("duplicate stock host");
+    }
+    let file = unsafe { File::from_raw_fd(duplicated) };
+    if LinuxArtifactSourceV1::validate_e3_static_elf_v1(&file)? != expected.elf_execution_model {
+        bail!("stock code-mode host ELF closure drifted");
+    }
+    Ok(())
+}
+
+fn hold_code_mode_host_v1(artifact: &DescriptorPinnedArtifactV1) -> Result<Option<OwnedFd>> {
+    let Some(path) = code_mode_host_support_path_v1(artifact)? else {
+        return Ok(None);
+    };
+    let expected = artifact
+        .runtime_support
+        .code_mode_host
+        .as_ref()
+        .context("stock host identity")?;
+    let held = open_absolute_beneath_root_no_symlinks(&path, libc::O_RDONLY, false)?;
+    check_code_mode_host_descriptor_v1(held.as_raw_fd(), expected, true)?;
+    Ok(Some(held))
+}
+
+fn mount_code_mode_host_v1(
+    held: RawFd,
+    expected: &config_projection::Codex0156CodeModeHostV1,
+) -> Result<()> {
+    // Owner UID was checked before entering the private user namespace. In this
+    // namespace that owner may be unmapped; all object/byte checks still apply.
+    check_code_mode_host_descriptor_v1(held, expected, false)?;
+    let target = open_absolute_beneath_root_no_symlinks(
+        &expected.file.absolute_path,
+        libc::O_RDONLY,
+        false,
+    )?;
+    check_code_mode_host_descriptor_v1(target.as_raw_fd(), expected, false)?;
+    let pid = std::process::id();
+    let source = format!("/proc/{pid}/fd/{held}");
+    let parent = open_absolute_beneath_root_no_symlinks(
+        "/var/lib/substrate/world-deps/codex-runtime/bin",
+        libc::O_RDONLY,
+        true,
+    )?;
+    let target_path = format!("/proc/{pid}/fd/{}/codex-code-mode-host", parent.as_raw_fd());
+    bind_mount(&source, &target_path, false)?;
+    bind_mount(&source, &target_path, true)?;
+    let mounted = open_absolute_beneath_root_no_symlinks(
+        &expected.file.absolute_path,
+        libc::O_RDONLY,
+        false,
+    )?;
+    check_code_mode_host_descriptor_v1(mounted.as_raw_fd(), expected, false)?;
+    let mut filesystem: libc::statvfs = unsafe { zeroed() };
+    if unsafe { libc::fstatvfs(mounted.as_raw_fd(), &mut filesystem) } != 0
+        || filesystem.f_flag & libc::ST_RDONLY == 0
+    {
+        bail!("stock code-mode host mount is not read-only");
+    }
+    Ok(())
+}
+
 fn validate_runtime_support_manifest(artifact: &DescriptorPinnedArtifactV1) -> Result<()> {
     let support = &artifact.runtime_support;
     if artifact.file_type != "regular"
@@ -1599,7 +1747,14 @@ fn validate_runtime_support_manifest(artifact: &DescriptorPinnedArtifactV1) -> R
         || artifact.owner_uid != 0
         || !is_lower_hex_sha256(&artifact.sha256)
         || support.schema_version != 1
-        || support.support_policy_version != 1
+        || support.support_policy_version
+            != if artifact.role == ConfigProjectionArtifactRoleV1::Codex0156 {
+                2
+            } else {
+                1
+            }
+        || (support.code_mode_host.is_some()
+            != (artifact.role == ConfigProjectionArtifactRoleV1::Codex0156))
         || support.elf_interpreter.is_some()
         || support.dynamic_loader_cache.is_some()
         || !support.ordered_elf_dependencies.is_empty()
@@ -1610,6 +1765,7 @@ fn validate_runtime_support_manifest(artifact: &DescriptorPinnedArtifactV1) -> R
     {
         bail!("pinned E3-D artifact runtime support manifest is malformed");
     }
+    code_mode_host_support_path_v1(artifact)?;
     validate_fixed_support_device("/dev/null", 1, 3)?;
     validate_fixed_support_device("/dev/urandom", 1, 9)?;
     let expected_paths = [
@@ -3733,8 +3889,19 @@ fn validate_codex_plan(
             != [
                 ".credentials.json".to_string(),
                 "auth.json".to_string(),
-                "cloud-requirements-cache.json".to_string(),
+                if input.executable_artifact.role == ConfigProjectionArtifactRoleV1::Codex0156 {
+                    "cloud-config-bundle-cache.json"
+                } else {
+                    "cloud-requirements-cache.json"
+                }
+                .to_string(),
             ]
+            .into_iter()
+            .chain(
+                (input.executable_artifact.role == ConfigProjectionArtifactRoleV1::Codex0156)
+                    .then(|| "models_cache.json".to_string()),
+            )
+            .collect::<Vec<_>>()
         || plan.output_last_message.mode != 0o600
         || plan.output_last_message.initial_byte_length != 0
         || plan.output_last_message.initial_sha256
@@ -4842,6 +5009,7 @@ fn main() {{
                 executable_sha256: "c".repeat(64),
             },
             runtime_support: config_projection::E3RuntimeSupportManifestV1 {
+                code_mode_host: None,
                 schema_version: 1,
                 support_policy_version: 1,
                 elf_execution_model: E3ElfExecutionModelV1::StaticExec,
@@ -4921,6 +5089,132 @@ fn main() {{
         )
         .unwrap();
         input
+    }
+
+    fn codex0156_support_fixture() -> DescriptorPinnedArtifactV1 {
+        let root = CanonicalDirectoryV1 {
+            physical_path: "/fixture".into(),
+            physical_identity: config_projection::DirectoryPhysicalIdentityV1::Linux {
+                device_id: 1,
+                inode: 2,
+            },
+        };
+        let mut artifact =
+            synthetic_wrapper_input(E3IsolatedChildRoleV1::Codex, &root).executable_artifact;
+        let pins = config_projection::Codex0156ReleaseBundleV1::pinned();
+        artifact.role = ConfigProjectionArtifactRoleV1::Codex0156;
+        artifact.configured_absolute_path = config_projection::CODEX_0156_MAIN_PATH.into();
+        artifact.provenance = pins.main.provenance();
+        artifact.sha256 = pins.main.extracted_executable_sha256;
+        artifact.byte_length = pins.main.extracted_byte_length;
+        artifact.runtime_support.support_policy_version = 2;
+        artifact.runtime_support.code_mode_host =
+            Some(config_projection::Codex0156CodeModeHostV1 {
+                file: RuntimeSupportFileV1 {
+                    absolute_path: config_projection::CODEX_0156_HOST_PATH.into(),
+                    device_id: 1,
+                    inode: 2,
+                    mode: 0o755,
+                    byte_length: pins.code_mode_host.extracted_byte_length,
+                    sha256: pins.code_mode_host.extracted_executable_sha256.clone(),
+                },
+                owner_uid: 0,
+                elf_execution_model: E3ElfExecutionModelV1::StaticExec,
+                provenance: pins.code_mode_host.provenance(),
+            });
+        artifact
+    }
+
+    #[test]
+    fn codex0156_support_is_one_exact_file_under_existing_envelope_one() {
+        let artifact = codex0156_support_fixture();
+        let mut read = Vec::new();
+        let mut execute = Vec::new();
+        append_code_mode_host_support_paths_v1(&artifact, &mut read, &mut execute).unwrap();
+        assert_eq!(read, [config_projection::CODEX_0156_HOST_PATH]);
+        assert_eq!(execute, read);
+        assert!(!execute.contains(&"/var/lib/substrate/world-deps/codex-runtime/bin".to_string()));
+        let root = CanonicalDirectoryV1 {
+            physical_path: "/fixture".into(),
+            physical_identity: config_projection::DirectoryPhysicalIdentityV1::Linux {
+                device_id: 1,
+                inode: 2,
+            },
+        };
+        let mut input = synthetic_wrapper_input(E3IsolatedChildRoleV1::Codex, &root);
+        input.executable_artifact = artifact.clone();
+        input.enforcement_input_hash = hash_omitting(
+            "substrate.e3.world-fs-enforcement-input.v1",
+            "input",
+            &input,
+            "enforcement_input_hash",
+        )
+        .unwrap();
+        validate_enforcement_input_hash(&input).unwrap();
+        input.support_policy_version = 2;
+        input.enforcement_input_hash = hash_omitting(
+            "substrate.e3.world-fs-enforcement-input.v1",
+            "input",
+            &input,
+            "enforcement_input_hash",
+        )
+        .unwrap();
+        assert!(validate_enforcement_input_hash(&input).is_err());
+        let mut mixed = artifact.clone();
+        mixed.role = ConfigProjectionArtifactRoleV1::Codex0125;
+        assert!(code_mode_host_support_path_v1(&mixed).is_err());
+        let mut missing = artifact.clone();
+        missing.runtime_support.code_mode_host = None;
+        assert!(code_mode_host_support_path_v1(&missing).is_err());
+        let mut wrong = artifact;
+        wrong
+            .runtime_support
+            .code_mode_host
+            .as_mut()
+            .unwrap()
+            .file
+            .absolute_path = "/tmp/codex-code-mode-host".into();
+        assert!(code_mode_host_support_path_v1(&wrong).is_err());
+    }
+
+    #[test]
+    #[ignore = "designated non-executing official helper descriptor proof; requires SUBSTRATE_CODEX_0156_ARCHIVE_DIR"]
+    fn codex0156_official_helper_descriptor_rejects_symlink_and_inode_replacement() {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        let directory = std::path::PathBuf::from(
+            std::env::var("SUBSTRATE_CODEX_0156_ARCHIVE_DIR")
+                .expect("official helper proof requires retained pair"),
+        );
+        let fixture = tempfile::tempdir().unwrap();
+        let path = fixture.path().join("host");
+        std::fs::copy(directory.join("extracted-code-mode-host"), &path).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let held = File::open(&path).unwrap();
+        let metadata = held.metadata().unwrap();
+        let mut artifact = codex0156_support_fixture();
+        let expected = artifact.runtime_support.code_mode_host.as_mut().unwrap();
+        expected.file.device_id = metadata.dev();
+        expected.file.inode = metadata.ino();
+        expected.elf_execution_model =
+            LinuxArtifactSourceV1::validate_e3_static_elf_v1(&held).unwrap();
+        check_code_mode_host_descriptor_v1(held.as_raw_fd(), expected, false).unwrap();
+        let retained = fixture.path().join("retained");
+        std::fs::rename(&path, &retained).unwrap();
+        std::os::unix::fs::symlink(&retained, &path).unwrap();
+        assert!(open_absolute_beneath_root_no_symlinks(
+            path.to_str().unwrap(),
+            libc::O_RDONLY,
+            false
+        )
+        .is_err());
+        std::fs::remove_file(&path).unwrap();
+        std::fs::copy(&retained, &path).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let replacement = File::open(&path).unwrap();
+        assert!(
+            check_code_mode_host_descriptor_v1(replacement.as_raw_fd(), expected, false).is_err()
+        );
+        check_code_mode_host_descriptor_v1(held.as_raw_fd(), expected, false).unwrap();
     }
 
     fn synthetic_descriptors(role: WrapperRoleV1, workspace: RawFd) -> LaunchDescriptorsV1 {
@@ -5466,6 +5760,13 @@ fn main() {{
                 send_namespace_setup_byte(parent.as_raw_fd(), USERNS_MAPPED).unwrap();
                 let mut parent = Some(parent);
                 if close_before_check {
+                    // Make terminal state explicit even if a concurrent fork inherited this socket.
+                    assert_eq!(
+                        unsafe {
+                            libc::shutdown(parent.as_ref().unwrap().as_raw_fd(), libc::SHUT_RDWR)
+                        },
+                        0
+                    );
                     drop(parent.take());
                 }
                 release.send(()).unwrap();
@@ -5477,6 +5778,12 @@ fn main() {{
                     );
                 } else {
                     result.unwrap();
+                }
+                if let Some(parent) = parent.as_ref() {
+                    assert_eq!(
+                        unsafe { libc::shutdown(parent.as_raw_fd(), libc::SHUT_RDWR) },
+                        0
+                    );
                 }
                 drop(parent);
                 let child = receiver.join().unwrap();
@@ -5586,7 +5893,10 @@ fn main() {{
                 receive_exact_pipe_gate(pipe[0], FINAL_EXEC_RELEASE).is_ok(),
                 accepted
             );
-            unsafe { libc::close(pipe[0]) };
+            if bytes.is_empty() {
+                // Empty input is rejected before read_bounded_eof closes the original.
+                unsafe { libc::close(pipe[0]) };
+            }
         }
     }
 

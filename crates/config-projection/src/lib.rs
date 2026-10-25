@@ -2,12 +2,14 @@
 
 mod codec;
 mod codex_0125;
+mod codex_0156;
 mod linux_artifacts;
 mod registry;
 mod service;
 
 pub use codec::ConfigProjectionCodecV1;
 pub use codex_0125::*;
+pub use codex_0156::*;
 pub use linux_artifacts::*;
 pub use registry::*;
 pub use service::*;
@@ -122,6 +124,8 @@ pub struct DescriptorPinnedArtifactV1 {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct E3RuntimeSupportManifestV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code_mode_host: Option<Codex0156CodeModeHostV1>,
     pub schema_version: u32,
     pub support_policy_version: u32,
     pub elf_execution_model: E3ElfExecutionModelV1,
@@ -179,6 +183,8 @@ pub struct RuntimeSupportDirectoryV1 {
 #[serde(deny_unknown_fields)]
 pub enum ConfigProjectionArtifactRoleV1 {
     Codex0125,
+    Codex0156,
+    Codex0156CodeModeHost,
     WorldEntryWrapper,
     ManagedGateway,
 }
@@ -315,6 +321,8 @@ pub struct RuntimeArtifactManifestEntryV1 {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum RuntimeArtifactAuthorityRoleV1 {
     Codex0125,
+    Codex0156,
+    Codex0156CodeModeHost,
     ManagedGateway,
     WorldEntryWrapper,
 }
@@ -357,10 +365,12 @@ pub struct InstallerArtifactSourceRecordV1 {
 pub enum InstallerArtifactSourceStreamV1 {
     SubstrateSourceBuild,
     Codex0125OfficialArchive,
+    Codex0156OfficialArchives,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum InstallerArtifactBuildInputV1 {
+    Codex0156OfficialArchives(Codex0156ReleaseBundleV1),
     SubstrateSourceBuild {
         source_commit: String,
         source_tree: String,
@@ -610,6 +620,8 @@ pub struct CodexAmbientConfigClosureV1 {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CodexLoaderSourceIdentityV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub codex_0156_sources: Option<Codex0156LoaderSourcesV1>,
     pub codex_version: String,
     pub upstream_tag: String,
     pub config_loader_source_sha256: String,

@@ -1,7 +1,7 @@
 **Kind:** contract
 **Stable ID:** `agent-config-projection-v1`
 **Status:** canonical specification; E3-A through E3-D landed; E3-E terminally complete and product landed; enclosing E3 incomplete; E3-F not admitted or dispatched
-**Canonical for:** E3 config-projection identity, record, reference, versioned member-dispatch carrier, persistence, validation, Codex 0.125 native rendering, compatibility, and D1 handoff boundaries
+**Canonical for:** E3 config-projection identity, record, reference, versioned member-dispatch carrier, persistence, validation, versioned Codex 0.125/0.156.1 native inputs, compatibility, and D1 handoff boundaries
 **Correction source baseline:** commit `81cfd33d4c5d16c31c837eeddff769995c566570`, tree `d40f6663a2aa01996ce8b4957f4aae0d30830961`, parent `138864a26dbc4721366c6cc8934d464d1929a189`
 **Landed prerequisite fact:** `E2-RM` is landed at `2012bb8b5562a73ed0ee45238c19252c16b25065`; that landing permits this documentation correction but is not an E3 runtime dependency
 **Supersedes:** only E3 planning statements that leave projection schema, persistence, versioning, Codex ambient-config closure, or the absent local `crates/codex` unresolved
@@ -24,6 +24,87 @@ Current packet status follows the
 [E3-E terminal closure](../slices/e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17)
 on the separate authority branch; E3-E's product landing does not integrate those branches or prove
 retained Codex/Active/resume. The historical recovery prose does not renew recovery dispatch.
+
+## Codex 0.156.1 component amendment
+
+This amendment adds a separate Codex `0.156.1` installer/artifact/native-input/support subject.
+The historical `Codex0125` roles, source records, renderer and canonical bytes below retain their
+0.125 meaning. It does not admit V2, complete E3-F, create retained parent/release/Active joins,
+or qualify an installed/protected native turn. The existing UAA `0.3.7` dependency and typed
+protocol/session/cancel/finality ownership remain unchanged. Its 0.125 runtime advertising is
+not rewritten: the ordinary installer independently selects the exact trusted156 pair.
+
+`Codex0156ReleaseBundleV1` authenticates the main and stock code-mode-host archives independently:
+
+| Component | Sole regular archive member | Archive SHA-256 | Extracted SHA-256 | Archive / extracted bytes |
+| --- | --- | --- | --- | --- |
+| Main | `codex-x86_64-unknown-linux-musl` | `aff46539a83aff86e3c62c592bce2c50d95391f9df289afaf03a50c01d14533d` | `0b2e9301d6100dddda3b9d5c80ebaeaa3a2f1962388f2f36f6b96a9f08b1f33f` | 107380357 / 284479848 |
+| Host | `codex-code-mode-host-x86_64-unknown-linux-musl` | `a929daa9f6a0bddc00c0c9e6402df117b125acd96f9d554f6c99c32c7e66c608` | `45ba654b0e145406f3316be4729b886980ce811aa2e3b6ed4e033dd41ab524f1` | 26176187 / 70603664 |
+
+Both use official `rust-v0.156.1` Linux x86_64 musl release URLs. Existing cache/checksum/member/
+extracted-hash staging handles both. A complete staged `bin` directory is renamed initially or
+atomically exchanged with the existing physical directory under the existing installer-source
+lock, then fsynced and read back. There is no `bin` symlink or per-file replacement interval.
+The installed world-deps root, package root and published bin directory have mode0755
+independently of the caller's umask; `/var/lib/substrate` remains the existing provisioner's
+searchable ancestor prerequisite. Unix directory-search permission is distinct from the exact-file
+Landlock execute grant. An exact retry retains both installed inodes. Failure after directory exchange may leave the
+old source head stale; imports reject that mismatch until a retry publishes the complete pair.
+The same existing source ledger publishes one `Codex0156OfficialArchives` record/head containing
+two ordered entries and both archive identities. Missing, extra, mixed, reordered or substituted
+companions reject. Ordinary import selects this stream and publishes four ordered authority
+entries: `Codex0156`, `Codex0156CodeModeHost`, gateway and world-entry. Historical125 source
+resolution remains available for independently necessary historical authority validation; new
+installer publication has no125 fallback.
+
+The main support manifest has `support_policy_version = 2` and a mandatory typed `code_mode_host`
+with exact sibling path `/var/lib/substrate/world-deps/codex-runtime/bin/codex-code-mode-host`,
+physical identity, root ownership/mode0755, length/hash, independently pinned provenance and static
+ELF model. The helper's own support manifest remains version1 without another companion.
+The optional field is omitted entirely from125 canonical serialization, and125 roles reject it.
+This artifact-support version is distinct from the existing enforcement-envelope
+`E3WorldFsEnforcementInputV1.support_policy_version`, which remains exactly1. Envelope2 is rejected.
+
+Main Codex, gateway and world-entry still execute their held descriptors through `execveat`.
+Only the stock host uses its native sibling pathname execution: the wrapper opens and verifies
+that exact helper before user-namespace setup, retains its descriptor, installs a descriptor-rooted
+read-only file bind in the private mount namespace, reopens the exact mounted name and checks
+identity, bytes, ELF and read-only mount state before confinement/release. The derived support
+rules add read and execute on that file only. They grant no parent-directory read/execute, PATH
+fallback, writable replacement, executable shim or new owner. Existing final-exec/parent gates,
+I1/I2 custody, independent leases, namespace-before-cgroup order and exclusion-last remain intact.
+
+`Codex0156ProjectionV1` has a distinct opaque plan, renderer schema2 and native/loader hash domains
+`substrate.e3.codex-0.156-native-config-projection.v1` and
+`substrate.e3.codex-0.156-loader-inputs.v1`. Source identity binds official commit
+`b412ff32c417f855c2b2d1581b77058eed87c84b`, tree
+`0a0b0bf9acf2f45e9239e7a52ef79f7702aa5799`, the moved config-loader/state/schema, exec, login
+storage and cloud-bundle sources, and builtin catalogue SHA-256
+`1892a933a420e79a30779ef5f1ce5b7dbc145464aa6fb1432106a9e9859981d3`.
+The source closure uses `cloud-config-bundle-cache.json` and separately proves `models_cache.json`
+absent at startup. Package-default/profile overrides remain absent on the fixed exec invocation;
+project layers remain disabled by the existing untrusted workspace configuration. Private source
+and realization readback remain independent of source hash assertions. New rendering preserves
+stock `features.code_mode_host` default true and the structured
+`features.code_mode_host.disable_in_process_fallback` default false by leaving these settings
+unspecified; it does not suppress native tools or choose a different model.
+
+Production effective/native alias `codex` and public gateway mapping `codex -> codex-mini-latest`
+remain unchanged. A named builtin `gpt-6-astra` catalogue fixture may establish source-level
+`code_mode_only`, supported high reasoning and default service-tier facts; it is not a production
+model selection or proof that alias `codex` resolves to that stock profile. A later real turn still
+needs an explicit native/public/provider model decision and runtime qualification. Existing
+`world-service/src/e3_config_projection_prepare.rs` producer/preparation still constructs125 roles
+and plans (source selection, rendering and identity assembly); this packet does not migrate that
+retained producer or admit its V2 path. No private,
+billed or live-provider calls are part of this component packet.
+
+Nonprivileged official-pair fixtures may substitute physical roots, UID/GID/group and temporary
+regular common-support observations while preserving trusted release pins/schema/hash checks.
+They prove installer/source publication, artifact-import and native/support components only.
+They do not qualify this host's installed CA layout, real mounts/Landlock/cgroups, main-host
+handshake, native tool completion or descendant cleanup. Official files are never executed by
+these tests. Images, skills and cloud feature projects remain deferred.
 
 ## Source-grounded correction
 

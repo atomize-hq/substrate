@@ -3127,6 +3127,7 @@ mod tests {
             Sha256::digest(std::fs::read(&installed_wrapper).unwrap())
         );
         let mut runtime_support = E3RuntimeSupportManifestV1 {
+            code_mode_host: None,
             schema_version: 1,
             support_policy_version: 1,
             elf_execution_model: LinuxArtifactSourceV1::validate_e3_static_elf_v1(&wrapper_file)
