@@ -183,13 +183,15 @@ Substrate Dev Uninstaller
 Removes development shims and helper files produced by dev-install-substrate.sh.
 
 Usage:
-  dev-uninstall-substrate.sh [--prefix <path>] [--profile <debug|release>] [--bin <path>] [--version-label <name>] [--kill-live-processes]
+  dev-uninstall-substrate.sh [--prefix <path>] [--profile <debug|release>] [--bin <path>] [--managed-source-root <path>] [--version-label <name>] [--kill-live-processes]
   dev-uninstall-substrate.sh --help
 
 Options:
   --prefix <path>        Installation prefix that was used during dev install (default: ~/.substrate)
   --profile <name>       Cargo profile whose binary should be used for shim removal
   --bin <path>           Explicit path to substrate binary to invoke for shim removal
+  --managed-source-root <path>
+                        Canonical prior dev checkout whose installed links may be removed
   --version-label <name> Version directory label used during dev install (default: dev)
   --kill-live-processes  Kill matching live dev owner-helper processes before removing files
   --remove-world-service Remove the Linux world-service systemd service (requires sudo)
@@ -198,7 +200,60 @@ Options:
 
 If neither --profile nor --bin is provided the script will look for
 `target/release/substrate` first, then `target/debug/substrate`.
+The binary lookup stays relative to this script's checkout. --managed-source-root
+only selects link/helper ownership; it requires a matching installed dev binary
+link and never selects a binary to execute from the prior checkout.
 USAGE
+}
+
+validate_managed_source_root() {
+  python3 - "$1" "${PREFIX}" <<'PY'
+import os
+from pathlib import Path
+import re
+import stat
+import sys
+
+try:
+    raw, prefix = sys.argv[1:]
+    root = Path(raw)
+    if (not raw or not root.is_absolute() or raw == "/"
+            or os.path.realpath(raw, strict=True) != raw or not root.is_dir()):
+        raise ValueError()
+    # Recognize a dev checkout, without executing any code from that checkout.
+    for relative in ("Cargo.toml", "Cargo.lock", "src/main.rs",
+                     "scripts/substrate/dev-install-substrate.sh",
+                     "scripts/substrate/dev-uninstall-substrate.sh"):
+        path = root / relative
+        if not stat.S_ISREG(path.lstat().st_mode) or os.path.realpath(path, strict=True) != str(path):
+            raise ValueError()
+    metadata = root / ".git"
+    if metadata.is_symlink() or not (metadata.is_file() or metadata.is_dir()):
+        raise ValueError()
+    manifest = (root / "Cargo.toml").read_text()
+    if not re.search(r'(?m)^name\s*=\s*"substrate"\s*$', manifest) or "[workspace]" not in manifest:
+        raise ValueError()
+    installed_bin = Path(prefix) / "bin"
+    if not installed_bin.is_dir() or os.path.realpath(installed_bin, strict=True) != str(installed_bin):
+        raise ValueError()
+    # A directory resembling a checkout is insufficient authority. Require a
+    # user-owned, fixed-name installed dev link to an exact debug/release target.
+    names = ("substrate", "substrate-shim", "substrate-forwarder", "substrate-gateway",
+             "host-proxy", "world-service", "substrate-world-service")
+    for name in names:
+        for suffix in ("", ".exe"):
+            link = installed_bin / (name + suffix)
+            if not link.is_symlink() or link.lstat().st_uid != os.geteuid():
+                continue
+            target_name = "world-service" if name == "substrate-world-service" else name
+            if os.readlink(link) in {str(root / "target" / profile / (target_name + suffix))
+                                    for profile in ("debug", "release")}:
+                sys.exit(0)
+    raise ValueError()
+except (OSError, ValueError):
+    print("invalid managed source root or missing matching installed dev link", file=sys.stderr)
+    sys.exit(1)
+PY
 }
 
 run_privileged() {
@@ -310,7 +365,7 @@ remove_managed_symlink() {
     return 1
   fi
   case "${target}" in
-    "${REPO_ROOT}"/*)
+    "${MANAGED_SOURCE_ROOT}"/*)
       rm -f "${path}"
       log "Removing managed symlink ${path}"
       return 0
@@ -598,8 +653,8 @@ kill_live_dev_owner_helpers() {
     [[ "${cmd}" == *" agent __owner-helper "* ]] || continue
 
     case "${cmd}" in
-      "${REPO_ROOT}/target/debug/substrate "*|\
-      "${REPO_ROOT}/target/release/substrate "*|\
+      "${MANAGED_SOURCE_ROOT}/target/debug/substrate "*|\
+      "${MANAGED_SOURCE_ROOT}/target/release/substrate "*|\
       "${PREFIX%/}/bin/substrate "*|\
       "${VERSION_DIR}/substrate "*)
         candidate_pids+=("${pid}")
@@ -648,6 +703,8 @@ PREFIX_DECLARED=0
 INSTALL_BOOTSTRAP_CONTEXT_V1=""
 PROFILE=""
 SUBSTRATE_BIN=""
+MANAGED_SOURCE_ROOT=""
+MANAGED_SOURCE_ROOT_DECLARED=0
 VERSION_LABEL="dev"
 KILL_LIVE_PROCESSES=0
 REMOVE_WORLD_SERVICE=0
@@ -692,6 +749,12 @@ while [[ $# -gt 0 ]]; do
       SUBSTRATE_BIN="$2"
       shift 2
       ;;
+    --managed-source-root)
+      [[ $# -ge 2 ]] || fatal "--managed-source-root requires a value"
+      MANAGED_SOURCE_ROOT="$2"
+      MANAGED_SOURCE_ROOT_DECLARED=1
+      shift 2
+      ;;
     --version-label)
       [[ $# -ge 2 ]] || fatal "--version-label requires a value"
       VERSION_LABEL="$2"
@@ -734,6 +797,11 @@ ENV_FILE="${PREFIX%/}/dev-shim-env.sh"
 TRACE_LOG_PATH="${PREFIX%/}/trace.jsonl"
 RUN_DIR="${PREFIX%/}/run"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+if [[ "${MANAGED_SOURCE_ROOT_DECLARED}" -eq 1 ]]; then
+  validate_managed_source_root "${MANAGED_SOURCE_ROOT}" || fatal "Unable to select managed source root."
+else
+  MANAGED_SOURCE_ROOT="${REPO_ROOT}"
+fi
 MANAGED_STATE_DIR="${PREFIX%/}/.dev-install-managed"
 MANAGED_MAC_LINUX_BINARIES_PATH="${MANAGED_STATE_DIR}/mac-linux-binaries.txt"
 
@@ -827,7 +895,7 @@ fi
 
 if [[ -d "${BIN_DIR}" ]]; then
   log "Cleaning dev symlinks in ${BIN_DIR}"
-  for binary in substrate substrate-shim substrate-forwarder host-proxy world-service substrate-world-service; do
+  for binary in substrate substrate-shim substrate-forwarder substrate-gateway host-proxy world-service substrate-world-service; do
     for candidate in "${binary}" "${binary}.exe"; do
       target_path="${BIN_DIR}/${candidate}"
       if remove_managed_symlink "${target_path}"; then
@@ -857,6 +925,7 @@ if [[ -d "${BIN_LINUX_DIR}" ]]; then
   remove_managed_prefix_linux_binary_copies "${MANAGED_MAC_LINUX_BINARIES_PATH}"
   remove_managed_symlink "${BIN_LINUX_DIR}/substrate" || true
   remove_managed_symlink "${BIN_LINUX_DIR}/world-service" || true
+  remove_managed_symlink "${BIN_LINUX_DIR}/substrate-gateway" || true
   rmdir "${BIN_LINUX_DIR}" 2>/dev/null || true
 fi
 rmdir "${BIN_DIR}" 2>/dev/null || true
@@ -928,6 +997,8 @@ collect_protected_paths \
   "${BIN_DIR}/substrate-shim.exe" \
   "${BIN_DIR}/substrate-forwarder" \
   "${BIN_DIR}/substrate-forwarder.exe" \
+  "${BIN_DIR}/substrate-gateway" \
+  "${BIN_DIR}/substrate-gateway.exe" \
   "${BIN_DIR}/host-proxy" \
   "${BIN_DIR}/host-proxy.exe" \
   "${BIN_DIR}/world-service" \
@@ -941,7 +1012,8 @@ collect_protected_paths \
   "${RUNTIME_SCRIPTS_DIR}/mac/lima/substrate.yaml" \
   "${RUNTIME_SCRIPTS_DIR}/mac/lima/substrate-dev.yaml" \
   "${BIN_LINUX_DIR}/substrate" \
-  "${BIN_LINUX_DIR}/world-service"
+  "${BIN_LINUX_DIR}/world-service" \
+  "${BIN_LINUX_DIR}/substrate-gateway"
 
 if [[ "${#PROTECTED_PATHS[@]}" -gt 0 ]]; then
   report_protected_paths

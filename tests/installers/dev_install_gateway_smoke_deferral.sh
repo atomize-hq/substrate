@@ -121,9 +121,10 @@ else:
                         'SUBSTRATE_INSTALL_PRIMARY_USER': account,
                         'SUBSTRATE_INSTALL_PRIMARY_UID': uid,
                         'SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1': carrier}
-    for skip in (False, True):
+    for profile, skip in ((profile, skip) for profile in ('debug', 'release')
+                          for skip in (False, True)):
         for netfilter, noninteractive in ((False, '0'), (True, '1')):
-            args = ['--prefix', selected_prefix, '--profile', 'release',
+            args = ['--prefix', selected_prefix, '--profile', profile,
                     '--install-bootstrap-context-v1', carrier]
             if skip:
                 args += ['--skip-gateway-smoke']
@@ -137,14 +138,15 @@ else:
             assert [call['command'] for call in calls] == ['python3', 'provision'], calls
             assert calls[0]['args'] == ['-', '1', selected_prefix, carrier], calls[0]
             expected_args = ['--home', selected_prefix, '--install-bootstrap-context-v1', carrier,
-                             '--profile', 'release', '--skip-build']
+                             '--profile', profile]
             if skip:
                 expected_args += ['--skip-gateway-smoke']
             if netfilter:
                 expected_args += ['--world-netfilter', '--sudo-noninteractive']
             assert calls[1]['args'] == expected_args, calls[1]
+            assert '--skip-build' not in calls[1]['args'], calls[1]
             assert calls[1]['context'] == expected_context, calls[1]
-            print('PASS exact args/bootstrap forwarding:', 'deferred' if skip else 'default',
+            print('PASS exact args/bootstrap forwarding:', profile, 'deferred' if skip else 'default',
                   'netfilter/noninteractive' if netfilter else 'ordinary')
 print('PASS dev installer gateway smoke deferral focused tests')
 PY

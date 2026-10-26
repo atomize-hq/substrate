@@ -2863,7 +2863,6 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
           --home "${PREFIX}"
           --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}"
           --profile "${PROFILE}"
-          --skip-build
         )
 	    if [[ "${SKIP_GATEWAY_SMOKE}" -eq 1 ]]; then
 	      provision_args+=(--skip-gateway-smoke)

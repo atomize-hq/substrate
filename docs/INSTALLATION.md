@@ -328,6 +328,17 @@ source ~/.substrate/dev-shim-env.sh                          # refresh PATH/SHIM
 scripts/substrate/dev-uninstall-substrate.sh
 ```
 
+When replacing a dev installation owned by a different checkout, run the current
+uninstaller with `--managed-source-root /absolute/path/to/prior/checkout` and the
+same `--prefix` used by that installation. The prior path must be canonical and
+retain the Substrate dev layout; an existing user-owned installed binary symlink
+must point to its exact `target/debug` or `target/release` path. Missing build
+targets are allowed. This selects managed link and owner-helper cleanup only;
+shim removal still uses the current checkout's binary or explicit `--bin`.
+Foreign links and regular files remain protected, including `substrate-gateway`.
+Use `--remove-world-service` when intentionally removing the Linux service too;
+host group/linger cleanup remains a separate opt-in.
+
 These scripts build `substrate`, `substrate-shim`, `substrate-forwarder`,
 `host-proxy`, `substrate-gateway`, and (on supported platforms) `world-service`,
 symlink them into `~/.substrate/bin`, and deploy shim wrappers that point back to
