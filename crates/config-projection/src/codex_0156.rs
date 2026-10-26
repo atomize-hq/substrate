@@ -28,114 +28,11 @@ impl Codex0156ProjectionV1 {
     pub fn validate_loader_inputs(
         closure: &crate::CodexAmbientConfigClosureV1,
     ) -> Result<(), crate::ConfigProjectionFailureV1> {
-        use crate::{CodexLoaderInputDispositionV1 as D, ConfigProjectionFailureV1 as F};
+        use crate::ConfigProjectionFailureV1 as F;
         if closure.loader_source != pinned_loader_source_v1() {
             return Err(F::UnsupportedRuntimeVersion);
         }
-        if closure.allowed_enabled_layers != ["System", "User"]
-            || closure.forbidden_cli_overrides
-                != [
-                    "--config",
-                    "--ignore-rules",
-                    "--ignore-user-config",
-                    "--model",
-                    "--oss",
-                    "--profile",
-                    "-c",
-                ]
-        {
-            return Err(F::UnsupportedPolicySurface);
-        }
-        let mut expected = Vec::new();
-        for layer in ["System", "User"] {
-            for path in [
-                "config.toml",
-                "managed_config.toml",
-                "requirements.toml",
-                "rules",
-                "skills",
-            ] {
-                expected.push((
-                    layer,
-                    path,
-                    if layer == "User" && path == "config.toml" {
-                        D::Projected
-                    } else {
-                        D::ProvenAbsent
-                    },
-                ));
-            }
-        }
-        for path in [".codex/config.toml", ".codex/rules", ".codex/skills"] {
-            expected.push(("Project", path, D::DisabledByTrust));
-        }
-        expected.extend([
-            (
-                "McpCredentials",
-                ".credentials.json",
-                D::DisabledByEmptyMcpSetAndProvenAbsent,
-            ),
-            (
-                "Auth",
-                "auth.json",
-                D::DisabledByEphemeralCredentialStoreAndProvenAbsent,
-            ),
-            (
-                "CloudRequirements",
-                "cloud-config-bundle-cache.json",
-                D::DisabledByNoEphemeralAuthAndProvenAbsent,
-            ),
-            ("ModelsCache", "models_cache.json", D::ProvenAbsent),
-        ]);
-        if closure.inputs.len() != expected.len() {
-            return Err(F::WrongBinding);
-        }
-        for (input, (layer, path, disposition)) in closure.inputs.iter().zip(expected) {
-            if input.layer != layer
-                || input.relative_path != path
-                || input.disposition != disposition
-                || input.locator
-                    != format!(
-                        "{}/{}",
-                        input.directory.physical_path.trim_end_matches('/'),
-                        path
-                    )
-                || !matches!(
-                    input.directory.physical_identity,
-                    crate::DirectoryPhysicalIdentityV1::Linux {
-                        device_id: 1..,
-                        inode: 1..
-                    }
-                )
-            {
-                return Err(F::WrongBinding);
-            }
-            let present = [
-                input.device_id.is_some(),
-                input.inode.is_some(),
-                input.byte_length.is_some(),
-                input.sha256.is_some(),
-            ];
-            if (disposition == D::Projected && present != [true; 4])
-                || (disposition == D::DisabledByTrust
-                    && present != [true; 4]
-                    && present != [false; 4])
-                || (!matches!(disposition, D::Projected | D::DisabledByTrust)
-                    && present != [false; 4])
-                || input.device_id == Some(0)
-                || input.inode == Some(0)
-            {
-                return Err(F::WrongBinding);
-            }
-        }
-        if crate::ConfigProjectionCodecV1::domain_sha256(
-            "substrate.e3.codex-0.156-loader-inputs.v1",
-            &serde_json::json!({"inputs":closure.inputs,"loader_source":closure.loader_source}),
-        )? != closure.validated_loader_input_fingerprint
-        {
-            return Err(F::HashInvalid);
-        }
-        Ok(())
+        validate_stock_loader_shape_v1(closure, "substrate.e3.codex-0.156-loader-inputs.v1")
     }
 
     pub fn render(
@@ -359,6 +256,7 @@ pub(crate) fn validate_release_source_v1(
 
 pub(crate) fn pinned_loader_source_v1() -> crate::CodexLoaderSourceIdentityV1 {
     crate::CodexLoaderSourceIdentityV1 {
+        release_binding: None,
         codex_version: CODEX_0156_VERSION.to_string(),
         upstream_tag: "rust-v0.156.1".to_string(),
         validator_schema_version: 2,
@@ -464,5 +362,132 @@ pub(crate) fn pinned_loader_source_v1() -> crate::CodexLoaderSourceIdentityV1 {
             models_cache_filename: "models_cache.json".to_string(),
             cloud_cache_filename: "cloud-config-bundle-cache.json".to_string(),
         }),
+    }
+}
+
+pub(crate) fn validate_stock_loader_shape_v1(
+    closure: &crate::CodexAmbientConfigClosureV1,
+    domain: &str,
+) -> Result<(), crate::ConfigProjectionFailureV1> {
+    use crate::{CodexLoaderInputDispositionV1 as D, ConfigProjectionFailureV1 as F};
+    if closure.allowed_enabled_layers != ["System", "User"]
+        || closure.forbidden_cli_overrides
+            != [
+                "--config",
+                "--ignore-rules",
+                "--ignore-user-config",
+                "--model",
+                "--oss",
+                "--profile",
+                "-c",
+            ]
+    {
+        return Err(F::UnsupportedPolicySurface);
+    }
+    let mut expected = Vec::new();
+    for layer in ["System", "User"] {
+        for path in [
+            "config.toml",
+            "managed_config.toml",
+            "requirements.toml",
+            "rules",
+            "skills",
+        ] {
+            expected.push((
+                layer,
+                path,
+                if layer == "User" && path == "config.toml" {
+                    D::Projected
+                } else {
+                    D::ProvenAbsent
+                },
+            ));
+        }
+    }
+    for path in [".codex/config.toml", ".codex/rules", ".codex/skills"] {
+        expected.push(("Project", path, D::DisabledByTrust));
+    }
+    expected.extend([
+        (
+            "McpCredentials",
+            ".credentials.json",
+            D::DisabledByEmptyMcpSetAndProvenAbsent,
+        ),
+        (
+            "Auth",
+            "auth.json",
+            D::DisabledByEphemeralCredentialStoreAndProvenAbsent,
+        ),
+        (
+            "CloudRequirements",
+            "cloud-config-bundle-cache.json",
+            D::DisabledByNoEphemeralAuthAndProvenAbsent,
+        ),
+        ("ModelsCache", "models_cache.json", D::ProvenAbsent),
+    ]);
+    if closure.inputs.len() != expected.len() {
+        return Err(F::WrongBinding);
+    }
+    for (input, (layer, path, disposition)) in closure.inputs.iter().zip(expected) {
+        if input.layer != layer
+            || input.relative_path != path
+            || input.disposition != disposition
+            || input.locator
+                != format!(
+                    "{}/{}",
+                    input.directory.physical_path.trim_end_matches('/'),
+                    path
+                )
+            || !matches!(
+                input.directory.physical_identity,
+                crate::DirectoryPhysicalIdentityV1::Linux {
+                    device_id: 1..,
+                    inode: 1..
+                }
+            )
+        {
+            return Err(F::WrongBinding);
+        }
+        let present = [
+            input.device_id.is_some(),
+            input.inode.is_some(),
+            input.byte_length.is_some(),
+            input.sha256.is_some(),
+        ];
+        if (disposition == D::Projected && present != [true; 4])
+            || (disposition == D::DisabledByTrust && present != [true; 4] && present != [false; 4])
+            || (!matches!(disposition, D::Projected | D::DisabledByTrust) && present != [false; 4])
+            || input.device_id == Some(0)
+            || input.inode == Some(0)
+        {
+            return Err(F::WrongBinding);
+        }
+    }
+    if crate::ConfigProjectionCodecV1::domain_sha256(
+        domain,
+        &serde_json::json!({"inputs":closure.inputs,"loader_source":closure.loader_source}),
+    )? != closure.validated_loader_input_fingerprint
+    {
+        return Err(F::HashInvalid);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod frozen_identity_tests {
+    use super::*;
+    use sha2::{Digest, Sha256};
+    #[test]
+    fn historical_0156_loader_bytes_are_unchanged() {
+        let bytes =
+            crate::ConfigProjectionCodecV1::encode_canonical_json(&pinned_loader_source_v1())
+                .unwrap();
+        assert_eq!(
+            format!("{:x}", Sha256::digest(&bytes)),
+            "219804de6f27174b114d31ff8a0062f075b0d6f781b54805811ff7db9336a86f"
+        );
+        assert!(!std::str::from_utf8(&bytes)
+            .unwrap()
+            .contains("release_binding"));
     }
 }

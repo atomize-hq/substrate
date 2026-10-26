@@ -92,6 +92,8 @@ impl LaunchDescriptorsV1 {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct E3CodexLaunchPlanV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    release_binding: Option<config_projection::CodexReleaseBindingV1>,
     schema_version: u32,
     authority_store_id: String,
     series_id: String,
@@ -301,7 +303,11 @@ fn main() -> Result<()> {
         &input.executable_artifact,
         match descriptors.role {
             WrapperRoleV1::Codex => {
-                if input.executable_artifact.role == ConfigProjectionArtifactRoleV1::Codex0156 {
+                if input.executable_artifact.role == ConfigProjectionArtifactRoleV1::CodexMain {
+                    ConfigProjectionArtifactRoleV1::CodexMain
+                } else if input.executable_artifact.role
+                    == ConfigProjectionArtifactRoleV1::Codex0156
+                {
                     ConfigProjectionArtifactRoleV1::Codex0156
                 } else {
                     ConfigProjectionArtifactRoleV1::Codex0125
@@ -1483,6 +1489,49 @@ fn validate_self_artifact_descriptor(
     Ok(())
 }
 
+// Private test observation boundary: production paths and root ownership remain fixed.
+#[cfg(test)]
+thread_local! { static CODEX_COMPONENT_FIXTURE_ROOT_V1: std::cell::RefCell<Option<std::path::PathBuf>> = const { std::cell::RefCell::new(None) }; }
+fn codex_observed_path_v1(path: &str) -> String {
+    #[cfg(test)]
+    if let Some(root) = CODEX_COMPONENT_FIXTURE_ROOT_V1.with(|r| r.borrow().clone()) {
+        if path.starts_with("/etc/")
+            || path.starts_with("/var/lib/substrate/")
+            || path.starts_with("/usr/local/lib/substrate/")
+        {
+            return root
+                .join(path.trim_start_matches('/'))
+                .to_string_lossy()
+                .into_owned();
+        }
+    }
+    path.to_string()
+}
+fn codex_observed_owner_v1(owner: u32, group: bool) -> u64 {
+    #[cfg(test)]
+    if CODEX_COMPONENT_FIXTURE_ROOT_V1.with(|r| r.borrow().is_some())
+        && owner
+            == unsafe {
+                if group {
+                    libc::getegid()
+                } else {
+                    libc::geteuid()
+                }
+            }
+    {
+        return 0;
+    }
+    let _ = group;
+    u64::from(owner)
+}
+fn codex_ca_root_v1() -> Result<(File, u32)> {
+    #[cfg(test)]
+    if let Some(root) = CODEX_COMPONENT_FIXTURE_ROOT_V1.with(|r| r.borrow().clone()) {
+        return Ok((File::open(root)?, unsafe { libc::geteuid() }));
+    }
+    Ok((File::open("/")?, 0))
+}
+
 fn validate_pinned_target_artifact_descriptor(
     fd: RawFd,
     artifact: &DescriptorPinnedArtifactV1,
@@ -1495,6 +1544,13 @@ fn validate_pinned_target_artifact_descriptor(
         bail!("pinned E3-D target artifact role or path mismatch");
     }
     match (&artifact.role, &artifact.provenance) {
+        (ConfigProjectionArtifactRoleV1::CodexMain, provenance) => {
+            let release = config_projection::codex_release_from_provenance_v1(
+                provenance,
+                config_projection::CodexReleaseArtifactRoleV1::Main,
+            )?;
+            release.validate_main(artifact)?;
+        }
         (ConfigProjectionArtifactRoleV1::Codex0156, provenance)
             if *provenance
                 == config_projection::Codex0156ReleaseBundleV1::pinned()
@@ -1570,7 +1626,7 @@ fn validate_artifact_descriptor_bytes(
     if stat.st_mode & libc::S_IFMT != libc::S_IFREG
         || stat.st_mode & 0o7777 != artifact.mode
         || stat.st_mode & (libc::S_ISUID | libc::S_ISGID) != 0
-        || stat.st_uid as u64 != artifact.owner_uid
+        || codex_observed_owner_v1(stat.st_uid, false) != artifact.owner_uid
         || stat.st_dev != artifact.device_id
         || stat.st_ino != artifact.inode
         || stat.st_size < 0
@@ -1628,6 +1684,14 @@ fn code_mode_host_support_path_v1(artifact: &DescriptorPinnedArtifactV1) -> Resu
         artifact.role.clone(),
         &artifact.runtime_support.code_mode_host,
     ) {
+        (ConfigProjectionArtifactRoleV1::CodexMain, Some(host)) => {
+            let release = config_projection::codex_release_from_provenance_v1(
+                &artifact.provenance,
+                config_projection::CodexReleaseArtifactRoleV1::Main,
+            )?;
+            release.validate_main(artifact)?;
+            Ok(Some(host.file.absolute_path.clone()))
+        }
         (ConfigProjectionArtifactRoleV1::Codex0156, Some(host)) => {
             host.validate()?;
             if artifact.configured_absolute_path != config_projection::CODEX_0156_MAIN_PATH {
@@ -1635,7 +1699,11 @@ fn code_mode_host_support_path_v1(artifact: &DescriptorPinnedArtifactV1) -> Resu
             }
             Ok(Some(host.file.absolute_path.clone()))
         }
-        (ConfigProjectionArtifactRoleV1::Codex0156, None) | (_, Some(_)) => {
+        (
+            ConfigProjectionArtifactRoleV1::Codex0156 | ConfigProjectionArtifactRoleV1::CodexMain,
+            None,
+        )
+        | (_, Some(_)) => {
             bail!("missing or wrong-version stock code-mode host")
         }
         (_, None) => Ok(None),
@@ -1659,7 +1727,7 @@ fn check_code_mode_host_descriptor_v1(
     expected: &config_projection::Codex0156CodeModeHostV1,
     check_owner: bool,
 ) -> Result<()> {
-    expected.validate()?;
+    config_projection::validate_codex_host_identity_v1(expected)?;
     let mut metadata: libc::stat = unsafe { zeroed() };
     if unsafe { libc::fstat(fd, &mut metadata) } != 0 {
         return Err(std::io::Error::last_os_error()).context("stat held stock code-mode host");
@@ -1669,7 +1737,7 @@ fn check_code_mode_host_descriptor_v1(
         || metadata.st_dev != expected.file.device_id
         || metadata.st_ino != expected.file.inode
         || metadata.st_mode & 0o7777 != expected.file.mode
-        || (check_owner && metadata.st_uid != 0)
+        || (check_owner && codex_observed_owner_v1(metadata.st_uid, false) != 0)
         || metadata.st_size < 0
         || metadata.st_size as u64 != expected.file.byte_length
         || hash_descriptor(fd)? != expected.file.sha256
@@ -1748,13 +1816,19 @@ fn validate_runtime_support_manifest(artifact: &DescriptorPinnedArtifactV1) -> R
         || !is_lower_hex_sha256(&artifact.sha256)
         || support.schema_version != 1
         || support.support_policy_version
-            != if artifact.role == ConfigProjectionArtifactRoleV1::Codex0156 {
+            != if artifact.role == ConfigProjectionArtifactRoleV1::CodexMain {
+                3
+            } else if artifact.role == ConfigProjectionArtifactRoleV1::Codex0156 {
                 2
             } else {
                 1
             }
         || (support.code_mode_host.is_some()
-            != (artifact.role == ConfigProjectionArtifactRoleV1::Codex0156))
+            != matches!(
+                artifact.role,
+                ConfigProjectionArtifactRoleV1::Codex0156
+                    | ConfigProjectionArtifactRoleV1::CodexMain
+            ))
         || support.elf_interpreter.is_some()
         || support.dynamic_loader_cache.is_some()
         || !support.ordered_elf_dependencies.is_empty()
@@ -1787,8 +1861,8 @@ fn validate_runtime_support_manifest(artifact: &DescriptorPinnedArtifactV1) -> R
             bail!("pinned E3-D artifact common support path mismatch");
         }
         let file = if expected_path == "/etc/ssl/certs/ca-certificates.crt" {
-            let root = File::open("/").context("open root for E3-D CA validation")?;
-            resolve_exact_e3_ca_bundle_v1(root.as_raw_fd(), 0)?
+            let (root, owner) = codex_ca_root_v1().context("open root for E3-D CA validation")?;
+            resolve_exact_e3_ca_bundle_v1(root.as_raw_fd(), owner)?
         } else {
             open_absolute_beneath_root_no_symlinks(expected_path, libc::O_RDONLY, false)
                 .with_context(|| format!("open E3-D support file {expected_path}"))?
@@ -1852,8 +1926,8 @@ fn validate_runtime_support_manifest(artifact: &DescriptorPinnedArtifactV1) -> R
         || system_metadata.st_dev != system.device_id
         || system_metadata.st_ino != system.inode
         || system_metadata.st_mode & 0o7777 != system.mode
-        || u64::from(system_metadata.st_uid) != system.owner_uid
-        || u64::from(system_metadata.st_gid) != system.owner_gid
+        || codex_observed_owner_v1(system_metadata.st_uid, false) != system.owner_uid
+        || codex_observed_owner_v1(system_metadata.st_gid, true) != system.owner_gid
         || !system.ordered_entry_names.is_empty()
         || !entry_names.is_empty()
     {
@@ -2422,7 +2496,8 @@ fn open_absolute_beneath_root_no_symlinks(
     const RESOLVE_NO_SYMLINKS: u64 = 0x04;
     const RESOLVE_BENEATH: u64 = 0x08;
 
-    let relative = absolute_path
+    let observed_path = codex_observed_path_v1(absolute_path);
+    let relative = observed_path
         .strip_prefix('/')
         .filter(|path| {
             !path.is_empty()
@@ -3877,6 +3952,18 @@ fn validate_codex_plan(
     plan: &E3CodexLaunchPlanV1,
     input: &E3WorldFsEnforcementInputV1,
 ) -> Result<()> {
+    if input.executable_artifact.role == ConfigProjectionArtifactRoleV1::CodexMain {
+        let release = config_projection::codex_release_from_provenance_v1(
+            &input.executable_artifact.provenance,
+            config_projection::CodexReleaseArtifactRoleV1::Main,
+        )?;
+        release.validate_main(&input.executable_artifact)?;
+        if plan.release_binding.as_ref() != Some(release.binding()) {
+            bail!("Codex plan release differs from executable/support release")
+        }
+    } else if plan.release_binding.is_some() {
+        bail!("historical Codex plan has generic release binding")
+    }
     if plan.schema_version != 1
         || plan.series_id != plan.closed_projection_ref.series_id
         || plan.projection_identity_hash != input.projection_identity_hash
@@ -3889,7 +3976,11 @@ fn validate_codex_plan(
             != [
                 ".credentials.json".to_string(),
                 "auth.json".to_string(),
-                if input.executable_artifact.role == ConfigProjectionArtifactRoleV1::Codex0156 {
+                if matches!(
+                    input.executable_artifact.role,
+                    ConfigProjectionArtifactRoleV1::Codex0156
+                        | ConfigProjectionArtifactRoleV1::CodexMain
+                ) {
                     "cloud-config-bundle-cache.json"
                 } else {
                     "cloud-requirements-cache.json"
@@ -3898,8 +3989,12 @@ fn validate_codex_plan(
             ]
             .into_iter()
             .chain(
-                (input.executable_artifact.role == ConfigProjectionArtifactRoleV1::Codex0156)
-                    .then(|| "models_cache.json".to_string()),
+                matches!(
+                    input.executable_artifact.role,
+                    ConfigProjectionArtifactRoleV1::Codex0156
+                        | ConfigProjectionArtifactRoleV1::CodexMain
+                )
+                .then(|| "models_cache.json".to_string()),
             )
             .collect::<Vec<_>>()
         || plan.output_last_message.mode != 0o600
@@ -5217,6 +5312,175 @@ fn main() {{
         check_code_mode_host_descriptor_v1(held.as_raw_fd(), expected, false).unwrap();
     }
 
+    #[test]
+    #[ignore = "connected non-executing wrapper proof; requires actual installer/importer SUBSTRATE_CODEX_COMPONENT_DIR"]
+    fn codex_release_official_helper_descriptor() {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = std::path::PathBuf::from(
+            std::env::var("SUBSTRATE_CODEX_COMPONENT_DIR").expect("component directory required"),
+        );
+        let filesystem = directory.join("filesystem");
+        CODEX_COMPONENT_FIXTURE_ROOT_V1.with(|s| *s.borrow_mut() = Some(filesystem.clone()));
+        struct Reset;
+        impl Drop for Reset {
+            fn drop(&mut self) {
+                CODEX_COMPONENT_FIXTURE_ROOT_V1.with(|s| *s.borrow_mut() = None)
+            }
+        }
+        let _reset = Reset;
+        let decode = |name: &str| -> serde_json::Value {
+            config_projection::ConfigProjectionCodecV1::decode_canonical_json(
+                &std::fs::read(directory.join(name)).unwrap(),
+            )
+            .unwrap()
+        };
+        let artifact: DescriptorPinnedArtifactV1 =
+            serde_json::from_value(decode("main-artifact.json")).unwrap();
+        let identity: config_projection::ConfigProjectionIdentityV1 =
+            serde_json::from_value(decode("identity.json")).unwrap();
+        let native: config_projection::NativeAgentConfigProjectionV1 =
+            serde_json::from_value(decode("native-projection.json")).unwrap();
+        let source: config_projection::NativeProjectionSourceManifestV1 =
+            serde_json::from_value(decode("source-manifest.json")).unwrap();
+        assert_eq!(artifact, identity.runtime_artifacts.codex);
+        let release = config_projection::codex_release_from_provenance_v1(
+            &artifact.provenance,
+            config_projection::CodexReleaseArtifactRoleV1::Main,
+        )
+        .unwrap();
+        assert_eq!(
+            native.renderer.release_binding.as_ref(),
+            Some(release.binding())
+        );
+        assert_eq!(
+            native
+                .ambient_closure
+                .loader_source
+                .release_binding
+                .as_ref(),
+            Some(release.binding())
+        );
+        config_projection::CodexProjectionV1::validate_loader_inputs(&native.ambient_closure)
+            .unwrap();
+        let main = open_absolute_beneath_root_no_symlinks(
+            &artifact.configured_absolute_path,
+            libc::O_RDONLY,
+            false,
+        )
+        .unwrap();
+        validate_pinned_target_artifact_descriptor(
+            main.as_raw_fd(),
+            &artifact,
+            ConfigProjectionArtifactRoleV1::CodexMain,
+        )
+        .unwrap();
+        let held = hold_code_mode_host_v1(&artifact).unwrap().unwrap();
+        let expected = artifact.runtime_support.code_mode_host.as_ref().unwrap();
+        check_code_mode_host_descriptor_v1(held.as_raw_fd(), expected, true).unwrap();
+        let mut read = Vec::new();
+        let mut execute = Vec::new();
+        append_code_mode_host_support_paths_v1(&artifact, &mut read, &mut execute).unwrap();
+        assert_eq!(read, [config_projection::CODEX_HOST_PATH_V1]);
+        assert_eq!(execute, read);
+        assert!(!execute.contains(&"/var/lib/substrate/world-deps/codex-runtime/bin".to_string()));
+        let mut input =
+            synthetic_wrapper_input(E3IsolatedChildRoleV1::Codex, &identity.workspace_root);
+        input.executable_artifact = artifact.clone();
+        input.projection_identity_hash = identity.identity_hash.clone();
+
+        let mut plan:E3CodexLaunchPlanV1=serde_json::from_value(serde_json::json!({"release_binding":release.binding(),"schema_version":1,"authority_store_id":identity.authority_store_id,"series_id":identity.series_id,"fence_id":"fixture-fence","closed_projection_ref":{"authority_store_id":identity.authority_store_id,"series_id":identity.series_id,"record_id":format!("cpr_{}",uuid::Uuid::now_v7()),"revision":1,"record_hash":"1".repeat(64)},"projection_identity_hash":identity.identity_hash,"native_projection_hash":native.projection_hash,"turn":{"Initial":{"bootstrap_run_id":identity.bootstrap_run_id}},"codex_argv":native.invocation.initial_codex_argv,"final_environment":native.environment,"required_absent_codex_home_entries":[".credentials.json","auth.json","cloud-config-bundle-cache.json","models_cache.json"],"output_last_message":{"relative_path":"tmp/output-last-message/fixture.txt","guest_absolute_path":"/fixture/output.txt","device_id":1,"inode":2,"mode":0o600,"initial_byte_length":0,"initial_sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},"workspace":identity.workspace_root,"native_source":source.source_root,"native_realization":source.source_root,"system_empty":native.ambient_closure.inputs[0].directory,"stdin_fd":0,"stdout_fd":1,"stderr_fd":2,"plan_hash":""})).unwrap();
+        plan.plan_hash = hash_omitting(
+            "substrate.e3.codex-launch-plan.v1",
+            "plan",
+            &plan,
+            "plan_hash",
+        )
+        .unwrap();
+        input.codex_launch_plan_hash = Some(plan.plan_hash.clone());
+        validate_codex_plan(&plan, &input).unwrap();
+        let mut wrong = plan.clone();
+        wrong.release_binding.as_mut().unwrap().manifest_sha256 = "00".repeat(32);
+        wrong.plan_hash = hash_omitting(
+            "substrate.e3.codex-launch-plan.v1",
+            "plan",
+            &wrong,
+            "plan_hash",
+        )
+        .unwrap();
+        input.codex_launch_plan_hash = Some(wrong.plan_hash.clone());
+        assert!(validate_codex_plan(&wrong, &input).is_err());
+        let other = config_projection::CodexReleaseCatalogV1::embedded()
+            .unwrap()
+            .releases
+            .iter()
+            .find(|r| {
+                r.binding().as_ref() != Ok(release.binding())
+                    && r.artifacts[1].extracted != release.host().extracted
+            })
+            .map(|r| {
+                let other =
+                    config_projection::TrustedCodexReleaseV1::resolve(&r.binding().unwrap())
+                        .unwrap();
+                assert_eq!(
+                    config_projection::TrustedCodexReleaseV1::authenticate(other.input()).unwrap(),
+                    other
+                );
+                other
+            });
+        let mut mixed_release_cases = Vec::new();
+        if let Some(other) = &other {
+            let mut wrong = plan.clone();
+            wrong.release_binding = Some(other.binding().clone());
+            wrong.plan_hash = hash_omitting(
+                "substrate.e3.codex-launch-plan.v1",
+                "plan",
+                &wrong,
+                "plan_hash",
+            )
+            .unwrap();
+            input.codex_launch_plan_hash = Some(wrong.plan_hash.clone());
+            assert!(validate_codex_plan(&wrong, &input).is_err());
+            mixed_release_cases.push("selected-main-with-authenticated-other-plan-binding");
+            let mut mixed_input = input.clone();
+            let helper = mixed_input
+                .executable_artifact
+                .runtime_support
+                .code_mode_host
+                .as_mut()
+                .unwrap();
+            helper.file.byte_length = other.host().extracted.byte_length;
+            helper.file.sha256 = other.host().extracted.sha256.clone();
+            helper.elf_execution_model = other.host().extracted.elf.clone();
+            helper.provenance =
+                other.provenance(config_projection::CodexReleaseArtifactRoleV1::CodeModeHost);
+            other.validate_helper(helper).unwrap();
+            mixed_input.codex_launch_plan_hash = Some(plan.plan_hash.clone());
+            assert!(validate_codex_plan(&plan, &mixed_input).is_err());
+            mixed_release_cases.push("selected-main-plan-with-independently-valid-other-helper");
+            input.codex_launch_plan_hash = Some(plan.plan_hash.clone());
+            validate_codex_plan(&plan, &input).unwrap();
+        }
+        eprintln!(
+            "MUR3 trusted mixed-release wrapper cases: {}",
+            mixed_release_cases.len()
+        );
+        std::fs::write(directory.join("mixed-release-wrapper-proof.json"),config_projection::ConfigProjectionCodecV1::encode_canonical_json(&serde_json::json!({"selected_binding":release.binding(),"other_binding":other.as_ref().map(|r|r.binding()),"cases":mixed_release_cases,"second_trusted_record_absent":other.is_none()})).unwrap()).unwrap();
+        let host = filesystem.join(config_projection::CODEX_HOST_PATH_V1.trim_start_matches('/'));
+        let retained = directory.join("wrapper-held-host");
+        std::fs::rename(&host, &retained).unwrap();
+        assert!(hold_code_mode_host_v1(&artifact).is_err());
+        std::os::unix::fs::symlink(&retained, &host).unwrap();
+        assert!(hold_code_mode_host_v1(&artifact).is_err());
+        std::fs::remove_file(&host).unwrap();
+        std::fs::copy(&retained, &host).unwrap();
+        std::fs::set_permissions(&host, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(hold_code_mode_host_v1(&artifact).is_err());
+        check_code_mode_host_descriptor_v1(held.as_raw_fd(), expected, true).unwrap();
+        std::fs::remove_file(&host).unwrap();
+        std::fs::rename(&retained, &host).unwrap();
+        hold_code_mode_host_v1(&artifact).unwrap().unwrap();
+        std::fs::write(directory.join("wrapper-proof.json"),config_projection::ConfigProjectionCodecV1::encode_canonical_json(&serde_json::json!({"binding":release.binding(),"main_inode":artifact.inode,"helper_inode":expected.file.inode,"native_projection_hash":native.projection_hash,"exact_execute":execute,"source_owner_observation":"private test-only mapping; no installed ownership or kernel mount proof"})).unwrap()).unwrap();
+    }
     fn synthetic_descriptors(role: WrapperRoleV1, workspace: RawFd) -> LaunchDescriptorsV1 {
         let mut descriptors = BTreeMap::new();
         if role == WrapperRoleV1::Codex {

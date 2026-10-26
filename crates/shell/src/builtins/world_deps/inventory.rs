@@ -254,7 +254,9 @@ archive_entry_path="__SUBSTRATE_CODEX_ARCHIVE_ENTRY_PATH__"
 executable_sha256="__SUBSTRATE_CODEX_EXECUTABLE_SHA256__"
 codex_version="__SUBSTRATE_CODEX_VERSION__"
 target_triple="__SUBSTRATE_CODEX_TARGET_TRIPLE__"
-release_bundle='__SUBSTRATE_CODEX_RELEASE_BUNDLE_V1__'
+release_bundle=__SUBSTRATE_CODEX_RELEASE_BUNDLE_V1__
+release_input=__SUBSTRATE_CODEX_RELEASE_INPUT_V1__
+release_catalog=__SUBSTRATE_CODEX_RELEASE_CATALOG_V1__
 trusted_installer_uid="$(id -u)"
 for directory in "${world_deps_root}" "${world_deps_bin}" "${package_root}" "${downloads_root}" "${package_bin}"; do
   if [ -e "${directory}" ] || [ -L "${directory}" ]; then
@@ -360,14 +362,211 @@ __SUBSTRATE_CODEX_INSTALLER_ARTIFACT_SOURCE_V1__
 "#
 }
 
-pub(crate) fn render_codex_installer_artifact_source_v1() -> &'static str {
+/// The generic publisher reuses the frozen physical publication implementation.
+/// Only authenticated compiled catalog data is inserted by the ordinary renderer.
+fn render_codex_publisher_profile_v1(generic: bool) -> String {
+    let historical_bundle =
+        serde_json::to_string(&config_projection::Codex0156ReleaseBundleV1::pinned())
+            .expect("frozen historical pins");
+    let fields = if generic {
+        [
+            (
+                "__CODEX_SOURCE_DIRECTORY__",
+                r###"codex-official-release"###,
+            ),
+            ("__CODEX_SOURCE_STREAM__", r###"CodexOfficialRelease"###),
+            (
+                "__CODEX_EXTRA_ARGS__",
+                r###""${release_input}" "${release_catalog}""###,
+            ),
+            (
+                "__CODEX_RELEASE_INIT__",
+                r###"bundle = json.loads(sys.argv[8])
+release_input = json.loads(sys.argv[9])
+trusted_catalog = json.loads(sys.argv[10])
+historical_0156_bundle=json.loads('__CODEX_HISTORICAL_BUNDLE__')
+def release_digest(record):
+    return hashlib.sha256(json.dumps({"domain":"substrate.codex.release-manifest.v1", **record},ensure_ascii=False,separators=(",",":"),sort_keys=True).encode()).hexdigest()
+def authenticate_release(value):
+    if not isinstance(value,dict) or set(value)!={"binding","manifest"}: raise RuntimeError("invalid release input")
+    manifest=value["manifest"]
+    binding={"manifest_sha256":release_digest(manifest),"behavior_profile":manifest["behavior_profile"],"version":manifest["version"],"target":manifest["target"]}
+    if value["binding"]!=binding or manifest not in trusted_catalog["releases"]: raise RuntimeError("untrusted release record")
+    return manifest
+def validate_foreign_pending_head(value,body,temporary):
+    global bundle,release_input,executable_sha256,expected_build_input,main_support_policy,source_stream,stream_name
+    prior=(bundle,release_input,executable_sha256,expected_build_input,main_support_policy,source_stream,stream_name)
+    try:
+        foreign=value.get("source_stream")
+        if foreign == "Codex0156OfficialArchives":
+            bundle=historical_0156_bundle
+            expected_build_input={"Codex0156OfficialArchives":bundle}
+            main_support_policy=2
+            stream_name="codex-0.156.1-x86_64-unknown-linux-musl"
+        elif foreign == "Codex0125OfficialArchive":
+            pin={"version":"0.125.0","target_triple":"x86_64-unknown-linux-musl","archive_name":"codex-x86_64-unknown-linux-musl.tar.gz","archive_url":"https://github.com/openai/codex/releases/download/rust-v0.125.0/codex-x86_64-unknown-linux-musl.tar.gz","archive_sha256":"4a20a53943a7e6a0c5fa4463d4e47c58dd8e553ecebde455a4107e9906bfb001","archive_entry_path":"codex-x86_64-unknown-linux-musl","extracted_executable_sha256":"86dc42ac5823f25233d6dc4ec5ff34693afd8c32ff2d17b54c5eb0d15bc7d902"}
+            bundle={"version":pin["version"],"target_triple":pin["target_triple"],"main":pin}
+            expected_build_input={"CodexOfficialArchive":pin}
+            main_support_policy=1
+            stream_name="codex-0.125.0-x86_64-unknown-linux-musl"
+        else: raise RuntimeError("unknown foreign artifact source stream")
+        source_stream=foreign;release_input=None;executable_sha256=bundle["main"]["extracted_executable_sha256"]
+        # Shape, safe IDs, ref/store/revision/digest checks occur BEFORE composing a path.
+        if not validate_head_shape(value,load_valid_store()["source_store_id"]):
+            raise RuntimeError("unauthenticated foreign pending head")
+        final=os.path.join(root,"heads",stream_name+".json")
+        contenders={final:(temporary,body,value,"head")}
+        directory=os.path.join(root,"records",stream_name)
+        held_directory=os.open(directory,os.O_RDONLY|os.O_DIRECTORY|os.O_CLOEXEC|os.O_NOFOLLOW)
+        try:
+            info=os.fstat(held_directory)
+            if info.st_uid!=os.geteuid() or info.st_gid!=substrate_gid or stat.S_IMODE(info.st_mode)!=0o750:
+                raise RuntimeError("unsafe historical source record directory")
+            pattern=re.compile(r"^\.e3-artifact-tmp\.([0-9a-f-]{36})\.record$")
+            for name in os.listdir(directory):
+                if not name.startswith(".e3-artifact-tmp."):continue
+                match=pattern.fullmatch(name)
+                if match is None:raise RuntimeError("unknown historical record temporary")
+                identity=uuid.UUID(match.group(1))
+                if identity.version!=7 or str(identity)!=match.group(1):raise RuntimeError("invalid historical record temporary identity")
+                record_temporary=os.path.join(directory,name)
+                record_body,record=read_canonical_value(record_temporary,"unsafe historical record temporary")
+                if not validate_record_value(record,load_valid_store()["source_store_id"]):raise RuntimeError("unauthenticated historical record temporary")
+                record_final=os.path.join(directory,f"{record['revision']:020d}-{record['source_record_id']}.json")
+                if record_final in contenders:raise RuntimeError("ambiguous historical record temporaries")
+                contenders[record_final]=(record_temporary,record_body,record,"record")
+            named=os.stat(directory,follow_symlinks=False)
+            if (named.st_dev,named.st_ino,named.st_mode)!=(info.st_dev,info.st_ino,info.st_mode):raise RuntimeError("historical source directory changed during readback")
+        finally:os.close(held_directory)
+        # Authenticate the complete old-stream transaction without promoting,
+        # deleting, renaming or treating its records as the generic stream.
+        validate_recovery_transaction(contenders)
+    finally:
+        bundle,release_input,executable_sha256,expected_build_input,main_support_policy,source_stream,stream_name=prior
+
+def release_bundle_for(value):
+    manifest=authenticate_release(value)
+    def archive(artifact):
+        return {"archive_name":artifact["archive"]["name"],"archive_url":artifact["archive"]["url"],"archive_sha256":artifact["archive"]["sha256"],"archive_byte_length":artifact["archive"]["byte_length"],"archive_entry_path":artifact["archive"]["member"],"extracted_executable_sha256":artifact["extracted"]["sha256"],"extracted_byte_length":artifact["extracted"]["byte_length"]}
+    return {"version":manifest["version"],"target_triple":manifest["target"],"main":archive(manifest["artifacts"][0]),"code_mode_host":archive(manifest["artifacts"][1])}
+main_support_policy=3
+expected_build_input={"CodexOfficialRelease":release_input}
+selected_manifest=authenticate_release(release_input)
+if trusted_catalog["selected"].get(selected_manifest["target"])!=selected_manifest["version"] or bundle!=release_bundle_for(release_input): raise RuntimeError("selected release mismatch")"###,
+            ),
+            ("__CODEX_SUPPORT_POLICY__", r###"main_support_policy"###),
+            ("__CODEX_BUILD_TAG__", r###"CodexOfficialRelease"###),
+            ("__CODEX_BUILD_VALUE__", r###"release_input"###),
+            (
+                "__CODEX_PROVENANCE__",
+                r###"def provenance(pin):
+    if release_input is None:
+        return {"OfficialCodexRelease":{"version":bundle["version"],"target_triple":bundle["target_triple"],**{name:pin[name] for name in ("archive_name","archive_url","archive_sha256","archive_entry_path","extracted_executable_sha256")}}}
+    component="main" if pin==bundle["main"] else "code_mode_host"
+    return {"TrustedCodexRelease":{"binding":release_input["binding"],"component":component}}"###,
+            ),
+            (
+                "__CODEX_RECORD_WRAPPER__",
+                r###"def validate_record_value(value, source_store_id, expected_reference=None):
+    global bundle, release_input, executable_sha256, expected_build_input
+    if source_stream != "CodexOfficialRelease": return validate_record_value_inner(value,source_store_id,expected_reference)
+    prior_bundle, prior_input, prior_sha, prior_build = bundle, release_input, executable_sha256, expected_build_input
+    try:
+        own_input=value.get("build_input",{}).get("CodexOfficialRelease")
+        own_bundle=release_bundle_for(own_input)
+        bundle,release_input,executable_sha256=own_bundle,own_input,own_bundle["main"]["extracted_executable_sha256"]
+        expected_build_input={"CodexOfficialRelease":own_input}
+        return validate_record_value_inner(value, source_store_id, expected_reference)
+    except (KeyError,TypeError,ValueError,RuntimeError): return False
+    finally: bundle,release_input,executable_sha256,expected_build_input=prior_bundle,prior_input,prior_sha,prior_build
+"###,
+            ),
+            (
+                "__CODEX_FOREIGN_HEAD_FILTER__",
+                r###"            kind = match.group(2)
+            if kind == "head" and value.get("source_stream") != source_stream:
+                validate_foreign_pending_head(value,body,temporary)
+                continue
+            if kind == "store":"###,
+            ),
+            (
+                "__CODEX_PAIR_ELF_CHECK__",
+                r###"    if not isinstance(entries,list) or len(entries)!=2: return False
+    if release_input is not None and any(entry.get("runtime_support",{}).get("elf_execution_model")!=artifact["extracted"]["elf"] for entry,artifact in zip(entries,release_input["manifest"]["artifacts"])): return False"###,
+            ),
+        ]
+    } else {
+        [
+            (
+                "__CODEX_SOURCE_DIRECTORY__",
+                r###"codex-0.156.1-x86_64-unknown-linux-musl"###,
+            ),
+            (
+                "__CODEX_SOURCE_STREAM__",
+                r###"Codex0156OfficialArchives"###,
+            ),
+            ("__CODEX_EXTRA_ARGS__", r###""###),
+            (
+                "__CODEX_RELEASE_INIT__",
+                r###"bundle = json.loads(sys.argv[8])
+main_support_policy=2
+expected_build_input={"Codex0156OfficialArchives":bundle}"###,
+            ),
+            ("__CODEX_SUPPORT_POLICY__", r###"main_support_policy"###),
+            ("__CODEX_BUILD_TAG__", r###"Codex0156OfficialArchives"###),
+            ("__CODEX_BUILD_VALUE__", r###"bundle"###),
+            (
+                "__CODEX_PROVENANCE__",
+                r###"def provenance(pin):
+    return {"OfficialCodexRelease": {"version": bundle["version"], "target_triple": bundle["target_triple"], **{name: pin[name] for name in ("archive_name", "archive_url", "archive_sha256", "archive_entry_path", "extracted_executable_sha256")}}}
+"###,
+            ),
+            (
+                "__CODEX_RECORD_WRAPPER__",
+                r###"def validate_record_value(value, source_store_id, expected_reference=None):
+    return validate_record_value_inner(value,source_store_id,expected_reference)"###,
+            ),
+            (
+                "__CODEX_FOREIGN_HEAD_FILTER__",
+                r###"            kind = match.group(2)
+            if kind == "store":"###,
+            ),
+            (
+                "__CODEX_PAIR_ELF_CHECK__",
+                r###"    # Historical156 support meaning is frozen."###,
+            ),
+        ]
+    };
+    let mut script = codex_installer_artifact_source_template_v1().to_string();
+    for (marker, value) in fields {
+        assert!(
+            script.contains(marker),
+            "missing publisher template marker {marker}"
+        );
+        script = script.replace(marker, value);
+    }
+    if generic {
+        assert!(script.contains("__CODEX_HISTORICAL_BUNDLE__"));
+        script = script.replace("__CODEX_HISTORICAL_BUNDLE__", &historical_bundle);
+    }
+    assert!(!script.contains("__CODEX_"), "unexpanded publisher marker");
+    script
+}
+pub(crate) fn render_codex_release_installer_artifact_source_v1() -> String {
+    render_codex_publisher_profile_v1(true)
+}
+#[cfg(test)]
+pub(crate) fn render_codex_installer_artifact_source_v1() -> String {
+    render_codex_publisher_profile_v1(false)
+}
+fn codex_installer_artifact_source_template_v1() -> &'static str {
     r#"artifact_source_root="${world_deps_root}/runtime-artifacts-v1"
-install -d -m 0750 "${artifact_source_root}" "${artifact_source_root}/records" "${artifact_source_root}/records/codex-${codex_version}-x86_64-unknown-linux-musl" "${artifact_source_root}/heads"
+install -d -m 0750 "${artifact_source_root}" "${artifact_source_root}/records" "${artifact_source_root}/records/__CODEX_SOURCE_DIRECTORY__" "${artifact_source_root}/heads"
 touch "${artifact_source_root}/lock"
 chmod 0640 "${artifact_source_root}/lock"
 exec 9<>"${artifact_source_root}/lock"
 flock -x 9
-python3 - "${artifact_source_root}" "${installed_binary}" "${archive_name}" "${archive_url}" "${archive_sha256}" "${archive_entry_path}" "${executable_sha256}" "${release_bundle}" <<'PY'
+python3 - "${artifact_source_root}" "${installed_binary}" "${archive_name}" "${archive_url}" "${archive_sha256}" "${archive_entry_path}" "${executable_sha256}" "${release_bundle}" __CODEX_EXTRA_ARGS__ <<'PY'
 import datetime
 import grp
 import hashlib
@@ -382,11 +581,11 @@ import time
 import uuid
 
 root, executable, archive_name, archive_url, archive_sha256, archive_entry, executable_sha256 = sys.argv[1:8]
-bundle = json.loads(sys.argv[8])
+__CODEX_RELEASE_INIT__
 if (archive_name, archive_url, archive_sha256, archive_entry, executable_sha256) != tuple(bundle["main"][name] for name in ("archive_name", "archive_url", "archive_sha256", "archive_entry_path", "extracted_executable_sha256")):
     raise RuntimeError("main archive identity differs from the release bundle")
-source_stream = "Codex0156OfficialArchives"
-stream_name = "codex-0.156.1-x86_64-unknown-linux-musl"
+source_stream = "__CODEX_SOURCE_STREAM__"
+stream_name = "__CODEX_SOURCE_DIRECTORY__"
 
 def canonical(value):
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
@@ -478,7 +677,7 @@ def validate_support_value(value):
     target = value.get("system_config_mount_target")
     if not isinstance(target, dict) or set(target) != {"absolute_path", "device_id", "inode", "mode", "owner_uid", "owner_gid", "ordered_entry_names"} or target.get("absolute_path") != "/etc/codex" or not valid_u64(target.get("device_id")) or target["device_id"] <= 0 or not valid_u64(target.get("inode")) or target["inode"] <= 0 or not valid_u32(target.get("mode")) or target["mode"] != 0o755 or not valid_u64(target.get("owner_uid")) or target["owner_uid"] != 0 or not valid_u64(target.get("owner_gid")) or target["owner_gid"] != 0 or target.get("ordered_entry_names") != []:
         return False
-    return valid_u32(value.get("schema_version")) and value["schema_version"] == 1 and valid_u32(value.get("support_policy_version")) and value["support_policy_version"] == (2 if "code_mode_host" in value else 1) and value.get("elf_interpreter") is None and value.get("dynamic_loader_cache") is None and value.get("ordered_elf_dependencies") == [] and value.get("manifest_hash") == domain_hash("substrate.e3.runtime-support-manifest.v1", "manifest", value, "manifest_hash")
+    return valid_u32(value.get("schema_version")) and value["schema_version"] == 1 and valid_u32(value.get("support_policy_version")) and value["support_policy_version"] == (__CODEX_SUPPORT_POLICY__ if "code_mode_host" in value else 1) and value.get("elf_interpreter") is None and value.get("dynamic_loader_cache") is None and value.get("ordered_elf_dependencies") == [] and value.get("manifest_hash") == domain_hash("substrate.e3.runtime-support-manifest.v1", "manifest", value, "manifest_hash")
 
 def validate_entry_value(value):
     return (
@@ -497,10 +696,10 @@ def validate_entry_value(value):
         and value.get("entry_hash") == domain_hash("substrate.e3.installer-artifact-source-entry.v1", "entry", value, "entry_hash")
     )
 
-def provenance(pin):
-    return {"OfficialCodexRelease": {"version": bundle["version"], "target_triple": bundle["target_triple"], **{name: pin[name] for name in ("archive_name", "archive_url", "archive_sha256", "archive_entry_path", "extracted_executable_sha256")}}}
+__CODEX_PROVENANCE__
 
 def validate_release_entries(entries):
+__CODEX_PAIR_ELF_CHECK__
     if not isinstance(entries, list) or len(entries) != 2 or not validate_entry_value(entries[0]): return False
     main, host = entries
     pin = bundle["code_mode_host"]
@@ -518,7 +717,13 @@ def validate_release_entries(entries):
         and host.get("entry_hash") == domain_hash("substrate.e3.installer-artifact-source-entry.v1", "entry", host, "entry_hash")
         and support == {"file": expected_file, "owner_uid": 0, "elf_execution_model": host["runtime_support"]["elf_execution_model"], "provenance": provenance(pin)})
 
-def validate_record_value(value, source_store_id, expected_reference=None):
+__CODEX_RECORD_WRAPPER__
+def validate_authenticated_entries(entries):
+    if source_stream == "Codex0125OfficialArchive":
+        return isinstance(entries,list) and len(entries)==1 and validate_entry_value(entries[0]) and "code_mode_host" not in entries[0]["runtime_support"]
+    return validate_release_entries(entries)
+
+def validate_record_value_inner(value, source_store_id, expected_reference=None):
     reference_matches = expected_reference is None or (
         value.get("source_store_id") == expected_reference.get("source_store_id")
         and value.get("source_record_id") == expected_reference.get("source_record_id")
@@ -544,8 +749,8 @@ def validate_record_value(value, source_store_id, expected_reference=None):
         and value.get("source_stream") == source_stream
         and valid_u64(value.get("revision")) and value["revision"] > 0
         and predecessor_valid
-        and value.get("build_input") == {"Codex0156OfficialArchives": bundle}
-        and validate_release_entries(value.get("entries"))
+        and value.get("build_input") == expected_build_input
+        and validate_authenticated_entries(value.get("entries"))
         and valid_timestamp(value.get("created_at"))
         and value.get("record_hash") == domain_hash("substrate.e3.installer-artifact-source-record.v1", "record", value, "record_hash")
         and reference_matches
@@ -586,10 +791,8 @@ def validate_head_record(value):
     path = os.path.join(root, "records", stream_name, f"{reference['revision']:020d}-{reference['source_record_id']}.json")
     if not os.path.exists(path):
         return False
-    with open(path, "rb") as source:
-        body = source.read()
-    record = json.loads(body)
-    return canonical(record) == body and validate_record_value(record, value["source_store_id"], reference)
+    body,record=read_canonical_value(path,"unsafe artifact source head record")
+    return validate_record_value(record, value["source_store_id"], reference)
 
 def fsync_dir(path):
     descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
@@ -635,12 +838,19 @@ def exact_write(path, value, immutable):
     return body
 
 def read_canonical_value(path, error):
-    with open(path, "rb") as source:
-        body = source.read()
-    value = json.loads(body)
-    if canonical(value) != body:
-        raise RuntimeError(error)
-    return body, value
+    descriptor=os.open(path,os.O_RDONLY|os.O_CLOEXEC|os.O_NOFOLLOW)
+    try:
+        before=os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink!=1 or stat.S_IMODE(before.st_mode)!=0o640 or before.st_uid!=os.geteuid() or before.st_gid!=substrate_gid or before.st_size>16*1024*1024:
+            raise RuntimeError(error)
+        with os.fdopen(os.dup(descriptor),"rb") as source: body=source.read()
+        after=os.fstat(descriptor);named=os.stat(path,follow_symlinks=False)
+        identity=lambda st:(st.st_dev,st.st_ino,st.st_mode,st.st_nlink,st.st_size)
+        if identity(before)!=identity(after) or identity(before)!=identity(named):raise RuntimeError(error)
+    finally:os.close(descriptor)
+    value=json.loads(body)
+    if canonical(value)!=body:raise RuntimeError(error)
+    return body,value
 
 def validate_recovery_transaction(contenders):
     if not any(item[3] in {"record", "head"} for item in contenders.values()):
@@ -725,13 +935,8 @@ def recover_publication():
             info = os.stat(temporary, follow_symlinks=False)
             if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) != 0o640:
                 raise RuntimeError("unsafe Codex artifact publication temporary")
-            with open(temporary, "rb") as source:
-                body = source.read()
-            value = json.loads(body)
-            if canonical(value) != body:
-                raise RuntimeError("noncanonical Codex artifact publication temporary")
-            kind = match.group(2)
-            if kind == "store":
+            body,value=read_canonical_value(temporary,"unsafe Codex artifact publication temporary")
+__CODEX_FOREIGN_HEAD_FILTER__
                 final = os.path.join(root, "source-store.json")
                 valid = validate_store_value(value)
             elif kind == "record":
@@ -850,9 +1055,7 @@ def validate_complete_record_chain(head, pending_records=None):
         if name in pending_records:
             body, value = pending_records[name]
         else:
-            with open(os.path.join(directory, name), "rb") as source:
-                body = source.read()
-            value = json.loads(body)
+            body,value=read_canonical_value(os.path.join(directory,name),"unsafe artifact source predecessor")
         if canonical(value) != body or not validate_record_value(value, store["source_store_id"], reference):
             raise RuntimeError("invalid Codex artifact source predecessor record")
         reference = value.get("predecessor_ref")
@@ -1073,7 +1276,7 @@ entry = {
     "entry_hash": "",
 }
 entry["entry_hash"] = domain_hash("substrate.e3.installer-artifact-source-entry.v1", "entry", entry, "entry_hash")
-build_input = {"Codex0156OfficialArchives": bundle}
+build_input = {"__CODEX_BUILD_TAG__": __CODEX_BUILD_VALUE__}
 entries = [entry]
 if True:
     import copy
@@ -1091,12 +1294,12 @@ if True:
         "device_id": host_stat.st_dev, "inode": host_stat.st_ino, "byte_length": host_stat.st_size,
         "sha256": host_file["sha256"], "runtime_support": host_support}
     host["entry_hash"] = domain_hash("substrate.e3.installer-artifact-source-entry.v1", "entry", host, "entry_hash")
-    support["support_policy_version"] = 2
+    support["support_policy_version"] = __CODEX_SUPPORT_POLICY__
     support["code_mode_host"] = {"file": host_file, "owner_uid": 0, "elf_execution_model": host_support["elf_execution_model"], "provenance": provenance(pin)}
     support["manifest_hash"] = domain_hash("substrate.e3.runtime-support-manifest.v1", "manifest", support, "manifest_hash")
     entry["entry_hash"] = domain_hash("substrate.e3.installer-artifact-source-entry.v1", "entry", entry, "entry_hash")
     entries.append(host)
-    build_input = {"Codex0156OfficialArchives": bundle}
+    build_input = {"__CODEX_BUILD_TAG__": __CODEX_BUILD_VALUE__}
     if not validate_release_entries(entries): raise RuntimeError("incoherent installed Codex pair")
 head_path = os.path.join(root, "heads", stream_name + ".json")
 prior_head = None

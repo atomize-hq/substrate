@@ -391,6 +391,37 @@ impl AgentConfigProjectionServiceV1 {
         {
             return Err(WrongBinding);
         }
+        if record.native.renderer.release_binding.is_some()
+            != (identity.runtime_artifacts.codex.role
+                == crate::ConfigProjectionArtifactRoleV1::CodexMain)
+            || record.native.renderer.release_binding
+                != record.native.ambient_closure.loader_source.release_binding
+        {
+            return Err(WrongBinding);
+        }
+        if identity.runtime_artifacts.codex.role == crate::ConfigProjectionArtifactRoleV1::CodexMain
+        {
+            let binding = record
+                .native
+                .renderer
+                .release_binding
+                .as_ref()
+                .ok_or(WrongBinding)?;
+            let release = crate::TrustedCodexReleaseV1::resolve(binding)?;
+            release.validate_main(&identity.runtime_artifacts.codex)?;
+            if record.native.renderer.codex_version != binding.version
+                || record
+                    .native
+                    .ambient_closure
+                    .loader_source
+                    .release_binding
+                    .as_ref()
+                    != Some(binding)
+            {
+                return Err(WrongBinding);
+            }
+            crate::CodexProjectionV1::validate_loader_inputs(&record.native.ambient_closure)?;
+        }
         for (artifact, role) in [
             (
                 &identity.runtime_artifacts.codex,
@@ -1739,11 +1770,7 @@ fn validate_prepared_retained_launch_publication_v1(
             serde_json::to_value(&record.effective),
         ),
         (
-            if record.native.renderer.codex_version == "0.156.1" {
-                "substrate.e3.codex-0.156-native-config-projection.v1"
-            } else {
-                "substrate.e3.native-config-projection.v1"
-            },
+            crate::codex_native_hash_domain_v1(&record.native.renderer),
             "projection",
             "projection_hash",
             serde_json::to_value(&record.native),
@@ -1870,6 +1897,14 @@ fn codex_authority_role_v1(
     native_version: &str,
 ) -> Result<crate::RuntimeArtifactAuthorityRoleV1, ConfigProjectionFailureV1> {
     match (role, native_version) {
+        (crate::ConfigProjectionArtifactRoleV1::CodexMain, version)
+            if crate::CodexReleaseCatalogV1::embedded()?
+                .releases
+                .iter()
+                .any(|r| r.version == version) =>
+        {
+            Ok(crate::RuntimeArtifactAuthorityRoleV1::CodexMain)
+        }
         (crate::ConfigProjectionArtifactRoleV1::Codex0125, "0.125.0") => {
             Ok(crate::RuntimeArtifactAuthorityRoleV1::Codex0125)
         }

@@ -56,7 +56,16 @@ pub(crate) fn registry_fixture() -> (
     ConfigProjectionRegistryV1,
     ConfigProjectionStoreV1,
 ) {
-    let temp = tempfile::tempdir().expect("temp root");
+    registry_fixture_at_v1(tempfile::tempdir().expect("temp root"))
+}
+
+pub(crate) fn registry_fixture_at_v1(
+    temp: tempfile::TempDir,
+) -> (
+    tempfile::TempDir,
+    ConfigProjectionRegistryV1,
+    ConfigProjectionStoreV1,
+) {
     std::fs::set_permissions(temp.path(), std::fs::Permissions::from_mode(0o700))
         .expect("secure temp root");
     let authority = temp.path().join("authority-v1");

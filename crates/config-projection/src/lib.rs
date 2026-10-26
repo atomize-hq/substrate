@@ -3,6 +3,8 @@
 mod codec;
 mod codex_0125;
 mod codex_0156;
+mod codex_projection;
+mod codex_release;
 mod linux_artifacts;
 mod registry;
 mod service;
@@ -10,6 +12,8 @@ mod service;
 pub use codec::ConfigProjectionCodecV1;
 pub use codex_0125::*;
 pub use codex_0156::*;
+pub use codex_projection::{CodexProjectionPlanV1, CodexProjectionV1};
+pub use codex_release::*;
 pub use linux_artifacts::*;
 pub use registry::*;
 pub use service::*;
@@ -185,6 +189,8 @@ pub enum ConfigProjectionArtifactRoleV1 {
     Codex0125,
     Codex0156,
     Codex0156CodeModeHost,
+    CodexMain,
+    CodexCodeModeHost,
     WorldEntryWrapper,
     ManagedGateway,
 }
@@ -203,6 +209,10 @@ pub struct RuntimeArtifactAuthorityRefV1 {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub enum RuntimeArtifactProvenanceV1 {
+    TrustedCodexRelease {
+        binding: CodexReleaseBindingV1,
+        component: CodexReleaseArtifactRoleV1,
+    },
     OfficialCodexRelease {
         version: String,
         target_triple: String,
@@ -323,6 +333,8 @@ pub enum RuntimeArtifactAuthorityRoleV1 {
     Codex0125,
     Codex0156,
     Codex0156CodeModeHost,
+    CodexMain,
+    CodexCodeModeHost,
     ManagedGateway,
     WorldEntryWrapper,
 }
@@ -366,10 +378,12 @@ pub enum InstallerArtifactSourceStreamV1 {
     SubstrateSourceBuild,
     Codex0125OfficialArchive,
     Codex0156OfficialArchives,
+    CodexOfficialRelease,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum InstallerArtifactBuildInputV1 {
+    CodexOfficialRelease(CodexReleaseInputV1),
     Codex0156OfficialArchives(Codex0156ReleaseBundleV1),
     SubstrateSourceBuild {
         source_commit: String,
@@ -555,6 +569,8 @@ pub struct NativeAgentConfigProjectionV1 {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct NativeRendererIdentityV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub release_binding: Option<CodexReleaseBindingV1>,
     pub renderer_id: String,
     pub renderer_schema_version: u32,
     pub codex_version: String,
@@ -620,6 +636,8 @@ pub struct CodexAmbientConfigClosureV1 {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CodexLoaderSourceIdentityV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub release_binding: Option<CodexReleaseBindingV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub codex_0156_sources: Option<Codex0156LoaderSourcesV1>,
     pub codex_version: String,
@@ -1746,3 +1764,9 @@ mod e3e_schema_tests {
         );
     }
 }
+
+#[cfg(test)]
+extern crate self as config_projection;
+#[cfg(test)]
+#[path = "../tests/agent_config_projection_v1.rs"]
+mod projection_test_inputs;

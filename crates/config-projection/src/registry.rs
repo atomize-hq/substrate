@@ -1894,6 +1894,33 @@ mod linux {
             })
         }
 
+        pub fn publish_codex_native_source(
+            &self,
+            series_id: &str,
+            fence_id: &str,
+            plan: &crate::CodexProjectionPlanV1,
+            created_at: Timestamp,
+        ) -> Result<
+            (
+                NativeAgentConfigProjectionV1,
+                NativeProjectionSourceManifestV1,
+            ),
+            ConfigProjectionFailureV1,
+        > {
+            self.with_transaction(false, |transaction| {
+                let store = require_store(transaction)?;
+                validate_timestamp(&created_at)?;
+                publish_native_source_directory(
+                    transaction,
+                    &store,
+                    series_id,
+                    fence_id,
+                    &plan.0,
+                    created_at,
+                )
+            })
+        }
+
         pub fn acquire_consumer_lease(
             &self,
             acquired_projection_ref: &ConfigProjectionRefV1,
@@ -5412,11 +5439,7 @@ mod linux {
             &record.effective.projection_hash,
         )?;
         validate_projection_hash(
-            if record.native.renderer.codex_version == "0.156.1" {
-                "substrate.e3.codex-0.156-native-config-projection.v1"
-            } else {
-                "substrate.e3.native-config-projection.v1"
-            },
+            crate::codex_native_hash_domain_v1(&record.native.renderer),
             &record.native,
             &record.native.projection_hash,
         )?;
@@ -5440,9 +5463,25 @@ mod linux {
             )?,
         )?;
         validate_reference_bindings(record)?;
+        if let Some(binding) = &record.native.renderer.release_binding {
+            let release = crate::TrustedCodexReleaseV1::resolve(binding)?;
+            release.validate_main(&record.identity.runtime_artifacts.codex)?;
+            if record
+                .native
+                .ambient_closure
+                .loader_source
+                .release_binding
+                .as_ref()
+                != Some(binding)
+            {
+                return Err(ConfigProjectionFailureV1::WrongBinding);
+            }
+        }
         validate_artifact(
             &record.identity.runtime_artifacts.codex,
-            if record.native.renderer.codex_version == "0.156.1" {
+            if record.native.renderer.release_binding.is_some() {
+                crate::ConfigProjectionArtifactRoleV1::CodexMain
+            } else if record.native.renderer.codex_version == "0.156.1" {
                 crate::ConfigProjectionArtifactRoleV1::Codex0156
             } else {
                 crate::ConfigProjectionArtifactRoleV1::Codex0125
@@ -5972,6 +6011,10 @@ mod linux {
         }
         validate_prefixed_uuid(&manifest.manifest_id, "ram_")?;
         validate_timestamp(&manifest.created_at)?;
+        let is_generic = manifest
+            .entries
+            .first()
+            .is_some_and(|e| e.authority_role == RuntimeArtifactAuthorityRoleV1::CodexMain);
         let is_0156 = manifest
             .entries
             .first()
@@ -5981,6 +6024,15 @@ mod linux {
             RuntimeArtifactAuthorityRoleV1::ManagedGateway,
             RuntimeArtifactAuthorityRoleV1::WorldEntryWrapper,
         ];
+        if is_generic {
+            expected_roles.splice(
+                0..1,
+                [
+                    RuntimeArtifactAuthorityRoleV1::CodexMain,
+                    RuntimeArtifactAuthorityRoleV1::CodexCodeModeHost,
+                ],
+            );
+        }
         if is_0156 {
             expected_roles.splice(
                 0..1,
@@ -5998,7 +6050,7 @@ mod linux {
         {
             return Err(ConfigProjectionFailureV1::WrongBinding);
         }
-        for (entry, expected_path) in manifest.entries.iter().zip(if is_0156 {
+        for (entry, expected_path) in manifest.entries.iter().zip(if is_0156 || is_generic {
             vec![
                 crate::CODEX_0156_MAIN_PATH,
                 crate::CODEX_0156_HOST_PATH,
@@ -6029,11 +6081,17 @@ mod linux {
             validate_sha256(&entry.installer_source_ref.record_hash)?;
             validate_runtime_support(&entry.runtime_support)?;
             if (entry.runtime_support.code_mode_host.is_some())
-                != (entry.authority_role == RuntimeArtifactAuthorityRoleV1::Codex0156)
+                != matches!(
+                    entry.authority_role,
+                    RuntimeArtifactAuthorityRoleV1::Codex0156
+                        | RuntimeArtifactAuthorityRoleV1::CodexMain
+                )
             {
                 return Err(ConfigProjectionFailureV1::WrongBinding);
             }
             match (&entry.authority_role, &entry.provenance) {
+                (RuntimeArtifactAuthorityRoleV1::CodexMain, provenance) => crate::validate_codex_release_component_v1(provenance,crate::CodexReleaseArtifactRoleV1::Main,&entry.sha256,entry.byte_length,&entry.runtime_support.elf_execution_model)?,
+                (RuntimeArtifactAuthorityRoleV1::CodexCodeModeHost, provenance) => crate::validate_codex_release_component_v1(provenance,crate::CodexReleaseArtifactRoleV1::CodeModeHost,&entry.sha256,entry.byte_length,&entry.runtime_support.elf_execution_model)?,
                 (RuntimeArtifactAuthorityRoleV1::Codex0156, provenance) if *provenance == crate::Codex0156ReleaseBundleV1::pinned().main.provenance()
                     && entry.sha256 == crate::Codex0156ReleaseBundleV1::pinned().main.extracted_executable_sha256
                     && entry.byte_length == crate::Codex0156ReleaseBundleV1::pinned().main.extracted_byte_length => {},
@@ -6107,7 +6165,7 @@ mod linux {
                 )?,
             )?;
         }
-        if is_0156 {
+        if is_0156 || is_generic {
             let main = &manifest.entries[0];
             let host = &manifest.entries[1];
             let support = main
@@ -6115,7 +6173,19 @@ mod linux {
                 .code_mode_host
                 .as_ref()
                 .ok_or(ConfigProjectionFailureV1::WrongBinding)?;
-            if main.installer_source_ref != host.installer_source_ref
+            if (is_generic
+                && (crate::codex_release_from_provenance_v1(
+                    &main.provenance,
+                    crate::CodexReleaseArtifactRoleV1::Main,
+                )?
+                .binding()
+                    != crate::codex_release_from_provenance_v1(
+                        &host.provenance,
+                        crate::CodexReleaseArtifactRoleV1::CodeModeHost,
+                    )?
+                    .binding()
+                    || support.provenance != host.provenance))
+                || main.installer_source_ref != host.installer_source_ref
                 || support.file.device_id != host.device_id
                 || support.file.inode != host.inode
                 || support.file.sha256 != host.sha256
@@ -6187,12 +6257,28 @@ mod linux {
             return Err(ConfigProjectionFailureV1::HashInvalid);
         }
         let closure = &native.ambient_closure;
+        if native.renderer.release_binding != closure.loader_source.release_binding {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
         let pinned_loader = &closure.loader_source;
-        let is_0156 = native.renderer.codex_version == "0.156.1";
+        let is_generic = native.renderer.release_binding.is_some();
+        let is_0156 = native.renderer.codex_version == "0.156.1" && !is_generic;
+        if let Some(binding) = &native.renderer.release_binding {
+            let release = crate::TrustedCodexReleaseV1::resolve(binding)?;
+            if native.renderer.codex_version != binding.version
+                || native.renderer.renderer_schema_version != 3
+                || native.ambient_closure.loader_source != release.loader_source()
+            {
+                return Err(ConfigProjectionFailureV1::WrongBinding);
+            }
+            crate::CodexProjectionV1::validate_loader_inputs(closure)?;
+        }
         if is_0156 {
             crate::Codex0156ProjectionV1::validate_loader_inputs(closure)?;
         }
-        if (if is_0156 {
+        if (if is_generic {
+            false
+        } else if is_0156 {
             pinned_loader != &crate::codex_0156::pinned_loader_source_v1()
                 || native.renderer.renderer_schema_version != 2
         } else {
@@ -6225,7 +6311,7 @@ mod linux {
                     "--profile",
                     "-c",
                 ]
-            || closure.inputs.len() != if is_0156 { 17 } else { 16 }
+            || closure.inputs.len() != if is_0156 || is_generic { 17 } else { 16 }
         {
             return Err(ConfigProjectionFailureV1::WrongBinding);
         }
@@ -6337,7 +6423,7 @@ mod linux {
         for (offset, (layer, relative_path, disposition)) in [
             ("McpCredentials", ".credentials.json", crate::CodexLoaderInputDispositionV1::DisabledByEmptyMcpSetAndProvenAbsent),
             ("Auth", "auth.json", crate::CodexLoaderInputDispositionV1::DisabledByEphemeralCredentialStoreAndProvenAbsent),
-            ("CloudRequirements", if is_0156 { "cloud-config-bundle-cache.json" } else { "cloud-requirements-cache.json" }, crate::CodexLoaderInputDispositionV1::DisabledByNoEphemeralAuthAndProvenAbsent),
+            ("CloudRequirements", if is_0156 || is_generic { "cloud-config-bundle-cache.json" } else { "cloud-requirements-cache.json" }, crate::CodexLoaderInputDispositionV1::DisabledByNoEphemeralAuthAndProvenAbsent),
         ].into_iter().enumerate() {
             let entry = input(13 + offset)?;
             if entry.layer != layer || entry.relative_path != relative_path || entry.disposition != disposition
@@ -6346,7 +6432,7 @@ mod linux {
                 return Err(ConfigProjectionFailureV1::WrongBinding);
             }
         }
-        if is_0156 {
+        if is_0156 || is_generic {
             let entry = input(16)?;
             if entry.layer != "ModelsCache"
                 || entry.relative_path != "models_cache.json"
@@ -6362,7 +6448,9 @@ mod linux {
             }
         }
         if ConfigProjectionCodecV1::domain_sha256(
-            if is_0156 {
+            if is_generic {
+                crate::CODEX_LOADER_DOMAIN_V1
+            } else if is_0156 {
                 "substrate.e3.codex-0.156-loader-inputs.v1"
             } else {
                 "substrate.e3.codex-0.125-loader-inputs.v1"
@@ -6383,7 +6471,7 @@ mod linux {
             ConfigProjectionCodecV1::domain_sha256(
                 "",
                 &serde_json::json!({
-                    "domain": if is_0156 { "substrate.e3.codex-0.156-native-config-projection.v1" } else { "substrate.e3.native-config-projection.v1" },
+                    "domain": crate::codex_native_hash_domain_v1(&native.renderer),
                     "projection": value,
                 }),
             )?,
@@ -6936,7 +7024,11 @@ mod linux {
         authority_store_id: &str,
     ) -> Result<(), ConfigProjectionFailureV1> {
         if (artifact.runtime_support.code_mode_host.is_some()
-            != (expected_role == crate::ConfigProjectionArtifactRoleV1::Codex0156))
+            != matches!(
+                expected_role,
+                crate::ConfigProjectionArtifactRoleV1::Codex0156
+                    | crate::ConfigProjectionArtifactRoleV1::CodexMain
+            ))
             || artifact.role != expected_role
             || artifact.file_type != "regular"
             || artifact.configured_absolute_path.is_empty()
@@ -6963,7 +7055,7 @@ mod linux {
         support: &crate::E3RuntimeSupportManifestV1,
     ) -> Result<(), ConfigProjectionFailureV1> {
         if support.schema_version != 1
-            || crate::codex_0156::validate_support_version_v1(support).is_err()
+            || crate::validate_codex_support_v1(support).is_err()
             || support.elf_interpreter.is_some()
             || support.dynamic_loader_cache.is_some()
             || !support.ordered_elf_dependencies.is_empty()
@@ -10725,6 +10817,45 @@ mod linux {
                 created_at: Timestamp("2026-10-21T00:00:00.000000Z".into()),
                 manifest_hash: digest(),
             }
+        }
+
+        #[test]
+        fn owner_pre1_rehashed_historical_native_rejects_generic_loader_binding() {
+            let (_home, registry, store) = crate::projection_test_inputs::registry_fixture();
+            let series = format!("cps_{}", Uuid::now_v7());
+            let fence = format!("cpf_{}", Uuid::now_v7());
+            let (identity, effective, gateway, root, project) =
+                crate::projection_test_inputs::native_inputs(&store, &series, &fence);
+            let plan = crate::Codex0125ProjectionV1::render(
+                &identity, &effective, &gateway, root, &fence, project,
+            )
+            .unwrap();
+            let (mut native, _) = registry
+                .publish_native_source(
+                    &series,
+                    &fence,
+                    &plan,
+                    Timestamp("2026-10-25T12:00:00.000000Z".into()),
+                )
+                .unwrap();
+            native.ambient_closure.loader_source.release_binding = Some(
+                crate::TrustedCodexReleaseV1::selected(crate::CODEX_RELEASE_TARGET_V1)
+                    .unwrap()
+                    .binding()
+                    .clone(),
+            );
+            native.ambient_closure.validated_loader_input_fingerprint=crate::ConfigProjectionCodecV1::domain_sha256("substrate.e3.codex-0.125-loader-inputs.v1",&json!({"inputs":native.ambient_closure.inputs,"loader_source":native.ambient_closure.loader_source})).unwrap();
+            native.projection_hash = hash_omitting(
+                "substrate.e3.native-config-projection.v1",
+                "projection",
+                &native,
+                "projection_hash",
+            )
+            .unwrap();
+            assert_eq!(
+                validate_native_projection_source_input(&native, &series, &fence),
+                Err(ConfigProjectionFailureV1::WrongBinding)
+            );
         }
 
         #[test]

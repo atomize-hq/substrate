@@ -1642,19 +1642,40 @@ mod tests {
             advertised.version, "0.125.0",
             "consumed UAA metadata is deliberately unchanged"
         );
-        assert_eq!(spec.version, "0.156.1");
-        assert_eq!(spec.archive_name, "codex-x86_64-unknown-linux-musl.tar.gz");
         assert_eq!(
-            spec.archive_url,
-            "https://github.com/openai/codex/releases/download/rust-v0.156.1/codex-x86_64-unknown-linux-musl.tar.gz"
+            spec.release_catalog.selected.get(&spec.target_triple),
+            Some(&spec.version)
+        );
+        assert_eq!(
+            spec.archive_name,
+            spec.release_input.manifest.artifacts[0].archive.name
         );
         assert_eq!(
             spec.archive_sha256,
-            "aff46539a83aff86e3c62c592bce2c50d95391f9df289afaf03a50c01d14533d"
+            spec.release_input.manifest.artifacts[0].archive.sha256
         );
-        assert_eq!(spec.archive_entry_path, "codex-x86_64-unknown-linux-musl");
         assert_eq!(
             spec.extracted_executable_sha256,
+            spec.release_input.manifest.artifacts[0].extracted.sha256
+        );
+        //156 remains an immutable measured subject even when a later selection changes.
+        let historical = spec
+            .release_catalog
+            .releases
+            .iter()
+            .find(|r| r.version == "0.156.1")
+            .expect("retained156 manifest");
+        assert_eq!(
+            historical.artifacts[0].archive.name,
+            "codex-x86_64-unknown-linux-musl.tar.gz"
+        );
+        assert_eq!(historical.artifacts[0].archive.url,"https://github.com/openai/codex/releases/download/rust-v0.156.1/codex-x86_64-unknown-linux-musl.tar.gz");
+        assert_eq!(
+            historical.artifacts[0].archive.sha256,
+            "aff46539a83aff86e3c62c592bce2c50d95391f9df289afaf03a50c01d14533d"
+        );
+        assert_eq!(
+            historical.artifacts[0].extracted.sha256,
             "0b2e9301d6100dddda3b9d5c80ebaeaa3a2f1962388f2f36f6b96a9f08b1f33f"
         );
     }
@@ -1707,7 +1728,7 @@ mod tests {
             &spec,
         );
         assert!(script.contains("no Node/npm runtime bundle"));
-        assert!(script.contains("Codex0156OfficialArchives"));
+        assert!(script.contains("CodexOfficialRelease"));
         for message in [
             "substrate: downloading Codex runtime",
             "substrate: staging Codex runtime",
@@ -1721,7 +1742,7 @@ mod tests {
                 "missing progress breadcrumb: {message}"
             );
         }
-        assert!(!script.contains("Codex0125OfficialArchive"));
+        assert!(!script.contains("source_stream = \"Codex0125OfficialArchive\""));
         assert!(script.contains("codex-code-mode-host"));
         assert!(script.contains("entries[0].isreg()"));
         assert!(script.contains("libc.renameat2"));
@@ -1758,7 +1779,7 @@ mod tests {
             );
             fs::copy(
                 source,
-                downloads.join(format!("0.156.1-{}", pin.archive_name)),
+                downloads.join(format!("{}-{}", spec.version, pin.archive_name)),
             )
             .unwrap();
         }
@@ -1864,8 +1885,14 @@ mod tests {
                 String::from_utf8_lossy(&result.stderr)
             );
             let progress = String::from_utf8_lossy(&result.stderr);
-            assert!(progress.contains("substrate: staging Codex runtime 0.156.1"));
-            assert!(progress.contains("substrate: installing Codex runtime 0.156.1"));
+            assert!(progress.contains(&format!(
+                "substrate: staging Codex runtime {}",
+                spec.version
+            )));
+            assert!(progress.contains(&format!(
+                "substrate: installing Codex runtime {}",
+                spec.version
+            )));
             assert_eq!(
                 inodes,
                 [
@@ -1925,22 +1952,26 @@ mod tests {
             !acquisition_log.exists(),
             "cache fixture attempted acquisition"
         );
-        let head: serde_json::Value =
-            serde_json::from_slice(
-                &fs::read(root.join(
-                    "runtime-artifacts-v1/heads/codex-0.156.1-x86_64-unknown-linux-musl.json",
-                ))
-                .unwrap(),
-            )
-            .unwrap();
-        assert_eq!(head["source_stream"], "Codex0156OfficialArchives");
+        let head: serde_json::Value = serde_json::from_slice(
+            &fs::read(root.join("runtime-artifacts-v1/heads/codex-official-release.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(head["source_stream"], "CodexOfficialRelease");
         assert_eq!(head["head_revision"], 1);
         let reference = &head["head_ref"];
-        let record: serde_json::Value = serde_json::from_slice(&fs::read(root.join(format!("runtime-artifacts-v1/records/codex-0.156.1-x86_64-unknown-linux-musl/{:020}-{}.json", reference["revision"].as_u64().unwrap(), reference["source_record_id"].as_str().unwrap()))).unwrap()).unwrap();
+        let record: serde_json::Value = serde_json::from_slice(
+            &fs::read(root.join(format!(
+                "runtime-artifacts-v1/records/codex-official-release/{:020}-{}.json",
+                reference["revision"].as_u64().unwrap(),
+                reference["source_record_id"].as_str().unwrap()
+            )))
+            .unwrap(),
+        )
+        .unwrap();
         assert_eq!(record["entries"].as_array().unwrap().len(), 2);
         assert_eq!(
-            record["build_input"]["Codex0156OfficialArchives"],
-            serde_json::to_value(&spec.release_bundle).unwrap()
+            record["build_input"]["CodexOfficialRelease"],
+            serde_json::to_value(&spec.release_input).unwrap()
         );
         assert_eq!(
             fs::read_link(root.join("bin/codex")).unwrap(),
@@ -1949,8 +1980,8 @@ mod tests {
         // Deliberate wrong-cache failure cannot acquire or replace either inode.
         fs::write(
             downloads.join(format!(
-                "0.156.1-{}",
-                spec.release_bundle.code_mode_host.archive_name
+                "{}-{}",
+                spec.version, spec.release_bundle.code_mode_host.archive_name
             )),
             b"wrong cache",
         )
@@ -1966,6 +1997,692 @@ mod tests {
                     .ino()
             ]
         );
+    }
+    #[test]
+    fn world_deps_codex_release_manifest_history_rollback_and_pending_isolation() {
+        use sha2::{Digest, Sha256};
+        use std::os::unix::fs::MetadataExt;
+        let fixture = TempDir::new().unwrap();
+        let filesystem = fixture.path().join("filesystem");
+        let root = filesystem.join("var/lib/substrate/world-deps");
+        let downloads = root.join("codex-runtime/downloads");
+        fs::create_dir_all(&downloads).unwrap();
+        for logical in [
+            "/etc/hosts",
+            "/etc/nsswitch.conf",
+            "/etc/passwd",
+            "/etc/group",
+            "/etc/resolv.conf",
+            "/etc/ssl/certs/ca-certificates.crt",
+        ] {
+            let p = filesystem.join(logical.trim_start_matches('/'));
+            fs::create_dir_all(p.parent().unwrap()).unwrap();
+            fs::write(&p, logical).unwrap();
+            fs::set_permissions(p, fs::Permissions::from_mode(0o644)).unwrap();
+        }
+        let system = filesystem.join("etc/codex");
+        fs::create_dir(&system).unwrap();
+        fs::set_permissions(system, fs::Permissions::from_mode(0o755)).unwrap();
+        let stubs = fixture.path().join("deny-acquisition");
+        fs::create_dir(&stubs).unwrap();
+        for name in ["wget", "curl"] {
+            let p = stubs.join(name);
+            fs::write(&p, "#!/bin/sh\nexit 99\n").unwrap();
+            fs::set_permissions(p, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let mut elf = vec![0u8; 120];
+        elf[..16].copy_from_slice(b"\x7fELF\x02\x01\x01\0\0\0\0\0\0\0\0\0");
+        elf[16..18].copy_from_slice(&2u16.to_le_bytes());
+        elf[18..20].copy_from_slice(&62u16.to_le_bytes());
+        elf[20..24].copy_from_slice(&1u32.to_le_bytes());
+        elf[24..32].copy_from_slice(&0x400000u64.to_le_bytes());
+        elf[32..40].copy_from_slice(&64u64.to_le_bytes());
+        elf[52..54].copy_from_slice(&64u16.to_le_bytes());
+        elf[54..56].copy_from_slice(&56u16.to_le_bytes());
+        elf[56..58].copy_from_slice(&1u16.to_le_bytes());
+        elf[64..68].copy_from_slice(&1u32.to_le_bytes());
+        elf[68..72].copy_from_slice(&5u32.to_le_bytes());
+        elf[80..88].copy_from_slice(&0x400000u64.to_le_bytes());
+        elf[96..104].copy_from_slice(&120u64.to_le_bytes());
+        elf[104..112].copy_from_slice(&120u64.to_le_bytes());
+        elf[112..120].copy_from_slice(&0x1000u64.to_le_bytes());
+        let base = resolve_codex_runtime_install_spec_for_target_v1(
+            config_projection::CODEX_RELEASE_TARGET_V1,
+        )
+        .unwrap();
+        let historical_release = base
+            .release_catalog
+            .releases
+            .iter()
+            .find(|r| r.version == "0.156.1")
+            .expect("retained historical156 evidence")
+            .clone();
+        let mut catalog = base.release_catalog.clone();
+        catalog.releases.clear();
+        let mut variants = Vec::new();
+        for (index, version) in ["0.200.0-fixture", "0.200.1-fixture"]
+            .into_iter()
+            .enumerate()
+        {
+            let mut record = base.release_input.manifest.clone();
+            record.version = version.into();
+            record.source.tag = format!("rust-v{version}");
+            for (slot, artifact) in record.artifacts.iter_mut().enumerate() {
+                let mut bytes = elf.clone();
+                bytes.extend_from_slice(&[index as u8, slot as u8]);
+                artifact.extracted.byte_length = bytes.len() as u64;
+                artifact.extracted.sha256 = format!("{:x}", Sha256::digest(&bytes));
+                artifact.extracted.elf = config_projection::E3ElfExecutionModelV1::StaticExec;
+                artifact.archive.url = format!(
+                    "https://github.com/openai/codex/releases/download/{}/{}",
+                    record.source.tag, artifact.archive.name
+                );
+                let member = fixture.path().join(format!("member-{index}-{slot}"));
+                fs::write(&member, &bytes).unwrap();
+                let archive = downloads.join(format!("{version}-{}", artifact.archive.name));
+                let output=Command::new("python3").args(["-c","import io,sys,tarfile; data=open(sys.argv[1],'rb').read(); t=tarfile.open(sys.argv[2],'w:gz'); i=tarfile.TarInfo(sys.argv[3]); i.size=len(data); i.mode=0o755; t.addfile(i,io.BytesIO(data)); t.close()"]).arg(member).arg(&archive).arg(&artifact.archive.member).output().unwrap();
+                assert!(output.status.success());
+                artifact.archive.byte_length = fs::metadata(&archive).unwrap().len();
+                artifact.archive.sha256 =
+                    format!("{:x}", Sha256::digest(fs::read(archive).unwrap()));
+            }
+            record.validate_structure().unwrap();
+            catalog.releases.push(record.clone());
+            variants.push(record);
+        }
+        let make_spec = |record: &config_projection::CodexReleaseRecordV1| {
+            let mut spec = base.clone();
+            spec.version = record.version.clone();
+            spec.release_input = config_projection::CodexReleaseInputV1 {
+                binding: record.binding().unwrap(),
+                manifest: record.clone(),
+            };
+            spec.release_catalog = catalog.clone();
+            spec.release_catalog
+                .selected
+                .insert(record.target.clone(), record.version.clone());
+            let pin = |a: &config_projection::CodexReleaseArtifactV1| {
+                config_projection::Codex0156OfficialArchiveV1 {
+                    archive_name: a.archive.name.clone(),
+                    archive_url: a.archive.url.clone(),
+                    archive_sha256: a.archive.sha256.clone(),
+                    archive_byte_length: a.archive.byte_length,
+                    archive_entry_path: a.archive.member.clone(),
+                    extracted_executable_sha256: a.extracted.sha256.clone(),
+                    extracted_byte_length: a.extracted.byte_length,
+                }
+            };
+            spec.release_bundle = CodexInstallerReleaseV1 {
+                version: record.version.clone(),
+                target_triple: record.target.clone(),
+                main: pin(&record.artifacts[0]),
+                code_mode_host: pin(&record.artifacts[1]),
+            };
+            spec.archive_name = spec.release_bundle.main.archive_name.clone();
+            spec.archive_url = spec.release_bundle.main.archive_url.clone();
+            spec.archive_sha256 = spec.release_bundle.main.archive_sha256.clone();
+            spec.archive_entry_path = spec.release_bundle.main.archive_entry_path.clone();
+            spec.extracted_executable_sha256 =
+                spec.release_bundle.main.extracted_executable_sha256.clone();
+            spec
+        };
+        let first = make_spec(&variants[0]);
+        let second = make_spec(&variants[1]);
+        assert_ne!(first.release_input.binding, second.release_input.binding);
+        assert_ne!(
+            first.release_bundle.main.extracted_executable_sha256,
+            second.release_bundle.main.extracted_executable_sha256
+        );
+        let path = fixture.path().join("installer.sh");
+        let run = |body: &str| {
+            fs::write(&path, body).unwrap();
+            Command::new("bash")
+                .arg(&path)
+                .env(
+                    "PATH",
+                    format!("{}:{}", stubs.display(), std::env::var("PATH").unwrap()),
+                )
+                .env("SUBSTRATE_ARTIFACT_FIXTURE_ROOT", &filesystem)
+                .output()
+                .unwrap()
+        };
+        let a = codex_component_installer_script_v1(&first, &filesystem);
+        let b = codex_component_installer_script_v1(&second, &filesystem);
+        let result = run(&a);
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        let source = root.join("runtime-artifacts-v1");
+        let head_path = source.join("heads/codex-official-release.json");
+        let old_head = fs::read(&head_path).unwrap();
+        let bin = root.join("codex-runtime/bin");
+        let old_inode = fs::metadata(bin.join("codex")).unwrap().ino();
+        let before = run(&b.replace(
+            "# Physical directory publication",
+            "exit 77\n# Physical directory publication",
+        ));
+        assert!(!before.status.success());
+        assert_eq!(old_head, fs::read(&head_path).unwrap());
+        assert_eq!(old_inode, fs::metadata(bin.join("codex")).unwrap().ino());
+        let after = run(&b.replace("PYPAIR\nln -sf", "PYPAIR\nexit 78\nln -sf"));
+        assert!(!after.status.success());
+        assert_eq!(old_head, fs::read(&head_path).unwrap());
+        assert_ne!(old_inode, fs::metadata(bin.join("codex")).unwrap().ino());
+        let mut stripped = second.clone();
+        stripped
+            .release_catalog
+            .releases
+            .retain(|r| r.version == second.version);
+        let missing_history = run(&codex_component_installer_script_v1(&stripped, &filesystem));
+        assert!(
+            !missing_history.status.success(),
+            "removing deselected historical manifest must reject"
+        );
+        assert_eq!(old_head, fs::read(&head_path).unwrap());
+        let result = run(&b);
+        assert!(
+            result.status.success(),
+            "own-manifest A->B history failed: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        let head_b = fs::read(&head_path).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&head_b).unwrap();
+        assert_eq!(value["head_revision"], 2);
+        let inode_b = fs::metadata(bin.join("codex")).unwrap().ino();
+        let retry = run(&b);
+        assert!(retry.status.success());
+        assert_eq!(head_b, fs::read(&head_path).unwrap());
+        assert_eq!(inode_b, fs::metadata(bin.join("codex")).unwrap().ino());
+        let result = run(&a);
+        assert!(
+            result.status.success(),
+            "forward rollback failed: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        let head_a = fs::read(&head_path).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&head_a).unwrap();
+        assert_eq!(value["head_revision"], 3);
+        assert_ne!(old_head, head_a);
+        assert_ne!(inode_b, fs::metadata(bin.join("codex")).unwrap().ino());
+        assert_eq!(
+            fs::read_dir(source.join("records/codex-official-release"))
+                .unwrap()
+                .count(),
+            3
+        );
+        // Unknown/forged foreign heads cannot be reinterpreted as the current stream.
+        let temp = source
+            .join("heads")
+            .join(format!(".e3-artifact-tmp.{}.head", uuid::Uuid::now_v7()));
+        let mut foreign = value.clone();
+        foreign["source_stream"] = serde_json::json!("UnknownStream");
+        foreign.as_object_mut().unwrap().remove("head_hash");
+        foreign["head_hash"]=serde_json::json!(config_projection::ConfigProjectionCodecV1::domain_sha256("",&serde_json::json!({"domain":"substrate.e3.installer-artifact-source-head.v1","head":foreign})).unwrap());
+        fs::write(
+            &temp,
+            config_projection::ConfigProjectionCodecV1::encode_canonical_json(&foreign).unwrap(),
+        )
+        .unwrap();
+        fs::set_permissions(&temp, fs::Permissions::from_mode(0o640)).unwrap();
+        assert!(!run(&a).status.success());
+        assert!(temp.exists());
+        assert_eq!(head_a, fs::read(&head_path).unwrap());
+        fs::remove_file(&temp).unwrap();
+        // Current pending-head recovery retains exact head/inodes on idempotent replay.
+        fs::write(&temp, &head_a).unwrap();
+        fs::set_permissions(&temp, fs::Permissions::from_mode(0o640)).unwrap();
+        let result = run(&a);
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert!(!temp.exists());
+        assert_eq!(head_a, fs::read(&head_path).unwrap());
+        // A source manifest binding cannot authorize the other generated pair.
+        let mut mixed = first.clone();
+        mixed.release_bundle.code_mode_host = second.release_bundle.code_mode_host.clone();
+        assert!(validate_codex_runtime_install_spec_v1(&mixed).is_err());
+        assert_eq!(head_a, fs::read(&head_path).unwrap());
+        // A frozen historical156 pending head is authenticated in its OWN stream.
+        // This logical historical fixture deliberately does not claim current files:
+        // upgrades have already replaced their original descriptor observations.
+        let rehash = |mut value: serde_json::Value, domain: &str, member: &str, field: &str| {
+            value.as_object_mut().unwrap().remove(field);
+            let hash = config_projection::ConfigProjectionCodecV1::domain_sha256(
+                "",
+                &serde_json::json!({"domain":domain,member:value}),
+            )
+            .unwrap();
+            value[field] = serde_json::json!(hash);
+            value
+        };
+        let reference = &value["head_ref"];
+        let current_record = source.join(format!(
+            "records/codex-official-release/{:020}-{}.json",
+            reference["revision"].as_u64().unwrap(),
+            reference["source_record_id"].as_str().unwrap()
+        ));
+        let mut legacy: serde_json::Value =
+            serde_json::from_slice(&fs::read(current_record).unwrap()).unwrap();
+        let pins = config_projection::Codex0156ReleaseBundleV1::pinned();
+        legacy["source_stream"] = serde_json::json!("Codex0156OfficialArchives");
+        legacy["source_record_id"] = serde_json::json!(format!("iar_{}", uuid::Uuid::now_v7()));
+        legacy["revision"] = serde_json::json!(1);
+        legacy["predecessor_ref"] = serde_json::Value::Null;
+        legacy["build_input"] = serde_json::json!({"Codex0156OfficialArchives":pins});
+        for (index, pin) in [&pins.main, &pins.code_mode_host].into_iter().enumerate() {
+            legacy["entries"][index]["sha256"] = serde_json::json!(pin.extracted_executable_sha256);
+            legacy["entries"][index]["byte_length"] = serde_json::json!(pin.extracted_byte_length);
+            legacy["entries"][index]["runtime_support"]["elf_execution_model"] =
+                serde_json::to_value(&historical_release.artifacts[index].extracted.elf).unwrap();
+        }
+        let host_file = serde_json::json!({"absolute_path":config_projection::CODEX_HOST_PATH_V1,"device_id":legacy["entries"][1]["device_id"],"inode":legacy["entries"][1]["inode"],"mode":0o755,"byte_length":pins.code_mode_host.extracted_byte_length,"sha256":pins.code_mode_host.extracted_executable_sha256});
+        legacy["entries"][0]["runtime_support"]["support_policy_version"] = serde_json::json!(2);
+        legacy["entries"][0]["runtime_support"]["code_mode_host"] = serde_json::json!({"file":host_file,"owner_uid":0,"elf_execution_model":historical_release.artifacts[1].extracted.elf,"provenance":pins.code_mode_host.provenance()});
+        for index in [0, 1] {
+            legacy["entries"][index]["runtime_support"] = rehash(
+                legacy["entries"][index]["runtime_support"].clone(),
+                "substrate.e3.runtime-support-manifest.v1",
+                "manifest",
+                "manifest_hash",
+            );
+            legacy["entries"][index] = rehash(
+                legacy["entries"][index].clone(),
+                "substrate.e3.installer-artifact-source-entry.v1",
+                "entry",
+                "entry_hash",
+            );
+        }
+        legacy = rehash(
+            legacy,
+            "substrate.e3.installer-artifact-source-record.v1",
+            "record",
+            "record_hash",
+        );
+        let legacy_dir = source.join("records/codex-0.156.1-x86_64-unknown-linux-musl");
+        fs::create_dir(&legacy_dir).unwrap();
+        fs::set_permissions(&legacy_dir, fs::Permissions::from_mode(0o750)).unwrap();
+        let legacy_record_path = legacy_dir.join(format!(
+            "{:020}-{}.json",
+            1,
+            legacy["source_record_id"].as_str().unwrap()
+        ));
+        let legacy_record_bytes =
+            config_projection::ConfigProjectionCodecV1::encode_canonical_json(&legacy).unwrap();
+        fs::write(&legacy_record_path, &legacy_record_bytes).unwrap();
+        fs::set_permissions(&legacy_record_path, fs::Permissions::from_mode(0o640)).unwrap();
+        let legacy_head = rehash(
+            serde_json::json!({"schema_version":1,"source_store_id":legacy["source_store_id"],"source_stream":"Codex0156OfficialArchives","head_ref":{"source_store_id":legacy["source_store_id"],"source_record_id":legacy["source_record_id"],"revision":1,"record_hash":legacy["record_hash"]},"head_revision":1,"predecessor_head_hash":null,"updated_at":legacy["created_at"]}),
+            "substrate.e3.installer-artifact-source-head.v1",
+            "head",
+            "head_hash",
+        );
+        let legacy_head_bytes =
+            config_projection::ConfigProjectionCodecV1::encode_canonical_json(&legacy_head)
+                .unwrap();
+        fs::write(&temp, &legacy_head_bytes).unwrap();
+        fs::set_permissions(&temp, fs::Permissions::from_mode(0o640)).unwrap();
+        let result = run(&a);
+        assert!(
+            result.status.success(),
+            "valid frozen foreign head rejected: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert_eq!(fs::read(&temp).unwrap(), legacy_head_bytes);
+        assert!(!source
+            .join("heads/codex-0.156.1-x86_64-unknown-linux-musl.json")
+            .exists());
+        assert_eq!(head_a, fs::read(&head_path).unwrap());
+        // OWNER-PRE2: both staged files are valid before either immutable/head commit.
+        let legacy_record_temporary =
+            legacy_dir.join(format!(".e3-artifact-tmp.{}.record", uuid::Uuid::now_v7()));
+        fs::rename(&legacy_record_path, &legacy_record_temporary).unwrap();
+        let result = run(&a);
+        assert!(
+            result.status.success(),
+            "OWNER-PRE2 complete foreign pending record/head pair rejected: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert_eq!(
+            fs::read(&legacy_record_temporary).unwrap(),
+            legacy_record_bytes
+        );
+        assert_eq!(fs::read(&temp).unwrap(), legacy_head_bytes);
+        assert!(!legacy_record_path.exists());
+        assert!(!source
+            .join("heads/codex-0.156.1-x86_64-unknown-linux-musl.json")
+            .exists());
+        assert_eq!(head_a, fs::read(&head_path).unwrap());
+        // Incomplete, ambiguous, wrong-mode and symlinked staged records are not
+        // authenticated merely because their shared pending head names a known stream.
+        let held_pending = fixture.path().join("held-foreign-pending-record");
+        fs::rename(&legacy_record_temporary, &held_pending).unwrap();
+        assert!(
+            !run(&a).status.success(),
+            "foreign head without final or staged record accepted"
+        );
+        fs::rename(&held_pending, &legacy_record_temporary).unwrap();
+        let duplicate =
+            legacy_dir.join(format!(".e3-artifact-tmp.{}.record", uuid::Uuid::now_v7()));
+        fs::write(&duplicate, &legacy_record_bytes).unwrap();
+        fs::set_permissions(&duplicate, fs::Permissions::from_mode(0o640)).unwrap();
+        assert!(
+            !run(&a).status.success(),
+            "ambiguous foreign record temporaries accepted"
+        );
+        fs::remove_file(&duplicate).unwrap();
+        fs::set_permissions(&legacy_record_temporary, fs::Permissions::from_mode(0o600)).unwrap();
+        assert!(
+            !run(&a).status.success(),
+            "wrong-mode foreign record temporary accepted"
+        );
+        fs::set_permissions(&legacy_record_temporary, fs::Permissions::from_mode(0o640)).unwrap();
+        fs::rename(&legacy_record_temporary, &held_pending).unwrap();
+        std::os::unix::fs::symlink(&held_pending, &legacy_record_temporary).unwrap();
+        assert!(
+            !run(&a).status.success(),
+            "symlinked foreign record temporary accepted"
+        );
+        fs::remove_file(&legacy_record_temporary).unwrap();
+        fs::rename(&held_pending, &legacy_record_temporary).unwrap();
+        assert_eq!(head_a, fs::read(&head_path).unwrap());
+        assert_eq!(legacy_head_bytes, fs::read(&temp).unwrap());
+        fs::rename(&legacy_record_temporary, &legacy_record_path).unwrap();
+        for mutation in 0..7 {
+            let mut bad = legacy_head.clone();
+            match mutation {
+                0 => bad["head_ref"]["source_record_id"] = serde_json::json!("../../unsafe"),
+                1 => {
+                    bad["head_ref"]["source_store_id"] =
+                        serde_json::json!(format!("ias_{}", uuid::Uuid::now_v7()))
+                }
+                2 => bad["head_ref"]["revision"] = serde_json::json!(2),
+                3 => bad["head_ref"]["record_hash"] = serde_json::json!("00".repeat(32)),
+                4 => bad["unexpected"] = serde_json::json!(true),
+                5 => bad["updated_at"] = serde_json::json!("invalid"),
+                _ => bad["source_stream"] = serde_json::json!("Codex0125OfficialArchive"),
+            };
+            bad = rehash(
+                bad,
+                "substrate.e3.installer-artifact-source-head.v1",
+                "head",
+                "head_hash",
+            );
+            fs::write(
+                &temp,
+                config_projection::ConfigProjectionCodecV1::encode_canonical_json(&bad).unwrap(),
+            )
+            .unwrap();
+            assert!(
+                !run(&a).status.success(),
+                "foreign mutation {mutation} accepted"
+            );
+            assert_eq!(head_a, fs::read(&head_path).unwrap());
+            assert!(temp.exists());
+        }
+        fs::write(&temp, &legacy_head_bytes).unwrap();
+        let mut bad_record = legacy.clone();
+        bad_record["build_input"]["Codex0156OfficialArchives"]["main"]["archive_sha256"] =
+            serde_json::json!("00".repeat(32));
+        bad_record = rehash(
+            bad_record,
+            "substrate.e3.installer-artifact-source-record.v1",
+            "record",
+            "record_hash",
+        );
+        let mut bad_head = legacy_head.clone();
+        bad_head["head_ref"]["record_hash"] = bad_record["record_hash"].clone();
+        bad_head = rehash(
+            bad_head,
+            "substrate.e3.installer-artifact-source-head.v1",
+            "head",
+            "head_hash",
+        );
+        fs::write(
+            &legacy_record_path,
+            config_projection::ConfigProjectionCodecV1::encode_canonical_json(&bad_record).unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            &temp,
+            config_projection::ConfigProjectionCodecV1::encode_canonical_json(&bad_head).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            !run(&a).status.success(),
+            "self-hashed altered historical pins accepted"
+        );
+        fs::write(&legacy_record_path, &legacy_record_bytes).unwrap();
+        fs::write(&temp, &legacy_head_bytes).unwrap();
+        // Recover a B transaction staged under B, while the next invocation selects A.
+        let interrupted=run(&b.replace("commit_staged_publication(record_temporary, record_path, record_body, True)","raise RuntimeError('fixture interruption after both immutable/head staging')\ncommit_staged_publication(record_temporary, record_path, record_body, True)"));
+        assert!(!interrupted.status.success());
+        assert_eq!(head_a, fs::read(&head_path).unwrap());
+        let result = run(&a);
+        assert!(
+            result.status.success(),
+            "own-manifest pending B recovery while selecting A failed: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        let recovered: serde_json::Value =
+            serde_json::from_slice(&fs::read(&head_path).unwrap()).unwrap();
+        assert_eq!(recovered["head_revision"], 5);
+        assert_eq!(
+            fs::read_dir(source.join("records/codex-official-release"))
+                .unwrap()
+                .count(),
+            5
+        );
+        assert_eq!(fs::read(&temp).unwrap(), legacy_head_bytes);
+        let before_retry = fs::read(&head_path).unwrap();
+        let inode = fs::metadata(bin.join("codex")).unwrap().ino();
+        assert!(run(&a).status.success());
+        assert_eq!(before_retry, fs::read(&head_path).unwrap());
+        assert_eq!(inode, fs::metadata(bin.join("codex")).unwrap().ino());
+    }
+    fn codex_component_installer_script_v1(
+        spec: &CodexRuntimeInstallSpecV1,
+        filesystem: &Path,
+    ) -> String {
+        let root = filesystem.join("var/lib/substrate/world-deps");
+        let prelude = r#"import builtins,os,stat
+fixture_root=os.environ["SUBSTRATE_ARTIFACT_FIXTURE_ROOT"]
+def observed_path(path):
+    path=os.fspath(path)
+    if path.startswith(("/etc/","/var/lib/substrate/","/usr/local/lib/substrate/")): return os.path.join(fixture_root,path.lstrip("/"))
+    return path
+original_stat,original_open,original_listdir,original_listxattr=os.stat,builtins.open,os.listdir,os.listxattr
+def observed_stat(path,*args,**kwargs):
+    value=list(original_stat(observed_path(path),*args,**kwargs));value[4]=0;value[5]=0;return os.stat_result(value)
+os.stat=observed_stat
+builtins.open=lambda path,*args,**kwargs:original_open(observed_path(path),*args,**kwargs)
+os.listdir=lambda path:original_listdir(observed_path(path))
+os.listxattr=lambda path,*args,**kwargs:original_listxattr(observed_path(path),*args,**kwargs)
+"#;
+        render_codex_runtime_install_script_v1(
+            super::super::inventory::codex_runtime_install_script_template_v1(),
+            &spec,
+        )
+        .replace(
+            "world_deps_root=\"/var/lib/substrate/world-deps\"",
+            &format!("world_deps_root=\"{}\"", root.display()),
+        )
+        .replace(
+            "python3 - \"${artifact_source_root}\" \"${installed_binary}\"",
+            &format!(
+                "python3 - \"${{artifact_source_root}}\" \"{}\"",
+                config_projection::CODEX_MAIN_PATH_V1
+            ),
+        )
+        .replace(
+            "<<'PY'\nimport datetime",
+            &format!("<<'PY'\n{prelude}\nimport datetime"),
+        )
+        .replace("grp.getgrnam(\"substrate\").gr_gid", "os.getgid()")
+    }
+    #[cfg(unix)]
+    #[test]
+    #[ignore = "non-executing connected installer proof; requires held archives and a new SUBSTRATE_CODEX_COMPONENT_DIR"]
+    fn world_deps_codex_release_installer_handoff() {
+        use sha2::{Digest, Sha256};
+        use std::os::unix::fs::MetadataExt;
+        let directory = PathBuf::from(
+            std::env::var("SUBSTRATE_CODEX_COMPONENT_DIR").expect("component directory required"),
+        );
+        let archives = PathBuf::from(
+            std::env::var("SUBSTRATE_CODEX_0156_ARCHIVE_DIR")
+                .expect("held official archives required"),
+        );
+        let filesystem = directory.join("filesystem");
+        assert!(
+            !filesystem.exists(),
+            "use a fresh test-owned component directory"
+        );
+        let root = filesystem.join("var/lib/substrate/world-deps");
+        let downloads = root.join("codex-runtime/downloads");
+        fs::create_dir_all(&downloads).unwrap();
+        let spec = resolve_codex_runtime_install_spec_for_target_v1(
+            config_projection::CODEX_RELEASE_TARGET_V1,
+        )
+        .unwrap();
+        for pin in [
+            &spec.release_bundle.main,
+            &spec.release_bundle.code_mode_host,
+        ] {
+            let source = archives.join(&pin.archive_name);
+            assert_eq!(
+                fs::metadata(&source).unwrap().len(),
+                pin.archive_byte_length
+            );
+            assert_eq!(
+                format!("{:x}", Sha256::digest(fs::read(&source).unwrap())),
+                pin.archive_sha256
+            );
+            fs::copy(
+                source,
+                downloads.join(format!("{}-{}", spec.version, pin.archive_name)),
+            )
+            .unwrap();
+        }
+        let system = filesystem.join("etc/codex");
+        fs::create_dir_all(&system).unwrap();
+        fs::set_permissions(&system, fs::Permissions::from_mode(0o755)).unwrap();
+        for logical in [
+            "/etc/hosts",
+            "/etc/nsswitch.conf",
+            "/etc/passwd",
+            "/etc/group",
+            "/etc/resolv.conf",
+            "/etc/ssl/certs/ca-certificates.crt",
+        ] {
+            let path = filesystem.join(logical.trim_start_matches('/'));
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, format!("test-owned support {logical}\n")).unwrap();
+            fs::set_permissions(path, fs::Permissions::from_mode(0o644)).unwrap();
+        }
+        let stubs = directory.join("deny-acquisition");
+        fs::create_dir_all(&stubs).unwrap();
+        let denied = directory.join("acquisition-attempts");
+        for name in ["wget", "curl"] {
+            let path = stubs.join(name);
+            fs::write(
+                &path,
+                format!(
+                    "#!/bin/sh\nprintf '%s\\n' denied >> '{}'\nexit 99\n",
+                    denied.display()
+                ),
+            )
+            .unwrap();
+            fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        // Test-owned filesystem/UID observations only. Logical paths, record bytes,
+        // archive identities and the actual publisher/importer code remain exact.
+        let script = codex_component_installer_script_v1(&spec, &filesystem);
+        assert!(!script.contains("__SUBSTRATE_CODEX_"));
+        let path = directory.join("installer.sh");
+        fs::write(&path, &script).unwrap();
+        let run = || {
+            Command::new("bash")
+                .arg(&path)
+                .env(
+                    "PATH",
+                    format!("{}:{}", stubs.display(), std::env::var("PATH").unwrap()),
+                )
+                .env("SUBSTRATE_ARTIFACT_FIXTURE_ROOT", &filesystem)
+                .output()
+                .unwrap()
+        };
+        let first = run();
+        assert!(
+            first.status.success(),
+            "{}",
+            String::from_utf8_lossy(&first.stderr)
+        );
+        assert!(!denied.exists(), "unexpected acquisition attempt");
+        let bin = root.join("codex-runtime/bin");
+        let inodes = [
+            fs::metadata(bin.join("codex")).unwrap().ino(),
+            fs::metadata(bin.join("codex-code-mode-host"))
+                .unwrap()
+                .ino(),
+        ];
+        let retry = run();
+        assert!(
+            retry.status.success(),
+            "{}",
+            String::from_utf8_lossy(&retry.stderr)
+        );
+        assert_eq!(
+            inodes,
+            [
+                fs::metadata(bin.join("codex")).unwrap().ino(),
+                fs::metadata(bin.join("codex-code-mode-host"))
+                    .unwrap()
+                    .ino()
+            ]
+        );
+        let source = root.join("runtime-artifacts-v1");
+        let head: serde_json::Value =
+            config_projection::ConfigProjectionCodecV1::decode_canonical_json(
+                &fs::read(source.join("heads/codex-official-release.json")).unwrap(),
+            )
+            .unwrap();
+        assert_eq!(head["head_revision"], 1);
+        assert_eq!(head["source_stream"], "CodexOfficialRelease");
+        let reference = &head["head_ref"];
+        let record_path = source.join(format!(
+            "records/codex-official-release/{:020}-{}.json",
+            reference["revision"].as_u64().unwrap(),
+            reference["source_record_id"].as_str().unwrap()
+        ));
+        let record: config_projection::InstallerArtifactSourceRecordV1 =
+            config_projection::ConfigProjectionCodecV1::decode_canonical_json(
+                &fs::read(&record_path).unwrap(),
+            )
+            .unwrap();
+        assert_eq!(
+            record.build_input,
+            config_projection::InstallerArtifactBuildInputV1::CodexOfficialRelease(
+                spec.release_input.clone()
+            )
+        );
+        assert_eq!(record.entries[0].inode, inodes[0]);
+        assert_eq!(record.entries[1].inode, inodes[1]);
+        assert_eq!(record.entries[0].runtime_support.support_policy_version, 3);
+        fs::write(
+            directory.join("release-input.json"),
+            config_projection::ConfigProjectionCodecV1::encode_canonical_json(&spec.release_input)
+                .unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            directory.join("installer-record.json"),
+            fs::read(record_path).unwrap(),
+        )
+        .unwrap();
     }
 }
 
@@ -1986,9 +2703,19 @@ struct CodexRuntimeInstallSpecV1 {
     archive_sha256: String,
     archive_entry_path: String,
     extracted_executable_sha256: String,
-    release_bundle: config_projection::Codex0156ReleaseBundleV1,
+    release_bundle: CodexInstallerReleaseV1,
+    release_input: config_projection::CodexReleaseInputV1,
+    release_catalog: config_projection::CodexReleaseCatalogV1,
 }
 
+// Structural installer arguments derive from the authenticated release; no independent pins.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+struct CodexInstallerReleaseV1 {
+    version: String,
+    target_triple: String,
+    main: config_projection::Codex0156OfficialArchiveV1,
+    code_mode_host: config_projection::Codex0156OfficialArchiveV1,
+}
 #[allow(dead_code)]
 fn run_world_command_output_for_deps(
     cmd: &str,
@@ -2154,15 +2881,29 @@ fn map_codex_runtime_target_triple_for_guest_arch_v1(guest_arch: &str) -> Result
 fn resolve_codex_runtime_install_spec_for_target_v1(
     target_triple: &str,
 ) -> Result<CodexRuntimeInstallSpecV1> {
-    if target_triple != config_projection::CODEX_0156_TARGET {
-        return Err(config_model::user_error(format!(
-            "world deps package '{}' has no pinned official Codex release mapping for guest target '{}'",
-            CODEX_RUNTIME_PACKAGE_NAME, target_triple
-        )));
-    }
-    // UAA 0.3.7 advertises125. Installer provenance is independently pinned here;
-    // this does not claim newer UAA metadata or native execution qualification.
-    let bundle = config_projection::Codex0156ReleaseBundleV1::pinned();
+    let release =
+        config_projection::TrustedCodexReleaseV1::selected(target_triple).map_err(|error| {
+            config_model::user_error(format!(
+                "world deps package '{CODEX_RUNTIME_PACKAGE_NAME}' has no pinned official Codex release mapping for guest target '{target_triple}': {error:?}"
+            ))
+        })?;
+    let archive = |artifact: &config_projection::CodexReleaseArtifactV1| {
+        config_projection::Codex0156OfficialArchiveV1 {
+            archive_name: artifact.archive.name.clone(),
+            archive_url: artifact.archive.url.clone(),
+            archive_sha256: artifact.archive.sha256.clone(),
+            archive_byte_length: artifact.archive.byte_length,
+            archive_entry_path: artifact.archive.member.clone(),
+            extracted_executable_sha256: artifact.extracted.sha256.clone(),
+            extracted_byte_length: artifact.extracted.byte_length,
+        }
+    };
+    let bundle = CodexInstallerReleaseV1 {
+        version: release.record().version.clone(),
+        target_triple: release.record().target.clone(),
+        main: archive(release.main()),
+        code_mode_host: archive(release.host()),
+    };
     Ok(CodexRuntimeInstallSpecV1 {
         target_triple: bundle.target_triple.clone(),
         version: bundle.version.clone(),
@@ -2172,23 +2913,103 @@ fn resolve_codex_runtime_install_spec_for_target_v1(
         archive_entry_path: bundle.main.archive_entry_path.clone(),
         extracted_executable_sha256: bundle.main.extracted_executable_sha256.clone(),
         release_bundle: bundle,
+        release_input: release.input().clone(),
+        release_catalog: config_projection::CodexReleaseCatalogV1::embedded()
+            .map_err(|e| anyhow::anyhow!("trusted catalog: {e:?}"))?,
     })
+}
+
+fn validate_codex_runtime_install_spec_v1(spec: &CodexRuntimeInstallSpecV1) -> Result<()> {
+    let manifest = &spec.release_input.manifest;
+    spec.release_catalog
+        .validate()
+        .map_err(|e| anyhow::anyhow!("invalid catalog: {e:?}"))?;
+    if manifest
+        .binding()
+        .map_err(|e| anyhow::anyhow!("invalid release: {e:?}"))?
+        != spec.release_input.binding
+        || !spec.release_catalog.releases.contains(manifest)
+        || spec.release_catalog.selected.get(&manifest.target) != Some(&manifest.version)
+        || (&spec.version, &spec.target_triple) != (&manifest.version, &manifest.target)
+    {
+        anyhow::bail!("installer selection differs from authenticated manifest");
+    }
+    let archive = |a: &config_projection::CodexReleaseArtifactV1| {
+        config_projection::Codex0156OfficialArchiveV1 {
+            archive_name: a.archive.name.clone(),
+            archive_url: a.archive.url.clone(),
+            archive_sha256: a.archive.sha256.clone(),
+            archive_byte_length: a.archive.byte_length,
+            archive_entry_path: a.archive.member.clone(),
+            extracted_executable_sha256: a.extracted.sha256.clone(),
+            extracted_byte_length: a.extracted.byte_length,
+        }
+    };
+    if spec.release_bundle
+        != (CodexInstallerReleaseV1 {
+            version: manifest.version.clone(),
+            target_triple: manifest.target.clone(),
+            main: archive(&manifest.artifacts[0]),
+            code_mode_host: archive(&manifest.artifacts[1]),
+        })
+        || (
+            &spec.archive_name,
+            &spec.archive_url,
+            &spec.archive_sha256,
+            &spec.archive_entry_path,
+            &spec.extracted_executable_sha256,
+        ) != (
+            &spec.release_bundle.main.archive_name,
+            &spec.release_bundle.main.archive_url,
+            &spec.release_bundle.main.archive_sha256,
+            &spec.release_bundle.main.archive_entry_path,
+            &spec.release_bundle.main.extracted_executable_sha256,
+        )
+    {
+        anyhow::bail!("installer archive view differs from authenticated manifest");
+    }
+    Ok(())
 }
 
 fn render_codex_runtime_install_script_v1(
     template: &str,
     spec: &CodexRuntimeInstallSpecV1,
 ) -> String {
+    validate_codex_runtime_install_spec_v1(spec).expect("trusted installer release data");
     let publisher =
-        crate::builtins::world_deps::inventory::render_codex_installer_artifact_source_v1();
+        crate::builtins::world_deps::inventory::render_codex_release_installer_artifact_source_v1();
     let (source_lock, publication) = publisher
         .split_once("python3 - ")
         .expect("fixed source publisher");
     template
         .replace("__SUBSTRATE_CODEX_SOURCE_LOCK_V1__", source_lock)
         .replace(
+            "__SUBSTRATE_CODEX_RELEASE_INPUT_V1__",
+            &sh_quote(
+                &String::from_utf8(
+                    config_projection::ConfigProjectionCodecV1::encode_canonical_json(
+                        &spec.release_input,
+                    )
+                    .expect("trusted release"),
+                )
+                .expect("UTF8"),
+            ),
+        )
+        .replace(
+            "__SUBSTRATE_CODEX_RELEASE_CATALOG_V1__",
+            &sh_quote(
+                &String::from_utf8(
+                    config_projection::ConfigProjectionCodecV1::encode_canonical_json(
+                        &spec.release_catalog,
+                    )
+                    .expect("trusted catalog"),
+                )
+                .expect("UTF8"),
+            ),
+        )
+        .replace(
             "__SUBSTRATE_CODEX_RELEASE_BUNDLE_V1__",
-            &serde_json::to_string(&spec.release_bundle).expect("release pins"),
+            &sh_quote(&serde_json::to_string(&spec.release_bundle).expect("release data")),
         )
         .replace(
             "__SUBSTRATE_CODEX_HOST_ARCHIVE_NAME__",

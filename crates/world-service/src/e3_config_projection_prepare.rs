@@ -52,7 +52,7 @@ pub(crate) struct SealedE3ConfigProjectionPreparationV1 {
     record_id: String,
     launch_input_id: String,
     activation_intent: Option<config_projection::ManagedGatewayActivationIntentV1>,
-    native_plan: Option<config_projection::Codex0125ProjectionPlanV1>,
+    native_plan: Option<config_projection::CodexProjectionPlanV1>,
     native_source_manifest: Option<config_projection::NativeProjectionSourceManifestV1>,
     chain_bound: bool,
     // Field order also scrubs credentials before gateway cleanup/exclusion on unwinding.
@@ -196,7 +196,7 @@ impl E3ConfigProjectionPreparationManagerV1 {
             transport_api_types::MemberRuntimeBackendKindV1::ClaudeCode => "claude_code",
         };
         let runtime_artifact = manifest.entries.iter().find(|entry| {
-            entry.authority_role == config_projection::RuntimeArtifactAuthorityRoleV1::Codex0125
+            entry.authority_role == config_projection::RuntimeArtifactAuthorityRoleV1::CodexMain
         });
         if logical.sources != expected_sources
             || effective.authority_store_id != request.authoring_input_ref.authority_store_id
@@ -420,7 +420,7 @@ impl E3ConfigProjectionPreparationManagerV1 {
                             sha256: None,
                         })
                         .collect();
-                    owned.native_plan = Some(Codex0125ProjectionV1::render(
+                    owned.native_plan = Some(config_projection::CodexProjectionV1::render(
                         identity,
                         &effective,
                         &managed_gateway,
@@ -429,7 +429,7 @@ impl E3ConfigProjectionPreparationManagerV1 {
                         project_inputs,
                     )?);
                 }
-                let (native, manifest) = self.registry.publish_native_source(
+                let (native, manifest) = self.registry.publish_codex_native_source(
                     &identity.series_id,
                     &owned.fence_id,
                     owned
@@ -768,8 +768,8 @@ impl E3ConfigProjectionPreparationManagerV1 {
             immutable_launch_cap: cap,
             runtime_artifacts: config_projection::ConfigProjectionRuntimeArtifactsV1 {
                 codex: artifact(
-                    config_projection::RuntimeArtifactAuthorityRoleV1::Codex0125,
-                    config_projection::ConfigProjectionArtifactRoleV1::Codex0125,
+                    config_projection::RuntimeArtifactAuthorityRoleV1::CodexMain,
+                    config_projection::ConfigProjectionArtifactRoleV1::CodexMain,
                 )?,
                 world_entry_wrapper: artifact(
                     config_projection::RuntimeArtifactAuthorityRoleV1::WorldEntryWrapper,

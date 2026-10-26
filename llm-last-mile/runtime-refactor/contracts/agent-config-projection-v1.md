@@ -1,7 +1,7 @@
 **Kind:** contract
 **Stable ID:** `agent-config-projection-v1`
 **Status:** canonical specification; E3-A through E3-D landed; E3-E terminally complete and product landed; enclosing E3 incomplete; E3-F not admitted or dispatched
-**Canonical for:** E3 config-projection identity, record, reference, versioned member-dispatch carrier, persistence, validation, versioned Codex 0.125/0.156.1 native inputs, compatibility, and D1 handoff boundaries
+**Canonical for:** E3 config-projection identity, record, reference, versioned member-dispatch carrier, persistence, validation, trusted Codex release manifests/profiles, historical 0.125/0.156.1 native inputs, compatibility, and D1 handoff boundaries
 **Correction source baseline:** commit `81cfd33d4c5d16c31c837eeddff769995c566570`, tree `d40f6663a2aa01996ce8b4957f4aae0d30830961`, parent `138864a26dbc4721366c6cc8934d464d1929a189`
 **Landed prerequisite fact:** `E2-RM` is landed at `2012bb8b5562a73ed0ee45238c19252c16b25065`; that landing permits this documentation correction but is not an E3 runtime dependency
 **Supersedes:** only E3 planning statements that leave projection schema, persistence, versioning, Codex ambient-config closure, or the absent local `crates/codex` unresolved
@@ -24,6 +24,99 @@ Current packet status follows the
 [E3-E terminal closure](../slices/e3-agent-config-projection-and-gateway-adoption.md#e3-e-terminal-closure-2026-09-17)
 on the separate authority branch; E3-E's product landing does not integrate those branches or prove
 retained Codex/Active/resume. The historical recovery prose does not renew recovery dispatch.
+
+## Trusted Codex releases and reusable behavior profile
+
+The current `codex-runtime` installer consumes the canonical repository-managed
+`crates/config-projection/releases/codex.json` embedded by config-projection. The initial
+production catalog contains only the independently verified `0.156.1` Linux x86_64 musl main and
+stock code-mode-host pair described below. A test-only later release is never a production
+catalog entry or an official release claim. This amendment authorizes release-data generalization
+of the existing installer/artifact/native-input/support component; it does not qualify execution,
+admit V2, supply the sealed runtime producer, or complete E3-F.
+
+The catalog's closed schema contains an exact selected release per target and immutable release
+records. Each record binds schema, version, target, supported behavior profile, source tag/commit/
+tree and named source/catalogue hashes, plus the two ordered archive/member/extracted identities,
+lengths and measured ELF metadata. The selected profile is `codex-exec-stock-sibling-host-v1`.
+The existing strict canonical codec rejects duplicate/unknown fields and noncanonical or floating
+point JSON. Missing/extra/duplicate selections, artifacts, evidence slots, unsupported schema/
+profile/target, unsafe paths/member types and inconsistent URLs or hashes reject. No manifest
+field can supply scripts, TOML, environment, argv, runtime host paths, permissions, dynamic code,
+validator/hash-domain selection or arbitrary companions. The profile fixes those behavioral and
+security rules. Official URLs use the exact OpenAI Codex GitHub release location; acquisition
+keeps existing verified-cache and ordinary official redirect behavior.
+
+Reviewed repository authority authenticates catalog membership and compatibility with the named
+profile. Runtime requests, inventory overlays, environment and network responses cannot supply
+manifests or redefine trusted expected bytes. Hashes identify evidence and artifacts; they do not
+establish source-to-binary attestation or automatic behavioral compatibility. Adding a compatible
+release updates only reviewed manifest data and explicit selection, then runs meaningful checks
+and rebuilds the normal consumers. Changed CLI/config/loader/helper/protocol/default/security or
+unsupported ABI behavior requires a supported profile implementation and qualification. There is
+no latest selection, semver fallback, external hot-loaded manifest, automatic updater or new key
+service/ledger. Unknown data must fail before installer effects.
+
+The domain-separated digest covers one immutable canonical **release record**, not the catalog
+or its selected pointer. Adding or deselecting another record cannot change an old release digest.
+The release-record domain is `substrate.codex.release-manifest.v1`; generic native renderer schema3
+uses `substrate.e3.codex-native-config-projection.v1`, and loader schema3 uses
+`substrate.e3.codex-loader-inputs.v1`. These domains and the profile are stable across release
+numbers. The generic source/build-input stream is `CodexOfficialRelease` in the existing ledger;
+its physical stream directory is `codex-official-release`.
+The generic source build input, main/helper provenance and authority roles, native renderer and
+loader identity, support derivation and static wrapper validation all bind the same record digest
+and profile. The existing private Codex launch-plan input carries the generic binding and must
+match the executable artifact; its optional field is omitted on historical plans. This binds
+validation inputs without implementing the absent sealed runtime producer. Checking that individual objects each belong to some catalog record is insufficient.
+Consumers built with a different catalog reject unknown or mismatched release bindings. Existing
+source records, trusted entry/manifest hashes, immutable refs and native publication continue to
+carry authority; there is no independent release ledger or caller-selected expected identity.
+
+One generic source stream begins its own real lineage. Every predecessor and pending generic
+record validates against its **own** trusted immutable manifest, while final import requires the
+selected installed pair. Shared pending heads are routed or isolated by authenticated source
+stream, including complete staged record/head transactions whose final record is not yet present;
+historical156 temporaries are never renamed into the generic stream. Retain the existing
+lock across complete directory exchange, recovery and source publication, with canonical CAS,
+immutable record-before-head publication and readback. Failure after physical exchange may leave
+a stale head; imports reject until retry publishes the coherent selected pair. Exact retry keeps
+unchanged inodes/head. A rollback selects a previously approved entry and appends a new forward
+revision after normal installation; it does not reset history, adopt old inode observations or
+hot-swap an authoritative active member. Deselection does not revoke historical recognition.
+
+Generic main artifact support policy3 names exactly the checked stock sibling helper; the helper's
+own support remains1. Historical156 main support2/helper1 and historical125 support rules retain
+their strict original meanings. Shared structural helper handling does not widen the legacy
+validator: generic support requires a checked catalog selection and same-main-release helper
+binding. Main execution still uses its held descriptor. Native helper pathname execution retains
+the held verified object, descriptor-rooted read-only bind, mounted-name identity/hash/ELF/read-only
+readback and exact-file read/execute permission. No directory-wide execute, PATH fallback,
+writable replacement, shim or additional runtime owner is authorized. Enforcement-envelope1 is
+separate and unchanged; envelope2 remains rejected.
+
+Extract the existing common rendering/publication mechanism rather than adding another
+version-specific renderer. Preserve stock host/fallback settings by leaving them unspecified,
+current tools and accepted admission, source/cache/auth startup predicates and independent
+physical readback. Provider/model inventory, alias `codex`, public gateway
+`codex -> codex-mini-latest`, UAA0.3.7 and protocol/session/cancel/finality ownership do not change.
+Substrate retains authoritative member/turn/world/resource lifetime ownership and original I1/I2
+custody. Preparation changes select the authenticated imported release/profile only; HSA/E2/
+secret/lifecycle/retained-parent/Active/Registered/service joins are outside this component.
+
+Historical125/156 record bytes, role spellings, source streams, domains, support encodings and
+strict validation remain immutable. They acquire no generic release authority. Frozen pins remain
+only for independently necessary historical validation; future upgrades do not extend the named
+legacy modules. The following156 component amendment records the accepted historical subject;
+its pin-specific ordinary-selection description is superseded by the catalog path above.
+
+Component acceptance exercises actual rendered installer, emitted source record/head, production
+Rust import, shared native publication and actual wrapper validators with one common binding.
+A fixed-code later fixture and distinct nonexecuted ELF bytes exercise data-only updates and
+mixed-record rejection. These fixtures establish neither an installed/native turn nor a sealed
+runtime launch-plan producer, real namespace/mount/Landlock/cgroup behavior, helper handshake,
+provider/model authorization, tool completion, same-session resumes or descendant cleanup.
+E3E remains closed; E3F/E3/F14 remain open; V2 unavailable; images/skills/cloud remain deferred.
 
 ## Codex 0.156.1 component amendment
 
