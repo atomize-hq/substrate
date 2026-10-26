@@ -7573,3 +7573,7 @@ mod image_tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "openai_native0156_fixture.rs"]
+mod native0156_fixture;

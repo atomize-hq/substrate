@@ -1478,6 +1478,8 @@ struct CodexSeedProviderRoutingConfig {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 struct CodexBaseUrlConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     base_url: Option<String>,
 }
 
@@ -1620,6 +1622,7 @@ fn read_codex_startup_subset(seed_home: &Path, workspace_dir: &Path) -> Result<C
         model_providers.insert(
             provider_name.to_string(),
             CodexBaseUrlConfig {
+                name: Some(provider_name.to_string()),
                 base_url: Some(selected_base_url),
             },
         );
@@ -1636,6 +1639,7 @@ fn read_codex_startup_subset(seed_home: &Path, workspace_dir: &Path) -> Result<C
         providers.insert(
             provider_name.to_string(),
             CodexBaseUrlConfig {
+                name: None,
                 base_url: Some(selected_base_url),
             },
         );
@@ -3315,6 +3319,8 @@ mod tests {
     use super::*;
     use std::fs;
 
+    include!("member_runtime_native0156_tests.rs");
+
     // These exercise the consumed UAA adapters and generated launcher, using only
     // a test-owned regular file. They prove attachment-step composition, not
     // kernel cgroup membership or native/provider behavior.
@@ -4355,6 +4361,80 @@ fi
     }
 
     #[test]
+    fn codex_startup_selected_model_provider_gets_derived_display_name() {
+        let seed = tempfile::tempdir().unwrap();
+        fs::write(
+            seed.path().join("config.toml"),
+            r#"
+model = "gpt-6-astra"
+model_provider = " selected-provider "
+provider = "legacy-provider"
+[model_providers.selected-provider]
+base_url = "http://127.0.0.1:4123/v1"
+[model_providers.unselected]
+base_url = "https://unselected.invalid"
+name = "must not copy"
+[providers.legacy-provider]
+base_url = "https://legacy.invalid/v1"
+"#,
+        )
+        .unwrap();
+        let subset =
+            read_codex_startup_subset(seed.path(), Path::new("/bounded-workspace")).unwrap();
+        let rendered = toml::to_string(&subset).unwrap();
+        let actual: toml::Value = toml::from_str(&rendered).unwrap();
+        let selected = actual["model_providers"].as_table().unwrap();
+        assert_eq!(selected.len(), 1);
+        assert_eq!(
+            selected["selected-provider"]["name"].as_str(),
+            Some("selected-provider")
+        );
+        assert_eq!(
+            selected["selected-provider"]["base_url"].as_str(),
+            Some("http://127.0.0.1:4123/v1")
+        );
+        assert_eq!(selected["selected-provider"].as_table().unwrap().len(), 2);
+        assert_eq!(
+            actual["providers"]["legacy-provider"]
+                .as_table()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            actual["providers"]["legacy-provider"]["base_url"].as_str(),
+            Some("https://legacy.invalid/v1")
+        );
+        assert!(!rendered.contains("unselected"));
+    }
+
+    #[test]
+    fn codex_startup_selected_provider_seed_allowlist_stays_base_url_only() {
+        for family in ["model_providers", "providers"] {
+            for field in ["name", "arbitrary", "api_key", "env_key", "http_headers"] {
+                let seed = tempfile::tempdir().unwrap();
+                let selector = if family == "model_providers" {
+                    "model_provider"
+                } else {
+                    "provider"
+                };
+                fs::write(seed.path().join("config.toml"), format!(
+                    "model = \"gpt-6-astra\"\n{selector} = \"selected\"\n[{family}.selected]\nbase_url = \"http://127.0.0.1:4123/v1\"\n{field} = \"must-reject\"\n"
+                )).unwrap();
+                let error = read_codex_startup_subset(seed.path(), Path::new("/bounded-workspace"))
+                    .unwrap_err();
+                assert!(
+                    error
+                        .to_string()
+                        .contains("unsupported provider routing fields"),
+                    "{error:#}"
+                );
+                assert!(error.to_string().contains(field), "{error:#}");
+            }
+        }
+    }
+
+    #[test]
     fn prepare_codex_runtime_env_materializes_bounded_user_startup_subset_only() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let seed_home = temp_dir.path().join("seed-home");
@@ -4423,6 +4503,7 @@ mode = "should-not-copy"
                     "model_provider = \"compat-openai\"\n",
                     "openai_base_url = \"https://api.openai-proxy.example.invalid/v1\"\n\n",
                     "[model_providers.compat-openai]\n",
+                    "name = \"compat-openai\"\n",
                     "base_url = \"https://gateway.example.invalid/v1\"\n\n",
                     "[projects.\"{}\"]\n",
                     "trust_level = \"untrusted\"\n"
