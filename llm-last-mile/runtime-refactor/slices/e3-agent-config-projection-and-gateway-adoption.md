@@ -1,7 +1,7 @@
 **Kind:** controlling numbered specification and preserved slice row
 **Stable ID:** `e3-agent-config-projection-and-gateway-adoption`
 **Canonical for:** controlling E3 authority correction, contract/file/symbol fence, dependency and gate disposition, and preserved historical row
-**Status:** E3-A through E3-D landed; E3-E terminally complete; E3-F/E3/F14 open at the 2026-10-26 bounded return; P1-A committed at ad98ea44b; TASK05 settings loading committed at 3eac45580; B2.2 historical slice accepted 2026-10-27; TASK07 committed at 29cf8e822; installer integration committed at 33ebdf0d6; TASK09 reinstall failed required musl build; TASK12 portability repair committed at d9b4d2170; TASK09 revised-source reinstall active; TASK10 and TASK13 runtime readers accepted in isolation; approved TASK11 model selector implementing
+**Status:** E3-A through E3-D landed; E3-E terminally complete; E3-F/E3/F14 open at the 2026-10-26 bounded return; P1-A committed at ad98ea44b; TASK05 settings loading committed at 3eac45580; B2.2 historical slice accepted 2026-10-27; TASK07 committed at 29cf8e822; installer integration committed at 33ebdf0d6; TASK09 reinstall failed required musl build; TASK12 portability repair committed at d9b4d2170; TASK09 revised-source musl build passed but lifecycle capture failed; TASK14 absent-unit status repair committed at b3a112aff; TASK10 and TASK13 runtime readers accepted in isolation; approved TASK11 model selector implementing
 **Historical E3-A proof-recovery status:** canonical specification; E3-A has a preserved incomplete and unlanded candidate under bounded Linux proof recovery; E3-B through E3-F are not admitted, dispatched, or implemented
 **Historical E3-A proof-recovery authority scope:** documentation-only E3-A proof-recovery authority; no product/test change, proof execution, completion, landing, or successor admission/dispatch
 **Source span:** [`../03-phase-slice-map.md`](../03-phase-slice-map.md) line 222
@@ -1095,3 +1095,70 @@ After a bounded monitor correction and owner inspection, the same normal install
 on 2026-10-27 at 19:04:25 UTC, reusing the completed uninstall. Debug stages passed and the
 required musl release build is active at this checkpoint. Service/runtime provisioning and
 readiness remain pending; no live model call has occurred.
+
+### Absent-unit status compatibility repair — 2026-10-27
+
+The normal revised-source installer subsequently finished both required musl artifacts, then
+exited 1 during lifecycle capture at 19:06:56 UTC, before service installation/publication.
+The actual missing world-service unit reports `is-enabled=not-found` with exit 4 and
+`is-active=inactive` with exit 4; the strict helper currently requires the latter status 3.
+Retained path and systemd metadata checks corroborate absence. Exact user configuration was
+restored and the host window released. Doctor/health readiness remains false; Codex provisioning
+and the live turn were not reached. This failed attempt remains separate from the earlier
+monitor interruption and original musl failure.
+
+META selects TASK14 for a two-file repair in `scripts/linux/world-lifecycle.sh` and
+`tests/installers/world_provision_smoke.sh`: accept the observed inactive status 4 alongside
+status 3 only under the existing strict managed-unit, path and metadata corroboration.
+Capture and restore variants and rejection cases require focused tests and paired review
+before a scoped local commit. No host mutation or installer retry belongs to TASK14; TASK09
+retains installation/proof ownership. TASK11 continues independently. No readiness, model-route
+or full runtime gate is closed by this source repair.
+
+TASK14 passed paired implementation and strategic review with no findings. META accepted the
+reviewed working tree and the resulting two-file local commit
+`b3a112aff1346bb096f6cd7ead11f27354d30af1`, parent
+`3296a3f99efac982ba86b63c38b82dff3f6ac8a4`, tree
+`46411363ff2ff7b68b2a73a37f4f6caf579d4294`. Patch SHA256
+`97858bfb33faed21568567d6ab20a68f7a86702180cd100b6768f093f27c874c` matches review.
+The final 81 recovery cases include the original 48; 16 invariants and scoped shell checks pass.
+The original seven failing regressions and prior SecureBits-selector/full-formatting failures
+remain recorded. All five unrelated dirty files were preserved. META selects the same TASK09
+owner for normal installation/readiness from this exact source under existing custody and
+resource limits. This selection authorizes no live model call or readiness claim; TASK11 still
+requires review, integration and matching installed-source proof.
+
+### Registry restoration and selector proof — 2026-10-27
+
+The normal TASK09 reinstall from `b3a112aff` passed required builds and publication,
+then failed required world-dependency synchronization: the service could not create a
+world beneath `/run/user/0/substrate/worlds` (EROFS). Config restoration and host-window
+release were recorded. Doctor success did not establish usable-world execution or completed
+Codex provisioning; those obligations remain open.
+
+TASK15 repaired the exact registry writable allowance and pre-start creation, with a finite
+tmpfiles artifact included in capture, rollback and both uninstall paths. It preserves existing
+registry entries and strict daemon protections; it adds no persistence migration or Rust path
+change. Paired implementation and strategic observations found no source-endpoint blockers.
+META accepted the six-file working tree and committed endpoint
+`219438415c842b0488a304073d84a05580a03904`, parent `b3a112aff1346bb096f6cd7ead11f27354d30af1`,
+tree `69eeefb30058e8d0188f1469bec18b5a306685aa`, patch SHA256
+`6c8163bd2bb80416575b894ecd5a94b343b4224f50eefe40cac9bcd604939da8`.
+Recovery86, registry7, DAC and invariant16 pass; unchanged ShellCheck SC2034 and historical
+SecureBits/full-formatting failures remain negative. Actual installed namespace and readiness
+are unproved. META selects the same TASK09 owner for normal accepted-source reinstall under
+the unchanged cumulative resource, custody and restoration controls; no live model call yet.
+
+TASK11 continues independently. The frozen contract explicitly excludes adding native fork
+implementation. Fresh independent confirmation permits removing general HSA repair/native-fork
+qualification as selector prerequisites, while retaining the original failed ordering proof and
+raw P2 history. No observed baseline run or all-default equivalence is claimed. Supported
+continuation must preserve authenticated launch inputs; unsupported fork continuation must
+refuse before additional native/provider traffic. The additional default reconciliation lookup
+is being corrected within the selector fence. Remaining proof and paired review precede
+integration; exact combined installed-source qualification precedes the single live proof.
+
+TASK10 and TASK13 remain accepted isolated components, not integrated production adoption.
+The proposed bounded six-file reader integration awaits human approval. Production caller
+adoption and Workspace preflight proof remain separate subsequent increments; component
+acceptance, integration, adoption and end-to-end qualification must not be collapsed.
