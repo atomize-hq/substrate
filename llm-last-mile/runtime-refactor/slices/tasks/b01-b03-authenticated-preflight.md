@@ -545,3 +545,96 @@ dispatch, its W8 result unaccepted/unclosed, I1/I2 unresolved and `c381` publish
 Older extracted/as-of status text remains chronology. Inherited navigation wording in
 `slices/README.md`, Track E and E3 contract headers is nonblocking projection drift under that
 canonical dated correction; it grants no continuation and is not rewritten by this packet.
+
+
+### Selected HSA typed-object snapshot reads — 2026-10-27
+
+Under the user's instruction to keep runtime work moving in parallel with installer integration
+and live proof, META selects TASK10 as the next P1 component after Workspace commit
+`29cf8e8223c9d166263e56de219428d2b3858aa9`. The existing P1 fence requires a
+nonreconciling current-exact read; its storage transaction already holds and validates the existing
+versioned root but lacks authenticated typed-object reads. Existing typed reads enter semantic
+preflight, so using them would leave reconciliation reachable.
+
+**Outcome:** HSA-private authenticated typed-object reads within the existing nonreconciling
+snapshot transaction. Bind the frozen root revision/store, present index entry, exact kind/schema/ref,
+canonical length/commitment and existing HMAC parent/key rules. Retain/revalidate actual object/key
+files and held namespace bindings on successful and error exits. Missing, unsafe, changed, pending
+or conflicting state refuses without repair, initialization, secret export or new logging.
+
+**Fence:** `host_session_authority/store.rs`, `store/platform/transaction.rs`, and only necessary
+verification extraction in `store/platform/object_persistence.rs`, under
+`crates/shell/src/execution/agent_runtime/`, plus directly necessary colocated tests. Preserve codecs,
+layouts, writers, current reconciling callers and E2-RM/B1 behavior. No facade migration, complete
+current-exact resolver, Workspace revision persistence, consumer endpoint, service IPC or general
+storage framework. Any additional file requires a demonstrated dependency returned to META.
+
+**Proof:** genuine production-published isolated V2/V3 object reads, canonical/context-HMAC cases,
+stale/absent/wrong/retired/corrupt/unsafe/substituted/pending material, revalidation on both exits,
+unchanged entries/content/modes and call-path inspection excluding reconciliation and side effects.
+Run focused meaningful HSA/E2-RM regressions, formatting and substrate build; retain proof limits.
+Freeze API/contract before delegated changes and source/proof before paired review. Endpoint is
+reviewed working tree only: no commit, integration, installation, full read-cut, Loaded or PF claim.
+
+TASK10 uses a separate checkout/build/test state at the named Workspace commit. Installer TASK08
+owns only integration/commit of the accepted three-script repair; fresh TASK09 then owns the
+clean reinstall and exact-model normal-command proof. TASK10's unintegrated source is excluded
+from that installation. Actual task identities and delivery states remain in the shared workflow.
+
+**Accepted finite endpoint (2026-10-27):** META accepted TASK10's reviewed working tree on
+`29cf8e8223c9d166263e56de219428d2b3858aa9`, full patch SHA256
+`3cb6d32b09e302b470af70c0663146e6cc31c521b5fac99f8454dcb6035d28f0`.
+Original implementation discovery found a canonical-payload/reference schema mismatch; the local
+repair and three added tests received confirmation from a different fresh reviewer. Implementation
+is CLEAN and the original strategic Continue remains applicable. All 17 focused tests and 16 E2-RM
+tests pass, as do formatting and the substrate build. The HSA suite remains 264 passed, 1 failed,
+2 ignored; the inventory diagnostic failure also occurs on the exact baseline. No full-suite green
+claim is made. Original results, raw commands and source correspondence are retained under
+`evidence/task10/` in the shared workflow.
+
+The component authenticates a supplied reference within the held snapshot; selecting the current
+graph edge and authoritative context remains the resolver's responsibility. Commit/integration,
+current-exact resolver adoption, full read-cut, Loaded and PF completion remain pending. The
+accepted source remains isolated from the installer candidate.
+
+### Selected HSA current-exact reader — 2026-10-27
+
+META selects TASK13 under the continuing parallel-runtime authorization. Its isolated checkout
+starts at `33ebdf0d6a277f45dbc5603063bbcdbe521252ce` plus the exact accepted TASK10 patch,
+retained separately from the new delta. Publication of TASK10 is not a prerequisite to this isolated
+dependent work; neither component becomes an installer input.
+
+The new HSA-private Linux reader selects graph references and verification contexts from the held
+authority root and enforces existing exact session, caller, lineage, descriptor, attach, policy,
+bound-store and expected-observation checks. Its claim is limited to roots supported by the strict
+nonreconciling snapshot. Before material implementation, demonstrate a genuinely production-published
+useful V3 state and freeze the support matrix. Particular continuation/interleaved histories may
+require the existing external-history validator; do not relax the shared decoder or silently deliver
+a V2-only substitute if that dependency prevents useful V3 support.
+
+The fence is HSA `facade.rs`, signature-preserving reader injection in `transition.rs`, and minimum
+bridge/captured-root access in `store.rs` and `store/platform/transaction.rs`, with colocated tests.
+Existing production resolver callers, schemas, codecs, writers, runtime ownership, StateStore,
+Workspace and backend custody remain outside this increment. Required proof covers production
+V2/V3 positives, exact graph/context checks, stale and conflicting authority, corruption and pending
+refusal, unconditional exit revalidation, and no durable or runtime effects. Run affected focused
+regressions, TASK10 tests, E2-RM, formatting and the substrate build within an allocated private budget.
+
+Endpoint: paired-reviewed working tree only. No full support parity, production adoption, complete
+read cut, Loaded, exact-destination eligibility or P1/PF completion is claimed. Original advice,
+assignment, actual owner identity and readiness/return states are retained in the shared workflow.
+
+**Accepted TASK13 endpoint (2026-10-27):** META accepted the paired-reviewed working tree.
+TASK13-only patch SHA256 is `fcb37a94f77336a643adbc388a27f42639350f6ef85fc1f01a2d6bc7aebf8154`;
+combined with the separately retained TASK10 dependency, the patch SHA256 is
+`f348248e3c48d9cb92eb70a17549c8e2aca4973d559190e47fdfb4759b4e952b` on `33ebdf0d6`.
+Independent implementation discovery and strategic Continue found no blocking issue. Production
+positives cover V2 applied Start, V3 Start revision 1 and one registered V3 Start continuation at
+revision 2, ActiveAttached with the original caller and no interleaved retained ancestry. Ten focused,
+72 Start/current, 17 typed-object and 16 E2-RM tests pass; formatting, substrate build and source
+inspection pass. Original proof and exact source correspondence remain under `evidence/task13/`.
+
+The known baseline HSA inventory failure remains failed and unrerun; broader workspace, clippy,
+platform and installed checks remain unproved. Broader settled/successor/fork/Stop support,
+production caller adoption, full read cut and P1/PF completion remain pending. No commit or
+integration is selected by this acceptance.

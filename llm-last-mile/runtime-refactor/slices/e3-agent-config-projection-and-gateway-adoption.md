@@ -1,7 +1,7 @@
 **Kind:** controlling numbered specification and preserved slice row
 **Stable ID:** `e3-agent-config-projection-and-gateway-adoption`
 **Canonical for:** controlling E3 authority correction, contract/file/symbol fence, dependency and gate disposition, and preserved historical row
-**Status:** E3-A through E3-D landed; E3-E terminally complete; E3-F/E3/F14 open at the 2026-10-26 bounded return; P1-A committed at ad98ea44b; TASK05 settings loading committed at 3eac45580; B2.2 historical slice accepted 2026-10-27; TASK07 reviewed working tree accepted; installer component repair accepted separately
+**Status:** E3-A through E3-D landed; E3-E terminally complete; E3-F/E3/F14 open at the 2026-10-26 bounded return; P1-A committed at ad98ea44b; TASK05 settings loading committed at 3eac45580; B2.2 historical slice accepted 2026-10-27; TASK07 committed at 29cf8e822; installer integration committed at 33ebdf0d6; TASK09 reinstall failed required musl build; TASK12 portability repair committed at d9b4d2170; TASK09 revised-source reinstall active; TASK10 and TASK13 runtime readers accepted in isolation; approved TASK11 model selector implementing
 **Historical E3-A proof-recovery status:** canonical specification; E3-A has a preserved incomplete and unlanded candidate under bounded Linux proof recovery; E3-B through E3-F are not admitted, dispatched, or implemented
 **Historical E3-A proof-recovery authority scope:** documentation-only E3-A proof-recovery authority; no product/test change, proof execution, completion, landing, or successor admission/dispatch
 **Source span:** [`../03-phase-slice-map.md`](../03-phase-slice-map.md) line 222
@@ -81,6 +81,56 @@ The one shared coordination root remains
 Preserve the existing BACKLOG and two private diagnostic edits. Owners record actual source,
 review, installed proof and publication separately. The first refresh and TASK04 are committed at `ad98ea44b`; TASK05 is committed at `3eac45580`. Current scheduling and B2.2 closure documentation remain working-tree updates.
 The actual TASK identity/delivery is recorded in the workflow, not inferred from selection.
+
+### Installer integration and approved model selection — 2026-10-27
+
+The user authorized the accepted Workspace/control commit, a separate installer integration TASK,
+then a fresh clean-reinstall/real-proof TASK while runtime work continues. TASK07 published
+`29cf8e8223c9d166263e56de219428d2b3858aa9`. TASK08 integrated exactly the accepted installer
+patch and committed `33ebdf0d6a277f45dbc5603063bbcdbe521252ce`, tree
+`db0412a8527940872c843a0931c552a74bcfba8f`, with only the three named installer files.
+Paired integration observations found no new blocker; integrated recovery48 and invariant16 passed.
+Original failed selectors, reused-proof and shell-indexing limits remain recorded separately.
+
+TASK09 owns normal clean development installation from that exact source and the eventual one
+text-only public Codex initial turn. The original preflight stopped before mutation for insufficient
+capacity and a missing model route. META subsequently authorized removal only of the completed
+Workspace build's reconstructible incremental cache; actual recovery freed about 16.7 GB. Normal
+uninstall succeeded. The real debug installer then failed in its required Rust 1.89 musl release
+build because `libc::renameat2` is unavailable in `workspace_admission_authority.rs`. At that attempt, partial debug
+links/shims remained, while exact user configuration was restored. World doctor reported failure;
+shim doctor and health exit zero but their readiness summaries remain false. Installed readiness
+and live proof remain unproved. The failed `33ebdf0d6` attempt remains a failed result.
+The old live-linked Task03 checkout/artifacts are preserved; TASK10's HSA candidate is excluded.
+
+The exact-source public route fixes `codex` to `codex-mini-latest`; generated provider allowlist and
+model mapping follow that binding, and public initial startup has no attempt-local selector. The
+inaugural world-scope command uses the host orchestrator. This is a separate required-proof gap,
+not an installer regression or permission to substitute models. On 2026-10-27 the user explicitly
+approved a separate bounded TASK11 for attempt-local public Codex model selection:
+
+- Carry the exact requested upstream model through native input and gateway mapping/allowlist.
+- Preserve omitted-selection defaults and gateway-held account credentials; reject incompatible
+  runtime reuse before provider traffic rather than rewrite or silently substitute.
+- Limit changes to initial-start selection and necessary propagation, configuration/reuse checks,
+  scoped tests and documentation. No model catalogs, provider selection, account migration,
+  resume/fork model switching or protected E3 redesign.
+- Require non-billed public-start preparation proof and paired review. TASK11's current endpoint
+  is an isolated reviewed working tree based on `33ebdf0d6`; integration and updated installed
+  source correspondence precede the single live attempt. No live success is implied by approval.
+
+META selected TASK12 as a finite compatibility repair under the existing clean-install authority:
+replace only the unavailable Workspace rename wrapper using the existing Linux raw-syscall
+pattern, retaining atomic `RENAME_NOREPLACE`, descriptor-relative operation, errors/effects,
+durability and revalidation. No libc upgrade, installer gate change, overwrite fallback or new
+platform is selected. Proof requires the actual Rust 1.89 musl static build plus native Workspace
+regressions and paired review. A reviewed integrated source and explicit installation continuation
+precede another normal attempt; changed source cannot make the earlier failed attempt successful.
+
+TASK10 separately advances the selected P1 HSA typed-object snapshot-read component. Its source,
+proof and reviews remain isolated from the deployment lane. These tasks do not close E3/F14,
+complete the current-exact resolver, or establish Loaded/PF/execution permission. Actual owner
+identities, original observations, dispositions and pending proof are retained in the shared workflow.
 
 ## Current E3-F status correction — 2026-10-21
 
@@ -1011,3 +1061,37 @@ E3-F remains admitted/dispatched but paused, unaccepted and unclosed; E3-E remai
 incomplete. The reviewed bridge documentation is incorporated in this line; Linux checkout
 publication/readback remains a separate owner operation. No implementation resumes, candidate failure
 is resolved, or installed proof, deployment or new E2-RM/B2.2/B3.2/B4 closure is claimed.
+
+### Musl compatibility repair publication — 2026-10-27
+
+TASK12's accepted one-file repair is integrated and committed as
+`d9b4d2170f89053f6f864fc5f08fcec051013aea`, parent
+`33ebdf0d6a277f45dbc5603063bbcdbe521252ce`, tree
+`cb5a5034a14b037814b23f5646a3f1f2bc01d028`. The committed 797-byte patch matches
+reviewed SHA256 `0763505ff318d8124c8daf0f40f7572ccb4b378636677054d920536481105386`.
+The Linux Workspace publication call uses the existing raw-syscall pattern with the same held
+descriptors, names and `RENAME_NOREPLACE`; error, effect and durability handling are preserved.
+Exact required Rust 1.89 locked musl release builds of both artifacts pass, native unit tests pass
+7/7, Linux integration tests pass 9/9, and formatting passes. Independent strategy confirms the
+original portability blocker repaired; implementation review and a different fresh confirmation
+support the finite endpoint. Staged GitNexus reports one expected symbol and LOW indexed risk;
+the known missing source caller edge remains a coverage limit. Six unrelated dirty files were
+preserved and excluded from the commit.
+
+Broader workspace build (33 errors) and clippy (27 diagnostics) remain failed; full workspace and
+installed/platform checks remain unrun. Their endpoint-specific disposition does not waive later
+applicable obligations. Full original results and actual publication receipts remain in the shared
+workflow under `evidence/task12-integration/`.
+
+META selects the same TASK09 owner to resume normal clean development installation/readiness
+against exact revised source `d9b4d2170`, subject to immediate custody and capacity checks. The
+earlier failed `33ebdf0d6` attempt remains failed. No live model request is authorized by this
+continuation: TASK11's selector route still needs implementation, review, integration and matching
+installed-source proof before the single exact-model turn. TASK13's runtime source remains isolated.
+
+The first revised-source retry was interrupted by its resource monitor on a transient missing
+build file; this was not an installer failure or resource-limit breach. Its evidence is retained.
+After a bounded monitor correction and owner inspection, the same normal installer restarted
+on 2026-10-27 at 19:04:25 UTC, reusing the completed uninstall. Debug stages passed and the
+required musl release build is active at this checkpoint. Service/runtime provisioning and
+readiness remain pending; no live model call has occurred.
