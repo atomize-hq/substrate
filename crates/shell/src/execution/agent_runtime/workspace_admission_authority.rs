@@ -638,7 +638,8 @@ pub(crate) fn publish_workspace_identity(
         effects.phase = "Publishing";
         // SAFETY: live source/destination directory and fixed terminated components.
         let result = unsafe {
-            libc::renameat2(
+            libc::syscall(
+                libc::SYS_renameat2,
                 boundary.control.as_raw_fd(),
                 old.as_ptr(),
                 boundary.control.as_raw_fd(),
