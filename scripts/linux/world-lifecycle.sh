@@ -138,10 +138,11 @@ linux_assert_absent_managed_unit_v1() {
         substrate-lifecycle-publisher-v1.socket) expected_label=lifecycle-socket-unit; expected_path=/etc/systemd/system/substrate-lifecycle-publisher-v1.socket ;;
         *) return 1 ;;
     esac
-    [[ "${enabled}" == not-found && "${enabled_status}" == 4 && "${active}" == inactive && "${active_status}" == 3 ]] || return 1
+    [[ "${enabled}" == not-found && "${enabled_status}" == 4 && "${active}" == inactive && ("${active_status}" == 3 || "${active_status}" == 4) ]] || return 1
     local label target type rest found=0
     while IFS=$'\t' read -r label target type rest; do
-        if [[ "${label}" == "${expected_label}" && "${target}" == "${expected_path}" && "${type}" == absent ]]; then
+        if [[ "${label}" == "${expected_label}" || "${target}" == "${expected_path}" ]]; then
+            [[ "${label}" == "${expected_label}" && "${target}" == "${expected_path}" && "${type}" == absent ]] || return 1
             found=$((found + 1))
         fi
     done <"$(linux_snapshot_manifest_path)"

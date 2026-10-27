@@ -120,6 +120,8 @@ def ctl(args):
     if action=='show':
         if u.get('query_fail') or (os.environ.get('RESTORE_FAIL')=='query' and (r/'injected').exists()): sys.exit(1)
         if u.get('query_empty'): return
+        if 'metadata_lines' in u:
+            print('\n'.join(u['metadata_lines'])); return
         values=dict(LoadState='loaded' if present else 'not-found',ActiveState=u['active'],FragmentPath='/etc/systemd/system/'+unit if present else '',DropInPaths='')
         values.update(u.get('metadata',{}))
         for key,value in values.items(): print(key+'='+value)
@@ -414,6 +416,69 @@ if linux_restore_service_state substrate-world-service.service not-found inactiv
         require(result.returncode==77,result.stdout+result.stderr)
         assert_restored(case,before,dict(group=False,member=False))
     check('original dangling fixed enablement links restored exactly',dangling_enablement)
+
+    def absent_unit_observation(status, kind='accepted', index=0):
+        case=fixture('absent-observation-'+str(status)+'-'+kind+'-'+str(index))
+        labels=['world-service-unit','world-socket-unit','lifecycle-service-unit','lifecycle-socket-unit']
+        unit_name=units[index]; target='/etc/systemd/system/'+unit_name
+        snapshot_root='LINUX_MANAGED_STATE_SNAPSHOT_ROOT="$CASE_ROOT/snapshot"\n'
+        prepare=snapshot_root+'mkdir "$LINUX_MANAGED_STATE_SNAPSHOT_ROOT"\n: > "$(linux_snapshot_manifest_path)"\n: > "$(linux_snapshot_service_path)"\n'
+        for label, name in zip(labels, units):
+            prepare+='linux_snapshot_path '+shlex.quote(label)+' '+shlex.quote('/etc/systemd/system/'+name)+'\n'
+        result=execute(case,prepare)
+        require(result.returncode==0,result.stdout+result.stderr)
+        state=json.loads((case/'state').read_text()); unit=state['units'][unit_name]
+        unit['active_exit']=status
+        metadata=['LoadState=not-found','ActiveState=inactive','FragmentPath=','DropInPaths=']
+        manifest=case/'snapshot/manifest.tsv'; rows=manifest.read_text().splitlines()
+        matching=rows[index].split('\t')
+        if kind=='enabled-status': unit['enabled_exit']=1
+        elif kind.startswith('active-status-'): unit['active_exit']=int(kind.rsplit('-',1)[1])
+        elif kind=='unknown-active': unit['active_override']='unknown'
+        elif kind=='query-failure': unit['query_fail']=True
+        elif kind=='empty-metadata': unit['query_empty']=True
+        elif kind=='duplicate-metadata': unit['metadata_lines']=metadata+[metadata[0]]
+        elif kind=='missing-metadata': unit['metadata_lines']=metadata[:-1]
+        elif kind=='malformed-metadata': unit['metadata_lines']=metadata+['malformed']
+        elif kind=='extra-metadata': unit['metadata_lines']=metadata+['Untrusted=absent']
+        elif kind in ('loaded','masked'): unit['metadata']={'LoadState':kind}
+        elif kind=='metadata-active': unit['metadata']={'ActiveState':'active'}
+        elif kind=='fragment': unit['metadata']={'FragmentPath':'/other/unit'}
+        elif kind=='dropin': unit['metadata']={'DropInPaths':'/other/dropin'}
+        elif kind=='missing-snapshot': rows.pop(index)
+        elif kind=='duplicate-snapshot': rows.append(rows[index])
+        elif kind in ('conflicting-type','conflicting-label','conflicting-path'):
+            conflict=matching.copy()
+            conflict[{'conflicting-label':0,'conflicting-path':1,'conflicting-type':2}[kind]]={'conflicting-label':'other-unit','conflicting-path':'/other/unit','conflicting-type':'file'}[kind]
+            rows.append('\t'.join(conflict))
+        elif kind in ('regular-path','dangling-path'):
+            source=case/'fs'/target.lstrip('/')
+            if kind=='regular-path': source.write_text('unexpected unit\n')
+            else: source.symlink_to('/missing')
+            # Even forged not-found metadata cannot overrule the actual path.
+            unit.update(enabled_override='not-found',enabled_exit=4,metadata_lines=metadata)
+        manifest.write_text('\n'.join(rows)+'\n')
+        (case/'state').write_text(json.dumps(state))
+        before=tree(case); before_state=(case/'state').read_bytes()
+        routes=[('capture','linux_snapshot_service_state '+unit_name),('restore','linux_restore_service_state '+unit_name+' not-found inactive')]
+        for route, command in routes:
+            (case/'events').write_text('')
+            settings=dict(PREDICATE_PHASE='capture',PREDICATE_FLAG='-e',PREDICATE_TARGET=target) if kind=='path-permission' else {}
+            result=execute(case,snapshot_root+command,**settings)
+            require((result.returncode==0)==(kind=='accepted'),route+' '+kind+' status '+str(status)+': '+str(result.returncode)+'\n'+result.stdout+result.stderr)
+            expected=unit_name+'\tnot-found\tinactive\n' if kind=='accepted' else ''
+            require((case/'snapshot/services.tsv').read_text()==expected,route+' wrote unexpected capture state')
+            require(tree(case)==before,route+' changed files/links')
+            if kind!='path-permission': require((case/'state').read_bytes()==before_state,route+' changed service/account state')
+            events=[json.loads(line) for line in (case/'events').read_text().splitlines()]
+            require(all(e[0] in ('test','systemctl','predicate-error') and (e[0]!='systemctl' or e[1] in ('is-enabled','is-active','show')) for e in events),route+' attempted a mutation')
+    for status in (3,4):
+        for index, unit in enumerate(units):
+            check('absent inactive rc'+str(status)+' capture/restore '+unit,lambda s=status,i=index:absent_unit_observation(s,index=i))
+    for kind in ('enabled-status','active-status-0','active-status-1','active-status-2','active-status-5','unknown-active','query-failure','empty-metadata','duplicate-metadata','missing-metadata','malformed-metadata','extra-metadata','loaded','masked','metadata-active','fragment','dropin','missing-snapshot','duplicate-snapshot','conflicting-type','conflicting-label','conflicting-path','regular-path','dangling-path','path-permission'):
+        def rejected_absence(k=kind):
+            for status in (3,4): absent_unit_observation(status,k)
+        check('reject capture/restore rc3/rc4 '+kind,rejected_absence)
 
     def predicate_failure(phase, flag, present=False, acl=False):
         case=fixture('IR1-'+phase+'-'+flag[1:]+('-acl' if acl else ''))
