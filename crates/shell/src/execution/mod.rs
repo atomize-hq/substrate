@@ -38,6 +38,8 @@ pub(crate) mod socket_activation; // Made public for integration tests
 mod value_parse;
 mod workspace;
 mod workspace_cmd;
+#[cfg(target_os = "linux")]
+pub(crate) mod workspace_open;
 
 pub(crate) use agents_cmd::handle_agent_command;
 pub(crate) use agents_cmd::handle_agents_command;

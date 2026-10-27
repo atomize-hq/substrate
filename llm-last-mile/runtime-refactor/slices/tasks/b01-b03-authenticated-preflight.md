@@ -1,13 +1,78 @@
 **Kind:** packet
 **Stable ID:** `B01-B03-P1`
-**Status:** ADMISSION CONTRACT BOUND — proposed bounded implementation; source dispatch NOT AUTHORIZED; runtime unproved
+**Status:** P1-A / TASK04 accepted as reviewed working-tree source on 2026-10-26; full P1 implementation/proof incomplete
 **Canonical for:** initial same-host Substrate Workspace open/load/initialize boundary and exact-destination no-send preflight contract, proposed source fence, proof gates and admission assessment only
-**Authority scope:** documentation/control-plane preparation; no source implementation dispatch, setup operation, runtime qualification or B1 acceptance
+**Authority scope:** original P1 contract plus the selected P1-A component below; no real setup operation, full P1 qualification, B1 acceptance or later-send permission
 **Projection consumers:** [`current`](../../index/current.md), [`by-packet`](../../index/by-packet.md), [`by-id`](../../index/by-id.md), [`by-kind`](../../index/by-kind.md)
 
 # B01-B03-P1 — authenticated exact-destination no-send preflight
 
 ## Admission disposition
+
+### Selected first increment — 2026-10-26
+
+Following the [honestly stopped E3 return](../e3-agent-config-projection-and-gateway-adoption.md#bounded-return-and-next-task-sequence--2026-10-26),
+the user authorized bounded TASK dispatch. META selects `B01-B03-P1-A`: implement the strict
+read-only selected-location inspection component of the already proposed
+`WorkspaceOpenAdapter::inspect_existing`. This section supersedes earlier no-source-dispatch
+wording only for this component; the complete P1 contract and remaining proof stay binding.
+
+**Outcome and claim ceiling.** A native internal caller can classify a selected location and its
+nearest applicable Workspace boundary without initialization, repair, owner allocation or
+execution. A valid marker is only a discovered candidate, never authenticated Workspace/Lane
+identity, a `Loaded` owner view, exact-destination eligibility or permission to send. Component A
+must not manufacture absent owner state to implement the later load/preflight operations.
+
+**Source fence.** New `crates/shell/src/execution/workspace_open.rs`, minimum registration in
+`execution/mod.rs`, directly necessary use/extraction of `workspace.rs` path helpers, and focused
+tests for this component. Consume existing marker/config validation where suitable. Preserve
+existing public CLI/discovery behavior; do not silently replace legacy discovery callers. No
+initializer, HSA/store/backend IPC, config/policy writer, service, gateway or installer changes.
+Any necessary change beyond that fence returns to META with the concrete dependency.
+
+**Required behavior/proof.** An ordinary nested directory may resolve its enclosing candidate;
+an intervening disabled, malformed, incomplete, incompatible, unreadable or unsafe boundary must
+diagnose/refuse rather than fall through to an unrelated ancestor or defaults. Distinguish true
+absence from I/O failure and partial `.substrate` state. Establish filesystem/symlink handling
+from the existing security contract before implementation. Typed internal observations do not
+establish a public unauthenticated inspection endpoint or disclose private owner records.
+Exercise positive/nested, absence, disabled, missing marker, malformed/legacy/incompatible,
+unreadable and path-alias/boundary cases as applicable, including a valid ancestor behind a
+blocking boundary. Use before/after evidence for entries, content and modes plus decisive call-path
+inspection to prove no read-side writes, initializer/reconciliation, identity allocation, processes,
+cgroups, acceptance, service adoption or provider traffic. Tests use isolated temporary filesystem
+fixtures and explicitly make no real owner-state/installed-runtime claim.
+
+The TASK freezes its exact types and tests before edits, delegates implementation, and returns
+focused tests with nonzero selected cases, formatting, relevant shell regression/build checks,
+original implementation review and META strategic disposition. The authorized endpoint is a
+reviewed working-tree component and remaining-obligation report; no commit, push, merge,
+installation or live model call. This is partial PF-OPEN/PF-ZERO component evidence only. The
+full P1 gates, real-owner IPC proof and publication checks below are not waived or declared passed.
+Stop at this component; subsequent owner-backed load, absent initialization and exact no-send
+read-cut composition require their own bounded assignments.
+
+### Component acceptance — 2026-10-26
+
+META accepted TASK04 at its reviewed-working-tree endpoint: new internal Linux inspection and
+minimal module registration, on HEAD `623e01aab` plus the scoped uncommitted delta. Existing CLI
+callers remain unchanged. Candidate results leave policy/owner validity unchecked; no authenticated
+loading, initialization, production integration or full PF qualification is claimed.
+
+The [final return](../../../../.codex/orchestration/e3f-retained-next-20261022/evidence/task04/final-return.md)
+and [META acceptance](../../../../.codex/orchestration/e3f-retained-next-20261022/evidence/task04-meta-acceptance.md)
+retain source correspondence, original paired observations and independent focused confirmations.
+Focused 14-case tests, formatting, build and one existing config unit test passed. The named
+`workspace_init` Cargo suite remains exit 101 (one guard-masked pass, five failures); a separately
+recorded supported-prefix replay of all six behaviors and original assertions supplies accepted
+preservation evidence. Both original P2 proof findings were resolved through that new evidence and
+fresh independent confirmations, not a claimed suite fix or baseline runtime equivalence.
+
+No commit, push, merge or installation is part of acceptance. Before any next task, META must bound
+a concrete genuine owner-state/loading outcome, including missing schemas, writers and native read
+access. No successor is dispatched; installer restoration remains separately owned by Task03.
+
+### Original admission clarification — 2026-10-21
 
 The human product clarification on 2026-10-21 supersedes **B01-B03-P1-B01**, the earlier
 setup-issuer prerequisite. Initially Collider opens Substrate Workspaces on the same host.

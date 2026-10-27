@@ -13,8 +13,8 @@
 **Repo-truth snapshot:** 2026-08-02 at
 `4ceecd50e20d822dda7cbd8f0e1bef4ccad65d8e` / tree
 `8ed5dc7a354b731016a103b68091864b6a09223a`; re-check live code before every slice.
-**Current priority route:** [E3-F owner: I1/I2 design binding and `E3F-RETAINED-PROOF-RETURN`](slices/e3-agent-config-projection-and-gateway-adoption.md#i1i2-design-binding-and-runtime-return-sequence--2026-10-21) records I1/I2 first, separately authorized paused-W8 continuation/proof, then separately selected B01-B03-P1 at the bounded proof return. This is scheduling priority, not a hard E3-F dependency for read-only opening; no source/successor is dispatched.
-**Current scheduling projection:** [`index/current.md`](index/current.md) is the non-authoritative projection for terminally complete A1.3-P1, A1.4/A1, A2, A3, Track A, E1, and E2; implemented/review-clean/landed E2-RM and B2.2 with separate canonical terminal closure not located; landed B3.2/B4 source with exact terminal proof/CLEAN/closure receipts not located; landed E3-A–D and terminally complete/product-landed E3-E, with closure on the separate authority branch; incomplete enclosing E3 and dispatched-then-paused E3-F (W8 unaccepted/unclosed; no continuation authorized); [B01-B03-P1](slices/tasks/b01-b03-authenticated-preflight.md) initial native Workspace open/load/init and no-send admission contract bound, source not dispatched/runtime unproved; held A1.3-P0/A1.3 records; separate nonblocking macOS and deferred Windows work. Recorded slice closure is distinct from later product chronology. Canonical decisions, packets, and gates remain at their linked owners.
+**Current priority route:** [2026-10-26 bounded return and task sequence](slices/e3-agent-config-projection-and-gateway-adoption.md#bounded-return-and-next-task-sequence--2026-10-26): E3 remains open with protected production joins unfinished; P1-A read-only Workspace inspection is accepted as reviewed working-tree source; the next owner-backed loading outcome remains to be bounded. Installer restoration stays with Task03 as a separate pending lane.
+**Current scheduling projection:** [`index/current.md`](index/current.md) points to completed Track A/E1/E2/E3-E, landed but incompletely qualified B-track work, the bounded E3 stop, and accepted P1-A component work. October 21–22 statuses below retain chronology; the dated owner update controls current scheduling and preserves the proof limits of later component commits.
 **Navigation indexes:** [`index/README.md`](index/README.md) by stable title/owner, [`index/by-id.md`](index/by-id.md), [`index/by-kind.md`](index/by-kind.md), and [`index/by-packet.md`](index/by-packet.md).
 **Historical scheduling state (superseded for active scheduling on 2026-08-19):**
 Canonical historical content: [`history/cross-cutting-control-pack-checkpoints.md#historical-scheduling-state-superseded-for-active-scheduling-on-2026-08-19`](history/cross-cutting-control-pack-checkpoints.md#historical-scheduling-state-superseded-for-active-scheduling-on-2026-08-19). Use [`index/current.md`](index/current.md) and its linked owners—not this historical record—for active, held, lane-local, and deferred state.
@@ -82,6 +82,8 @@ only the cross-slice non-blocking review-finding inventory and does not absorb A
 Canonical content is maintained in [`foundations/per-slice-context-assembly-protocol.md`](foundations/per-slice-context-assembly-protocol.md).
 
 ## Current gateway carrier correction
+
+**Current readback:** The [October 26 owner update](slices/e3-agent-config-projection-and-gateway-adoption.md#bounded-return-and-next-task-sequence--2026-10-26) distinguishes newer ordinary Codex 0.156.1 component qualification from unfinished protected E3 adoption. Earlier routing/status descriptions below are historical where superseded; neither ordinary success nor an installed CLI reply closes E3.
 
 Keep this split explicit in every D1, D3, or E3 context capsule:
 

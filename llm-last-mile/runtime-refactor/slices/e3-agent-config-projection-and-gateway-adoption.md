@@ -1,7 +1,7 @@
 **Kind:** controlling numbered specification and preserved slice row
 **Stable ID:** `e3-agent-config-projection-and-gateway-adoption`
 **Canonical for:** controlling E3 authority correction, contract/file/symbol fence, dependency and gate disposition, and preserved historical row
-**Status:** E3-A through E3-D landed; E3-E terminally complete; enclosing E3 incomplete; E3-F dispatched then paused, W8 unaccepted/unclosed; no continuation authorized
+**Status:** E3-A through E3-D landed; E3-E terminally complete; E3-F/E3/F14 open at the 2026-10-26 bounded return; P1-A inspection accepted as reviewed working tree; next owner-backed outcome unselected; installer restoration separate
 **Historical E3-A proof-recovery status:** canonical specification; E3-A has a preserved incomplete and unlanded candidate under bounded Linux proof recovery; E3-B through E3-F are not admitted, dispatched, or implemented
 **Historical E3-A proof-recovery authority scope:** documentation-only E3-A proof-recovery authority; no product/test change, proof execution, completion, landing, or successor admission/dispatch
 **Source span:** [`../03-phase-slice-map.md`](../03-phase-slice-map.md) line 222
@@ -19,6 +19,44 @@
 > E3-A proof-recovery header fields describe that historical correction, not current packet status.
 > E3-E is terminally complete under its closure record below. Enclosing E3 remains incomplete:
 > E3-F was later dispatched and paused as corrected below; this closure grants no continuation authority.
+
+## Bounded return and next task sequence — 2026-10-26
+
+The user authorized META to refresh this control plane, establish bounded tasks, and dispatch the
+first TASK, keeping installer restoration separate from main runtime work. This section records
+that scheduling decision and supersedes older current-status projections only. It does not
+rewrite earlier reviews, relax I1/I2 or F1–F14, or close E3. The source baseline is
+`623e01aab3ee8356a6b38a4dddbbe08e94e0cb05` in
+`/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration`.
+
+| Current result | Evidence and limit |
+|---|---|
+| Native inputs and same-owner namespace components landed | `c4b22d499` and `21ec7613f`; these components do not establish service admission or protected retained execution. |
+| Gateway protocol corrections, ordinary resume reentry, official Codex 0.156.1 main/helper and trusted release catalog landed | Commits through `8df1160ec`; current trusted profiles are governed by the amendments at the start of [the projection contract](../contracts/agent-config-projection-v1.md). Historical 0.125 prose is not a request to downgrade. |
+| Actual native initial turn and two history-bearing resumes qualified locally | `130566107`; [original report](../../../.codex/orchestration/e3f-retained-next-20261022/evidence/task-03-adoption-launch/native0156-qualification/completed-final-report.md) uses a deterministic upstream. It does not prove installed service admission, commercial-provider success, protected E3 or F14. |
+| Dev installer repair landed; installation remains incomplete | `623e01aab`; [installation report](../../../.codex/orchestration/e3f-retained-next-20261022/evidence/task-03-adoption-launch/live0156-text/dev-reinstall/final-report.md). Uninstall succeeded; reinstall exposed the debug-profile defect and then absent-unit snapshot/restore handling. Service/socket were absent on the regroup check. No normal-command live reply succeeded. |
+| Protected retained route remains unavailable | Current `WorldService::execute_stream` rejects V2; member runtime still has the common NonE3 lease. Paired authority injection, original `take_for_v2` custody, tagged ownership, wrapper validation/release, I2 accounting and authentic Active/Registered production joins remain unfinished. |
+
+META records an **honestly stopped `E3F-RETAINED-PROOF-RETURN`**, using the existing return rule
+below. This is a scheduling return with retained blockers, not F14 execution or E3 acceptance.
+The public world-scope initial CLI prompt uses the host orchestrator; success on that route cannot
+replace the missing retained service proof. No UAA replacement or new supervisor is selected.
+
+| Order / lane | Bounded next outcome | Admission and endpoint |
+|---|---|---|
+| Main 1: `B01-B03-P1-A` / TASK04 | Strict read-only selected-location inspection, preserving invalid/disabled boundaries and proving zero inspection-side mutation | Accepted by META under [P1's component fence](tasks/b01-b03-authenticated-preflight.md#selected-first-increment--2026-10-26) after paired discovery and fresh focused proof confirmations. Reviewed working-tree source only; no commit/push/deployment. Original CLI suite remains failed; separately recorded supported-prefix replay supplies preservation evidence. Full P1 remains open; Main 2 needs a concrete genuine owner-state/load outcome before dispatch. |
+| Main 2: P1 genuine owner-backed load | Current authorized configuration/policy and honest Workspace/Lane/destination availability | Plan after component A's actual return. Rebind missing owner readers; no invented identity or fixture-backed production truth. Not dispatched by this table. |
+| Main 3: P1 absent initialization and exact no-send composition | Separately approved initialization semantics; nonreconciling HSA/custody/read-cut composition and PF-OPEN–PF-LATER proof | Split into dependency-ready assignments before dispatch. Component results do not waive full P1 proof, authorize real initialization, or grant later-send permission. |
+| Independent B/C lane | Recover existing E2-RM/B2.2/B3.2/B4 proof and identify real remaining clauses, then C2 and C3 when eligible | Ready for a separate bounded selection; missing closure records are not evidence of missing code. Coordinate shared runtime files. No dispatch here. |
+| Protected E3 continuation | One named wrapper/accounting/adapter/ownership prerequisite with a finite proof boundary | Separate later selection. Wrapper and accounting may proceed independently only after shared custody interfaces are settled; retain one integration owner and keep V2 closed until authentic admission/cleanup is ready. |
+| Installer restoration | Authentic absent-unit snapshot/rollback repair and supported reinstall | Existing Task03 retains ownership; repair remains pending separate disposition. No automatic source fix, commit, service mutation or live request follows from this refresh. This lane is not a prerequisite to P1-A or independent source/evidence work. |
+| D/E successors | D1 envelope, D2 mediation, D3 integration and E4 host-visible writes | Existing E3→D1→D2→D3 and E3→E4 dependencies remain. Concrete source/proof preparation can be selected independently; implementation is not dispatched here. |
+
+The one shared coordination root remains
+`/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/e3f-retained-next-20261022/`.
+Preserve the existing BACKLOG and two private diagnostic edits. Owners record actual source,
+review, installed proof and publication separately. This refresh is an uncommitted owner decision;
+the actual TASK identity/delivery is recorded in the workflow, not inferred from selection.
 
 ## Current E3-F status correction — 2026-10-21
 
