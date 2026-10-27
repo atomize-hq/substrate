@@ -1,6 +1,494 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Execute actual lifecycle bodies with an external-operation adapter that can
+# touch only private fixtures. Select before any legacy target artifact writes.
+if [[ "${1:-}" == "--installer-recovery" ]]; then
+  [[ $# -eq 1 ]] || exit 2
+  python3 - "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)" <<'PY_RECOVERY'
+import hashlib
+import json
+import os
+from pathlib import Path
+import shlex
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+
+repo = Path(sys.argv[1])
+provision = (repo / 'scripts/linux/world-provision.sh').read_text()
+lifecycle = (repo / 'scripts/linux/world-lifecycle.sh').read_text()
+failures = []
+count = 0
+
+def check(name, operation):
+    global count
+    count += 1
+    try:
+        operation()
+        print('PASS', name, flush=True)
+    except (AssertionError, subprocess.CalledProcessError) as error:
+        failures.append(name)
+        print('FAIL', name, str(error), flush=True)
+
+def require(condition, detail):
+    assert condition, detail
+
+with tempfile.TemporaryDirectory(prefix='installer-recovery-', dir=os.environ['SUBSTRATE_TEST_TMPDIR']) as temporary:
+    root = Path(temporary)
+    # Run the actual production dispatch block twice: real argv intercepted at
+    # cargo/rustup, and dry argv captured at show_cmd. No project compilation.
+    block = provision.split('if [[ ${SKIP_BUILD} -eq 0 ]]; then\n', 1)[1].split('\nelse\n    echo "==> Skipping build as requested"', 1)[0]
+    block = 'if [[ ${SKIP_BUILD} -eq 0 ]]; then\n' + block + '\nfi\n'
+    micro = root / 'micro'
+    (micro / 'src').mkdir(parents=True)
+    (micro / 'Cargo.toml').write_text('[package]\nname="profile-proof"\nversion="0.1.0"\nedition="2021"\n[workspace]\n[profile.fixture]\ninherits="dev"\n')
+    (micro / 'src/main.rs').write_text('fn main() {}\n')
+    (micro / 'Cargo.lock').write_text('version = 4\n[[package]]\nname = "profile-proof"\nversion = "0.1.0"\n')
+    toolchain = Path('/home/spenser/.rustup/toolchains/1.89.0-x86_64-unknown-linux-gnu/bin')
+    cargo = toolchain / 'cargo'
+    env = dict(os.environ, RUSTC=str(toolchain / 'rustc'), CARGO_TARGET_DIR=str(micro / 'target'))
+    require(cargo.is_file() and (toolchain / 'rustc').is_file(), 'installed Rust 1.89 required')
+    require(subprocess.check_output([str(toolchain / 'rustc'), '--version'], text=True).startswith('rustc 1.89.0 '), 'wrong Rust version')
+    def profile_case(profile):
+        outputs = []
+        for dry in (0, 1):
+            script = '''set -Eeuo pipefail
+cargo() { printf '%s\\0' cargo "$@" >> "$ARGV"; }
+rustup() { printf '%s\\0' rustup "$@" >> "$ARGV"; }
+show_cmd() { printf '%s\\0' "$@" >> "$ARGV"; }
+''' + block
+            argv = root / ('argv-' + profile + str(dry))
+            subprocess.run(['bash', '-c', script], env=dict(env, PROFILE=profile, SKIP_BUILD='0', DRY_RUN=str(dry), REPO_ROOT=str(repo), ARGV=str(argv)), check=True, capture_output=True, text=True)
+            outputs.append(argv.read_bytes().split(b'\0')[:-1])
+        require(outputs[0] == outputs[1], 'real/dry argv differ')
+        args = [value.decode() for value in outputs[0]]
+        split = args.index('rustup')
+        native, static_args = args[:split], args[split:]
+        require('--locked' in native, 'lost locked build')
+        require(static_args == ['rustup', 'run', '1.89.0', 'cargo', 'build', '--locked', '--release', '--target', 'x86_64-unknown-linux-musl', '-p', 'world-service', '--bin', 'substrate-world-entry', '-p', 'substrate-gateway', '--bin', 'substrate-gateway', '--manifest-path', str(repo / 'Cargo.toml')], static_args)
+        flags = ['--release'] if profile == 'release' else ['--profile', native[native.index('--profile') + 1]]
+        result = subprocess.run([str(cargo), 'build', '--locked', '--offline', *flags, '--manifest-path', str(micro / 'Cargo.toml')], env=env, capture_output=True, text=True)
+        print(result.stdout + result.stderr, end='')
+        require(result.returncode == 0, 'Cargo rejected production-derived profile argv: ' + repr(flags))
+        require((micro / 'target' / profile / 'profile-proof').is_file(), 'wrong artifact layout')
+        if profile == 'debug':
+            require(flags == ['--profile', 'dev'], flags)
+            require('/target/${PROFILE}/world-service' in provision, 'public debug layout changed')
+    for profile in ('debug', 'release', 'fixture'):
+        check('Rust 1.89 production-derived real/dry ' + profile, lambda p=profile: profile_case(p))
+
+    units = ['substrate-world-service.service', 'substrate-world-service.socket', 'substrate-lifecycle-publisher-v1.service', 'substrate-lifecycle-publisher-v1.socket']
+    links = {units[0]: 'multi-user.target.wants', units[1]: 'sockets.target.wants', units[3]: 'sockets.target.wants'}
+    # The adapter implements only the commands reached by the actual bodies.
+    # Every filesystem operand must map to fs/ or this temporary fixture.
+    dispatcher = root / 'adapter'
+    dispatcher.write_text('#!' + sys.executable + '\n' + r'''
+import hashlib,json,os,socket,subprocess,sys
+from pathlib import Path
+r=Path(os.environ['CASE_ROOT']); fs=r/'fs'; args=sys.argv[2:]; cmd=sys.argv[1]
+state=json.loads((r/'state').read_text()); units=state['units']
+def save(): (r/'state').write_text(json.dumps(state))
+def mapped(value):
+    if value.startswith(str(r)+'/') or value == str(r): return value
+    if value.startswith(('/etc/','/usr/','/run/','/var/')) or value in ('/etc','/run/substrate'): return str(fs)+value
+    raise RuntimeError('denied path '+value)
+def event(kind,values):
+    with (r/'events').open('a') as stream: stream.write(json.dumps([kind,*values])+'\n')
+def fail(stage):
+    if os.environ.get('INJECT') == stage and not (r/'injected').exists():
+        (r/'injected').touch(); sys.exit(77)
+def ctl(args):
+    action=args[0]; unit=next((a for a in args[1:] if a in units), None)
+    event('systemctl',args)
+    if action=='daemon-reload':
+        if os.environ.get('RESTORE_FAIL')=='reload' and (r/'injected').exists(): sys.exit(79)
+        return
+    if action=='cat': sys.exit(1)
+    if unit is None: raise RuntimeError('denied unit')
+    u=units[unit]; source=fs/'etc/systemd/system'/unit
+    present=source.exists() or source.is_symlink()
+    if action=='is-enabled':
+        value=u['enabled'] if present else 'not-found'
+        print(u.get('enabled_override',value)); sys.exit(u.get('enabled_exit',0 if value.startswith('enabled') else (4 if value=='not-found' else 1)))
+    if action=='is-active':
+        value=u.get('active_override',u['active'])
+        if '--quiet' not in args: print(value)
+        sys.exit(u.get('active_exit',0 if value=='active' else 3))
+    if action=='show':
+        if u.get('query_fail') or (os.environ.get('RESTORE_FAIL')=='query' and (r/'injected').exists()): sys.exit(1)
+        if u.get('query_empty'): return
+        values=dict(LoadState='loaded' if present else 'not-found',ActiveState=u['active'],FragmentPath='/etc/systemd/system/'+unit if present else '',DropInPaths='')
+        values.update(u.get('metadata',{}))
+        for key,value in values.items(): print(key+'='+value)
+        return
+    if action in ('unmask','mask','enable','disable'):
+        if action=='mask': u['enabled']='masked-runtime' if '--runtime' in args else 'masked'
+        if action=='enable':
+            u['enabled']='enabled-runtime' if '--runtime' in args else 'enabled'
+            if unit in state['links']:
+                path=fs/'etc/systemd/system'/state['links'][unit]/unit
+                path.parent.mkdir(parents=True,exist_ok=True)
+                if not path.is_symlink(): path.symlink_to('/etc/systemd/system/'+unit)
+            save(); fail('enable')
+        if action=='disable': u['enabled']='disabled'
+    elif action in ('stop','start','restart'):
+        if action=='stop': u['active']='inactive'; u['listening']=False
+        else:
+            u['active']='active'; u['listening']=unit.endswith('.socket')
+            if unit=='substrate-world-service.service':
+                # Socket activation can have started the publisher before an
+                # installer failure; rollback must use its executor to stop it.
+                units['substrate-lifecycle-publisher-v1.service']['active']='active'
+        if unit.endswith('.socket'):
+            endpoint=fs/('run/substrate.sock' if unit=='substrate-world-service.socket' else 'run/substrate-lifecycle-publisher-v1.sock')
+            if endpoint.exists(): endpoint.unlink()
+            if action!='stop':
+                endpoint.parent.mkdir(parents=True,exist_ok=True)
+                previous=os.getcwd(); os.chdir(endpoint.parent)
+                sock=socket.socket(socket.AF_UNIX); sock.bind(endpoint.name); sock.close()
+                os.chdir(previous)
+                endpoint.chmod(0o660 if unit=='substrate-world-service.socket' else 0o600)
+        save()
+        if action!='stop': fail('socket' if unit.endswith('.socket') else 'service')
+    elif action!='status': raise RuntimeError('denied systemctl '+action)
+    save()
+if cmd=='systemctl': ctl(args)
+elif cmd=='executor':
+    event('executor',args); ctl([args[args.index('--action')+1],args[args.index('--service-unit')+1]])
+elif cmd in ('getent','member','id'):
+    sys.exit(0 if cmd=='id' or state['account'].get('group' if cmd=='getent' else 'member') else 1)
+elif cmd in ('groupadd','usermod','gpasswd','groupdel'):
+    event(cmd,args)
+    if os.environ.get('ACCOUNT_FAIL')==cmd and (r/'injected').exists():
+        event('account-error',[cmd,'79']); sys.exit(79)
+    state['account']['group' if cmd in ('groupadd','groupdel') else 'member']=cmd in ('groupadd','usermod'); save()
+elif cmd=='acl-helper':
+    assert args[0] in ('--socket','--directory-traverse','--tree-readonly') and args[2]=='substrate'
+    event(cmd,args)
+    sys.exit(subprocess.run(['/usr/bin/setfacl',*(['-R'] if args[0]=='--tree-readonly' else []),'-m','u:12345:r-x,m::r-x',mapped(args[1])]).returncode)
+elif cmd=='getfacl':
+    sys.exit(subprocess.run(['/usr/bin/getfacl',*(mapped(arg) if arg.startswith('/') else arg for arg in args)]).returncode)
+elif cmd=='setfacl':
+    event(cmd,args)
+    backup=Path(args[0].split('=',1)[1]); assert backup.is_file()
+    sys.exit(subprocess.run(['/usr/bin/setfacl',*args]).returncode)
+elif cmd=='python3':
+    body=sys.stdin.read(); digest=hashlib.sha256(body.encode()).hexdigest()
+    assert digest in state['python'], 'denied Python body'
+    event('publication',[state['python'][digest]])
+    path=Path(mapped(args[1])); path.mkdir(parents=True,exist_ok=True)
+    if state['python'][digest]!='config': (path/'fixture-publication').write_text('bounded external adapter\n')
+elif cmd in ('test','stat','cp','rm','mkdir','install','chown','ls'):
+    event(cmd,args)
+    if cmd=='test' and args==[os.environ.get('PREDICATE_FLAG'),os.environ.get('PREDICATE_TARGET')]:
+        flag=args[0]; key='predicate-count-'+flag
+        state[key]=state.get(key,0)+1; save()
+        phase=os.environ.get('PREDICATE_PHASE')
+        triggered=(phase=='capture' and not (r/'injected').exists()) or (phase=='admission' and state[key]>=2 and not (r/'injected').exists()) or (phase=='restore' and (r/'injected').exists())
+        if triggered:
+            event('predicate-error',[phase,flag,'2']); sys.exit(2)
+    if cmd=='rm' and os.environ.get('RESTORE_FAIL')=='path' and (r/'injected').exists(): sys.exit(79)
+    mapped_args=[]; skip=False
+    for arg in args:
+        if skip: skip=False; continue
+        if cmd=='install' and arg in ('-o','-g'): skip=True; continue
+        if cmd=='chown' and arg==str(os.getuid())+':'+str(os.getgid()): mapped_args.append(arg); continue
+        if not arg.startswith(('-','/')) and not (cmd=='stat' and arg in ('%a','%u','%g')):
+            raise RuntimeError('denied relative file operand '+arg)
+        mapped_args.append(mapped(arg) if arg.startswith('/') else arg)
+    # Original fixture ownership is the current uid/gid; refuse other chowns.
+    if cmd=='chown':
+        identity=next(a for a in mapped_args if not a.startswith('-'))
+        assert identity==str(os.getuid())+':'+str(os.getgid())
+    result=subprocess.run(['/usr/bin/'+cmd,*mapped_args]);
+    if result.returncode: sys.exit(result.returncode)
+    if cmd=='install' and args[-1].endswith('substrate-lifecycle-publisher-v1.socket'): fail('files')
+else: raise RuntimeError('denied external command '+cmd)
+''')
+    dispatcher.chmod(0o755)
+    python_bodies = {}
+    for function, label in [('provision_e3_system_config_mount_target_v1','config'),('publish_installed_home_bootstrap_v1','bootstrap'),('publish_substrate_artifact_source_v1','artifact')]:
+        body = lifecycle.split(function+'() {\n',1)[1].split("<<'PY'\n",1)[1].split('\nPY\n',1)[0]+'\n'
+        python_bodies[hashlib.sha256(body.encode()).hexdigest()] = label
+    helper = r'''
+set -Eeuo pipefail
+source "$REPO/scripts/linux/world-lifecycle.sh"
+sudo_cmd() {
+    case "$1" in
+      /usr/libexec/substrate/substrate-lifecycle-linux) shift; "$ADAPTER" executor "$@" ;;
+      /usr/libexec/substrate/substrate-apply-socket-acl) shift; "$ADAPTER" acl-helper "$@" ;;
+      *) "$ADAPTER" "$@" ;;
+    esac
+}
+systemctl() { sudo_cmd systemctl "$@"; }
+getent() { "$ADAPTER" getent "$@"; }
+id() { "$ADAPTER" id "$@"; }
+user_in_group() { "$ADAPTER" member "$@"; }
+getfacl() { "$ADAPTER" getfacl "$@"; }
+setfacl() { "$ADAPTER" setfacl "$@"; }
+ensure_substrate_group_exists() { sudo_cmd groupadd substrate; }
+ensure_user_in_group() { sudo_cmd usermod -aG substrate fixture-user; }
+install_unit() { local tmp; tmp=$(mktemp); printf '%s\n' "$2" > "$tmp"; sudo_cmd install -Dm0644 "$tmp" "$1"; rm "$tmp"; }
+resolve_substrate_cli() { printf 'fixture-cli'; }
+maybe_run_gateway_lifecycle_proof() { :; }
+print_linger_guidance() { :; }
+verify_socket_acl_bridge() { :; }
+verify_world_deps_acl_bridge() { :; }
+world_deps_probe_path() { printf '/var/lib/substrate/world-deps/bin/probe'; }
+WORLD_AGENT_BIN_PATH="$CASE_ROOT/input" GATEWAY_BIN_PATH="$CASE_ROOT/input"
+E3_GATEWAY_BIN_PATH="$CASE_ROOT/input" E3_WORLD_ENTRY_BIN_PATH="$CASE_ROOT/input"
+LIFECYCLE_EXECUTOR_BIN_PATH="$CASE_ROOT/input" ACL_HELPER_SOURCE_PATH="$CASE_ROOT/input"
+ACL_HELPER_INSTALL_PATH=/usr/libexec/substrate/substrate-apply-socket-acl
+SERVICE_PATH=/etc/systemd/system/substrate-world-service.service
+SOCKET_PATH=/etc/systemd/system/substrate-world-service.socket
+ACL_DROPIN_PATH=/etc/systemd/system/substrate-world-service.socket.d/20-substrate-group-acl.conf
+SOCKET_FS_PATH=/run/substrate.sock SUBSTRATE_STATE_PATH=/var/lib/substrate
+WORLD_DEPS_ROOT_PATH=/var/lib/substrate/world-deps WORLD_DEPS_BIN_PATH=/var/lib/substrate/world-deps/bin
+SUBSTRATE_GROUP=substrate INVOKING_USER=fixture-user SUBSTRATE_CLI_BIN_PATH=fixture-cli
+SERVICE_UNIT_CONTENT=service SOCKET_UNIT_CONTENT=socket SOCKET_DROPIN_CONTENT=dropin
+SCRIPT_DIR="$CASE_ROOT/units"
+SUBSTRATE_SOURCE_COMMIT=fixture SUBSTRATE_SOURCE_TREE=fixture SUBSTRATE_CARGO_LOCK_SHA256=fixture
+SUBSTRATE_RUSTC_VERSION=fixture SUBSTRATE_SOURCE_TARGET=fixture SUBSTRATE_SOURCE_PROFILE=fixture SUBSTRATE_SOURCE_BUILD_PERFORMED=1
+INSTALL_BOOTSTRAP_CONTEXT_V1=fixture INSTALL_BOOTSTRAP_COMMITMENT=fixture INSTALL_BOOTSTRAP_ACCOUNT=fixture
+INSTALL_BOOTSTRAP_UID=12345 INSTALL_BOOTSTRAP_PRIMARY_GID=12345 INSTALL_PREFIX=/fixture-home
+'''
+    def fixture(name, mixed=False):
+        case = root / name
+        (case / 'fs/etc/systemd/system').mkdir(parents=True)
+        (case / 'tmp').mkdir()
+        (case / 'units').mkdir()
+        for unit in units[2:]: (case / 'units' / unit).write_text('fixture publisher\n')
+        (case / 'input').write_text('fixture binary\n')
+        state = dict(units={unit:dict(enabled='disabled',active='inactive',listening=False) for unit in units}, links=links, account=dict(group=False,member=False), python=python_bodies)
+        if mixed:
+            for unit in units[2:]: (case / 'fs/etc/systemd/system' / unit).write_text('original '+unit+'\n')
+            state['units'][units[3]].update(enabled='enabled',active='active',listening=True)
+            link=case / 'fs/etc/systemd/system' / links[units[3]] / units[3]
+            link.parent.mkdir(); link.symlink_to('/etc/systemd/system/'+units[3])
+            import socket
+            endpoint=case/'fs/run/substrate-lifecycle-publisher-v1.sock'
+            endpoint.parent.mkdir(parents=True)
+            previous=os.getcwd(); os.chdir(endpoint.parent)
+            sock=socket.socket(socket.AF_UNIX); sock.bind(endpoint.name); sock.close()
+            os.chdir(previous); endpoint.chmod(0o600)
+        dropin=case / 'fs/etc/systemd/system/substrate-world-service.socket.d/20-substrate-group-acl.conf'
+        dropin.parent.mkdir(); dropin.write_text('original unloaded ACL dropin\n'); dropin.chmod(0o644)
+        (case / 'state').write_text(json.dumps(state)); (case / 'events').touch()
+        return case
+    def execute(case, tail='main', **extra):
+        result=subprocess.run(['bash','-c',helper+'\n'+tail], env=dict(os.environ,REPO=str(repo),CASE_ROOT=str(case),ADAPTER=str(dispatcher),TMPDIR=str(case/'tmp'),**extra),text=True,capture_output=True)
+        (case/'output').write_text(result.stdout+result.stderr)
+        return result
+    def tree(case):
+        result={}
+        for path in (case/'fs').rglob('*'):
+            # Empty parents of fixed managed paths are not themselves managed.
+            if path.is_dir() and not path.is_symlink(): continue
+            info=path.lstat()
+            result[str(path.relative_to(case/'fs'))]=(stat.S_IFMT(info.st_mode),stat.S_IMODE(info.st_mode),info.st_uid,info.st_gid,os.readlink(path) if path.is_symlink() else (b'<socket>' if stat.S_ISSOCK(info.st_mode) else path.read_bytes()))
+        return result
+    def assert_restored(case, before, account):
+        require(tree(case)==before, 'filesystem/link/metadata mismatch: '+repr(tree(case)))
+        state=json.loads((case/'state').read_text())
+        require(state['account']==account,'account mismatch')
+        for unit in units:
+            expected_active='active' if unit==units[3] and ('etc/systemd/system/'+unit) in before else 'inactive'
+            require(state['units'][unit]['active']==expected_active, 'active mismatch '+unit)
+            require(state['units'][unit]['listening']==(expected_active=='active' and unit.endswith('.socket')), 'listening mismatch '+unit)
+    def rollback_case(mixed, stage):
+        case=fixture(('mixed' if mixed else 'absent')+'-'+stage,mixed)
+        before=tree(case); account=json.loads((case/'state').read_text())['account']
+        result=execute(case,INJECT=stage)
+        require(result.returncode==77, result.stdout+result.stderr)
+        require((case/'injected').exists(),'install never reached injection')
+        assert_restored(case,before,account)
+        events=[json.loads(line) for line in (case/'events').read_text().splitlines()]
+        publication=next(i for i,e in enumerate(events) if e[:2]==['publication','artifact'])
+        removal=next(i for i,e in enumerate(events) if i>publication and e[0]=='rm' and e[-1]=='/usr/libexec/substrate/substrate-lifecycle-linux')
+        if stage in ('socket','service'):
+            require(any(e[:2]==['systemctl','stop'] and e[-1]==units[1] for e in events[publication:removal]),'absent active socket not stopped before removal')
+        if mixed:
+            restart=next(i for i,e in enumerate(events) if e[:2]==['systemctl','restart'] and e[-1]==units[3])
+            service_restore=next(i for i,e in enumerate(events) if i>removal and e[:2]==['systemctl','disable'] and e[-1]==units[2])
+            require(restart<service_restore,'socket restored after service')
+        if stage=='service':
+            require(any(e[0]=='executor' and e[-1]=='stop' for e in events[publication:removal]),'executor stop must precede executor removal')
+    for mixed in (False,True):
+        for stage in ('files','enable','socket','service'):
+            check(('mixed' if mixed else 'absent')+' rollback after '+stage,lambda m=mixed,s=stage:rollback_case(m,s))
+    def success():
+        case=fixture('success',True); result=execute(case)
+        require(result.returncode==0,result.stdout+result.stderr)
+        state=json.loads((case/'state').read_text())
+        require(state['units'][units[0]]['active']=='active','service did not start')
+        for unit in (units[1],units[3]): require(state['units'][unit]['listening'],'socket did not listen')
+        for unit,target in links.items(): require((case/'fs/etc/systemd/system'/target/unit).is_symlink(),'missing enablement '+unit)
+        require(not list((case/'tmp').glob('substrate-world-lifecycle.*')),'successful snapshot retained')
+    check('successful actual main/install/capture fixture',success)
+    def rejection(kind):
+        case=fixture('reject-'+kind)
+        state=json.loads((case/'state').read_text()); unit=state['units'][units[0]]
+        source=case/'fs/etc/systemd/system'/units[0]
+        if kind=='regular': source.write_text('hostile'); unit.update(enabled_override='not-found',enabled_exit=4)
+        elif kind in ('symlink','dangling'):
+            source.symlink_to('/dev/null' if kind=='symlink' else '/missing'); unit.update(enabled_override='not-found',enabled_exit=4)
+        elif kind=='query': unit['query_fail']=True
+        elif kind=='empty-query': unit['query_empty']=True
+        elif kind=='enabled-status': unit['enabled_exit']=1
+        elif kind=='active-status': unit['active_exit']=1
+        elif kind=='metadata-active': unit['metadata']={'ActiveState':'active'}
+        elif kind=='unknown-absence': unit['active_override']='unknown'
+        elif kind in ('fragment','dropin','loaded'):
+            unit['metadata']={dict(fragment='FragmentPath',dropin='DropInPaths',loaded='LoadState')[kind]:dict(fragment='/other/unit',dropin='/other/dropin',loaded='loaded')[kind]}
+        elif kind=='enabled': unit['enabled_override']='unexpected'
+        elif kind=='active': unit['active_override']='activating'
+        (case/'state').write_text(json.dumps(state))
+        result=execute(case,'record_linux_managed_state')
+        require(result.returncode!=0,'adversarial capture accepted '+kind)
+        require(not any(json.loads(line)[0]=='publication' for line in (case/'events').read_text().splitlines()),'install reached')
+    for kind in ('regular','symlink','dangling','query','empty-query','enabled-status','active-status','metadata-active','unknown-absence','fragment','dropin','loaded','enabled','active'):
+        check('reject '+kind+' unit observation',lambda k=kind:rejection(k))
+    def partial():
+        case=fixture('partial',True); before=tree(case)
+        state=json.loads((case/'state').read_text()); state['units'][units[1]]['active_override']='failed'; (case/'state').write_text(json.dumps(state))
+        result=execute(case)
+        require(result.returncode!=0,'partial capture accepted')
+        require(tree(case)==before,'partial capture modified files')
+        require(not any(json.loads(line)[0]=='publication' for line in (case/'events').read_text().splitlines()),'partial capture installed')
+    check('partial capture prevents installation',partial)
+    def restoration_failure(mode):
+        case=fixture('restore-failure-'+mode); result=execute(case,INJECT='service',RESTORE_FAIL=mode)
+        require(result.returncode!=0,'restoration failure accepted')
+        require(list((case/'tmp').glob('substrate-world-lifecycle.*')),'failed restoration discarded evidence')
+    for mode in ('path','reload','query'):
+        check('restore '+mode+' failure retains snapshot evidence',lambda m=mode:restoration_failure(m))
+    def preserved():
+        case=fixture('preserved',True)
+        result=execute(case,'''linux_restore_service_state substrate-lifecycle-publisher-v1.service masked active
+linux_restore_service_state substrate-lifecycle-publisher-v1.socket enabled-runtime active
+DRY_RUN=1
+LINUX_MANAGED_STATE_SNAPSHOT_ROOT="$CASE_ROOT/tmp"
+linux_snapshot_service_state substrate-world-service.service
+''')
+        require(result.returncode==0,result.stdout+result.stderr)
+        events=[json.loads(line) for line in (case/'events').read_text().splitlines()]
+        require(['systemctl','mask',units[2]] in events,'masked state lost')
+        require(['systemctl','enable','--runtime',units[3]] in events,'runtime state lost')
+        require((case/'tmp/services.tsv').read_text()==units[0]+'\tunknown\tunknown\n','dry unknown changed')
+    check('masked active/runtime-enabled/dry-unknown preservation',preserved)
+    def unknown():
+        case=fixture('literal-unknown')
+        state=json.loads((case/'state').read_text())
+        state['units'][units[0]].update(enabled_override='unknown',active_override='unknown')
+        (case/'state').write_text(json.dumps(state))
+        result=execute(case,'''record_linux_managed_state
+! grep -F $'substrate-world-service.service\\tnot-found' "$(linux_snapshot_service_path)"
+grep -F $'substrate-world-service.service\\tunknown\\tunknown' "$(linux_snapshot_service_path)"
+if linux_restore_service_state substrate-world-service.service not-found inactive; then exit 91; fi
+''')
+        require(result.returncode==0,result.stdout+result.stderr)
+    check('literal unknown retained and rejected as authenticated absence',unknown)
+    def acl_account():
+        case=fixture('acl-account',True)
+        runtime=case/'fs/run/substrate'; runtime.mkdir(); runtime.chmod(0o750)
+        state_root=case/'fs/var/lib/substrate'; state_root.mkdir(parents=True); state_root.chmod(0o750)
+        subprocess.run(['/usr/bin/setfacl','-m','u:23456:--x,m::r-x',str(runtime),str(state_root)],check=True)
+        before_acl=subprocess.check_output(['/usr/bin/getfacl','-cpn',str(runtime),str(state_root)])
+        before=tree(case)
+        state=json.loads((case/'state').read_text()); state['account']=dict(group=True,member=False); (case/'state').write_text(json.dumps(state))
+        result=execute(case,INJECT='service')
+        require(result.returncode==77,result.stdout+result.stderr)
+        assert_restored(case,before,dict(group=True,member=False))
+        require(subprocess.check_output(['/usr/bin/getfacl','-cpn',str(runtime),str(state_root)])==before_acl,'kernel ACL mismatch')
+    check('present account/ownership and real kernel ACL rollback',acl_account)
+    def dangling_enablement():
+        case=fixture('dangling-enablements')
+        for unit,target in links.items():
+            link=case/'fs/etc/systemd/system'/target/unit
+            link.parent.mkdir(parents=True,exist_ok=True); link.symlink_to('/original-dangling/'+unit)
+        before=tree(case)
+        result=execute(case,INJECT='service')
+        require(result.returncode==77,result.stdout+result.stderr)
+        assert_restored(case,before,dict(group=False,member=False))
+    check('original dangling fixed enablement links restored exactly',dangling_enablement)
+
+    def predicate_failure(phase, flag, present=False, acl=False):
+        case=fixture('IR1-'+phase+'-'+flag[1:]+('-acl' if acl else ''))
+        target='/etc/systemd/system/'+units[0]
+        if acl:
+            target='/var/lib/substrate'
+            (case/'fs/var/lib/substrate').mkdir(parents=True)
+        if present:
+            (case/'fs/etc/systemd/system'/units[0]).write_text('original main unit\n')
+        before=tree(case)
+        tail='main' if phase!='restore' else '''record_linux_managed_state
+# Capture succeeds first; only the actual restore observation fails.
+touch "$CASE_ROOT/injected"
+restore_linux_managed_state
+'''
+        settings=dict(PREDICATE_PHASE=phase,PREDICATE_FLAG=flag,PREDICATE_TARGET=target)
+        if phase!='restore':
+            # The real capture returns the operational status unchanged. The
+            # main ERR trap's incomplete-capture guard returns its own failure,
+            # so main is required to fail, not to retain this exact number.
+            direct=execute(case,'record_linux_managed_state',**settings)
+            require(direct.returncode==2,'direct capture lost rc2: '+str(direct.returncode)+'\n'+direct.stdout+direct.stderr)
+            state=json.loads((case/'state').read_text())
+            state.pop('predicate-count-'+flag,None)
+            (case/'state').write_text(json.dumps(state))
+        previous_snapshots=set((case/'tmp').glob('substrate-world-lifecycle.*'))
+        result=execute(case,tail,**settings)
+        events=[json.loads(line) for line in (case/'events').read_text().splitlines()]
+        require(any(e==['predicate-error',phase,flag,'2'] for e in events),'predicate failure never exercised')
+        require(result.returncode==2 if phase=='restore' else result.returncode!=0,'predicate error became success: '+str(result.returncode)+'\n'+result.stdout+result.stderr)
+        require(tree(case)==before,'predicate error changed original files/links')
+        require(not any(e[0]=='publication' for e in events),'installation followed failed capture')
+        if phase!='restore':
+            require(not any(e[0] in ('groupadd','usermod','install') for e in events),'install operations followed failed capture')
+        require(set((case/'tmp').glob('substrate-world-lifecycle.*'))-previous_snapshots,'this failed attempt discarded its snapshot')
+    for flag in ('-e','-L','-d','-S'):
+        check('Task03-IR1 capture propagates '+flag+' rc2',lambda f=flag:predicate_failure('capture',f,present=f in ('-d','-S')))
+    for flag in ('-e','-L'):
+        check('Task03-IR1 admission propagates '+flag+' rc2',lambda f=flag:predicate_failure('admission',f))
+        check('Task03-IR1 restore propagates '+flag+' rc2 and retains snapshot',lambda f=flag:predicate_failure('restore',f))
+    check('Task03-IR1 ACL capture propagates -e rc2',lambda:predicate_failure('capture','-e',acl=True))
+    check('Task03-IR1 ACL second observation propagates -e rc2',lambda:predicate_failure('admission','-e',acl=True))
+
+    def account_failure(kind):
+        case=fixture('IR2-'+kind)
+        original=dict(group=kind in ('gpasswd-existing','usermod'),member=kind=='usermod')
+        state=json.loads((case/'state').read_text()); state['account']=original; (case/'state').write_text(json.dumps(state))
+        mutation='''sudo_cmd groupadd substrate
+sudo_cmd usermod -aG substrate fixture-user
+'''
+        command='gpasswd'
+        expected=dict(group=True,member=True)
+        if kind=='gpasswd-existing': mutation='sudo_cmd usermod -aG substrate fixture-user\n'
+        elif kind=='groupdel': command='groupdel'; expected=dict(group=True,member=False)
+        elif kind=='usermod':
+            command='usermod'; expected=dict(group=True,member=False)
+            mutation='sudo_cmd gpasswd -d fixture-user substrate\n'
+        result=execute(case,'record_linux_managed_state\n'+mutation+'''touch "$CASE_ROOT/injected"
+restore_linux_managed_state
+''',ACCOUNT_FAIL=command)
+        events=[json.loads(line) for line in (case/'events').read_text().splitlines()]
+        require(['account-error',command,'79'] in events,'account failure never exercised')
+        require(result.returncode==79,'failed account mutation status lost: '+str(result.returncode)+'\n'+result.stdout+result.stderr)
+        require(json.loads((case/'state').read_text())['account']==expected,'unexpected account state after failed mutation')
+        require(list((case/'tmp').glob('substrate-world-lifecycle.*')),'account failure discarded evidence')
+    for kind in ('gpasswd-existing','gpasswd-new','groupdel','usermod'):
+        check('Task03-IR2 '+kind+' failure propagates and retains snapshot',lambda k=kind:account_failure(k))
+
+
+
+print('installer-recovery: '+str(count)+' cases; '+str(len(failures))+' failures; 0 skips')
+if failures: sys.exit(1)
+PY_RECOVERY
+  exit $?
+fi
 if [[ "${1:-}" == "--runtime-directory-dac" || "${1:-}" == "--runtime-directory-dac-systemd" ]]; then
   [[ $# -eq 1 ]] || exit 2
   repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

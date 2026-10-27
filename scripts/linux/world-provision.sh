@@ -1001,10 +1001,14 @@ if [[ ${SKIP_BUILD} -eq 0 ]]; then
             cargo build --locked -p substrate --bin substrate --bin substrate-lifecycle-linux -p world-service --bin world-service -p substrate-gateway --bin substrate-gateway --release --manifest-path "${REPO_ROOT}/Cargo.toml"
         fi
     else
+        cargo_profile="${PROFILE}"
+        if [[ "${cargo_profile}" == "debug" ]]; then
+            cargo_profile="dev"
+        fi
         if [[ ${DRY_RUN} -eq 1 ]]; then
-            show_cmd cargo build --locked -p substrate --bin substrate --bin substrate-lifecycle-linux -p world-service --bin world-service -p substrate-gateway --bin substrate-gateway --profile "${PROFILE}" --manifest-path "${REPO_ROOT}/Cargo.toml"
+            show_cmd cargo build --locked -p substrate --bin substrate --bin substrate-lifecycle-linux -p world-service --bin world-service -p substrate-gateway --bin substrate-gateway --profile "${cargo_profile}" --manifest-path "${REPO_ROOT}/Cargo.toml"
         else
-            cargo build --locked -p substrate --bin substrate --bin substrate-lifecycle-linux -p world-service --bin world-service -p substrate-gateway --bin substrate-gateway --profile "${PROFILE}" --manifest-path "${REPO_ROOT}/Cargo.toml"
+            cargo build --locked -p substrate --bin substrate --bin substrate-lifecycle-linux -p world-service --bin world-service -p substrate-gateway --bin substrate-gateway --profile "${cargo_profile}" --manifest-path "${REPO_ROOT}/Cargo.toml"
         fi
     fi
     echo "==> Building descriptor-pinned E3 static artifacts (Rust 1.89.0, release, x86_64-unknown-linux-musl)"

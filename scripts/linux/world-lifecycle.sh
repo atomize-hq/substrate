@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 LINUX_MANAGED_STATE_SNAPSHOT_ROOT=""
+LINUX_MANAGED_STATE_CAPTURE_IN_PROGRESS=0
 : "${DRY_RUN:=0}"
 
 linux_snapshot_manifest_path() {
@@ -58,6 +59,20 @@ linux_require_world_context() {
     [[ "${missing}" -eq 0 ]]
 }
 
+# Internal observation adapter: only test's status 1 is a negative predicate.
+# Other nonzero statuses cannot establish anything about a managed path.
+linux_path_predicate_v1() {
+    local predicate_status=0
+    sudo_cmd test "$@" >/dev/null 2>&1 || predicate_status=$?
+    case "${predicate_status}" in
+        0|1) printf '%s' "${predicate_status}" ;;
+        *)
+            printf 'world-lifecycle path observation failed (%s): %s\n' "${predicate_status}" "$*" >&2
+            return "${predicate_status}"
+            ;;
+    esac
+}
+
 linux_snapshot_path() {
     local label="$1"
     local target="$2"
@@ -66,18 +81,27 @@ linux_snapshot_path() {
     local backup=""
     local owner=""
     local group=""
+    local exists_status link_status directory_status socket_status
 
-    if sudo_cmd test -e "${target}" >/dev/null 2>&1 || sudo_cmd test -L "${target}" >/dev/null 2>&1; then
-        if sudo_cmd test -L "${target}" >/dev/null 2>&1; then
+    exists_status="$(linux_path_predicate_v1 -e "${target}")" || return $?
+    link_status="$(linux_path_predicate_v1 -L "${target}")" || return $?
+    if [[ "${exists_status}" == 0 || "${link_status}" == 0 ]]; then
+        if [[ "${link_status}" == 0 ]]; then
             type="symlink"
-            backup="${LINUX_MANAGED_STATE_SNAPSHOT_ROOT}/${label}.backup"
-            sudo_cmd cp -a --no-dereference "${target}" "${backup}"
-        elif sudo_cmd test -d "${target}" >/dev/null 2>&1; then
-            type="dir"
-        elif sudo_cmd test -S "${target}" >/dev/null 2>&1; then
-            type="socket"
         else
-            type="file"
+            directory_status="$(linux_path_predicate_v1 -d "${target}")" || return $?
+            if [[ "${directory_status}" == 0 ]]; then
+                type="dir"
+            else
+                socket_status="$(linux_path_predicate_v1 -S "${target}")" || return $?
+                if [[ "${socket_status}" == 0 ]]; then
+                    type="socket"
+                else
+                    type="file"
+                fi
+            fi
+        fi
+        if [[ "${type}" == file || "${type}" == symlink ]]; then
             backup="${LINUX_MANAGED_STATE_SNAPSHOT_ROOT}/${label}.backup"
             sudo_cmd cp -a --no-dereference "${target}" "${backup}"
         fi
@@ -101,16 +125,59 @@ linux_snapshot_path() {
         "$(linux_manifest_field_v1 "${group}")" >>"$(linux_snapshot_manifest_path)"
 }
 
+# Missing units are accepted only for this fixed managed set, after the path
+# snapshot and trusted systemd queries agree. An unloaded ACL drop-in is still
+# preserved separately by the ordinary path snapshot.
+linux_assert_absent_managed_unit_v1() {
+    local unit="$1" enabled="$2" enabled_status="$3" active="$4" active_status="$5"
+    local expected_label expected_path
+    case "${unit}" in
+        substrate-world-service.service) expected_label=world-service-unit; expected_path="${SERVICE_PATH}" ;;
+        substrate-world-service.socket) expected_label=world-socket-unit; expected_path="${SOCKET_PATH}" ;;
+        substrate-lifecycle-publisher-v1.service) expected_label=lifecycle-service-unit; expected_path=/etc/systemd/system/substrate-lifecycle-publisher-v1.service ;;
+        substrate-lifecycle-publisher-v1.socket) expected_label=lifecycle-socket-unit; expected_path=/etc/systemd/system/substrate-lifecycle-publisher-v1.socket ;;
+        *) return 1 ;;
+    esac
+    [[ "${enabled}" == not-found && "${enabled_status}" == 4 && "${active}" == inactive && "${active_status}" == 3 ]] || return 1
+    local label target type rest found=0
+    while IFS=$'\t' read -r label target type rest; do
+        if [[ "${label}" == "${expected_label}" && "${target}" == "${expected_path}" && "${type}" == absent ]]; then
+            found=$((found + 1))
+        fi
+    done <"$(linux_snapshot_manifest_path)"
+    [[ "${found}" == 1 ]] || return 1
+    local exists_status link_status
+    exists_status="$(linux_path_predicate_v1 -e "${expected_path}")" || return $?
+    link_status="$(linux_path_predicate_v1 -L "${expected_path}")" || return $?
+    [[ "${exists_status}" == 1 && "${link_status}" == 1 ]] || return 1
+    local metadata line seen="|"
+    metadata="$(sudo_cmd systemctl show "${unit}" --all --property=LoadState,ActiveState,FragmentPath,DropInPaths)" || return $?
+    while IFS= read -r line; do
+        case "${line}" in
+            LoadState=not-found|ActiveState=inactive|FragmentPath=|DropInPaths=) ;;
+            *) return 1 ;;
+        esac
+        [[ "${seen}" != *"|${line%%=*}|"* ]] || return 1
+        seen+="${line%%=*}|"
+    done <<<"${metadata}"
+    for label in LoadState ActiveState FragmentPath DropInPaths; do
+        [[ "${seen}" == *"|${label}|"* ]] || return 1
+    done
+}
+
 linux_snapshot_service_state() {
     local unit="$1"
-    local enabled="unknown"
-    local active="unknown"
+    local enabled="unknown" active="unknown"
+    local enabled_status=0 active_status=0
     if [[ ${DRY_RUN} -eq 0 ]]; then
-        enabled="$(systemctl is-enabled "${unit}" 2>/dev/null || true)"
-        active="$(systemctl is-active "${unit}" 2>/dev/null || true)"
+        enabled="$(sudo_cmd systemctl is-enabled "${unit}" 2>/dev/null)" || enabled_status=$?
+        active="$(sudo_cmd systemctl is-active "${unit}" 2>/dev/null)" || active_status=$?
+        if [[ "${enabled}" == not-found ]]; then
+            linux_assert_absent_managed_unit_v1 "${unit}" "${enabled}" "${enabled_status}" "${active}" "${active_status}" || return $?
+        fi
     fi
     case "${enabled}" in
-        enabled|enabled-runtime|disabled|masked|masked-runtime|static|unknown) ;;
+        enabled|enabled-runtime|disabled|masked|masked-runtime|static|unknown|not-found) ;;
         *)
             printf 'world-lifecycle unsupported pre-state enabled value %s for %s\n' "${enabled}" "${unit}" >&2
             return 1
@@ -154,7 +221,9 @@ linux_snapshot_acl_state() {
     local backup=""
     local -a getfacl_args=(getfacl -p)
 
-    if ! sudo_cmd test -e "${target}" >/dev/null 2>&1; then
+    local exists_status
+    exists_status="$(linux_path_predicate_v1 -e "${target}")" || return $?
+    if [[ "${exists_status}" == 1 ]]; then
         printf '%s\t%s\t%s\t%s\n' \
             "${label}" \
             "${target}" \
@@ -205,34 +274,37 @@ linux_restore_path() {
         absent)
             if sudo_cmd test -d "${target}" >/dev/null 2>&1 \
                 && ! sudo_cmd test -L "${target}" >/dev/null 2>&1; then
-                sudo_cmd rm -rf -- "${target}"
+                sudo_cmd rm -rf -- "${target}" || return $?
             else
-                sudo_cmd rm -f -- "${target}"
+                sudo_cmd rm -f -- "${target}" || return $?
             fi
             ;;
         dir)
-            sudo_cmd install -d -m"${install_mode}" "${target}"
+            sudo_cmd install -d -m"${install_mode}" "${target}" || return $?
             if [[ -n "${owner}" && -n "${group}" ]]; then
-                sudo_cmd chown "${owner}:${group}" "${target}"
+                sudo_cmd chown "${owner}:${group}" "${target}" || return $?
             fi
             ;;
         file|symlink)
             if [[ -n "${backup}" && ( -e "${backup}" || -L "${backup}" ) ]]; then
                 target_parent="$(dirname -- "${target}")"
-                sudo_cmd mkdir -p "${target_parent}"
-                sudo_cmd rm -rf "${target}" || true
-                sudo_cmd cp -a "${backup}" "${target}"
+                sudo_cmd mkdir -p "${target_parent}" || return $?
+                sudo_cmd rm -rf "${target}" || return $?
+                sudo_cmd cp -a "${backup}" "${target}" || return $?
                 if [[ -n "${owner}" && -n "${group}" ]]; then
                     if [[ "${type}" == "symlink" ]]; then
-                        sudo_cmd chown -h "${owner}:${group}" "${target}"
+                        sudo_cmd chown -h "${owner}:${group}" "${target}" || return $?
                     else
-                        sudo_cmd chown "${owner}:${group}" "${target}"
+                        sudo_cmd chown "${owner}:${group}" "${target}" || return $?
                     fi
                 fi
+            else
+                printf 'world-lifecycle missing path snapshot for %s (%s)\n' "${target}" "${label}" >&2
+                return 1
             fi
             ;;
         socket)
-            sudo_cmd rm -f "${target}" || true
+            sudo_cmd rm -f "${target}" || return $?
             ;;
         *)
             printf 'world-lifecycle restore skipped unknown snapshot type %s for %s (%s)\n' \
@@ -246,15 +318,23 @@ linux_restore_service_state() {
     local enabled="$2"
     local active="$3"
 
+    if [[ "${enabled}" == not-found ]]; then
+        local current_enabled current_active enabled_status=0 active_status=0
+        current_enabled="$(sudo_cmd systemctl is-enabled "${unit}" 2>/dev/null)" || enabled_status=$?
+        current_active="$(sudo_cmd systemctl is-active "${unit}" 2>/dev/null)" || active_status=$?
+        linux_assert_absent_managed_unit_v1 "${unit}" "${current_enabled}" "${enabled_status}" "${current_active}" "${active_status}"
+        return $?
+    fi
+
     if [[ "${active}" == "active" && ( "${enabled}" == "masked" || "${enabled}" == "masked-runtime" ) ]]; then
-        sudo_cmd systemctl unmask "${unit}"
-        linux_restart_service_unit "${unit}"
+        sudo_cmd systemctl unmask "${unit}" || return $?
+        linux_restart_service_unit "${unit}" || return $?
         case "${enabled}" in
             masked)
-                sudo_cmd systemctl mask "${unit}"
+                sudo_cmd systemctl mask "${unit}" || return $?
                 ;;
             masked-runtime)
-                sudo_cmd systemctl mask --runtime "${unit}"
+                sudo_cmd systemctl mask --runtime "${unit}" || return $?
                 ;;
         esac
         return 0
@@ -262,24 +342,24 @@ linux_restore_service_state() {
 
     case "${enabled}" in
         enabled)
-            sudo_cmd systemctl unmask "${unit}"
-            sudo_cmd systemctl enable "${unit}"
+            sudo_cmd systemctl unmask "${unit}" || return $?
+            sudo_cmd systemctl enable "${unit}" || return $?
             ;;
         enabled-runtime)
-            sudo_cmd systemctl unmask "${unit}"
-            sudo_cmd systemctl enable --runtime "${unit}"
+            sudo_cmd systemctl unmask "${unit}" || return $?
+            sudo_cmd systemctl enable --runtime "${unit}" || return $?
             ;;
         static|unknown)
             ;;
         disabled)
-            sudo_cmd systemctl unmask "${unit}"
-            sudo_cmd systemctl disable "${unit}"
+            sudo_cmd systemctl unmask "${unit}" || return $?
+            sudo_cmd systemctl disable "${unit}" || return $?
             ;;
         masked)
-            sudo_cmd systemctl mask "${unit}"
+            sudo_cmd systemctl mask "${unit}" || return $?
             ;;
         masked-runtime)
-            sudo_cmd systemctl mask --runtime "${unit}"
+            sudo_cmd systemctl mask --runtime "${unit}" || return $?
             ;;
         *)
             printf 'world-lifecycle unsupported restore enabled value %s for %s\n' "${enabled}" "${unit}" >&2
@@ -289,10 +369,10 @@ linux_restore_service_state() {
 
     case "${active}" in
         active)
-            linux_restart_service_unit "${unit}"
+            linux_restart_service_unit "${unit}" || return $?
             ;;
         inactive)
-            sudo_cmd systemctl stop "${unit}"
+            sudo_cmd systemctl stop "${unit}" || return $?
             ;;
         unknown)
             ;;
@@ -341,10 +421,10 @@ linux_restore_account_state() {
         if [[ -n "${user}" && "${user}" != "root" ]] \
             && id "${user}" >/dev/null 2>&1 \
             && user_in_group "${user}" "${group}"; then
-            sudo_cmd gpasswd -d "${user}" "${group}" || true
+            sudo_cmd gpasswd -d "${user}" "${group}" || return $?
         fi
         if getent group "${group}" >/dev/null 2>&1; then
-            sudo_cmd groupdel "${group}" || true
+            sudo_cmd groupdel "${group}" || return $?
         fi
         return 0
     fi
@@ -352,11 +432,11 @@ linux_restore_account_state() {
     if [[ -n "${user}" && "${user}" != "root" ]] && id "${user}" >/dev/null 2>&1; then
         if [[ "${user_member_before}" == "1" ]]; then
             if ! user_in_group "${user}" "${group}"; then
-                sudo_cmd usermod -aG "${group}" "${user}" || true
+                sudo_cmd usermod -aG "${group}" "${user}" || return $?
             fi
         else
             if user_in_group "${user}" "${group}"; then
-                sudo_cmd gpasswd -d "${user}" "${group}" || true
+                sudo_cmd gpasswd -d "${user}" "${group}" || return $?
             fi
         fi
     fi
@@ -1540,6 +1620,7 @@ record_linux_managed_state() {
         return 0
     fi
     LINUX_MANAGED_STATE_SNAPSHOT_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/substrate-world-lifecycle.XXXXXX")"
+    LINUX_MANAGED_STATE_CAPTURE_IN_PROGRESS=1
     : >"$(linux_snapshot_manifest_path)"
     : >"$(linux_snapshot_service_path)"
     : >"$(linux_snapshot_account_state_path)"
@@ -1557,6 +1638,11 @@ record_linux_managed_state() {
     linux_snapshot_path "lifecycle-executor" "/usr/libexec/substrate/substrate-lifecycle-linux"
     linux_snapshot_path "lifecycle-service-unit" "/etc/systemd/system/substrate-lifecycle-publisher-v1.service"
     linux_snapshot_path "lifecycle-socket-unit" "/etc/systemd/system/substrate-lifecycle-publisher-v1.socket"
+    # Exact WantedBy closure of the three enable operations below. Preserve any
+    # original link/file (including dangling links), never the whole wants dir.
+    linux_snapshot_path "world-service-enablement" "/etc/systemd/system/multi-user.target.wants/substrate-world-service.service"
+    linux_snapshot_path "world-socket-enablement" "/etc/systemd/system/sockets.target.wants/substrate-world-service.socket"
+    linux_snapshot_path "lifecycle-socket-enablement" "/etc/systemd/system/sockets.target.wants/substrate-lifecycle-publisher-v1.socket"
     linux_snapshot_path "run-substrate-dir" "/run/substrate"
     linux_snapshot_path "world-socket-endpoint" "${SOCKET_FS_PATH}"
     linux_snapshot_path "lifecycle-socket-endpoint" "/run/substrate-lifecycle-publisher-v1.sock"
@@ -1578,6 +1664,7 @@ record_linux_managed_state() {
     linux_snapshot_acl_state "world-socket-acl" "${SOCKET_FS_PATH}" "0"
     linux_snapshot_acl_state "state-root-acl" "${SUBSTRATE_STATE_PATH}" "0"
     linux_snapshot_acl_state "world-deps-acl" "${WORLD_DEPS_ROOT_PATH}" "1"
+    LINUX_MANAGED_STATE_CAPTURE_IN_PROGRESS=0
 }
 
 invoke_linux_lifecycle_executor() {
@@ -1731,34 +1818,49 @@ install_linux_managed_state() {
 }
 
 restore_linux_managed_state() {
+    local unit_kind
     if [[ -z "${LINUX_MANAGED_STATE_SNAPSHOT_ROOT}" || ! -d "${LINUX_MANAGED_STATE_SNAPSHOT_ROOT}" ]]; then
         return 0
     fi
 
+    # Capture only copies observations; installation has not begun if capture
+    # fails. Replaying a partial service list could remove an existing socket
+    # endpoint without its corresponding restart. Retain evidence instead.
+    if [[ "${LINUX_MANAGED_STATE_CAPTURE_IN_PROGRESS}" == 1 ]]; then
+        printf 'world-lifecycle incomplete capture retained at %s\n' "${LINUX_MANAGED_STATE_SNAPSHOT_ROOT}" >&2
+        return 1
+    fi
+
+    # Quiesce newly installed absent sockets before stopping services, so
+    # activation cannot revive them while their managed files are removed.
     if [[ -f "$(linux_snapshot_service_path)" ]]; then
-        while IFS=$'\t' read -r unit _enabled _active; do
-            [[ "${unit}" == *.service ]] || continue
-            if sudo_cmd systemctl is-active --quiet "${unit}"; then
-                linux_stop_service_unit "${unit}"
-            fi
-        done <"$(linux_snapshot_service_path)"
+        for unit_kind in socket service; do
+            while IFS=$'\t' read -r unit enabled _active; do
+                [[ "${unit}" == *."${unit_kind}" ]] || continue
+                if [[ "${unit_kind}" == socket && "${enabled}" != not-found ]]; then
+                    continue
+                fi
+                if sudo_cmd systemctl is-active --quiet "${unit}"; then
+                    linux_stop_service_unit "${unit}" || return $?
+                fi
+            done <"$(linux_snapshot_service_path)"
+        done
     fi
 
     if [[ -f "$(linux_snapshot_manifest_path)" ]]; then
         tac "$(linux_snapshot_manifest_path)" | while IFS=$'\t' read -r label target type mode backup owner group; do
             [[ -n "${label}" ]] || continue
-            linux_restore_path "${label}" "${target}" "${type}" "${mode}" "${backup}" "${owner}" "${group}"
-        done
+            linux_restore_path "${label}" "${target}" "${type}" "${mode}" "${backup}" "${owner}" "${group}" || return $?
+        done || return $?
     fi
 
-    sudo_cmd systemctl daemon-reload || true
+    sudo_cmd systemctl daemon-reload || return $?
 
     if [[ -f "$(linux_snapshot_service_path)" ]]; then
-        local unit_kind
         for unit_kind in socket service; do
             while IFS=$'\t' read -r unit enabled active; do
                 [[ "${unit}" == *."${unit_kind}" ]] || continue
-                linux_restore_service_state "${unit}" "${enabled}" "${active}"
+                linux_restore_service_state "${unit}" "${enabled}" "${active}" || return $?
             done <"$(linux_snapshot_service_path)"
         done
     fi
@@ -1766,14 +1868,14 @@ restore_linux_managed_state() {
     if [[ -f "$(linux_snapshot_acl_state_path)" ]]; then
         while IFS=$'\t' read -r label target recursive backup; do
             [[ -n "${label}" ]] || continue
-            linux_restore_acl_state "${label}" "${target}" "${recursive}" "${backup}"
+            linux_restore_acl_state "${label}" "${target}" "${recursive}" "${backup}" || return $?
         done <"$(linux_snapshot_acl_state_path)"
     fi
 
     if [[ -f "$(linux_snapshot_account_state_path)" ]]; then
         while IFS=$'\t' read -r group user group_exists_before user_member_before; do
             [[ -n "${group}" ]] || continue
-            linux_restore_account_state "${group}" "${user}" "${group_exists_before}" "${user_member_before}"
+            linux_restore_account_state "${group}" "${user}" "${group_exists_before}" "${user_member_before}" || return $?
         done <"$(linux_snapshot_account_state_path)"
     fi
 
