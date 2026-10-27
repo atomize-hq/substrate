@@ -1013,6 +1013,43 @@ fn resolve_effective_policy_with_explain_from_global_patch(
         None
     };
 
+    compose_effective_policy(global_path, global_patch, workspace_layer, explain)
+}
+
+/// Compose only the supplied policy inputs, without filesystem discovery or caches.
+/// Source validation and precedence are shared with the existing discovery resolver.
+pub fn resolve_effective_policy_with_explain_from_sources(
+    global_path: &Path,
+    global_bytes: Option<&[u8]>,
+    workspace_source: Option<(&Path, &[u8])>,
+    explain: bool,
+) -> Result<(Policy, Option<PolicyExplainV1>)> {
+    fn parse(path: &Path, bytes: &[u8]) -> Result<PolicyPatch> {
+        let raw = std::str::from_utf8(bytes)
+            .with_context(|| format!("invalid UTF-8 in {}", path.display()))?;
+        parse_policy_patch_yaml(path, raw)
+    }
+    let global_patch = global_bytes
+        .map(|bytes| parse(global_path, bytes))
+        .transpose()?
+        .unwrap_or_default();
+    let workspace_layer = workspace_source
+        .map(|(path, bytes)| Ok::<_, anyhow::Error>((parse(path, bytes)?, path.to_path_buf())))
+        .transpose()?;
+    compose_effective_policy(
+        global_path.to_path_buf(),
+        global_patch,
+        workspace_layer,
+        explain,
+    )
+}
+
+fn compose_effective_policy(
+    global_path: PathBuf,
+    global_patch: PolicyPatch,
+    workspace_layer: Option<(PolicyPatch, PathBuf)>,
+    explain: bool,
+) -> Result<(Policy, Option<PolicyExplainV1>)> {
     let workspace_enabled = workspace_layer.is_some();
     let workspace_path = workspace_layer.as_ref().map(|(_, p)| p.as_path());
     let workspace_patch = workspace_layer.as_ref().map(|(p, _)| p);
@@ -3425,6 +3462,87 @@ fn hashmap_to_btree(map: &HashMap<String, String>) -> BTreeMap<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn workspace_settings_policy_explicit_layers_preserve_values_and_provenance() {
+        let global = Path::new("/explicit-home/policy.yaml");
+        let workspace = Path::new("/explicit-workspace/.substrate/policy.yaml");
+        let (policy, explain) = resolve_effective_policy_with_explain_from_sources(
+            global,
+            Some(b"id: global\ncmd_allowed: [global]\nnet_allowed: [example.com]\n"),
+            Some((workspace, b"id: workspace\ncmd_allowed: []\n")),
+            true,
+        )
+        .unwrap();
+        assert_eq!(policy.id, "workspace");
+        assert!(policy.cmd_allowed.is_empty());
+        assert_eq!(policy.net_allowed, vec!["example.com"]);
+        let explain = explain.unwrap();
+        assert_eq!(explain.keys.0["id"].sources[0].layer, "workspace_patch");
+        assert_eq!(
+            explain.keys.0["id"].sources[0].path.as_deref(),
+            workspace.to_str()
+        );
+        assert_eq!(
+            explain.keys.0["net_allowed"].sources[0].layer,
+            "global_patch"
+        );
+    }
+
+    #[test]
+    fn workspace_settings_policy_explicit_missing_patch_inherits_defaults() {
+        let global = Path::new("/explicit-home/policy.yaml");
+        for bytes in [None, Some(b"id: global\n".as_slice())] {
+            let (policy, explain) =
+                resolve_effective_policy_with_explain_from_sources(global, bytes, None, true)
+                    .unwrap();
+            let mut expected = Policy::default();
+            if bytes.is_some() {
+                expected.id = "global".into();
+            }
+            validate_and_finalize_effective_policy(&mut expected).unwrap();
+            assert_eq!(
+                serde_json::to_value(policy).unwrap(),
+                serde_json::to_value(expected).unwrap()
+            );
+            let explain = explain.unwrap();
+            let source = &explain.keys.0["id"].sources[0].layer;
+            assert_eq!(
+                source,
+                if bytes.is_some() {
+                    "global_patch"
+                } else {
+                    "default"
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn workspace_settings_policy_explicit_sources_reject_parse_and_validation_errors() {
+        let global = Path::new("/explicit-home/policy.yaml");
+        let workspace = Path::new("/explicit-workspace/.substrate/policy.yaml");
+        for invalid in [
+            b"unknown: true\n".as_slice(),
+            b"[broken",
+            b"world_fs:\n  write:\n    enabled: false\n  fail_closed:\n    routing: false\n",
+        ] {
+            assert!(resolve_effective_policy_with_explain_from_sources(
+                global,
+                Some(invalid),
+                None,
+                true
+            )
+            .is_err());
+            assert!(resolve_effective_policy_with_explain_from_sources(
+                global,
+                None,
+                Some((workspace, invalid)),
+                true
+            )
+            .is_err());
+        }
+    }
 
     fn restricted_parent(root: &Path) -> Policy {
         fs::create_dir_all(root.join("src")).unwrap();

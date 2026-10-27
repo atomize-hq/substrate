@@ -18,7 +18,7 @@
 > E3 remains incomplete. The
 > [2026-10-26 owner sequence](e3-agent-config-projection-and-gateway-adoption.md#bounded-return-and-next-task-sequence--2026-10-26)
 > records landed E3-F components, outstanding protected production joins, an honest bounded return,
-> P1-A inspection acceptance at the reviewed-working-tree endpoint and separate installer restoration. E4 remains undispatched. Schedule
+> P1-A commit, TASK05 internal owner-backed settings acceptance and separate installer restoration. E4 remains undispatched. Schedule
 > authority stays with the controlling decision, packet, and gate owners.
 
 The extracted E2 row below is pre-correction navigation. Its current authority is the

@@ -92,7 +92,7 @@ E3-A through E3-D are landed. [E3-E is terminally complete and product landed](e
 with canonical closure on the separate authority branch. Enclosing E3 remains incomplete;
 E3-F has landed components but remains incomplete at the
 [2026-10-26 bounded return](e3-agent-config-projection-and-gateway-adoption.md#bounded-return-and-next-task-sequence--2026-10-26);
-P1-A inspection is accepted as reviewed working-tree source; its next owner-state outcome remains to be bounded and installer restoration remains separate. Its projection is independently valid before D1; D1 retains
+P1-A inspection is committed at `ad98ea44b`; TASK05 internal owner-backed settings loading is accepted as reviewed working-tree source, with genuine identity/disclosure still unsupported and installer restoration separate. Its projection is independently valid before D1; D1 retains
 V3/envelope, D2 side-effect brokerage, D3 final joined proof, and E4 write/sync after its existing
 E3 prerequisite. No whole-seam promotion or successor admission follows from this navigation.
 

@@ -81,6 +81,32 @@ pub fn resolve_effective_policy_with_explain_from_global_source(
     )
 }
 
+/// Resolve policy from exact caller-held bytes, without rediscovering a Workspace.
+/// `None` means the corresponding source was observed absent by the caller.
+///
+/// ```
+/// # fn example() -> anyhow::Result<()> {
+/// let (policy, explanation) = substrate_broker::resolve_effective_policy_with_explain_from_sources(
+///     std::path::Path::new("/selected-home/policy.yaml"), None, None, true,
+/// )?;
+/// assert!(explanation.is_some());
+/// # Ok(())
+/// # }
+/// ```
+pub fn resolve_effective_policy_with_explain_from_sources(
+    global_path: &Path,
+    global_bytes: Option<&[u8]>,
+    workspace_source: Option<(&Path, &[u8])>,
+    explain: bool,
+) -> Result<(Policy, Option<crate::PolicyExplainV1>)> {
+    crate::effective_policy::resolve_effective_policy_with_explain_from_sources(
+        global_path,
+        global_bytes,
+        workspace_source,
+        explain,
+    )
+}
+
 pub fn set_observe_only(observe: bool) {
     match global_broker() {
         Ok(broker) => broker.set_observe_only(observe),

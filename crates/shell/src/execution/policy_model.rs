@@ -1141,6 +1141,24 @@ pub(crate) fn resolve_effective_policy_with_explain_for_bootstrap_home(
     .map_err(|error| config_model::user_error(error.to_string()))
 }
 
+/// Use exactly the sources held by the native Workspace settings reader.
+pub(crate) fn resolve_effective_policy_from_sources_v1(
+    global_path: &Path,
+    global_bytes: Option<&[u8]>,
+    workspace_source: Option<(&Path, &[u8])>,
+) -> Result<(Policy, PolicyExplainV1)> {
+    let (policy, explain) = substrate_broker::resolve_effective_policy_with_explain_from_sources(
+        global_path,
+        global_bytes,
+        workspace_source,
+        true,
+    )?;
+    Ok((
+        policy,
+        explain.ok_or_else(|| anyhow!("explicit policy explanation missing"))?,
+    ))
+}
+
 fn btree_to_hashmap(map: &BTreeMap<String, String>) -> HashMap<String, String> {
     map.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
 }

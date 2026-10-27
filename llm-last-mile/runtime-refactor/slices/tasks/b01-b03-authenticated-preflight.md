@@ -1,6 +1,6 @@
 **Kind:** packet
 **Stable ID:** `B01-B03-P1`
-**Status:** P1-A / TASK04 accepted as reviewed working-tree source on 2026-10-26; full P1 implementation/proof incomplete
+**Status:** P1-A / TASK04 committed at ad98ea44b; P1-B / TASK05 accepted as reviewed working-tree internal settings loading; full P1 incomplete
 **Canonical for:** initial same-host Substrate Workspace open/load/initialize boundary and exact-destination no-send preflight contract, proposed source fence, proof gates and admission assessment only
 **Authority scope:** original P1 contract plus the selected P1-A component below; no real setup operation, full P1 qualification, B1 acceptance or later-send permission
 **Projection consumers:** [`current`](../../index/current.md), [`by-packet`](../../index/by-packet.md), [`by-id`](../../index/by-id.md), [`by-kind`](../../index/by-kind.md)
@@ -71,6 +71,78 @@ fresh independent confirmations, not a claimed suite fix or baseline runtime equ
 No commit, push, merge or installation is part of acceptance. Before any next task, META must bound
 a concrete genuine owner-state/loading outcome, including missing schemas, writers and native read
 access. No successor is dispatched; installer restoration remains separately owned by Task03.
+
+### Selected owner-backed settings increment — 2026-10-26
+
+The user authorized committing TASK04, then defining and dispatching the next bounded owner-backed
+Workspace loading task. TASK04 and the preceding control-plane refresh are committed at
+`ad98ea44b853956cdce31ba6a0b7ac8dce1ac6fe`. META selects `B01-B03-P1-B` / TASK05:
+**internal native settings loading from the existing configuration and policy owners**. This is a
+useful partial load, not `WorkspaceOpenReplyV1::Loaded` or authenticated consumer disclosure.
+
+**Observable outcome.** From a fresh selected-directory inspection and existing trusted native
+invocation/product-home context, return effective configuration and policy with truthful source
+provenance. Return explicit unsupported states for Workspace identity, Lanes, destinations and
+consumer read authorization: no supported owner readers/writers exist for those components.
+Unsupported must not assert a particular owner record is absent. Plausible identity fixture bytes
+must not become genuine state. Missing/invalid product home fails without scaffolding. Results and
+errors stay internal; no consumer endpoint, serialization, blanket sensitive Debug output or logs.
+
+**Source fence.** Extend `execution/workspace_open.rs`; add a fresh explicit-source resolver in
+`execution/config_model.rs`, a minimal `execution/policy_model.rs` bridge, and explicit-source
+composition in `crates/broker/src/effective_policy.rs` with minimum necessary `api.rs`/`lib.rs`
+exports and focused tests. Existing native principal binding and `OpenedBootstrapHomeV1` reads
+are the context footholds, not a new Workspace read grant. Do not modify HSA storage/trusted-home
+policy, bootstrap layout, config/policy writers, initializer, persistence/revisions, service,
+transport, gateway or public CLI callers. Return a concrete dependency before exceeding this fence.
+
+**Required semantics.** Repeat strict inspection; never trust an old path-only Candidate. Collect
+Workspace marker and optional policy from the same held boundary, without legacy ancestor
+rediscovery or cache hits. Preserve genuine config/policy composition, environment/CLI precedence,
+validation and provenance. Capture actual override inputs once. Preserve supported missing-policy
+inheritance; malformed/unreadable/unsafe/replaced policy blocks regardless of gateway mode. Validate
+regular files before reads and revalidate named/held associations and observed absence. The result
+is a bounded observation, not an atomic snapshot, monotonic revision cut, ABA guarantee or authority
+for later use. No invented identity, initialization offer beyond discovery absence, eligibility,
+capability, reservation, hidden repair or runtime/provider effect.
+
+**Proof and endpoint.** Freeze exact typed outcomes and native-context construction before delegated
+edits. Nonzero focused tests cover distinct global/Workspace values and provenance, fresh reopen,
+precedence/inheritance and legacy parity, nearer invalid/disabled boundaries, invalid policy in all
+relevant modes, aliases/special files/substitution, wrong principal/invalid home, unsupported owner
+components despite plausible fixture IDs, and unchanged before/after entries/content/modes. Inspect
+the call path for no startup scaffolding, tracing, writes, reconciliation, allocation or execution.
+Run applicable shell/broker tests, formatting and substrate build; bind commands, source and counts.
+Retain TASK04's failed original CLI suite and alternative replay honestly; reuse only still-applicable
+proof. Refresh/bind the exact GitNexus index and run symbol impacts before edits. Paired independent
+implementation and strategic review govern acceptance. Endpoint: reviewed working-tree changes;
+no commit/push/merge/install/live call or successor dispatch is authorized for TASK05.
+
+**Next decision and concurrency.** Full `Loaded` needs genuine Workspace owner persistence and a
+supported publication lifecycle for already-configured Workspaces; absent-only initialization cannot
+silently migrate them. Select that outcome explicitly after this return. Only after TASK05 starts
+will META identify a concurrent task and present its scope/conflict plan for human approval. No
+concurrent dispatch is authorized by this selection; installer restoration remains separate.
+
+### Settings-component acceptance — 2026-10-27
+
+META accepted TASK05 candidate `0bb301583149c694eb5bac51d919368f26609cfd5e6721b6443d2390f023e6f6`
+at the reviewed-working-tree endpoint on HEAD `ad98ea44b`. Both independent observations found no
+blocking finding or unmet selected proof; the owner established implementation CLEAN and verified
+final correspondence. The six-file delta remains uncommitted. [META acceptance](../../../../.codex/orchestration/e3f-retained-next-20261022/evidence/task05-meta-acceptance.md)
+retains the exact endpoint and original review references.
+
+The accepted outcome is internal config/policy observation with unsupported identity, Lanes,
+destinations and consumer read authorization. Settings17, inspection14, config29 (private umask077),
+policy14, broker-focused3, doctest1, formatting and build passed. The original broker suite remains
+78 passed/8 failed with invocation-guard limitations; a separately source-bound supported-prefix
+replay passed86 and was accepted by both observers as alternative preservation evidence. No original
+suite fix, baseline runtime equivalence or full PF qualification is claimed.
+
+The next dependent selection must establish genuine Workspace publication/lifecycle and owner-issued
+reopen, including already-configured Workspaces without implicit migration. No successor is selected.
+The B2.2 closure-recovery concurrency proposal still awaits human approval; installer Task03 remains
+separate. Full P1/PF/E3/F14 remains open. No commit, push, install or deployment is included here.
 
 ### Original admission clarification — 2026-10-21
 

@@ -1437,6 +1437,56 @@ pub(crate) fn parse_config_patch_yaml(path: &Path, raw: &str) -> Result<Substrat
     Ok(parsed)
 }
 
+/// Inputs captured once at the native invocation boundary; deliberately not printable.
+pub(crate) struct CapturedConfigOverridesV1 {
+    environment: EnvOverrides,
+    cli: CliConfigOverrides,
+}
+
+impl CapturedConfigOverridesV1 {
+    pub(crate) fn capture(cli: &CliConfigOverrides) -> Result<Self> {
+        Ok(Self {
+            environment: parse_env_overrides()?,
+            cli: cli.clone(),
+        })
+    }
+}
+
+/// Fresh composition from caller-held sources. This function never discovers or opens paths.
+pub(crate) fn resolve_effective_config_from_sources_v1(
+    global_path: &Path,
+    global_bytes: Option<&[u8]>,
+    workspace_path: &Path,
+    workspace_bytes: &[u8],
+    overrides: &CapturedConfigOverridesV1,
+    policy: &substrate_broker::Policy,
+) -> Result<(SubstrateConfig, ConfigExplainV1)> {
+    fn parse(path: &Path, bytes: &[u8]) -> Result<SubstrateConfigPatch> {
+        let raw = std::str::from_utf8(bytes)
+            .map_err(|_| user_error(format!("invalid UTF-8 in {}", path.display())))?;
+        parse_config_patch_yaml(path, raw)
+    }
+    let global_patch = global_bytes
+        .map(|bytes| parse(global_path, bytes))
+        .transpose()?
+        .unwrap_or_default();
+    let workspace_patch = parse(workspace_path, workspace_bytes)?;
+    let (config, explain) = resolve_effective_from_layers(
+        &global_patch,
+        global_path,
+        Some((&workspace_patch, workspace_path)),
+        &overrides.environment,
+        &overrides.cli,
+        true,
+        true,
+    )?;
+    validate_config_against_policy(&config, policy)?;
+    Ok((
+        config,
+        explain.ok_or_else(|| anyhow!("explicit config explanation missing"))?,
+    ))
+}
+
 pub(crate) fn resolve_effective_config(
     cwd: &Path,
     cli: &CliConfigOverrides,
@@ -3715,6 +3765,78 @@ mod tests {
     use std::ffi::OsString;
     use std::fs;
     use tempfile::TempDir;
+
+    #[test]
+    #[serial]
+    fn workspace_settings_config_captures_overrides_once_and_preserves_precedence() {
+        let _env = EnvGuard::set_str("SUBSTRATE_OVERRIDE_WORLD", "disabled");
+        let mut cli = CliConfigOverrides {
+            world_enabled: Some(true),
+            ..Default::default()
+        };
+        let captured = CapturedConfigOverridesV1::capture(&cli).unwrap();
+        cli.world_enabled = Some(false);
+        let _changed_env = EnvGuard::set_str("SUBSTRATE_OVERRIDE_WORLD", "invalid-after-capture");
+        let (config, explain) = resolve_effective_config_from_sources_v1(
+            Path::new("/explicit/config.yaml"),
+            Some(b"world: {enabled: false, caged: false}\n"),
+            Path::new("/workspace/.substrate/workspace.yaml"),
+            b"world: {enabled: false, caged: true}\n",
+            &captured,
+            &substrate_broker::Policy::default(),
+        )
+        .unwrap();
+        assert!(config.world.enabled);
+        assert!(config.world.caged);
+        assert_eq!(explain.keys.0["world.enabled"].sources[0].layer, "cli_flag");
+        assert_eq!(
+            explain.keys.0["world.caged"].sources[0].layer,
+            "workspace_patch"
+        );
+        assert_eq!(captured.environment.world_enabled, Some(false));
+        assert_eq!(captured.cli.world_enabled, Some(true));
+    }
+
+    #[test]
+    fn workspace_settings_config_explicit_layers_match_existing_composer() {
+        let global_path = Path::new("/explicit/config.yaml");
+        let workspace_path = Path::new("/workspace/.substrate/workspace.yaml");
+        let global = b"sync: {exclude: [one, two]}\nworld: {caged: false}\n";
+        let workspace = b"sync: {exclude: [two, three]}\nworld: {caged: true}\n";
+        let overrides = CapturedConfigOverridesV1 {
+            environment: EnvOverrides::default(),
+            cli: CliConfigOverrides::default(),
+        };
+        let explicit = resolve_effective_config_from_sources_v1(
+            global_path,
+            Some(global),
+            workspace_path,
+            workspace,
+            &overrides,
+            &substrate_broker::Policy::default(),
+        )
+        .unwrap();
+        let expected = resolve_effective_from_layers(
+            &parse_config_patch_yaml(global_path, std::str::from_utf8(global).unwrap()).unwrap(),
+            global_path,
+            Some((
+                &parse_config_patch_yaml(workspace_path, std::str::from_utf8(workspace).unwrap())
+                    .unwrap(),
+                workspace_path,
+            )),
+            &EnvOverrides::default(),
+            &CliConfigOverrides::default(),
+            true,
+            true,
+        )
+        .unwrap();
+        assert_eq!(explicit.0, expected.0);
+        assert_eq!(Some(explicit.1), expected.1);
+        assert_eq!(
+            explicit.0.sync.exclude,
+            vec![".git/**", ".substrate/**", "two", "three"]
+        );
+    }
 
     #[cfg(target_os = "linux")]
     #[test]

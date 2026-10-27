@@ -1,7 +1,7 @@
 **Kind:** controlling numbered specification and preserved slice row
 **Stable ID:** `e3-agent-config-projection-and-gateway-adoption`
 **Canonical for:** controlling E3 authority correction, contract/file/symbol fence, dependency and gate disposition, and preserved historical row
-**Status:** E3-A through E3-D landed; E3-E terminally complete; E3-F/E3/F14 open at the 2026-10-26 bounded return; P1-A inspection accepted as reviewed working tree; next owner-backed outcome unselected; installer restoration separate
+**Status:** E3-A through E3-D landed; E3-E terminally complete; E3-F/E3/F14 open at the 2026-10-26 bounded return; P1-A committed at ad98ea44b; TASK05 internal owner-backed settings loading accepted as reviewed working tree; installer restoration separate
 **Historical E3-A proof-recovery status:** canonical specification; E3-A has a preserved incomplete and unlanded candidate under bounded Linux proof recovery; E3-B through E3-F are not admitted, dispatched, or implemented
 **Historical E3-A proof-recovery authority scope:** documentation-only E3-A proof-recovery authority; no product/test change, proof execution, completion, landing, or successor admission/dispatch
 **Source span:** [`../03-phase-slice-map.md`](../03-phase-slice-map.md) line 222
@@ -44,8 +44,8 @@ replace the missing retained service proof. No UAA replacement or new supervisor
 
 | Order / lane | Bounded next outcome | Admission and endpoint |
 |---|---|---|
-| Main 1: `B01-B03-P1-A` / TASK04 | Strict read-only selected-location inspection, preserving invalid/disabled boundaries and proving zero inspection-side mutation | Accepted by META under [P1's component fence](tasks/b01-b03-authenticated-preflight.md#selected-first-increment--2026-10-26) after paired discovery and fresh focused proof confirmations. Reviewed working-tree source only; no commit/push/deployment. Original CLI suite remains failed; separately recorded supported-prefix replay supplies preservation evidence. Full P1 remains open; Main 2 needs a concrete genuine owner-state/load outcome before dispatch. |
-| Main 2: P1 genuine owner-backed load | Current authorized configuration/policy and honest Workspace/Lane/destination availability | Plan after component A's actual return. Rebind missing owner readers; no invented identity or fixture-backed production truth. Not dispatched by this table. |
+| Main 1: `B01-B03-P1-A` / TASK04 | Strict read-only selected-location inspection, preserving invalid/disabled boundaries and proving zero inspection-side mutation | Accepted by META under [P1's component fence](tasks/b01-b03-authenticated-preflight.md#selected-first-increment--2026-10-26) after paired discovery and fresh focused proof confirmations. Accepted endpoint subsequently committed at `ad98ea44b` under explicit human approval; no push/deployment. Original CLI suite remains failed; separately recorded supported-prefix replay supplies preservation evidence. Full P1 remains open; Main 2 is the separately bounded internal settings load below. |
+| Main 2: `B01-B03-P1-B` / TASK05 | Fresh exact-root configuration/policy from their existing owners; explicit unsupported identity/Lanes/destinations/disclosure | Accepted at the reviewed-working-tree endpoint under [the settings-loading fence](tasks/b01-b03-authenticated-preflight.md#selected-owner-backed-settings-increment--2026-10-26). Internal bounded observation only, never `Loaded` or consumer authorization. Reviewed working-tree endpoint; later owner persistence/publication requires explicit selection. |
 | Main 3: P1 absent initialization and exact no-send composition | Separately approved initialization semantics; nonreconciling HSA/custody/read-cut composition and PF-OPEN–PF-LATER proof | Split into dependency-ready assignments before dispatch. Component results do not waive full P1 proof, authorize real initialization, or grant later-send permission. |
 | Independent B/C lane | Recover existing E2-RM/B2.2/B3.2/B4 proof and identify real remaining clauses, then C2 and C3 when eligible | Ready for a separate bounded selection; missing closure records are not evidence of missing code. Coordinate shared runtime files. No dispatch here. |
 | Protected E3 continuation | One named wrapper/accounting/adapter/ownership prerequisite with a finite proof boundary | Separate later selection. Wrapper and accounting may proceed independently only after shared custody interfaces are settled; retain one integration owner and keep V2 closed until authentic admission/cleanup is ready. |
@@ -55,8 +55,8 @@ replace the missing retained service proof. No UAA replacement or new supervisor
 The one shared coordination root remains
 `/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/e3f-retained-next-20261022/`.
 Preserve the existing BACKLOG and two private diagnostic edits. Owners record actual source,
-review, installed proof and publication separately. This refresh is an uncommitted owner decision;
-the actual TASK identity/delivery is recorded in the workflow, not inferred from selection.
+review, installed proof and publication separately. The first refresh and TASK04 are committed at `ad98ea44b`; TASK05 selection is a later uncommitted owner decision.
+The actual TASK identity/delivery is recorded in the workflow, not inferred from selection.
 
 ## Current E3-F status correction — 2026-10-21
 
