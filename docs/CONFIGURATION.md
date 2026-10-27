@@ -740,3 +740,37 @@ period.
 
 For installation instructions, see [INSTALLATION.md](INSTALLATION.md).
 For development configuration, see [DEVELOPMENT.md](DEVELOPMENT.md).
+## Native Workspace owner publication (Linux)
+
+An existing enabled Workspace can receive its initial Substrate owner identity with
+`substrate workspace init [PATH] --publish-owner`. This explicit operation validates
+the current native operator, existing trusted product home, Workspace settings and
+physical root before publication. It preserves YAML, Git storage, `.gitignore` and
+existing permissions. It cannot be combined with `--force` or `--examples`.
+
+`substrate workspace status [PATH] --json` observes that identity without creating or
+repairing state. Before publication it reports `OwnerStateMissing`; afterward a fresh
+process reports `OwnerStateObserved`, the same opaque Workspace/store-incarnation
+references and initial state revision `1`. Nested paths may select their enclosing
+Workspace. Repeated publication preserves the record and returns `AlreadyPublished`.
+Config/policy revisions, Lanes, destinations and consumer read authorization remain
+explicitly `Unsupported`. This status grants no execution or consumer capability.
+
+The strict partial owner record is `.substrate/workspace-state.v1.json`, created with
+mode `0600`. It binds the native owner, existing product home, physical Workspace and
+control directories, and its own file identity. Ordinary owner-controlled `0755`
+Workspace/control directories are supported. Group/other write access, special mode
+bits, extended/default ACLs and symlink aliases are refused without changing them.
+Ancestors must be root/native-owned, ACL-free and protected against other writers;
+shared `/tmp` ancestry is unsupported. Moving/copying/rebinding owner state is not
+supported. Malicious same-owner/root activity, same-inode restores and universal ABA
+detection are outside this initial physical-binding model.
+
+Publication holds an advisory directory lock, exclusively stages
+`.substrate/.workspace-state.v1.pending`, syncs the file, publishes with a no-replace
+rename, then syncs the directory. Status returns `PublicationInProgress` while the
+exclusive lock is held. A pending entry or corrupt/conflicting state blocks further
+publication and observation; reads never clean or complete it. Failure diagnostics
+report the phase and known/uncertain staging/publication/durability effects. A failure
+after rename can leave a visible valid owner record with unconfirmed durability. A
+later read observes that record without retroactively confirming the failed write.

@@ -32,6 +32,10 @@ const DEFAULT_POLICY_PATCH_YAML: &str = r#"# Substrate policy patch (sparse over
 
 pub(crate) fn handle_workspace_command(cmd: &WorkspaceCmd, cli: &Cli) -> i32 {
     let result: Result<i32> = match &cmd.action {
+        WorkspaceAction::Init(args) if args.publish_owner => {
+            Err(actionable("native Workspace owner binding is required"))
+        }
+        WorkspaceAction::Status(_) => Err(actionable("native Workspace owner binding is required")),
         WorkspaceAction::Init(args) => run_workspace_init(args).map(|_| 0),
         WorkspaceAction::Disable(args) => run_workspace_disable(args).map(|_| 0),
         WorkspaceAction::Enable(args) => run_workspace_enable(args).map(|_| 0),
@@ -49,11 +53,385 @@ pub(crate) fn handle_workspace_command(cmd: &WorkspaceCmd, cli: &Cli) -> i32 {
     }
 }
 
+pub(crate) fn is_workspace_owner_action(cli: &Cli) -> bool {
+    matches!(&cli.sub, Some(crate::execution::cli::SubCommands::Workspace(cmd)) if matches!(&cmd.action, WorkspaceAction::Status(_)) || matches!(&cmd.action, WorkspaceAction::Init(args) if args.publish_owner))
+}
+
+/// Only these explicit actions bypass startup scaffolding; native binding precedes disclosure.
+#[cfg(target_os = "linux")]
+pub(crate) fn try_handle_workspace_owner_command(
+    cli: &Cli,
+    install_context: &transport_api_types::InstallBootstrapContextCarrierV1,
+) -> Option<i32> {
+    use crate::execution::agent_runtime::workspace_admission_authority::{
+        WorkspaceIdentityObservationV1 as Identity, WorkspaceOwnerBlockerV1 as OwnerBlocker,
+        WorkspaceOwnerPublicationV1 as Publication,
+    };
+    use crate::execution::workspace_open::{
+        WorkspaceNativeSettingsContextV1, WorkspaceOpenAdapter, WorkspaceSettingsLoadV1,
+    };
+    use serde_json::json;
+    if !is_workspace_owner_action(cli) {
+        return None;
+    }
+    let Some(crate::execution::cli::SubCommands::Workspace(cmd)) = &cli.sub else {
+        return None;
+    };
+    let (path, publish, json_output) = match &cmd.action {
+        WorkspaceAction::Init(args) => {
+            if args.force || args.examples {
+                eprintln!("substrate: --publish-owner conflicts with --force and --examples");
+                return Some(2);
+            }
+            (args.path.as_deref(), true, false)
+        }
+        WorkspaceAction::Status(args) => (args.path.as_deref(), false, args.json),
+        _ => return None,
+    };
+    let emit = |value: serde_json::Value| {
+        if json_output {
+            println!("{value}");
+        } else if let Some(effects) = value.get("effects") {
+            println!(
+                "substrate: {}; effects={effects}",
+                value["state"].as_str().unwrap_or("Unavailable")
+            );
+        } else {
+            println!(
+                "substrate: {}",
+                value["state"].as_str().unwrap_or("Unavailable")
+            );
+        }
+    };
+    let context = match WorkspaceNativeSettingsContextV1::from_native_invocation(install_context) {
+        Ok(context) => context,
+        Err(_) => {
+            emit(json!({"version":1,"state":"NativeContextDenied"}));
+            return Some(2);
+        }
+    };
+    let selected = match std::env::current_dir() {
+        Ok(cwd) => {
+            let path = path.unwrap_or(Path::new("."));
+            let path = if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                cwd.join(path)
+            };
+            if path
+                .components()
+                .any(|part| matches!(part, std::path::Component::ParentDir))
+            {
+                emit(json!({"version":1,"state":"UnsafePath"}));
+                return Some(2);
+            }
+            path.components().collect::<PathBuf>()
+        }
+        Err(_) => {
+            emit(json!({"version":1,"state":"Unavailable"}));
+            return Some(1);
+        }
+    };
+    let overrides = CliConfigOverrides {
+        world_enabled: if cli.world {
+            Some(true)
+        } else if cli.no_world {
+            Some(false)
+        } else {
+            None
+        },
+        anchor_mode: cli.anchor_mode.map(Into::into),
+        anchor_path: cli
+            .anchor_path
+            .as_ref()
+            .map(|p| p.to_string_lossy().into_owned()),
+        caged: if cli.caged {
+            Some(true)
+        } else if cli.uncaged {
+            Some(false)
+        } else {
+            None
+        },
+    };
+    let (settings, publication) = if publish {
+        let (settings, publication) =
+            WorkspaceOpenAdapter::publish_existing_owner(&selected, &context, &overrides);
+        (settings, Some(publication))
+    } else {
+        (
+            WorkspaceOpenAdapter::load_existing(&selected, &context, &overrides),
+            None,
+        )
+    };
+    let observation = match settings {
+        WorkspaceSettingsLoadV1::SettingsObserved(observation) => observation,
+        other => {
+            let state = match other {
+                WorkspaceSettingsLoadV1::Absent { .. } => "WorkspaceAbsent",
+                _ => "WorkspaceBlocked",
+            };
+            let mut value = json!({"version":1,"state":state});
+            if let Some(Publication::Failed(_, effects)) = publication {
+                value["effects"] = serde_json::to_value(effects).unwrap_or_default();
+            }
+            emit(value);
+            return Some(2);
+        }
+    };
+    if let Some(publication) = publication {
+        match publication {
+            Publication::Published(identity, _) => {
+                println!(
+                    "substrate: Published {} {} revision {}",
+                    identity.workspace_ref, identity.store_incarnation, identity.state_revision
+                );
+                return Some(0);
+            }
+            Publication::AlreadyPublished(identity) => {
+                println!(
+                    "substrate: AlreadyPublished {} {} revision {}",
+                    identity.workspace_ref, identity.store_incarnation, identity.state_revision
+                );
+                return Some(0);
+            }
+            Publication::Failed(reason, effects) => {
+                eprintln!(
+                    "substrate: {reason:?}; effects={}",
+                    serde_json::to_string(&effects).unwrap_or_default()
+                );
+                return Some(
+                    if matches!(
+                        reason,
+                        OwnerBlocker::Unavailable | OwnerBlocker::PublicationInProgress
+                    ) {
+                        1
+                    } else {
+                        2
+                    },
+                );
+            }
+        }
+    }
+    match observation.identity {
+        Identity::OwnerStateObserved(identity) => {
+            emit(
+                json!({"version":1,"state":"OwnerStateObserved","workspace_ref":identity.workspace_ref,"store_incarnation":identity.store_incarnation,"state_revision":identity.state_revision,"config_revision":identity.revision_coverage.config,"policy_revision":identity.revision_coverage.policy,"lanes":"Unsupported","destinations":"Unsupported","consumer_read_authorization":"Unsupported"}),
+            );
+            Some(0)
+        }
+        Identity::OwnerStateMissing => {
+            emit(json!({"version":1,"state":"OwnerStateMissing"}));
+            Some(2)
+        }
+        Identity::OwnerStateBlocked(reason) => {
+            emit(json!({"version":1,"state":reason}));
+            Some(
+                if matches!(
+                    reason,
+                    OwnerBlocker::Unavailable | OwnerBlocker::PublicationInProgress
+                ) {
+                    1
+                } else {
+                    2
+                },
+            )
+        }
+    }
+}
+
 pub(crate) fn workspace_cmd_exit_code_for_error(err: &anyhow::Error) -> i32 {
     if err.is::<ActionableError>() {
         2
     } else {
         1
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod owner_effects_tests {
+    use super::*;
+    use crate::execution::agent_runtime::workspace_admission_authority as owner;
+    use clap::Parser;
+    use std::ffi::OsStr;
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn test_workspace_owner_cli_settings_blocked_retains_effects() {
+        // This driver exists only in the unit-test binary, never in the product CLI.
+        const DRIVER_PHASE: &str = "SUBSTRATE_TEST_OWNER_EFFECTS_PHASE";
+        if let Ok(phase) = env::var(DRIVER_PHASE) {
+            let root = env::current_dir().unwrap().join("workspace");
+            let home = env::current_dir().unwrap().join("product");
+            let carrier =
+                crate::execution::install_bootstrap::construct_unix_install_bootstrap_context(
+                    Some(&home),
+                    OsStr::new("substrate"),
+                    Path::new("/unused/substrate"),
+                    None,
+                    Path::new("/"),
+                )
+                .unwrap();
+            let cli = Cli::try_parse_from([
+                OsStr::new("substrate"),
+                OsStr::new("workspace"),
+                OsStr::new("init"),
+                root.as_os_str(),
+                OsStr::new("--publish-owner"),
+            ])
+            .unwrap();
+            let settings = root.join(".substrate/workspace.yaml");
+            owner::set_publication_hook(Some(Box::new(move |current| {
+                if current == phase {
+                    fs::write(&settings, b"[invalid\n").unwrap();
+                    if current != "DirectorySynced" {
+                        return Err(owner::WorkspaceOwnerBlockerV1::ChangedDuringRead);
+                    }
+                }
+                Ok(())
+            })));
+            let result = try_handle_workspace_owner_command(&cli, &carrier);
+            owner::set_publication_hook(None);
+            assert_eq!(result, Some(2));
+            assert_eq!(
+                fs::read(root.join(".substrate/workspace.yaml")).unwrap(),
+                b"[invalid\n"
+            );
+            return;
+        }
+
+        for (checkpoint, phase, staging, publication, durability, pending, published) in [
+            (
+                "DirectorySynced",
+                "DirectorySynced",
+                "Created",
+                "Visible",
+                "Confirmed",
+                false,
+                true,
+            ),
+            (
+                "BeforeCreate",
+                "BeforeCreate",
+                "NotCreated",
+                "NotPublished",
+                "NotApplicable",
+                false,
+                false,
+            ),
+            (
+                "StagingCreated",
+                "StagingCreated",
+                "Created",
+                "NotPublished",
+                "NotApplicable",
+                true,
+                false,
+            ),
+            (
+                "PartialWrite",
+                "WritingStaging",
+                "Created",
+                "NotPublished",
+                "NotApplicable",
+                true,
+                false,
+            ),
+            (
+                "PublishedVisible",
+                "PublishedVisible",
+                "Created",
+                "Visible",
+                "Unconfirmed",
+                false,
+                true,
+            ),
+        ] {
+            let fixture = tempfile::tempdir_in(
+                env::var_os("XDG_RUNTIME_DIR").expect("private native fixture parent"),
+            )
+            .unwrap();
+            let home = fixture.path().join("product");
+            let root = fixture.path().join("workspace");
+            fs::create_dir(&home).unwrap();
+            fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).unwrap();
+            fs::create_dir_all(root.join(".substrate")).unwrap();
+            for path in [
+                home.join("config.yaml"),
+                home.join("policy.yaml"),
+                root.join(".substrate/workspace.yaml"),
+                root.join(".substrate/policy.yaml"),
+            ] {
+                fs::write(&path, b"{}\n").unwrap();
+                fs::set_permissions(path, fs::Permissions::from_mode(0o600)).unwrap();
+            }
+            let mut command = Command::new(env::current_exe().unwrap());
+            for name in [
+                "SUBSTRATE_HOME",
+                "SUBSTRATE_INSTALL_PREFIX",
+                "SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1",
+                "SUBSTRATE_OVERRIDE_WORLD",
+            ] {
+                command.env_remove(name);
+            }
+            let output = command
+                .args([
+                    "--exact",
+                    "execution::workspace_cmd::owner_effects_tests::test_workspace_owner_cli_settings_blocked_retains_effects",
+                    "--nocapture",
+                ])
+                .env(DRIVER_PHASE, checkpoint)
+                .current_dir(fixture.path())
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{checkpoint}: {output:?}");
+            assert_eq!(
+                root.join(".substrate").join(owner::PENDING_FILE).exists(),
+                pending
+            );
+            assert_eq!(
+                root.join(".substrate").join(owner::OWNER_FILE).exists(),
+                published
+            );
+            let stdout = String::from_utf8(output.stdout).unwrap();
+            let stderr = String::from_utf8(output.stderr).unwrap();
+            let lines: Vec<_> = stdout
+                .lines()
+                .filter(|line| line.starts_with("substrate:"))
+                .collect();
+            assert_eq!(lines.len(), 1, "{checkpoint}: {stdout}");
+            println!("{checkpoint}: {}", lines[0]);
+            let effects = lines[0]
+                .strip_prefix("substrate: WorkspaceBlocked; effects=")
+                .expect("late settings refusal must report publication effects");
+            let effects: serde_json::Value = serde_json::from_str(effects).unwrap();
+            assert_eq!(
+                effects,
+                serde_json::json!({
+                    "phase": phase, "staging": staging, "publication": publication, "durability": durability
+                })
+            );
+            let combined = format!("{stdout}{stderr}");
+            for private in [
+                fixture.path().to_str().unwrap(),
+                "workspace_ref",
+                "store_incarnation",
+                "native_owner",
+                "physical_path",
+                "record_identity",
+                "[invalid",
+            ] {
+                assert!(!combined.contains(private), "private disclosure: {private}");
+            }
+            if published {
+                let record: serde_json::Value = serde_json::from_slice(
+                    &fs::read(root.join(".substrate").join(owner::OWNER_FILE)).unwrap(),
+                )
+                .unwrap();
+                for field in ["workspace_ref", "store_incarnation"] {
+                    assert!(!combined.contains(record[field].as_str().unwrap()));
+                }
+            }
+        }
     }
 }
 

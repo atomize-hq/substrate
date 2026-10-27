@@ -15,6 +15,8 @@ pub(crate) mod session;
 pub(crate) mod state_store;
 pub(crate) mod tool_invocation_contract;
 pub(crate) mod validator;
+#[cfg(target_os = "linux")]
+pub(crate) mod workspace_admission_authority;
 #[cfg(any(target_os = "linux", target_os = "macos", test))]
 pub(crate) mod world_work_execution_supervisor;
 

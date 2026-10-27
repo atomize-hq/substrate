@@ -1,8 +1,8 @@
 **Kind:** slice row
 **Stable ID:** `b2-2-foreground-receipt-return`
 **Canonical for:** extracted B2.2 slice row, its preserved blocked history, and the current second `E2-RM` admission correction
-**Status:** B2.2 implemented/review-clean/landed; separate canonical terminal closure not located
-**Authority scope:** exact extracted source table header and row plus the documentation-only admission correction below; no schedule, dispatch, or implementation authority
+**Status:** B2.2 terminally complete by present META acceptance on 2026-10-27; historical Linux subject only
+**Authority scope:** extracted row, preserved admission history, and the present bounded terminal acceptance below; no successor dispatch authority
 **Source span:** [`../03-phase-slice-map.md`](../03-phase-slice-map.md) line 177
 **Supersedes:** canonical ownership of the extracted `B2.2 — Foreground receipt return` row
 **Superseded by:** none
@@ -11,10 +11,84 @@
 # B2.2 — Foreground receipt return
 
 > **Authority boundary:** This file owns only the extracted B2.2 Track B row and its current
-> admission correction. It preserves the exact row text below, does not reopen the completed
-> B1/B2.1 or E2 implementation, and does not admit or dispatch `E2-RM` or B2.2.
+> admission correction and present terminal acceptance. It preserves the exact historical row,
+> does not reopen B1/B2.1 or E2, and grants no new implementation or successor dispatch.
+
+## Terminal closure — 2026-10-27
+
+Under the user's explicit instruction to make the B2.2 closure decision and update the control
+plane, META `01a17a4d-1468-7bc3-9f77-5bb0cfce0b07` **accepts B2.2 as terminally complete** for
+bounded Linux foreground receipt return and authenticated immutable retry at:
+
+- Commit: `0e16a88b2c833c8176ac0e40c6eef33388a5b7df`.
+- Tree: `ebe0ff7c56f571a23eb5be71db470fe9c0cfa023`.
+- Parent / E2-RM baseline: `2012bb8b5562a73ed0ee45238c19252c16b25065`.
+- Reviewed landed patch SHA-256: `e3c73cb85906f40b0afe5d11c4c343b478005d69ada89d728834e11b8b71efac`.
+
+This is a present acceptance of that exact historical subject, not a recovered historical
+approval or qualification of the current combined-tree runtime. TASK06's accepted evidence
+recovery and both independent observations establish the source/review correspondence. Fresh
+META authority advice found no additional substantive proof blocker for this precise claim.
+
+### Accepted fence and authority disposition
+
+META expressly adopts the exact five-file landed delta: `execution/orchestrator_world_dispatch.rs`,
+`execution/agent_runtime/{dispatch_contract.rs,state_store.rs,tool_invocation_contract.rs}`, and
+`repl/async_repl.rs`, all under `crates/shell/src/`. The `state_store.rs` addition is limited to
+the authenticated request-indexed B1 semantic reader, typed outcomes/errors, reused validators
+and colocated tests. It transfers no physical storage, reconciliation or lifecycle ownership.
+
+G-ADM (original admission/five-file expansion) and G-ACCEPT (original accepting/publication
+authority) remain unrecovered historical facts. Today's decision supplies present acceptance;
+it does not assert those old decisions occurred. G-PROOF-TRACE remains incomplete broad-command
+invocation detail, limiting the claims below. E2-RM's separate terminal closure remains unverified;
+no additional B2.2 prerequisite is inferred. The preserved preimplementation restrictions below
+remain chronology and behavioral constraints, not a requirement to redispatch landed work.
+
+### Seven closeout records
+
+| Required item | Accepted record |
+|---|---|
+| Crosswalk rows | WorldDispatchControl, RuntimeToolInvocationAdapter and InternalToolboxTransport record this bounded foreground-return increment, consuming WorldWorkReceiptRegistry and WorldWorkExecutionSupervisor truth. No seam-wide classification is promoted. |
+| Authority moved | Foreground callers stop owning a terminal wait for accepted ephemeral and ordinary retained work. B1 owns acceptance, B2.1 observation/journal/replay/terminal truth, and E2 immutable policy/cap truth. |
+| Production path | Four dispatcher entrypoints enter task/ordinary retained dispatch; durable Start/B1 acceptance and B2.1 handoff plus E2 publication/authenticated resolution precede receipt return through toolbox normalization and REPL consumption. Retry resolves immutable history before current authority preparation. |
+| Enforcement | Request-indexed authenticated B1 snapshot and E2-RM exact joins, typed fail-closed outcomes, and durable-before-return ordering; no new policy or physical-store authority. |
+| Exact proof | Final R/119 has 18 focused passes; R/147 final CLEAN matches R/139 patch and R/149/164 landing. Qualified differential and diagnostic evidence is accepted only as detailed below. |
+| Permanent regressions | Landed colocated `b2_2_` tests satisfy B2.2's RG-RECEIPT-01/02/03 clauses: before-terminal return, exact immutable retry, concurrency winner notification, and caller-drop survival. Existing B1/B2.1 and named blocking compatibility are preserved. |
+| Sibling boundaries | No E2-RM resolver/storage rewrite, B1 persistence/schema change, B2.1 journal/replay ownership change, obligation change, B3.2/B4/C2/C3/D1/E3 completion, migration, or platform-parity claim. |
+
+### Accepted proof and retained limitations
+
+Historical Linux Rust/Cargo 1.89 proof is bound to the final patch over the E2-RM baseline.
+`cargo test --locked --offline -p shell --lib b2_2_ -- --nocapture --test-threads=1`
+passed 18 tests; the root-lock regression passed separately. Final formatting and diff checks
+passed. Final shell comparison was candidate 1433 passed / 100 failed / 1 filtered versus
+baseline 1417 / 100 / 1, both exit 101, with identical named failures. Clippy retained 16
+matching inherited diagnostics. Earlier workspace build/clippy/test failures were not rerun on
+the final corrections; they establish no final whole-workspace success. Source-built CLI and
+world doctor succeeded; shim/health failed on isolated missing `manager_hooks.yaml` and did not
+produce successful JSON. Some broad-check full argv remains unrecovered. META accepts these
+explicitly qualified results for this bounded historical slice, not as unconditional green checks.
+
+Original HIGH retry/current-authority and mutating-probe findings were confirmed resolved by
+R/129; its started-ID notification confirmation and the final root-lock correction/R/147 CLEAN
+complete the historical finding chain. Controlled stream tests exercise the production dispatcher;
+there is no live-provider, macOS/Windows, installed-current-runtime or whole-seam qualification.
+B2.2-scoped receipt clauses close; remaining B3.2 receipt/manifest/lifecycle and B4 control clauses,
+C2/C3 eligibility, E3/F14 and other ledger-wide obligations remain separately owned and open.
+
+Retained evidence: [TASK06 final return](</home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/e3f-retained-next-20261022/evidence/task06/final/final-return.md>)
+contains the exact command/result matrix, original finding dispositions, all seven minima and
+source pointers. Its [manifest](</home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/e3f-retained-next-20261022/evidence/task06/producer/reference-manifest.json>)
+binds 187 references. Historical R/* originals live in
+`/home/spenser/__Active_code/.evidence/substrate-b2-2-foreground-receipt-return-ac4702a5/remediation-five-file-20260905/`.
+These local evidence pointers do not claim remote archival availability.
 
 ## Current admission disposition
+
+The 2026-10-27 terminal acceptance above supersedes the closure-unknown status in the dated
+history below; it preserves its ownership and immutable-material requirements.
+
 
 **Current status (2026-09-17):** B2.2 foreground receipt return and authenticated retry landed at
 `0e16a88b2c833c8176ac0e40c6eef33388a5b7df`. The [2026-09-17 control-plane audit](</home/spenser/__Active_code/review-evidence/runtime-refactor-control-plane-audit-20260917T152119Z.md>)

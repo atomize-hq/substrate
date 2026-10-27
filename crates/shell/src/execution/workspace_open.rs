@@ -2,8 +2,8 @@
 //!
 //! A candidate proves only that the nearest control boundary has a compatible marker.
 //! Discovery alone leaves policy unchecked. Settings observation composes config/policy,
-//! while Workspace identity, Lanes, destinations and consumer authorization stay unsupported.
-//! This module has no public transport or legacy discovery callers.
+//! with native owner identity explicitly observed, missing or blocked. Lanes, destinations
+//! and consumer authorization remain unsupported; no full Loaded view is supplied.
 
 #![allow(
     dead_code,
@@ -12,6 +12,11 @@
 
 use super::agent_runtime::host_session_authority::{
     schema::DirectoryPhysicalIdentityV1, trusted_fs::TrustedAuthorityRoot,
+};
+use super::agent_runtime::workspace_admission_authority::{
+    self as owner, DirectoryBindingV1, HeldWorkspaceOwnerBoundaryV1, NativeOwnerBindingV1,
+    NativeOwnerV1, PublicationEffectsV1, WorkspaceIdentityObservationV1, WorkspaceOwnerBlockerV1,
+    WorkspaceOwnerPublicationV1,
 };
 use super::agent_runtime::{HostSessionAuthority, OpenedBootstrapHomeV1};
 use super::{
@@ -433,6 +438,35 @@ pub(crate) enum WorkspaceSettingsContextFailureV1 {
 }
 
 impl WorkspaceNativeSettingsContextV1 {
+    pub(crate) fn owner_binding(
+        &self,
+    ) -> Result<NativeOwnerBindingV1, WorkspaceSettingsContextFailureV1> {
+        self.revalidate()?;
+        let PlatformPrincipalV1::Unix { uid, account } =
+            &self.carrier.context.intended_host_principal
+        else {
+            return Err(WorkspaceSettingsContextFailureV1::PrincipalDenied);
+        };
+        let bootstrap = self.authority.bootstrap_home();
+        let home = bootstrap
+            .identity()
+            .map_err(|_| WorkspaceSettingsContextFailureV1::HomeUnsupportedOrUnavailable)?;
+        let DirectoryPhysicalIdentityV1::Linux { device_id, inode } = home.physical_identity else {
+            return Err(WorkspaceSettingsContextFailureV1::HomeUnsupportedOrUnavailable);
+        };
+        Ok(NativeOwnerBindingV1 {
+            owner: NativeOwnerV1 {
+                uid: *uid,
+                account: account.clone(),
+            },
+            home: DirectoryBindingV1 {
+                physical_path: home.physical_path.clone(),
+                device_id,
+                inode,
+            },
+        })
+    }
+
     pub(crate) fn from_native_invocation(
         carrier: &InstallBootstrapContextCarrierV1,
     ) -> Result<Self, WorkspaceSettingsContextFailureV1> {
@@ -511,7 +545,7 @@ pub(crate) struct WorkspaceSettingsObservationV1 {
     pub(crate) workspace_config_source: PathBuf,
     pub(crate) workspace_policy_source: Option<PathBuf>,
     pub(crate) captured_overrides: CapturedConfigOverridesV1,
-    pub(crate) identity: WorkspaceOwnerComponentV1,
+    pub(crate) identity: WorkspaceIdentityObservationV1,
     pub(crate) lanes: WorkspaceOwnerComponentV1,
     pub(crate) destinations: WorkspaceOwnerComponentV1,
     pub(crate) consumer_read_authorization: WorkspaceOwnerComponentV1,
@@ -700,147 +734,241 @@ impl WorkspaceOpenAdapter {
         context: &WorkspaceNativeSettingsContextV1,
         cli: &CliConfigOverrides,
     ) -> WorkspaceSettingsLoadV1 {
-        use WorkspaceSettingsBlockerV1 as Blocker;
-        if let Err(reason) = context.revalidate() {
-            return WorkspaceSettingsLoadV1::Blocked {
-                boundary: None,
-                reason: Blocker::NativeContext(reason),
+        Self::observe_existing(selected, context, cli, false).0
+    }
+
+    pub(crate) fn publish_existing_owner(
+        selected: &Path,
+        context: &WorkspaceNativeSettingsContextV1,
+        cli: &CliConfigOverrides,
+    ) -> (WorkspaceSettingsLoadV1, WorkspaceOwnerPublicationV1) {
+        let (settings, publication) = Self::observe_existing(selected, context, cli, true);
+        let mut publication = publication.unwrap_or(WorkspaceOwnerPublicationV1::Failed(
+            WorkspaceOwnerBlockerV1::UnsafeOwnerState,
+            PublicationEffectsV1::default(),
+        ));
+        if !matches!(settings, WorkspaceSettingsLoadV1::SettingsObserved(_)) {
+            let effects = match &publication {
+                WorkspaceOwnerPublicationV1::Published(_, effects)
+                | WorkspaceOwnerPublicationV1::Failed(_, effects) => *effects,
+                WorkspaceOwnerPublicationV1::AlreadyPublished(_) => PublicationEffectsV1::default(),
             };
+            publication = WorkspaceOwnerPublicationV1::Failed(
+                WorkspaceOwnerBlockerV1::ChangedDuringRead,
+                effects,
+            );
         }
-        let mut guard = match InspectionGuard::capture(selected) {
-            Ok(guard) => guard,
-            Err(reason) => {
+        (settings, publication)
+    }
+
+    fn observe_existing(
+        selected: &Path,
+        context: &WorkspaceNativeSettingsContextV1,
+        cli: &CliConfigOverrides,
+        publish: bool,
+    ) -> (WorkspaceSettingsLoadV1, Option<WorkspaceOwnerPublicationV1>) {
+        let mut publication = None;
+        let settings = (|| {
+            use WorkspaceSettingsBlockerV1 as Blocker;
+            if let Err(reason) = context.revalidate() {
                 return WorkspaceSettingsLoadV1::Blocked {
                     boundary: None,
-                    reason: Blocker::Inspection(reason),
-                }
+                    reason: Blocker::NativeContext(reason),
+                };
             }
-        };
-        let collected = (|| -> SettingsResult<Option<WorkspaceSettingsObservationV1>> {
-            let Some(root) = guard.classify().map_err(Blocker::Inspection)? else {
-                return Ok(None);
+            let mut guard = match InspectionGuard::capture(selected) {
+                Ok(guard) => guard,
+                Err(reason) => {
+                    return WorkspaceSettingsLoadV1::Blocked {
+                        boundary: None,
+                        reason: Blocker::Inspection(reason),
+                    }
+                }
             };
-            let overrides =
-                CapturedConfigOverridesV1::capture(cli).map_err(|_| Blocker::InvalidOverrides)?;
-            let control_index = guard.control_directory.ok_or(Blocker::ChangedDuringRead)?;
-            let control = &guard.directories[control_index];
-            let marker_path = control.path.join(workspace::WORKSPACE_MARKER_FILENAME);
-            let marker_bytes = guard
-                .marker_bytes
-                .as_deref()
-                .ok_or(Blocker::ChangedDuringRead)?;
-            let workspace_policy = HeldSettingsSource::capture(
-                &control.held,
-                workspace::WORKSPACE_POLICY_FILENAME,
-                SettingsSourceV1::WorkspacePolicy,
-            )?;
-            let workspace_policy_path = control.path.join(workspace::WORKSPACE_POLICY_FILENAME);
-            let bootstrap = context.authority.bootstrap_home();
-            let home = HeldSettingsHome::capture(&bootstrap)?;
-            let global_config_guard = HeldSettingsSource::capture(
-                &home.held,
-                "config.yaml",
-                SettingsSourceV1::GlobalConfig,
-            )?;
-            let global_config = bootstrap.open_e3_config_source().map_err(|_| {
-                Blocker::Unavailable(SettingsSourceV1::GlobalConfig, io::ErrorKind::Other)
-            })?;
-            if global_config.source_bytes() != global_config_guard.bytes.as_deref() {
-                return Err(Blocker::ChangedDuringRead);
-            }
-            let global_policy = HeldSettingsSource::capture(
-                &home.held,
-                "policy.yaml",
-                SettingsSourceV1::GlobalPolicy,
-            )?;
-            let policy_bytes = bootstrap.read_policy_yaml().map_err(|_| {
-                Blocker::Unavailable(SettingsSourceV1::GlobalPolicy, io::ErrorKind::Other)
-            })?;
-            if policy_bytes != global_policy.bytes {
-                return Err(Blocker::ChangedDuringRead);
-            }
-            let global_config_path = home.path.join("config.yaml");
-            let global_policy_path = home.path.join("policy.yaml");
-            // Parsing and canonical finalization happen for every supported gateway/policy mode.
-            let (policy, policy_provenance) =
-                policy_model::resolve_effective_policy_from_sources_v1(
-                    &global_policy_path,
-                    policy_bytes.as_deref(),
-                    workspace_policy
-                        .bytes
-                        .as_deref()
-                        .map(|bytes| (workspace_policy_path.as_path(), bytes)),
-                )
-                .map_err(|_| Blocker::IncompatibleConfigPolicy)?;
-            if let Some(bytes) = global_config.source_bytes() {
-                let raw = std::str::from_utf8(bytes)
-                    .map_err(|_| Blocker::InvalidSource(SettingsSourceV1::GlobalConfig))?;
-                parse_config_patch_yaml(&global_config_path, raw)
-                    .map_err(|_| Blocker::InvalidSource(SettingsSourceV1::GlobalConfig))?;
-            }
-            let (config, config_provenance) =
-                config_model::resolve_effective_config_from_sources_v1(
-                    &global_config_path,
-                    global_config.source_bytes(),
-                    &marker_path,
-                    marker_bytes,
-                    &overrides,
-                    &policy,
-                )
-                .map_err(|_| Blocker::IncompatibleConfigPolicy)?;
-            #[cfg(test)]
-            AFTER_SETTINGS_COLLECT.with(|hook| {
-                if let Some(hook) = hook.borrow_mut().take() {
-                    hook();
+            let collected = (|| -> SettingsResult<Option<WorkspaceSettingsObservationV1>> {
+                let Some(root) = guard.classify().map_err(Blocker::Inspection)? else {
+                    return Ok(None);
+                };
+                let overrides = CapturedConfigOverridesV1::capture(cli)
+                    .map_err(|_| Blocker::InvalidOverrides)?;
+                let control_index = guard.control_directory.ok_or(Blocker::ChangedDuringRead)?;
+                let control = &guard.directories[control_index];
+                let marker_path = control.path.join(workspace::WORKSPACE_MARKER_FILENAME);
+                let marker_bytes = guard
+                    .marker_bytes
+                    .as_deref()
+                    .ok_or(Blocker::ChangedDuringRead)?;
+                let workspace_policy = HeldSettingsSource::capture(
+                    &control.held,
+                    workspace::WORKSPACE_POLICY_FILENAME,
+                    SettingsSourceV1::WorkspacePolicy,
+                )?;
+                let workspace_policy_path = control.path.join(workspace::WORKSPACE_POLICY_FILENAME);
+                let bootstrap = context.authority.bootstrap_home();
+                let home = HeldSettingsHome::capture(&bootstrap)?;
+                let global_config_guard = HeldSettingsSource::capture(
+                    &home.held,
+                    "config.yaml",
+                    SettingsSourceV1::GlobalConfig,
+                )?;
+                let global_config = bootstrap.open_e3_config_source().map_err(|_| {
+                    Blocker::Unavailable(SettingsSourceV1::GlobalConfig, io::ErrorKind::Other)
+                })?;
+                if global_config.source_bytes() != global_config_guard.bytes.as_deref() {
+                    return Err(Blocker::ChangedDuringRead);
                 }
-            });
-            // These are bounded observable substitution checks, not owner monotonic revisions.
-            workspace_policy.revalidate(&control.held)?;
-            home.revalidate(&bootstrap)?;
-            global_config_guard.revalidate(&home.held)?;
-            global_config
+                let global_policy = HeldSettingsSource::capture(
+                    &home.held,
+                    "policy.yaml",
+                    SettingsSourceV1::GlobalPolicy,
+                )?;
+                let policy_bytes = bootstrap.read_policy_yaml().map_err(|_| {
+                    Blocker::Unavailable(SettingsSourceV1::GlobalPolicy, io::ErrorKind::Other)
+                })?;
+                if policy_bytes != global_policy.bytes {
+                    return Err(Blocker::ChangedDuringRead);
+                }
+                let global_config_path = home.path.join("config.yaml");
+                let global_policy_path = home.path.join("policy.yaml");
+                // Parsing and canonical finalization happen for every supported gateway/policy mode.
+                let (policy, policy_provenance) =
+                    policy_model::resolve_effective_policy_from_sources_v1(
+                        &global_policy_path,
+                        policy_bytes.as_deref(),
+                        workspace_policy
+                            .bytes
+                            .as_deref()
+                            .map(|bytes| (workspace_policy_path.as_path(), bytes)),
+                    )
+                    .map_err(|_| Blocker::IncompatibleConfigPolicy)?;
+                if let Some(bytes) = global_config.source_bytes() {
+                    let raw = std::str::from_utf8(bytes)
+                        .map_err(|_| Blocker::InvalidSource(SettingsSourceV1::GlobalConfig))?;
+                    parse_config_patch_yaml(&global_config_path, raw)
+                        .map_err(|_| Blocker::InvalidSource(SettingsSourceV1::GlobalConfig))?;
+                }
+                let (config, config_provenance) =
+                    config_model::resolve_effective_config_from_sources_v1(
+                        &global_config_path,
+                        global_config.source_bytes(),
+                        &marker_path,
+                        marker_bytes,
+                        &overrides,
+                        &policy,
+                    )
+                    .map_err(|_| Blocker::IncompatibleConfigPolicy)?;
+                #[cfg(test)]
+                AFTER_SETTINGS_COLLECT.with(|hook| {
+                    if let Some(hook) = hook.borrow_mut().take() {
+                        hook();
+                    }
+                });
+                // These are bounded observable substitution checks, not owner monotonic revisions.
+                workspace_policy.revalidate(&control.held)?;
+                home.revalidate(&bootstrap)?;
+                global_config_guard.revalidate(&home.held)?;
+                global_config
+                    .revalidate()
+                    .map_err(|_| Blocker::ChangedDuringRead)?;
+                global_policy.revalidate(&home.held)?;
+                let revalidate = || -> Result<(), WorkspaceOwnerBlockerV1> {
+                    let verify = || -> SettingsResult<()> {
+                        guard.revalidate().map_err(Blocker::Inspection)?;
+                        context.revalidate().map_err(Blocker::NativeContext)?;
+                        workspace_policy.revalidate(&control.held)?;
+                        home.revalidate(&bootstrap)?;
+                        global_config_guard.revalidate(&home.held)?;
+                        global_config
+                            .revalidate()
+                            .map_err(|_| Blocker::ChangedDuringRead)?;
+                        global_policy.revalidate(&home.held)
+                    };
+                    verify().map_err(|_| WorkspaceOwnerBlockerV1::ChangedDuringRead)
+                };
+                let boundary = HeldWorkspaceOwnerBoundaryV1::capture(
+                    context,
+                    &root,
+                    &control.held,
+                    guard
+                        .directories
+                        .iter()
+                        .map(|d| (d.path.as_path(), &d.held)),
+                );
+                let identity = if publish {
+                    let result = match boundary {
+                        Ok(boundary) => {
+                            owner::publish_workspace_identity(boundary, context, revalidate)
+                        }
+                        Err(reason) => WorkspaceOwnerPublicationV1::Failed(
+                            reason,
+                            PublicationEffectsV1::default(),
+                        ),
+                    };
+                    let identity = match &result {
+                        WorkspaceOwnerPublicationV1::Published(identity, _)
+                        | WorkspaceOwnerPublicationV1::AlreadyPublished(identity) => {
+                            WorkspaceIdentityObservationV1::OwnerStateObserved(identity.clone())
+                        }
+                        WorkspaceOwnerPublicationV1::Failed(reason, _) => {
+                            WorkspaceIdentityObservationV1::OwnerStateBlocked(*reason)
+                        }
+                    };
+                    publication = Some(result);
+                    identity
+                } else {
+                    match boundary
+                        .and_then(|boundary| owner::read_workspace_identity(boundary, context))
+                    {
+                        Ok(read) => match revalidate().and_then(|_| read.revalidate(context)) {
+                            Ok(()) => read.observation.clone(),
+                            Err(reason) => {
+                                WorkspaceIdentityObservationV1::OwnerStateBlocked(reason)
+                            }
+                        },
+                        Err(reason) => WorkspaceIdentityObservationV1::OwnerStateBlocked(reason),
+                    }
+                };
+                let unsupported = WorkspaceOwnerComponentV1::Unsupported(
+                    UnsupportedWorkspaceOwnerReasonV1::OwnerReaderNotImplemented,
+                );
+                Ok(Some(WorkspaceSettingsObservationV1 {
+                    selected_location: selected.to_path_buf(),
+                    root,
+                    config,
+                    config_provenance,
+                    policy,
+                    policy_provenance,
+                    global_config_source: global_config.source_bytes().map(|_| global_config_path),
+                    global_policy_source: policy_bytes.as_ref().map(|_| global_policy_path),
+                    workspace_config_source: marker_path,
+                    workspace_policy_source: workspace_policy
+                        .bytes
+                        .as_ref()
+                        .map(|_| workspace_policy_path),
+                    captured_overrides: overrides,
+                    identity,
+                    lanes: unsupported,
+                    destinations: unsupported,
+                    consumer_read_authorization: unsupported,
+                }))
+            })();
+            let result = guard
                 .revalidate()
-                .map_err(|_| Blocker::ChangedDuringRead)?;
-            global_policy.revalidate(&home.held)?;
-            let unsupported = WorkspaceOwnerComponentV1::Unsupported(
-                UnsupportedWorkspaceOwnerReasonV1::OwnerReaderNotImplemented,
-            );
-            Ok(Some(WorkspaceSettingsObservationV1 {
-                selected_location: selected.to_path_buf(),
-                root,
-                config,
-                config_provenance,
-                policy,
-                policy_provenance,
-                global_config_source: global_config.source_bytes().map(|_| global_config_path),
-                global_policy_source: policy_bytes.as_ref().map(|_| global_policy_path),
-                workspace_config_source: marker_path,
-                workspace_policy_source: workspace_policy
-                    .bytes
-                    .as_ref()
-                    .map(|_| workspace_policy_path),
-                captured_overrides: overrides,
-                identity: unsupported,
-                lanes: unsupported,
-                destinations: unsupported,
-                consumer_read_authorization: unsupported,
-            }))
+                .map_err(Blocker::Inspection)
+                .and_then(|_| context.revalidate().map_err(Blocker::NativeContext))
+                .and(collected);
+            match result {
+                Ok(Some(observation)) => WorkspaceSettingsLoadV1::SettingsObserved(observation),
+                Ok(None) => WorkspaceSettingsLoadV1::Absent {
+                    selected_location: selected.to_path_buf(),
+                },
+                Err(reason) => WorkspaceSettingsLoadV1::Blocked {
+                    boundary: guard.boundary,
+                    reason,
+                },
+            }
         })();
-        let result = guard
-            .revalidate()
-            .map_err(Blocker::Inspection)
-            .and_then(|_| context.revalidate().map_err(Blocker::NativeContext))
-            .and(collected);
-        match result {
-            Ok(Some(observation)) => WorkspaceSettingsLoadV1::SettingsObserved(observation),
-            Ok(None) => WorkspaceSettingsLoadV1::Absent {
-                selected_location: selected.to_path_buf(),
-            },
-            Err(reason) => WorkspaceSettingsLoadV1::Blocked {
-                boundary: guard.boundary,
-                reason,
-            },
-        }
+        (settings, publication)
     }
 }
 
@@ -1785,8 +1913,13 @@ mod tests {
         let expected = WorkspaceOwnerComponentV1::Unsupported(
             UnsupportedWorkspaceOwnerReasonV1::OwnerReaderNotImplemented,
         );
-        for component in [
+        assert_eq!(
             observation.identity,
+            WorkspaceIdentityObservationV1::OwnerStateBlocked(
+                WorkspaceOwnerBlockerV1::CorruptOwnerState
+            )
+        );
+        for component in [
             observation.lanes,
             observation.destinations,
             observation.consumer_read_authorization,
@@ -1976,5 +2109,315 @@ mod tests {
             settings_reason(settings_preserved(&f, &f.nested)),
             WorkspaceSettingsBlockerV1::InvalidOverrides
         );
+    }
+
+    mod owner_tests {
+        use super::*;
+        use owner::{
+            DurabilityEffectV1 as Durability, PublicationEffectV1 as Visibility,
+            StagingEffectV1 as Staging,
+        };
+
+        fn publish(f: &SettingsFixture) -> WorkspaceOwnerPublicationV1 {
+            WorkspaceOpenAdapter::publish_existing_owner(
+                &f.nested,
+                &f.context,
+                &CliConfigOverrides::default(),
+            )
+            .1
+        }
+
+        fn issued(f: &SettingsFixture) -> owner::WorkspaceOwnerIdentityV1 {
+            match publish(f) {
+                WorkspaceOwnerPublicationV1::Published(identity, effects) => {
+                    assert_eq!(effects.durability, Durability::Confirmed);
+                    identity
+                }
+                other => panic!("publisher: {other:?}"),
+            }
+        }
+
+        fn identity(f: &SettingsFixture) -> WorkspaceIdentityObservationV1 {
+            settings_observed(settings_preserved(f, &f.nested)).identity
+        }
+
+        #[test]
+        #[serial_test::serial]
+        fn workspace_owner_settings_production_identity_and_independent_allocations() {
+            let f = settings_fixture();
+            assert_eq!(
+                identity(&f),
+                WorkspaceIdentityObservationV1::OwnerStateMissing
+            );
+            let a = issued(&f);
+            assert_eq!(
+                identity(&f),
+                WorkspaceIdentityObservationV1::OwnerStateObserved(a.clone())
+            );
+            assert_eq!(a.state_revision, 1);
+            assert_eq!(a.workspace_ref.len(), 67);
+            assert_eq!(a.store_incarnation.len(), 68);
+            assert_ne!(&a.workspace_ref[3..], &a.store_incarnation[4..]);
+            let before = snapshot(f.temp.path());
+            assert!(
+                matches!(publish(&f), WorkspaceOwnerPublicationV1::AlreadyPublished(b) if b == a)
+            );
+            assert_eq!(before, snapshot(f.temp.path()));
+            let g = settings_fixture();
+            let b = issued(&g);
+            assert_ne!(a.workspace_ref, b.workspace_ref);
+            assert_ne!(a.store_incarnation, b.store_incarnation);
+        }
+
+        #[test]
+        #[serial_test::serial]
+        fn workspace_owner_interruption_effects_and_nonreconciling_reopen() {
+            for phase in [
+                "BeforeCreate",
+                "StagingCreated",
+                "PartialWrite",
+                "FileSync",
+                "StagingSynced",
+                "BeforeRename",
+                "PublishedVisible",
+                "BeforeDirectorySync",
+                "DirectorySynced",
+            ] {
+                let f = settings_fixture();
+                let before = snapshot(f.temp.path());
+                owner::set_publication_hook(Some(Box::new(move |current| {
+                    if current == phase {
+                        Err(WorkspaceOwnerBlockerV1::Unavailable)
+                    } else {
+                        Ok(())
+                    }
+                })));
+                let result = publish(&f);
+                owner::set_publication_hook(None);
+                let WorkspaceOwnerPublicationV1::Failed(
+                    WorkspaceOwnerBlockerV1::Unavailable,
+                    effects,
+                ) = result
+                else {
+                    panic!("{phase}: {result:?}");
+                };
+                let after = snapshot(f.temp.path());
+                let visible = matches!(
+                    phase,
+                    "PublishedVisible" | "BeforeDirectorySync" | "DirectorySynced"
+                );
+                if phase == "BeforeCreate" {
+                    assert_eq!(effects.staging, Staging::NotCreated);
+                    assert_eq!(before, after);
+                    assert_eq!(
+                        identity(&f),
+                        WorkspaceIdentityObservationV1::OwnerStateMissing
+                    );
+                } else if visible {
+                    assert_eq!(effects.publication, Visibility::Visible);
+                    assert_eq!(
+                        effects.durability,
+                        if phase == "DirectorySynced" {
+                            Durability::Confirmed
+                        } else {
+                            Durability::Unconfirmed
+                        }
+                    );
+                    assert!(matches!(
+                        identity(&f),
+                        WorkspaceIdentityObservationV1::OwnerStateObserved(_)
+                    ));
+                    assert!(!f.root.join(".substrate").join(owner::PENDING_FILE).exists());
+                } else {
+                    assert_eq!(effects.staging, Staging::Created);
+                    assert_eq!(effects.publication, Visibility::NotPublished);
+                    assert_eq!(
+                        identity(&f),
+                        WorkspaceIdentityObservationV1::OwnerStateBlocked(
+                            WorkspaceOwnerBlockerV1::PartialPublication
+                        )
+                    );
+                    assert!(!f.root.join(".substrate").join(owner::OWNER_FILE).exists());
+                    let before_retry = snapshot(f.temp.path());
+                    assert!(matches!(
+                        publish(&f),
+                        WorkspaceOwnerPublicationV1::Failed(
+                            WorkspaceOwnerBlockerV1::PartialPublication,
+                            _
+                        )
+                    ));
+                    assert_eq!(before_retry, snapshot(f.temp.path()));
+                }
+                let mut permitted = snapshot(f.temp.path());
+                permitted.remove(&PathBuf::from("workspace/.substrate").join(owner::OWNER_FILE));
+                permitted.remove(&PathBuf::from("workspace/.substrate").join(owner::PENDING_FILE));
+                assert_eq!(
+                    permitted, before,
+                    "only declared publication entry changed at {phase}"
+                );
+                assert_eq!(
+                    after,
+                    snapshot(f.temp.path()),
+                    "read/retry altered interrupted state: {phase}"
+                );
+                println!("workspace_owner_ interruption {phase}: {effects:?}; reopen checked, no cleanup");
+            }
+        }
+
+        #[test]
+        #[serial_test::serial]
+        fn workspace_owner_idempotent_and_read_substitution_refuse_final_disclosure() {
+            for phase in ["AlreadyCollected", "ReadCollected"] {
+                for object in ["record", "settings", "control", "home"] {
+                    let f = settings_fixture();
+                    issued(&f);
+                    let path = match object {
+                        "record" => f.root.join(".substrate").join(owner::OWNER_FILE),
+                        "settings" => f.root.join(".substrate/policy.yaml"),
+                        "control" => f.root.join(".substrate"),
+                        _ => f.home.clone(),
+                    };
+                    owner::set_publication_hook(Some(Box::new(move |current| {
+                        if current == phase {
+                            if object == "settings" {
+                                fs::write(&path, b"name: changed\n").unwrap();
+                            } else {
+                                let moved = path.with_extension("moved");
+                                fs::rename(&path, &moved).unwrap();
+                                if object == "record" {
+                                    fs::copy(&moved, &path).unwrap();
+                                } else {
+                                    fs::create_dir(&path).unwrap();
+                                }
+                            }
+                        }
+                        Ok(())
+                    })));
+                    if phase == "AlreadyCollected" {
+                        assert!(
+                            matches!(publish(&f),WorkspaceOwnerPublicationV1::Failed(_,effects) if effects.staging==Staging::NotCreated)
+                        );
+                    } else {
+                        let result = WorkspaceOpenAdapter::load_existing(
+                            &f.nested,
+                            &f.context,
+                            &CliConfigOverrides::default(),
+                        );
+                        assert!(!matches!(
+                            result,
+                            WorkspaceSettingsLoadV1::SettingsObserved(
+                                WorkspaceSettingsObservationV1 {
+                                    identity: WorkspaceIdentityObservationV1::OwnerStateObserved(_),
+                                    ..
+                                }
+                            )
+                        ));
+                    }
+                    owner::set_publication_hook(None);
+                    println!(
+                        "workspace_owner_ {phase}/{object} substitution: final identity refused"
+                    );
+                }
+            }
+        }
+
+        #[test]
+        #[serial_test::serial]
+        fn workspace_owner_no_replace_preserves_conflicting_writer_bytes() {
+            let f = settings_fixture();
+            let target = f.root.join(".substrate").join(owner::OWNER_FILE);
+            owner::set_publication_hook(Some(Box::new(move |phase| {
+                if phase == "BeforeRename" {
+                    private_file(&target, b"foreign writer bytes");
+                }
+                Ok(())
+            })));
+            let result = publish(&f);
+            owner::set_publication_hook(None);
+            assert!(
+                matches!(result,WorkspaceOwnerPublicationV1::Failed(_,effects) if effects.publication==Visibility::Uncertain)
+            );
+            assert_eq!(
+                fs::read(f.root.join(".substrate").join(owner::OWNER_FILE)).unwrap(),
+                b"foreign writer bytes"
+            );
+            assert!(f
+                .root
+                .join(".substrate")
+                .join(owner::PENDING_FILE)
+                .is_file());
+            assert_eq!(
+                identity(&f),
+                WorkspaceIdentityObservationV1::OwnerStateBlocked(
+                    WorkspaceOwnerBlockerV1::PartialPublication
+                )
+            );
+        }
+
+        #[test]
+        #[serial_test::serial]
+        fn workspace_owner_unavailable_acl_checks_refuse_without_effects() {
+            let f = settings_fixture();
+            let before = snapshot(f.temp.path());
+            owner::set_publication_hook(Some(Box::new(|phase| {
+                if phase == "AclValidation" {
+                    Err(WorkspaceOwnerBlockerV1::Unavailable)
+                } else {
+                    Ok(())
+                }
+            })));
+            assert_eq!(
+                identity(&f),
+                WorkspaceIdentityObservationV1::OwnerStateBlocked(
+                    WorkspaceOwnerBlockerV1::Unavailable
+                )
+            );
+            assert!(
+                matches!(publish(&f),WorkspaceOwnerPublicationV1::Failed(WorkspaceOwnerBlockerV1::Unavailable,effects) if effects.staging==Staging::NotCreated)
+            );
+            owner::set_publication_hook(None);
+            assert_eq!(before, snapshot(f.temp.path()));
+        }
+
+        #[test]
+        #[serial_test::serial]
+        fn workspace_owner_postpublish_settings_failure_retains_visible_effects() {
+            for phase in ["PublishedVisible", "DirectorySynced"] {
+                let f = settings_fixture();
+                let policy = f.root.join(".substrate/policy.yaml");
+                owner::set_publication_hook(Some(Box::new(move |current| {
+                    if current == phase {
+                        fs::write(&policy, b"[invalid\n").unwrap();
+                    }
+                    Ok(())
+                })));
+                let (settings, result) = WorkspaceOpenAdapter::publish_existing_owner(
+                    &f.root,
+                    &f.context,
+                    &CliConfigOverrides::default(),
+                );
+                owner::set_publication_hook(None);
+                let WorkspaceOwnerPublicationV1::Failed(_, effects) = result else {
+                    panic!("{result:?}");
+                };
+                assert_eq!(effects.publication, Visibility::Visible);
+                assert_eq!(effects.durability, Durability::Confirmed);
+                assert!(matches!(
+                    settings,
+                    WorkspaceSettingsLoadV1::SettingsObserved(WorkspaceSettingsObservationV1 {
+                        identity: WorkspaceIdentityObservationV1::OwnerStateBlocked(_),
+                        ..
+                    }) | WorkspaceSettingsLoadV1::Blocked { .. }
+                ));
+                assert!(f.root.join(".substrate").join(owner::OWNER_FILE).is_file());
+                assert!(!f.root.join(".substrate").join(owner::PENDING_FILE).exists());
+                // This test's explicitly changed policy is invalid, so no read may disclose
+                // the identity until separately repaired. The read never repairs that input.
+                assert!(matches!(
+                    settings_preserved(&f, &f.root),
+                    WorkspaceSettingsLoadV1::Blocked { .. }
+                ));
+            }
+        }
     }
 }

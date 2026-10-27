@@ -433,6 +433,18 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
         return Ok(2);
     }
 
+    #[cfg(target_os = "linux")]
+    if let Some(code) =
+        super::workspace_cmd::try_handle_workspace_owner_command(&cli, &install_context)
+    {
+        return Ok(code);
+    }
+    #[cfg(not(target_os = "linux"))]
+    if super::workspace_cmd::is_workspace_owner_action(&cli) {
+        eprintln!("substrate: Workspace owner publication/status is unsupported on this platform");
+        return Ok(2);
+    }
+
     #[cfg(unix)]
     if cli.install_bootstrap_home_v1 {
         return match super::home_bootstrap::ensure_substrate_home_deps_scaffold_for_context(

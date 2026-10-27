@@ -12,6 +12,11 @@
 
 > **Authority boundary:** This file is a navigation index only. The preserved B0 through joint-closeout history and the recorded B3.1 family remain at their existing D6 owners; B2.2, B3.2, and B4 remain independent later slices, undispatched here, and do not reopen the completed B1/B2.1 or B3.1/C1 families.
 
+**Current B2.2 status (2026-10-27):** [Terminally complete by present acceptance](b2-2-foreground-receipt-return.md#terminal-closure--2026-10-27)
+for the exact historical Linux subject. The row below preserves its original scope; the canonical
+closure expressly accepts the narrow fifth-file semantic-reader addition and qualified proof.
+B3.2/B4 and broader gates remain separate; this index dispatches no successor.
+
 | Packet | Goal | Authority owner | Must-read sections | Sibling context | Exact allowed code areas | Explicit non-goals | Exit gate | Regression gates | Prerequisites | Gates deliberately deferred |
 |---|---|---|---|---|---|---|---|---|---|---|
 | [**B0 through B1/B2.1 joint closeout — canonical family rows moved**](../b1-b2-1/slice-and-task.md#b1-receipt-core-and-activated-store-allowlist) | [Canonical B1/B2.1 packet rows](../b1-b2-1/slice-and-task.md#b1-receipt-core-and-activated-store-allowlist) | — | — | — | — | — | — | — | — | — |

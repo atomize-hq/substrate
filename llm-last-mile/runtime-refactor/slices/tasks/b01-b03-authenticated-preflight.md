@@ -1,6 +1,6 @@
 **Kind:** packet
 **Stable ID:** `B01-B03-P1`
-**Status:** P1-A / TASK04 committed at ad98ea44b; P1-B / TASK05 accepted as reviewed working-tree internal settings loading; full P1 incomplete
+**Status:** P1-A / TASK04 committed at ad98ea44b; P1-B / TASK05 accepted and committed at 3eac45580; full P1 incomplete
 **Canonical for:** initial same-host Substrate Workspace open/load/initialize boundary and exact-destination no-send preflight contract, proposed source fence, proof gates and admission assessment only
 **Authority scope:** original P1 contract plus the selected P1-A component below; no real setup operation, full P1 qualification, B1 acceptance or later-send permission
 **Projection consumers:** [`current`](../../index/current.md), [`by-packet`](../../index/by-packet.md), [`by-id`](../../index/by-id.md), [`by-kind`](../../index/by-kind.md)
@@ -143,6 +143,84 @@ The next dependent selection must establish genuine Workspace publication/lifecy
 reopen, including already-configured Workspaces without implicit migration. No successor is selected.
 The B2.2 closure-recovery concurrency proposal still awaits human approval; installer Task03 remains
 separate. Full P1/PF/E3/F14 remains open. No commit, push, install or deployment is included here.
+
+### Publication and scheduling update — 2026-10-27
+
+The user authorized committing TASK05 and dispatching B2.2 closure recovery. Accepted TASK05 source
+and its control-plane updates are committed at `3eac4558034e9bf4c1f09dbdff07c1d639165c46`; no push or
+deployment occurred. TASK06 now owns bounded B2.2 retained-evidence recovery, not product repair or
+automatic terminal closure. The user requested a proposal for genuine Workspace owner publication;
+that proposed successor is not authorized for implementation or dispatched. Earlier acceptance text
+above preserves the original working-tree endpoint and then-pending approval chronology.
+
+### Selected owner publication and reopen — 2026-10-27
+
+**Accepted component endpoint (2026-10-27):** TASK07's reviewed working tree is accepted by
+META on HEAD `3eac4558034e9bf4c1f09dbdff07c1d639165c46`, exact eight-file source set
+`e32e2b39bf2e09465af35499e1d1b888cf5dd4bdf7a65aa7227e76e0593d9864`.
+Genuine explicit owner publication, fresh-process status/reopen and partial settings identity
+composition are implemented. Original P2 CLI effect-reporting finding was repaired and confirmed
+by a different focused reviewer; independent strategic Continue remains applicable. Final CLI9,
+owner6, settings17, five-checkpoint handler regression, build and formatting passed; applicable
+prior regressions are retained. Original failed initialization/broker suites remain distinct from
+supported-prefix alternatives. Linux fixture and fault-injection limitations remain explicit.
+No commit, installation, live-user publication or full P1/PF/E3/F14 closure follows. Config/policy
+revisions, Lane/destination and consumer-read authorization remain Unsupported. The selected
+contract below remains the fence; [acceptance evidence](</home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/e3f-retained-next-20261022/evidence/task07-meta-acceptance.md>)
+retains the exact reviews, repair and source correspondence.
+
+
+The user explicitly approved META's publication proposal and its boundaries. META selects TASK07:
+**genuine owner identity publication for an already-configured Workspace, followed by read-only
+native reopen**. TASK06 continues independently as immutable B2.2 evidence recovery.
+
+**Observable surface.** Add `substrate workspace init [PATH] --publish-owner` and
+`substrate workspace status [PATH] --json`. Publication is an explicit native operator action on an
+existing enabled, strictly validated Workspace; it does not invoke ordinary initialization, change
+settings/Git storage/gitignore/permissions, enroll a consumer or grant execution authority. Reject
+`--force`/`--examples` combinations. Before publication status diagnoses `OwnerStateMissing`; after
+publication a fresh process returns the same validated owner-issued Workspace reference and state
+revision. Idempotent publication preserves identity. Bind actual principal, existing trusted product
+home and exact physical Workspace/control roots before disclosure. No generic consumer read grant.
+
+**Approved partial schema.** Freeze strict `.substrate/workspace-state.v1.json` owner format before
+edits, in new `execution/agent_runtime/workspace_admission_authority.rs`. Allocate opaque independent
+Workspace and store-incarnation identities through the production publisher; never derive them from
+path/session or fixture input. Include native owner/root binding and initial state revision. Reject
+unknown/duplicate fields, unsupported versions and empty identities. Config/policy revision coverage
+is explicitly **Unsupported**, not invented current revision values or a complete owner revision
+vector. This selected partial identity schema does not satisfy the full revision contract below;
+writer hooks, Lane associations and ABA/current-cut proof remain open.
+
+**Write and read safety.** Serialize publication using a descriptor-bound per-Workspace lock; validate
+owner/type/mode/ACL/device/link posture and named/held associations without changing permissions.
+Exclusive staging, file sync, no-replace publication and directory sync must preserve any existing
+identity. Conflicting/corrupt/unsafe state or partial publication residue refuses replacement or new
+identity allocation; report known/uncertain effects on interruption. Read-only status/open never
+repairs, cleans, migrates or completes publication. No move/copy/recovery rebinding is supported;
+invalid physical/principal/home bindings fail closed. Do not imply universal restore/ABA detection
+beyond demonstrated binding checks. Integrate the same validated owner reader into TASK05's internal
+settings observation; keep absent/corrupt owner state explicit and Lanes/destinations/consumer
+read authorization unsupported. No full Loaded, eligibility or provider/runtime claim.
+
+**Source fence.** New owner module and minimal parent registration; `workspace_open.rs` for held
+owner reads/composition; `workspace_cmd.rs` and `cli.rs` for the exact new modes; `routing.rs` for
+new-action-only dispatch after native binding and before scaffold/trace; focused Linux tests and
+corresponding documentation. Touch `invocation/plan.rs` only if the context handoff demonstrably
+requires it. Reuse applicable security primitives without changing HSA/private-home policy. Existing
+Workspace init/status-independent CLI behavior stays unchanged. Return other dependencies before
+expanding this fence. No HSA/backend/custody/Lane/execution or global config/policy writer changes.
+
+**Proof and endpoint.** Freeze exact schema, command behavior, security checks and effects before
+delegated implementation. Tests use the actual publisher and fresh-process status with isolated
+native-owned fixtures: publish/reopen/idempotence, concurrent one-identity outcome, binding/alias/
+special-file/ACL/mode rejection, corrupt/conflicting/partial states and injected interruption points,
+no read-side mutation, exact declared publication effects and preserved settings. Genuine positive
+records originate from the production publisher; handwritten JSON is negative input only. Run
+applicable TASK04/05 regressions, fmt and build; retain original failed suites versus alternative
+proof distinctions. Paired independent reviews govern acceptance. Endpoint is reviewed working-tree
+implementation and command/effect evidence, no commit/push/install/deployment or live user Workspace
+publication. No successor is dispatched. Full P1/PF/E3/F14 remains open.
 
 ### Original admission clarification — 2026-10-21
 

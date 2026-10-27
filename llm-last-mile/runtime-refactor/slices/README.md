@@ -80,8 +80,9 @@ is also terminally complete at exact closure commit
 is terminally complete over implementation commit
 `96e102d9f5690e0d63957f6e9db56d632b7cdd17`. Later product chronology is separate from
 that recorded slice closure: [`E2-RM`](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite) and
-[B2.2](b2-2-foreground-receipt-return.md#current-admission-disposition) are implemented/review-clean/
-landed; separate canonical terminal closure was not located for either. Their earlier admission
+[B2.2](b2-2-foreground-receipt-return.md#terminal-closure--2026-10-27) are landed. B2.2 now has
+present terminal acceptance of its exact historical Linux subject (2026-10-27); E2-RM separate
+terminal closure remains unverified and is not an added B2.2 prerequisite. Earlier admission
 corrections remain history, with immutable-material and ownership rules preserved.
 [B3.2](b3-2-retained-receipt-messaging-and-lifecycle.md#landed-source-status-2026-09-17) and
 [B4](b4-receipt-targeted-cancel-inspect-stop.md#landed-source-status-2026-09-17) have landed source;
@@ -92,7 +93,7 @@ E3-A through E3-D are landed. [E3-E is terminally complete and product landed](e
 with canonical closure on the separate authority branch. Enclosing E3 remains incomplete;
 E3-F has landed components but remains incomplete at the
 [2026-10-26 bounded return](e3-agent-config-projection-and-gateway-adoption.md#bounded-return-and-next-task-sequence--2026-10-26);
-P1-A inspection is committed at `ad98ea44b`; TASK05 internal owner-backed settings loading is accepted as reviewed working-tree source, with genuine identity/disclosure still unsupported and installer restoration separate. Its projection is independently valid before D1; D1 retains
+P1-A inspection is committed at `ad98ea44b`; TASK05 internal owner-backed settings loading is committed at `3eac45580`; TASK07 owner publication is accepted at its reviewed-working-tree endpoint, with full disclosure still unsupported and installer restoration separate. Its projection is independently valid before D1; D1 retains
 V3/envelope, D2 side-effect brokerage, D3 final joined proof, and E4 write/sync after its existing
 E3 prerequisite. No whole-seam promotion or successor admission follows from this navigation.
 

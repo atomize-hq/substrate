@@ -636,6 +636,8 @@ pub enum AgentsAction {
 pub enum WorkspaceAction {
     /// Initialize a workspace at PATH (defaults to .)
     Init(WorkspaceInitArgs),
+    /// Observe the native Workspace owner identity without repair or execution
+    Status(WorkspaceStatusArgs),
     /// Disable workspace discovery at PATH (defaults to .)
     Disable(WorkspacePathArgs),
     /// Enable workspace discovery at PATH (defaults to .)
@@ -872,6 +874,19 @@ pub struct WorkspaceInitArgs {
     /// Create .substrate/workspace.example.yaml and .substrate/policy.example.yaml
     #[arg(long)]
     pub examples: bool,
+    /// Publish owner identity for an existing configured Workspace (Linux)
+    #[arg(long, conflicts_with_all = ["force", "examples"])]
+    pub publish_owner: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct WorkspaceStatusArgs {
+    /// Path within an existing Workspace (defaults to .)
+    #[arg(value_name = "PATH")]
+    pub path: Option<PathBuf>,
+    /// Print bounded owner status as JSON
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Args, Debug)]

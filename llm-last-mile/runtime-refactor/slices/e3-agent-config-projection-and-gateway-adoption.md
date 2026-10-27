@@ -1,7 +1,7 @@
 **Kind:** controlling numbered specification and preserved slice row
 **Stable ID:** `e3-agent-config-projection-and-gateway-adoption`
 **Canonical for:** controlling E3 authority correction, contract/file/symbol fence, dependency and gate disposition, and preserved historical row
-**Status:** E3-A through E3-D landed; E3-E terminally complete; E3-F/E3/F14 open at the 2026-10-26 bounded return; P1-A committed at ad98ea44b; TASK05 internal owner-backed settings loading accepted as reviewed working tree; installer restoration separate
+**Status:** E3-A through E3-D landed; E3-E terminally complete; E3-F/E3/F14 open at the 2026-10-26 bounded return; P1-A committed at ad98ea44b; TASK05 settings loading committed at 3eac45580; B2.2 historical slice accepted 2026-10-27; TASK07 reviewed working tree accepted; installer component repair accepted separately
 **Historical E3-A proof-recovery status:** canonical specification; E3-A has a preserved incomplete and unlanded candidate under bounded Linux proof recovery; E3-B through E3-F are not admitted, dispatched, or implemented
 **Historical E3-A proof-recovery authority scope:** documentation-only E3-A proof-recovery authority; no product/test change, proof execution, completion, landing, or successor admission/dispatch
 **Source span:** [`../03-phase-slice-map.md`](../03-phase-slice-map.md) line 222
@@ -45,17 +45,41 @@ replace the missing retained service proof. No UAA replacement or new supervisor
 | Order / lane | Bounded next outcome | Admission and endpoint |
 |---|---|---|
 | Main 1: `B01-B03-P1-A` / TASK04 | Strict read-only selected-location inspection, preserving invalid/disabled boundaries and proving zero inspection-side mutation | Accepted by META under [P1's component fence](tasks/b01-b03-authenticated-preflight.md#selected-first-increment--2026-10-26) after paired discovery and fresh focused proof confirmations. Accepted endpoint subsequently committed at `ad98ea44b` under explicit human approval; no push/deployment. Original CLI suite remains failed; separately recorded supported-prefix replay supplies preservation evidence. Full P1 remains open; Main 2 is the separately bounded internal settings load below. |
-| Main 2: `B01-B03-P1-B` / TASK05 | Fresh exact-root configuration/policy from their existing owners; explicit unsupported identity/Lanes/destinations/disclosure | Accepted at the reviewed-working-tree endpoint under [the settings-loading fence](tasks/b01-b03-authenticated-preflight.md#selected-owner-backed-settings-increment--2026-10-26). Internal bounded observation only, never `Loaded` or consumer authorization. Reviewed working-tree endpoint; later owner persistence/publication requires explicit selection. |
+| Main 2: `B01-B03-P1-B` / TASK05 | Fresh exact-root configuration/policy from their existing owners; explicit unsupported identity/Lanes/destinations/disclosure | Accepted at the reviewed-working-tree endpoint under [the settings-loading fence](tasks/b01-b03-authenticated-preflight.md#selected-owner-backed-settings-increment--2026-10-26). Internal bounded observation only, never `Loaded` or consumer authorization. Accepted endpoint committed at `3eac45580`; TASK07 is the separately approved owner-publication increment. |
+| Main 2 successor: TASK07 | Explicit genuine owner identity publication for configured Workspace and read-only reopen | Reviewed working tree accepted under the human-approved [bounded publication contract](tasks/b01-b03-authenticated-preflight.md#selected-owner-publication-and-reopen--2026-10-27); source-set `e32e2b39…`, paired discovery and focused effect-reporting repair confirmed; partial revision coverage, no implicit migration/rebinding, no full Loaded or PF claim. |
 | Main 3: P1 absent initialization and exact no-send composition | Separately approved initialization semantics; nonreconciling HSA/custody/read-cut composition and PF-OPEN–PF-LATER proof | Split into dependency-ready assignments before dispatch. Component results do not waive full P1 proof, authorize real initialization, or grant later-send permission. |
-| Independent B/C lane | Recover existing E2-RM/B2.2/B3.2/B4 proof and identify real remaining clauses, then C2 and C3 when eligible | Ready for a separate bounded selection; missing closure records are not evidence of missing code. Coordinate shared runtime files. No dispatch here. |
+| Independent B/C lane: TASK06 | B2.2 retained proof and terminal-closure recovery | TASK06 recovery accepted; [present META B2.2 terminal acceptance](b2-2-foreground-receipt-return.md#terminal-closure--2026-10-27) recorded on 2026-10-27 for the exact historical Linux subject. No current-runtime or B3.2/B4/C2 qualification. |
 | Protected E3 continuation | One named wrapper/accounting/adapter/ownership prerequisite with a finite proof boundary | Separate later selection. Wrapper and accounting may proceed independently only after shared custody interfaces are settled; retain one integration owner and keep V2 closed until authentic admission/cleanup is ready. |
-| Installer restoration | Authentic absent-unit snapshot/rollback repair and supported reinstall | Existing Task03 retains ownership; repair remains pending separate disposition. No automatic source fix, commit, service mutation or live request follows from this refresh. This lane is not a prerequisite to P1-A or independent source/evidence work. |
+| Installer restoration | Authentic absent-unit snapshot/rollback repair and supported reinstall | Existing Task03 completed the three-file installer repair; META accepted its isolated reviewed working tree at `3eac45580`, patch `05f2891a…`, after paired discovery and different focused repair/proof confirmation. Source integration, commit, installation and exact-model normal-command proof remain separate. No live Codex success is claimed. This lane is not a prerequisite to P1-A or independent source/evidence work. |
 | D/E successors | D1 envelope, D2 mediation, D3 integration and E4 host-visible writes | Existing E3→D1→D2→D3 and E3→E4 dependencies remain. Concrete source/proof preparation can be selected independently; implementation is not dispatched here. |
+
+### Installer component acceptance — 2026-10-27
+
+TASK03's isolated checkout is
+`/home/spenser/__Active_code/.worktrees/substrate-task03-installer-repair-20261027`, based on
+`3eac4558034e9bf4c1f09dbdff07c1d639165c46`. Accepted uncommitted patch SHA-256:
+`05f2891aab229e9c91f448e5c85a2f8ea00be9db09aa30e185f4584095428fa8`.
+Exactly `scripts/linux/world-provision.sh`, `scripts/linux/world-lifecycle.sh` and
+`tests/installers/world_provision_smoke.sh` change. Debug provisioning now uses Cargo dev while
+retaining target/debug; absent-unit capture/rollback preserves the mixed existing host state,
+fixed enablement links and recovery evidence, and propagates observation/account rollback errors.
+
+Both original behavioral P2 findings were repaired. A different focused reviewer confirmed those
+repairs and independently confirmed the P2 supplemental-proof disposition. Final recovery48 and
+supplemental source-invariant16 checks passed independently twice; Rust rollback1 and applicable
+installer fixtures/static checks passed. The original publication Rust selector remains NOTPASS
+because of its preexisting SecureBits literal mismatch; supplemental proof checks every original
+invariant, including capabilities and unchanged actual two-flag directive. Full legacy shfmt also
+remains NOTPASS. This is component proof with modeled systemd/account/publication, not host liveness,
+installed readiness or a normal Codex turn. [META acceptance](</home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/e3f-retained-next-20261022/evidence/task03-installer-meta-acceptance.md>)
+retains the original observations, exact source correspondence and limitations. The live-linked
+previous deployment is unchanged. No integration, commit, install or model call occurred; exact
+`gpt-6-astra` routing remains a separate requirement before the intended normal-command proof.
 
 The one shared coordination root remains
 `/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/e3f-retained-next-20261022/`.
 Preserve the existing BACKLOG and two private diagnostic edits. Owners record actual source,
-review, installed proof and publication separately. The first refresh and TASK04 are committed at `ad98ea44b`; TASK05 selection is a later uncommitted owner decision.
+review, installed proof and publication separately. The first refresh and TASK04 are committed at `ad98ea44b`; TASK05 is committed at `3eac45580`. Current scheduling and B2.2 closure documentation remain working-tree updates.
 The actual TASK identity/delivery is recorded in the workflow, not inferred from selection.
 
 ## Current E3-F status correction — 2026-10-21
