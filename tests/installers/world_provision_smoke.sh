@@ -1,6 +1,169 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "${1:-}" == "--world-registry" ]]; then
+  [[ $# -eq 1 ]] || exit 2
+  python3 - "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)" <<'PY_REGISTRY'
+import os
+from pathlib import Path
+import re
+import shlex
+import stat
+import subprocess
+import sys
+import tempfile
+
+repo = Path(sys.argv[1])
+source = (repo / 'scripts/linux/world-provision.sh').read_text()
+unit = source.split("SERVICE_UNIT_CONTENT <<UNIT || true\n", 1)[1].split('\nUNIT\n', 1)[0]
+registry = '/run/user/0/substrate/worlds'
+artifact = '/etc/tmpfiles.d/substrate-world-registry.conf'
+prestart = 'ExecStartPre=+/usr/bin/systemd-tmpfiles --create ' + artifact
+match = re.search(r"REGISTRY_TMPFILES_CONTENT <<'TMPFILES' \|\| true\n(.*?)\nTMPFILES", source, re.S)
+config = match.group(1) + '\n' if match else ''
+failed = []
+count = 0
+
+def require(condition, message):
+    assert condition, message
+
+def check(name, operation):
+    global count
+    count += 1
+    try:
+        operation()
+        print('PASS', name, flush=True)
+    except (AssertionError, subprocess.CalledProcessError) as error:
+        failed.append(name)
+        print('FAIL', name, str(error), flush=True)
+
+def allowance():
+    require(unit.count('ProtectHome=read-only\n') == 1, 'ProtectHome changed')
+    require(unit.count('ProtectSystem=strict\n') == 1, 'ProtectSystem changed')
+    paths = [line for line in unit.splitlines() if line.startswith('ReadWritePaths=')]
+    expected = 'ReadWritePaths="${SYSTEMD_SUBSTRATE_HOME}" /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp ' + registry
+    require(paths == [expected], 'missing exact registry allowance or unrelated writable change: ' + repr(paths))
+    require('RuntimeDirectory=substrate\n' in unit, 'original runtime directory changed')
+    require('XDG_RUNTIME_DIR' not in unit, 'global XDG selector introduced')
+
+def preparation():
+    starts = [line for line in unit.splitlines() if line.startswith('ExecStartPre=')]
+    require(starts == [prestart, 'ExecStartPre=/usr/bin/setfacl -m u:${INSTALL_BOOTSTRAP_UID}:r-x,m::r-x /run/substrate'],
+            'trusted preparation must precede the namespaced ACL command on every start: ' + repr(starts))
+    require(config == 'd ' + registry + ' - - - -\n', 'config must create only, preserving existing metadata with no cleanup age')
+
+check('exact registry allowance with unchanged protections', allowance)
+check('trusted pre-namespace creation on every service start', preparation)
+
+with tempfile.TemporaryDirectory(prefix='world-registry-', dir=os.environ['SUBSTRATE_TEST_TMPDIR']) as temporary:
+    root = Path(temporary)
+    def create(fs):
+        require(bool(config), 'generated registry configuration absent')
+        result = subprocess.run(['/usr/bin/systemd-tmpfiles', '--root=' + str(fs), '--create', '-'],
+                                input=config, text=True, capture_output=True, preexec_fn=lambda: os.umask(0o027))
+        print('COMMAND', shlex.join(result.args), 'EXIT', result.returncode, flush=True)
+        print(result.stdout + result.stderr, end='', flush=True)
+        require(result.returncode == 0, 'private tmpfiles create failed')
+
+    def snapshot(fs):
+        result = {}
+        for path in fs.rglob('*'):
+            info = path.lstat()
+            result[str(path.relative_to(fs))] = (stat.S_IFMT(info.st_mode), stat.S_IMODE(info.st_mode),
+                info.st_uid, info.st_gid, os.readlink(path) if path.is_symlink() else
+                (path.read_bytes() if path.is_file() else None))
+        return result
+
+    def absent():
+        fs = root / 'absent'; fs.mkdir()
+        create(fs)
+        for suffix in ('run', 'run/user', 'run/user/0', 'run/user/0/substrate', registry[1:]):
+            info = (fs / suffix).stat()
+            require(stat.S_IMODE(info.st_mode) == 0o755, 'wrong new directory mode: ' + suffix)
+            require((info.st_uid, info.st_gid) == (os.getuid(), os.getgid()), 'wrong synthetic creator ownership')
+        (fs / registry[1:] / 'fresh-world').mkdir()
+        before = snapshot(fs); create(fs)
+        require(snapshot(fs) == before, 'repeat start changed registry')
+    check('absent path creation and repeated service-start preparation', absent)
+
+    def existing():
+        fs = root / 'existing'
+        entry = fs / registry[1:] / 'wld_synthetic'
+        entry.mkdir(parents=True)
+        (entry / 'session.json').write_bytes(b'{"synthetic":true}\n')
+        for suffix, mode in [('run', 0o751), ('run/user', 0o750), ('run/user/0', 0o711),
+                             ('run/user/0/substrate', 0o700), (registry[1:], 0o750),
+                             (registry[1:] + '/wld_synthetic', 0o710),
+                             (registry[1:] + '/wld_synthetic/session.json', 0o640)]:
+            (fs / suffix).chmod(mode)
+        (entry / 'unknown-link').symlink_to('session.json')
+        before = snapshot(fs); create(fs); create(fs)
+        require(snapshot(fs) == before, 'existing directory/entry bytes, owner, mode, or link changed')
+    check('existing synthetic registry and unknown entries preserved', existing)
+
+    def boot():
+        # A distinct empty /run models a new boot, without deleting any fixture.
+        fs = root / 'fresh-boot'; fs.mkdir()
+        create(fs)
+        require((fs / registry[1:]).is_dir(), 'fresh boot registry missing')
+        create(fs)
+        (fs / registry[1:] / 'fresh-world').mkdir()
+    check('fresh volatile boot registry ready for fresh worlds', boot)
+
+    def uninstall(name, development):
+        fs = root / name
+        entry = fs / registry[1:] / 'wld_synthetic'
+        entry.mkdir(parents=True); entry.chmod(0o710)
+        (entry / 'session.json').write_bytes(b'{"synthetic":"uninstall-preserve"}\n')
+        before = snapshot(fs / 'run/user/0')
+        owned = fs / artifact[1:]
+        owned.parent.mkdir(parents=True); owned.write_text(config)
+        text = (repo / 'scripts/substrate' / name).read_text()
+        if development:
+            marker = 'if [[ "${REMOVE_WORLD_SERVICE}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then\n'
+            block = marker + text.split(marker, 1)[1].split('\nelif ', 1)[0] + '\nfi\n'
+        else:
+            marker = 'if command -v systemctl >/dev/null 2>&1; then\n'
+            block = marker + text.split(marker, 1)[1].split('\nfi\n', 1)[0] + '\nfi\n'
+        # Run the actual Linux removal block. Every privileged command is
+        # intercepted; filesystem operands can only reach this private root.
+        script = r'''set -euo pipefail
+log() { :; }
+warn() { :; }
+systemctl() { :; }
+sudo() { maybe_sudo "$@"; }
+maybe_sudo() {
+    if [[ "$1" == systemctl ]]; then return 0; fi
+    [[ "$1" == rm ]] || exit 91
+    shift
+    local arg
+    local -a args=()
+    for arg in "$@"; do
+        case "$arg" in
+          -*) args+=("$arg") ;;
+          /etc/*|/usr/*|/var/*|/run/*) args+=("$FIXTURE_ROOT$arg") ;;
+          *) exit 92 ;;
+        esac
+    done
+    /usr/bin/rm "${args[@]}"
+}
+REMOVE_WORLD_SERVICE=1 IS_LINUX=1 IS_MAC=0
+''' + block
+        result = subprocess.run(['bash', '-c', script], env=dict(os.environ, FIXTURE_ROOT=str(fs)),
+                                text=True, capture_output=True)
+        require(result.returncode == 0, result.stdout + result.stderr)
+        require(not owned.exists(), 'normal uninstall retained owned configuration')
+        require(snapshot(fs / 'run/user/0') == before, 'normal uninstall changed registry or sessions')
+    for name, development in [('dev-uninstall-substrate.sh', True), ('uninstall-substrate.sh', False)]:
+        check('normal ' + name + ' removes artifact and preserves sessions', lambda n=name,d=development:uninstall(n,d))
+
+print('Registry checks:', count, 'failures:', len(failed))
+print('Limits: private tmpfiles execution under current uid; systemd ordering and namespace allowances are source checks; no host service/reboot proof.')
+sys.exit(1 if failed else 0)
+PY_REGISTRY
+  exit $?
+fi
+
 # Execute actual lifecycle bodies with an external-operation adapter that can
 # touch only private fixtures. Select before any legacy target artifact writes.
 if [[ "${1:-}" == "--installer-recovery" ]]; then
@@ -257,6 +420,8 @@ SUBSTRATE_RUSTC_VERSION=fixture SUBSTRATE_SOURCE_TARGET=fixture SUBSTRATE_SOURCE
 INSTALL_BOOTSTRAP_CONTEXT_V1=fixture INSTALL_BOOTSTRAP_COMMITMENT=fixture INSTALL_BOOTSTRAP_ACCOUNT=fixture
 INSTALL_BOOTSTRAP_UID=12345 INSTALL_BOOTSTRAP_PRIMARY_GID=12345 INSTALL_PREFIX=/fixture-home
 '''
+    registry_config = provision.split("REGISTRY_TMPFILES_CONTENT <<'TMPFILES' || true\n", 1)[1].split('\nTMPFILES\n', 1)[0]
+    helper += '\nREGISTRY_TMPFILES_CONTENT=' + shlex.quote(registry_config) + '\n'
     def fixture(name, mixed=False):
         case = root / name
         (case / 'fs/etc/systemd/system').mkdir(parents=True)
@@ -417,6 +582,54 @@ if linux_restore_service_state substrate-world-service.service not-found inactiv
         assert_restored(case,before,dict(group=False,member=False))
     check('original dangling fixed enablement links restored exactly',dangling_enablement)
 
+    def registry_metadata(case):
+        base = case/'fs/run/user/0'
+        return {str(path.relative_to(base)):(stat.S_IMODE(path.lstat().st_mode),path.lstat().st_uid,path.lstat().st_gid)
+                for path in [base,*base.rglob('*')]}
+    def registry_fixture(case):
+        entry=case/'fs/run/user/0/substrate/worlds/wld_synthetic'
+        entry.mkdir(parents=True)
+        (entry/'session.json').write_bytes(b'{"synthetic":"preserve"}\n')
+        (entry/'session.json').chmod(0o640); entry.chmod(0o710)
+        entry.parent.chmod(0o750); entry.parent.parent.chmod(0o711)
+    def registry_rollback(present, stage):
+        case=fixture('registry-rollback-'+str(present)+'-'+stage)
+        registry_fixture(case)
+        artifact=case/'fs/etc/tmpfiles.d/substrate-world-registry.conf'
+        if present:
+            artifact.parent.mkdir(); artifact.write_bytes(b'# original configuration\n'); artifact.chmod(0o600)
+            os.utime(artifact,ns=(1577934245123456789,1577934245987654321))
+            original_mtime=artifact.stat().st_mtime_ns
+        before=tree(case); metadata=registry_metadata(case)
+        result=execute(case,INJECT=stage)
+        require(result.returncode==77,result.stdout+result.stderr)
+        assert_restored(case,before,dict(group=False,member=False))
+        if present: require(artifact.stat().st_mtime_ns==original_mtime,'rollback altered original artifact mtime_ns')
+        require(registry_metadata(case)==metadata,'rollback altered registry metadata')
+        events=[json.loads(line) for line in (case/'events').read_text().splitlines()]
+        require(any(e[0]=='install' and e[-1]=='/etc/tmpfiles.d/substrate-world-registry.conf' for e in events),'artifact publication not reached')
+        require(not any(any(isinstance(a,str) and a.startswith('/run/user/0') for a in e[1:]) for e in events),
+                'installer captured or mutated registry/session paths')
+    for present in (False,True):
+        for stage in ('files','service'):
+            check('registry artifact '+('present' if present else 'absent')+' rollback after '+stage,
+                  lambda p=present,s=stage:registry_rollback(p,s))
+    def registry_publication():
+        case=fixture('registry-publication'); registry_fixture(case)
+        before=registry_metadata(case); session=case/'fs/run/user/0/substrate/worlds/wld_synthetic/session.json'
+        body=session.read_bytes()
+        result=execute(case)
+        require(result.returncode==0,result.stdout+result.stderr)
+        artifact=case/'fs/etc/tmpfiles.d/substrate-world-registry.conf'
+        require(artifact.read_text()==registry_config+'\n','published configuration differs from generated source')
+        require(stat.S_IMODE(artifact.stat().st_mode)==0o644,'wrong configuration mode')
+        require(registry_metadata(case)==before and session.read_bytes()==body,'publication touched registry')
+        events=[json.loads(line) for line in (case/'events').read_text().splitlines()]
+        published=next(i for i,e in enumerate(events) if e[0]=='install' and e[-1]=='/etc/tmpfiles.d/substrate-world-registry.conf')
+        started=next(i for i,e in enumerate(events) if e[:2]==['systemctl','start'] and e[-1]==units[0])
+        require(published<started,'service started before configuration publication')
+    check('owned registry artifact published before service start without session mutation',registry_publication)
+
     def absent_unit_observation(status, kind='accepted', index=0):
         case=fixture('absent-observation-'+str(status)+'-'+kind+'-'+str(index))
         labels=['world-service-unit','world-socket-unit','lifecycle-service-unit','lifecycle-socket-unit']
@@ -572,6 +785,7 @@ for uid in ('12345', '23456'):
     rendered = subprocess.check_output(['bash', '-c', 'cat <<UNIT\n' + unit + '\nUNIT\n'],
                                        env=dict(os.environ, INSTALL_BOOTSTRAP_UID=uid), text=True)
     assert [line for line in rendered.splitlines() if line.startswith('ExecStartPre=')] == [
+        'ExecStartPre=+/usr/bin/systemd-tmpfiles --create /etc/tmpfiles.d/substrate-world-registry.conf',
         f'ExecStartPre=/usr/bin/setfacl -m u:{uid}:r-x,m::r-x /run/substrate']
     assert 'RuntimeDirectoryMode=0750\n' in rendered and 'Group=substrate\n' in rendered
     print('PASS provisioner mandatory exact bootstrap UID:', uid)
@@ -583,7 +797,7 @@ if sys.argv[2] == '--runtime-directory-dac-systemd':
     uid, gid = str(os.getuid()), str(os.getgid())
     rendered = subprocess.check_output(['bash', '-c', 'cat <<UNIT\n' + unit + '\nUNIT\n'],
                                        env=dict(os.environ, INSTALL_BOOTSTRAP_UID=uid), text=True)
-    hook = next(line.split('=', 1)[1] for line in rendered.splitlines() if line.startswith('ExecStartPre='))
+    hook = next(line.split('=', 1)[1] for line in rendered.splitlines() if line.startswith('ExecStartPre=/usr/bin/setfacl '))
     name = 'substrate-dac-test-' + uuid.uuid4().hex
     runtime = '/run/' + name
     unit_path = '/run/systemd/system/' + name + '.service'
@@ -1701,6 +1915,7 @@ SERVICE_PATH="${FAKE_ROOT}/etc/systemd/system/substrate-world-service.service"
 SOCKET_PATH="${FAKE_ROOT}/etc/systemd/system/substrate-world-service.socket"
 ACL_DROPIN_PATH="${FAKE_ROOT}/etc/systemd/system/substrate-world-service.socket.d/20-substrate-group-acl.conf"
 SERVICE_UNIT_CONTENT="service"
+REGISTRY_TMPFILES_CONTENT="registry"
 SOCKET_UNIT_CONTENT="socket"
 SOCKET_DROPIN_CONTENT="dropin"
 INVOKING_USER="tester"
@@ -1944,6 +2159,7 @@ SERVICE_PATH="/tmp/substrate-world-service.service"
 SOCKET_PATH="/tmp/substrate-world-service.socket"
 ACL_DROPIN_PATH="/tmp/20-substrate-group-acl.conf"
 SERVICE_UNIT_CONTENT="service"
+REGISTRY_TMPFILES_CONTENT="registry"
 SOCKET_UNIT_CONTENT="socket"
 SOCKET_DROPIN_CONTENT="dropin"
 INVOKING_USER="tester"

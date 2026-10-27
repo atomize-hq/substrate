@@ -716,6 +716,7 @@ if command -v systemctl >/dev/null 2>&1; then
     log "Removing systemd unit + runtime directories..."
     maybe_sudo rm -f /etc/systemd/system/substrate-world-service.service || true
     maybe_sudo rm -f /etc/systemd/system/substrate-world-service.socket || true
+    maybe_sudo rm -f /etc/tmpfiles.d/substrate-world-registry.conf || true
     maybe_sudo rm -rf /var/lib/substrate || true
     maybe_sudo rm -rf /run/substrate || true
     maybe_sudo rm -f /run/substrate.sock || true

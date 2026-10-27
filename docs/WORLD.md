@@ -126,6 +126,15 @@ Deliberate boundary for later lanes:
   or the explicit `SUBSTRATE_HOME` you pass to the helper) and keeps that path in
   `ReadWritePaths` alongside `/var/lib/substrate`, `/run`, `/run/substrate`, `/sys/fs/cgroup`,
   and `/tmp`.
+- The root service also allows writes to exactly `/run/user/0/substrate/worlds`
+  beneath `ProtectHome=read-only`, retaining `ProtectSystem=strict`. Before each
+  start (including boot and restart), a privileged `systemd-tmpfiles --create`
+  pre-start command uses `/etc/tmpfiles.d/substrate-world-registry.conf` to create
+  missing registry directories. Existing directory ownership, modes and session
+  entries are preserved, with no timed cleanup. Installer rollback restores the
+  configuration; normal uninstall removes it without deleting this registry.
+  Registry metadata remains volatile across reboot; this provides readiness for
+  fresh worlds rather than persistence of existing worlds.
 - The helper ensures the Linux `substrate` group exists, adds the invoking user when possible,
   and rewrites the socket/service units so `/run/substrate` is recreated as
   `root:substrate 0750`, `/run/substrate.sock` is created as `root:substrate 0660`,

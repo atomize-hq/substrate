@@ -43,6 +43,7 @@ linux_require_world_context() {
         SOCKET_PATH \
         ACL_DROPIN_PATH \
         SERVICE_UNIT_CONTENT \
+        REGISTRY_TMPFILES_CONTENT \
         SOCKET_UNIT_CONTENT \
         SOCKET_DROPIN_CONTENT \
         INVOKING_USER \
@@ -1634,6 +1635,7 @@ record_linux_managed_state() {
     linux_snapshot_path "e3-world-entry-binary" "/usr/local/lib/substrate/e3/substrate-world-entry"
     linux_snapshot_path "acl-helper" "${ACL_HELPER_INSTALL_PATH}"
     linux_snapshot_path "world-service-unit" "${SERVICE_PATH}"
+    linux_snapshot_path "world-registry-tmpfiles" "/etc/tmpfiles.d/substrate-world-registry.conf"
     linux_snapshot_path "world-socket-unit" "${SOCKET_PATH}"
     linux_snapshot_path "world-socket-dropin" "${ACL_DROPIN_PATH}"
     linux_snapshot_path "lifecycle-executor" "/usr/libexec/substrate/substrate-lifecycle-linux"
@@ -1725,6 +1727,8 @@ install_linux_managed_state() {
     publish_substrate_artifact_source_v1
 
     echo "==> Writing world systemd units to ${SERVICE_PATH} and ${SOCKET_PATH}"
+    # Capture/publication owns only this configuration, never registry contents.
+    install_unit "/etc/tmpfiles.d/substrate-world-registry.conf" "${REGISTRY_TMPFILES_CONTENT}"
     install_unit "${SERVICE_PATH}" "${SERVICE_UNIT_CONTENT}"
     install_unit "${SOCKET_PATH}" "${SOCKET_UNIT_CONTENT}"
     install_unit "${ACL_DROPIN_PATH}" "${SOCKET_DROPIN_CONTENT}"

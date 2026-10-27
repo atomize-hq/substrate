@@ -947,6 +947,7 @@ if [[ "${REMOVE_WORLD_SERVICE}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
     sudo systemctl disable --now substrate-world-service.socket substrate-world-service.service >/dev/null 2>&1 || warn "Failed to disable substrate-world-service socket/service units"
     sudo rm -f /etc/systemd/system/substrate-world-service.service || true
     sudo rm -f /etc/systemd/system/substrate-world-service.socket || true
+    sudo rm -f /etc/tmpfiles.d/substrate-world-registry.conf || true
     sudo systemctl daemon-reload || true
     sudo rm -f /usr/local/bin/substrate-world-service || true
     sudo rm -rf /var/lib/substrate || true

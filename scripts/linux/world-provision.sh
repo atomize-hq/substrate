@@ -1099,6 +1099,12 @@ fi
 SERVICE_PATH="/etc/systemd/system/substrate-world-service.service"
 SOCKET_PATH="/etc/systemd/system/substrate-world-service.socket"
 
+# Unspecified mode/owner/group preserve existing directories. New directories
+# are root:root 0755 under the root pre-start command; no age means no cleanup.
+read -r -d '' REGISTRY_TMPFILES_CONTENT <<'TMPFILES' || true
+d /run/user/0/substrate/worlds - - - -
+TMPFILES
+
 NETFILTER_ENV_LINE=""
 if [[ "${ENABLE_WORLD_NETFILTER}" -eq 1 ]]; then
     NETFILTER_ENV_LINE="Environment=WORLD_NETFILTER_ENABLE=1"
@@ -1135,6 +1141,9 @@ Group=substrate
 UMask=0027
 RuntimeDirectory=substrate
 RuntimeDirectoryMode=0750
+# '+' prepares the legacy registry outside this command's filesystem namespace,
+# before the following namespaced pre-start and main process need the path.
+ExecStartPre=+/usr/bin/systemd-tmpfiles --create /etc/tmpfiles.d/substrate-world-registry.conf
 ExecStartPre=/usr/bin/setfacl -m u:${INSTALL_BOOTSTRAP_UID}:r-x,m::r-x /run/substrate
 StateDirectory=substrate
 StateDirectoryMode=0750
@@ -1145,7 +1154,7 @@ NoNewPrivileges=yes
 LimitCORE=0
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths="${SYSTEMD_SUBSTRATE_HOME}" /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp
+ReadWritePaths="${SYSTEMD_SUBSTRATE_HOME}" /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp /run/user/0/substrate/worlds
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE CAP_SETUID CAP_SETGID CAP_SETPCAP
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE CAP_SETUID CAP_SETGID CAP_SETPCAP
 SecureBits=noroot noroot-locked
