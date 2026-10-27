@@ -98,6 +98,47 @@ pub(crate) const WORLD_FS_LANDLOCK_DISCOVER_ALLOWLIST_ENV: &str =
     "SUBSTRATE_WORLD_FS_LANDLOCK_DISCOVER_ALLOWLIST";
 pub(crate) const LANDLOCK_HELPER_SRC_ENV: &str = "SUBSTRATE_LANDLOCK_HELPER_SRC";
 
+// Only boundary-attached metadata is eligible for this event. In particular, an
+// arbitrary backend error (even an io::Error) must remain unclassified.
+fn command_execution_failed(error: &anyhow::Error, attempt_id: uuid::Uuid) -> anyhow::Error {
+    #[cfg(target_os = "linux")]
+    let failure = error.downcast_ref::<world::exec::ShellCommandFailure>();
+    #[cfg(target_os = "linux")]
+    let (operation, raw_os_error, errno_status) = match failure {
+        Some(failure) => {
+            let operation = failure.operation();
+            let errno = failure.raw_os_error();
+            let status = if matches!(operation, "stdout-pipe" | "stderr-pipe") {
+                "not-applicable"
+            } else if errno.is_some() {
+                "present"
+            } else {
+                "absent"
+            };
+            (operation, errno, status)
+        }
+        None => ("unknown", None, "unknown"),
+    };
+    #[cfg(not(target_os = "linux"))]
+    let (operation, raw_os_error, errno_status): (&str, Option<i32>, &str) = {
+        let _ = error;
+        ("unknown", None, "unknown")
+    };
+
+    // A root event also avoids inheriting content-bearing request span fields.
+    tracing::error!(
+        parent: None,
+        service = "world-service",
+        process_id = std::process::id(),
+        attempt_id = %attempt_id,
+        operation,
+        raw_os_error,
+        errno_status,
+        "exec failed"
+    );
+    anyhow::anyhow!("Command execution failed")
+}
+
 const CARGO_BIN_EXE_WORLD_AGENT_ENV: &str = "CARGO_BIN_EXE_world-service";
 const CARGO_BIN_EXE_WORLD_AGENT_ALT_ENV: &str = "CARGO_BIN_EXE_world_service";
 
@@ -797,12 +838,12 @@ impl WorldService {
         };
 
         // Execute command
+        let attempt_id = uuid::Uuid::now_v7();
         let result = match self.backend.exec(&world, exec_req) {
             Ok(r) => r,
             Err(e) => {
                 self.record_last_netfilter_failure_for_error(isolate_network, &e);
-                tracing::error!(error = %e, "exec failed");
-                return Err(anyhow::anyhow!("Command execution failed"));
+                return Err(command_execution_failed(&e, attempt_id));
             }
         };
 
@@ -3824,6 +3865,163 @@ pub(crate) fn resolve_landlock_allowlist_paths(
     out.sort();
     out.dedup();
     out
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod safe_execution_diagnostic_tests {
+    use super::*;
+    use std::io::Write;
+
+    #[derive(Clone)]
+    struct LogBuffer(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for LogBuffer {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn capture_failure(error: &anyhow::Error, attempt_id: uuid::Uuid) -> (String, String) {
+        let buffer = LogBuffer(Arc::new(Mutex::new(Vec::new())));
+        let writer = buffer.clone();
+        // Same fmt subscriber/event formatter as run_world_service; only output,
+        // deterministic timestamp/ANSI settings and the filter differ for capture.
+        let subscriber = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::TRACE)
+            .without_time()
+            .with_ansi(false)
+            .with_writer(move || writer.clone())
+            .finish();
+        let public = tracing::subscriber::with_default(subscriber, || {
+            let span = tracing::info_span!("request", request = "span-content-sentinel");
+            let _entered = span.enter();
+            command_execution_failed(error, attempt_id)
+        });
+        let output = String::from_utf8(buffer.0.lock().unwrap().clone()).unwrap();
+        (output, format!("{public:#}"))
+    }
+
+    fn assert_safe_event(
+        output: &str,
+        attempt_id: uuid::Uuid,
+        operation: &str,
+        errno: Option<i32>,
+        errno_status: &str,
+    ) {
+        assert_eq!(output.lines().count(), 1, "{output}");
+        // Assert the complete formatted payload, so any added raw field fails.
+        let mut expected =
+            format!(
+            "exec failed service=\"world-service\" process_id={} attempt_id={} operation=\"{}\"",
+            std::process::id(), attempt_id, operation,
+        );
+        if let Some(errno) = errno {
+            expected.push_str(&format!(" raw_os_error={errno}"));
+        }
+        expected.push_str(&format!(" errno_status=\"{errno_status}\"\n"));
+        assert_eq!(
+            output.split_once("exec failed").unwrap().1,
+            &expected["exec failed".len()..]
+        );
+        assert!(output.contains("ERROR"));
+        assert!(!output.contains("span-content-sentinel"));
+    }
+
+    #[test]
+    fn test_safe_diagnostic_actual_event_suppresses_wrapped_spawn_content() {
+        let fixture = tempfile::tempdir().unwrap();
+        let cwd = fixture.path().join("cwd-content-sentinel-missing");
+        let env = HashMap::from([
+            (
+                "ENV_CONTENT_SENTINEL_KEY".into(),
+                "env-content-sentinel-value".into(),
+            ),
+            ("SHIM_SESSION_ID".into(), "session-content-sentinel".into()),
+            ("ACCOUNT_FIXTURE".into(), "account-content-sentinel".into()),
+        ]);
+        let error = world::exec::execute_shell_command(
+            "printf command-content-sentinel",
+            &cwd,
+            &env,
+            false,
+            None,
+        )
+        .unwrap_err()
+        .context("session-context-content-sentinel")
+        .context("request-context-content-sentinel");
+        let failure = error
+            .downcast_ref::<world::exec::ShellCommandFailure>()
+            .unwrap();
+        assert_eq!(failure.raw_os_error(), Some(libc::ENOENT));
+        let internal = format!("{error:#}");
+        assert!(internal.contains("printf command-content-sentinel"));
+        assert!(internal.contains("session-context-content-sentinel"));
+        assert!(internal.contains("request-context-content-sentinel"));
+
+        let mut attempts = HashSet::new();
+        for _ in 0..3 {
+            let attempt_id = uuid::Uuid::now_v7();
+            assert!(attempts.insert(attempt_id));
+            let (output, public) = capture_failure(&error, attempt_id);
+            print!("{output}");
+            println!("public: {public}");
+            assert_safe_event(&output, attempt_id, "spawn", Some(libc::ENOENT), "present");
+            assert_eq!(public, "Command execution failed");
+            for forbidden in [
+                "command-content-sentinel",
+                "cwd-content-sentinel-missing",
+                "ENV_CONTENT_SENTINEL_KEY",
+                "env-content-sentinel-value",
+                "SHIM_SESSION_ID",
+                "session-content-sentinel",
+                "ACCOUNT_FIXTURE",
+                "account-content-sentinel",
+                "session-context-content-sentinel",
+                "request-context-content-sentinel",
+                "Failed to spawn command",
+                "No such file or directory",
+                " error=",
+                " error_debug=",
+                fixture.path().to_str().unwrap(),
+            ] {
+                assert!(!output.contains(forbidden), "unexpected field: {forbidden}");
+                assert!(!public.contains(forbidden));
+            }
+        }
+    }
+
+    #[test]
+    fn test_safe_diagnostic_unknown_errors_never_infer_operation_or_errno() {
+        for error in [
+            anyhow::anyhow!("Failed to spawn command: command-content-sentinel (os error 2)"),
+            anyhow::Error::new(std::io::Error::from_raw_os_error(libc::ENOENT))
+                .context("Failed to wait for child process completion"),
+            anyhow::Error::new(std::io::Error::other("raw-content-sentinel"))
+                .context("Failed to capture stdout pipe"),
+        ] {
+            let attempt_id = uuid::Uuid::now_v7();
+            let (output, public) = capture_failure(&error, attempt_id);
+            print!("{output}");
+            println!("public: {public}");
+            assert_safe_event(&output, attempt_id, "unknown", None, "unknown");
+            assert_eq!(public, "Command execution failed");
+            for forbidden in [
+                "raw-content-sentinel",
+                "command-content-sentinel",
+                "Failed to",
+                "No such file",
+                "raw_os_error=",
+            ] {
+                assert!(!output.contains(forbidden));
+                assert!(!public.contains(forbidden));
+            }
+        }
+    }
 }
 
 #[cfg(test)]

@@ -754,6 +754,97 @@ pub fn execute_shell_command(
     .output)
 }
 
+/// Content-free classification attached at a shell execution error boundary.
+///
+/// This context deliberately does not contain the command, directory or environment.
+/// The original error and any outer contexts remain available internally.
+///
+/// ```
+/// # fn inspect(error: &anyhow::Error) {
+/// if let Some(failure) = error.downcast_ref::<world::exec::ShellCommandFailure>() {
+///     assert!(["spawn", "stdout-pipe", "stderr-pipe", "untraced-wait"]
+///         .contains(&failure.operation()));
+///     let _errno: Option<i32> = failure.raw_os_error();
+/// }
+/// # }
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct ShellCommandFailure {
+    operation: ShellCommandOperation,
+    raw_os_error: Option<i32>,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum ShellCommandOperation {
+    Spawn,
+    StdoutPipe,
+    StderrPipe,
+    UntracedWait,
+}
+
+impl ShellCommandFailure {
+    /// Return the fixed operation label recorded at the failing boundary.
+    pub fn operation(&self) -> &'static str {
+        match self.operation {
+            ShellCommandOperation::Spawn => "spawn",
+            ShellCommandOperation::StdoutPipe => "stdout-pipe",
+            ShellCommandOperation::StderrPipe => "stderr-pipe",
+            ShellCommandOperation::UntracedWait => "untraced-wait",
+        }
+    }
+
+    /// Return the original OS errno, or `None` when absent or not applicable.
+    pub fn raw_os_error(&self) -> Option<i32> {
+        self.raw_os_error
+    }
+}
+
+impl std::fmt::Display for ShellCommandFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "shell command failure ({})", self.operation())
+    }
+}
+
+impl std::error::Error for ShellCommandFailure {}
+
+fn shell_command_io_error(
+    error: std::io::Error,
+    operation: ShellCommandOperation,
+) -> anyhow::Error {
+    let failure = ShellCommandFailure {
+        operation,
+        raw_os_error: error.raw_os_error(),
+    };
+    anyhow::Error::new(error).context(failure)
+}
+
+fn capture_command_pipe<T>(pipe: Option<T>, kind: StreamKind) -> Result<T> {
+    pipe.ok_or_else(|| {
+        let (operation, message) = match kind {
+            StreamKind::Stdout => (
+                ShellCommandOperation::StdoutPipe,
+                "Failed to capture stdout pipe",
+            ),
+            StreamKind::Stderr => (
+                ShellCommandOperation::StderrPipe,
+                "Failed to capture stderr pipe",
+            ),
+        };
+        anyhow!(message).context(ShellCommandFailure {
+            operation,
+            raw_os_error: None,
+        })
+    })
+}
+
+fn untraced_child_status(
+    status: std::io::Result<std::process::ExitStatus>,
+) -> Result<std::process::ExitStatus> {
+    status
+        .map_err(|error| shell_command_io_error(error, ShellCommandOperation::UntracedWait))
+        .context("Failed to wait for child process completion")
+}
+
 #[cfg(target_os = "linux")]
 pub(crate) fn execute_shell_command_with_capture(
     cmd: &str,
@@ -800,17 +891,12 @@ pub(crate) fn execute_shell_command_with_capture(
 
     let mut child = build_command(cmd, cwd, env, login_shell, tracing_permitted)
         .spawn()
+        .map_err(|error| shell_command_io_error(error, ShellCommandOperation::Spawn))
         .with_context(|| format!("Failed to spawn command: {cmd}"))?;
     let _active_exec = register_active_exec(capture.span_id, child.id() as i32);
 
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| anyhow!("Failed to capture stdout pipe"))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| anyhow!("Failed to capture stderr pipe"))?;
+    let stdout = capture_command_pipe(child.stdout.take(), StreamKind::Stdout)?;
+    let stderr = capture_command_pipe(child.stderr.take(), StreamKind::Stderr)?;
 
     let stdout_handle = spawn_reader(stdout, StreamKind::Stdout);
     let stderr_handle = spawn_reader(stderr, StreamKind::Stderr);
@@ -827,9 +913,7 @@ pub(crate) fn execute_shell_command_with_capture(
             std::process::ExitStatus::from_raw(trace.raw_exit_status)
         }
     } else {
-        child
-            .wait()
-            .context("Failed to wait for child process completion")?
+        untraced_child_status(child.wait())?
     };
 
     let stdout_buf = join_reader(stdout_handle, "stdout");
@@ -869,23 +953,16 @@ pub(crate) fn execute_shell_command_with_capture(
 
     let mut child = command
         .spawn()
+        .map_err(|error| shell_command_io_error(error, ShellCommandOperation::Spawn))
         .with_context(|| format!("Failed to spawn command: {cmd}"))?;
 
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| anyhow!("Failed to capture stdout pipe"))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| anyhow!("Failed to capture stderr pipe"))?;
+    let stdout = capture_command_pipe(child.stdout.take(), StreamKind::Stdout)?;
+    let stderr = capture_command_pipe(child.stderr.take(), StreamKind::Stderr)?;
 
     let stdout_handle = spawn_reader(stdout, StreamKind::Stdout);
     let stderr_handle = spawn_reader(stderr, StreamKind::Stderr);
 
-    let status = child
-        .wait()
-        .context("Failed to wait for child process completion")?;
+    let status = untraced_child_status(child.wait())?;
 
     let stdout_buf = join_reader(stdout_handle, "stdout");
     let stderr_buf = join_reader(stderr_handle, "stderr");
@@ -1866,6 +1943,104 @@ mod tests {
     use super::*;
     #[cfg(target_os = "linux")]
     use substrate_common::ProcessEventsStatus;
+
+    #[test]
+    fn test_safe_diagnostic_real_spawn_preserves_full_chain() {
+        let fixture = tempfile::tempdir().unwrap();
+        let cwd = fixture.path().join("cwd-sentinel-missing");
+        let env = HashMap::from([("ENV_SENTINEL_KEY".into(), "env-sentinel-value".into())]);
+        let error = execute_shell_command("printf command-sentinel-body", &cwd, &env, false, None)
+            .unwrap_err()
+            .context("session-sentinel-context")
+            .context("outer-sentinel-context");
+        let chain: Vec<_> = error.chain().map(ToString::to_string).collect();
+        assert_eq!(chain[0], "outer-sentinel-context");
+        assert_eq!(chain[1], "session-sentinel-context");
+        assert!(chain
+            .iter()
+            .any(|message| message == "Failed to spawn command: printf command-sentinel-body"));
+        let io = error.downcast_ref::<std::io::Error>().unwrap();
+        assert_eq!(io.raw_os_error(), Some(libc::ENOENT));
+        assert_eq!(chain.last().unwrap(), &io.to_string());
+        let failure = error.downcast_ref::<ShellCommandFailure>().unwrap();
+        assert_eq!(failure.operation(), "spawn");
+        assert_eq!(failure.raw_os_error(), io.raw_os_error());
+        assert!(chain
+            .iter()
+            .any(|message| message == "shell command failure (spawn)"));
+    }
+
+    #[test]
+    fn test_safe_diagnostic_pipe_boundaries_have_no_errno() {
+        for (kind, operation, original) in [
+            (
+                StreamKind::Stdout,
+                "stdout-pipe",
+                "Failed to capture stdout pipe",
+            ),
+            (
+                StreamKind::Stderr,
+                "stderr-pipe",
+                "Failed to capture stderr pipe",
+            ),
+        ] {
+            assert_eq!(capture_command_pipe(Some(17), kind).unwrap(), 17);
+            let error = capture_command_pipe::<()>(None, kind)
+                .unwrap_err()
+                .context("outer pipe context");
+            let failure = error.downcast_ref::<ShellCommandFailure>().unwrap();
+            assert_eq!(failure.operation(), operation);
+            assert_eq!(failure.raw_os_error(), None);
+            assert!(error.downcast_ref::<std::io::Error>().is_none());
+            assert_eq!(error.chain().last().unwrap().to_string(), original);
+        }
+    }
+
+    #[test]
+    fn test_safe_diagnostic_untraced_wait_preserves_io_error() {
+        for source in [
+            std::io::Error::from_raw_os_error(libc::ECHILD),
+            std::io::Error::other("synthetic-wait-source-sentinel"),
+        ] {
+            let errno = source.raw_os_error();
+            let message = source.to_string();
+            let error = untraced_child_status(Err(source))
+                .unwrap_err()
+                .context("outer wait context");
+            let failure = error.downcast_ref::<ShellCommandFailure>().unwrap();
+            assert_eq!(failure.operation(), "untraced-wait");
+            assert_eq!(failure.raw_os_error(), errno);
+            let io = error.downcast_ref::<std::io::Error>().unwrap();
+            assert_eq!(io.raw_os_error(), errno);
+            assert_eq!(io.to_string(), message);
+            let chain: Vec<_> = error.chain().map(ToString::to_string).collect();
+            assert_eq!(chain[0], "outer wait context");
+            assert_eq!(chain[1], "Failed to wait for child process completion");
+            assert_eq!(chain.last().unwrap(), &message);
+        }
+    }
+
+    #[test]
+    fn test_safe_diagnostic_success_output_and_nonzero_exit_are_preserved() {
+        let fixture = tempfile::tempdir().unwrap();
+        for code in [0, 23] {
+            let output = execute_shell_command_with_capture(
+                &format!("printf stdout-fixture; printf stderr-fixture >&2; exit {code}"),
+                fixture.path(),
+                &HashMap::new(),
+                false,
+                CommandCapture::new(None, None),
+            )
+            .unwrap();
+            assert_eq!(output.output.status.code(), Some(code));
+            assert_eq!(output.output.stdout, b"stdout-fixture");
+            assert_eq!(output.output.stderr, b"stderr-fixture");
+            assert_eq!(
+                serde_json::to_value(output.process_telemetry).unwrap(),
+                serde_json::to_value(ProcessTelemetry::default()).unwrap()
+            );
+        }
+    }
 
     #[test]
     fn workspace_isolation_preserves_world_deps_root_before_tmpfs() {
