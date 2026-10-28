@@ -1,11 +1,52 @@
 **Kind:** packet
 **Stable ID:** `B01-B03-P1`
-**Status:** P1-A / TASK04 committed at ad98ea44b; P1-B / TASK05 accepted and committed at 3eac45580; full P1 incomplete
+**Status:** TASK04 committed ad98ea44b; TASK05 committed 3eac45580; TASK07 committed 29cf8e822; TASK10/13 readers accepted in isolation, not adopted; full P1 incomplete; current documentation-only reconciliation, implementation held
 **Canonical for:** initial same-host Substrate Workspace open/load/initialize boundary and exact-destination no-send preflight contract, proposed source fence, proof gates and admission assessment only
 **Authority scope:** original P1 contract plus the selected P1-A component below; no real setup operation, full P1 qualification, B1 acceptance or later-send permission
 **Projection consumers:** [`current`](../../index/current.md), [`by-packet`](../../index/by-packet.md), [`by-id`](../../index/by-id.md), [`by-kind`](../../index/by-kind.md)
 
 # B01-B03-P1 — authenticated exact-destination no-send preflight
+
+## Configuration proposal and Collider alignment — 2026-10-28
+
+The user requests authoritative control-plane/Collider alignment. This is documentation only
+while implementation is held. The [current E3 direction and hold](../e3-agent-config-projection-and-gateway-adoption.md#configuration-direction-and-planning-hold--2026-10-28),
+[TASK20 v2 roadmap](../../../../.codex/orchestration/e3f-retained-next-20261022/evidence/task20/v2/serial-completion-roadmap.md) and
+[configuration audit](../../../../.codex/orchestration/e3f-retained-next-20261022/evidence/task20/v2/configuration-source-audit.md) retain human
+configuration intent. C1–C5, schema/settings, whole-agent replacement, route and catalog deferral
+remain pending review. These links authorize no P1 contract or source-fence expansion.
+
+At the existing same-host native boundary, Collider invokes Substrate; selected paths and UI
+fields are not authority. Valid configured state loads with current authorization, without
+enrollment, pairing or new setup permission. Only genuine absence offers explicit approved
+initialization; invalid, disabled or incomplete state is diagnosed. Substrate owns identities,
+configuration, policy, Lanes and destinations; presentation cannot invent or write them.
+
+Exact no-send preflight requires the authentic existing HSA caller/session/backend/custody and
+exact Workspace/Lane/World-generation/association. It does not rebind sessions, reserve, accept
+or send. Initiating principal, execution actor and backend owner remain distinct. Existing PF
+gates are unchanged. A new model selection neither selects a World/Lane nor grants execution
+or read rights.
+
+If proposed selected-agent, inventory, route or profile revisions contribute to eligibility,
+the later approved design must identify their real owners and complete monotonic invalidator
+coverage in the read cut, including same-bytes A→B→A. No implementation coverage is claimed.
+Running sessions remain pinned to the original selection; read/load must not silently reselect
+or repair.
+
+The [handoff same-host opening](../../../../docs/contracts/draft/collider-b01-b05-handoff.md#1-scope-and-source-binding) and
+[§3.2 native binding and separate later ingress](../../../../docs/contracts/draft/collider-b01-b05-handoff.md#32-immutable-request-identity-and-the-admission-boundary),
+B03 [§4.6 actor/selection boundary](../../../../docs/contracts/draft/lane-world-binding.md#46-recommended-model-authorized-selection-not-session-rebinding),
+[§4.7 consistency/recovery](../../../../docs/contracts/draft/lane-world-binding.md#47-associationadmission-consistency-and-recovery),
+[§4.8 owner-interface candidate](../../../../docs/contracts/draft/lane-world-binding.md#48-joint-b01b03-owner-interface-candidate--2026-09-21) and
+[§4.9 durable request/history joins](../../../../docs/contracts/draft/lane-world-binding.md#49-durable-request-join-and-recovery-candidate)
+are review candidates, not exported APIs or approved extensions. P1's
+[current-read stable cut](#current-read-schema-and-stable-cut) and
+[PF proof gates](#dependencies-and-required-proof) remain controlling. B01 send, reconciliation,
+reservation and fencing; B04 context/Handbook; B05 dependency mutation; frontend adapter adoption;
+and installed runtime readiness remain separately scoped and proved. Completing all B01–B05 is
+not required to finish no-send P1. The handoff's Collider repository pin is historical; the
+current frontend is unverified.
 
 ## Admission disposition
 

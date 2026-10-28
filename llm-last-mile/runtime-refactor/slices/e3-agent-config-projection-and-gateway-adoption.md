@@ -1,7 +1,7 @@
 **Kind:** controlling numbered specification and preserved slice row
 **Stable ID:** `e3-agent-config-projection-and-gateway-adoption`
 **Canonical for:** controlling E3 authority correction, contract/file/symbol fence, dependency and gate disposition, and preserved historical row
-**Status:** E3-A through E3-D landed; E3-E terminally complete; E3-F/E3/F14 open at the 2026-10-26 bounded return; P1-A committed at ad98ea44b; TASK05 settings loading committed at 3eac45580; B2.2 historical slice accepted 2026-10-27; TASK07 committed at 29cf8e822; installer integration committed at 33ebdf0d6; TASK09 reinstall failed required musl build; TASK12 portability repair committed at d9b4d2170; TASK09 revised-source musl build passed but lifecycle capture failed; TASK14 absent-unit status repair committed at b3a112aff; TASK10 and TASK13 runtime readers accepted in isolation; approved TASK11 model selector implementing
+**Status:** E3-A–D landed; E3-E closed; E3-F/E3/F14 open; TASK04/05/07 committed; TASK10/13 readers accepted in isolation, not adopted; TASK11 held; TASK20 v2 paired-reviewed planning deliverable accepted for human review only; configuration proposals pending review and product implementation held
 **Historical E3-A proof-recovery status:** canonical specification; E3-A has a preserved incomplete and unlanded candidate under bounded Linux proof recovery; E3-B through E3-F are not admitted, dispatched, or implemented
 **Historical E3-A proof-recovery authority scope:** documentation-only E3-A proof-recovery authority; no product/test change, proof execution, completion, landing, or successor admission/dispatch
 **Source span:** [`../03-phase-slice-map.md`](../03-phase-slice-map.md) line 222
@@ -19,6 +19,81 @@
 > E3-A proof-recovery header fields describe that historical correction, not current packet status.
 > E3-E is terminally complete under its closure record below. Enclosing E3 remains incomplete:
 > E3-F was later dispatched and paused as corrected below; this closure grants no continuation authority.
+
+## Configuration direction and planning hold — 2026-10-28
+
+Current human authority is documentation reconciliation only. Implementation, integration,
+source-owner resumption, new product TASKs/TASK19, installation and live proof remain on hold
+pending review. This supersedes older scheduling and selector-continuation wording only for
+current next actions; prior authorization and proof history remain intact.
+
+The runtime-refactor canonical owners remain controlling for intent, slice boundaries, contracts
+and gates under the [reading and update rules](../foundations/reading-and-update-rules.md).
+Live code plus fresh evidence governs artifact truth. TASK20 is a serial completion proposal
+subordinate to these owners, not replacement authority or full A–E completion. Its v2
+[roadmap](../../../.codex/orchestration/e3f-retained-next-20261022/evidence/task20/v2/serial-completion-roadmap.md),
+[change and decision summary](../../../.codex/orchestration/e3f-retained-next-20261022/evidence/task20/v2/change-and-decisions.md),
+[configuration audit](../../../.codex/orchestration/e3f-retained-next-20261022/evidence/task20/v2/configuration-source-audit.md),
+[fresh-META preparation](../../../.codex/orchestration/e3f-retained-next-20261022/evidence/task20/v2/fresh-meta-start.md),
+[exact reviewed manifest](../../../.codex/orchestration/e3f-retained-next-20261022/evidence/task20/v2/reviewed-plan-manifest.json) and
+[META planning acceptance](../../../.codex/orchestration/e3f-retained-next-20261022/evidence/task20/v2/meta-final-planning-acceptance.md)
+are retained, uncommitted local coordination artifacts under ignored `.codex/orchestration/`,
+not published specifications. The main control documents preserve this direction and hold even
+without that local evidence. Source identity: reviewed manifest SHA256
+`ba29cfb345d5f08d30d0101d91b8620cc474c4be1a5b8829791b5ae399609a9d`;
+roadmap SHA256 `0ef2cab4dcb3094e49e334ca3f304cb00935c7692d8255fba03beb83d941cf1e`.
+The frozen preparation/review-pending labels are historical candidate state; the separate META
+acceptance records the completed planning endpoint, with human review still pending.
+
+The user clarified agent configuration ownership: existing global agents are available in
+workspaces, with workspace overrides, intended harness/provider/model and the corresponding
+connection/auth profile, plus configurable defaults. Model discovery should use models.dev
+rather than a fixed catalog. This is direction; concrete encodings, default semantics,
+compatibility and present-checkpoint scope remain proposals.
+
+Proposed C1–C5 reuse the global and workspace stores. A named agent supplies the complete
+harness/support-contract, provider, connection-profile and exact model. A proposed global
+default names an agent, with a workspace override; whole-agent replacement/masking and explicit
+selection precedence/refusal rules await review. Independently inherited fields are not settled.
+Provisional schema V4 and settings `agents.defaults.agent_id` are recommendations, not supported
+product keys. Keep preference, policy and actual authentication distinct: no silent model,
+provider, endpoint or subscription-versus-API fallback, and no credential bytes in configuration.
+Commit the original selection at Start, including default-origin selection; pin Resume/recovery
+and revalidate current permission/auth without rerouting. Ordinary, legacy and protected
+compatibility remains an explicit decision, with no decoder bypass.
+
+The proposed revised TASK11 assignment retains authenticated birth, private native home,
+gateway-held credentials and runtime-reuse refusal; reworks propagation and actual ordinary
+loader adoption; and supersedes the hardcoded `--model` switch as independent selection
+authority. Its old implementation remains held and unintegrated; no work is resumed. All
+original product findings and HOST/WORLD proof obligations remain. Ordinary configuration
+support does not widen the protected V3/E3 profile or caps, or close I1/I2/F1–F14. The exact
+single public `gpt-6-astra` proof remains a later configuration-derived obligation.
+
+models.dev metadata is proposed descriptive discovery, not compatibility, entitlement, policy,
+authentication or execution authority. Cache, refresh, offline and custom/private-model behavior
+is designed in the proposal now; network importer/cache writer, UI and general integration
+deferral is explicitly proposed pending human review. A live-discovery-now alternative requires
+an exact bounded scope and proof; no deferral approval is inferred. Optional metadata refresh
+cannot select/reselect a model or switch billing.
+
+Five decision groups remain pending:
+
+1. The checkpoint addition and catalog deferral versus precise expansion.
+2. Encoding and ordinary/legacy/protected coexistence.
+3. Default, explicit, workspace, conflict, alias and recovery semantics.
+4. The existing subscription profile versus an authorized alternative.
+5. Protected interoperability, fences and proof.
+
+The proposal and hold remain until actual user decisions and continuation authority. The
+[P1 configuration/Collider alignment](tasks/b01-b03-authenticated-preflight.md#configuration-proposal-and-collider-alignment--2026-10-28),
+[Collider handoff](../../../docs/contracts/draft/collider-b01-b05-handoff.md) and
+[Lane/World draft](../../../docs/contracts/draft/lane-world-binding.md) retain the owner boundaries. Workspace production
+adoption/load/init/PF, protected E3-F, historical closure recovery, accepted-source integration
+and commit, reinstall, and distinct installed P1/E3/public-model proofs remain roadmap proposals
+with owner gates and proof ceilings. Installer restoration remains a separate lane; none of
+these lanes is resumed. Current Collider implementation correspondence is unverified; draft
+interfaces are not claimed callable APIs.
 
 ## Bounded return and next task sequence — 2026-10-26
 
@@ -81,6 +156,57 @@ The one shared coordination root remains
 Preserve the existing BACKLOG and two private diagnostic edits. Owners record actual source,
 review, installed proof and publication separately. The first refresh and TASK04 are committed at `ad98ea44b`; TASK05 is committed at `3eac45580`. Current scheduling and B2.2 closure documentation remain working-tree updates.
 The actual TASK identity/delivery is recorded in the workflow, not inferred from selection.
+
+### Diagnostic install failure and HOST Resume design recovery — 2026-10-27
+
+TASK16's two-file content-free execution diagnostic is paired-reviewed, accepted and locally
+committed at `eee66706e74673b25490168c8d81733c8199a380`, parent `841399513`.
+Its targeted synthetic proof does not establish the cause of prior installation failures.
+TASK09's one normal reinstall at this exact source failed exit 3 during required world-dependency
+synchronization with generic HTTP 500. Built, installed and live service artifacts correspond;
+normal builds/publication succeeded, but official runtime provisioning and overall readiness did
+not. Configuration was restored and the exclusive host window released. The narrowly filtered
+fixed-event query returned zero matches; operation, errno and child-start remain unknown. Fresh
+source inspection found that its plain-only grammar rejects the selected logging dependency's
+default ANSI format; the service's effective ANSI setting and actual cause remain unproved. META
+selected one corrected, strictly content-free query over the same unit/PID/time interval, accepting
+only exact plain or colored event forms. That query exited zero but local JSON field admission failed;
+no event was extracted and the original payload was discarded. Static comparison with systemd 257.9
+then established two validator incompatibilities: automatic sequence metadata fields and byte-array
+encoding for nonprintable messages. META selected bounded admission corrections and one identical
+query after local validation; the event grammar and retrieval scope remain unchanged. This does not
+establish the discarded row's exact difference or the installer cause. No reinstall, new execution
+request, source repair or model call is selected. The corrected JSON query subsequently admitted one
+fixed event: `spawn`, errno 7 (`E2BIG`), from the installed PID in the retained installer interval.
+This is temporal backend association, not exact client-request identity or a root-cause diagnosis.
+META selected read-only source recovery of the launch-input construction; no repair or reinstall is
+selected. Original failed proof and all three
+TASK09 P2 findings remain open. Evidence: coordination root `evidence/task09/eee667-install/`,
+including the full report, exact query and 131-entry freeze manifest.
+
+TASK11 remains held and unintegrated after the supported HOST Resume path launched successfully
+but failed settlement because no world binding existed. At the user's request, META recovered the
+intended pattern from the [placement and completion contract](../a1-2-earlier-histories/contracts-and-gates.md),
+[obligation architecture](../b3-1-c1/architecture.md) and
+[episode contract](../contracts/host-execution-episode-v1.md).
+Host placement with no world binding is valid. HSA owns durable posture; the obligation ledger owns
+attention semantics. World-backed execution retains exact world completion evidence. No controlling
+no-world Resume completion/evidence branch was recovered. Native clean completion alone cannot
+justify parking or erase applicable obligations. The proposed next contract must specify exact
+completion and ledger-owned attention applicability, including carried and during-turn obligations,
+without fabricating world receipts. The user subsequently approved a separate bounded HSA task to
+specify this contract and implement within it, preserving world-backed behavior and no-replay rules.
+Any new policy or producer requirement returns for decision before expansion. TASK18 is selected for
+contract work first; implementation awaits the coordinated reader baseline. The selector's HOST/WORLD
+claim and existing blocker remain intact. Original design recovery and focused attention advice are
+retained in coordination evidence.
+
+TASK10 and TASK13 remain accepted reader components. The user approved TASK17 to integrate their
+combined six-file patch into the integration working tree, with no commit, production adoption or
+installer-source change. TASK18 contract work may run concurrently; TASK17 alone writes the shared
+HSA files. Integration acceptance, production adoption and full Workspace preflight qualification
+remain distinct pending endpoints.
+No installer failure makes independent runtime work an implicit dependency or grants its expansion.
 
 ### Installer integration and approved model selection — 2026-10-27
 
