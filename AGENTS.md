@@ -1,5 +1,12 @@
 # Repository Guidelines
 
+## Runtime-refactor checkpoint workflow
+For this workflow only, follow the [ongoing work completion checkpoint](llm-last-mile/runtime-refactor/slices/tasks/ongoing-work-completion-checkpoint.md).
+Read it at checkpoint start/recovery and before consequential dispatch or acceptance when relevant state changes.
+Explicitly bind assignments/recovery to the worktree named there; another checkout does not inherit this pointer.
+Use affected delta reads between transitions; a full reread every turn is unnecessary.
+The charter preserves detailed owner contracts and skill execution rules; it grants no product continuation.
+
 ## Orientation
 Substrate is the secure execution layer that sits between AI agents and a developer workstation. The top-level binaries in `src/` (`substrate`, `substrate-shim`) orchestrate command capture, policy evaluation, and execution inside isolated "worlds" so that every action is observable, replayable, and compliant with local policy.
 
