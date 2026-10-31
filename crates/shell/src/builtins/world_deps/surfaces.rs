@@ -1504,6 +1504,183 @@ mod tests {
     #[cfg(unix)]
     use transport_api_types::{InstallBootstrapContextCarrierV1, InstallBootstrapContextV1};
 
+    #[test]
+    fn test_world_script_install_command_carries_one_payload() {
+        // Rendering only: do not execute this real installer or inspect a live world.
+        let target = config_projection::CODEX_RELEASE_TARGET_V1;
+        let spec = resolve_codex_runtime_install_spec_for_target_v1(target).unwrap();
+        let script = render_codex_runtime_install_script_v1(
+            super::super::inventory::codex_runtime_install_script_template_v1(),
+            &spec,
+        );
+        // The built-in codex-runtime package has no wrappers.
+        let command = build_world_script_install_command_v1(&script, &[]);
+        // world/src/exec.rs transports the command as SUBSTRATE_INNER_CMD.
+        let environment_string = format!("SUBSTRATE_INNER_CMD={command}");
+        eprintln!(
+            "installer target={target} body_bytes={} command_bytes={} environment_string_bytes={} environment_string_with_nul_bytes={}",
+            script.len(), command.len(), environment_string.len(), environment_string.len() + 1,
+        );
+        assert_eq!(command.matches(&script).count(), 1, "{target}");
+
+        // A length discriminator also catches duplication when the payload changes.
+        let short = build_world_script_install_command_v1("# size probe\n", &[]);
+        let padding = "# payload size discrimination: ' \" $() ` ; & |\n".repeat(2048);
+        let long = build_world_script_install_command_v1(&format!("# size probe\n{padding}"), &[]);
+        assert_eq!(long.len() - short.len(), padding.len());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_world_script_install_command_executes_both_interpreters() {
+        for bash_available in [true, false] {
+            for exit_code in [0, 37] {
+                for ending in ["", "\n", "\n\n"] {
+                    let fixture = TempDir::new().unwrap();
+                    let tools = fixture.path().join("tools");
+                    let bin = fixture.path().join("guest bin ' $ ;");
+                    fs::create_dir(&tools).unwrap();
+                    fs::create_dir(fixture.path().join("home")).unwrap();
+                    for tool in ["cat", "mkdir"] {
+                        std::os::unix::fs::symlink(format!("/bin/{tool}"), tools.join(tool))
+                            .unwrap();
+                    }
+                    // Preserve the actual interpreter options while disabling host
+                    // profile loading. The payload checks Bash's real login state.
+                    let (interpreter, launcher) = if bash_available {
+                        ("bash", "exec /bin/bash --noprofile --norc \"$@\"\n")
+                    } else {
+                        ("sh", "exec /bin/sh \"$@\"\n")
+                    };
+                    let launcher_path = tools.join(interpreter);
+                    fs::write(
+                        &launcher_path,
+                        format!(
+                            "#!/bin/sh\n[ \"$#\" -eq 2 ] || exit 91\nprintf '%s\\n' \"$1\" > \"$FIXTURE_ROOT/options\"\nprintf '%s' \"$2\" > \"$FIXTURE_ROOT/payload\"\n{launcher}"
+                        ),
+                    )
+                    .unwrap();
+                    fs::set_permissions(&launcher_path, fs::Permissions::from_mode(0o755)).unwrap();
+                    let chmod = tools.join("chmod");
+                    fs::write(
+                        &chmod,
+                        r#"#!/bin/sh
+[ -e "$FIXTURE_ROOT/installer-complete" ] || exit 92
+if [ "$2" = "$SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR/first" ]; then
+  [ ! -e "$SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR/second" ] || exit 93
+fi
+printf '%s\n' "$2" >> "$FIXTURE_ROOT/wrapper-order"
+exec /bin/chmod "$@"
+"#,
+                    )
+                    .unwrap();
+                    fs::set_permissions(&chmod, fs::Permissions::from_mode(0o755)).unwrap();
+                    let script = format!(
+                        r#"if [ "$FIXTURE_EXPECT_BASH" = 1 ]; then
+  [ -n "${{BASH_VERSION:-}}" ] || exit 80
+  shopt -q login_shell || exit 81
+  printf bash > "$FIXTURE_ROOT/interpreter"
+else
+  if [ -n "${{BASH_VERSION:-}}" ]; then
+    if shopt -q login_shell; then exit 86; fi
+  fi
+  printf sh > "$FIXTURE_ROOT/interpreter"
+fi
+[ ! -e "$SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR/first" ] || exit 82
+[ ! -e "$SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR/second" ] || exit 83
+SCRIPT_LEVEL=child
+printf '%s\n' "$SCRIPT_LEVEL" "$(printf '%s' substitution)" > "$FIXTURE_ROOT/expanded"
+cat <<'LITERAL_PAYLOAD' > "$FIXTURE_ROOT/literal"
+literal ' " $SCRIPT_LEVEL $(exit 84) `exit 85` ; & | < > * ? [ ] \
+second line
+LITERAL_PAYLOAD
+printf '%s\n' "$SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR" > "$FIXTURE_ROOT/bin-path"
+printf done > "$FIXTURE_ROOT/installer-complete"
+exit {exit_code}{ending}"#
+                    );
+                    let wrappers = [
+                        WrapperFileV1 {
+                            name: "first".into(),
+                            body: "#!/bin/sh\nprintf '%s' 'literal $() ` ; \\\"'".into(),
+                        },
+                        WrapperFileV1 {
+                            name: "second".into(),
+                            body: "#!/bin/sh\nprintf '%s' \"$HOME\"\n\n".into(),
+                        },
+                    ];
+                    let command = build_world_script_install_command_v1(&script, &wrappers);
+                    let output = Command::new("/bin/sh")
+                        .args(["-c", &command])
+                        .env_clear()
+                        .env("PATH", &tools)
+                        .env("HOME", fixture.path().join("home"))
+                        .env("FIXTURE_ROOT", fixture.path())
+                        .env(
+                            "FIXTURE_EXPECT_BASH",
+                            if bash_available { "1" } else { "0" },
+                        )
+                        .env("SCRIPT_LEVEL", "outer")
+                        .env("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR", &bin)
+                        .current_dir(fixture.path())
+                        .output()
+                        .unwrap();
+                    assert_eq!(
+                        output.status.code(),
+                        Some(exit_code),
+                        "bash={bash_available} ending={ending:?}: {}",
+                        String::from_utf8_lossy(&output.stderr)
+                    );
+                    assert_eq!(
+                        fs::read_to_string(fixture.path().join("options")).unwrap(),
+                        if bash_available { "-lc\n" } else { "-c\n" }
+                    );
+                    assert_eq!(
+                        fs::read_to_string(fixture.path().join("payload")).unwrap(),
+                        script.trim_end_matches('\n')
+                    );
+                    assert_eq!(
+                        fs::read_to_string(fixture.path().join("interpreter")).unwrap(),
+                        interpreter
+                    );
+                    assert_eq!(
+                        fs::read(fixture.path().join("expanded")).unwrap(),
+                        b"child\nsubstitution\n"
+                    );
+                    assert_eq!(
+                        fs::read_to_string(fixture.path().join("literal")).unwrap(),
+                        "literal ' \" $SCRIPT_LEVEL $(exit 84) `exit 85` ; & | < > * ? [ ] \\\nsecond line\n"
+                    );
+                    assert_eq!(
+                        fs::read_to_string(fixture.path().join("bin-path")).unwrap(),
+                        format!("{}\n", bin.display())
+                    );
+                    if exit_code == 0 {
+                        for wrapper in &wrappers {
+                            let path = bin.join(&wrapper.name);
+                            let mut expected = wrapper.body.clone();
+                            if !expected.ends_with('\n') {
+                                expected.push('\n');
+                            }
+                            assert_eq!(fs::read(&path).unwrap(), expected.as_bytes());
+                            assert_eq!(
+                                fs::metadata(path).unwrap().permissions().mode() & 0o777,
+                                0o755
+                            );
+                        }
+                        assert_eq!(
+                            fs::read_to_string(fixture.path().join("wrapper-order")).unwrap(),
+                            format!("{}/first\n{}/second\n", bin.display(), bin.display())
+                        );
+                    } else {
+                        assert!(!bin.join("first").exists());
+                        assert!(!bin.join("second").exists());
+                        assert!(!fixture.path().join("wrapper-order").exists());
+                    }
+                }
+            }
+        }
+    }
+
     #[cfg(unix)]
     #[test]
     #[serial]
@@ -3288,22 +3465,17 @@ fn build_world_script_install_command_v1(
     cmd.push_str("export SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR=\"$world_deps_bin\"\n");
     cmd.push_str("mkdir -p \"$world_deps_bin\"\n");
     cmd.push_str("if command -v bash >/dev/null 2>&1; then\n");
-    cmd.push_str("  bash -lc \"$(cat <<'__SUBSTRATE_WDP4_INSTALL__'\n");
-    cmd.push_str(installer_script);
-    if !installer_script.ends_with('\n') {
-        cmd.push('\n');
-    }
-    cmd.push_str("__SUBSTRATE_WDP4_INSTALL__\n");
-    cmd.push_str(")\"\n");
+    cmd.push_str("  set -- bash -lc\n");
     cmd.push_str("else\n");
-    cmd.push_str("  sh -c \"$(cat <<'__SUBSTRATE_WDP4_INSTALL__'\n");
+    cmd.push_str("  set -- sh -c\n");
+    cmd.push_str("fi\n");
+    cmd.push_str("\"$@\" \"$(cat <<'__SUBSTRATE_WDP4_INSTALL__'\n");
     cmd.push_str(installer_script);
     if !installer_script.ends_with('\n') {
         cmd.push('\n');
     }
     cmd.push_str("__SUBSTRATE_WDP4_INSTALL__\n");
     cmd.push_str(")\"\n");
-    cmd.push_str("fi\n");
 
     for (idx, wrapper) in wrappers.iter().enumerate() {
         let delimiter = format!("__SUBSTRATE_WDP4_WRAPPER_{idx}__");
