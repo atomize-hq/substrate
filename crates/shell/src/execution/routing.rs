@@ -433,6 +433,53 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
         return Ok(2);
     }
 
+    if matches!(
+        &cli.sub,
+        Some(SubCommands::Agents(AgentsCmd {
+            action: AgentsAction::Catalog(_),
+        }))
+    ) {
+        if cli.command.is_some()
+            || cli.script.is_some()
+            || cli.ci_mode
+            || cli.no_exit_on_error
+            || cli.use_pty
+            || cli.shell.is_some()
+            || cli.shim_status
+            || cli.shim_status_json
+            || cli.shim_skip
+            || cli.shim_deploy
+            || cli.shim_remove
+            || cli.async_repl
+            || cli.legacy_repl
+            || cli.repl_host_escape
+            || cli.trace.is_some()
+            || cli.replay.is_some()
+            || cli.replay_verbose
+            || cli.replay_platform_bootstrap_input_v1.is_some()
+            || cli.flip_world
+            || cli.caged
+            || cli.uncaged
+            || cli.anchor_mode.is_some()
+            || cli.anchor_path.is_some()
+            || cli.world
+            || cli.no_world
+        {
+            eprintln!("substrate: catalog action must be exclusive");
+            return Ok(2);
+        }
+        #[cfg(target_os = "linux")]
+        if let Some(code) = super::model_catalog::try_handle_catalog_command(&cli, &install_context)
+        {
+            return Ok(code);
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            eprintln!("substrate: model catalog is unsupported on this platform");
+            return Ok(2);
+        }
+    }
+
     #[cfg(target_os = "linux")]
     if let Some(code) =
         super::workspace_cmd::try_handle_workspace_owner_command(&cli, &install_context)

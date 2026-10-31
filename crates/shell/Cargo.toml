@@ -18,6 +18,7 @@ name = "substrate_shell"
 anyhow = "1.0"
 clap = { version = "4.5", features = ["derive"] }
 serde_json = "1.0"
+ureq = "=2.12.1"
 serde_yaml = "0.9"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.10", features = ["v7"] }
@@ -101,3 +102,6 @@ rustc_version = "0.4"
 
 [features]
 default = []
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(substrate_catalog_test_support)"] }
