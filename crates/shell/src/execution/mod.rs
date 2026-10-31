@@ -18,6 +18,11 @@ pub mod lock;
 pub mod managed_lifecycle;
 mod manager;
 pub mod manager_init;
+#[cfg(all(target_os = "linux", not(substrate_catalog_test_support)))]
+mod model_catalog;
+#[cfg(all(target_os = "linux", substrate_catalog_test_support))]
+#[doc(hidden)]
+pub mod model_catalog;
 pub(crate) mod orchestrator_world_dispatch;
 mod platform;
 #[cfg(any(target_os = "macos", target_os = "windows"))]

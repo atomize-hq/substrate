@@ -301,6 +301,9 @@ fn handle_agent_toolbox_command(cmd: &AgentToolboxCmd, cli: &Cli) -> i32 {
 pub(crate) fn handle_agents_command(cmd: &AgentsCmd, _cli: &Cli) -> i32 {
     let result = match &cmd.action {
         AgentsAction::Validate => run_validate(),
+        AgentsAction::Catalog(_) => Err(anyhow::anyhow!(
+            "catalog requires the accepted-home early dispatcher"
+        )),
     };
 
     match result {

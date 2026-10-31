@@ -111,6 +111,87 @@ agents:
     - cli:codex-world
 ```
 
+## Descriptive model catalog (Linux)
+
+Catalog refresh is explicit:
+
+```bash
+substrate agents catalog refresh --json
+substrate agents catalog status --json
+```
+
+These commands use the accepted installed product home (or the explicit
+`--install-prefix`). The private home must already exist. Status opens it without
+creating directories, loading agent configuration, initializing tracing, or making
+network requests. A missing cache reports `available: false`; it does not prevent
+agent selection.
+
+Refresh makes one unauthenticated request to
+`https://models.dev/catalog.json?type=chat`. It uses normal certificate validation,
+refuses redirects, disables ambient proxy credentials and connection reuse, and
+has a 15-second total network deadline. There are no background refreshes, provider
+probes, or configurable production origins. Responses are bounded to 32 MiB after
+decompression. Invalid UTF-8, duplicate keys (including ignored fields), nesting
+beyond 32 levels, text or IDs beyond 4096 bytes, more than 4096 providers or 131072
+offerings/canonical models, conflicting map identities, and dangling canonical
+attributions refuse publication. Missing upstream model types mean `chat`;
+explicit non-chat entries refuse the selected filter.
+
+The normalized snapshot retains provider/offering/canonical identities, labels,
+descriptions and advisory status. Offering IDs remain distinct from optional
+canonical model attribution. Upstream endpoint URLs, packages and headers are
+never executed or used for routing. Metadata does not grant compatibility,
+authentication, entitlement, policy, billing, or model availability authority.
+Configured supported selections and pinned sessions remain independent of public
+catalog membership. Refresh never writes defaults, profiles, aliases, agent
+configuration or session records, and never selects a fallback.
+
+Storage is descriptor-relative under `<accepted-product-home>/model-catalog/`:
+one `snapshot.json`, an optional bounded `refresh-failure.json`, and at most one
+`publication.stage`. A directory lock serializes refreshes. Publication validates
+the home, directory, file ownership/modes/ACLs, single-link regular files and held
+preimages, then writes and fsyncs a same-directory stage before atomic rename and
+directory fsync. There is one committed snapshot bounded to 32 MiB, a failure
+record bounded to 4 KiB, and one stage bounded to 32 MiB, within the 64 MiB
+committed / 32 MiB staging / 96 MiB peak ceilings. Interrupted stages are removed
+only by a subsequent explicit refresh after validation. Unknown or unsafe storage
+entries refuse refresh rather than being repaired or deleted.
+
+Status reports fetched UTC, age, source and normalized SHA-256 digests, actual
+server validators, recorded failure/offline state and counts. Data becomes stale
+after 24 hours or a failed refresh; future timestamps report clock uncertainty
+and no definite age. A failed refresh retains the last validated snapshot, which
+remains available offline with visible freshness. An error cannot change a
+configured or running selection. `offline` records the latest failed refresh; it
+does not actively test connectivity.
+
+Source transport tests use a build-time-only loopback injection surface:
+
+```bash
+RUSTFLAGS='--cfg substrate_catalog_test_support --check-cfg=cfg(substrate_catalog_test_support)' \
+  cargo test --locked -p shell --test model_catalog_refresh_linux -- --nocapture
+```
+
+Normal builds have no injection surface. These HTTP fixtures and baseline record
+preservation tests do not qualify genuine shared V3 Start/Resume, an installed
+binary, or the live models.dev origin.
+
+The separately ignored installed-proof launcher requires
+`SUBSTRATE_CATALOG_PROOF_PROFILE=/absolute/protected/profile.json` and the exact
+test `test_installed_catalog_refresh_and_offline --ignored --exact --nocapture`.
+Its closed version-1 JSON profile names `installed_binary`, `installed_sha256`,
+`source_manifest`, `source_manifest_sha256`, distinct isolated `accepted_home` and
+`empty_home`, and `preserved_artifacts` entries with absolute `path`, `sha256` and
+`kind` (`config`, `selection`, `retained_session` are required). The protected
+source manifest has `version`, physical `source_root`, exact Git `head`, and
+`files` entries with relative `path` and `sha256` covering the tracked tree. Both
+homes must already have private accepted custody and no catalog directory. The
+launcher uses the exact executable for live refresh and process-local
+`unshare --net` offline checks; missing profile, executable, namespace capability,
+or live response fails visibly. It never changes machine networking or sends a
+provider/model request. Authoring this launcher does not establish installed
+qualification or provenance of supplied genuine session artifacts.
+
 ## Manager Manifest & Init
 
 | Variable | Purpose | Default | Example |

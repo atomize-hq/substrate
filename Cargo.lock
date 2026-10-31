@@ -5531,6 +5531,7 @@ dependencies = [
  "unified-agent-api",
  "unified-agent-api-claude-code",
  "unified-agent-api-codex",
+ "ureq",
  "url",
  "uuid",
  "which 6.0.3",

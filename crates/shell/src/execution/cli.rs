@@ -630,6 +630,28 @@ pub struct AgentsCmd {
 pub enum AgentsAction {
     /// Validate discovered agent inventory files
     Validate,
+    /// Explicitly refresh or inspect descriptive models.dev metadata
+    Catalog(AgentCatalogCmd),
+}
+
+#[derive(Args, Debug)]
+pub struct AgentCatalogCmd {
+    #[command(subcommand)]
+    pub action: AgentCatalogAction,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum AgentCatalogAction {
+    /// Fetch and atomically publish validated public metadata (no provider calls)
+    Refresh(AgentCatalogOutputArgs),
+    /// Read cached metadata freshness without refreshing or creating files
+    Status(AgentCatalogOutputArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct AgentCatalogOutputArgs {
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Subcommand, Debug)]
