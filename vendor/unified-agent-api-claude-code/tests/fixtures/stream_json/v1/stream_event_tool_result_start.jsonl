@@ -1,0 +1,1 @@
+{"type":"stream_event","session_id":"sess-1","event":{"type":"content_block_start","content_block":{"type":"tool_result","tool_use_id":"t1"}}}

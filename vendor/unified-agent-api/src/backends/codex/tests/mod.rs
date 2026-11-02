@@ -1,0 +1,15 @@
+mod app_server;
+mod backend_contract;
+mod capabilities;
+mod completion_classification_race;
+mod exec_backpressure;
+mod external_sandbox;
+mod mapping;
+mod model_mapping;
+mod model_runtime_rejection;
+mod policy_add_dirs;
+mod policy_model_override;
+mod run_start_cwd_capture;
+mod session_handle;
+mod support;
+mod working_dir_resolution;

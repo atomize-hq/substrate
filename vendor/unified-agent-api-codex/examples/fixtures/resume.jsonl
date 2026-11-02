@@ -1,0 +1,7 @@
+{"type":"thread.resumed","thread_id":"demo-thread"}
+{"type":"turn.started","turn_id":"turn-9","thread_id":"demo-thread"}
+{"type":"item.created","thread_id":"demo-thread","turn_id":"turn-9","item":{"type":"reasoning","id":"r1","content":"Rehydrating context for the apply step."}}
+{"type":"item.created","thread_id":"demo-thread","turn_id":"turn-9","item":{"type":"command_execution","id":"cmd-9","status":"completed","content":"git status --short"}}
+{"type":"item.created","thread_id":"demo-thread","turn_id":"turn-9","item":{"type":"file_change","id":"chg-9","status":"completed","content":"Staged src/lib.rs changes"}}
+{"type":"item.created","thread_id":"demo-thread","turn_id":"turn-9","item":{"type":"agent_message","id":"msg-9","status":"completed","content":"Ready to apply the staged diff."}}
+{"type":"turn.completed","turn_id":"turn-9","thread_id":"demo-thread"}

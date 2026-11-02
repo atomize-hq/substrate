@@ -1,0 +1,4 @@
+{"type":"thread.resumed","thread_id":"t061","resume_field":true}
+{"type":"turn.started","turn_id":"turn-r1"}
+{"type":"item.created","item":{"type":"reasoning","id":"r1","status":"completed","content":"rehydrated 0.61.0"}}
+{"type":"turn.completed"}

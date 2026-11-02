@@ -1,0 +1,4 @@
+
+{"type":"system","subtype":"init","session_id":"sess-1"}
+    
+{"type":"user","session_id":"sess-1","message":{"content":[{"type":"text","text":"hi"}]}}

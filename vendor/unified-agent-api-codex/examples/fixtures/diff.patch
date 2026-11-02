@@ -1,0 +1,8 @@
+diff --git a/src/lib.rs b/src/lib.rs
+index 1111111..2222222 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@
+-// TODO: wire streaming fixtures
++// Streaming/resume fixture keeps sample payloads aligned with the CLI
+ pub fn demo() {}

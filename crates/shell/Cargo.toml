@@ -86,6 +86,7 @@ world-windows-wsl = { version = "0.1.0", path = "../world-windows-wsl" }
 
 [dev-dependencies]
 assert_cmd = "2.0"
+futures-util = "0.3"
 config-projection = { version = "0.2.8", path = "../config-projection", features = ["test-support"] }
 tempfile = "3.0"
 predicates = "3.0"
@@ -96,6 +97,14 @@ parking_lot = "0.12"
 hyper014 = { package = "hyper", version = "0.14" }
 world = { version = "0.1.1", path = "../world", features = ["test-support"] }
 world-service = { path = "../world-service" }
+
+[[test]]
+name = "sdk_codex_terminal_custody"
+path = "../../vendor/unified-agent-api-codex/tests/terminal_custody.rs"
+
+[[test]]
+name = "sdk_claude_terminal_custody"
+path = "../../vendor/unified-agent-api-claude-code/tests/terminal_custody.rs"
 
 [build-dependencies]
 rustc_version = "0.4"

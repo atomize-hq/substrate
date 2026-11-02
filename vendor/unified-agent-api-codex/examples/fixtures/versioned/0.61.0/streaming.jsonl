@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"t061","future":"kept"}
+{"type":"turn.started","turn_id":"turn-1"}
+{"type":"item.created","item":{"type":"agent_message","id":"msg-1","status":"in_progress","content":"hello from 0.61.0"}}
+{"type":"item.updated","item":{"type":"agent_message","id":"msg-1","status":"completed","content":"done 0.61.0"},"extra_event":"present"}
+{"type":"turn.completed"}

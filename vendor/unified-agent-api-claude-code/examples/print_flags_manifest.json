@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "flags": [
+    { "key": "--add-dir", "examples": ["print_tools_safe_bash"] },
+    { "key": "--agent", "examples": ["print_agents"] },
+    { "key": "--agents", "examples": ["print_agents"] },
+    {
+      "key": "--allow-dangerously-skip-permissions",
+      "examples": ["print_allow_dangerously_skip_permissions"]
+    },
+    { "key": "--allowedTools", "examples": ["print_tools_safe_bash"] },
+    { "key": "--append-system-prompt", "examples": ["print_system_prompts"] },
+    { "key": "--betas", "examples": ["print_betas"] },
+    { "key": "--chrome", "examples": ["print_chrome_flags"] },
+    { "key": "--continue", "examples": ["multi_turn_continue"] },
+    { "key": "--dangerously-skip-permissions", "examples": ["print_text"] },
+    { "key": "--debug", "examples": ["print_debug_file"] },
+    { "key": "--debug-file", "examples": ["print_debug_file"] },
+    {
+      "key": "--disable-slash-commands",
+      "examples": ["print_disable_slash_commands"]
+    },
+    { "key": "--disallowedTools", "examples": ["print_tools_disallowed"] },
+    { "key": "--fallback-model", "examples": ["print_model_fallback_budget"] },
+    { "key": "--file", "examples": ["print_file_resources"] },
+    { "key": "--fork-session", "examples": ["multi_turn_fork"] },
+    { "key": "--from-pr", "examples": ["print_from_pr"] },
+    { "key": "--help", "examples": ["help_version"] },
+    { "key": "--ide", "examples": ["print_ide"] },
+    {
+      "key": "--include-partial-messages",
+      "examples": ["print_include_partial_messages"]
+    },
+    { "key": "--input-format", "examples": ["print_stdin_text"] },
+    { "key": "--json-schema", "examples": ["print_json_schema"] },
+    { "key": "--max-budget-usd", "examples": ["print_model_fallback_budget"] },
+    { "key": "--mcp-config", "examples": ["print_mcp_config"] },
+    { "key": "--mcp-debug", "examples": ["print_mcp_config"] },
+    { "key": "--model", "examples": ["print_model_fallback_budget"] },
+    { "key": "--no-chrome", "examples": ["print_chrome_flags"] },
+    {
+      "key": "--no-session-persistence",
+      "examples": ["multi_turn_no_session_persistence"]
+    },
+    { "key": "--output-format", "examples": ["print_text"] },
+    { "key": "--permission-mode", "examples": ["print_tools_safe_bash"] },
+    { "key": "--plugin-dir", "examples": ["print_plugin_dirs"] },
+    { "key": "--print", "examples": ["print_text"] },
+    {
+      "key": "--replay-user-messages",
+      "examples": ["print_stream_json_replay_user_messages"]
+    },
+    { "key": "--resume", "examples": ["multi_turn_resume"] },
+    { "key": "--session-id", "examples": ["multi_turn_resume"] },
+    { "key": "--setting-sources", "examples": ["print_settings_sources"] },
+    { "key": "--settings", "examples": ["print_settings_sources"] },
+    { "key": "--strict-mcp-config", "examples": ["print_mcp_config"] },
+    { "key": "--system-prompt", "examples": ["print_system_prompts"] },
+    { "key": "--tools", "examples": ["print_tools_safe_bash"] },
+    { "key": "--verbose", "examples": ["print_verbose"] },
+    { "key": "--version", "examples": ["help_version"] }
+  ]
+}

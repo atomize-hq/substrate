@@ -1,0 +1,1 @@
+{"type":"stream_event","session_id":"sess-1","event":{"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{\\\"cmd\\\":\\\"ls\\\"}"}}}

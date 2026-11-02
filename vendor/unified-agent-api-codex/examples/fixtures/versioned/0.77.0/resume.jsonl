@@ -1,0 +1,4 @@
+{"type":"thread.resumed","thread_id":"t077","resume_meta":"v"}
+{"type":"turn.started","thread_id":"t077","turn_id":"turn-r1"}
+{"type":"item.started","thread_id":"t077","turn_id":"turn-r1","item_id":"r1","status":"completed","item_type":"reasoning","content":{"text":"restored 0.77.0"}}
+{"type":"turn.completed","thread_id":"t077","turn_id":"turn-r1"}

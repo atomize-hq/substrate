@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "commands": [
+    { "path": ["doctor"], "examples": ["doctor"] },
+    { "path": ["setup-token"], "examples": ["setup_token_flow"] },
+    { "path": ["update"], "examples": ["update"] },
+
+    { "path": ["mcp"], "examples": ["mcp_list"] },
+    { "path": ["mcp", "list"], "examples": ["mcp_list"] },
+    { "path": ["mcp", "reset-project-choices"], "examples": ["mcp_list"] },
+    { "path": ["mcp", "serve"], "examples": ["mcp_manage"] },
+    { "path": ["mcp", "add-from-claude-desktop"], "examples": ["mcp_manage"] },
+    { "path": ["mcp", "get"], "examples": ["mcp_manage"] },
+    { "path": ["mcp", "add"], "examples": ["mcp_manage"] },
+    { "path": ["mcp", "remove"], "examples": ["mcp_manage"] },
+    { "path": ["mcp", "add-json"], "examples": ["mcp_manage"] },
+
+    { "path": ["plugin"], "examples": ["plugin_manage"] },
+    { "path": ["plugin", "list"], "examples": ["plugin_manage"] },
+    { "path": ["plugin", "enable"], "examples": ["plugin_manage"] },
+    { "path": ["plugin", "disable"], "examples": ["plugin_manage"] },
+    { "path": ["plugin", "install"], "examples": ["plugin_manage"] },
+    { "path": ["plugin", "uninstall"], "examples": ["plugin_manage"] },
+    { "path": ["plugin", "update"], "examples": ["plugin_manage"] },
+    { "path": ["plugin", "validate"], "examples": ["plugin_manage"] },
+    { "path": ["plugin", "manifest"], "examples": ["plugin_manage"] },
+    { "path": ["plugin", "manifest", "marketplace"], "examples": ["plugin_manage"] },
+    { "path": ["plugin", "marketplace"], "examples": ["plugin_manage"] },
+    { "path": ["plugin", "marketplace", "add"], "examples": ["plugin_manage"] },
+    { "path": ["plugin", "marketplace", "list"], "examples": ["plugin_manage"] },
+    { "path": ["plugin", "marketplace", "remove"], "examples": ["plugin_manage"] },
+    { "path": ["plugin", "marketplace", "repo"], "examples": ["plugin_manage"] },
+    { "path": ["plugin", "marketplace", "update"], "examples": ["plugin_manage"] }
+  ]
+}
+

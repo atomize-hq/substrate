@@ -1,0 +1,14 @@
+mod app_server;
+mod apply_diff;
+mod cloud;
+mod debug;
+mod exec_server;
+mod features;
+mod fork;
+mod help;
+mod mcp;
+mod plugin;
+mod proxy;
+mod review;
+mod sandbox;
+mod update;

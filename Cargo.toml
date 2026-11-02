@@ -67,7 +67,12 @@ members = [
     "crates/replay", "crates/forwarder", "crates/world-windows-wsl",
     "tools/version-bump",
 ]
-exclude = ["crates/substrate-graph"]
+exclude = [
+    "crates/substrate-graph",
+    "vendor/unified-agent-api",
+    "vendor/unified-agent-api-codex",
+    "vendor/unified-agent-api-claude-code",
+]
 
 [workspace.dependencies]
 anyhow = "1.0"
@@ -94,3 +99,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+[patch.crates-io]
+unified-agent-api = { path = "vendor/unified-agent-api" }
+unified-agent-api-codex = { path = "vendor/unified-agent-api-codex" }
+unified-agent-api-claude-code = { path = "vendor/unified-agent-api-claude-code" }

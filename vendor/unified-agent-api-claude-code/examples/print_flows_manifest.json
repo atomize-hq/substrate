@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "flows": [
+    { "id": "print_stream_json", "examples": ["print_stream_json"] },
+    {
+      "id": "print_include_partial_messages",
+      "examples": ["print_include_partial_messages"]
+    },
+    { "id": "print_session_id", "examples": ["print_session_id"] },
+    { "id": "multi_turn_resume", "examples": ["multi_turn_resume"] },
+    { "id": "multi_turn_fork_session", "examples": ["multi_turn_fork"] },
+    { "id": "multi_turn_continue", "examples": ["multi_turn_continue"] }
+  ]
+}
+

@@ -1,0 +1,14 @@
+{"type":"thread.started","thread_id":"demo-thread"}
+{"type":"turn.started","turn_id":"turn-1","thread_id":"demo-thread"}
+{"type":"item.created","thread_id":"demo-thread","turn_id":"turn-1","item":{"type":"reasoning","id":"r1","status":"in_progress","content":"Collecting repo status and running checks."}}
+{"type":"item.created","thread_id":"demo-thread","turn_id":"turn-1","item":{"type":"command_execution","id":"cmd-1","status":"in_progress","content":"cargo fmt --all","input":{"command":"cargo fmt --all"}}}
+{"type":"item.updated","thread_id":"demo-thread","turn_id":"turn-1","item":{"type":"command_execution","id":"cmd-1","status":"completed","content":"cargo fmt --all","output":"completed in 3s"}}
+{"type":"item.created","thread_id":"demo-thread","turn_id":"turn-1","item":{"type":"file_change","id":"chg-1","status":"completed","content":"Formatted src/lib.rs and crates/codex/examples"}}
+{"type":"item.created","thread_id":"demo-thread","turn_id":"turn-1","item":{"type":"mcp_tool_call","id":"tool-1","status":"queued","content":"tools/codex --sandbox","input":{"name":"tools/codex","arguments":{"prompt":"Stream repo status","sandbox":"on"}}}}
+{"type":"item.created","thread_id":"demo-thread","turn_id":"turn-1","item":{"type":"web_search","id":"search-1","status":"in_progress","content":"Searching docs for streaming schema notes"}}
+{"type":"item.created","thread_id":"demo-thread","turn_id":"turn-1","item":{"type":"todo_list","id":"todo-1","content":"Ship README + EXAMPLES refresh"}}
+{"type":"item.created","thread_id":"demo-thread","turn_id":"turn-1","item":{"type":"agent_message","id":"msg-1","status":"in_progress","content":"Formatting complete; summarizing changes."}}
+{"type":"item.updated","thread_id":"demo-thread","turn_id":"turn-1","item":{"type":"agent_message","id":"msg-1","status":"completed","content":"Formatting done. No additional changes required."}}
+{"type":"turn.completed","turn_id":"turn-1","thread_id":"demo-thread"}
+{"type":"turn.started","turn_id":"turn-2","thread_id":"demo-thread"}
+{"type":"turn.failed","turn_id":"turn-2","thread_id":"demo-thread","message":"Idle timeout reached"}

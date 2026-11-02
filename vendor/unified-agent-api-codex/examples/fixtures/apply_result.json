@@ -1,0 +1,6 @@
+{
+  "type": "apply.result",
+  "exit_code": 0,
+  "stdout": "Applied 1 file (src/lib.rs)\n",
+  "stderr": ""
+}

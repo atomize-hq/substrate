@@ -1,0 +1,9 @@
+# Unified Agent API terminal custody dependency
+
+These three packages are the published `0.3.7` crates from upstream commit `416c094953ce20d6e231b5047453273287248510`, with the bounded terminal custody changes retained from TASK11. Cargo resolves them through repository-relative `[patch.crates-io]` paths. No private worktree or unpublished upstream package is needed to build this source.
+
+`unified-agent-api-custody.json` records each registry archive SHA-256, every delivered file SHA-256, original/patched source hashes, and the exact source patch digest. `unified-agent-api-custody.patch` applies to the three unpacked published packages under their unversioned package names. The only additional manifest adaptation registers the supplied `terminal_custody` integration target in the two normalized wrapper manifests, which otherwise disable test autodiscovery. Registry cache metadata and dependency-local lockfiles are omitted; this workspace's `Cargo.lock` controls the build. Original MIT and Apache licenses are retained in each package.
+
+The patch adds checked native process/stdio settlement, cancellation/startup custody and the shared harness acknowledgment surface consumed by Substrate. It does not select models, grant execution permission or publish a new SDK release. SDK behavioral tests and integrated Substrate custody proof remain distinct.
+
+The vendored packages stay outside the main workspace membership. The shell package registers their two supplied terminal-custody integration files as `sdk_codex_terminal_custody` and `sdk_claude_terminal_custody`; `cargo +1.89.0 test --offline --locked -p shell --test sdk_codex_terminal_custody --test sdk_claude_terminal_custody` exercises the actual patched dependencies with this workspace's pinned lockfile. The extra shell test dependency on `futures-util` uses its existing locked version.

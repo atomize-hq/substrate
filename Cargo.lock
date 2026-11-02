@@ -5487,6 +5487,7 @@ dependencies = [
  "env_logger",
  "fs2",
  "futures",
+ "futures-util",
  "gethostname",
  "handbook-engine",
  "handbook-flow",
@@ -6752,8 +6753,6 @@ checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 [[package]]
 name = "unified-agent-api"
 version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "972585d7b6c3f2cc3e8811c1a94ed849f4bde92ac406fa17404dc344bcc320e7"
 dependencies = [
  "futures-core",
  "futures-util",
@@ -6768,8 +6767,6 @@ dependencies = [
 [[package]]
 name = "unified-agent-api-claude-code"
 version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fa32f3088d982ec430b3661502e2b220d85178950ecb07e33742038cbfa3d9b"
 dependencies = [
  "futures-core",
  "portable-pty 0.9.0",
@@ -6783,8 +6780,6 @@ dependencies = [
 [[package]]
 name = "unified-agent-api-codex"
 version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca7a553f381cd50914174b0d2a8497066aaa9f2bead2430774dad83456b6a8a7"
 dependencies = [
  "futures-core",
  "semver",

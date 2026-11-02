@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"t077","future_flag":1}
+{"type":"turn.started","thread_id":"t077","turn_id":"turn-1","input_text":"hello"}
+{"type":"item.started","thread_id":"t077","turn_id":"turn-1","item_id":"msg-1","status":"in_progress","item_type":"agent_message","content":{"text":"hi"},"new_top":"kept"}
+{"type":"item.delta","thread_id":"t077","turn_id":"turn-1","item_id":"msg-1","item_type":"agent_message","delta":{"text_delta":" there"}}
+{"type":"item.completed","thread_id":"t077","turn_id":"turn-1","item_id":"msg-1","status":"completed","item_type":"agent_message","content":{"text":"hi there"},"extra_meta":{"nested":true}}
+{"type":"turn.completed","thread_id":"t077","turn_id":"turn-1","last_item_id":"msg-1"}
