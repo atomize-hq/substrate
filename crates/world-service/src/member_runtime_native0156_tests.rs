@@ -1279,4 +1279,617 @@ mod native0156 {
             &json!({"lane":lane,"identity_regression":identity_regression,"uuid":uuid,"turns":3,"exact_resumes":2,"native_exec_processes":work,"history_work_processes":history_work,"observed_helper_processes":helper,"helper_startup_identities":helper_starts,"history_tool_processes":tools,"normal_uaa_probes":probes,"external_helper_coverage":!helper.is_empty(),"cleanup":"all observed PID/start identities absent including zombies, without rescue; no whole-descendant guarantee","scope":"ordinary manager component; regular attach surrogate only"}),
         );
     }
+    /// Explicit one-turn live operation. Gateway credentials never enter this worker.
+    #[tokio::test]
+    #[ignore = "explicit live-account authorization required; one initial text-only turn"]
+    async fn codex0156_live_text_manager_worker() {
+        use hyper::body::HttpBody;
+        let root = PathBuf::from(std::env::var_os("SUBSTRATE_LIVE_TEXT_ROOT").unwrap());
+        let package =
+            PathBuf::from(std::env::var_os("SUBSTRATE_NATIVE_CODEX_0156_PACKAGE_DIR").unwrap());
+        let source_pair = check_pair(&package);
+        let bin = root.join("package/bin");
+        fs::create_dir_all(&bin).unwrap();
+        for name in ["codex", "codex-code-mode-host"] {
+            fs::copy(package.join(name), bin.join(name)).unwrap();
+            fs::set_permissions(bin.join(name), fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        write_json(
+            root.join("verified-official-pair.json"),
+            &json!({"source":source_pair,"private":check_pair(&bin)}),
+        );
+        let observer = Observer::start(root.clone());
+        let workspace = root.join("workspace");
+        let seed = root.join("seed");
+        let cgroup = root.join("regular-attach-surrogate");
+        for path in [&workspace, &seed, &cgroup] {
+            fs::create_dir(path).unwrap();
+        }
+        fs::write(cgroup.join("cgroup.procs"), "").unwrap();
+        fs::write(seed.join("auth.json"), "{}").unwrap();
+        let ready: serde_json::Value =
+            serde_json::from_slice(&fs::read(root.join("gateway-ready.json")).unwrap()).unwrap();
+        fs::write(seed.join("config.toml"), format!("model = \"gpt-6-astra\"\nmodel_provider = \"substrate-live-text\"\n[model_providers.substrate-live-text]\nbase_url = {:?}\n", ready["url"].as_str().unwrap())).unwrap();
+        let phrase = format!(
+            "SUBSTRATE-LIVE-{}",
+            &uuid::Uuid::new_v4().simple().to_string()[..12]
+        );
+        write_json(
+            root.join("intended-request.json"),
+            &json!({"phrase":phrase,"model":"gpt-6-astra","initial_turns":1,"resumes":0,"tools_requested":false}),
+        );
+        let mut dispatch = sample_authority_managed_dispatch();
+        dispatch.participant_id = "ash_member".into();
+        dispatch.retained_worker_launch_authority = None;
+        dispatch.e2_launch_activation = None;
+        dispatch.resolved_runtime.binary_path = bin.join("codex").display().to_string();
+        dispatch.initial_prompt = Some(format!("Reply with exactly {phrase} and nothing else. Do not use any tools. Do not read, create, edit, or otherwise operate on any files. This is a text-only connectivity check."));
+        let manager = MemberRuntimeManager::new();
+        let env = HashMap::from([(
+            SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.into(),
+            seed.display().to_string(),
+        )]);
+        let span = "spn_live_text_only_20261026";
+        let response = manager
+            .launch(
+                "live-text-only".into(),
+                env,
+                span.into(),
+                MemberRuntimeLaunchAdmissionV1 {
+                    ordinary_effect: None,
+                    dispatch,
+                    acceptance_context: None,
+                    policy_snapshot: sample_e2_submit_turn_request()
+                        .policy_snapshot_carrier
+                        .unwrap()
+                        .policy_snapshot()
+                        .unwrap(),
+                },
+                sample_world_binding(),
+                LinuxWorldPlacementContext {
+                    working_dir: workspace.clone(),
+                    cgroup_path: cgroup,
+                    require_cgroup_attach: true,
+                },
+            )
+            .await
+            .expect("actual manager initial launch");
+        let mut body = response.into_body();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(90);
+        let mut bytes = Vec::new();
+        let mut parsed = 0;
+        let mut unexpected_tool = false;
+        let mut deadline_expired = false;
+        let mut cancelled_on_error = false;
+        let mut cancel_accepted = false;
+        loop {
+            match tokio::time::timeout_at(deadline, body.data()).await {
+                Ok(Some(Ok(chunk))) => {
+                    bytes.extend_from_slice(&chunk);
+                    while let Some(end) = bytes[parsed..].iter().position(|b| *b == b'\n') {
+                        let line = &bytes[parsed..parsed + end];
+                        parsed += end + 1;
+                        if line.is_empty() {
+                            continue;
+                        }
+                        let value: serde_json::Value =
+                            serde_json::from_slice(line).expect("typed manager frame");
+                        unexpected_tool |= live_text_has_tool(&value);
+                        if !cancelled_on_error && live_text_should_cancel(&value) {
+                            cancelled_on_error = true;
+                            cancel_accepted = manager.cancel(span, "TERM").unwrap_or(false);
+                        }
+                    }
+                }
+                Ok(None) => break,
+                Ok(Some(Err(_))) => break,
+                Err(_) => {
+                    deadline_expired = true;
+                    let _ = manager.cancel(span, "TERM");
+                    break;
+                }
+            }
+        }
+        drop(body);
+        fs::write(root.join("live-manager-frames.jsonl"), &bytes).unwrap();
+        let frames: Vec<serde_json::Value> = String::from_utf8(bytes)
+            .unwrap()
+            .lines()
+            .filter_map(|line| serde_json::from_str(line).ok())
+            .collect();
+        // Failed bootstrap may already have removed the authoritative member slot.
+        // Preserve failure receipts and cleanup rather than expecting retention.
+        let active = manager
+            .find_submit_target(&sample_submit_turn_request())
+            .ok();
+        if let Some(active) = &active {
+            wait_turn_free(active).await;
+        }
+        let conversation = active.as_ref().and_then(|active| active.uaa_session_id());
+        manager.unregister_member("ash_member");
+        drop(active);
+        drop(manager);
+        let end = Instant::now() + Duration::from_secs(5);
+        loop {
+            let observed: Vec<Process> =
+                serde_json::from_slice(&fs::read(root.join("observed-processes.json")).unwrap())
+                    .unwrap();
+            if observed.iter().all(|p| !is_alive(p)) || Instant::now() >= end {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        let observed = observer.finish();
+        let survivors: Vec<_> = observed.iter().filter(|p| is_alive(p)).collect();
+        let output_files = fs::read_dir(root.join("tmp"))
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .starts_with("codex_last_message_")
+            })
+            .map(|e| (e.path(), fs::read_to_string(e.path()).unwrap()))
+            .collect::<Vec<_>>();
+        let success = !unexpected_tool
+            && !deadline_expired
+            && !cancelled_on_error
+            && frames
+                .iter()
+                .any(|frame| live_text_has_reply(frame, &phrase))
+            && survivors.is_empty()
+            && frames.iter().any(|f| f["type"] == "exit" && f["exit"] == 0)
+            && output_files.iter().any(|(_, text)| text == &phrase);
+        write_json(
+            root.join("live-result.json"),
+            &json!({"success":success,"expected_reply":phrase,"conversation_id":conversation,"deadline_expired":deadline_expired,"reply_deadline_seconds":90,"cancelled_on_error":cancelled_on_error,"cancel_accepted":cancel_accepted,"unexpected_tool":unexpected_tool,"frames":frames,"last_messages":output_files,"observed_processes":observed,"survivors":survivors,"official_pair_after":check_pair(&bin),"workspace_entries":fs::read_dir(&workspace).unwrap().count(),"kernel_membership_proved":false,"whole_descendant_claim":false}),
+        );
+        assert!(
+            success,
+            "live text operation failed; inspect private sanitized receipt, no replay"
+        );
+    }
+
+    fn live_text_has_tool(value: &serde_json::Value) -> bool {
+        match value {
+            serde_json::Value::Object(map) => map.iter().any(|(key, value)| {
+                ((key == "kind" || key == "type" || key == "item_type")
+                    && value.as_str().is_some_and(|s| {
+                        matches!(
+                            s,
+                            "tool_call"
+                                | "tool_result"
+                                | "function_call"
+                                | "command_execution"
+                                | "file_change"
+                                | "mcp_tool_call"
+                                | "web_search"
+                        )
+                    }))
+                    || live_text_has_tool(value)
+            }),
+            serde_json::Value::Array(values) => values.iter().any(live_text_has_tool),
+            _ => false,
+        }
+    }
+
+    fn live_text_has_reply(value: &serde_json::Value, phrase: &str) -> bool {
+        value["type"] == "event"
+            && value["event"]["kind"] == "task_progress"
+            && value["event"]["data"]["message"].as_str() == Some(phrase)
+    }
+
+    #[test]
+    fn test_live_text_requires_assistant_progress_not_status_echo() {
+        let phrase = "SUBSTRATE-REPLY";
+        assert!(live_text_has_reply(
+            &json!({"type":"event","event":{"kind":"task_progress","data":{"message":phrase}}}),
+            phrase
+        ));
+        assert!(!live_text_has_reply(
+            &json!({"type":"event","event":{"kind":"status","data":{"message":phrase}}}),
+            phrase
+        ));
+        assert!(!live_text_has_reply(
+            &json!({"type":"event","event":{"kind":"task_progress","data":{"message":"partial"}}}),
+            phrase
+        ));
+    }
+
+    fn live_text_should_cancel(value: &serde_json::Value) -> bool {
+        live_text_has_tool(value) || value["type"] == "error" || value["event"]["kind"] == "alert"
+    }
+
+    #[test]
+    fn test_live_text_diagnostic_error_gate_requests_cancel() {
+        assert!(live_text_should_cancel(
+            &json!({"type":"event","event":{"kind":"alert","data":{"message":"redacted"}}})
+        ));
+        assert!(live_text_should_cancel(&json!({"type":"error"})));
+        assert!(live_text_should_cancel(
+            &json!({"event":{"data":{"type":"command_execution"}}})
+        ));
+        assert!(!live_text_should_cancel(
+            &json!({"type":"event","event":{"kind":"status"}})
+        ));
+    }
+
+    #[test]
+    fn test_live_text_tool_observer_rejects_tool_activity() {
+        assert!(live_text_has_tool(
+            &json!({"event":{"data":{"uaa_event":{"item":{"type":"command_execution"}}}}})
+        ));
+        assert!(live_text_has_tool(&json!({"event":{"kind":"tool_call"}})));
+        assert!(!live_text_has_tool(
+            &json!({"event":{"kind":"text_output","text":"no tools"}})
+        ));
+    }
+
+    /// Actual SDK controls with a synthetic CLI, not service admission, an
+    /// official native binary, or an early/partial-startup cleanup guarantee.
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_ordinary_native_sdk_cancellation_retains_history_until_reaped() {
+        for harness in [
+            transport_api_types::AgentHarnessFamilyV1::Codex,
+            transport_api_types::AgentHarnessFamilyV1::ClaudeCode,
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let launcher = temp.path().join("launcher");
+            fs::create_dir(&launcher).unwrap();
+            fs::set_permissions(&launcher, fs::Permissions::from_mode(0o700)).unwrap();
+            let (selected, start, runtime) = ordinary_worker_component_fixture(harness);
+            let history = Arc::new(
+                OrdinaryNativeWorkerHistoryV1::create(&launcher, &start, &runtime, &selected)
+                    .unwrap(),
+            );
+            let wiring = transport_api_types::GatewayClientWiringV1 {
+                openai_base_url: "http://127.0.0.1:32123".into(),
+                anthropic_base_url: "http://127.0.0.1:32123".into(),
+            };
+            let (name, config) = ordinary_native_config(temp.path(), &selected, &wiring).unwrap();
+            history.write_config(name, &config).unwrap();
+            let binary = temp.path().join("synthetic-native.py");
+            fs::write(&binary, r##"#!/usr/bin/python3
+import json, os, pathlib, sys, time
+args = sys.argv[1:]
+if '--version' in args:
+    print('codex 1.2.3'); sys.exit(0)
+if '--help' in args:
+    print('Usage: --add-dir --allow-dangerously-skip-permissions'); sys.exit(0)
+if args and args[0] == 'features':
+    print('{"features":["add_dir"]}'); sys.exit(0)
+home = pathlib.Path(os.environ['HOME'])
+turn = os.environ['FIXTURE_TURN']
+is_codex = os.environ['FIXTURE_BACKEND'] == 'codex'
+if is_codex:
+    sys.stdin.read()  # The supported control test begins after prompt stdin/setup.
+if turn != '0':
+    assert 'thread-sdk-component' in args
+    assert ('resume' if is_codex else '--resume') in args
+else:
+    assert 'resume' not in args and '--resume' not in args
+with (home / 'sdk-turns').open('a') as stream:
+    stream.write(turn + '\n')
+marker = pathlib.Path(os.environ['FIXTURE_MARKER'])
+temporary = marker.with_suffix('.tmp')
+temporary.write_text(json.dumps({'pid': os.getpid(), 'args': args, 'home': str(home)}))
+temporary.rename(marker)
+if is_codex:
+    print('{"type":"thread.started","thread_id":"thread-sdk-component"}', flush=True)
+else:
+    print('{"type":"system","subtype":"init","session_id":"thread-sdk-component"}', flush=True)
+if turn == '0':
+    gate = pathlib.Path(os.environ['FIXTURE_GATE'])
+    deadline = time.monotonic() + 10
+    while not gate.exists() and time.monotonic() < deadline:
+        time.sleep(0.005)
+    assert gate.exists(), 'fixture completion gate timed out'
+    if is_codex:
+        print('{"type":"turn.completed","thread_id":"thread-sdk-component"}')
+    else:
+        print('{"type":"result","subtype":"success","is_error":false,"result":"component","session_id":"thread-sdk-component","duration_ms":1,"duration_api_ms":1,"num_turns":1,"total_cost_usd":0}')
+else:
+    time.sleep(10)  # Finite fallback only; supported cancellation must finish first.
+"##).unwrap();
+            fs::set_permissions(&binary, fs::Permissions::from_mode(0o700)).unwrap();
+            let backend = if harness == transport_api_types::AgentHarnessFamilyV1::Codex {
+                MemberRuntimeBackendKindV1::Codex
+            } else {
+                MemberRuntimeBackendKindV1::ClaudeCode
+            };
+            let bridge = PromptFulfillmentBridge::for_member_backend(&backend, binary).unwrap();
+            let exclusion = E3PrivilegedChildExclusionV1::new_recovering().unwrap();
+            exclusion.finish_recovery().unwrap();
+            let mut identities = BTreeSet::new();
+            for turn in 0..3 {
+                let marker = temp.path().join(format!("started-{turn}.json"));
+                let gate = temp.path().join(format!("complete-{turn}"));
+                let mut env = BTreeMap::from([
+                    ("FIXTURE_MARKER".into(), marker.display().to_string()),
+                    ("FIXTURE_GATE".into(), gate.display().to_string()),
+                    ("FIXTURE_TURN".into(), turn.to_string()),
+                    (
+                        "FIXTURE_BACKEND".into(),
+                        if harness == transport_api_types::AgentHarnessFamilyV1::Codex {
+                            "codex"
+                        } else {
+                            "claude"
+                        }
+                        .into(),
+                    ),
+                ]);
+                configure_ordinary_native_env(
+                    &mut env,
+                    &selected,
+                    &history.descriptor_path().unwrap(),
+                    &wiring,
+                )
+                .unwrap();
+                let mut extensions =
+                    member_runtime_workspace_access_extensions(backend, temp.path());
+                extensions.insert(
+                    "agent_api.config.model.v1".into(),
+                    json!(selected.routed_model_id),
+                );
+                if turn != 0 {
+                    extensions.insert(
+                        SESSION_RESUME_EXTENSION_V1.into(),
+                        json!({"selector":"id","id":"thread-sdk-component"}),
+                    );
+                }
+                let control = bridge
+                    .run_control(AgentWrapperRunRequest {
+                        prompt: format!("synthetic turn {turn}"),
+                        working_dir: Some(temp.path().to_path_buf()),
+                        timeout: None,
+                        env,
+                        extensions,
+                    })
+                    .await
+                    .unwrap();
+                let ready = tokio::time::timeout(Duration::from_secs(5), async {
+                    while !marker.exists() {
+                        tokio::time::sleep(Duration::from_millis(5)).await;
+                    }
+                })
+                .await;
+                if ready.is_err() {
+                    control.cancel.cancel();
+                    let _ = tokio::time::timeout(Duration::from_secs(5), control.handle.completion)
+                        .await;
+                    panic!("synthetic native did not reach post-stdin setup: {harness:?}/{turn}");
+                }
+                let observed: serde_json::Value =
+                    serde_json::from_slice(&fs::read(&marker).unwrap()).unwrap();
+                let pid = observed["pid"].as_u64().unwrap() as u32;
+                let identity =
+                    process_identity(pid).expect("observe actual SDK child before cancellation");
+                assert!(identities.insert((pid, identity.start.clone())));
+                assert_eq!(
+                    observed["home"],
+                    history.descriptor_path().unwrap().display().to_string()
+                );
+                let mut events = control.handle.events;
+                let registered = tokio::time::timeout(Duration::from_secs(5), async {
+                    while let Some(event) = events.next().await {
+                        if surfaced_uaa_session_id_from_data(event.data.as_ref()).as_deref()
+                            == Some("thread-sdk-component")
+                        {
+                            return true;
+                        }
+                    }
+                    false
+                })
+                .await;
+                if !matches!(registered, Ok(true)) {
+                    control.cancel.cancel();
+                    let _ = tokio::time::timeout(Duration::from_secs(5), control.handle.completion)
+                        .await;
+                    panic!("SDK startup did not surface the exact universal session event: {harness:?}/{turn}");
+                }
+                let policy_path = launcher.join(format!("turn-policy-{turn}.sh"));
+                fs::write(&policy_path, "synthetic owned launcher").unwrap();
+                let policy = PreparedSubmittedTurnPolicyLauncher {
+                    path: policy_path.clone(),
+                };
+                let lease = Arc::new(exclusion.acquire_non_e3_child().unwrap());
+                let custody = Arc::new(());
+                let weak = Arc::downgrade(&custody);
+                let terminal_confirmed = Arc::new(AtomicBool::new(false));
+                let checked_terminal = Arc::clone(&terminal_confirmed);
+                let terminal_start = identity.start.clone();
+                let checked: agent_api::DynAgentWrapperCompletion = Box::pin(async move {
+                    let result = control.handle.completion.await;
+                    assert!(process_identity(pid).is_none_or(|now| now.start != terminal_start), "SDK terminal observation must reap its actual PID/start identity, including zombies");
+                    checked_terminal.store(true, Ordering::Release);
+                    result
+                });
+                let cancel = control.cancel;
+                let terminate = cancel.clone();
+                let completion = retain_ordinary_world_completion(
+                    checked,
+                    (Arc::clone(&history), lease, policy, custody),
+                    move || terminate.cancel(),
+                );
+                let events = tokio::spawn(async move { while events.next().await.is_some() {} });
+                assert!(weak.upgrade().is_some());
+                assert!(policy_path.is_file());
+                assert!(exclusion.acquire_e3_exclusive("sdk-component", 7).is_err());
+                if turn == 0 {
+                    fs::write(&gate, "complete").unwrap();
+                    let result = tokio::time::timeout(Duration::from_secs(5), completion)
+                        .await
+                        .unwrap()
+                        .unwrap();
+                    assert!(result.status.success());
+                } else if turn == 1 {
+                    cancel.cancel();
+                    let result = tokio::time::timeout(Duration::from_secs(5), completion)
+                        .await
+                        .unwrap();
+                    assert!(
+                        result
+                            .as_ref()
+                            .map_or(true, |value| !value.status.success()),
+                        "cancelled synthetic child cannot report success"
+                    );
+                } else {
+                    drop(completion);
+                    tokio::time::timeout(Duration::from_secs(5), async {
+                        while weak.upgrade().is_some() {
+                            tokio::time::sleep(Duration::from_millis(5)).await;
+                        }
+                    })
+                    .await
+                    .unwrap();
+                }
+                tokio::time::timeout(Duration::from_secs(5), events)
+                    .await
+                    .unwrap()
+                    .unwrap();
+                assert!(
+                    terminal_confirmed.load(Ordering::Acquire),
+                    "custody release must follow confirmed SDK terminal/reap observation, not a supervisor panic"
+                );
+                assert!(weak.upgrade().is_none());
+                assert!(!policy_path.exists());
+                assert!(process_identity(pid).is_none_or(|now| now.start != identity.start));
+                history.revalidate().unwrap();
+                let mut exclusive = exclusion.acquire_e3_exclusive("sdk-component", 7).unwrap();
+                exclusive.release_after_cleanup_v1().unwrap();
+                eprintln!("actual SDK synthetic lifecycle: {harness:?} turn={turn} pid={pid} terminal/reaped/custody released");
+            }
+            assert_eq!(identities.len(), 3);
+            assert_eq!(
+                fs::read_to_string(history.path.join("sdk-turns")).unwrap(),
+                "0\n1\n2\n"
+            );
+            history.revalidate().unwrap();
+        }
+    }
+
+    /// Public UAA cancellation during the inner SDK's blocked prompt write.
+    /// Eventual absence is observed under a live Tokio runtime; this does not
+    /// turn the returned cancellation result into a child-wait acknowledgement.
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_ordinary_codex_sdk_startup_cancel_observes_reaping() {
+        let temp = tempfile::tempdir().unwrap();
+        let marker = temp.path().join("startup.json");
+        let binary = temp.path().join("synthetic-blocked-stdin.py");
+        fs::write(
+            &binary,
+            r##"#!/usr/bin/python3
+import fcntl, json, os, pathlib, sys, time
+args = sys.argv[1:]
+if '--version' in args:
+    print('codex 1.2.3'); sys.exit(0)
+if '--help' in args:
+    print('Usage: --add-dir'); sys.exit(0)
+if args and args[0] == 'features':
+    print('{"features":["add_dir"]}'); sys.exit(0)
+# No stdin read and no session event: inner ExecStreamControl cannot finish setup.
+marker = pathlib.Path(os.environ['FIXTURE_MARKER'])
+temporary = marker.with_suffix('.tmp')
+temporary.write_text(json.dumps({'pid': os.getpid(), 'stdin_pipe_capacity': fcntl.fcntl(0, fcntl.F_GETPIPE_SZ)}))
+temporary.rename(marker)
+time.sleep(10)  # Finite fallback; the test requires cancellation cleanup sooner.
+"##,
+        )
+        .unwrap();
+        fs::set_permissions(&binary, fs::Permissions::from_mode(0o700)).unwrap();
+        let (selected, start, runtime) =
+            ordinary_worker_component_fixture(transport_api_types::AgentHarnessFamilyV1::Codex);
+        let launcher = temp.path().join("launcher");
+        fs::create_dir(&launcher).unwrap();
+        fs::set_permissions(&launcher, fs::Permissions::from_mode(0o700)).unwrap();
+        let history =
+            OrdinaryNativeWorkerHistoryV1::create(&launcher, &start, &runtime, &selected).unwrap();
+        let wiring = transport_api_types::GatewayClientWiringV1 {
+            openai_base_url: "http://127.0.0.1:32123".into(),
+            anthropic_base_url: "http://127.0.0.1:32123".into(),
+        };
+        let (name, config) = ordinary_native_config(temp.path(), &selected, &wiring).unwrap();
+        history.write_config(name, &config).unwrap();
+        let mut env = BTreeMap::from([("FIXTURE_MARKER".into(), marker.display().to_string())]);
+        configure_ordinary_native_env(
+            &mut env,
+            &selected,
+            &history.descriptor_path().unwrap(),
+            &wiring,
+        )
+        .unwrap();
+        let bridge =
+            PromptFulfillmentBridge::for_member_backend(&MemberRuntimeBackendKindV1::Codex, binary)
+                .unwrap();
+        // Linux pipes cannot absorb this entire prompt while the child never reads.
+        let control = bridge
+            .run_control(AgentWrapperRunRequest {
+                prompt: "x".repeat(2 * 1024 * 1024),
+                working_dir: Some(temp.path().to_path_buf()),
+                timeout: None,
+                env,
+                extensions: BTreeMap::new(),
+            })
+            .await
+            .unwrap();
+        let ready = tokio::time::timeout(Duration::from_secs(5), async {
+            while !marker.exists() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await;
+        if ready.is_err() {
+            control.cancel.cancel();
+            let _ = tokio::time::timeout(Duration::from_secs(5), control.handle.completion).await;
+            panic!("synthetic Codex did not reach blocked prompt stdin");
+        }
+        let observed: serde_json::Value =
+            serde_json::from_slice(&fs::read(&marker).unwrap()).unwrap();
+        assert!(observed["stdin_pipe_capacity"].as_u64().unwrap() < 2 * 1024 * 1024);
+        let pid = observed["pid"].as_u64().unwrap() as u32;
+        let identity = process_identity(pid).expect("observe blocked-startup child");
+        let mut events = control.handle.events;
+        let events = tokio::spawn(async move {
+            assert!(
+                events.next().await.is_none(),
+                "blocked-stdin startup must emit no universal event before cancellation"
+            );
+        });
+        eprintln!(
+            "startup child before public cancel: {}",
+            json!({"pid":pid,"start":identity.start,"state":identity.state,"stdin_pipe_capacity":observed["stdin_pipe_capacity"]})
+        );
+        control.cancel.cancel();
+        let result = tokio::time::timeout(Duration::from_secs(5), control.handle.completion)
+            .await
+            .unwrap();
+        assert!(
+            matches!(&result, Err(AgentWrapperError::Backend { message }) if message == "cancelled"),
+            "startup cancellation must return the pinned cancellation error"
+        );
+        let at_cancellation_return = process_identity(pid);
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while process_identity(pid).is_some_and(|now| now.start == identity.start) {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("observe actual startup-child reaping, including zombies, without rescue");
+        tokio::time::timeout(Duration::from_secs(1), events)
+            .await
+            .unwrap()
+            .unwrap();
+        history.revalidate().unwrap();
+        eprintln!(
+            "startup cancellation observation: {}",
+            json!({
+                "pid":pid,"start":identity.start,"state_before_cancel":identity.state,
+                "identity_at_cancel_completion":at_cancellation_return,
+                "identity_after_observer_wait":process_identity(pid),
+                "returned_universal_control":true,"inner_sdk_setup_blocked":true,
+                "wait_acknowledgement":false,"rescue_signals":0,
+                "scope":"synthetic Codex blocked-stdin startup; live Tokio runtime observation only"
+            })
+        );
+    }
 }
