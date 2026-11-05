@@ -5,6 +5,13 @@
 
 # Seam Crosswalk
 
+<!-- linux-preview-overlay:A19:start -->
+## Linux preview applicability (2026-11-05)
+
+For current ordinary-versus-protected status, follow [configuration/gateway seam](seams/configuration-and-gateway-adoption.md), [E3 owner](slices/e3-agent-config-projection-and-gateway-adoption.md) and [preview decision](linux-first-codex-release/DECISION.md). The earlier E3-unadmitted/no-implementation correction below is historical: A–E remain valid, ordinary source is accepted in [accepted M1 source record](milestones/milestone-1-source-completion-2026-11-05.md), and protected E3-F acceptance is DEFERRED/unclosed. Existing A0 inventory and all compatibility/extracted seam rows stay unchanged; this root supplies routing only.
+
+<!-- linux-preview-overlay:A19:end -->
+
 > **Compatibility index boundary:** Shared seam-family navigation lives under [`seams/`](seams/README.md), while packet-family and current seam-family authority remains with each linked canonical owner. This root preserves legacy headings, anchors, and explicitly labeled compatibility tables without promoting a seam; A0 remains location-locked here.
 
 ## Reading rule

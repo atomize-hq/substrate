@@ -5,6 +5,20 @@
 
 # Runtime-refactor navigation index
 
+<!-- linux-preview-overlay:A23:start -->
+## Linux preview applicability (2026-11-05)
+
+For current release status, use [preview decision](../linux-first-codex-release/DECISION.md) and [successor roadmap](../linux-first-codex-release/ROADMAP.md); earlier configuration-HOLD/component/scheduling entries below are historical where superseded. These entries locate owners and evidence only.
+
+| Stable title / owner | Destination |
+| --- | --- |
+| Decision — Linux-first ordinary-Codex source-installable preview | [preview decision](../linux-first-codex-release/DECISION.md) (`linux-first-codex-release-decision`) |
+| Roadmap — Linux-first ordinary-Codex preview | [successor roadmap](../linux-first-codex-release/ROADMAP.md) (`linux-first-codex-release-roadmap`) |
+| Milestone 1 source completion and exact proof map | [accepted M1 source record](../milestones/milestone-1-source-completion-2026-11-05.md); [M1 source/proof manifest](../milestones/milestone-1-source-manifest-2026-11-05.json) |
+| Retained Codex test support and provenance | [committed retained-support review](../milestones/retained-test-support-review-2026-11-05.md) |
+
+<!-- linux-preview-overlay:A23:end -->
+
 > **Authority boundary:** This file is an index only. It does not authorize implementation, close a gate, change a packet status, or supersede a decision. Follow each canonical owner for its complete scope and qualifications.
 
 ## Navigation set

@@ -7,6 +7,15 @@
 
 # B01-B03-P1 — authenticated exact-destination no-send preflight
 
+<!-- linux-preview-overlay:A05:start -->
+## Linux preview applicability (2026-11-05)
+
+[accepted M1 source record](../../milestones/milestone-1-source-completion-2026-11-05.md)/[M1 source/proof manifest](../../milestones/milestone-1-source-manifest-2026-11-05.json) now accept integrated native Workspace open/approved absent-only init, genuine reader adoption, configured V3 selection/defaults and exact no-send source proof. Old proposal-pending/not-adopted/implementation-HOLD wording below is historical for this narrower preview; [preview decision](../../linux-first-codex-release/DECISION.md) and [successor roadmap](../../linux-first-codex-release/ROADMAP.md) control current priority without changing the P1 contract.
+
+The five `workspace-source-proof-current-11c1` populations are `preflight`, `preflight-resume`, `preflight-owner`, `preflight-custody`, `preflight-legacy`, all exit 0 with nonzero PF-OPEN/INIT/AUTH/EXACT/REV/ZERO/LATER observations in their applicable populations. Recorded source is `11c1c7eb388fcfdc2ad21264defac83fd221dde9ff7da8fe1e77b0ca9f96ef14`, binding `3ac6d40b02c92a3b6a5a94a3d5163015a9b0e1346c2442cad4514b7b027c0674`; results SHA-256 `7dea4aa324c509818a5188d9cb48898678581b74b5c12b459411bfd6257e975a`, with unchanged production PF routes independently confirmed to M1 tested map `46055570…`. This is private-source genuine native publishers/readers and typed Root UDS with a private cgroup metadata mask: **no installed/kernel/provider qualification**. Source correspondence is not a fresh run. Approved init writes remain separate from zero-effect open/preflight/denied reads. Full-send, B1 acceptance, association/reservation/history mutation and Collider/frontend adoption remain outside this proof; installed full-PF remains L3.
+
+<!-- linux-preview-overlay:A05:end -->
+
 ## Configuration proposal and Collider alignment — 2026-10-28
 
 The user requests authoritative control-plane/Collider alignment. This is documentation only

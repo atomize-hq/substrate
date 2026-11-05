@@ -10,6 +10,15 @@
 
 # B4 — Receipt-targeted cancel/inspect/stop
 
+<!-- linux-preview-overlay:A10:start -->
+## Linux preview applicability (2026-11-05)
+
+For [preview decision](../linux-first-codex-release/DECISION.md)/[successor roadmap](../linux-first-codex-release/ROADMAP.md) L3, all advertised ordinary cancel/inspect/Stop/cleanup behavior remains required. [accepted M1 source record](../milestones/milestone-1-source-completion-2026-11-05.md)/[M1 source/proof manifest](../milestones/milestone-1-source-manifest-2026-11-05.json) bind current `public-world-work49-current-effects` at tested source `46055570…`: exact cancellation/inspection, account/policy/original-source refusal, normalized Exit130/B2 journal, accepted-input replay, generation replacement/refusal and checked cleanup; four focused cancellation/Fork/inspection/Stop tests and historical `public-world-work43-prepared` retain their exact populations/windows. Controlled native/gateway fixtures and zero provider requests prove neither live Codex nor every B4 outcome.
+
+Map every applicable preserved-row clause to valid proof or bounded gap through the actual native owner: pending-admission cancellation stages/ambiguity, active receipt targeting, no-active versus terminal/unreachable/invalid/mismatch/ambiguous/policy-denied outcomes, repeated terminal idempotence and Stop/cancel/admission distinctions. Fill current installed/control gaps rather than substituting a subset or endless old-paperwork search. Landed `5e972add…`, unlocated original terminal receipts and C2 eligibility uncertainty remain exact; no whole B4/C2/C3 promotion follows.
+
+<!-- linux-preview-overlay:A10:end -->
+
 > **Authority boundary:** This file owns only the extracted B4 Track B row. It preserves the exact row text below, does not widen C-track or unrelated lifecycle authority, and does not dispatch B4.
 
 ## Landed-source status (2026-09-17)

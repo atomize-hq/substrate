@@ -1,5 +1,14 @@
 # Substrate → Collider B01–B05 contract handoff draft
 
+<!-- linux-preview-overlay:A28:start -->
+## Linux preview applicability (2026-11-05)
+
+The established Collider target remains. [accepted M1 source record](../../../llm-last-mile/runtime-refactor/milestones/milestone-1-source-completion-2026-11-05.md)/[M1 source/proof manifest](../../../llm-last-mile/runtime-refactor/milestones/milestone-1-source-manifest-2026-11-05.json) now accept narrow native Substrate Workspace open/approved absent-only init/exact no-send P1 **source** proof ([P1 native open/init/no-send owner](../../../llm-last-mile/runtime-refactor/slices/tasks/b01-b03-authenticated-preflight.md)); old blanket native-adapter-proposed/implementation-HOLD claims below are historical for that implemented cut. [preview decision](../../../llm-last-mile/runtime-refactor/linux-first-codex-release/DECISION.md)/[successor roadmap](../../../llm-last-mile/runtime-refactor/linux-first-codex-release/ROADMAP.md) own the ordinary preview priority.
+
+Installed/kernel/P1 qualification and consumer/frontend adoption remain pending. Later full-send/B04/B05/association-reservation/history/reconciliation work stays deferred/proposed as recorded; no new callable API beyond source-backed native scope, enrollment, send permission or Collider production adoption is asserted. Approved init writes remain distinct from zero-effect open/preflight.
+
+<!-- linux-preview-overlay:A28:end -->
+
 **Status:** Bounded contract-design handoff for consumer/owner review, updated 2026-10-21. Joint B01/B03 now has concrete proposed internal responsibilities and interfaces; new contracts are not claimed component-owner-approved, wire-final, implemented or runtime-qualified. The initial same-host Workspace opening correction and bounded no-send contract are recorded in [B01-B03-P1](../../../llm-last-mile/runtime-refactor/slices/tasks/b01-b03-authenticated-preflight.md); minimal proposed responsibility amendments are recorded in the three existing canonical owner documents; no runtime implementation, control-plane cutover or Collider production adoption is authorized.
 **Start with:** [B03 Lane/World binding proposal](lane-world-binding.md).
 **Objective:** Let Collider plan against coherent Substrate-owned operations without mistaking proposed semantics, existing source, supported exposure, and runtime proof for one status.

@@ -4,6 +4,22 @@
 **Source provenance:** extracted byte-for-byte from [`../05-debug-regression-ledger.md#canonical-issue-ledger`](../05-debug-regression-ledger.md#canonical-issue-ledger), baseline lines 16–97 inclusive; the exact 41492-byte source body is preserved between the boundary markers below
 **Baseline span SHA-256:** `191a62ea0c77064941947280d87c539163ab69b772a8018f6b2f4e3d3e5aae3e`
 
+<!-- linux-preview-overlay:A06:start -->
+## Linux preview applicability (2026-11-05)
+
+[preview decision](../linux-first-codex-release/DECISION.md) selects the narrower preview; [successor roadmap](../linux-first-codex-release/ROADMAP.md) and [scoped preview gate ledger](../linux-first-codex-release/ROADMAP.md#scoped-gate-ledger) derive its required qualification without closing ledger-wide gates. M1 source is accepted/published and retained support committed ([accepted M1 source record](../milestones/milestone-1-source-completion-2026-11-05.md), [M1 source/proof manifest](../milestones/milestone-1-source-manifest-2026-11-05.json), [committed retained-support review](../milestones/retained-test-support-review-2026-11-05.md)); no current whole-Linux-green, installation or provider result is asserted. Earlier unadmitted/HOLD/protected-three/current-owner prose below retains its historical date only.
+
+| Applicable clause population | Reusable M1 source evidence | Current preview obligation |
+| --- | --- | --- |
+| Ordinary receipts, messaging, admission, cancel/Stop/inspection/cleanup (`RG-RECEIPT-02`, `RG-MSG-01`, `RG-ADMISSION-01`, `RG-CANCEL-01/02`, ordinary exit/observation clauses) | `public-world-work49-current-effects` at tested source `46055570…`, historical `public-world-work43-prepared` at `ab280ec7…`, 23 custody/source + four focused controls + four publisher tests, exact manifest windows | Complete [B3.2 shipping qualification](../slices/b3-2-retained-receipt-messaging-and-lifecycle.md#linux-preview-applicability-2026-11-05)/[B4 shipping qualification](../slices/b4-receipt-targeted-cancel-inspect-stop.md#linux-preview-applicability-2026-11-05) clause matrix, reuse applicable proof, fill bounded actual source/installed gaps. Original B3.2/B4 terminal receipts remain unresolved; no whole-slice promotion or endless paperwork predecessor. |
+| Ordinary policy/auth/config/security/Workspace and S1–S5 applicable clauses | Immutable policy/original selection/auth/history/refusal/cleanup and genuine five-population private PF source proof; 19 historical SDK custody tests within correspondence | L1/L3 full ordinary assertions, installed shell/shim/World/policy/tracing/config/catalog/PF, exact owner/current-read/zero-effect/init distinctions. Source proof is not installed or kernel qualification. |
+| Developer population / R15 | Scoped M1 fmt/strict lint/release/service passes only; actual full-workspace aggregate FAIL/open | [complete L1 developer coverage](../linux-first-codex-release/ROADMAP.md#complete-developer-coverage-map) requires every ordinary canonical workspace/all-target build/lint/test obligation and green documented standard Linux preflight configuration after legitimate protected-positive separation. No unexamined/unreached ordinary case or selected passing subset can close L1. Preserve actual canonical exits and individual platform/positive deferrals. Historical 59 targets/suites are no current bug inventory. |
+| Protected E3 production positives | E3-A–E evidence preserved; enclosing E3 not accepted | R11–R13/R18/F1–F14 **DEFERRED**, exact positive assertions retained; unsupported-E3 refusal checks and ordinary security remain mandatory. |
+
+Ledger-wide RG-CONFIG/UAA/OBS and D2/E3/D3 acceptance stay open. [B2.2 present historical acceptance](../slices/b2-2-foreground-receipt-return.md#terminal-closure--2026-10-27) is present historical acceptance; completed E2-RM work is reused without inventing a newly recovered terminal receipt. Historical closure uncertainty and current shipping qualification are separate. No global waiver/green, gate-policy rewrite or implementation effect follows.
+
+<!-- linux-preview-overlay:A06:end -->
+
 ## Current completed-slice gate disposition
 
 The exact extracted ledger body below remains byte-stable. Under the terminal

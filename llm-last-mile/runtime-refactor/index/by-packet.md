@@ -5,6 +5,20 @@
 
 # Runtime-refactor navigation by packet
 
+<!-- linux-preview-overlay:A26:start -->
+## Linux preview applicability (2026-11-05)
+
+Use this bounded selective-load set for the new preview. Older held/component/current-task entries below are historical snapshots where superseded, not instructions to wake prior owners.
+
+1. [preview decision](../linux-first-codex-release/DECISION.md) and [successor roadmap](../linux-first-codex-release/ROADMAP.md): goal, L0–L5, exact W/R, resource/effect/publication fences and full ordinary developer coverage.
+2. [accepted M1 source record](../milestones/milestone-1-source-completion-2026-11-05.md), [M1 source/proof manifest](../milestones/milestone-1-source-manifest-2026-11-05.json), [committed retained-support review](../milestones/retained-test-support-review-2026-11-05.md): accepted/published source, SDK/support identities and proof ceilings.
+3. [E3 owner](../slices/e3-agent-config-projection-and-gateway-adoption.md), [P1 native open/init/no-send owner](../slices/tasks/b01-b03-authenticated-preflight.md), [B3.2 shipping qualification](../slices/b3-2-retained-receipt-messaging-and-lifecycle.md#linux-preview-applicability-2026-11-05), [B4 shipping qualification](../slices/b4-receipt-targeted-cancel-inspect-stop.md#linux-preview-applicability-2026-11-05), [canonical issue ledger](../evidence/canonical-issue-ledger.md): retained ordinary semantics/proof and actual installed gaps.
+4. [protected projection contract](../contracts/agent-config-projection-v1.md) and [protected gateway contract](../contracts/managed-gateway-adoption-v1.md): protected E3-A–E preserved, E3-F/R11–R13/R18/F1–F14 DEFERRED, unsupported refusal and ordinary security mandatory.
+
+Future fresh MetaV2 dispatches separate top-level TaskV2 owners after actual admission; local child agents and old owner IDs do not substitute. This load set is navigation, not activation or completion.
+
+<!-- linux-preview-overlay:A26:end -->
+
 > **Authority boundary:** This file is an index only. It routes packet, lane, and packet-family identifiers to their canonical packet records or packet indexes; it does not select work, close a gate, or dispatch a successor.
 
 ## Current completed, held, and awaiting-admission records

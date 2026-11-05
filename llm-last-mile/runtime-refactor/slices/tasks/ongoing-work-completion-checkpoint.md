@@ -1,5 +1,14 @@
 # Ongoing work completion checkpoint
 
+<!-- linux-preview-overlay:A03:start -->
+## Linux preview applicability (2026-11-05)
+
+The current narrower Linux ordinary-Codex source-installable preview is owned by [preview decision](../../linux-first-codex-release/DECISION.md) and derived [successor roadmap](../../linux-first-codex-release/ROADMAP.md). This **all-nine checkpoint remains incomplete**. Obligation 6 and protected parts of 8 (R11–R13/R18/F1–F14) are DEFERRED for the preview only; obligation 7's current B3.2/B4 shipping behavior still requires complete clause/proof/gap coverage, with original terminal-paperwork uncertainty preserved. Reuse completed E2-RM work and [B2.2 present historical acceptance](../b2-2-foreground-receipt-return.md#terminal-closure--2026-10-27), without reopening them.
+
+[accepted M1 source record](../../milestones/milestone-1-source-completion-2026-11-05.md) is accepted/published at `91cd0f53`; formerly protected incoming tests are committed at `a0a8decb7` and provenance at `23771505` ([committed retained-support review](../../milestones/retained-test-support-review-2026-11-05.md)). The clean preparation baseline is `23771505e781fe8e2702863267a23719562df9cf`. Below, October HOLD, dirty-three and reuse-owner 09/10/11/13/17/18/20 instructions are historical, superseded for this preview; older detailed product/security decisions remain. Future fresh MetaV2 dispatches separate fresh top-level TaskV2 owners after actual admission; this document prep activates none. Source acceptance does not close current developer/install/provider gates.
+
+<!-- linux-preview-overlay:A03:end -->
+
 **Kind:** bounded META charter. **Canonical for:** this checkpoint objective, exclusions, attributed latest human planning decisions, completion and stop conditions only. **Status (2026-10-28):** documentation authorized; product IMPLEMENTATION HOLD remains.
 
 ## Authority and continuity

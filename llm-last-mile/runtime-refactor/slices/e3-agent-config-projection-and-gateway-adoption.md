@@ -13,6 +13,15 @@
 
 # E3 — AgentConfigProjectionService and gateway adoption
 
+<!-- linux-preview-overlay:A04:start -->
+## Linux preview applicability (2026-11-05)
+
+[preview decision](../linux-first-codex-release/DECISION.md) now selects an ordinary Linux/systemd source-installable preview; [successor roadmap](../linux-first-codex-release/ROADMAP.md) owns its derived phases. **E3-A–E remain valid; protected E3-F/R11–R13/R18/F1–F14 acceptance is DEFERRED, unaccepted and unclosed.** E3-F was dispatched historically; stale never-dispatched/reader-not-adopted/HOLD/October priority text below is as-of chronology, not current preview scheduling. Preserve its exact custody, selection, gateway, rejection and deferred positive obligations. Unsupported protected paths remain refused; ordinary isolation/policy/auth/custody are still mandatory.
+
+[accepted M1 source record](../milestones/milestone-1-source-completion-2026-11-05.md) and [M1 source/proof manifest](../milestones/milestone-1-source-manifest-2026-11-05.json) record accepted integrated configured selection/defaults, Workspace/PF, catalog and ordinary retained/control source; publication is `91cd0f53`, retained support `a0a8decb7`/`23771505` ([committed retained-support review](../milestones/retained-test-support-review-2026-11-05.md)). Controlled native/gateway harnesses used real CLI/service/World plumbing with zero provider requests. Current whole-Linux developer gate is open; installed/public proof remains pending. Historical `eee66706…` HTTP500 installation stays failed; current-candidate installation is unqualified. No whole-E3 closure or new runtime/owner activation follows.
+
+<!-- linux-preview-overlay:A04:end -->
+
 > **Authority boundary:** This file is the controlling numbered E3 specification. It consumes the
 > landed E2-RM read behavior as serialization context without reopening E2, E2-RM, or B2.2. It
 > preserves the exact historical Track E row and the earlier correction chronology below. The

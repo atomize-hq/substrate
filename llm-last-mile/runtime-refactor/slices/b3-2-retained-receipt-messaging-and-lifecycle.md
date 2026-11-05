@@ -10,6 +10,15 @@
 
 # B3.2 — Remaining retained receipt, messaging, and lifecycle completion
 
+<!-- linux-preview-overlay:A09:start -->
+## Linux preview applicability (2026-11-05)
+
+For [preview decision](../linux-first-codex-release/DECISION.md)/[successor roadmap](../linux-first-codex-release/ROADMAP.md) L3, current advertised ordinary messaging/lifecycle behavior remains mandatory despite protected E3 deferral. [accepted M1 source record](../milestones/milestone-1-source-completion-2026-11-05.md)/[M1 source/proof manifest](../milestones/milestone-1-source-manifest-2026-11-05.json) provide historical `public-world-work43-prepared` at `ab280ec7…`, current `public-world-work49-current-effects` at tested source `46055570…` and focused custody/control/publisher proof, with exact run/correspondence limits and zero provider requests.
+
+Map **every relevant promised clause** in the preserved row below—retained receipts/message identity/causation, accepted-turn lifecycle/park continuity, exact retry/admission, durable partial/ambiguous admission resolution, cap release, creation-observer/restart convergence and exit outcomes—to applicable proof or a bounded actual gap, including installed/native owner coverage. Reuse valid M1 evidence and fill actual gaps; protected full-manifest positives stay DEFERRED, while ordinary safety cannot be relabeled protected debt. Landed `1026f495…` and missing original terminal proof/review/closure facts remain historical. Unbounded historical-paperwork recovery is no preview predecessor and this overlay claims no whole-slice closure.
+
+<!-- linux-preview-overlay:A09:end -->
+
 > **Authority boundary:** This file owns only the extracted B3.2 Track B row. It preserves the exact row text below, does not reopen the completed B3.1/C1 family, and does not dispatch B3.2.
 
 ## Landed-source status (2026-09-17)

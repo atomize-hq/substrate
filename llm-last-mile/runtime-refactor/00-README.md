@@ -1,5 +1,14 @@
 # Runtime Refactor Control Pack
 
+<!-- linux-preview-overlay:A15:start -->
+## Linux preview applicability (2026-11-05)
+
+Start with [preview decision](linux-first-codex-release/DECISION.md), then [successor roadmap](linux-first-codex-release/ROADMAP.md), [accepted M1 source record](milestones/milestone-1-source-completion-2026-11-05.md)/[M1 source/proof manifest](milestones/milestone-1-source-manifest-2026-11-05.json) and [committed retained-support review](milestones/retained-test-support-review-2026-11-05.md). The preview is ordinary Linux/systemd source-installable Codex with protected E3-F/R11–R13/R18/F1–F14 **DEFERRED**, unaccepted/unclosed. M1 is published (`91cd0f53`); retained support/provenance are committed (`a0a8decb7`/`23771505`); current developer/install/provider qualification is open. [complete L1 developer coverage](linux-first-codex-release/ROADMAP.md#complete-developer-coverage-map) owns the complete ordinary green-standard-preflight requirement.
+
+Earlier A1.3-P1/August and October “current priority/scheduling,” HOLD, component-not-integrated and protected-three wording below are historical snapshots where superseded; they do not select preview tasks. [E3 owner](slices/e3-agent-config-projection-and-gateway-adoption.md), [P1 native open/init/no-send owner](slices/tasks/b01-b03-authenticated-preflight.md) and [slice sequencing owner](slices/README.md) retain detailed semantics/navigation. This entrypoint remains routing only.
+
+<!-- linux-preview-overlay:A15:end -->
+
 **Kind:** entrypoint
 **Stable ID:** `runtime-refactor-control-pack-entrypoint`
 **Status:** canonical stable human entrypoint

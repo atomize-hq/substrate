@@ -10,6 +10,15 @@
 
 # `AgentConfigProjectionRecordV1`
 
+<!-- linux-preview-overlay:A12:start -->
+## Linux preview applicability (2026-11-05)
+
+Current applicability follows [E3 owner](../slices/e3-agent-config-projection-and-gateway-adoption.md) and [preview decision](../linux-first-codex-release/DECISION.md)/[successor roadmap](../linux-first-codex-release/ROADMAP.md): E3-A–E remain valid; E3-F was later dispatched and remains unaccepted/unclosed, with protected R11–R13/R18/F1–F14 acceptance **DEFERRED** for the ordinary preview. The never-admitted/dispatched header and recovery prose below are historical, not current scheduling.
+
+[accepted M1 source record](../milestones/milestone-1-source-completion-2026-11-05.md)/[M1 source/proof manifest](../milestones/milestone-1-source-manifest-2026-11-05.json) ordinary configured selection and local source-SDK/trusted-release proof do not close protected adoption. All schemas/hash domains/F gates, strict rejection, immutable historical records and security/cleanup/custody contracts below stay unchanged. Unsupported protected paths still refuse; no source/install/provider effect follows.
+
+<!-- linux-preview-overlay:A12:end -->
+
 > **Authority boundary:** E3 publishes one independently valid, non-secret config projection for an
 > exact retained worker before D1 exists. The projection consumes the already-immutable E2 launch or
 > fork cap without mutating, reconstructing, or re-owning E2. D1 later consumes the opaque published

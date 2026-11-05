@@ -5,6 +5,22 @@
 
 # Runtime-refactor navigation by identifier
 
+<!-- linux-preview-overlay:A24:start -->
+## Linux preview applicability (2026-11-05)
+
+Current preview IDs resolve below; older decision/packet/component status text retains its dated scope where superseded by [preview decision](../linux-first-codex-release/DECISION.md). Historical R/TASK/E3 identifiers are unchanged, with no gate marked completed by this index.
+
+| Identifier | Exact owner / scope |
+| --- | --- |
+| `linux-first-codex-release-decision` | [preview decision](../linux-first-codex-release/DECISION.md) — selected goal/scope/effect boundaries |
+| `linux-first-codex-release-roadmap`; `LF-L0`–`LF-L5` | [successor roadmap](../linux-first-codex-release/ROADMAP.md) — derived pending phases |
+| `LFG-DEV`, `LFG-INSTALL`, `LFG-PRODUCT`, `LFG-CATALOG`, `LFG-PF`, `LFG-CONTROLS`, `LFG-E3-REFUSAL`, `LFG-LIVE`, `LFG-PUBLISH` | [scoped preview gate ledger](../linux-first-codex-release/ROADMAP.md#scoped-gate-ledger) — required scoped clause groups, no completion assertion |
+| M1 `91cd0f53` / tested source `46055570…` | [accepted M1 source record](../milestones/milestone-1-source-completion-2026-11-05.md); [M1 source/proof manifest](../milestones/milestone-1-source-manifest-2026-11-05.json) — exact source/proof windows |
+| `public-world-work43-prepared`, `public-world-work49-current-effects`, `workspace-source-proof-current-11c1` | [M1 source/proof manifest](../milestones/milestone-1-source-manifest-2026-11-05.json) — private raw proof hashes/source attribution; not installed/provider qualification |
+| retained support `a0a8decb7` / provenance `23771505` | [committed retained-support review](../milestones/retained-test-support-review-2026-11-05.md) — resolved former protected-three boundary |
+
+<!-- linux-preview-overlay:A24:end -->
+
 > **Authority boundary:** This file is an index only. It resolves stable identifiers, packet and task IDs, seam names, contract names and versions, gate IDs, evidence and issue IDs, and review-finding IDs to their canonical owners or most precise remaining historical owners when no standalone gate file exists; it does not authorize work or reinterpret those records.
 
 ## Decision stable titles

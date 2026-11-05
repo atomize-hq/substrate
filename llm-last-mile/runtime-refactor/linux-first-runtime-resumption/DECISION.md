@@ -1,5 +1,12 @@
 # Decision — Linux-First Runtime-Refactor Resumption
 
+<!-- linux-preview-overlay:A14:start -->
+## Linux preview applicability (2026-11-05)
+
+[preview decision](../linux-first-codex-release/DECISION.md) now owns the November 5 ordinary Linux/Codex source-installable preview; [successor roadmap](../linux-first-codex-release/ROADMAP.md) derives its task order and proof gates. This August decision remains historical authority for platform separation and closed selections, including unchanged A1.3 history; its older active-priority/E3-never-dispatched/closure-search projections are not current preview dispatch instructions. macOS/Windows parity is not reopened. No full-E3 prerequisite or new product/effect admission is created by this pointer.
+
+<!-- linux-preview-overlay:A14:end -->
+
 ## Status and effective date
 
 - **Status:** accepted for active scheduling; documentation-only decision.

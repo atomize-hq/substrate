@@ -10,6 +10,15 @@
 
 # Track E — Dispatch-scoped policy narrowing and config projection
 
+<!-- linux-preview-overlay:A21:start -->
+## Linux preview applicability (2026-11-05)
+
+Current preview navigation follows [preview decision](../linux-first-codex-release/DECISION.md)/[successor roadmap](../linux-first-codex-release/ROADMAP.md) and [E3 owner](e3-agent-config-projection-and-gateway-adoption.md): E3-A–E remain valid; protected E3-F/R11–R13/R18/F1–F14 acceptance is DEFERRED/unclosed. Ordinary integrated selection/Workspace/catalog source is accepted in [accepted M1 source record](../milestones/milestone-1-source-completion-2026-11-05.md), with current installed proof still open.
+
+Reuse [B2.2 present historical acceptance](b2-2-foreground-receipt-return.md#terminal-closure--2026-10-27) and completed E2-RM work as separate subjects; old missing-closure/current-October-component/installer-priority wording below retains its dated scope, not a new preview predecessor. No extracted Track E table or historical acceptance is changed.
+
+<!-- linux-preview-overlay:A21:end -->
+
 > **Authority boundary:** This file is a navigation index only. E1 and E2 retain terminal closure.
 > [`E2-RM`](../contracts/dispatch-policy-commitment-v1.md#e2-rm--authenticated-accepted-work-receipt-material-projection-prerequisite) and [B2.2](b2-2-foreground-receipt-return.md#current-admission-disposition)
 > are implemented/review-clean/landed, with separate canonical terminal closure not located.

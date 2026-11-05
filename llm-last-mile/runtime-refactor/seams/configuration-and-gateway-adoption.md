@@ -10,6 +10,15 @@
 
 # Configuration and gateway adoption seam family
 
+<!-- linux-preview-overlay:A07:start -->
+## Linux preview applicability (2026-11-05)
+
+Current ordinary source and protected integration have different proof ceilings: [accepted M1 source record](../milestones/milestone-1-source-completion-2026-11-05.md)/[M1 source/proof manifest](../milestones/milestone-1-source-manifest-2026-11-05.json) accept the integrated ordinary configured-selection/Workspace/catalog/runtime route, with local vendored SDK parent `62a1e506…` and M1 publication `91cd0f53`; this is not an upstream SDK release. Trusted native release/profile identities below keep their exact original scopes.
+
+[preview decision](../linux-first-codex-release/DECISION.md)/[successor roadmap](../linux-first-codex-release/ROADMAP.md) select the ordinary Linux preview. E3-A–E remain valid; protected E3-F/R11–R13/R18/F1–F14 acceptance is **DEFERRED**, not absent primitives, full seam acceptance or permission to delete rejection. Older no-implementation/HOLD/current-priority correction wording is historical where superseded by this source fact. Installed/provider proof remains open; exact extracted rows and security contracts remain unchanged.
+
+<!-- linux-preview-overlay:A07:end -->
+
 > **Authority boundary:** This file preserves the extracted `AgentConfigProjectionService` and
 > `WorldRuntimeAdapterExecutionEnvelope` seam rows and projects the controlling E3 correction below.
 > It promotes no seam, moves no A0 inventory, reopens no prior family, and authorizes no implementation.

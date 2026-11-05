@@ -4,6 +4,25 @@
 
 # Current runtime-refactor state
 
+<!-- linux-preview-overlay:A16:start -->
+## Linux preview applicability (2026-11-05)
+
+**Refresh: 2026-11-05.** Preparation started clean at `23771505e781fe8e2702863267a23719562df9cf`, branch `feat/runtime-refactor-e3-f-retained-codex-implementation`, in the exact W named by [preview decision](../linux-first-codex-release/DECISION.md). Current work is documentation preparation; future L0–L5 require actual admission under [successor roadmap](../linux-first-codex-release/ROADMAP.md). The older refresh and component/current-status rows below are dated historical snapshots, not dispatch instructions.
+
+| Current axis | Status / canonical pointer |
+| --- | --- |
+| M1 integrated source / publication | Accepted/published `91cd0f53`, tested original-map `46055570…`; [accepted M1 source record](../milestones/milestone-1-source-completion-2026-11-05.md) and [M1 source/proof manifest](../milestones/milestone-1-source-manifest-2026-11-05.json) |
+| Retained support / former dirty-three | Committed/pushed tests `a0a8decb7`, provenance `23771505`; [committed retained-support review](../milestones/retained-test-support-review-2026-11-05.md); historical M1 exclusions remain exact |
+| Ordinary Linux developer gate | OPEN; historical R15 aggregate FAIL, 59 older failing targets/suites not 59 current bugs; every ordinary obligation and green standard configuration required by [complete L1 developer coverage](../linux-first-codex-release/ROADMAP.md#complete-developer-coverage-map) |
+| Source installer / installed product/catalog/PF/controls | Current candidate UNQUALIFIED; historical `eee66706…` HTTP500 remains failed, not a current diagnosis; [successor roadmap](../linux-first-codex-release/ROADMAP.md) L2/L3 |
+| Live provider/model | OPEN; M1 controlled native harnesses had zero provider requests; separately released bounded actual-account L4 |
+| Protected E3 | A–E preserved; E3-F/R11–R13/R18/F1–F14 DEFERRED, unaccepted/unclosed; [E3 owner](../slices/e3-agent-config-projection-and-gateway-adoption.md) |
+| B-track / larger goal | [B2.2 present historical acceptance](../slices/b2-2-foreground-receipt-return.md#terminal-closure--2026-10-27) and completed E2-RM work reused; [B3.2 shipping qualification](../slices/b3-2-retained-receipt-messaging-and-lifecycle.md#linux-preview-applicability-2026-11-05)/[B4 shipping qualification](../slices/b4-receipt-targeted-cancel-inspect-stop.md#linux-preview-applicability-2026-11-05) current clause proof required, historical terminal gaps distinct; original nine-obligation checkpoint incomplete |
+
+No old owner is resumed and no runtime/install/provider/publication effect follows from this projection.
+
+<!-- linux-preview-overlay:A16:end -->
+
 > **NON-AUTHORITATIVE PROJECTION:** This file repeats only current identifiers, statuses, dates, one-line scope labels, and canonical links. It does not authorize work, close a gate, change a packet, supersede a decision, or replace any linked canonical owner.
 
 **Refresh: 2026-10-28, documentation-only hold; retained HEAD `eee66706`, no new source proof.** The [current configuration direction and planning hold](../slices/e3-agent-config-projection-and-gateway-adoption.md#configuration-direction-and-planning-hold--2026-10-28) and [P1/Collider alignment](../slices/tasks/b01-b03-authenticated-preflight.md#configuration-proposal-and-collider-alignment--2026-10-28) govern current next-action state. Configuration proposals await human review; implementation and installer continuation remain held. Older scheduling and selector approvals remain historical.

@@ -10,6 +10,15 @@
 
 # Shared slice map index
 
+<!-- linux-preview-overlay:A17:start -->
+## Linux preview applicability (2026-11-05)
+
+Current preview order is derived by [successor roadmap](../linux-first-codex-release/ROADMAP.md) from [preview decision](../linux-first-codex-release/DECISION.md), with [accepted M1 source record](../milestones/milestone-1-source-completion-2026-11-05.md)/[committed retained-support review](../milestones/retained-test-support-review-2026-11-05.md) as retained source evidence. E3-A–E remain valid; protected E3-F/R11–R13/R18/F1–F14 are DEFERRED for the preview. Full E3 success is not an ordinary-preview predecessor. Complete ordinary developer and B3.2/B4 shipping qualification remain required; the larger checkpoint is incomplete.
+
+Earlier E3-F/Workspace-opening/August/October priority and component-HOLD paragraphs below are historical where superseded. The architecture dependency spine, exact extracted sequencing/closeout bodies and review rules remain unchanged. This route admits no C2/C3/D successor or implementation effects.
+
+<!-- linux-preview-overlay:A17:end -->
+
 > **Authority boundary:** This file owns only the extracted shared sequencing/dependency and slice-closeout bodies plus non-authoritative Track A–E navigation. Schedule and dispatch authority remain with the controlling decision, packet, gate, and review owners together with [`../index/current.md`](../index/current.md); this file creates none.
 
 ## Sequencing rules

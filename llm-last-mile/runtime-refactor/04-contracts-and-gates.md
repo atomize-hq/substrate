@@ -5,6 +5,13 @@
 
 # Contracts and Gates
 
+<!-- linux-preview-overlay:A20:start -->
+## Linux preview applicability (2026-11-05)
+
+Current E3 applicability is in [E3 owner](slices/e3-agent-config-projection-and-gateway-adoption.md), [protected projection contract](contracts/agent-config-projection-v1.md) and [protected gateway contract](contracts/managed-gateway-adoption-v1.md): A–E remain valid, E3-F was dispatched historically and protected adoption is now DEFERRED/unaccepted/unclosed for [preview decision](linux-first-codex-release/DECISION.md). Blanket never-admitted/dispatched/implemented prose in the older E3 navigation section is historical. [scoped preview gate ledger](linux-first-codex-release/ROADMAP.md#scoped-gate-ledger) derives scoped preview proof without rewriting schemas, technical security contracts, review machinery or whole-E3 acceptance.
+
+<!-- linux-preview-overlay:A20:end -->
+
 > **Compatibility index boundary:** Canonical contracts and gates live under [`contracts/`](contracts/) and [`gates/`](gates/) together with linked packet-family records. This root preserves legacy headings, anchors, and compatibility sections without changing a contract or gate status.
 
 ## Normative conventions

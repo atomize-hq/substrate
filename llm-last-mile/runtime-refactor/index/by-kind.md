@@ -5,6 +5,20 @@
 
 # Runtime-refactor navigation by kind
 
+<!-- linux-preview-overlay:A25:start -->
+## Linux preview applicability (2026-11-05)
+
+Current preview owners and evidence are indexed by actual kind below. Older active-priority/HOLD/component status entries retain their dated scope where superseded by [preview decision](../linux-first-codex-release/DECISION.md); navigation creates no completed gate or duplicate authority.
+
+| Kind | Canonical destination | Scope |
+| --- | --- | --- |
+| decision | [preview decision](../linux-first-codex-release/DECISION.md) | `linux-first-codex-release-decision`; selected preview outcome/boundaries |
+| packet-plan | [successor roadmap](../linux-first-codex-release/ROADMAP.md) | `linux-first-codex-release-roadmap`; derived L0–L5 and scoped gates |
+| milestone evidence | [accepted M1 source record](../milestones/milestone-1-source-completion-2026-11-05.md); [M1 source/proof manifest](../milestones/milestone-1-source-manifest-2026-11-05.json) | Accepted M1 source and exact proof/publication map |
+| review/provenance evidence | [committed retained-support review](../milestones/retained-test-support-review-2026-11-05.md) | Retained test support committed/pushed; no installed/provider qualification |
+
+<!-- linux-preview-overlay:A25:end -->
+
 > **Authority boundary:** This file is an index only. It groups canonical owners and compatibility indexes by document kind; it does not authorize work, change status, or supersede the linked owners.
 
 ## architecture

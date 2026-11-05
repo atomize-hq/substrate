@@ -45,3 +45,17 @@ historical paths and do not resolve from this relocated owner):
 | Batch 3 — baseline behaviors + cross-gate smoke scenarios | [`baseline-behaviors-and-smoke-scenarios.md`](baseline-behaviors-and-smoke-scenarios.md) | Exact extracted [`## Baseline behaviors that all tracks preserve`](baseline-behaviors-and-smoke-scenarios.md#baseline-behaviors-that-all-tracks-preserve) and [`## Cross-gate smoke scenarios`](baseline-behaviors-and-smoke-scenarios.md#cross-gate-smoke-scenarios) bodies with separate exact source provenance preserved between distinct boundary markers, plus the canonical bounded [`A3-scoped RG-BASE-03 disposition`](baseline-behaviors-and-smoke-scenarios.md#a3-scoped-rg-base-03-disposition) outside those bodies; Gate IDs, statuses, table order/cells, ordered scenario steps, deterministic parked-successor sequence, Covers lines, and fail-closed/exception boundaries remain unchanged. |
 | Batch 4 — receipt/review-control navigation | [`receipts/README.md`](receipts/README.md) | Navigation only; follow the receipt index to the canonical `review-control/README.md` store. No receipt or review record is copied, reorganized into new evidence, or normalized here, and process/review evidence does not replace product proof, gate satisfaction, or packet/implementation/dispatch/promotion authority. |
 | Batch 4 — current-state projection compatibility pointer | [`../macos-dev-parity/evidence-regression.md#current-cross-lane-regression-ledger-2026-08-20-controlling`](../macos-dev-parity/evidence-regression.md#current-cross-lane-regression-ledger-2026-08-20-controlling) | The root `05` current cross-lane projection remains compatibility-only; canonical ownership and status stay with the existing D6 macOS-parity evidence owner, and no ownership or status transfer occurs here. |
+
+<!-- linux-preview-overlay:A27:start -->
+## Linux preview applicability (2026-11-05)
+
+| Evidence / derived proof requirement | Destination |
+| --- | --- |
+| Accepted M1 source and remaining qualification limits | [accepted M1 source record](../milestones/milestone-1-source-completion-2026-11-05.md) |
+| Exact tested/publication maps and raw proof hashes | [M1 source/proof manifest](../milestones/milestone-1-source-manifest-2026-11-05.json) |
+| Committed retained support and historical provenance | [committed retained-support review](../milestones/retained-test-support-review-2026-11-05.md) |
+| Current ordinary developer/installed/catalog/PF/control/account/publication obligations | [scoped preview gate ledger](../linux-first-codex-release/ROADMAP.md#scoped-gate-ledger); [complete L1 developer coverage](../linux-first-codex-release/ROADMAP.md#complete-developer-coverage-map) |
+
+These are navigation pointers only. Source correspondence, installed proof and provider response remain separate; exact extracted reading text and raw receipt ownership above are unchanged.
+
+<!-- linux-preview-overlay:A27:end -->

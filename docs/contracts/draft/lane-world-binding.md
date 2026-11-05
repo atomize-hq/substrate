@@ -1,5 +1,14 @@
 # B03 proposal: Lane, World association, and accepted-work binding
 
+<!-- linux-preview-overlay:A29:start -->
+## Linux preview applicability (2026-11-05)
+
+[accepted M1 source record](../../../llm-last-mile/runtime-refactor/milestones/milestone-1-source-completion-2026-11-05.md)/[M1 source/proof manifest](../../../llm-last-mile/runtime-refactor/milestones/milestone-1-source-manifest-2026-11-05.json) accept narrow native Workspace open/approved absent-only init/exact no-send P1 source proof ([P1 native open/init/no-send owner](../../../llm-last-mile/runtime-refactor/slices/tasks/b01-b03-authenticated-preflight.md)), and [preview decision](../../../llm-last-mile/runtime-refactor/linux-first-codex-release/DECISION.md)/[successor roadmap](../../../llm-last-mile/runtime-refactor/linux-first-codex-release/ROADMAP.md) replace older HOLD/native-absent priority wording for the ordinary preview. [accepted M1 source record](../../../llm-last-mile/runtime-refactor/milestones/milestone-1-source-completion-2026-11-05.md) does not establish installed/kernel qualification or Collider/frontend adoption; those remain pending.
+
+Association/full-send/reservation/history interfaces remain proposed and later work deferred. Initiating principal, execution actor, Workspace, Lane, World/generation, association, runtime/backend owner and operation authorization stay distinct. Historical source pins and all target/security/consistency/recovery contracts below remain unchanged; native opening/no-send eligibility supplies no later send authority.
+
+<!-- linux-preview-overlay:A29:end -->
+
 **Status:** Draft for owner-contract review, updated 2026-10-21. Not an accepted API, canonical-owner replacement, implementation dispatch, or runtime-readiness claim.
 **Purpose:** Make the confirmed multi-World Lane model precise enough for Collider to display and control one exact accepted task without guessing its execution destination.
 **Companion:** [B01–B05 handoff](collider-b01-b05-handoff.md), including evidence pins, shared boundaries, and remaining decisions.

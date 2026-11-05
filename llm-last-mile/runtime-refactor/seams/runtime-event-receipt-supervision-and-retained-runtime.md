@@ -10,6 +10,15 @@
 
 # Runtime event, receipt, supervision, and retained runtime seam extraction
 
+<!-- linux-preview-overlay:A08:start -->
+## Linux preview applicability (2026-11-05)
+
+[accepted M1 source record](../milestones/milestone-1-source-completion-2026-11-05.md)/[M1 source/proof manifest](../milestones/milestone-1-source-manifest-2026-11-05.json) supply accepted ordinary retained/control/custody source proof: current `public-world-work49-current-effects` at `46055570…`, historical `public-world-work43-prepared` at `ab280ec7…`, 23 custody/source tests, four focused controls and exact historical SDK/publisher correspondence. These used controlled native/gateway harnesses through real CLI/service/World paths with zero provider requests; no whole retained seam, installed or protected acceptance follows.
+
+[preview decision](../linux-first-codex-release/DECISION.md)/[successor roadmap](../linux-first-codex-release/ROADMAP.md) require complete [B3.2 shipping qualification](../slices/b3-2-retained-receipt-messaging-and-lifecycle.md#linux-preview-applicability-2026-11-05)/[B4 shipping qualification](../slices/b4-receipt-targeted-cancel-inspect-stop.md#linux-preview-applicability-2026-11-05) current shipping behavior/proof matrices and bounded actual gaps, independently of protected deferral. Reuse completed E2-RM source work and [B2.2 present historical acceptance](../slices/b2-2-foreground-receipt-return.md#terminal-closure--2026-10-27); older separate-closure-not-located prose retains its historical evidentiary limit, not a new ordinary release predecessor. B3.2/B4 original terminal receipts remain unresolved, not disproved. Earlier native-adapters-absent/source-HOLD and October E3 priority wording is historical. No C2/C3 or full-manifest promotion; extracted ownership/semantics stay exact.
+
+<!-- linux-preview-overlay:A08:end -->
+
 > **Authority boundary:** This file owns only the extracted `RuntimeEventTransport`, `WorldWorkReceiptRegistry`, `WorldWorkExecutionSupervisor`, and `RetainedWorkerRuntime` seam rows. It does not promote any seam, move the A0 authority-leak inventory, reopen D5/D6/D7 or already-extracted D8 family owners, rewrite `b1-b2-1/` or `b3-1-c1/`, extract the remaining C/D seam families, or authorize B0/B1/B2.1/B3.1/B3.2/B4/C implementation work.
 
 ## World-bound local controller settlement sources

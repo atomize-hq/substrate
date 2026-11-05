@@ -10,6 +10,13 @@
 
 # Track B — World-dispatch receipts, supervision, and cancel
 
+<!-- linux-preview-overlay:A22:start -->
+## Linux preview applicability (2026-11-05)
+
+Current ordinary release entrants should load [B3.2 shipping qualification](b3-2-retained-receipt-messaging-and-lifecycle.md#linux-preview-applicability-2026-11-05), [B4 shipping qualification](b4-receipt-targeted-cancel-inspect-stop.md#linux-preview-applicability-2026-11-05) and [successor roadmap](../linux-first-codex-release/ROADMAP.md) under [preview decision](../linux-first-codex-release/DECISION.md). These distinguish retained M1 source proof, mandatory current shipping gaps and unresolved original terminal receipts; no table rewrite, whole-slice closure or successor dispatch follows.
+
+<!-- linux-preview-overlay:A22:end -->
+
 > **Authority boundary:** This file is a navigation index only. The preserved B0 through joint-closeout history and the recorded B3.1 family remain at their existing D6 owners; B2.2, B3.2, and B4 remain independent later slices, undispatched here, and do not reopen the completed B1/B2.1 or B3.1/C1 families.
 
 **Current B2.2 status (2026-10-27):** [Terminally complete by present acceptance](b2-2-foreground-receipt-return.md#terminal-closure--2026-10-27)

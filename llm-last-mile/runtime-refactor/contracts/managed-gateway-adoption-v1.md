@@ -9,6 +9,15 @@
 
 # Managed gateway adoption V1
 
+<!-- linux-preview-overlay:A13:start -->
+## Linux preview applicability (2026-11-05)
+
+Current applicability follows [E3 owner](../slices/e3-agent-config-projection-and-gateway-adoption.md) and [preview decision](../linux-first-codex-release/DECISION.md)/[successor roadmap](../linux-first-codex-release/ROADMAP.md): preserve E3-A–E validity and original E3-E primitive closure. E3-F was later dispatched; protected R11–R13/R18/F1–F14 adoption remains **DEFERRED**, unaccepted/unclosed. Older never-dispatched/specification-only/HOLD wording is historical.
+
+[accepted M1 source record](../milestones/milestone-1-source-completion-2026-11-05.md)/[M1 source/proof manifest](../milestones/milestone-1-source-manifest-2026-11-05.json) accept ordinary configured native/gateway source within exact proof windows, not full protected adoption, installed or provider qualification. Preserve credential-FD exact receiver/no persistence/no inheritance, ownership/accounting/ACK/cleanup, all schemas and immutable records below. Deferral neither removes rejection nor weakens the ordinary security boundary.
+
+<!-- linux-preview-overlay:A13:end -->
+
 > **Authority boundary:** E3 reuses the landed `GatewayAuthBundleV1` pipe and gateway one-time
 > consumer exactly once. It adds non-secret orchestration identity, an initially denied access
 > boundary, durable intent/ACK references, and a launch fence. It does not persist secrets, authorize

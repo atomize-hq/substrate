@@ -10,6 +10,15 @@
 
 # Authority map
 
+<!-- linux-preview-overlay:A11:start -->
+## Linux preview applicability (2026-11-05)
+
+[accepted M1 source record](../milestones/milestone-1-source-completion-2026-11-05.md) now accepts genuine native Workspace publishers/readers, exact no-send source proof and the ordinary configured selection route ([P1 native open/init/no-send owner](../slices/tasks/b01-b03-authenticated-preflight.md), [M1 source/proof manifest](../milestones/milestone-1-source-manifest-2026-11-05.json)). Earlier claims that these narrow native reads are absent/proposed or source dispatch is held are historical at their stated scope. Later full-send admission/association/reservation/history target extensions remain proposals; frontend/installed qualification is still unverified.
+
+Current preview priority follows [preview decision](../linux-first-codex-release/DECISION.md)/[successor roadmap](../linux-first-codex-release/ROADMAP.md), not October E3-before-P1 ordering. E3-A–E remain valid; protected E3-F production ownership acceptance is DEFERRED and its contract unchanged. Product authority ownership below remains distinct from future Meta/Task workflow roles; no new owner topology, seam promotion or implementation effect follows.
+
+<!-- linux-preview-overlay:A11:end -->
+
 ## Proposed B01/B03 consumer admission responsibility amendment — 2026-10-21
 
 The authorized joint [B01 contract design](../../../docs/contracts/draft/collider-b01-b05-handoff.md#32-immutable-request-identity-and-the-admission-boundary) and [B03 effect/recovery protocol](../../../docs/contracts/draft/lane-world-binding.md#47-associationadmission-consistency-and-recovery) select the following **target extensions**, not current exports, runtime implementation authority, component-owner signoff or seam promotion. The historical owner rows and their evidence states below remain unchanged.

@@ -5,6 +5,13 @@
 
 # Phase and Slice Map
 
+<!-- linux-preview-overlay:A18:start -->
+## Linux preview applicability (2026-11-05)
+
+Current preview navigation: [preview decision](linux-first-codex-release/DECISION.md) → [successor roadmap](linux-first-codex-release/ROADMAP.md) → [slice sequencing owner](slices/README.md). Earlier August/October scheduling pointers and compatibility rows below preserve chronology/anchors; they do not supersede the new scoped route. This root adds no policy or implementation authority.
+
+<!-- linux-preview-overlay:A18:end -->
+
 > **Compatibility index boundary:** Shared sequencing and slice navigation lives under [`slices/`](slices/README.md) and the linked packet-family owners. This root preserves legacy headings, anchors, and compatibility tables without introducing scheduling authority or successor selection.
 
 ## Sequencing rules
