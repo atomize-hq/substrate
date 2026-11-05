@@ -3,6 +3,28 @@
 Status: living document capturing near-term and upcoming work.
 Keep concise, actionable, and security-focused.
 
+## Deferred — native Codex image eligibility through the gateway
+
+- **Gap (2026-10-24):** managed gateway image generation and editing are implemented
+  and locally tested, but native Codex tool availability and real upstream entitlement
+  remain unproved. The pinned Codex 0.156.1 investigation did not establish a supported
+  configuration-only route that exposes the image tool while keeping account/provider
+  credentials exclusively in the gateway. This is a bounded finding, not proof that no
+  supported integration exists. See the [gateway route contract](../crates/gateway/docs/contracts/chatgpt-codex-route-contract.md).
+- **Follow-up:** revisit during native-version/launch integration and before claiming
+  end-to-end native image support. Compare supported official CLI or host integration
+  with an explicitly approved derived Codex capability change; document artifact,
+  maintenance and entitlement implications. No Codex modification is approved by this entry.
+- **Preserve:** gateway-held credentials, existing provider support and truthful native
+  eligibility. Do not use dummy actor headers, provider-name spoofing or child account
+  secrets. Resolve image-specific retry behavior separately; a lost response can leave
+  billed remote work completed, and gateway send-once does not prevent native retries.
+- **Acceptance:** an approved, source/artifact-bound integration exposes both generation
+  and editing on initial launch and fresh-process resume, with legitimate service access,
+  valid media/reference/artifact behavior and credentials remaining in the gateway.
+  Gateway-local tests alone do not establish this. Keep this deferred capability distinct
+  from the core E3-F launch/work/resume/cleanup deliverable.
+
 ## Deferred — hardened/advanced macOS installer
 
 - Revisit the hardened macOS installer only after the ordinary developer install, Lima world,
