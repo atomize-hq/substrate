@@ -7,8 +7,12 @@ pub(crate) mod dispatch_policy_commitment;
 pub(crate) mod host_inbox;
 pub(crate) mod host_session_authority;
 pub(crate) mod mapping;
+#[cfg(target_os = "linux")]
+pub(crate) mod native_launch_context;
 pub(crate) mod obligation_ledger;
 pub(crate) mod orchestration_session;
+#[cfg(target_os = "linux")]
+mod ordinary_world_observers;
 pub(crate) mod registry;
 pub(crate) mod retained_worker_runtime;
 pub(crate) mod session;

@@ -34,8 +34,7 @@ use super::dispatch_contract::{
 use super::host_session_authority::schema::{
     AgentExecutionScopeV1, AuthorityObjectKindV1, HostSessionAuthorityPreconditionV1,
     HostSessionPostureV1, HostSessionTransitionCallerKindV1, HostSessionTransitionCallerV1,
-    HostSessionTransitionModeV1, RuntimeBackendKindV1, StartContinuationHandleHashInputV2,
-    StartContinuationHandleStateV2,
+    HostSessionTransitionModeV1, RuntimeBackendKindV1, StartContinuationHandleStateV2,
 };
 #[cfg(target_os = "linux")]
 use super::host_session_authority::store::BootstrapClassificationV1;
@@ -224,6 +223,89 @@ fn candidate_priority(kind: OrchestrationObligationKind) -> u8 {
         OrchestrationObligationKind::FollowUpRequired => 3,
         _ => u8::MAX,
     }
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone)]
+pub(crate) struct OrdinaryAutoAttachAuthorityV1 {
+    #[allow(
+        dead_code,
+        reason = "ordinary auto-attach retains authenticated selection until original-issuance and successor joins are wired; effects remain refused"
+    )]
+    pub(crate) selection:
+        std::sync::Arc<super::native_launch_context::AuthenticatedOrdinarySelectionV1>,
+    #[allow(
+        dead_code,
+        reason = "ordinary auto-attach retains install context while successor transport provenance is unavailable and effects remain refused"
+    )]
+    pub(crate) install_context: transport_api_types::InstallBootstrapContextCarrierV1,
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn execute_ordinary_router_auto_attach_for_session(
+    store: &AgentRuntimeStateStore,
+    ordinary: &OrdinaryAutoAttachAuthorityV1,
+    orchestration_session_id: &str,
+    router_identity: &str,
+    world: bool,
+    no_world: bool,
+) -> Result<RouterAutoAttachSessionExecution> {
+    let _ = (
+        store,
+        ordinary,
+        orchestration_session_id,
+        router_identity,
+        world,
+        no_world,
+    );
+    anyhow::bail!("ordinary_current_run_verifier_unavailable: auto-attach refused before current-root, permission, ledger or successor effects");
+}
+
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "ordinary session auto-attach is staged until successor transport provenance is available; this entrypoint refuses effects"
+)]
+pub(crate) fn execute_ordinary_session_auto_attach(
+    store: &AgentRuntimeStateStore,
+    ordinary: &OrdinaryAutoAttachAuthorityV1,
+    orchestration_session_id: &str,
+    router_identity: &str,
+    _captured_policy: &Policy,
+    world: bool,
+    no_world: bool,
+) -> Result<SessionAutoAttachExecution> {
+    let _ = ordinary;
+    let _ = (
+        store,
+        orchestration_session_id,
+        router_identity,
+        world,
+        no_world,
+    );
+    anyhow::bail!("ordinary_successor_provenance_unavailable: legacy transport cannot independently refuse stripped ordinary successor data; no ordinary successor effect was performed");
+}
+
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "ordinary successor transport provenance remains unavailable"
+)]
+pub(crate) fn build_ordinary_auto_attach_launch_plan(
+    store: &AgentRuntimeStateStore,
+    ordinary: &OrdinaryAutoAttachAuthorityV1,
+    orchestration_session_id: &str,
+    obligation_id: &str,
+    attach_claim_owner: &str,
+) -> Result<AuthorityManagedSuccessorLaunchPlanV1> {
+    let _ = ordinary;
+    let _ = (
+        store,
+        orchestration_session_id,
+        obligation_id,
+        attach_claim_owner,
+    );
+    anyhow::bail!("ordinary_successor_provenance_unavailable: legacy transport cannot independently refuse stripped ordinary successor data; no ordinary successor effect was performed");
 }
 
 #[allow(dead_code)]
@@ -1550,15 +1632,22 @@ fn exact_settled_auto_attach_start_continuity(
 ) -> Result<String> {
     let mut settled = None;
     for reference in &resolved.authority.internal_resume_handle_refs {
-        if reference.schema_version != 2 {
+        if !matches!(reference.schema_version, 2 | 3) {
             continue;
         }
         let bytes = authority
             .read_authority_object_v2_at(root.root_revision, reference)
             .map_err(|error| anyhow::anyhow!(error.to_string()))?;
-        let handle: StartContinuationHandleHashInputV2 =
-            super::host_session_authority::canonical_json::from_slice(&bytes)
-                .context("decode router auto-attach durable Start continuation")?;
+        let handle =
+            super::host_session_authority::start_continuity::decode_start_continuation_handle(
+                reference, &bytes,
+            )
+            .context("decode router auto-attach versioned Start continuation")?;
+        if handle.world_controller().is_some_and(|world| {
+            resolved.authority.world_binding.as_ref() != Some(&world.world_binding)
+        }) {
+            anyhow::bail!("router World continuation differs from current session placement");
+        }
         if handle.authority_store_id != root.authority_store_id
             || handle.orchestration_session_id != resolved.authority.orchestration_session_id
             || handle.backend_id != resolved.caller.descriptor.backend_id
@@ -1570,7 +1659,9 @@ fn exact_settled_auto_attach_start_continuity(
             );
         }
         if matches!(handle.state, StartContinuationHandleStateV2::Settled { .. })
-            && settled.replace(handle.internal_uaa_session_id).is_some()
+            && settled
+                .replace(handle.internal_uaa_session_id.clone())
+                .is_some()
         {
             anyhow::bail!(
                 "owner_unreachable: router auto-attach authority has ambiguous settled Start continuations"

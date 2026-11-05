@@ -231,8 +231,24 @@ impl BackendHarnessAdapter for ClaudeHarnessAdapter {
     ) -> Option<crate::backend_harness::BackendAttemptCustody> {
         let cancel = self.custody.clone();
         let settle = self.custody.clone();
+        let observed = self.custody.clone();
+        let admission_observed = self.custody.clone();
         Some(crate::backend_harness::BackendAttemptCustody {
+            observe_closed_before_any_spawn: Some(Arc::new(move || {
+                admission_observed.observed_closed_before_any_spawn()
+            })),
             request_termination: Arc::new(move || cancel.request_termination()),
+            observe_processes: Some(Arc::new(move || {
+                observed
+                    .observed_process_terminations()
+                    .into_iter()
+                    .map(|value| crate::AgentWrapperProcessTerminationObservation {
+                        process_id: value.process_id,
+                        status: value.status,
+                        recovery_status: value.recovery_status,
+                    })
+                    .collect()
+            })),
             settle: Arc::new(move || {
                 let settle = settle.clone();
                 Box::pin(async move {

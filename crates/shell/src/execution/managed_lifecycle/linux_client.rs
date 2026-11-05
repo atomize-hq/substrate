@@ -183,11 +183,17 @@ fn run_linux_executor_frame_with_paths_v1(
         .stderr(Stdio::piped());
 
     let child = command.spawn().context("spawn fixed sudo linux executor")?;
+    // Command retains its configured stdout descriptor after spawn. Releasing
+    // that parent copy lets an early executor exit close the channel.
+    drop(command);
 
-    send_seqpacket_frame_v1(&parent_socket, request_bytes)
-        .context("write request to linux executor channel")?;
-    let response_bytes = read_seqpacket_frame_v1(&parent_socket)
-        .context("read response from linux executor channel")?;
+    let exchange = (|| {
+        send_seqpacket_frame_v1(&parent_socket, request_bytes)
+            .context("write request to linux executor channel")?;
+        read_seqpacket_frame_v1(&parent_socket).context("read response from linux executor channel")
+    })();
+    // Channel failure must also close the request peer before joining the child.
+    drop(parent_socket);
 
     let output = child
         .wait_with_output()
@@ -198,6 +204,7 @@ fn run_linux_executor_frame_with_paths_v1(
             String::from_utf8_lossy(&output.stderr)
         );
     }
+    let response_bytes = exchange?;
     if response_bytes.is_empty() {
         bail!("linux executor did not return a response");
     }
@@ -305,6 +312,44 @@ mod tests {
         )
         .unwrap();
         serde_json::from_slice(&response_bytes).unwrap()
+    }
+
+    #[test]
+    fn relay_executor_early_exit_is_reaped_without_waiting_for_reply_v1() {
+        let temp = tempdir().unwrap();
+        let sudo_path = temp.path().join("early-exit.py");
+        let pid_path = temp.path().join("owned-executor.pid");
+        write_test_script_v1(&sudo_path,
+            "#!/usr/bin/python3\nimport os,pathlib,sys\npathlib.Path(sys.argv[-1]).write_text(str(os.getpid()))\nprint('synthetic executor early exit',file=sys.stderr)\nraise SystemExit(53)\n");
+        let (tx, rx) = std::sync::mpsc::channel();
+        let worker = thread::spawn(move || {
+            let _temp = temp;
+            let result = run_linux_executor_frame_with_paths_v1(
+                &sudo_path,
+                Path::new(FIXED_ENV_PATH_V1),
+                Path::new("/unused/fake-executor"),
+                &[pid_path.to_str().unwrap()],
+                b"synthetic request",
+            );
+            let pid = fs::read_to_string(pid_path)
+                .unwrap()
+                .parse::<u32>()
+                .unwrap();
+            let unreaped = PathBuf::from(format!("/proc/{pid}")).exists();
+            tx.send((result, unreaped)).unwrap();
+        });
+        let (result, unreaped) = rx
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("relay must finish after its owned executor exits");
+        worker.join().expect("join relay observer");
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("synthetic executor early exit"));
+        assert!(
+            !unreaped,
+            "the original executor must be waited, including on channel failure"
+        );
     }
 
     #[test]

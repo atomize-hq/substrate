@@ -77,7 +77,7 @@ mod bundled_binary;
 mod cli;
 mod client_core;
 mod process_custody;
-pub use process_custody::{ExecProcessCustody, ExecSettlementError};
+pub use process_custody::{ExecProcessCustody, ExecSettlementError, ProcessTerminationObservation};
 mod commands;
 mod defaults;
 mod error;
@@ -347,7 +347,26 @@ impl CodexClient {
         .await
     }
 
-    pub(crate) async fn probe_capabilities_with_env_overrides_for_current_dir_with_custody(
+    /// Probes the executable using the same working directory, environment overrides,
+    /// and process custody as the intended execution. The result describes CLI
+    /// compatibility; it is not execution authority or a held executable identity.
+    /// Callers retain responsibility for settling `custody` after startup failures.
+    ///
+    /// ```no_run
+    /// # async fn example() {
+    /// let client = codex::CodexClient::builder().build();
+    /// let custody = codex::ExecProcessCustody::default();
+    /// let capabilities = client
+    ///     .probe_capabilities_with_env_overrides_for_current_dir_with_custody(
+    ///         &std::collections::BTreeMap::new(),
+    ///         std::path::Path::new("/workspace"),
+    ///         Some(&custody),
+    ///     )
+    ///     .await;
+    /// # let _ = capabilities;
+    /// # }
+    /// ```
+    pub async fn probe_capabilities_with_env_overrides_for_current_dir_with_custody(
         &self,
         env: &BTreeMap<String, String>,
         current_dir: &Path,

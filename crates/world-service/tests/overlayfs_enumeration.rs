@@ -66,6 +66,8 @@ fn execute_non_pty(
     };
 
     let req = ExecuteRequest {
+        schema_version: 1,
+        ordinary_start_selection: None,
         profile: None,
         cmd: cmd.to_string(),
         cwd: Some(cwd.display().to_string()),

@@ -519,6 +519,7 @@ impl AgentControlFixture {
         ))
     }
 
+    #[cfg(not(target_os = "linux"))]
     fn reset_fake_codex_state(&self) {
         let state_path = self
             .fake_codex
@@ -884,6 +885,7 @@ fn write_fake_codex_script_with_indeterminate_start_handoff(dir: &Path) -> PathB
     path
 }
 
+#[cfg(not(target_os = "linux"))]
 fn write_fake_codex_script_resume_requires_expected_handle(dir: &Path) -> PathBuf {
     let path = dir.join("fake-codex-resume-requires-expected-handle.sh");
     let count_path = dir.join("fake-codex-resume-requires-expected-handle.count");
@@ -947,6 +949,7 @@ fn write_fake_codex_script_exit_after_bootstrap_frames(dir: &Path) -> PathBuf {
     path
 }
 
+#[cfg(not(target_os = "linux"))]
 fn write_fake_codex_script_turn_requires_helper_cancel_after_prompt(dir: &Path) -> PathBuf {
     let path = dir.join("fake-codex-turn-requires-helper-cancel.sh");
     let count_path = dir.join("fake-codex-turn-requires-helper-cancel.count");

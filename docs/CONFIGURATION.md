@@ -42,7 +42,7 @@ Config keys:
 - The shell-owned v1 runtime only realizes selected orchestrators with `config.kind=cli`, `protocol=substrate.agent.session`, and `cli.mode=persistent`.
 - `config.placements.<placement>.cli.runtime_family` is the inventory-only runtime-realization truth for shell-owned UAA candidates in placement-aware `version: 2` agent manifests. Supported values are `codex` and `claude_code`.
 - Runtime realization still keys policy and exact backend routing off that placement-local exact `backend_id`. For example, `cli:codex-world` may realize the canonical `codex` runtime family while remaining a distinct exact backend id from `cli:codex-host`.
-- `config.placements.<placement>.cli.binary` is also placement-local truth. The selected placement must carry the binary that is true for that placement; for example, `codex-world` must continue to declare `/var/lib/substrate/world-deps/bin/codex` rather than the host shorthand `codex`.
+- `config.placements.<placement>.cli.binary` is also placement-local truth. The shipped `codex-world` placement declares the pinned release entrypoint `/var/lib/substrate/world-deps/codex-runtime/bin/codex`. The existing guest entrypoint `/var/lib/substrate/world-deps/bin/codex` also remains supported. Validation probes and preserves the declared entrypoint; it never substitutes the host shorthand `codex` or another installed path.
 
 Policy keys:
 - `agents.allowed_backends` remains the allowlist for exact agent adapter ids such as `cli:codex-host`, `cli:codex-world`, or `api:openai`.
@@ -855,3 +855,104 @@ publication and observation; reads never clean or complete it. Failure diagnosti
 report the phase and known/uncertain staging/publication/durability effects. A failure
 after rename can leave a visible valid owner record with unconfirmed durability. A
 later read observes that record without retroactively confirming the failed write.
+
+### Exact native current-actor reads and first association (Linux)
+
+`substrate workspace current-actor --request FILE` requests one exact nonsecret
+current-actor projection. The strict bounded version-1 JSON contains exact existing
+Workspace, session, agent backend, World/generation, Lane/association/custody selectors
+and a mandatory held HSA observation. The actual native principal must be the genuine
+Workspace owner. Both native and service boundaries independently authorize the read
+from current held global/Workspace policy sources using existing patch precedence.
+`workspace_authority.current_actor_read` is a distinct optional `allow`/`deny` decision;
+absence or denial refuses. It does not alter serialized execution `Policy`, existing
+HSA capabilities, execution policy snapshots, or permission for another operation.
+
+`substrate workspace publish-association --request FILE` explicitly requests the
+first association of one already-existing service-owned World. It separately requires
+`workspace_authority.association_publish: allow`; the read permission cannot authorize
+it. The service invokes the Workspace owner publisher while retaining its actual
+backend custody and exact HSA observation. No validation grant is issued. Publication
+creates only `.substrate/workspace-association.v1.json`, using its own exclusive pending
+file and no-replace publication. Both are mode `0600`, owned by the genuine native
+Workspace owner; no existing ownership or owner-v1 bytes change. Interrupted pending
+state refuses reads and further publication without cleanup or automatic repair.
+
+Publication reports staging, visibility and directory-sync evidence separately. An
+unknown transport outcome is represented as unknown effects, never as no writes.
+The immutable first association has its own Lane, incarnation and revision `1`; it
+does not implement reassociation or general Lane management. Backend custody is bound
+to the existing producer incarnation and monotonic in-process revision. A service
+restart/recovery or unsupported producer invalidates the old reference and does not
+repair the association. Reads neither start a service nor create/recover/attach/adopt
+a World, and use one authenticated UDS request connection without retries or fallback.
+
+The result is a bounded current-actor projection, not P1 `EligibleObservation`, a
+stable cut across every invalidator, a reservation, or permission for later execution.
+Policy removal revokes subsequent reads/publications. Observed changes during a read
+refuse a positive reply; complete monotonic policy/config ABA coverage remains future
+work. Ordinary owner-v1 status continues to report identity-only component coverage.
+
+### Native Workspace open and no-send preflight (Linux)
+
+`substrate workspace open /absolute/workspace` performs a current owner read. A valid
+configured Workspace returns `Loaded` without setup approval. Missing owner identity,
+partial initialization, disabled or invalid boundaries are diagnosed without repair or
+parent fallback. Optional owner components report their actual availability; `Loaded`
+does not establish destination eligibility or runtime liveness.
+
+The independent sparse policy operations are `workspace_authority.workspace_load`,
+`workspace_authority.current_actor_read`,
+`workspace_authority.association_publish`, and `workspace_authority.initialize`. Each
+requires an explicit `allow` under the existing global/Workspace policy precedence;
+missing decisions deny. `workspace_load` authorizes the local settings/component load;
+`current_actor_read` only authorizes the exact current-actor projection and preflight.
+Neither read permission grants the other or permits initialization/publication.
+Execution permissions grant none of these operations. An
+absent initialization offer binds the native carrier and held-home physical identity as
+well as exact settings and effects. The typed
+`workspace initialize-approved --request FILE` operation applies one approval only
+with current native owner and initialization permission. Denial/cancellation writes
+nothing. Initialization creates Workspace settings, a genuine owner identity and empty
+Lane/association collections; it creates no World, execution destination or credentials.
+An interrupted operation remains incomplete on reopen.
+
+`workspace preflight --request FILE` uses a strict exact current-actor request and the
+separate authenticated native UDS `/v1/workspace/preflight` endpoint. It checks native
+caller/home, Workspace, selected Lane/World/generation, HSA and existing backend custody
+with two bounded owner collects and current read authorization. No lock spans IPC.
+`EligibleObservation` contains opaque identities and owner revisions, with no later
+send, execution, reservation, history or delegation authority. Later operations must
+reauthenticate and authorize independently. The service also watches the existing Root
+installed-home registry before opening its configured capability and through final
+current-authority validation. Head/record changes, restoration, watch loss or overflow
+refuse the bounded cut. The native local open/init constructor binds the actual native
+UID/account and held carrier-selected owner root; it does not independently read the
+Root-only installed-home registry.
+
+Explicit settings writers keep per-source `.<filename>.owner-revision.v1.json` records
+beside global or Workspace YAML, with checked counters, physical source commitments and
+incomplete-publication markers. These records are outside HSA's closed `authority-v1`
+layout. Reads never create them. Every consumed absence, including an optional policy or
+enabled marker, requires an explicit owner-published monotonic tombstone. A legacy
+configured source can load while its exact cut reports unsupported revision coverage. Unmediated changes or incomplete coverage
+refuse eligibility. Existing immutable Workspace identity/first-association V1 records
+retain their schemas. Explicit `publish-world-association` updates use independently
+revisioned per-session `workspace-world-<session digest>.v1.json` records; unrelated
+session updates do not advance the selected association's cut. Matching genuine first
+association identities are reused. Each selected publication also writes an exact
+`.<association filename>.source-cut.v1.json` snapshot receipt binding the selected
+record and immutable Workspace owner source. Its `.source-cut.v1.pending` marker
+prevents partial publication from becoming eligible. Missing receipts never enroll
+on read. The new association-update response reports association and receipt effects
+separately for each attempt; R08 publication effects/wire stay unchanged. These are
+source-owner mutations, never read effects.
+
+The integration proof launcher is
+`SUBSTRATE_PREFLIGHT_PROOF_PROFILE=/absolute/protected/no-send-profile.json cargo test -p shell --test consumer_admission_preflight_linux test_real_workspace_open_init_and_existing_world_no_send -- --ignored --exact --nocapture`.
+The strict protected profile binds exact native/writer artifacts, actual native caller,
+owner request, UDS, measured fixture roots and an exact initialization offer. Missing
+profile, genuine state or IPC fails visibly. Private source proof is distinct from
+installed/kernel qualification. Native WorldFork and trailing-retained Stop support
+remain bounded by their existing producers; no eligibility is manufactured for an
+unsupported population.

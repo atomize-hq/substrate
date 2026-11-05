@@ -1,4 +1,7 @@
-use crate::execution::config_model::{parse_config_yaml, SubstrateConfig};
+use crate::execution::config_model::{
+    is_protected_selection_config_error_v1, parse_config_yaml, ProtectedSelectionConfigErrorV1,
+    SubstrateConfig,
+};
 use anyhow::{anyhow, bail, Context, Result};
 use std::fs;
 use std::io;
@@ -46,7 +49,21 @@ pub fn load_install_config(path: &Path) -> Result<InstallConfig> {
             })
         }
         Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(InstallConfig::default()),
-        Err(err) => Err(anyhow!("failed to read {}: {err}", path.display())),
+        Err(err) => Err(anyhow!("failed to read {}: {err}", path.display()))
+            .context(ProtectedSelectionConfigErrorV1),
+    }
+}
+
+/// Read-only refusal before installer discovery, provisioning or default recovery.
+pub(super) fn refuse_protected_install_config(path: &Path) -> Result<()> {
+    match fs::read_to_string(path) {
+        Ok(raw) => match parse_config_yaml(path, &raw) {
+            Err(err) if is_protected_selection_config_error_v1(&err) => Err(err),
+            _ => Ok(()),
+        },
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(anyhow!("failed to read {}: {err}", path.display()))
+            .context(ProtectedSelectionConfigErrorV1),
     }
 }
 
@@ -55,15 +72,21 @@ pub fn save_install_config(path: &Path, cfg: &InstallConfig) -> Result<()> {
     let parent = path
         .parent()
         .ok_or_else(|| anyhow!("config path {} has no parent", path.display()))?;
-    fs::create_dir_all(parent)
-        .with_context(|| format!("failed to create directory for {}", path.display()))?;
-
     let mut current = match fs::read_to_string(path) {
-        Ok(raw) => parse_config_yaml(path, &raw).unwrap_or_default(),
+        Ok(raw) => match parse_config_yaml(path, &raw) {
+            Ok(current) => current,
+            Err(err) if is_protected_selection_config_error_v1(&err) => return Err(err),
+            Err(_) => SubstrateConfig::default(),
+        },
         Err(err) if err.kind() == io::ErrorKind::NotFound => SubstrateConfig::default(),
-        Err(err) => return Err(anyhow!("failed to read {}: {err}", path.display())),
+        Err(err) => {
+            return Err(anyhow!("failed to read {}: {err}", path.display()))
+                .context(ProtectedSelectionConfigErrorV1)
+        }
     };
     current.world.enabled = cfg.world_enabled;
+    fs::create_dir_all(parent)
+        .with_context(|| format!("failed to create directory for {}", path.display()))?;
 
     let mut tmp = NamedTempFile::new_in(parent)
         .with_context(|| format!("failed to create temp file near {}", path.display()))?;
@@ -173,5 +196,75 @@ mod tests {
             world.get("enabled").and_then(|value| value.as_bool()),
             Some(true)
         );
+    }
+
+    #[test]
+    fn test_install_config_rejects_protected_input_without_materialization() {
+        for raw in crate::execution::config_model::PROTECTED_SELECTION_CONFIG_FIXTURES_V1 {
+            let dir = tempdir().unwrap();
+            let path = dir.path().join("config.yaml");
+            fs::write(&path, raw).unwrap();
+            let before: Vec<_> = fs::read_dir(dir.path())
+                .unwrap()
+                .map(|e| e.unwrap().file_name())
+                .collect();
+            let error = load_install_config(&path).unwrap_err();
+            assert!(
+                is_protected_selection_config_error_v1(&error),
+                "{error:#}; {raw}"
+            );
+            let error = save_install_config(&path, &InstallConfig::default()).unwrap_err();
+            assert!(
+                is_protected_selection_config_error_v1(&error),
+                "{error:#}; {raw}"
+            );
+            assert_eq!(fs::read_to_string(&path).unwrap(), *raw);
+            let after: Vec<_> = fs::read_dir(dir.path())
+                .unwrap()
+                .map(|e| e.unwrap().file_name())
+                .collect();
+            assert_eq!(before, after, "no materialization on protected refusal");
+        }
+    }
+
+    #[test]
+    fn test_install_config_writer_rechecks_changed_input() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("config.yaml");
+        fs::write(&path, "world: {enabled: false}\n").unwrap();
+        let mut config = load_install_config(&path).unwrap();
+        config.set_world_enabled(true);
+        let changed = crate::execution::config_model::PROTECTED_SELECTION_CONFIG_FIXTURES_V1[0];
+        fs::write(&path, changed).unwrap();
+        let error = save_install_config(&path, &config).unwrap_err();
+        assert!(is_protected_selection_config_error_v1(&error));
+        assert_eq!(fs::read_to_string(&path).unwrap(), changed);
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+
+        // Proven-absence legacy corruption keeps its existing recovery behavior.
+        fs::write(&path, "world: {enabled: invalid}\n").unwrap();
+        let error = load_install_config(&path).unwrap_err();
+        assert!(!is_protected_selection_config_error_v1(&error));
+        save_install_config(&path, &config).unwrap();
+        assert!(load_install_config(&path).unwrap().world_enabled);
+
+        // The current read must stand alone if bytes change after an early precheck.
+        refuse_protected_install_config(&path).unwrap();
+        let unreadable_yaml = b"\xffagents: {defaults: {selection: {harness: codex}}}\n";
+        fs::write(&path, unreadable_yaml).unwrap();
+        let error = load_install_config(&path).unwrap_err();
+        assert!(is_protected_selection_config_error_v1(&error));
+        let error = save_install_config(&path, &config).unwrap_err();
+        assert!(is_protected_selection_config_error_v1(&error));
+        assert_eq!(fs::read(&path).unwrap(), unreadable_yaml);
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+
+        let mixed = "world: {enabled: &flag false, caged: *flag}\nagents: {defaults: {selection: {harness: codex, provider: openai, connection_profile: 'built_in:codex-subscription', model: pinned-model}}}\n";
+        fs::write(&path, mixed).unwrap();
+        save_install_config(&path, &config).unwrap();
+        let saved = parse_config_yaml(&path, &fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(saved.world.enabled);
+        assert!(!saved.world.caged);
+        assert_eq!(saved.agents.defaults.selection.model, "pinned-model");
     }
 }

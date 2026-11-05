@@ -532,8 +532,10 @@ pub struct AgentOwnerHelperArgs {
 
 #[derive(Args, Debug, Default)]
 pub struct AgentStartArgs {
+    #[arg(long = "agent", value_name = "AGENT_ID")]
+    pub agent: Option<String>,
     #[arg(long = "backend", value_name = "BACKEND_ID")]
-    pub backend: String,
+    pub backend: Option<String>,
     #[arg(long, value_name = "host|world")]
     pub scope: Option<AgentStartScopeArg>,
     #[arg(
@@ -658,8 +660,20 @@ pub struct AgentCatalogOutputArgs {
 pub enum WorkspaceAction {
     /// Initialize a workspace at PATH (defaults to .)
     Init(WorkspaceInitArgs),
+    /// Open a genuine configured Workspace, or offer exact absent-only initialization
+    Open(WorkspacePathArgs),
+    /// Apply an exact typed initialization decision from a protected request file
+    InitializeApproved(WorkspaceCurrentArgs),
+    /// Observe an exact current destination without any send or execution effect
+    Preflight(WorkspaceCurrentArgs),
+    /// Publish a per-World association update with independent owner permission
+    PublishWorldAssociation(WorkspaceCurrentArgs),
     /// Observe the native Workspace owner identity without repair or execution
     Status(WorkspaceStatusArgs),
+    /// Read one exact existing associated World's nonsecret current actor
+    CurrentActor(WorkspaceCurrentArgs),
+    /// Publish the first association of one exact already-existing World
+    PublishAssociation(WorkspaceCurrentArgs),
     /// Disable workspace discovery at PATH (defaults to .)
     Disable(WorkspacePathArgs),
     /// Enable workspace discovery at PATH (defaults to .)
@@ -690,6 +704,48 @@ mod tests {
             panic!("expected agent start command");
         };
         start
+    }
+
+    #[test]
+    fn test_agent_start_accepts_configured_selection_without_explicit_agent_or_backend() {
+        let start = parse_start_args(&["substrate", "agent", "start", "--prompt", "hello"]);
+        assert_eq!(start.agent, None);
+        assert_eq!(start.backend, None);
+        assert_eq!(start.scope, None);
+    }
+
+    #[test]
+    fn test_agent_start_retains_explicit_agent_and_backend_for_joint_validation() {
+        let start = parse_start_args(&[
+            "substrate",
+            "agent",
+            "start",
+            "--agent",
+            "custom",
+            "--backend",
+            "cli:custom-host",
+            "--scope",
+            "host",
+            "--prompt",
+            "hello",
+        ]);
+        assert_eq!(start.agent.as_deref(), Some("custom"));
+        assert_eq!(start.backend.as_deref(), Some("cli:custom-host"));
+        assert_eq!(start.scope, Some(AgentStartScopeArg::Host));
+    }
+
+    #[test]
+    fn test_agent_start_retains_explicit_empty_backend_for_runtime_refusal() {
+        let start = parse_start_args(&[
+            "substrate",
+            "agent",
+            "start",
+            "--backend",
+            "",
+            "--prompt",
+            "hello",
+        ]);
+        assert_eq!(start.backend.as_deref(), Some(""));
     }
 
     #[test]
@@ -1303,4 +1359,11 @@ pub enum ShimAction {
         #[arg(short = 'y', long = "yes")]
         yes: bool,
     },
+}
+
+#[derive(Args, Debug)]
+pub struct WorkspaceCurrentArgs {
+    /// Bounded strict version-1 exact selectors and mandatory held observation JSON
+    #[arg(long)]
+    pub request: PathBuf,
 }

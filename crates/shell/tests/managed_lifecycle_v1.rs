@@ -224,7 +224,7 @@ fn mapped_lifecycle_decoder_accepts_only_two_tags() {
     for tag in ["stage_one_create", "post_pm_action"] {
         let decoded: ManagedLifecycleControlRequestV1 =
             serde_json::from_value(json!({"tag": tag})).expect("the two ordinary tags must decode");
-        assert_eq!(decoded.tag.is_some(), true);
+        assert!(decoded.tag.is_some());
     }
     for tag in [
         "publisher_bootstrap_direct_interactive",

@@ -74,6 +74,8 @@ fn make_member_dispatch_request(
         cwd.display().to_string(),
     );
     ExecuteRequest {
+        schema_version: 1,
+        ordinary_start_selection: None,
         profile: None,
         cmd: String::new(),
         cwd: Some(cwd.display().to_string()),

@@ -1411,7 +1411,8 @@ mod tests {
             let server = std::thread::spawn(move || {
                 let (mut stream, _) = listener.accept().unwrap();
                 let mut request = [0u8; 4096];
-                stream.read(&mut request).unwrap();
+                let bytes_read = stream.read(&mut request).unwrap();
+                assert!(bytes_read > 0, "fixture server received no request bytes");
                 write!(
                     stream,
                     "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",

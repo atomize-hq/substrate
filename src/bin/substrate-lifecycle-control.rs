@@ -1,13 +1,17 @@
 use anyhow::{anyhow, bail, Context, Result};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::fs::{File, OpenOptions};
+#[cfg(target_os = "macos")]
+use std::fs::File;
+use std::fs::OpenOptions;
 use std::io::{self, BufRead, BufReader, Read, Write};
 #[cfg(target_os = "macos")]
 use std::os::fd::{AsRawFd, FromRawFd};
 #[cfg(target_os = "macos")]
 use std::os::unix::fs::MetadataExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(target_os = "macos")]
+use std::path::PathBuf;
 #[cfg(target_os = "macos")]
 use std::process::{Child, Command, Stdio};
 
@@ -28,11 +32,14 @@ impl DirectGuestPublisherPairingSessionTagV1 {
         }
     }
 }
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+#[cfg(target_os = "macos")]
+use std::time::{Duration, Instant};
+use std::time::{SystemTime, UNIX_EPOCH};
+#[cfg(target_os = "macos")]
+use substrate_common::canonical_guest_publisher_pairing_operator_launch_v1;
 use substrate_common::{
-    canonical_guest_publisher_pairing_operator_launch_v1,
-    canonical_guest_publisher_pairing_ticket_v1, canonical_mac_r6_pairing_predecessor_v1,
-    lifecycle_anchor_sha256_v1, parse_mac_publisher_bootstrap_request_v1,
+    canonical_mac_r6_pairing_predecessor_v1, lifecycle_anchor_sha256_v1,
+    parse_mac_publisher_bootstrap_request_v1,
     validate_guest_publisher_pairing_operator_launch_against_ticket_at_v1,
     validate_guest_publisher_pairing_ticket_at_v1, validate_guest_publisher_pairing_ticket_v1,
     validate_lifecycle_publisher_protected_state_v1, validate_mac_r6_pairing_continuation_v1,
@@ -55,7 +62,7 @@ const GUEST_PAIRING_LITERAL_V1: &str = "PAIR EXACT SUBSTRATE GUEST PUBLISHER";
 #[cfg(target_os = "macos")]
 const MAC_PUBLISHER_HELPER_PATH_V1: &str =
     "/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1";
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", test))]
 const MAC_PUBLISHER_SERVICE_LABEL_V1: &str = "com.substrate.lifecycle.publisher.v1";
 
 pub fn read_exact_bootstrap_confirmation_v1<R, W>(reader: &mut R, writer: &mut W) -> Result<()>
@@ -763,6 +770,7 @@ fn r6_now_unix_ns_v1() -> Result<u64> {
 
 /// Encode the sole canonical signed operator envelope without introducing a caller-selectable
 /// codec, framing, or transport dependency.
+#[cfg(target_os = "macos")]
 fn base64url_encode_control_v1(bytes: &[u8]) -> String {
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     let mut output = String::new();
@@ -1132,17 +1140,6 @@ fn print_json_line_v1(value: &Value) -> Result<()> {
     Ok(())
 }
 
-fn print_ticket_v1(ticket: &substrate_common::GuestPublisherPairingTicketV1) -> Result<()> {
-    let canonical = canonical_guest_publisher_pairing_ticket_v1(ticket)?;
-    let stdout = io::stdout();
-    let mut handle = stdout.lock();
-    handle
-        .write_all(&canonical)
-        .context("write canonical pairing ticket")?;
-    writeln!(handle).context("terminate canonical pairing ticket")?;
-    Ok(())
-}
-
 fn open_controlling_terminal_reader_v1() -> Result<BufReader<std::fs::File>> {
     #[cfg(windows)]
     let path = "CONIN$";
@@ -1168,6 +1165,7 @@ fn open_controlling_terminal_writer_v1() -> Result<std::fs::File> {
         .with_context(|| format!("open controlling terminal for write at {path}"))
 }
 
+#[cfg(target_os = "macos")]
 fn open_controlling_terminal_duplex_v1() -> Result<std::fs::File> {
     #[cfg(windows)]
     let path = "CONOUT$";

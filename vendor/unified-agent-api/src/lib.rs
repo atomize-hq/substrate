@@ -14,7 +14,8 @@ use futures_core::Stream;
 mod agent_kind;
 mod cancel_settlement;
 use cancel_settlement::AgentWrapperCancelInner;
-pub use cancel_settlement::{DynAgentWrapperDisposalRequested, DynAgentWrapperSettlement};
+pub use cancel_settlement::{DynAgentWrapperDisposalRequested, DynAgentWrapperSettlement,
+    DynAgentWrapperProcessSettlement, AgentWrapperProcessTerminationObservation, AgentWrapperProcessSettlementObservation};
 mod runtime_support;
 
 use crate::mcp::{
@@ -170,6 +171,7 @@ impl AgentWrapperCancelHandle {
                 cancel: Box::new(cancel),
                 settlement: None,
                 disposal: None,
+                process_settlement: None,
             }),
         }
     }

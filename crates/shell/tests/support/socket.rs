@@ -15,6 +15,10 @@ use std::sync::{
 };
 use std::thread;
 use std::time::Duration;
+use transport_api_types::{
+    RuntimeEventIdentityV1, RuntimeFrameIdentityV1, RuntimeTerminalIdentityV1,
+    RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+};
 
 /// Behavior for socket stubs spawned during tests.
 #[derive(Clone)]
@@ -89,6 +93,11 @@ pub enum SocketResponse {
     /// Executes `/v1/execute` and `/v1/execute/stream` requests on the host, using
     /// the request's `cwd` and `env` for a lightweight world-service simulation.
     CapabilitiesAndHostExecute { scopes: Vec<String> },
+    /// Current typed stream for plain command fixtures only; no member authority.
+    CapabilitiesAndCurrentPlainCommandStream {
+        scopes: Vec<String>,
+        error: Option<String>,
+    },
     /// Like `CapabilitiesAndHostExecute`, but also records each `/v1/execute` and
     /// `/v1/execute/stream` request JSON payload.
     CapabilitiesAndHostExecuteRecord {
@@ -482,6 +491,26 @@ impl AgentSocket {
                                         payload["process_events_dropped"] = json!(dropped);
                                     }
                                     write_response(&mut stream, &payload.to_string());
+                                } else {
+                                    let _ = stream.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n");
+                                }
+                            }
+                            SocketResponse::CapabilitiesAndCurrentPlainCommandStream {
+                                scopes,
+                                error,
+                            } => {
+                                if first_line.starts_with("GET /v1/capabilities") {
+                                    write_capabilities(&mut stream);
+                                } else if first_line.starts_with("GET /v1/doctor/world") {
+                                    write_world_doctor_report(&mut stream);
+                                } else if first_line.starts_with("POST /v1/execute/stream") {
+                                    let payload = handle_current_plain_command_stream(
+                                        &request,
+                                        scopes,
+                                        error.as_deref(),
+                                    )
+                                    .expect("valid current plain-command fixture request");
+                                    write_stream_response(&mut stream, &payload);
                                 } else {
                                     let _ = stream.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n");
                                 }
@@ -1146,6 +1175,88 @@ fn handle_host_execute(request: &HttpRequest, scopes: &[String]) -> anyhow::Resu
     Ok(payload.to_string())
 }
 
+fn handle_current_plain_command_stream(
+    request: &HttpRequest,
+    scopes: &[String],
+    error: Option<&str>,
+) -> anyhow::Result<String> {
+    use transport_api_types::{
+        ExecuteRequest, ExecuteStreamFrame, ProcessTelemetry, RuntimeEventIdentityV1,
+        RuntimeFrameIdentityV1, RuntimeTerminalIdentityV1,
+        RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+    };
+    let parsed: ExecuteRequest = serde_json::from_slice(&request.body)?;
+    anyhow::ensure!(
+        parsed.schema_version == 1
+            && !parsed.pty
+            && parsed.member_dispatch.is_none()
+            && parsed.acceptance_context.is_none()
+            && parsed.ordinary_start_selection.is_none(),
+        "current command fixture cannot supply selected-member or acceptance authority"
+    );
+    // Plain commands use producer-assigned correlation IDs, not request authority.
+    let stream_id = format!("rts_{}", uuid::Uuid::now_v7());
+    let span_id = format!("routing-fixture-{}", uuid::Uuid::now_v7());
+    let mut sequence = 0;
+    let mut next_frame = || {
+        sequence += 1;
+        RuntimeFrameIdentityV1 {
+            schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: stream_id.clone(),
+            frame_sequence: sequence,
+        }
+    };
+    let mut frames = vec![ExecuteStreamFrame::Start {
+        frame_identity: next_frame(),
+        span_id: span_id.clone(),
+    }];
+    if let Some(message) = error {
+        frames.push(ExecuteStreamFrame::Error {
+            frame_identity: next_frame(),
+            message: message.to_owned(),
+        });
+    } else {
+        let output = run_host_command(&ExecuteRequestStub {
+            cmd: parsed.cmd,
+            cwd: parsed.cwd,
+            env: parsed.env,
+            member_dispatch: None,
+        })?;
+        if !output.stdout.is_empty() {
+            frames.push(ExecuteStreamFrame::Stdout {
+                frame_identity: next_frame(),
+                chunk_b64: BASE64.encode(&output.stdout),
+            });
+        }
+        if !output.stderr.is_empty() {
+            frames.push(ExecuteStreamFrame::Stderr {
+                frame_identity: next_frame(),
+                chunk_b64: BASE64.encode(&output.stderr),
+            });
+        }
+        // Exit is the first semantic event of this plain command stream.
+        let event_identity = RuntimeEventIdentityV1 {
+            event_id: format!("evt_{}", uuid::Uuid::now_v7()),
+            event_sequence: 1,
+        };
+        frames.push(ExecuteStreamFrame::Exit {
+            frame_identity: next_frame(),
+            terminal_identity: RuntimeTerminalIdentityV1::from(&event_identity),
+            event_identity,
+            exit: output.exit,
+            span_id,
+            scopes_used: scopes.to_vec(),
+            fs_diff: None,
+            process_telemetry: ProcessTelemetry::backend_disabled(),
+        });
+    }
+    let mut payload = Vec::new();
+    for frame in frames {
+        payload.extend(frame.canonical_ndjson_bytes().map_err(anyhow::Error::msg)?);
+    }
+    Ok(String::from_utf8(payload)?)
+}
+
 fn handle_host_execute_stream(request: &HttpRequest, scopes: &[String]) -> anyhow::Result<String> {
     let parsed: ExecuteRequestStub = serde_json::from_slice(&request.body)?;
     let output = run_host_command(&parsed)?;
@@ -1229,37 +1340,45 @@ fn build_stream_payload_with_process_events(
     process_events_reason: Option<&str>,
     process_events_dropped: Option<u64>,
 ) -> String {
+    let stream_id = uuid::Uuid::now_v7().to_string();
+    let event_identity = RuntimeEventIdentityV1 {
+        event_id: format!("{stream_id}:exit"),
+        event_sequence: 1,
+    };
+    let terminal_identity = RuntimeTerminalIdentityV1::from(&event_identity);
     let mut frames = String::new();
-    frames.push_str(
-        &json!({
-            "type": "start",
-            "span_id": "agent-span"
-        })
-        .to_string(),
-    );
-    frames.push('\n');
-    if !stdout.is_empty() {
-        frames.push_str(
-            &json!({
-                "type": "stdout",
-                "chunk_b64": BASE64.encode(stdout.as_bytes())
-            })
-            .to_string(),
-        );
+    let mut frame_sequence = 0;
+    let mut push_frame = |mut frame: JsonValue| {
+        frame_sequence += 1;
+        frame["frame_identity"] = json!(RuntimeFrameIdentityV1 {
+            schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: stream_id.clone(),
+            frame_sequence,
+        });
+        frames.push_str(&frame.to_string());
         frames.push('\n');
+    };
+
+    push_frame(json!({
+        "type": "start",
+        "span_id": "agent-span"
+    }));
+    if !stdout.is_empty() {
+        push_frame(json!({
+            "type": "stdout",
+            "chunk_b64": BASE64.encode(stdout.as_bytes())
+        }));
     }
     if !stderr.is_empty() {
-        frames.push_str(
-            &json!({
-                "type": "stderr",
-                "chunk_b64": BASE64.encode(stderr.as_bytes())
-            })
-            .to_string(),
-        );
-        frames.push('\n');
+        push_frame(json!({
+            "type": "stderr",
+            "chunk_b64": BASE64.encode(stderr.as_bytes())
+        }));
     }
     let mut exit_frame = json!({
         "type": "exit",
+        "event_identity": event_identity,
+        "terminal_identity": terminal_identity,
         "exit": exit,
         "span_id": "agent-span",
         "scopes_used": scopes,
@@ -1273,8 +1392,7 @@ fn build_stream_payload_with_process_events(
     if let Some(dropped) = process_events_dropped {
         exit_frame["process_events_dropped"] = json!(dropped);
     }
-    frames.push_str(&exit_frame.to_string());
-    frames.push('\n');
+    push_frame(exit_frame);
     frames
 }
 

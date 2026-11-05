@@ -786,6 +786,8 @@ struct RawPolicyV2 {
     agents: RawAgentsPolicyV1,
     #[serde(default)]
     workflow: RawWorkflowPolicyV1,
+    #[serde(default, rename = "workspace_authority")]
+    _workspace_authority: WorkspaceAuthorityPolicyV1,
 
     net_allowed: Vec<String>,
 
@@ -1560,3 +1562,32 @@ impl Serialize for Policy {
 
 #[cfg(test)]
 mod tests;
+
+/// Current native Workspace operations, never a stored execution-policy capability.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceAuthorityDecisionV1 {
+    Allow,
+    Deny,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct WorkspaceAuthorityPolicyV1 {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workspace_load: Option<WorkspaceAuthorityDecisionV1>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_actor_read: Option<WorkspaceAuthorityDecisionV1>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub association_publish: Option<WorkspaceAuthorityDecisionV1>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub initialize: Option<WorkspaceAuthorityDecisionV1>,
+}
+impl WorkspaceAuthorityPolicyV1 {
+    pub fn is_empty(&self) -> bool {
+        self.workspace_load.is_none()
+            && self.current_actor_read.is_none()
+            && self.association_publish.is_none()
+            && self.initialize.is_none()
+    }
+}

@@ -34,6 +34,8 @@ impl BackendHarnessAdapter for CustodyAdapter {
         let release = self.release.clone();
         let fail = self.fail_settlement;
         Some(BackendAttemptCustody {
+            observe_closed_before_any_spawn: None,
+            observe_processes: None,
             request_termination: Arc::new(|| {}),
             settle: Arc::new(move || {
                 let settling = settling.clone();

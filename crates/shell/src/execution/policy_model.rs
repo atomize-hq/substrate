@@ -16,6 +16,8 @@ use substrate_broker::{
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct PolicyPatch {
+    #[serde(skip_serializing_if = "substrate_broker::WorkspaceAuthorityPolicyV1::is_empty")]
+    pub workspace_authority: substrate_broker::WorkspaceAuthorityPolicyV1,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -48,7 +50,8 @@ pub(crate) struct PolicyPatch {
 
 impl PolicyPatch {
     pub(crate) fn is_empty(&self) -> bool {
-        self.id.is_none()
+        self.workspace_authority.is_empty()
+            && self.id.is_none()
             && self.name.is_none()
             && self.world_fs.is_empty()
             && self.llm.is_empty()
@@ -1542,6 +1545,23 @@ fn apply_policy_patch_over(target: &mut Policy, patch: &PolicyPatch) {
 
 fn reset_policy_patch_key(patch: &mut PolicyPatch, key: &str) -> Result<bool> {
     match key {
+        "workspace_authority.workspace_load" => {
+            Ok(patch.workspace_authority.workspace_load.take().is_some())
+        }
+        "workspace_authority.current_actor_read" => Ok(patch
+            .workspace_authority
+            .current_actor_read
+            .take()
+            .is_some()),
+        "workspace_authority.association_publish" => Ok(patch
+            .workspace_authority
+            .association_publish
+            .take()
+            .is_some()),
+        "workspace_authority.initialize" => {
+            Ok(patch.workspace_authority.initialize.take().is_some())
+        }
+
         "id" => Ok(patch.id.take().is_some()),
         "name" => Ok(patch.name.take().is_some()),
 
@@ -1748,6 +1768,22 @@ fn reset_policy_patch_key(patch: &mut PolicyPatch, key: &str) -> Result<bool> {
 
 fn apply_update_to_patch(patch: &mut PolicyPatch, update: &ConfigUpdate) -> Result<bool> {
     match update.key.as_str() {
+        "workspace_authority.workspace_load" => apply_workspace_authority_decision_v1(
+            &mut patch.workspace_authority.workspace_load,
+            update,
+        ),
+        "workspace_authority.current_actor_read" => apply_workspace_authority_decision_v1(
+            &mut patch.workspace_authority.current_actor_read,
+            update,
+        ),
+        "workspace_authority.association_publish" => apply_workspace_authority_decision_v1(
+            &mut patch.workspace_authority.association_publish,
+            update,
+        ),
+        "workspace_authority.initialize" => {
+            apply_workspace_authority_decision_v1(&mut patch.workspace_authority.initialize, update)
+        }
+
         "id" => apply_string_opt(&mut patch.id, &update.op, &update.value),
         "name" => apply_string_opt(&mut patch.name, &update.op, &update.value),
 
@@ -2862,5 +2898,65 @@ llm:
                 "expected `{expected_fragment}` in error, got: {err}"
             );
         }
+    }
+}
+
+fn apply_workspace_authority_decision_v1(
+    target: &mut Option<substrate_broker::WorkspaceAuthorityDecisionV1>,
+    update: &ConfigUpdate,
+) -> Result<bool> {
+    let UpdateOp::Set = update.op else {
+        return Err(config_model::user_error(
+            "Workspace operation decisions require =",
+        ));
+    };
+    let next = Some(match update.value.trim() {
+        "allow" => substrate_broker::WorkspaceAuthorityDecisionV1::Allow,
+        "deny" => substrate_broker::WorkspaceAuthorityDecisionV1::Deny,
+        _ => {
+            return Err(config_model::user_error(
+                "Workspace operation decision must be allow or deny",
+            ))
+        }
+    });
+    let changed = *target != next;
+    *target = next;
+    Ok(changed)
+}
+
+#[cfg(test)]
+mod workspace_read_cut_policy_operation_writer_tests {
+    use super::*;
+    #[test]
+    fn workspace_read_cut_policy_operation_set_reset_is_strict_and_independent() {
+        let mut patch = PolicyPatch::default();
+        let updates = config_model::parse_updates(&[
+            "workspace_authority.current_actor_read=deny".into(),
+            "workspace_authority.workspace_load=allow".into(),
+            "workspace_authority.initialize=allow".into(),
+        ])
+        .unwrap();
+        apply_updates_to_policy_patch(&mut patch, &updates).unwrap();
+        assert_eq!(
+            patch.workspace_authority.current_actor_read,
+            Some(substrate_broker::WorkspaceAuthorityDecisionV1::Deny)
+        );
+        assert_eq!(
+            patch.workspace_authority.initialize,
+            Some(substrate_broker::WorkspaceAuthorityDecisionV1::Allow)
+        );
+        assert_eq!(
+            patch.workspace_authority.workspace_load,
+            Some(substrate_broker::WorkspaceAuthorityDecisionV1::Allow)
+        );
+        reset_policy_patch_keys(&mut patch, &["workspace_authority.workspace_load".into()])
+            .unwrap();
+        assert_eq!(patch.workspace_authority.workspace_load, None);
+        assert_eq!(patch.workspace_authority.association_publish, None);
+        reset_policy_patch_keys(&mut patch, &["workspace_authority.initialize".into()]).unwrap();
+        assert_eq!(patch.workspace_authority.initialize, None);
+        let bad =
+            config_model::parse_updates(&["workspace_authority.initialize=yes".into()]).unwrap();
+        assert!(apply_updates_to_policy_patch(&mut patch, &bad).is_err());
     }
 }

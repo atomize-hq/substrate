@@ -95,4 +95,37 @@ mod tests {
             assert!(message.contains(&format!("failed to read {}", config_path.display())));
         }
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_manager_env_refuses_protected_input_before_write() {
+        for raw in config_model::PROTECTED_SELECTION_CONFIG_FIXTURES_V1 {
+            let temp = tempdir().unwrap();
+            let home = temp.path().join("selected-home");
+            fs::create_dir(&home).unwrap();
+            let config_path = home.join("config.yaml");
+            fs::write(&config_path, raw).unwrap();
+            let env_path = home.join("env.sh");
+            fs::write(&env_path, "existing env sentinel\n").unwrap();
+            let error = update_manager_env_exports(&env_path, &home, true).unwrap_err();
+            assert!(
+                config_model::is_protected_selection_config_error_v1(&error),
+                "{error:#}; {raw}"
+            );
+            assert_eq!(
+                fs::read_to_string(&env_path).unwrap(),
+                "existing env sentinel\n"
+            );
+            assert_eq!(fs::read_to_string(&config_path).unwrap(), *raw);
+            let missing_parent = home.join("no-exports");
+            let error = update_manager_env_exports(&missing_parent.join("env.sh"), &home, true)
+                .unwrap_err();
+            assert!(config_model::is_protected_selection_config_error_v1(&error));
+            assert!(
+                !missing_parent.exists(),
+                "refuse before creating output parent"
+            );
+            assert_eq!(fs::read_dir(&home).unwrap().count(), 2);
+        }
+    }
 }

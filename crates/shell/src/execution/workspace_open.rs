@@ -1,9 +1,7 @@
-//! Strict Linux discovery and internal native settings observation.
-//!
-//! A candidate proves only that the nearest control boundary has a compatible marker.
-//! Discovery alone leaves policy unchecked. Settings observation composes config/policy,
-//! with native owner identity explicitly observed, missing or blocked. Lanes, destinations
-//! and consumer authorization remain unsupported; no full Loaded view is supplied.
+//! Strict Linux Workspace discovery, native owner load, approved absent initialization,
+//! and exact no-send observations. Internal settings observation alone is not eligibility.
+//! The preflight composes genuine per-World association, current HSA and backend custody
+//! with bounded owner revision revalidation. No returned observation grants later use.
 
 #![allow(
     dead_code,
@@ -428,6 +426,10 @@ impl InspectionGuard {
 pub(crate) struct WorkspaceNativeSettingsContextV1 {
     carrier: InstallBootstrapContextCarrierV1,
     authority: HostSessionAuthority,
+    peer_authority: Option<(
+        u32,
+        std::sync::Arc<config_projection::ConfiguredAcceptedHomeAuthorityV1>,
+    )>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -488,12 +490,17 @@ impl WorkspaceNativeSettingsContextV1 {
         Ok(Self {
             carrier: carrier.clone(),
             authority,
+            peer_authority: None,
         })
     }
 
     fn revalidate(&self) -> Result<(), WorkspaceSettingsContextFailureV1> {
-        super::install_bootstrap::bind_unix_install_bootstrap_context(&self.carrier)
-            .map_err(|_| WorkspaceSettingsContextFailureV1::PrincipalDenied)?;
+        if let Some((uid, configured)) = &self.peer_authority {
+            self.revalidate_peer_authority(*uid, configured)?;
+        } else {
+            super::install_bootstrap::bind_unix_install_bootstrap_context(&self.carrier)
+                .map_err(|_| WorkspaceSettingsContextFailureV1::PrincipalDenied)?;
+        }
         self.authority
             .bootstrap_home()
             .revalidate()
@@ -540,6 +547,7 @@ pub(crate) struct WorkspaceSettingsObservationV1 {
     pub(crate) config_provenance: ConfigExplainV1,
     pub(crate) policy: substrate_broker::Policy,
     pub(crate) policy_provenance: substrate_broker::PolicyExplainV1,
+    pub(crate) workspace_authority: substrate_broker::WorkspaceAuthorityEffectiveV1,
     pub(crate) global_config_source: Option<PathBuf>,
     pub(crate) global_policy_source: Option<PathBuf>,
     pub(crate) workspace_config_source: PathBuf,
@@ -551,6 +559,10 @@ pub(crate) struct WorkspaceSettingsObservationV1 {
     pub(crate) consumer_read_authorization: WorkspaceOwnerComponentV1,
 }
 
+#[allow(
+    clippy::large_enum_variant,
+    reason = "retain the complete held workspace settings observation and established absent or blocked result API"
+)]
 pub(crate) enum WorkspaceSettingsLoadV1 {
     SettingsObserved(WorkspaceSettingsObservationV1),
     Absent {
@@ -734,7 +746,7 @@ impl WorkspaceOpenAdapter {
         context: &WorkspaceNativeSettingsContextV1,
         cli: &CliConfigOverrides,
     ) -> WorkspaceSettingsLoadV1 {
-        Self::observe_existing(selected, context, cli, false).0
+        Self::observe_existing(selected, context, cli, false, None).0
     }
 
     pub(crate) fn publish_existing_owner(
@@ -742,7 +754,7 @@ impl WorkspaceOpenAdapter {
         context: &WorkspaceNativeSettingsContextV1,
         cli: &CliConfigOverrides,
     ) -> (WorkspaceSettingsLoadV1, WorkspaceOwnerPublicationV1) {
-        let (settings, publication) = Self::observe_existing(selected, context, cli, true);
+        let (settings, publication) = Self::observe_existing(selected, context, cli, true, None);
         let mut publication = publication.unwrap_or(WorkspaceOwnerPublicationV1::Failed(
             WorkspaceOwnerBlockerV1::UnsafeOwnerState,
             PublicationEffectsV1::default(),
@@ -766,6 +778,7 @@ impl WorkspaceOpenAdapter {
         context: &WorkspaceNativeSettingsContextV1,
         cli: &CliConfigOverrides,
         publish: bool,
+        mut operation: Option<&mut NativeWorkspaceOperationV1<'_>>,
     ) -> (WorkspaceSettingsLoadV1, Option<WorkspaceOwnerPublicationV1>) {
         let mut publication = None;
         let settings = (|| {
@@ -931,13 +944,24 @@ impl WorkspaceOpenAdapter {
                 let unsupported = WorkspaceOwnerComponentV1::Unsupported(
                     UnsupportedWorkspaceOwnerReasonV1::OwnerReaderNotImplemented,
                 );
-                Ok(Some(WorkspaceSettingsObservationV1 {
+                let workspace_authority =
+                    substrate_broker::resolve_workspace_authority_from_sources_v1(
+                        &global_policy_path,
+                        policy_bytes.as_deref(),
+                        workspace_policy
+                            .bytes
+                            .as_deref()
+                            .map(|bytes| (workspace_policy_path.as_path(), bytes)),
+                    )
+                    .map_err(|_| Blocker::IncompatibleConfigPolicy)?;
+                let observation = WorkspaceSettingsObservationV1 {
                     selected_location: selected.to_path_buf(),
                     root,
                     config,
                     config_provenance,
                     policy,
                     policy_provenance,
+                    workspace_authority,
                     global_config_source: global_config.source_bytes().map(|_| global_config_path),
                     global_policy_source: policy_bytes.as_ref().map(|_| global_policy_path),
                     workspace_config_source: marker_path,
@@ -950,7 +974,22 @@ impl WorkspaceOpenAdapter {
                     lanes: unsupported,
                     destinations: unsupported,
                     consumer_read_authorization: unsupported,
-                }))
+                };
+                if let Some(operation) = operation.as_mut() {
+                    let boundary = HeldWorkspaceOwnerBoundaryV1::capture(
+                        context,
+                        &observation.root,
+                        &control.held,
+                        guard
+                            .directories
+                            .iter()
+                            .map(|d| (d.path.as_path(), &d.held)),
+                    )
+                    .map_err(|_| Blocker::ChangedDuringRead)?;
+                    operation(&observation, boundary, &revalidate)
+                        .map_err(|_| Blocker::ChangedDuringRead)?;
+                }
+                Ok(Some(observation))
             })();
             let result = guard
                 .revalidate()
@@ -1175,7 +1214,7 @@ mod tests {
                 matches!(preserved(temp.path(), &nested), WorkspaceInspection::Candidate(DiscoveredWorkspace { root: candidate, .. }) if candidate == root)
             );
         }
-        fs::set_permissions(&policy, fs::Permissions::from_mode(0)).unwrap();
+        fs::set_permissions(&policy, fs::Permissions::from_mode(0o0)).unwrap();
         assert!(matches!(
             preserved(temp.path(), &nested),
             WorkspaceInspection::Candidate(_)
@@ -1207,7 +1246,7 @@ mod tests {
             let before = snapshot(temp.path());
             let target = root.join(name);
             let original = fs::metadata(&target).unwrap().permissions();
-            fs::set_permissions(&target, fs::Permissions::from_mode(0)).unwrap();
+            fs::set_permissions(&target, fs::Permissions::from_mode(0o0)).unwrap();
             let permission_error = File::open(&target).unwrap_err();
             assert_eq!(permission_error.raw_os_error(), Some(libc::EACCES));
             println!(
@@ -1397,7 +1436,7 @@ mod tests {
         let (temp, root, nested) = fixture();
         let before = snapshot(temp.path());
         let original = fs::metadata(&nested).unwrap().permissions();
-        fs::set_permissions(&nested, fs::Permissions::from_mode(0)).unwrap();
+        fs::set_permissions(&nested, fs::Permissions::from_mode(0o0)).unwrap();
         let permission_error = File::open(&nested).unwrap_err();
         assert_eq!(permission_error.raw_os_error(), Some(libc::EACCES));
         println!(
@@ -1498,6 +1537,9 @@ mod tests {
         let nested = root.join("nested");
         fs::create_dir_all(&nested).unwrap();
         marker(&root, b"world: {enabled: true}\nsync: {exclude: [local]}\n");
+        for directory in [&root, &nested, &root.join(".substrate")] {
+            fs::set_permissions(directory, fs::Permissions::from_mode(0o700)).unwrap();
+        }
         private_file(
             &root.join(".substrate/policy.yaml"),
             b"name: local-policy\ncmd_allowed: [local]\n",
@@ -1518,6 +1560,76 @@ mod tests {
             nested,
             context,
         }
+    }
+
+    #[test]
+    fn test_workspace_current_native_policy_change_refuses_before_disclosure_or_transport() {
+        let fixture = settings_fixture();
+        private_file(
+            &fixture.home.join("policy.yaml"),
+            b"workspace_authority: {current_actor_read: allow}\n",
+        );
+        let (_, published) = WorkspaceOpenAdapter::publish_existing_owner(
+            &fixture.root,
+            &fixture.context,
+            &CliConfigOverrides::default(),
+        );
+        let WorkspaceOwnerPublicationV1::Published(identity, _) = published else {
+            panic!("genuine owner publication");
+        };
+        let carrier = settings_carrier(&fixture.home);
+        let home = fixture.context.owner_binding().unwrap().home;
+        let request = transport_api_types::WorkspaceCurrentRequestV1 {
+            schema_version: 1,
+            native_context: carrier,
+            resource: transport_api_types::WorkspaceCurrentResourceV1 {
+                workspace_path: fixture.root.to_str().unwrap().into(),
+                workspace_ref: identity.workspace_ref,
+                workspace_incarnation: identity.store_incarnation,
+                orchestration_session_id: "negative-selector".into(),
+                world_id: "negative-selector".into(),
+                world_generation: 0,
+                backend_id: "cli:codex".into(),
+            },
+            observation: transport_api_types::WorkspaceHeldAuthorityObservationV1 {
+                authority_store_id: "negative-selector".into(),
+                home_path: home.physical_path,
+                home_device: home.device_id,
+                home_inode: home.inode,
+                root_revision: 1,
+                authority_revision: 1,
+                authority_record_sha256: "a".repeat(64),
+                authoritative_lineage_sha256: "b".repeat(64),
+            },
+            operation: transport_api_types::WorkspaceCurrentOperationV1::CurrentActorRead {
+                lane_ref: "negative-selector".into(),
+                association_incarnation: "negative-selector".into(),
+                association_revision: 1,
+                backend_custody_ref: "c".repeat(64),
+                expected_actor: "negative-selector".into(),
+            },
+        };
+        let path = fixture.home.join("policy.yaml");
+        let changed = path.clone();
+        AFTER_SETTINGS_COLLECT.with(|hook| {
+            *hook.borrow_mut() = Some(Box::new(move || {
+                fs::write(
+                    changed,
+                    b"workspace_authority: {current_actor_read: deny}\n",
+                )
+                .unwrap();
+            }))
+        });
+        let reply = run_native_workspace_current_request_v1(&request).unwrap();
+        assert!(matches!(
+            reply,
+            transport_api_types::WorkspaceCurrentResponseV1::Refused { .. }
+        ));
+        assert_eq!(
+            fs::read(path).unwrap(),
+            b"workspace_authority: {current_actor_read: deny}\n",
+            "read repaired policy"
+        );
     }
 
     fn settings_preserved(fixture: &SettingsFixture, selected: &Path) -> WorkspaceSettingsLoadV1 {
@@ -1622,7 +1734,93 @@ mod tests {
                     selected, &bootstrap, true,
                 )
                 .unwrap();
-            assert_eq!(observation.config, legacy_config.0);
+            // Preserve every semantic field while separately proving all three
+            // skipped physical-capture fields and their exact provenance.
+            assert_eq!(
+                serde_json::to_value(&observation.config).unwrap(),
+                serde_json::to_value(&legacy_config.0).unwrap()
+            );
+            assert_eq!(
+                observation.config.repl.max_pty_buffered_lines_clamp,
+                legacy_config.0.repl.max_pty_buffered_lines_clamp
+            );
+            assert!(observation.config.selection_sources.is_empty());
+            assert!(observation.config.selection_preference_source.is_none());
+            assert!(observation.config.selection_profiles.is_empty());
+            use sha2::{Digest, Sha256};
+            use std::os::unix::fs::MetadataExt;
+            use transport_api_types::{
+                AgentConnectionAuthV1, AgentConnectionBillingV1, AgentConnectionProfileV1,
+                AgentSelectionSourceScopeV1, AgentSelectionSourceV1,
+            };
+            let builtin = AgentSelectionSourceV1 {
+                scope: AgentSelectionSourceScopeV1::BuiltIn,
+                root_identity: "substrate-agent-routes.v1".into(),
+                relative_path: "config/agent-routes".into(),
+                revision: "1".into(),
+                sha256: "af4b5e5a2c07723d4d0b8fb592e90487d2c38e71b5501d14ff63cef4cf247874".into(),
+            };
+            let mut sources = vec![builtin.clone()];
+            for (scope, path) in [
+                (
+                    AgentSelectionSourceScopeV1::Global,
+                    f.home.join("config.yaml"),
+                ),
+                (
+                    AgentSelectionSourceScopeV1::Workspace,
+                    f.root.join(".substrate/workspace.yaml"),
+                ),
+            ] {
+                let parent = path.parent().unwrap().canonicalize().unwrap();
+                let metadata = fs::metadata(&parent).unwrap();
+                let hash = format!("{:x}", Sha256::digest(fs::read(&path).unwrap()));
+                sources.push(AgentSelectionSourceV1 {
+                    scope,
+                    root_identity: format!(
+                        "{}:{}:{}",
+                        metadata.dev(),
+                        metadata.ino(),
+                        parent.display()
+                    ),
+                    relative_path: path.file_name().unwrap().to_str().unwrap().into(),
+                    revision: hash.clone(),
+                    sha256: hash,
+                });
+            }
+            assert_eq!(legacy_config.0.selection_sources.len(), 3);
+            assert_eq!(legacy_config.0.selection_sources, sources);
+            assert_eq!(
+                legacy_config.0.selection_preference_source.as_ref(),
+                Some(&builtin)
+            );
+            let profiles = vec![
+                AgentConnectionProfileV1 {
+                    id: "built_in:codex-subscription".into(),
+                    revision: "1".into(),
+                    provider: "openai".into(),
+                    billing: AgentConnectionBillingV1::Subscription,
+                    endpoint_identity: "openai-codex-subscription".into(),
+                    upstream_base_url: "https://chatgpt.com/backend-api".into(),
+                    auth: AgentConnectionAuthV1::CodexAccount {
+                        reference: "configured-account".into(),
+                    },
+                    source: builtin.clone(),
+                },
+                AgentConnectionProfileV1 {
+                    id: "built_in:claude-existing".into(),
+                    revision: "1".into(),
+                    provider: "anthropic".into(),
+                    billing: AgentConnectionBillingV1::Api,
+                    endpoint_identity: "anthropic-api".into(),
+                    upstream_base_url: "https://api.anthropic.com".into(),
+                    auth: AgentConnectionAuthV1::ApiKeyEnvironment {
+                        name: "ANTHROPIC_API_KEY".into(),
+                    },
+                    source: builtin,
+                },
+            ];
+            assert_eq!(legacy_config.0.selection_profiles.len(), 2);
+            assert_eq!(legacy_config.0.selection_profiles, profiles);
             assert_eq!(Some(observation.config_provenance), legacy_config.1);
             assert_eq!(
                 serde_json::to_value(observation.policy).unwrap(),
@@ -1770,7 +1968,7 @@ mod tests {
                     } else {
                         f.root.join(".substrate/policy.yaml")
                     };
-                    fs::set_permissions(&path, fs::Permissions::from_mode(0)).unwrap();
+                    fs::set_permissions(&path, fs::Permissions::from_mode(0o0)).unwrap();
                     assert_eq!(
                         fs::read(&path).unwrap_err().raw_os_error(),
                         Some(libc::EACCES)
@@ -2420,4 +2618,2283 @@ mod tests {
             }
         }
     }
+}
+
+type NativeWorkspaceOperationV1<'a> = dyn FnMut(
+        &WorkspaceSettingsObservationV1,
+        HeldWorkspaceOwnerBoundaryV1,
+        &dyn Fn() -> Result<(), WorkspaceOwnerBlockerV1>,
+    ) -> Result<(), WorkspaceOwnerBlockerV1>
+    + 'a;
+
+/// Kernel identity from the actual accepted connection. No public constructor from a UID.
+#[derive(Clone)]
+pub struct WorkspaceNativePeerV1 {
+    uid: u32,
+}
+impl WorkspaceNativePeerV1 {
+    pub fn capture_linux_uds_v1(stream: &tokio::net::UnixStream) -> Result<Self, &'static str> {
+        let peer = stream.peer_cred().map_err(|_| "Denied")?;
+        if peer.pid().is_none() {
+            return Err("Denied");
+        }
+        Ok(Self { uid: peer.uid() })
+    }
+}
+
+impl WorkspaceNativeSettingsContextV1 {
+    fn from_peer_invocation(
+        carrier: &InstallBootstrapContextCarrierV1,
+        peer: &WorkspaceNativePeerV1,
+        configured: std::sync::Arc<config_projection::ConfiguredAcceptedHomeAuthorityV1>,
+    ) -> Result<Self, WorkspaceSettingsContextFailureV1> {
+        use WorkspaceSettingsContextFailureV1::*;
+        carrier.validate().map_err(|_| InvalidNativeContext)?;
+        configured
+            .revalidate()
+            .map_err(|_| HomeUnsupportedOrUnavailable)?;
+        let accepted = configured.accepted_home();
+        if configured.intended_uid() != u64::from(peer.uid)
+            || carrier.context.host_substrate_home != accepted.physical_path
+        {
+            return Err(PrincipalDenied);
+        }
+        let root =
+            TrustedAuthorityRoot::open_for_owner(Path::new(&accepted.physical_path), peer.uid)
+                .map_err(|_| HomeUnsupportedOrUnavailable)?;
+        let authority = HostSessionAuthority::from_trusted_root(root)
+            .map_err(|_| HomeUnsupportedOrUnavailable)?;
+        let context = Self {
+            carrier: carrier.clone(),
+            authority,
+            peer_authority: Some((peer.uid, configured)),
+        };
+        context.revalidate()?;
+        Ok(context)
+    }
+
+    fn revalidate_peer_authority(
+        &self,
+        peer_uid: u32,
+        configured: &config_projection::ConfiguredAcceptedHomeAuthorityV1,
+    ) -> Result<(), WorkspaceSettingsContextFailureV1> {
+        use WorkspaceSettingsContextFailureV1::*;
+        configured
+            .revalidate()
+            .map_err(|_| HomeUnsupportedOrUnavailable)?;
+        // Observe today's installed binding afresh, independently of E3 registry/preparations.
+        let fresh = config_projection::ConfiguredAcceptedHomeAuthorityV1::from_installed_bootstrap_authority()
+            .map_err(|_| HomeUnsupportedOrUnavailable)?;
+        if fresh.intended_uid() != u64::from(peer_uid)
+            || fresh.accepted_home() != configured.accepted_home()
+            || self.carrier.context.host_substrate_home != fresh.accepted_home().physical_path
+        {
+            return Err(PrincipalDenied);
+        }
+        let PlatformPrincipalV1::Unix { uid, account } =
+            &self.carrier.context.intended_host_principal
+        else {
+            return Err(PrincipalDenied);
+        };
+        if *uid != peer_uid {
+            return Err(PrincipalDenied);
+        }
+        let account = CString::new(account.as_bytes()).map_err(|_| InvalidNativeContext)?;
+        let mut pwd = std::mem::MaybeUninit::<libc::passwd>::uninit();
+        let mut result = std::ptr::null_mut();
+        let mut buffer = vec![0u8; 16384];
+        if unsafe {
+            libc::getpwnam_r(
+                account.as_ptr(),
+                pwd.as_mut_ptr(),
+                buffer.as_mut_ptr().cast(),
+                buffer.len(),
+                &mut result,
+            )
+        } != 0
+            || result.is_null()
+            || unsafe { pwd.assume_init() }.pw_uid != peer_uid
+        {
+            return Err(PrincipalDenied);
+        }
+        let accepted = configured.accepted_home();
+        let bootstrap_home = self.authority.bootstrap_home();
+        let physical = &bootstrap_home
+            .identity()
+            .map_err(|_| HomeUnsupportedOrUnavailable)?
+            .physical_identity;
+        match (physical, &accepted.physical_identity) {
+            (
+                DirectoryPhysicalIdentityV1::Linux {
+                    device_id: a,
+                    inode: b,
+                },
+                config_projection::DirectoryPhysicalIdentityV1::Linux {
+                    device_id: c,
+                    inode: d,
+                },
+            ) if a == c && b == d => Ok(()),
+            _ => Err(HomeUnsupportedOrUnavailable),
+        }
+    }
+}
+
+impl WorkspaceOpenAdapter {
+    fn with_native_operation_v1(
+        selected: &Path,
+        context: &WorkspaceNativeSettingsContextV1,
+        operation: &mut NativeWorkspaceOperationV1<'_>,
+    ) -> WorkspaceSettingsLoadV1 {
+        Self::observe_existing(
+            selected,
+            context,
+            &CliConfigOverrides::default(),
+            false,
+            Some(operation),
+        )
+        .0
+    }
+}
+
+fn current_request_matches_owner_v1(
+    observation: &WorkspaceSettingsObservationV1,
+    request: &transport_api_types::WorkspaceCurrentRequestV1,
+) -> bool {
+    matches!(&observation.identity, WorkspaceIdentityObservationV1::OwnerStateObserved(identity)
+        if identity.workspace_ref == request.resource.workspace_ref
+            && identity.store_incarnation == request.resource.workspace_incarnation)
+        && observation.root.to_str() == Some(request.resource.workspace_path.as_str())
+}
+
+fn current_operation_allowed_v1(
+    observation: &WorkspaceSettingsObservationV1,
+    operation: &transport_api_types::WorkspaceCurrentOperationV1,
+) -> bool {
+    use substrate_broker::WorkspaceAuthorityDecisionV1::Allow;
+    use transport_api_types::WorkspaceCurrentOperationV1::*;
+    match operation {
+        CurrentActorRead { .. } => {
+            observation.workspace_authority.decisions.current_actor_read == Some(Allow)
+                && observation.workspace_authority.read_source.is_some()
+        }
+        PublishAssociation => {
+            observation
+                .workspace_authority
+                .decisions
+                .association_publish
+                == Some(Allow)
+                && observation.workspace_authority.publish_source.is_some()
+        }
+    }
+}
+
+fn refused_current_v1(
+    reason: transport_api_types::WorkspaceCurrentRefusalV1,
+) -> transport_api_types::WorkspaceCurrentResponseV1 {
+    transport_api_types::WorkspaceCurrentResponseV1::Refused { reason }
+}
+
+/// Source-owner service entry. The peer comes from the accepted connection; accepted home
+/// comes from installed authority, not a request pathname. This function never ensures a World.
+///
+/// ```no_run
+/// # fn read(stream: &tokio::net::UnixStream, request: &transport_api_types::WorkspaceCurrentRequestV1, actual_backend: &world::LinuxLocalBackend) {
+/// if let Ok(peer) = substrate_shell::WorkspaceNativePeerV1::capture_linux_uds_v1(stream) {
+///     let response = substrate_shell::workspace_current_for_peer_v1(&peer, request, actual_backend);
+///     # let _ = response;
+/// }
+/// # }
+/// ```
+pub fn workspace_current_for_peer_v1(
+    peer: &WorkspaceNativePeerV1,
+    request: &transport_api_types::WorkspaceCurrentRequestV1,
+    backend: &world::LinuxLocalBackend,
+) -> transport_api_types::WorkspaceCurrentResponseV1 {
+    use transport_api_types::{
+        WorkspaceCurrentOperationV1 as O, WorkspaceCurrentRefusalV1 as F,
+        WorkspaceCurrentResponseV1 as R,
+    };
+    if request.validate().is_err() {
+        return refused_current_v1(F::Denied);
+    }
+    let configured = match config_projection::ConfiguredAcceptedHomeAuthorityV1::from_installed_bootstrap_authority() {
+        Ok(value) => std::sync::Arc::new(value), Err(_) => return refused_current_v1(F::Denied),
+    };
+    let context = match WorkspaceNativeSettingsContextV1::from_peer_invocation(
+        &request.native_context,
+        peer,
+        configured,
+    ) {
+        Ok(context) => context,
+        Err(_) => return refused_current_v1(F::Denied),
+    };
+    let effects =
+        std::cell::Cell::new(transport_api_types::WorkspaceAssociationEffectsV1::default());
+    let mut output = refused_current_v1(F::Denied);
+    let settings = WorkspaceOpenAdapter::with_native_operation_v1(
+        Path::new(&request.resource.workspace_path),
+        &context,
+        &mut |observation, boundary, sources_current| {
+            // Authorize before target lookup or any diagnostic revealing resource existence.
+            if !current_operation_allowed_v1(observation, &request.operation) {
+                return Ok(());
+            }
+            if !current_request_matches_owner_v1(observation, request) {
+                return Ok(());
+            }
+            let publish = matches!(request.operation, O::PublishAssociation);
+            let owner = match owner::WorkspaceAssociationOperationV1::open(
+                boundary, &context, request, publish,
+            ) {
+                Ok(value) => value,
+                Err(_) => {
+                    return Ok(());
+                }
+            };
+            if let O::CurrentActorRead {
+                backend_custody_ref,
+                ..
+            } = &request.operation
+            {
+                if let Err(reason) =
+                    owner.validate_read_selectors_v1(&context, request, backend_custody_ref)
+                {
+                    output = refused_current_v1(workspace_owner_refusal_v1(reason));
+                    owner.revalidate(&context)?;
+                    return Ok(());
+                }
+            }
+            let resource_authorized = std::cell::Cell::new(!publish);
+            let refusal = std::cell::Cell::new(F::Integrity);
+            let result = backend.with_existing_custody_nonreconciling_v1(
+                &request.resource.orchestration_session_id, &request.resource.world_id, request.resource.world_generation,
+                &observation.root, |custody| {
+                    let held = context.held_current_observation_v1(request);
+                    context.authority.with_workspace_current_actor_nonreconciling_v1(
+                        &request.resource.orchestration_session_id, &held, |resolved| {
+                            context.validate_current_join_v1(request, resolved)?;
+                            resource_authorized.set(true);
+                            let result = if publish {
+                                owner.publish(&context, custody, &effects, sources_current)
+                                    .map_err(|_| super::agent_runtime::host_session_authority::facade::AuthorityFacadeError::workspace_current_refusal_v1())?
+                            } else {
+                                owner.read_joined(&context, request, custody, resolved)
+                                    .map_err(|reason| if reason == WorkspaceOwnerBlockerV1::UnsupportedOwnerState {
+                                        super::agent_runtime::host_session_authority::facade::AuthorityFacadeError::workspace_current_unsupported_v1()
+                                    } else { super::agent_runtime::host_session_authority::facade::AuthorityFacadeError::workspace_current_refusal_v1() })?
+                            };
+                            sources_current().map_err(|_| super::agent_runtime::host_session_authority::facade::AuthorityFacadeError::workspace_current_refusal_v1())?;
+                            owner.revalidate(&context).map_err(|_| super::agent_runtime::host_session_authority::facade::AuthorityFacadeError::workspace_current_refusal_v1())?;
+                            custody.revalidate().map_err(|_| super::agent_runtime::host_session_authority::facade::AuthorityFacadeError::workspace_current_refusal_v1())?;
+                            Ok(result)
+                        }).map_err(|error| { refusal.set(error.workspace_current_category_v1()); anyhow::anyhow!("current authority refused") })
+                });
+            output = match result {
+                Ok(value) => value,
+                Err(_) if effects.get().staging_created == Some(true) => {
+                    R::AssociationPublicationFailed {
+                        reason: F::Integrity,
+                        effects: effects.get(),
+                    }
+                }
+                Err(error) => refused_current_v1(if !resource_authorized.get() {
+                    F::Denied
+                } else if error.to_string() == "custody producer unsupported" {
+                    F::Unsupported
+                } else {
+                    refusal.get()
+                }),
+            };
+            Ok(())
+        },
+    );
+    if !matches!(settings, WorkspaceSettingsLoadV1::SettingsObserved(_)) {
+        return if effects.get().staging_created == Some(true) {
+            R::AssociationPublicationFailed {
+                reason: F::Changed,
+                effects: effects.get(),
+            }
+        } else {
+            refused_current_v1(F::Denied)
+        };
+    }
+    output
+}
+
+impl WorkspaceNativeSettingsContextV1 {
+    fn held_current_observation_v1(
+        &self,
+        request: &transport_api_types::WorkspaceCurrentRequestV1,
+    ) -> super::agent_runtime::host_session_authority::facade::AuthorityObservationV1 {
+        use super::agent_runtime::host_session_authority::{
+            facade::AuthorityObservationV1,
+            schema::{AuthorityObjectCommitmentV1, CanonicalDirectoryV1},
+        };
+        let o = &request.observation;
+        AuthorityObservationV1 {
+            authority_store_id: o.authority_store_id.clone(),
+            orchestration_session_id: request.resource.orchestration_session_id.clone(),
+            bootstrap_home: CanonicalDirectoryV1 {
+                physical_path: o.home_path.clone(),
+                physical_identity: DirectoryPhysicalIdentityV1::Linux {
+                    device_id: o.home_device,
+                    inode: o.home_inode,
+                },
+            },
+            root_revision: o.root_revision,
+            authority_revision: o.authority_revision,
+            authority_record_commitment: AuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: o.authority_record_sha256.clone(),
+            },
+            authoritative_lineage_commitment: AuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: o.authoritative_lineage_sha256.clone(),
+            },
+        }
+    }
+
+    fn validate_current_join_v1(
+        &self,
+        request: &transport_api_types::WorkspaceCurrentRequestV1,
+        resolved: &super::agent_runtime::host_session_authority::facade::ResolvedCurrentAuthorityV1,
+    ) -> Result<(), super::agent_runtime::host_session_authority::facade::AuthorityFacadeError>
+    {
+        use super::agent_runtime::host_session_authority::facade::AuthorityFacadeError;
+        let r = &request.resource;
+        let workspace = &resolved.authority.workspace_binding;
+        let matches = workspace.workspace_root.physical_path == r.workspace_path
+            && workspace.authority_store_id == request.observation.authority_store_id
+            && workspace.authority_store_root == resolved.observation.bootstrap_home
+            && resolved.caller.descriptor.backend_id == r.backend_id
+            && resolved.host_attach_contract.backend_id == r.backend_id
+            && resolved
+                .authority
+                .world_binding
+                .as_ref()
+                .is_some_and(|world| {
+                    world.world_id == r.world_id && world.world_generation == r.world_generation
+                })
+            && match &request.operation {
+                transport_api_types::WorkspaceCurrentOperationV1::CurrentActorRead {
+                    expected_actor,
+                    ..
+                } => &resolved.caller.participant_id == expected_actor,
+                transport_api_types::WorkspaceCurrentOperationV1::PublishAssociation => true,
+            };
+        if resolved.authority.world_binding.is_none() {
+            return Err(AuthorityFacadeError::workspace_current_ineligible_v1());
+        }
+        if !matches {
+            return Err(AuthorityFacadeError::workspace_current_refusal_v1());
+        }
+        let inspection = InspectionGuard::capture(Path::new(&r.workspace_path))
+            .map_err(|_| AuthorityFacadeError::workspace_current_refusal_v1())?;
+        let selected = &inspection.directories[inspection.selected];
+        let expected = &workspace.workspace_root.physical_identity;
+        if !matches!(expected, DirectoryPhysicalIdentityV1::Linux { device_id, inode } if *device_id == selected.identity.device && *inode == selected.identity.inode)
+        {
+            return Err(AuthorityFacadeError::workspace_current_refusal_v1());
+        }
+        self.revalidate()
+            .map_err(|_| AuthorityFacadeError::workspace_current_refusal_v1())
+    }
+}
+
+pub(crate) fn run_native_workspace_current_request_v1(
+    request: &transport_api_types::WorkspaceCurrentRequestV1,
+) -> anyhow::Result<transport_api_types::WorkspaceCurrentResponseV1> {
+    use transport_api_types::{
+        WorkspaceCurrentOperationV1 as O, WorkspaceCurrentRefusalV1 as F,
+        WorkspaceCurrentResponseV1 as R,
+    };
+    request.validate().map_err(anyhow::Error::msg)?;
+    let context = WorkspaceNativeSettingsContextV1::from_native_invocation(&request.native_context)
+        .map_err(|_| anyhow::anyhow!("Denied"))?;
+    let mut output = refused_current_v1(F::Denied);
+    let settings = WorkspaceOpenAdapter::with_native_operation_v1(
+        Path::new(&request.resource.workspace_path),
+        &context,
+        &mut |observation, boundary, sources_current| {
+            if !current_operation_allowed_v1(observation, &request.operation) {
+                return Ok(());
+            }
+            if !current_request_matches_owner_v1(observation, request) {
+                return Ok(());
+            }
+            let after_boundary = boundary.duplicate_unlocked_v1(&context)?;
+            let owner = if matches!(request.operation, O::CurrentActorRead { .. }) {
+                match owner::WorkspaceAssociationOperationV1::open(
+                    boundary, &context, request, false,
+                ) {
+                    Ok(owner) => Some(owner),
+                    Err(reason) => {
+                        output = refused_current_v1(workspace_owner_refusal_v1(reason));
+                        return Ok(());
+                    }
+                }
+            } else {
+                None
+            };
+            if let Some(owner) = &owner {
+                let O::CurrentActorRead {
+                    backend_custody_ref,
+                    ..
+                } = &request.operation
+                else {
+                    unreachable!()
+                };
+                if let Err(reason) =
+                    owner.validate_read_selectors_v1(&context, request, backend_custody_ref)
+                {
+                    output = refused_current_v1(workspace_owner_refusal_v1(reason));
+                    return Ok(());
+                }
+            }
+            drop(owner);
+            let socket = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("/run/substrate.sock"));
+            let result = (|| -> anyhow::Result<R> {
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()?;
+                let client = transport_api_client::AgentClient::unix_socket(socket)?;
+                runtime.block_on(client.workspace_current_v1(request))
+            })();
+            output = match result {
+                Ok(response) => response,
+                Err(_) if matches!(request.operation, O::PublishAssociation) => {
+                    R::AssociationPublicationFailed {
+                        reason: F::Changed,
+                        effects: transport_api_types::WorkspaceAssociationEffectsV1::unknown(),
+                    }
+                }
+                Err(_) => refused_current_v1(F::Unsupported),
+            };
+            let after = owner::WorkspaceAssociationOperationV1::open(
+                after_boundary,
+                &context,
+                request,
+                false,
+            );
+            let owner_current = match (&output, &after) {
+                (R::CurrentActor(..), Ok(owner)) => match &request.operation {
+                    O::CurrentActorRead {
+                        backend_custody_ref,
+                        ..
+                    } => owner
+                        .validate_read_selectors_v1(&context, request, backend_custody_ref)
+                        .is_ok(),
+                    _ => false,
+                },
+                (R::AssociationPublished { .. }, Ok(owner)) => {
+                    owner.publication_matches_v1(&output)
+                }
+                (R::Refused { .. } | R::AssociationPublicationFailed { .. }, _) => true,
+                _ => false,
+            };
+            if sources_current().is_err() || context.revalidate().is_err() || !owner_current {
+                output = match &output {
+                    R::AssociationPublished { effects, .. }
+                    | R::AssociationPublicationFailed { effects, .. } => {
+                        R::AssociationPublicationFailed {
+                            reason: F::Changed,
+                            effects: *effects,
+                        }
+                    }
+                    _ => refused_current_v1(F::Changed),
+                };
+            }
+            Ok(())
+        },
+    );
+    if !matches!(settings, WorkspaceSettingsLoadV1::SettingsObserved(_)) {
+        output = match &output {
+            R::AssociationPublished { effects, .. }
+            | R::AssociationPublicationFailed { effects, .. } => R::AssociationPublicationFailed {
+                reason: F::Changed,
+                effects: *effects,
+            },
+            _ => refused_current_v1(F::Denied),
+        };
+    }
+    Ok(output)
+}
+
+fn workspace_owner_refusal_v1(
+    reason: WorkspaceOwnerBlockerV1,
+) -> transport_api_types::WorkspaceCurrentRefusalV1 {
+    use transport_api_types::WorkspaceCurrentRefusalV1 as F;
+    match reason {
+        WorkspaceOwnerBlockerV1::UnsupportedOwnerState => F::Unsupported,
+        WorkspaceOwnerBlockerV1::ChangedDuringRead => F::Changed,
+        WorkspaceOwnerBlockerV1::BindingMismatch => F::Ineligible,
+        _ => F::Integrity,
+    }
+}
+
+#[derive(Clone, PartialEq, Eq)]
+struct WorkspaceLocalCutV1 {
+    settings: Vec<Option<super::workspace_read_cut::SettingsRevisionV1>>,
+    effective: Vec<u8>,
+    identity: owner::WorkspaceOwnerIdentityV1,
+    association: owner::SelectedWorldAssociationV1,
+}
+
+fn local_cut_v1(
+    context: &WorkspaceNativeSettingsContextV1,
+    observation: &WorkspaceSettingsObservationV1,
+    boundary: HeldWorkspaceOwnerBoundaryV1,
+    request: &transport_api_types::WorkspaceCurrentRequestV1,
+) -> anyhow::Result<WorkspaceLocalCutV1> {
+    use super::workspace_read_cut as cut;
+    anyhow::ensure!(
+        current_operation_allowed_v1(observation, &request.operation)
+            && current_request_matches_owner_v1(observation, request),
+        "Denied"
+    );
+    let native = context
+        .owner_binding()
+        .map_err(|_| anyhow::anyhow!("Denied"))?;
+    let home = cut::directory(Path::new(&native.home.physical_path), native.owner.uid)?;
+    let control = cut::directory(&observation.root.join(".substrate"), native.owner.uid)?;
+    anyhow::ensure!(
+        cut::source_identity(&control, ".workspace-init.v1.pending", native.owner.uid)?.is_none(),
+        "Incomplete"
+    );
+    anyhow::ensure!(
+        cut::source_identity(
+            &control,
+            ".workspace-association.v1.pending",
+            native.owner.uid
+        )?
+        .is_none(),
+        "Incomplete association publication"
+    );
+    let settings = [
+        (&home, "config.yaml"),
+        (&home, "policy.yaml"),
+        (&control, "workspace.yaml"),
+        (&control, "policy.yaml"),
+        (&control, "workspace.disabled"),
+    ]
+    .into_iter()
+    .map(|(parent, name)| cut::optional_revision(parent, name, native.owner.uid))
+    .collect::<anyhow::Result<Vec<_>>>()?;
+    let WorkspaceIdentityObservationV1::OwnerStateObserved(identity) = &observation.identity else {
+        anyhow::bail!("Incomplete");
+    };
+    let association = owner::read_selected_world_association_v1(boundary, context, request)
+        .map_err(|e| anyhow::anyhow!("{e:?}"))?;
+    let transport_api_types::WorkspaceCurrentOperationV1::CurrentActorRead {
+        lane_ref,
+        association_incarnation,
+        association_revision,
+        backend_custody_ref,
+        ..
+    } = &request.operation
+    else {
+        anyhow::bail!("Denied");
+    };
+    anyhow::ensure!(
+        association.active
+            && &association.lane_ref == lane_ref
+            && &association.incarnation == association_incarnation
+            && &association.revision == association_revision
+            && &association.custody_ref == backend_custody_ref,
+        "Ineligible"
+    );
+    let effective = serde_json::to_vec(&(
+        &observation.config,
+        &observation.policy,
+        &observation.workspace_authority.decisions,
+    ))?;
+    Ok(WorkspaceLocalCutV1 {
+        settings,
+        effective,
+        identity: identity.clone(),
+        association,
+    })
+}
+
+fn current_disclosure_allowed_v1(
+    context: &WorkspaceNativeSettingsContextV1,
+    request: &transport_api_types::WorkspaceCurrentRequestV1,
+) -> bool {
+    matches!(WorkspaceOpenAdapter::load_existing(Path::new(&request.resource.workspace_path),context,&CliConfigOverrides::default()),
+        WorkspaceSettingsLoadV1::SettingsObserved(observation) if current_operation_allowed_v1(&observation,&request.operation)
+            && current_request_matches_owner_v1(&observation,request))
+}
+
+// The installed registry is a consumed service input. Observe its namespace before
+// opening the configured capability; do not hold its flock across any collection.
+fn installed_authority_watch_v1() -> anyhow::Result<super::workspace_read_cut::ReadWatchV1> {
+    let mut watch = super::workspace_read_cut::ReadWatchV1::new()?;
+    let root = Path::new("/var/lib/substrate/install-bootstrap-authority-v1");
+    for directory in root.ancestors().skip(1) {
+        let name = root
+            .strip_prefix(directory)?
+            .components()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("Unsupported installed authority ancestor"))?;
+        watch.add(
+            directory,
+            &[name
+                .as_os_str()
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("Unsupported installed authority spelling"))?],
+        )?;
+    }
+    watch.add(root, &["active.json", "lock", "records"])?;
+    let records = root.join("records");
+    // Only the selected immutable record is consumed, but conservatively observe
+    // every extant record here rather than exposing its hash through a new API.
+    let mut names = Vec::new();
+    for entry in std::fs::read_dir(&records)? {
+        anyhow::ensure!(
+            names.len() < 1024,
+            "Unsupported installed authority population"
+        );
+        names.push(
+            entry?
+                .file_name()
+                .into_string()
+                .map_err(|_| anyhow::anyhow!("Unsupported installed record spelling"))?,
+        );
+    }
+    watch.add(
+        &records,
+        &names.iter().map(String::as_str).collect::<Vec<_>>(),
+    )?;
+    watch.verify()?;
+    Ok(watch)
+}
+
+fn cut_watch_v1(
+    context: &WorkspaceNativeSettingsContextV1,
+    request: &transport_api_types::WorkspaceCurrentRequestV1,
+) -> anyhow::Result<super::workspace_read_cut::ReadWatchV1> {
+    let mut watch = super::workspace_read_cut::ReadWatchV1::new()?;
+    let native = context
+        .owner_binding()
+        .map_err(|_| anyhow::anyhow!("Denied"))?;
+    let home = Path::new(&native.home.physical_path);
+    let source_names = [
+        "config.yaml",
+        "policy.yaml",
+        "workspace.yaml",
+        "workspace.disabled",
+        ".config.yaml.owner-revision.v1.json",
+        ".policy.yaml.owner-revision.v1.json",
+        ".workspace.yaml.owner-revision.v1.json",
+        ".workspace.disabled.owner-revision.v1.json",
+        ".config.yaml.owner-revision.v1.pending",
+        ".policy.yaml.owner-revision.v1.pending",
+        ".workspace.yaml.owner-revision.v1.pending",
+        ".workspace.disabled.owner-revision.v1.pending",
+        "workspace-state.v1.json",
+        ".workspace-state.v1.pending",
+        ".workspace-init.v1.pending",
+        ".workspace-association.v1.pending",
+        "settings.yaml",
+    ];
+    watch.add(home, &source_names)?;
+    let selected = Path::new(&request.resource.workspace_path);
+    for watched_root in [selected, home] {
+        for directory in watched_root.ancestors() {
+            let mut names = vec![".substrate"];
+            if let Some(child) = watched_root
+                .strip_prefix(directory)
+                .ok()
+                .and_then(|rest| rest.components().next())
+            {
+                if let Some(name) = child.as_os_str().to_str() {
+                    names.push(name);
+                }
+            }
+            watch.add(directory, &names)?;
+        }
+    }
+    watch.add(&selected.join(".substrate"), &source_names)?;
+    let association =
+        owner::selected_association_name_v1(&request.resource.orchestration_session_id);
+    watch.add(
+        &selected.join(".substrate"),
+        &[
+            &association,
+            &format!(".{association}.pending"),
+            &format!(".{association}.source-cut.v1.json"),
+            &format!(".{association}.source-cut.v1.pending"),
+        ],
+    )?;
+    watch.add(&home.join("authority-v1"), &["state-root-v1.json"])?;
+    Ok(watch)
+}
+
+fn cut_refusal_v1(error: &anyhow::Error) -> transport_api_types::WorkspaceCurrentRefusalV1 {
+    use transport_api_types::WorkspaceCurrentRefusalV1 as F;
+    let message = error.to_string();
+    if message.contains("Denied") {
+        F::Denied
+    } else if message.contains("Unsupported") {
+        F::Unsupported
+    } else if message.contains("Ineligible") || message.contains("BindingMismatch") {
+        F::Ineligible
+    } else if message.contains("Changed") {
+        F::Changed
+    } else {
+        F::Integrity
+    }
+}
+
+fn peer_context_v1(
+    peer: &WorkspaceNativePeerV1,
+    request: &transport_api_types::WorkspaceCurrentRequestV1,
+) -> anyhow::Result<WorkspaceNativeSettingsContextV1> {
+    request.validate().map_err(anyhow::Error::msg)?;
+    let configured = std::sync::Arc::new(
+        config_projection::ConfiguredAcceptedHomeAuthorityV1::from_installed_bootstrap_authority()
+            .map_err(|_| anyhow::anyhow!("Denied"))?,
+    );
+    WorkspaceNativeSettingsContextV1::from_peer_invocation(
+        &request.native_context,
+        peer,
+        configured,
+    )
+    .map_err(|_| anyhow::anyhow!("Denied"))
+}
+
+/// Exact current no-send observation. Each of the two local owner collects releases
+/// every lock before the next collect. No runtime is ensured or reconciled.
+///
+/// ```no_run
+/// # fn inspect(peer: &substrate_shell::WorkspaceNativePeerV1, request: &transport_api_types::WorkspaceCurrentRequestV1, backend: &world::LinuxLocalBackend) {
+/// let reply = substrate_shell::workspace_preflight_for_peer_v1(peer, request, backend);
+/// # let _ = reply;
+/// # }
+/// ```
+pub fn workspace_preflight_for_peer_v1(
+    peer: &WorkspaceNativePeerV1,
+    request: &transport_api_types::WorkspaceCurrentRequestV1,
+    backend: &world::LinuxLocalBackend,
+) -> transport_api_types::WorkspacePreflightResponseV1 {
+    use transport_api_types::{
+        WorkspaceCurrentOperationV1 as O, WorkspaceCurrentRefusalV1 as F,
+        WorkspacePreflightResponseV1 as R,
+    };
+    let result = (|| -> anyhow::Result<_> {
+        anyhow::ensure!(
+            matches!(request.operation, O::CurrentActorRead { .. }),
+            "Denied"
+        );
+        let mut installed_watch =
+            installed_authority_watch_v1().map_err(|_| anyhow::anyhow!("Denied"))?;
+        let context = peer_context_v1(peer, request)?;
+        anyhow::ensure!(current_disclosure_allowed_v1(&context, request), "Denied");
+        let mut watch = cut_watch_v1(&context, request).map_err(|_| anyhow::anyhow!("Denied"))?;
+        let mut previous = None;
+        let mut eligible = None;
+        for _ in 0..2 {
+            let mut collected = None;
+            let mut failure = F::Denied;
+            let settings = WorkspaceOpenAdapter::with_native_operation_v1(
+                Path::new(&request.resource.workspace_path),
+                &context,
+                &mut |observation, boundary, sources_current| {
+                    if !current_operation_allowed_v1(observation, &request.operation)
+                        || !current_request_matches_owner_v1(observation, request)
+                    {
+                        return Ok(());
+                    }
+                    let local = match local_cut_v1(&context, observation, boundary, request) {
+                        Ok(value) => value,
+                        Err(error) => {
+                            failure = cut_refusal_v1(&error);
+                            return Ok(());
+                        }
+                    };
+                    let joined = backend.with_existing_custody_nonreconciling_v1(
+                        &request.resource.orchestration_session_id, &request.resource.world_id, request.resource.world_generation, &observation.root,
+                        |custody| {
+                            anyhow::ensure!(custody.binding_ref() == local.association.custody_ref, "Changed custody");
+                            let held = context.held_current_observation_v1(request);
+                            context.authority.with_workspace_current_cut_v1(&request.resource.orchestration_session_id, &held,
+                                |resolved, hsa_physical| {
+                                    context.validate_current_join_v1(request, resolved)?;
+                                    sources_current().map_err(|_| super::agent_runtime::host_session_authority::facade::AuthorityFacadeError::workspace_current_refusal_v1())?;
+                                    custody.revalidate().map_err(|_| super::agent_runtime::host_session_authority::facade::AuthorityFacadeError::workspace_current_refusal_v1())?;
+                                    let (incarnation, revision) = custody.revision_observation_v1();
+                                    Ok((hsa_physical, incarnation.to_owned(), revision))
+                                }).map_err(|error| anyhow::anyhow!("{error:?}"))
+                        });
+                    match joined {
+                        Ok((hsa_physical, custody_incarnation, custody_revision)) => {
+                            let vector = transport_api_types::WorkspaceReadRevisionVectorV1 {
+                                settings: local
+                                    .settings
+                                    .iter()
+                                    .map(|value| value.as_ref().map(|v| v.token()))
+                                    .collect(),
+                                workspace_revision: local.identity.state_revision,
+                                association_incarnation: local.association.incarnation.clone(),
+                                association_revision: local.association.revision,
+                                authority_store_id: request.observation.authority_store_id.clone(),
+                                root_revision: request.observation.root_revision,
+                                authority_revision: request.observation.authority_revision,
+                                custody_incarnation,
+                                custody_revision,
+                            };
+                            let O::CurrentActorRead { expected_actor, .. } = &request.operation
+                            else {
+                                unreachable!()
+                            };
+                            eligible = Some(transport_api_types::WorkspaceEligibleObservationV1 {
+                                workspace_ref: local.identity.workspace_ref.clone(),
+                                workspace_incarnation: local.identity.store_incarnation.clone(),
+                                lane_ref: local.association.lane_ref.clone(),
+                                world_id: request.resource.world_id.clone(),
+                                world_generation: request.resource.world_generation,
+                                backend_id: request.resource.backend_id.clone(),
+                                actor_id: expected_actor.clone(),
+                                revisions: vector.clone(),
+                            });
+                            collected = Some((local, hsa_physical, vector));
+                        }
+                        Err(_) => failure = F::Integrity,
+                    }
+                    sources_current()?;
+                    Ok(())
+                },
+            );
+            anyhow::ensure!(
+                matches!(settings, WorkspaceSettingsLoadV1::SettingsObserved(_)),
+                "Denied"
+            );
+            let current = collected.ok_or_else(|| anyhow::anyhow!("{failure:?}"))?;
+            if let Some(previous) = &previous {
+                anyhow::ensure!(previous == &current, "Changed owner revision vector");
+            }
+            previous = Some(current);
+        }
+        watch.verify()?;
+        context
+            .revalidate()
+            .map_err(|_| anyhow::anyhow!("Denied"))?;
+        installed_watch.verify()?;
+        eligible.ok_or_else(|| anyhow::anyhow!("Integrity"))
+    })();
+    match result {
+        Ok(value) => R::EligibleObservation(Box::new(value)),
+        Err(error) => R::Refused {
+            reason: cut_refusal_v1(&error),
+        },
+    }
+}
+
+/// Explicit authorized source-owner mutation; never invoked by open/preflight.
+///
+/// ```no_run
+/// # fn update(peer: &substrate_shell::WorkspaceNativePeerV1, request: &transport_api_types::WorkspaceAssociationUpdateV1, backend: &world::LinuxLocalBackend) {
+/// let reply = substrate_shell::workspace_association_update_for_peer_v1(peer, request, backend);
+/// # let _ = reply;
+/// # }
+/// ```
+pub fn workspace_association_update_for_peer_v1(
+    peer: &WorkspaceNativePeerV1,
+    update: &transport_api_types::WorkspaceAssociationUpdateV1,
+    backend: &world::LinuxLocalBackend,
+) -> transport_api_types::WorkspaceAssociationUpdateResponseV1 {
+    use transport_api_types::{
+        WorkspaceAssociationUpdateResponseV1 as R, WorkspaceCurrentOperationV1 as O,
+        WorkspaceCurrentRefusalV1 as F,
+    };
+    let request = &update.current;
+    let Ok(context) = peer_context_v1(peer, request) else {
+        return R::Refused { reason: F::Denied };
+    };
+    if !matches!(request.operation, O::PublishAssociation) {
+        return R::Refused { reason: F::Denied };
+    }
+    let effects =
+        std::cell::Cell::new(transport_api_types::WorkspaceAssociationUpdateEffectsV1::default());
+    let mut output = R::Refused { reason: F::Denied };
+    let settings = WorkspaceOpenAdapter::with_native_operation_v1(
+        Path::new(&request.resource.workspace_path),
+        &context,
+        &mut |observation, boundary, sources_current| {
+            if !current_operation_allowed_v1(observation, &request.operation)
+                || !current_request_matches_owner_v1(observation, request)
+            {
+                return Ok(());
+            }
+            let mut boundary = Some(boundary);
+            let result = backend.with_existing_custody_nonreconciling_v1(&request.resource.orchestration_session_id,
+                &request.resource.world_id, request.resource.world_generation, &observation.root, |custody| {
+                    context.authority.with_workspace_current_actor_nonreconciling_v1(&request.resource.orchestration_session_id,
+                        &context.held_current_observation_v1(request), |resolved| {
+                            context.validate_current_join_v1(request, resolved)?;
+                            owner::publish_selected_world_association_v1(boundary.take().expect("one joined operation"), &context,
+                                request, update.active, custody.binding_ref(), &effects, sources_current)
+                                .map_err(|_| super::agent_runtime::host_session_authority::facade::AuthorityFacadeError::workspace_current_refusal_v1())
+                        }).map_err(|error| anyhow::anyhow!("{error:?}"))
+                });
+            output = result.unwrap_or_else(|_| R::AssociationPublicationFailed {
+                reason: F::Integrity,
+                effects: effects.get(),
+            });
+            Ok(())
+        },
+    );
+    if !matches!(settings, WorkspaceSettingsLoadV1::SettingsObserved(_)) {
+        return R::AssociationPublicationFailed {
+            reason: F::Changed,
+            effects: effects.get(),
+        };
+    }
+    output
+}
+
+pub(crate) fn run_native_workspace_preflight_request_v1(
+    request: &transport_api_types::WorkspaceCurrentRequestV1,
+) -> transport_api_types::WorkspacePreflightResponseV1 {
+    use transport_api_types::{WorkspaceCurrentRefusalV1 as F, WorkspacePreflightResponseV1 as R};
+    let result = (|| -> anyhow::Result<R> {
+        request.validate().map_err(anyhow::Error::msg)?;
+        let context =
+            WorkspaceNativeSettingsContextV1::from_native_invocation(&request.native_context)
+                .map_err(|_| anyhow::anyhow!("Denied"))?;
+        anyhow::ensure!(current_disclosure_allowed_v1(&context, request), "Denied");
+        let mut watch = cut_watch_v1(&context, request).map_err(|_| anyhow::anyhow!("Denied"))?;
+        let mut before = None;
+        let mut output = None;
+        let settings = WorkspaceOpenAdapter::with_native_operation_v1(
+            Path::new(&request.resource.workspace_path),
+            &context,
+            &mut |observation, boundary, sources_current| {
+                let local = match local_cut_v1(&context, observation, boundary, request) {
+                    Ok(local) => local,
+                    Err(error) => {
+                        output = Some(R::Refused {
+                            reason: cut_refusal_v1(&error),
+                        });
+                        return Ok(());
+                    }
+                };
+                // local_cut returns owned observations and drops every Workspace lock.
+                before = Some(local);
+                let result = (|| -> anyhow::Result<R> {
+                    let runtime = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()?;
+                    let socket = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
+                        .map(PathBuf::from)
+                        .unwrap_or_else(|| PathBuf::from("/run/substrate.sock"));
+                    let client = transport_api_client::AgentClient::unix_socket(socket)?;
+                    runtime.block_on(client.workspace_preflight_v1(request))
+                })();
+                output = Some(result.unwrap_or(R::Refused {
+                    reason: F::Unsupported,
+                }));
+                sources_current()?;
+                Ok(())
+            },
+        );
+        anyhow::ensure!(
+            matches!(settings, WorkspaceSettingsLoadV1::SettingsObserved(_)),
+            "Denied"
+        );
+        if before.is_none() {
+            return Ok(output.unwrap_or(R::Refused { reason: F::Denied }));
+        }
+        let mut after = None;
+        let settings = WorkspaceOpenAdapter::with_native_operation_v1(
+            Path::new(&request.resource.workspace_path),
+            &context,
+            &mut |observation, boundary, sources_current| {
+                after = local_cut_v1(&context, observation, boundary, request).ok();
+                sources_current()?;
+                Ok(())
+            },
+        );
+        anyhow::ensure!(
+            matches!(settings, WorkspaceSettingsLoadV1::SettingsObserved(_))
+                && after.is_some()
+                && before == after,
+            "Changed native owner cut"
+        );
+        watch.verify()?;
+        let result = output.ok_or_else(|| anyhow::anyhow!("Integrity"))?;
+        if let R::EligibleObservation(value) = &result {
+            let local = after.as_ref().ok_or_else(|| anyhow::anyhow!("Integrity"))?;
+            anyhow::ensure!(
+                value.revisions.settings
+                    == local
+                        .settings
+                        .iter()
+                        .map(|v| v.as_ref().map(|v| v.token()))
+                        .collect::<Vec<_>>()
+                    && value.revisions.workspace_revision == local.identity.state_revision
+                    && value.revisions.association_revision == local.association.revision
+                    && value.revisions.association_incarnation == local.association.incarnation,
+                "Changed cross-owner cut"
+            );
+        }
+        Ok(result)
+    })();
+    result.unwrap_or_else(|error| R::Refused {
+        reason: cut_refusal_v1(&error),
+    })
+}
+
+fn global_open_authority_v1(
+    context: &WorkspaceNativeSettingsContextV1,
+) -> anyhow::Result<(Vec<u8>, substrate_broker::WorkspaceAuthorityEffectiveV1)> {
+    context
+        .revalidate()
+        .map_err(|_| anyhow::anyhow!("Denied"))?;
+    let native = context
+        .owner_binding()
+        .map_err(|_| anyhow::anyhow!("Denied"))?;
+    let bytes = context
+        .authority
+        .bootstrap_home()
+        .read_policy_yaml()
+        .map_err(|_| anyhow::anyhow!("Denied"))?
+        .unwrap_or_default();
+    let decisions = substrate_broker::resolve_workspace_authority_from_sources_v1(
+        &Path::new(&native.home.physical_path).join("policy.yaml"),
+        (!bytes.is_empty()).then_some(bytes.as_slice()),
+        None,
+    )?;
+    Ok((bytes, decisions))
+}
+
+fn initial_effects_v1(settings: &transport_api_types::WorkspaceInitialSettingsV1) -> Vec<String> {
+    let mut effects = vec![
+        ".substrate/".into(),
+        ".substrate/.workspace-init.v1.pending".into(),
+        ".substrate/workspace.yaml".into(),
+        ".substrate/.workspace.yaml.owner-revision.v1.json".into(),
+        ".substrate/.policy.yaml.owner-revision.v1.json".into(),
+        ".substrate/.workspace.disabled.owner-revision.v1.json".into(),
+        ".substrate/workspace-state.v1.json".into(),
+        ".substrate/workspace-collections.v1.json".into(),
+    ];
+    if settings.policy_yaml.is_some() {
+        effects.extend([".substrate/policy.yaml".into()]);
+    }
+    effects.push(".substrate/.workspace-state.v1.pending (transient)".into());
+    effects.push(".substrate/.workspace-init.v1.pending removal on success".into());
+    for source in ["workspace.yaml", "policy.yaml", "workspace.disabled"] {
+        for suffix in ["owner-revision.v1.pending", "owner-revision.v1.written"] {
+            effects.push(format!(".substrate/.{source}.{suffix} (transient)"));
+        }
+        if source == "workspace.yaml" || source == "policy.yaml" && settings.policy_yaml.is_some() {
+            effects.push(format!(
+                ".substrate/.{source}.owner-write.v1.pending (transient)"
+            ));
+        }
+    }
+    effects
+}
+
+fn absence_offer_v1(
+    context: &WorkspaceNativeSettingsContextV1,
+    selected: &Path,
+    settings: transport_api_types::WorkspaceInitialSettingsV1,
+) -> anyhow::Result<transport_api_types::WorkspaceInitializationOfferV1> {
+    anyhow::ensure!(
+        settings.config_yaml.len() <= 16384
+            && settings
+                .policy_yaml
+                .as_ref()
+                .is_none_or(|p| p.len() <= 16384),
+        "Invalid settings"
+    );
+    parse_config_patch_yaml(
+        &selected.join(".substrate/workspace.yaml"),
+        &settings.config_yaml,
+    )?;
+    if let Some(policy) = &settings.policy_yaml {
+        policy_model::parse_policy_patch_yaml(&selected.join(".substrate/policy.yaml"), policy)?;
+    }
+    let mut guard =
+        InspectionGuard::capture(selected).map_err(|_| anyhow::anyhow!("Unsafe boundary"))?;
+    anyhow::ensure!(
+        guard
+            .classify()
+            .map_err(|_| anyhow::anyhow!("Blocked boundary"))?
+            .is_none(),
+        "Existing boundary"
+    );
+    guard
+        .revalidate()
+        .map_err(|_| anyhow::anyhow!("Changed boundary"))?;
+    let root = guard.directories[guard.selected].identity;
+    anyhow::ensure!(
+        root.owner == unsafe { libc::geteuid() } && root.mode & 0o7022 == 0,
+        "Denied"
+    );
+    let native = context
+        .owner_binding()
+        .map_err(|_| anyhow::anyhow!("Denied"))?;
+    Ok(transport_api_types::WorkspaceInitializationOfferV1 {
+        schema_version: 1,
+        native_context: context.carrier.clone(),
+        home_device: native.home.device_id,
+        home_inode: native.home.inode,
+        selected_location: selected.to_string_lossy().into_owned(),
+        root_device: root.device,
+        root_inode: root.inode,
+        effects: initial_effects_v1(&settings),
+        settings,
+    })
+}
+
+/// Native owner open. No setup, history, runtime or destination effect follows this read.
+///
+/// ```no_run
+/// # fn open(carrier: &transport_api_types::InstallBootstrapContextCarrierV1) {
+/// let result = substrate_shell::workspace_open_native_v1(carrier, std::path::Path::new("/workspace"));
+/// # let _ = result;
+/// # }
+/// ```
+pub fn workspace_open_native_v1(
+    carrier: &InstallBootstrapContextCarrierV1,
+    selected: &Path,
+) -> serde_json::Value {
+    use serde_json::json;
+    use substrate_broker::WorkspaceAuthorityDecisionV1::Allow;
+    let result = (|| -> anyhow::Result<serde_json::Value> {
+        let context = WorkspaceNativeSettingsContextV1::from_native_invocation(carrier)
+            .map_err(|_| anyhow::anyhow!("Denied"))?;
+        let (global_bytes, global) = global_open_authority_v1(&context)?;
+        let globally_authorized =
+            global.decisions.workspace_load == Some(Allow) && global.load_source.is_some();
+        let mut components = json!({"availability":"Unsupported"});
+        let loaded = WorkspaceOpenAdapter::with_native_operation_v1(
+            selected,
+            &context,
+            &mut |observation, boundary, sources_current| {
+                if observation.workspace_authority.decisions.workspace_load == Some(Allow) {
+                    components =
+                        match owner::read_current_workspace_components_v1(boundary, &context) {
+                            Ok(value) => value,
+                            Err(reason) => {
+                                json!({"availability":"Blocked","reason":format!("{reason:?}")})
+                            }
+                        };
+                    sources_current()?;
+                }
+                Ok(())
+            },
+        );
+        let reply = match loaded {
+            WorkspaceSettingsLoadV1::Absent { .. } => {
+                anyhow::ensure!(globally_authorized, "Denied");
+                json!({"state":"InitializationOffered", "offer": absence_offer_v1(&context, selected,
+                    transport_api_types::WorkspaceInitialSettingsV1 { config_yaml: "{}\n".into(), policy_yaml: None })?})
+            }
+            WorkspaceSettingsLoadV1::Blocked { boundary, reason } => {
+                anyhow::ensure!(globally_authorized, "Denied");
+                let incomplete = boundary
+                    .as_ref()
+                    .and_then(|root| {
+                        super::workspace_read_cut::directory(&root.join(".substrate"), unsafe {
+                            libc::geteuid()
+                        })
+                        .ok()
+                    })
+                    .is_some_and(|control| {
+                        super::workspace_read_cut::source_identity(
+                            &control,
+                            ".workspace-init.v1.pending",
+                            unsafe { libc::geteuid() },
+                        )
+                        .ok()
+                        .flatten()
+                        .is_some()
+                    });
+                if incomplete
+                    || reason
+                        == WorkspaceSettingsBlockerV1::Inspection(
+                            WorkspaceInspectionBlocker::MissingMarker,
+                        )
+                {
+                    json!({"state":"Incomplete","reason":"InterruptedInitialization"})
+                } else {
+                    json!({"state":"Invalid", "reason":format!("{reason:?}")})
+                }
+            }
+            WorkspaceSettingsLoadV1::SettingsObserved(observation) => {
+                anyhow::ensure!(
+                    observation.workspace_authority.decisions.workspace_load == Some(Allow),
+                    "Denied"
+                );
+                let control = super::workspace_read_cut::directory(
+                    &observation.root.join(".substrate"),
+                    unsafe { libc::geteuid() },
+                )?;
+                if super::workspace_read_cut::source_identity(
+                    &control,
+                    ".workspace-init.v1.pending",
+                    unsafe { libc::geteuid() },
+                )?
+                .is_some()
+                {
+                    json!({"state":"Incomplete", "reason":"InterruptedInitialization"})
+                } else if let WorkspaceIdentityObservationV1::OwnerStateObserved(identity) =
+                    observation.identity
+                {
+                    let native = context
+                        .owner_binding()
+                        .map_err(|_| anyhow::anyhow!("Denied"))?;
+                    let home = super::workspace_read_cut::directory(
+                        Path::new(&native.home.physical_path),
+                        native.owner.uid,
+                    )?;
+                    let coverage = [
+                        (&home, "config.yaml"),
+                        (&home, "policy.yaml"),
+                        (&control, "workspace.yaml"),
+                        (&control, "policy.yaml"),
+                        (&control, "workspace.disabled"),
+                    ]
+                    .into_iter()
+                    .all(|(directory, name)| {
+                        super::workspace_read_cut::optional_revision(
+                            directory,
+                            name,
+                            native.owner.uid,
+                        )
+                        .is_ok()
+                    });
+                    json!({"state":"Loaded", "workspace_ref":identity.workspace_ref,"workspace_incarnation":identity.store_incarnation,
+                        "config":observation.config,"config_provenance":observation.config_provenance,"policy_provenance":observation.policy_provenance,
+                        "components":components,"destinations":"ExactPreflightRequired", "read_cut":if coverage { "ExactPreflightRequired" } else { "UnsupportedRevisionCoverage" }})
+                } else {
+                    json!({"state":"Incomplete", "reason":format!("{:?}", observation.identity)})
+                }
+            }
+        };
+        anyhow::ensure!(
+            global_open_authority_v1(&context)?.0 == global_bytes,
+            "Changed permission"
+        );
+        Ok(reply)
+    })();
+    result.unwrap_or_else(|error| json!({"state":"Refused", "reason":if error.to_string().contains("Denied") {"Denied"} else {"Integrity"}}))
+}
+
+/// Apply one exact absent-only approval, separately authorized from current read.
+/// A failed apply retains its incomplete boundary; reopening never repairs it.
+///
+/// ```no_run
+/// # fn init(carrier: &transport_api_types::InstallBootstrapContextCarrierV1, decision: &transport_api_types::WorkspaceInitializationDecisionV1) {
+/// let result = substrate_shell::workspace_initialize_native_v1(carrier, decision);
+/// # let _ = result;
+/// # }
+/// ```
+pub fn workspace_initialize_native_v1(
+    carrier: &InstallBootstrapContextCarrierV1,
+    decision: &transport_api_types::WorkspaceInitializationDecisionV1,
+) -> serde_json::Value {
+    use super::workspace_read_cut as cut;
+    use serde_json::json;
+    use substrate_broker::WorkspaceAuthorityDecisionV1::Allow;
+    let transport_api_types::WorkspaceInitializationDecisionV1::Approved { offer } = decision
+    else {
+        return json!({"state":"NotInitialized","effects":[],"decision":match decision { transport_api_types::WorkspaceInitializationDecisionV1::Denied => "Denied", _ => "Cancelled" }});
+    };
+    let mut effects = Vec::<String>::new();
+    let mut unknown = false;
+    let mut phase = "BeforeApply";
+    let mut owner_effects = None;
+    let result = (|| -> anyhow::Result<_> {
+        let context = WorkspaceNativeSettingsContextV1::from_native_invocation(carrier)
+            .map_err(|_| anyhow::anyhow!("Denied"))?;
+        let (global_before, authority) = global_open_authority_v1(&context)?;
+        anyhow::ensure!(
+            authority.decisions.initialize == Some(Allow) && authority.initialize_source.is_some(),
+            "Denied"
+        );
+        let selected = Path::new(&offer.selected_location);
+        anyhow::ensure!(
+            &absence_offer_v1(&context, selected, offer.settings.clone())? == offer.as_ref(),
+            "Changed approval"
+        );
+        let native = context
+            .owner_binding()
+            .map_err(|_| anyhow::anyhow!("Denied"))?;
+        let root = cut::directory(selected, native.owner.uid)?;
+        let meta = root.metadata()?;
+        use std::os::unix::fs::MetadataExt;
+        anyhow::ensure!(
+            (meta.dev(), meta.ino()) == (offer.root_device, offer.root_inode),
+            "Changed root"
+        );
+        let mut absent_guard =
+            InspectionGuard::capture(selected).map_err(|_| anyhow::anyhow!("Unsafe boundary"))?;
+        let mut initialization_watch = cut::ReadWatchV1::new()?;
+        let mut selected_watch = None;
+        for (index, directory) in absent_guard.directories.iter().enumerate() {
+            let wd = initialization_watch.add_held(&directory.held, &[".substrate"])?;
+            if index == absent_guard.selected {
+                anyhow::ensure!(
+                    EntryIdentity::held(&root).map_err(|_| anyhow::anyhow!("Changed root"))?
+                        == directory.identity,
+                    "Changed selected root"
+                );
+                selected_watch = Some(wd);
+            }
+        }
+        let selected_watch =
+            selected_watch.ok_or_else(|| anyhow::anyhow!("Missing selected watch"))?;
+        anyhow::ensure!(
+            absent_guard
+                .classify()
+                .map_err(|_| anyhow::anyhow!("Changed boundary"))?
+                .is_none(),
+            "Changed boundary"
+        );
+        absent_guard
+            .revalidate()
+            .map_err(|_| anyhow::anyhow!("Changed boundary"))?;
+        let global_directory =
+            cut::directory(Path::new(&native.home.physical_path), native.owner.uid)?;
+        let global_config_identity =
+            cut::source_identity(&global_directory, "config.yaml", native.owner.uid)?;
+        let global_policy_identity =
+            cut::source_identity(&global_directory, "policy.yaml", native.owner.uid)?;
+        let global_path = Path::new(&native.home.physical_path).join("policy.yaml");
+        let local_policy_path = selected.join(".substrate/policy.yaml");
+        let (policy, _) = policy_model::resolve_effective_policy_from_sources_v1(
+            &global_path,
+            (!global_before.is_empty()).then_some(global_before.as_slice()),
+            offer
+                .settings
+                .policy_yaml
+                .as_ref()
+                .map(|p| (local_policy_path.as_path(), p.as_bytes())),
+        )?;
+        let bootstrap = context.authority.bootstrap_home();
+        let config_bytes = bootstrap
+            .read_config_yaml()
+            .map_err(|_| anyhow::anyhow!("Unavailable"))?;
+        config_model::resolve_effective_config_from_sources_v1(
+            &Path::new(&native.home.physical_path).join("config.yaml"),
+            config_bytes.as_deref(),
+            &selected.join(".substrate/workspace.yaml"),
+            offer.settings.config_yaml.as_bytes(),
+            &CapturedConfigOverridesV1::capture(&CliConfigOverrides::default())?,
+            &policy,
+        )?;
+        anyhow::ensure!(
+            global_open_authority_v1(&context)?.0 == global_before,
+            "Changed permission"
+        );
+        anyhow::ensure!(
+            cut::source_identity(&global_directory, "config.yaml", native.owner.uid)?
+                == global_config_identity
+                && cut::source_identity(&global_directory, "policy.yaml", native.owner.uid)?
+                    == global_policy_identity,
+            "Changed initial global sources"
+        );
+        absent_guard
+            .revalidate()
+            .map_err(|_| anyhow::anyhow!("Changed boundary"))?;
+        initialization_watch.verify()?;
+        // Exact exclusive creation is the first mutation. No existing boundary is opened for repair.
+        let name = CString::new(".substrate")?;
+        if unsafe { libc::mkdirat(root.as_raw_fd(), name.as_ptr(), 0o700) } != 0 {
+            let error = io::Error::last_os_error();
+            unknown = matches!(error.raw_os_error(), Some(libc::EIO));
+            return Err(error.into());
+        }
+        unknown = false;
+        effects.push(".substrate/".into());
+        root.sync_all()?;
+        initialization_checkpoint_v1("ControlCreated")?;
+        let control_path = selected.join(".substrate");
+        let control = cut::child(&root, b".substrate", libc::O_RDONLY | libc::O_DIRECTORY)?;
+        let control_meta = control.metadata()?;
+        anyhow::ensure!(
+            control_meta.dev() == meta.dev()
+                && control_meta.uid() == native.owner.uid
+                && control_meta.mode() & 0o7777 == 0o700,
+            "Changed initialized control directory"
+        );
+        let control_identity = EntryIdentity::held(&control)
+            .map_err(|_| anyhow::anyhow!("Changed initialized control directory"))?;
+        initialization_watch.verify_created_directory_once(selected_watch, b".substrate")?;
+        let initialization_watch = std::cell::RefCell::new(initialization_watch);
+        let revalidate_approved = || -> Result<(), WorkspaceOwnerBlockerV1> {
+            let check = || -> anyhow::Result<()> {
+                initialization_watch.borrow_mut().verify()?;
+                anyhow::ensure!(
+                    observe(&root, OsStr::new(".substrate"))
+                        .map_err(|_| anyhow::anyhow!("Changed control directory"))?
+                        == Some(control_identity)
+                        && EntryIdentity::held(&control)
+                            .map_err(|_| anyhow::anyhow!("Changed control directory"))?
+                            == control_identity,
+                    "Changed control directory"
+                );
+                anyhow::ensure!(
+                    std::fs::read_link(format!("/proc/self/fd/{}", root.as_raw_fd()))? == selected
+                        && std::fs::read_link(format!("/proc/self/fd/{}", control.as_raw_fd()))?
+                            == control_path,
+                    "Changed initialized root"
+                );
+                for directory in &absent_guard.directories {
+                    anyhow::ensure!(
+                        EntryIdentity::held(&directory.held)
+                            .map_err(|_| anyhow::anyhow!("Changed root"))?
+                            == directory.identity,
+                        "Changed root identity"
+                    );
+                }
+                for entry in &absent_guard.entries {
+                    if entry.directory != absent_guard.selected {
+                        anyhow::ensure!(
+                            observe(
+                                &absent_guard.directories[entry.directory].held,
+                                OsStr::new(entry.name)
+                            )
+                            .map_err(|_| anyhow::anyhow!("Changed ancestor"))?
+                                == entry.identity,
+                            "Changed ancestor"
+                        );
+                    }
+                }
+                anyhow::ensure!(
+                    cut::source_identity(&global_directory, "config.yaml", native.owner.uid)?
+                        == global_config_identity
+                        && cut::source_identity(
+                            &global_directory,
+                            "policy.yaml",
+                            native.owner.uid
+                        )? == global_policy_identity,
+                    "Changed initial global sources"
+                );
+                anyhow::ensure!(
+                    global_open_authority_v1(&context)?.0 == global_before,
+                    "Changed initialization permission"
+                );
+                Ok(())
+            };
+            check().map_err(|_| WorkspaceOwnerBlockerV1::ChangedDuringRead)
+        };
+        revalidate_approved().map_err(|_| anyhow::anyhow!("Changed initialized root"))?;
+        phase = "PublishingInitializationMarker";
+        unknown = true;
+        cut::write_new(
+            &control,
+            ".workspace-init.v1.pending",
+            b"incomplete approved initialization\n",
+        )?;
+        unknown = false;
+        effects.push(".substrate/.workspace-init.v1.pending".into());
+        control.sync_all()?;
+        initialization_checkpoint_v1("PendingCreated")?;
+        unknown = true;
+        phase = "PublishingConfig";
+        revalidate_approved().map_err(|_| anyhow::anyhow!("Changed initialized root"))?;
+        cut::write_initial_settings_at(
+            &control,
+            &control_path,
+            "workspace.yaml",
+            Some(offer.settings.config_yaml.as_bytes()),
+        )?;
+        unknown = false;
+        effects.extend([
+            ".substrate/workspace.yaml".into(),
+            ".substrate/.workspace.yaml.owner-revision.v1.json".into(),
+        ]);
+        initialization_checkpoint_v1("ConfigPublished")?;
+        if let Some(policy) = &offer.settings.policy_yaml {
+            unknown = true;
+            phase = "PublishingPolicy";
+            revalidate_approved().map_err(|_| anyhow::anyhow!("Changed initialized root"))?;
+            cut::write_initial_settings_at(
+                &control,
+                &control_path,
+                "policy.yaml",
+                Some(policy.as_bytes()),
+            )?;
+            effects.extend([
+                ".substrate/policy.yaml".into(),
+                ".substrate/.policy.yaml.owner-revision.v1.json".into(),
+            ]);
+        }
+        if offer.settings.policy_yaml.is_none() {
+            phase = "PublishingPolicyAbsence";
+            unknown = true;
+            revalidate_approved().map_err(|_| anyhow::anyhow!("Changed initialized root"))?;
+            cut::write_initial_settings_at(&control, &control_path, "policy.yaml", None)?;
+            effects.push(".substrate/.policy.yaml.owner-revision.v1.json".into());
+        }
+        phase = "PublishingEnabledAbsence";
+        unknown = true;
+        revalidate_approved().map_err(|_| anyhow::anyhow!("Changed initialized root"))?;
+        cut::write_initial_settings_at(&control, &control_path, "workspace.disabled", None)?;
+        unknown = false;
+        effects.push(".substrate/.workspace.disabled.owner-revision.v1.json".into());
+        initialization_checkpoint_v1("SettingsPublished")?;
+        unknown = true;
+        phase = "PublishingOwner";
+        revalidate_approved().map_err(|_| anyhow::anyhow!("Changed initialized root"))?;
+        let boundary = HeldWorkspaceOwnerBoundaryV1::capture(
+            &context,
+            selected,
+            &control,
+            absent_guard
+                .directories
+                .iter()
+                .map(|d| (d.path.as_path(), &d.held))
+                .chain(std::iter::once((control_path.as_path(), &control))),
+        )
+        .map_err(|_| anyhow::anyhow!("Changed initialized boundary"))?;
+        let publication =
+            owner::publish_workspace_identity(boundary, &context, &revalidate_approved);
+        let identity = match publication {
+            WorkspaceOwnerPublicationV1::Published(identity, e) => {
+                owner_effects = Some(e);
+                identity
+            }
+            WorkspaceOwnerPublicationV1::Failed(_, e) => {
+                owner_effects = Some(e);
+                if e.staging == owner::StagingEffectV1::Created {
+                    effects
+                        .push(".substrate/.workspace-state.v1.pending (created transient)".into());
+                }
+                if e.publication == owner::PublicationEffectV1::Visible {
+                    effects.push(".substrate/workspace-state.v1.json".into());
+                }
+                unknown = e.staging == owner::StagingEffectV1::Uncertain
+                    || e.publication == owner::PublicationEffectV1::Uncertain;
+                anyhow::bail!("Incomplete owner publication");
+            }
+            WorkspaceOwnerPublicationV1::AlreadyPublished(_) => {
+                anyhow::bail!("Unexpected existing identity")
+            }
+        };
+        unknown = false;
+        effects.push(".substrate/workspace-state.v1.json".into());
+        initialization_checkpoint_v1("OwnerPublished")?;
+        unknown = true;
+        phase = "PublishingEmptyCollections";
+        revalidate_approved().map_err(|_| anyhow::anyhow!("Changed initialized root"))?;
+        cut::write_new(
+            &control,
+            "workspace-collections.v1.json",
+            &serde_json::to_vec(&json!({"schema_version":1,
+            "workspace_ref":identity.workspace_ref,"workspace_incarnation":identity.store_incarnation,"lanes":[],"associations":[]}))?,
+        )?;
+        unknown = false;
+        effects.push(".substrate/workspace-collections.v1.json".into());
+        control.sync_all()?;
+        initialization_checkpoint_v1("CollectionsPublished")?;
+        for entry in &absent_guard.entries {
+            if entry.directory != absent_guard.selected
+                && observe(
+                    &absent_guard.directories[entry.directory].held,
+                    OsStr::new(entry.name),
+                )
+                .map_err(|_| anyhow::anyhow!("Changed ancestor"))?
+                    != entry.identity
+            {
+                anyhow::bail!("Changed ancestor");
+            }
+        }
+        anyhow::ensure!(
+            std::fs::read_link(format!("/proc/self/fd/{}", root.as_raw_fd()))? == selected,
+            "Changed root"
+        );
+        context
+            .revalidate()
+            .map_err(|_| anyhow::anyhow!("Changed native binding"))?;
+        anyhow::ensure!(
+            global_open_authority_v1(&context)?.0 == global_before,
+            "Changed permission"
+        );
+        phase = "CommittingInitialization";
+        revalidate_approved().map_err(|_| anyhow::anyhow!("Changed initialized root"))?;
+        unknown = true;
+        cut::unlink(&control, ".workspace-init.v1.pending")?;
+        unknown = false;
+        Ok(
+            json!({"state":"Initialized","workspace_ref":identity.workspace_ref,"workspace_incarnation":identity.store_incarnation,"effects":effects,"owner_publication":owner_effects,"durability":"Confirmed"}),
+        )
+    })();
+    result.unwrap_or_else(|error| json!({"state":"InitializationFailed","reason":if error.to_string().contains("Denied") {"Denied"} else {"Incomplete"},
+        "known_effects":effects,"phase":phase,"owner_publication":owner_effects,"additional_effects_unknown":unknown,"durability":if effects.is_empty()&&!unknown{"NotApplicable"}else{"Unconfirmed"}}))
+}
+
+#[cfg(test)]
+type InitializationHookV1 = Box<dyn FnMut(&str) -> anyhow::Result<()>>;
+
+#[cfg(test)]
+thread_local! {
+    static INITIALIZATION_HOOK_V1: std::cell::RefCell<Option<InitializationHookV1>> = const { std::cell::RefCell::new(None) };
+}
+fn initialization_checkpoint_v1(phase: &str) -> anyhow::Result<()> {
+    #[cfg(test)]
+    return INITIALIZATION_HOOK_V1.with(|hook| match hook.borrow_mut().as_mut() {
+        Some(hook) => hook(phase),
+        None => Ok(()),
+    });
+    #[cfg(not(test))]
+    {
+        let _ = phase;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod r09_r10_tests {
+    use super::*;
+    use std::collections::BTreeMap;
+    use std::fs;
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    use transport_api_types::{
+        WorkspaceInitializationDecisionV1 as Decision, WorkspaceInitializationOfferV1 as Offer,
+    };
+    fn fixture(initialize: bool) -> (tempfile::TempDir, PathBuf, InstallBootstrapContextCarrierV1) {
+        let temp = tempfile::tempdir_in(
+            std::env::var_os("XDG_RUNTIME_DIR").expect("private native fixture parent"),
+        )
+        .unwrap();
+        let home = temp.path().join("home");
+        let selected = temp.path().join("workspace");
+        for path in [&home, &selected] {
+            fs::create_dir(path).unwrap();
+            fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        super::super::workspace_read_cut::write_settings(&home.join("config.yaml"), Some(b"{}\n"))
+            .unwrap();
+        super::super::workspace_read_cut::write_settings(
+            &home.join("policy.yaml"),
+            Some(if initialize {
+                b"workspace_authority: {workspace_load: allow, current_actor_read: allow, initialize: allow}\n"
+            } else {
+                b"workspace_authority: {workspace_load: allow, current_actor_read: allow}\n"
+            }),
+        )
+        .unwrap();
+        let carrier = super::super::install_bootstrap::construct_unix_install_bootstrap_context(
+            Some(&home),
+            OsStr::new("substrate"),
+            Path::new("/unused/substrate"),
+            None,
+            Path::new("/"),
+        )
+        .unwrap();
+        (temp, selected, carrier)
+    }
+    type InitializationTreeSnapshotV1 = BTreeMap<PathBuf, (u32, u32, u64, u64, i64, i64, Vec<u8>)>;
+
+    fn snapshot(root: &Path) -> InitializationTreeSnapshotV1 {
+        fn walk(root: &Path, path: &Path, state: &mut InitializationTreeSnapshotV1) {
+            let m = fs::symlink_metadata(path).unwrap();
+            state.insert(
+                path.strip_prefix(root).unwrap().to_path_buf(),
+                (
+                    m.mode(),
+                    m.uid(),
+                    m.nlink(),
+                    m.len(),
+                    m.mtime_nsec(),
+                    m.ctime_nsec(),
+                    if m.is_file() {
+                        fs::read(path).unwrap()
+                    } else {
+                        Vec::new()
+                    },
+                ),
+            );
+            if m.is_dir() {
+                for entry in fs::read_dir(path).unwrap() {
+                    walk(root, &entry.unwrap().path(), state);
+                }
+            }
+        }
+        let mut state = BTreeMap::new();
+        walk(root, root, &mut state);
+        state
+    }
+    fn offer(carrier: &InstallBootstrapContextCarrierV1, selected: &Path) -> Offer {
+        let value = workspace_open_native_v1(carrier, selected);
+        assert_eq!(value["state"], "InitializationOffered", "{value}");
+        serde_json::from_value(value["offer"].clone()).unwrap()
+    }
+    #[test]
+    #[serial_test::serial]
+    fn workspace_open_approved_absent_init_load_reopen_and_zero_read_effects() {
+        let (temp, selected, carrier) = fixture(true);
+        let before = snapshot(temp.path());
+        let proposed = offer(&carrier, &selected);
+        assert_eq!(
+            snapshot(temp.path()),
+            before,
+            "PF-OPEN absence offer is read-only"
+        );
+        let initialized = workspace_initialize_native_v1(
+            &carrier,
+            &Decision::Approved {
+                offer: Box::new(proposed),
+            },
+        );
+        assert_eq!(initialized["state"], "Initialized", "{initialized}");
+        assert!(!selected.join(".gitignore").exists());
+        assert!(!selected.join(".substrate/git").exists());
+        assert!(!selected
+            .join(".substrate/.workspace-init.v1.pending")
+            .exists());
+        let after = snapshot(temp.path());
+        let first = workspace_open_native_v1(&carrier, &selected);
+        let second = workspace_open_native_v1(&carrier, &selected);
+        assert_eq!(first["state"], "Loaded", "{first}");
+        assert_eq!(first, second);
+        assert_eq!(snapshot(temp.path()), after, "PF-ZERO configured reopen");
+        println!(
+            "PF-INIT approved + PF-OPEN configured/reopen + PF-ZERO: {} declared created entries",
+            initialized["effects"].as_array().unwrap().len()
+        );
+    }
+    #[test]
+    #[serial_test::serial]
+    fn workspace_open_denied_cancelled_init_and_independent_mutation_authority() {
+        let (temp, selected, carrier) = fixture(false);
+        let proposed = offer(&carrier, &selected);
+        let before = snapshot(temp.path());
+        for decision in [
+            Decision::Denied,
+            Decision::Cancelled,
+            Decision::Approved {
+                offer: Box::new(proposed),
+            },
+        ] {
+            let reply = workspace_initialize_native_v1(&carrier, &decision);
+            assert_ne!(reply["state"], "Initialized");
+            assert_eq!(
+                snapshot(temp.path()),
+                before,
+                "PF-INIT denied/cancel/read permission cannot initialize"
+            );
+        }
+    }
+    #[test]
+    #[serial_test::serial]
+    fn workspace_open_interrupted_initializer_never_repairs_or_reoffers() {
+        for phase in [
+            "ControlCreated",
+            "PendingCreated",
+            "ConfigPublished",
+            "SettingsPublished",
+            "OwnerPublished",
+            "CollectionsPublished",
+        ] {
+            let (temp, selected, carrier) = fixture(true);
+            let proposed = offer(&carrier, &selected);
+            INITIALIZATION_HOOK_V1.with(|hook| {
+                *hook.borrow_mut() = Some(Box::new(move |current| {
+                    if current == phase {
+                        anyhow::bail!("injected interruption");
+                    }
+                    Ok(())
+                }))
+            });
+            let reply = workspace_initialize_native_v1(
+                &carrier,
+                &Decision::Approved {
+                    offer: Box::new(proposed.clone()),
+                },
+            );
+            INITIALIZATION_HOOK_V1.with(|hook| *hook.borrow_mut() = None);
+            assert_eq!(reply["state"], "InitializationFailed", "{phase}: {reply}");
+            let before = snapshot(temp.path());
+            let reopen = workspace_open_native_v1(&carrier, &selected);
+            assert!(
+                matches!(reopen["state"].as_str(), Some("Incomplete" | "Invalid")),
+                "{phase}: {reopen}"
+            );
+            assert_eq!(
+                snapshot(temp.path()),
+                before,
+                "PF-ZERO failed init reopen {phase}"
+            );
+            let retry = workspace_initialize_native_v1(
+                &carrier,
+                &Decision::Approved {
+                    offer: Box::new(proposed),
+                },
+            );
+            assert_eq!(retry["state"], "InitializationFailed");
+            assert_eq!(
+                snapshot(temp.path()),
+                before,
+                "no reapproval/repair {phase}"
+            );
+            println!(
+                "PF-INIT partial {phase}: known={} unknown={}",
+                reply["known_effects"], reply["additional_effects_unknown"]
+            );
+        }
+    }
+    #[test]
+    #[serial_test::serial]
+    fn workspace_open_intervening_boundary_changed_settings_and_spoofed_context_zero() {
+        for kind in [
+            "boundary",
+            "settings",
+            "effects",
+            "home-identity",
+            "native-context",
+            "principal",
+        ] {
+            let (temp, selected, mut carrier) = fixture(true);
+            let mut proposed = offer(&carrier, &selected);
+            match kind {
+                "boundary" => fs::create_dir(selected.join(".substrate")).unwrap(),
+                "settings" => proposed.settings.config_yaml = "[invalid".into(),
+                "effects" => proposed.effects.clear(),
+                "home-identity" => proposed.home_inode += 1,
+                "native-context" => {
+                    let alternate_home = temp.path().join("alternate");
+                    fs::create_dir(&alternate_home).unwrap();
+                    fs::set_permissions(&alternate_home, fs::Permissions::from_mode(0o700))
+                        .unwrap();
+                    fs::write(
+                        alternate_home.join("policy.yaml"),
+                        b"workspace_authority: {workspace_load: allow, current_actor_read: allow, initialize: allow}\n",
+                    )
+                    .unwrap();
+                    carrier =
+                        super::super::install_bootstrap::construct_unix_install_bootstrap_context(
+                            Some(&alternate_home),
+                            OsStr::new("substrate"),
+                            Path::new("/unused/substrate"),
+                            None,
+                            Path::new("/"),
+                        )
+                        .unwrap();
+                }
+                _ => {
+                    carrier.context.intended_host_principal = PlatformPrincipalV1::Unix {
+                        uid: unsafe { libc::geteuid() } + 1,
+                        account: "spoof".into(),
+                    };
+                }
+            }
+            let before = snapshot(temp.path());
+            let reply = workspace_initialize_native_v1(
+                &carrier,
+                &Decision::Approved {
+                    offer: Box::new(proposed),
+                },
+            );
+            assert_eq!(reply["state"], "InitializationFailed");
+            assert_eq!(snapshot(temp.path()), before, "PF-AUTH/PF-INIT {kind}");
+        }
+    }
+    #[test]
+    #[serial_test::serial]
+    fn workspace_open_initializer_never_writes_substituted_selected_root() {
+        let (_temp, selected, carrier) = fixture(true);
+        let proposed = offer(&carrier, &selected);
+        let original = selected.clone();
+        let retained = selected.with_file_name("retained-approved-root");
+        INITIALIZATION_HOOK_V1.with(|hook| {
+            *hook.borrow_mut() = Some(Box::new(move |phase| {
+                if phase == "ControlCreated" {
+                    fs::rename(&original, &retained)?;
+                    fs::create_dir(&original)?;
+                    fs::set_permissions(&original, fs::Permissions::from_mode(0o700))?;
+                }
+                Ok(())
+            }))
+        });
+        let reply = workspace_initialize_native_v1(
+            &carrier,
+            &Decision::Approved {
+                offer: Box::new(proposed),
+            },
+        );
+        INITIALIZATION_HOOK_V1.with(|hook| *hook.borrow_mut() = None);
+        assert_eq!(reply["state"], "InitializationFailed", "{reply}");
+        assert_eq!(
+            fs::read_dir(&selected).unwrap().count(),
+            0,
+            "no write entered replacement root"
+        );
+        assert_eq!(
+            fs::read_dir(
+                selected
+                    .with_file_name("retained-approved-root")
+                    .join(".substrate")
+            )
+            .unwrap()
+            .count(),
+            0
+        );
+    }
+    #[test]
+    #[serial_test::serial]
+    fn workspace_open_initializer_rejects_replaced_control_directory() {
+        for kind in ["nonempty", "empty", "restored"] {
+            let (temp, selected, carrier) = fixture(true);
+            let proposed = offer(&carrier, &selected);
+            let control = selected.join(".substrate");
+            let retained = temp.path().join("retained-control");
+            let observed = std::rc::Rc::new(std::cell::RefCell::new(None));
+            let captured = observed.clone();
+            let replacement = control.clone();
+            INITIALIZATION_HOOK_V1.with(|hook| {
+                *hook.borrow_mut() = Some(Box::new(move |phase| {
+                    if phase == "ControlCreated" {
+                        fs::rename(&replacement, &retained)?;
+                        fs::create_dir(&replacement)?;
+                        fs::set_permissions(&replacement, fs::Permissions::from_mode(0o700))?;
+                        if kind == "nonempty" {
+                            let path = replacement.join("workspace.yaml");
+                            fs::write(&path, b"foreign configuration\n")?;
+                            fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+                        } else if kind == "restored" {
+                            fs::remove_dir(&replacement)?;
+                            fs::rename(&retained, &replacement)?;
+                        }
+                        *captured.borrow_mut() = Some(snapshot(&replacement));
+                    }
+                    Ok(())
+                }));
+            });
+            let reply = workspace_initialize_native_v1(
+                &carrier,
+                &Decision::Approved {
+                    offer: Box::new(proposed),
+                },
+            );
+            INITIALIZATION_HOOK_V1.with(|hook| *hook.borrow_mut() = None);
+            assert_eq!(reply["state"], "InitializationFailed", "{kind}: {reply}");
+            assert_eq!(
+                snapshot(&control),
+                *observed.borrow().as_ref().unwrap(),
+                "{kind}"
+            );
+        }
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn workspace_open_initializer_preserves_intervening_settings() {
+        for (phase, name) in [
+            ("PendingCreated", "workspace.yaml"),
+            ("ConfigPublished", "policy.yaml"),
+            ("ConfigPublished", "workspace.disabled"),
+        ] {
+            let (_temp, selected, carrier) = fixture(true);
+            let proposed = offer(&carrier, &selected);
+            let path = selected.join(".substrate").join(name);
+            let injected = path.clone();
+            let observed = std::rc::Rc::new(std::cell::RefCell::new(None));
+            let captured = observed.clone();
+            INITIALIZATION_HOOK_V1.with(|hook| {
+                *hook.borrow_mut() = Some(Box::new(move |checkpoint| {
+                    if checkpoint == phase {
+                        fs::write(&injected, b"intervening owner bytes\n")?;
+                        fs::set_permissions(&injected, fs::Permissions::from_mode(0o600))?;
+                        *captured.borrow_mut() = Some(snapshot(&injected));
+                    }
+                    Ok(())
+                }));
+            });
+            let reply = workspace_initialize_native_v1(
+                &carrier,
+                &Decision::Approved {
+                    offer: Box::new(proposed),
+                },
+            );
+            INITIALIZATION_HOOK_V1.with(|hook| *hook.borrow_mut() = None);
+            assert_eq!(reply["state"], "InitializationFailed", "{name}: {reply}");
+            assert_eq!(
+                snapshot(&path),
+                *observed.borrow().as_ref().unwrap(),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn workspace_open_initialize_permission_does_not_regrant_read() {
+        let (temp, selected, carrier) = fixture(true);
+        let proposed = offer(&carrier, &selected);
+        super::super::workspace_read_cut::write_settings(
+            &Path::new(&carrier.context.host_substrate_home).join("policy.yaml"),
+            Some(b"workspace_authority: {current_actor_read: deny, initialize: allow}\n"),
+        )
+        .unwrap();
+        let reply = workspace_initialize_native_v1(
+            &carrier,
+            &Decision::Approved {
+                offer: Box::new(proposed),
+            },
+        );
+        assert_eq!(reply["state"], "Initialized", "{reply}");
+        let before = snapshot(temp.path());
+        let denied = workspace_open_native_v1(&carrier, &selected);
+        assert_eq!(
+            denied,
+            serde_json::json!({"state":"Refused","reason":"Denied"})
+        );
+        assert_eq!(snapshot(temp.path()), before);
+    }
+    #[test]
+    #[serial_test::serial]
+    fn workspace_open_legacy_coverage_and_invalid_owner_never_enroll_or_reoffer() {
+        for kind in [
+            "coverage",
+            "unknown-owner",
+            "missing-owner",
+            "disabled",
+            "legacy",
+        ] {
+            let (temp, selected, carrier) = fixture(true);
+            let proposed = offer(&carrier, &selected);
+            assert_eq!(
+                workspace_initialize_native_v1(
+                    &carrier,
+                    &Decision::Approved {
+                        offer: Box::new(proposed)
+                    }
+                )["state"],
+                "Initialized"
+            );
+            match kind {
+                "coverage" => fs::remove_file(
+                    selected.join(".substrate/.workspace.yaml.owner-revision.v1.json"),
+                )
+                .unwrap(),
+                "unknown-owner" => {
+                    let path = selected.join(".substrate/workspace-state.v1.json");
+                    let mut value: serde_json::Value =
+                        serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+                    value["version"] = 99.into();
+                    fs::write(path, serde_json::to_vec(&value).unwrap()).unwrap();
+                }
+                "missing-owner" => {
+                    fs::remove_file(selected.join(".substrate/workspace-state.v1.json")).unwrap()
+                }
+                "disabled" => super::super::workspace_read_cut::write_settings(
+                    &selected.join(".substrate/workspace.disabled"),
+                    Some(b""),
+                )
+                .unwrap(),
+                _ => fs::write(selected.join(".substrate/settings.yaml"), b"legacy").unwrap(),
+            }
+            let before = snapshot(temp.path());
+            let reopened = workspace_open_native_v1(&carrier, &selected);
+            if kind == "coverage" {
+                assert_eq!(reopened["state"], "Loaded");
+                assert_eq!(reopened["read_cut"], "UnsupportedRevisionCoverage");
+            } else {
+                assert!(
+                    !matches!(
+                        reopened["state"].as_str(),
+                        Some("Loaded" | "InitializationOffered")
+                    ),
+                    "{kind}: {reopened}"
+                );
+            }
+            assert_eq!(
+                snapshot(temp.path()),
+                before,
+                "no metadata enrollment/repair for {kind}"
+            );
+        }
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod installed_authority_cut_private_tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    #[ignore = "requires exact released private Root namespace and genuine installed-home publisher"]
+    fn workspace_open_installed_authority_watch_genuine_publisher_and_restoration() {
+        assert_eq!(unsafe { libc::geteuid() }, 0);
+        assert_eq!(
+            std::env::var("TASK22_PRIVATE_NAMESPACE").unwrap(),
+            "joined-v1"
+        );
+        let private = std::path::PathBuf::from(std::env::var_os("TASK22_PRIVATE_ROOT").unwrap());
+        let product = std::path::PathBuf::from(std::env::var_os("TASK22_PRODUCT").unwrap());
+        let private_parent = product.join(".codex/task20-workspace-proof/joined");
+        assert_eq!(
+            private.parent(),
+            Some(private_parent.as_path()),
+            "exact owned private source-proof case"
+        );
+        let first = transport_api_types::InstallBootstrapContextCarrierV1::decode(
+            std::fs::read_to_string(private.join("control/carrier.txt"))
+                .unwrap()
+                .trim(),
+        )
+        .unwrap();
+        assert!(
+            WorkspaceNativeSettingsContextV1::from_native_invocation(&first).is_err(),
+            "Root may not borrow the unprivileged native constructor"
+        );
+        let alternate_path = Path::new("/run/task22-owner/registry-alternate");
+        std::fs::create_dir(alternate_path).unwrap();
+        std::fs::set_permissions(alternate_path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let name = std::ffi::CString::new(alternate_path.as_os_str().as_encoded_bytes()).unwrap();
+        assert_eq!(unsafe { libc::chown(name.as_ptr(), 1000, 1000) }, 0);
+        let second = transport_api_types::InstallBootstrapContextCarrierV1::from_context(
+            transport_api_types::InstallBootstrapContextV1::new_unix(
+                alternate_path.to_str().unwrap(),
+                "task22-owner",
+                1000,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let publish = |carrier: &transport_api_types::InstallBootstrapContextCarrierV1| {
+            let output = std::process::Command::new("/usr/bin/bash")
+                .args([
+                    "--noprofile",
+                    "--norc",
+                    "-c",
+                    r#"
+set -euo pipefail
+source "$TASK22_PRODUCT/scripts/linux/world-lifecycle.sh"
+sudo_cmd() { "$@"; }
+INSTALL_BOOTSTRAP_CONTEXT_V1="$TASK22_PUBLISH_CARRIER"
+INSTALL_BOOTSTRAP_COMMITMENT="$TASK22_PUBLISH_COMMITMENT"
+INSTALL_BOOTSTRAP_ACCOUNT=task22-owner
+INSTALL_BOOTSTRAP_UID=1000
+INSTALL_BOOTSTRAP_PRIMARY_GID=1000
+INSTALL_PREFIX="$TASK22_PUBLISH_PREFIX"
+unset FAKE_ROOT
+publish_installed_home_bootstrap_v1
+"#,
+                ])
+                .env("TASK22_PUBLISH_CARRIER", carrier.encode().unwrap())
+                .env(
+                    "TASK22_PUBLISH_COMMITMENT",
+                    &carrier.host_context_commitment,
+                )
+                .env(
+                    "TASK22_PUBLISH_PREFIX",
+                    &carrier.context.selected_host_prefix,
+                )
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        let mut watch = installed_authority_watch_v1().unwrap();
+        publish(&second);
+        publish(&first);
+        assert!(
+            watch.verify().is_err(),
+            "genuine installed-home A→B→A must invalidate cut"
+        );
+        let registry = Path::new("/var/lib/substrate/install-bootstrap-authority-v1");
+        for mode in [
+            "head-content-restore",
+            "head-remove-restore",
+            "directory-attributes-restore",
+        ] {
+            let mut watch = installed_authority_watch_v1().unwrap();
+            let head = registry.join("active.json");
+            let bytes = std::fs::read(&head).unwrap();
+            match mode {
+                "head-content-restore" => {
+                    std::fs::write(&head, b"unmediated").unwrap();
+                    std::fs::write(&head, &bytes).unwrap();
+                }
+                "head-remove-restore" => {
+                    let moved = registry.join("private-proof-moved-head");
+                    std::fs::rename(&head, &moved).unwrap();
+                    std::fs::rename(&moved, &head).unwrap();
+                }
+                _ => {
+                    std::fs::set_permissions(registry, std::fs::Permissions::from_mode(0o700))
+                        .unwrap();
+                    std::fs::set_permissions(registry, std::fs::Permissions::from_mode(0o750))
+                        .unwrap();
+                }
+            }
+            assert!(watch.verify().is_err(), "{mode}");
+            assert_eq!(std::fs::read(head).unwrap(), bytes);
+        }
+        installed_authority_watch_v1().unwrap().verify().unwrap();
+        config_projection::ConfiguredAcceptedHomeAuthorityV1::from_installed_bootstrap_authority()
+            .unwrap();
+        println!("PF-REV installed-home exact watch: genuine publisher A→B→A and three restoration controls; fresh accepted binding restored");
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) fn selected_receipt_failure_for_test_v1(
+    carrier: &InstallBootstrapContextCarrierV1,
+    current_request: &transport_api_types::WorkspaceCurrentRequestV1,
+) -> transport_api_types::WorkspaceAssociationUpdateEffectsV1 {
+    let mut request = current_request.clone();
+    let transport_api_types::WorkspaceCurrentOperationV1::CurrentActorRead {
+        backend_custody_ref,
+        ..
+    } = &request.operation
+    else {
+        panic!("actual genuine private read request");
+    };
+    let custody = backend_custody_ref.clone();
+    request.operation = transport_api_types::WorkspaceCurrentOperationV1::PublishAssociation;
+    let context = WorkspaceNativeSettingsContextV1::from_native_invocation(carrier).unwrap();
+    let effects =
+        std::cell::Cell::new(transport_api_types::WorkspaceAssociationUpdateEffectsV1::default());
+    owner::set_publication_hook(Some(Box::new(|phase| {
+        if phase == "SelectedAssociationPublished" {
+            Err(owner::WorkspaceOwnerBlockerV1::Unavailable)
+        } else {
+            Ok(())
+        }
+    })));
+    let mut attempted = false;
+    let settings = WorkspaceOpenAdapter::with_native_operation_v1(
+        Path::new(&request.resource.workspace_path),
+        &context,
+        &mut |observation, boundary, current| {
+            assert_eq!(
+                observation
+                    .workspace_authority
+                    .decisions
+                    .association_publish,
+                Some(substrate_broker::WorkspaceAuthorityDecisionV1::Allow)
+            );
+            attempted = true;
+            assert!(matches!(
+                owner::publish_selected_world_association_v1(
+                    boundary, &context, &request, true, &custody, &effects, current
+                ),
+                Err(owner::WorkspaceOwnerBlockerV1::Unavailable)
+            ));
+            Ok(())
+        },
+    );
+    owner::set_publication_hook(None);
+    assert!(attempted && matches!(settings, WorkspaceSettingsLoadV1::SettingsObserved(_)));
+    let effect = effects.get();
+    assert_eq!(effect.association.published_visible, Some(true));
+    assert_eq!(effect.association.directory_sync_confirmed, Some(true));
+    assert_eq!(
+        effect.receipt,
+        transport_api_types::WorkspaceAssociationEffectsV1::default()
+    );
+    effect
 }

@@ -1,8 +1,10 @@
 use crate::execution::agent_inventory::{
-    discover_agent_files, load_effective_agent_inventory, validate_agent_file,
-    AgentInventoryEntryV1,
+    discover_agent_files, load_agent_inventory_snapshot_v3, load_effective_agent_inventory,
+    validate_agent_file, AgentInventoryEntryV1, AgentInventorySnapshotV3,
 };
 use crate::execution::agent_runtime::auto_attach::SessionAutoAttachClaim;
+#[cfg(all(unix, not(target_os = "linux")))]
+use crate::execution::agent_runtime::control::run_hidden_owner_helper_startup_prompt_stream_with_action;
 #[cfg(not(target_os = "linux"))]
 use crate::execution::agent_runtime::control::toolbox_transport_path;
 #[cfg(target_os = "linux")]
@@ -37,7 +39,6 @@ use crate::execution::agent_runtime::control::{
     public_prompt_rendered_exit, reconcile_resumed_public_turn_detach_timeout,
     register_durable_start_startup_prompt_listener, render_committed_public_start_transaction,
     render_indeterminate_public_start_transaction,
-    run_hidden_owner_helper_startup_prompt_stream_with_action,
     run_hidden_owner_helper_startup_prompt_stream_with_public_identity,
     verify_public_start_continuity_settled, HiddenOwnerHelperStartupPromptPlan,
 };
@@ -47,16 +48,14 @@ use crate::execution::agent_runtime::host_session_authority::fork_successor::{
     AllocateForkSuccessorRequestV1, ForkSuccessorAllocationOutcomeV1,
 };
 #[cfg(unix)]
+use crate::execution::agent_runtime::host_session_authority::schema::StartContinuationHandleStateV2;
+#[cfg(unix)]
 use crate::execution::agent_runtime::host_session_authority::schema::TimestampV1;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::host_session_authority::schema::{
     AgentExecutionScopeV1, HostPostTurnDispositionV1, HostSessionAuthorityPreconditionV1,
     HostSessionPostureV1, HostSessionTransitionCallerKindV1, HostSessionTransitionCallerV1,
     HostSessionTransitionModeV1, RuntimeBackendKindV1,
-};
-#[cfg(unix)]
-use crate::execution::agent_runtime::host_session_authority::schema::{
-    StartContinuationHandleHashInputV2, StartContinuationHandleStateV2,
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::host_session_authority::stop::{
@@ -153,6 +152,7 @@ use substrate_common::{AgentEvent, PlacementExecution};
 use tokio::runtime::Builder as TokioRuntimeBuilder;
 #[cfg(target_os = "linux")]
 use transport_api_types::InstallBootstrapContextCarrierV1;
+use transport_api_types::{AgentSelectionPlacementV1, ResolvedAgentSelectionV1};
 #[cfg(target_os = "linux")]
 use transport_api_types::{SharedWorldOwnerAction, SharedWorldOwnerSpec};
 use uuid::Uuid;
@@ -208,7 +208,12 @@ pub(crate) fn handle_agent_command(
                 1
             }
         },
-        AgentAction::Start(args) => render_public_prompt_command_result(run_start(args, cli)),
+        AgentAction::Start(args) => render_public_prompt_command_result(run_start(
+            args,
+            cli,
+            #[cfg(target_os = "linux")]
+            install_context,
+        )),
         AgentAction::Turn(args) => render_public_prompt_command_result(run_turn(args, cli)),
         AgentAction::Reattach(args) => match run_reattach(args, cli) {
             Ok(()) => 0,
@@ -366,6 +371,48 @@ fn run_owner_helper(
     #[cfg(target_os = "linux")] install_context: &InstallBootstrapContextCarrierV1,
 ) -> Result<i32> {
     #[cfg(target_os = "linux")]
+    if args
+        .plan_file
+        .parent()
+        .and_then(|path| path.file_name())
+        .and_then(std::ffi::OsStr::to_str)
+        == Some("ordinary-successor-plans-v1")
+    {
+        let envelope =
+            crate::execution::agent_runtime::control::load_ordinary_successor_helper_envelope(
+                &args.plan_file,
+            )?;
+        // Capture only parent-owned envelope transport, CLOEXEC and RAII,
+        // before slow authentication. No Accepted or authority effects occur.
+        let transport_plan = crate::execution::agent_runtime::control::validate_ordinary_successor_helper_envelope(
+            &crate::execution::agent_runtime::control::decode_ordinary_successor_helper_envelope(&envelope)?
+        )?;
+        let startup_path = &transport_plan
+            .helper_plan
+            .startup_prompt
+            .as_ref()
+            .context("ordinary successor has no exact startup reply path")?
+            .stream_path;
+        let startup_reply =
+            crate::execution::agent_runtime::control::take_ordinary_successor_startup_stream_v1(
+                startup_path,
+            )?;
+        let (selection, successor) =
+            crate::execution::agent_runtime::control::authenticate_ordinary_successor_helper(
+                &envelope,
+                install_context,
+            )?;
+        let plan = successor.helper_plan.clone();
+        remove_hidden_owner_helper_launch_plan(&args.plan_file)?;
+        return crate::repl::async_repl::run_ordinary_hidden_owner_helper(
+            plan,
+            successor,
+            selection,
+            install_context.clone(),
+            startup_reply,
+        );
+    }
+    #[cfg(target_os = "linux")]
     let authority_successor = (args
         .plan_file
         .parent()
@@ -375,12 +422,30 @@ fn run_owner_helper(
     .then(|| load_authority_managed_successor_launch_plan(&args.plan_file))
     .transpose()?;
     #[cfg(target_os = "linux")]
+    if authority_successor.is_some() {
+        anyhow::bail!("ordinary public successor requires the strict original-selection envelope");
+    }
+    #[cfg(target_os = "linux")]
     let plan = match authority_successor.as_ref() {
         Some(successor) => successor.helper_plan.clone(),
         None => load_hidden_owner_helper_launch_plan(&args.plan_file)?,
     };
     #[cfg(not(target_os = "linux"))]
     let plan = load_hidden_owner_helper_launch_plan(&args.plan_file)?;
+    #[cfg(target_os = "linux")]
+    {
+        if plan.mode != OwnerHelperMode::Start {
+            anyhow::bail!("ordinary public successor inner plan cannot enter generic Existing");
+        }
+        let selected = crate::execution::agent_runtime::control::recover_ordinary_public_selection(
+            install_context,
+            plan.orchestration_session_id(),
+        )?;
+        crate::execution::agent_runtime::control::authenticate_ordinary_public_helper_run(
+            &selected, &plan, None,
+        )?
+        .revalidate_before_effect()?;
+    }
     remove_hidden_owner_helper_launch_plan(&args.plan_file)?;
     crate::repl::async_repl::run_hidden_owner_helper(
         plan,
@@ -420,20 +485,128 @@ struct HostStartLaunchPlan {
     helper_plan: HiddenOwnerHelperLaunchPlan,
     resolved_contract: ResolvedLaunchContract,
     public_identity: StartPromptPublicIdentity,
+    native_selection: ResolvedAgentSelectionV1,
+    requested_selection: ResolvedAgentSelectionV1,
 }
 
-fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
+fn run_start(
+    args: &AgentStartArgs,
+    cli: &Cli,
+    #[cfg(target_os = "linux")] install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<()> {
     let prompt = load_public_prompt_source(&PublicPromptInput {
         prompt: args.prompt_source.prompt.clone(),
         prompt_file: args.prompt_source.prompt_file.clone(),
     })
     .map_err(normalize_public_prompt_error)?;
     let context = resolve_command_context(cli)?;
+    #[cfg(target_os = "linux")]
+    let configured =
+        crate::execution::install_bootstrap::acquire_ordinary_configured_home(install_context)?;
+    #[cfg(target_os = "linux")]
+    let invocation_root = TrustedAuthorityRoot::open_for_owner(
+        Path::new(&configured.accepted_home().physical_path),
+        u32::try_from(configured.intended_uid())?,
+    )?;
+    #[cfg(target_os = "linux")]
+    let invocation_workspace = {
+        use crate::execution::agent_runtime::host_session_authority::schema::{
+            CanonicalDirectoryV1, DirectoryPhysicalIdentityV1,
+        };
+        use std::os::unix::fs::MetadataExt;
+        let path = fs::canonicalize(current_dir())?;
+        let metadata = fs::metadata(&path)?;
+        CanonicalDirectoryV1 {
+            physical_path: path
+                .to_str()
+                .context("public workspace requires UTF-8")?
+                .into(),
+            physical_identity: DirectoryPhysicalIdentityV1::Linux {
+                device_id: metadata.dev(),
+                inode: metadata.ino(),
+            },
+        }
+    };
+    #[cfg(target_os = "linux")]
+    let held_workspace = crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedWorkspaceRoot::open_exact(
+        &invocation_workspace,
+    )?;
+    #[cfg(target_os = "linux")]
+    let revalidate_install = || -> Result<()> {
+        crate::execution::install_bootstrap::bind_unix_install_bootstrap_context(install_context)?;
+        let encoded = install_context.encode().map_err(anyhow::Error::msg)?;
+        crate::execution::install_bootstrap::validate_install_bootstrap_projections(
+            install_context,
+            &encoded,
+            |key| env::var_os(key),
+        )?;
+        configured.revalidate()?;
+        invocation_root.revalidate()?;
+        held_workspace.revalidate()?;
+        let observed = public_start_authority()?;
+        if observed.bootstrap_home().identity()? != invocation_root.identity()
+            || invocation_root.identity().physical_path != configured.accepted_home().physical_path
+            || fs::canonicalize(current_dir())?.to_str()
+                != Some(invocation_workspace.physical_path.as_str())
+        {
+            anyhow::bail!("public invocation install root or workspace changed");
+        }
+        let same_home = match (
+            &invocation_root.identity().physical_identity,
+            &configured.accepted_home().physical_identity,
+        ) {
+            (
+                crate::execution::agent_runtime::host_session_authority::schema::DirectoryPhysicalIdentityV1::Linux { device_id: a, inode: b },
+                config_projection::DirectoryPhysicalIdentityV1::Linux { device_id: c, inode: d },
+            ) => a == c && b == d,
+            _ => false,
+        };
+        if !same_home {
+            anyhow::bail!("public invocation physical configured home changed");
+        }
+        Ok(())
+    };
+    #[cfg(target_os = "linux")]
+    revalidate_install()?;
     let store = AgentRuntimeStateStore::new()?;
     #[cfg(target_os = "linux")]
     let mut start_plan = build_start_launch_plan(args, &context)?;
     #[cfg(not(target_os = "linux"))]
     let start_plan = build_start_launch_plan(args, &context)?;
+
+    #[cfg(target_os = "linux")]
+    let selections =
+        crate::execution::agent_runtime::native_launch_context::OrdinaryStartSelectionsV1 {
+            native: start_plan.native_selection.clone(),
+            requested: start_plan.requested_selection.clone(),
+        };
+    #[cfg(target_os = "linux")]
+    let sources =
+        crate::execution::agent_runtime::native_launch_context::CapturedOrdinarySourcesV1::capture(
+            &context.effective_config,
+            &context.selection_snapshot,
+            &selections,
+        )?;
+    #[cfg(target_os = "linux")]
+    let planned_workspace = start_plan.helper_plan.session.workspace_root.clone();
+    #[cfg(target_os = "linux")]
+    let revalidate_invocation = || -> Result<()> {
+        revalidate_install()?;
+        if planned_workspace != invocation_workspace.physical_path {
+            anyhow::bail!("public birth workspace differs from invocation custody");
+        }
+        let fresh = resolve_command_context(cli)?;
+        let fresh_sources = crate::execution::agent_runtime::native_launch_context::CapturedOrdinarySourcesV1::capture(
+            &fresh.effective_config, &fresh.selection_snapshot, &selections)?;
+        if serde_json::to_value(&fresh_sources)? != serde_json::to_value(&sources)?
+            || serde_json::to_value(&fresh.base_policy)?
+                != serde_json::to_value(&context.base_policy)?
+        {
+            anyhow::bail!("public Start source/policy changed before birth effect");
+        }
+        revalidate_install()?;
+        Ok(())
+    };
 
     #[cfg(unix)]
     let (startup_prompt_text, prompt_sha256, request_key_sha256) = {
@@ -462,7 +635,10 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
     };
 
     #[cfg(target_os = "linux")]
-    ensure_public_start_authority_bootstrapped()?;
+    {
+        revalidate_invocation()?;
+        ensure_public_start_authority_bootstrapped()?;
+    }
     #[cfg(unix)]
     let mut retry_transaction = retryable_public_start_transaction(&request_key_sha256)?;
     #[cfg(unix)]
@@ -495,6 +671,7 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
         #[cfg(target_os = "linux")]
         {
             if retry_transaction.is_none() {
+                revalidate_invocation()?;
                 let world_binding = establish_public_world_start_binding(
                     start_plan.helper_plan.orchestration_session_id(),
                     &start_plan.helper_plan.session.workspace_root,
@@ -522,14 +699,27 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
             public_backend_id: Some(start_plan.public_identity.backend_id.clone()),
             public_scope: Some(start_plan.public_identity.scope),
         });
-        prepare_public_start_authority_before_transport(&start_plan.helper_plan)
-            .map_err(runtime_start_error)?;
+        revalidate_invocation()?;
+        prepare_public_start_authority_before_transport(
+            &start_plan.helper_plan,
+            install_context,
+            invocation_root.identity(),
+            &invocation_workspace,
+            &selections,
+            &sources,
+            &context.effective_config,
+            &context.inventory,
+            &start_plan.resolved_contract,
+        )
+        .map_err(runtime_start_error)?;
     }
 
     let HostStartLaunchPlan {
         helper_plan,
         resolved_contract,
         public_identity,
+        native_selection: _,
+        requested_selection: _,
     } = start_plan;
 
     #[cfg(not(unix))]
@@ -661,6 +851,10 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
                                 declare_or_join_public_start_submission_indeterminate(
                                     &transaction,
                                 )?;
+                            #[cfg(target_os = "linux")]
+                            if public_prompt_rendered_exit_code(&err).is_some() {
+                                return Err(err);
+                            }
                             render_indeterminate_public_start_result(&indeterminate, args.json)
                         }
                         StartTransactionStateV1::ContinuationRegistered { .. } => {
@@ -712,8 +906,31 @@ fn public_start_request_key(
     public_backend_id: &str,
     public_scope: AgentExecutionScope,
 ) -> Result<String> {
+    plan.native_selection
+        .validate()
+        .map_err(config_model::user_error)?;
+    plan.requested_selection
+        .validate()
+        .map_err(config_model::user_error)?;
+    let requested_placement = match public_scope {
+        AgentExecutionScope::Host => AgentSelectionPlacementV1::Host,
+        AgentExecutionScope::World => AgentSelectionPlacementV1::World,
+    };
+    if plan.native_selection.placement != AgentSelectionPlacementV1::Host
+        || plan.native_selection.backend_id != plan.helper_plan.descriptor.backend_id
+        || plan.requested_selection.placement != requested_placement
+        || plan.requested_selection.backend_id != public_backend_id
+        || (public_scope == AgentExecutionScope::Host
+            && plan.native_selection != plan.requested_selection)
+    {
+        return Err(config_model::user_error(
+            "Start selections conflict with the launch identities",
+        ));
+    }
     let stable_request = serde_json::json!({
-        "schema_version": 1,
+        "schema_version": 2,
+        "native_selection": &plan.native_selection,
+        "requested_selection": &plan.requested_selection,
         "descriptor": &plan.helper_plan.descriptor,
         "workspace_root": &plan.helper_plan.session.workspace_root,
         "host_attach_contract": &plan.helper_plan.host_attach_contract,
@@ -724,10 +941,12 @@ fn public_start_request_key(
         },
         "prompt_sha256": prompt_sha256,
     });
-    let bytes = serde_json::to_vec(&stable_request)
-        .context("failed to encode the durable public Start request key")?;
+    let bytes = crate::execution::agent_runtime::host_session_authority::canonical_json::to_vec(
+        &stable_request,
+    )
+    .context("failed to encode the durable public Start request key")?;
     Ok(public_start_digest(
-        "substrate.a1.3-p1.public-start-request.v1",
+        "substrate.selected-public-start-request.v1",
         &[&bytes],
     ))
 }
@@ -744,7 +963,13 @@ fn public_start_authority() -> Result<HostSessionAuthority> {
 
 #[cfg(target_os = "linux")]
 fn ensure_public_start_authority_bootstrapped() -> Result<()> {
-    public_start_authority()?
+    let authority = public_start_authority()?;
+    // Existing selected births are V2/V3. The V1 bootstrap cannot join them.
+    // A failed strict versioned read still has to pass the original bootstrap.
+    if authority.read_preserved_start_root_v2().is_ok() {
+        return Ok(());
+    }
+    authority
         .bootstrap()
         .map(|_| ())
         .map_err(|error| anyhow::anyhow!(error.to_string()))
@@ -944,6 +1169,19 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
     .map_err(normalize_public_prompt_error)?;
 
     #[cfg(target_os = "linux")]
+    let ordinary_source = {
+        let carrier = crate::execution::install_bootstrap::checked_install_bootstrap_context_from_projections()?;
+        let selected = crate::execution::agent_runtime::control::recover_ordinary_public_selection(
+            &carrier,
+            &args.session,
+        )?;
+        crate::execution::agent_runtime::control::revalidate_ordinary_public_source_permission(
+            &selected,
+        )?;
+        selected
+    };
+
+    #[cfg(target_os = "linux")]
     let mut public_successor_guard = acquire_public_successor_request_guard(
         &substrate_paths::substrate_home()?,
         &args.session,
@@ -977,19 +1215,24 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
                     .resolve_current_exact(&args.session, None)
                     .map_err(|error| runtime_start_error(anyhow::anyhow!(error.to_string())))?;
                 let backend_id = current.caller.descriptor.backend_id.clone();
-                if backend_id != args.backend {
+                if ordinary_source.requested_selection().backend_id != args.backend {
                     anyhow::bail!(config_model::user_error(format!(
                         "backend_not_in_session: orchestration session {} has no exact backend slot for {}",
                         args.session, args.backend
                     )));
                 }
-                let context = resolve_command_context(cli)?;
+                let captured_config = ordinary_source.captured_effective_config();
+                let current_policy =
+                    crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
+                        Path::new(ordinary_source.workspace_root()),
+                        &ordinary_source.held_authority().bootstrap_home(),
+                    )?;
                 let host_toolbox_surface_authoritative = authoritative_host_toolbox_surface_enabled(
                     &backend_id,
                     AgentExecutionScope::Host,
                     ORCHESTRATOR_ROLE,
-                    &context.effective_config,
-                    &context.base_policy,
+                    &captured_config,
+                    &current_policy,
                 );
                 let exact_prompt = maybe_compose_prompt_with_authoritative_host_toolbox_contract(
                     &prompt.prompt_text,
@@ -1076,10 +1319,11 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
                 if resume_required {
                     mark_public_successor_request_in_flight(&mut public_successor_guard)
                         .map_err(runtime_start_error)?;
-                    let mut launch = build_resumed_turn_launch_plan(
+                    let mut launch = build_ordinary_public_resumed_turn_launch_plan(
+                        &ordinary_source,
                         &args.session,
                         &exact_prompt,
-                        Some(&public_successor_guard),
+                        &public_successor_guard,
                     )?;
                     if launch.helper_plan.descriptor.backend_id != backend_id {
                         anyhow::bail!(config_model::user_error(format!(
@@ -1109,17 +1353,21 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
                         public_backend_id: None,
                         public_scope: None,
                     });
-                    let _successor_launch = launch_authority_managed_successor_owner_helper(
-                        &launch,
-                        launch_permit,
-                        cli.world,
-                        cli.no_world,
+                    let applied_selection = Arc::new(ordinary_source.refresh_original_selection()?);
+                    let carrier = crate::execution::install_bootstrap::checked_install_bootstrap_context_from_projections()?;
+                    let _successor_launch = crate::execution::agent_runtime::control::launch_ordinary_successor_owner_helper(
+                        &applied_selection, &carrier, &launch, launch_permit, cli.world, cli.no_world,
                     )
                     .map_err(runtime_start_error)?;
-                    run_hidden_owner_helper_startup_prompt_stream_with_action(
+                    run_hidden_owner_helper_startup_prompt_stream_with_public_identity(
                         startup_listener,
                         args.json,
                         PublicPromptAction::Turn,
+                        &ordinary_source.requested_selection().backend_id,
+                        match ordinary_source.requested_selection().placement {
+                            AgentSelectionPlacementV1::Host => AgentExecutionScope::Host,
+                            AgentSelectionPlacementV1::World => AgentExecutionScope::World,
+                        },
                     )
                     .map_err(normalize_public_prompt_error)?;
                     wait_for_authority_managed_successor_completion(&launch)
@@ -1684,10 +1932,10 @@ fn host_execution_client_start_for_scope(
 }
 
 fn require_start_backend_id(args: &AgentStartArgs) -> Result<&str> {
-    let backend_id = args.backend.trim();
+    let backend_id = args.backend.as_deref().unwrap_or("").trim();
     if backend_id.is_empty() {
         anyhow::bail!(config_model::user_error(
-            "unknown_backend: public start requires --backend <backend_id>"
+            "unknown_backend: an explicit --backend must name a nonempty backend id"
         ));
     }
     Ok(backend_id)
@@ -1767,9 +2015,12 @@ fn resolve_requested_start_scope(
         return Ok(start_scope_from_arg(scope));
     }
 
+    let preferred_scope = context.effective_config.agents.defaults.execution.scope;
+    if args.backend.is_none() {
+        return Ok(preferred_scope);
+    }
     let backend_id = require_start_backend_id(args)?;
     let cwd = current_dir();
-    let preferred_scope = context.effective_config.agents.defaults.execution.scope;
     if probe_start_scope_candidate(args, context, &cwd, backend_id, preferred_scope)?.is_some() {
         return Ok(preferred_scope);
     }
@@ -2157,11 +2408,56 @@ fn build_start_launch_plan(
     }
 }
 
+fn resolve_start_selection(
+    args: &AgentStartArgs,
+    context: &AgentCommandContext,
+    scope: AgentExecutionScope,
+) -> Result<ResolvedAgentSelectionV1> {
+    let agent = args.agent.as_deref().map(str::trim);
+    let backend = args.backend.as_deref().map(str::trim);
+    if agent.is_some_and(str::is_empty) || backend.is_some_and(str::is_empty) {
+        return Err(config_model::user_error(
+            "explicit agent/backend selection must be nonempty",
+        ));
+    }
+    context
+        .selection_snapshot
+        .resolve_selection(&context.effective_config, agent, backend, scope)
+}
+
+fn validate_start_selection_contract(
+    selection: &ResolvedAgentSelectionV1,
+    contract: &ResolvedLaunchContract,
+) -> Result<()> {
+    use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
+    use transport_api_types::AgentHarnessFamilyV1;
+    selection.validate().map_err(config_model::user_error)?;
+    let family = match selection.selection.harness {
+        AgentHarnessFamilyV1::Codex => AgentRuntimeBackendKind::Codex,
+        AgentHarnessFamilyV1::ClaudeCode => AgentRuntimeBackendKind::ClaudeCode,
+    };
+    let placement = match contract.execution_scope {
+        AgentExecutionScope::Host => AgentSelectionPlacementV1::Host,
+        AgentExecutionScope::World => AgentSelectionPlacementV1::World,
+    };
+    if selection.backend_id != contract.backend_id
+        || selection.realized_agent_id != contract.agent_id
+        || family != contract.backend_kind
+        || selection.placement != placement
+    {
+        return Err(config_model::user_error(
+            "complete selection conflicts with the policy-validated runtime contract",
+        ));
+    }
+    Ok(())
+}
+
 fn build_host_start_launch_plan(
     args: &AgentStartArgs,
     context: &AgentCommandContext,
 ) -> Result<HostStartLaunchPlan> {
-    let backend_id = require_start_backend_id(args)?;
+    let selection = resolve_start_selection(args, context, AgentExecutionScope::Host)?;
+    let backend_id = selection.backend_id.as_str();
 
     let cwd = current_dir();
     let envelope = build_start_dispatch_envelope(args, backend_id, AgentExecutionScope::Host);
@@ -2207,6 +2503,7 @@ fn build_host_start_launch_plan(
             err,
         )),
     };
+    validate_start_selection_contract(&selection, &resolved)?;
     let descriptor = materialize_runtime_descriptor(&resolved)
         .map_err(|err| runtime_materialization_user_error("runtime_start_failed", err.reason))?;
 
@@ -2238,6 +2535,8 @@ fn build_host_start_launch_plan(
             backend_id: backend_id.to_string(),
             scope: AgentExecutionScope::Host,
         },
+        native_selection: selection.clone(),
+        requested_selection: selection,
     })
 }
 
@@ -2267,7 +2566,8 @@ fn build_world_start_session_birth_plan(
     args: &AgentStartArgs,
     context: &AgentCommandContext,
 ) -> Result<HostStartLaunchPlan> {
-    let backend_id = require_start_backend_id(args)?;
+    let requested_selection = resolve_start_selection(args, context, AgentExecutionScope::World)?;
+    let backend_id = requested_selection.backend_id.as_str();
 
     let cwd = current_dir();
     let world_envelope =
@@ -2288,9 +2588,16 @@ fn build_world_start_session_birth_plan(
         ))
     })?;
 
+    validate_start_selection_contract(&requested_selection, &requested_world_contract)?;
     let orchestrator =
         validate_orchestrator_selection(&context.effective_config, &context.inventory)
             .map_err(config_model::user_error)?;
+    let native_selection = context.selection_snapshot.resolve_selection(
+        &context.effective_config,
+        Some(&orchestrator.file.id),
+        None,
+        AgentExecutionScope::Host,
+    )?;
     let host_backend_id = orchestrator.derived_backend_id();
     let host_attach_envelope =
         build_world_start_host_attach_dispatch_envelope(args, &host_backend_id);
@@ -2309,6 +2616,7 @@ fn build_world_start_session_birth_plan(
             host_backend_id
         ))
     })?;
+    validate_start_selection_contract(&native_selection, &host_attach_resolved)?;
     let host_attach_contract = HostAttachContract::from_resolved_contract(&host_attach_resolved, None)
         .ok_or_else(|| {
             config_model::user_error(format!(
@@ -2347,6 +2655,8 @@ fn build_world_start_session_birth_plan(
             backend_id: requested_world_contract.backend_id,
             scope: AgentExecutionScope::World,
         },
+        native_selection,
+        requested_selection,
     })
 }
 
@@ -2669,44 +2979,190 @@ fn exact_settled_start_continuation(
     crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
     String,
 )> {
+    let owner = resolved
+        .authority
+        .active_authoritative_participant_id
+        .as_deref()
+        .context("current continuation source has no authoritative participant")?;
+    if owner != resolved.caller.participant_id {
+        anyhow::bail!("current continuation source differs from exact caller");
+    }
+    exact_settled_continuation_for_authority(
+        authority,
+        root,
+        &resolved.authority,
+        &resolved.caller.descriptor,
+        None,
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn exact_settled_continuation_for_authority(
+    authority: &HostSessionAuthority,
+    root: &crate::execution::agent_runtime::host_session_authority::store_schema::StateRootV3,
+    source: &crate::execution::agent_runtime::host_session_authority::store_schema::DurableSessionAuthorityV1,
+    descriptor: &crate::execution::agent_runtime::host_session_authority::schema::AgentDescriptorV1,
+    expected_handle: Option<
+        &crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
+    >,
+) -> Result<(
+    crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
+    String,
+)> {
+    use crate::execution::agent_runtime::host_session_authority::schema::{
+        AuthorityObjectKindV1, ResumeHandleHashInputV1,
+    };
+    let owner = source
+        .active_authoritative_participant_id
+        .as_deref()
+        .context("continuation source has no authoritative participant")?;
     let mut settled = None;
-    for reference in &resolved.authority.internal_resume_handle_refs {
-        if reference.schema_version != 2 {
+    for reference in &source.internal_resume_handle_refs {
+        if reference.object_kind != AuthorityObjectKindV1::ResumeHandle {
+            anyhow::bail!("current continuation authority contains a non-handle reference");
+        }
+        if expected_handle.is_some_and(|expected| expected != reference) {
             continue;
         }
         let bytes = authority
             .read_authority_object_v2_at(root.root_revision, reference)
             .map_err(|error| anyhow::anyhow!(error.to_string()))?;
-        let handle: StartContinuationHandleHashInputV2 =
-            crate::execution::agent_runtime::host_session_authority::canonical_json::from_slice(
-                &bytes,
-            )
-            .context("decode durable Start continuation handle")?;
-        if handle.authority_store_id != root.authority_store_id
-            || handle.orchestration_session_id != resolved.authority.orchestration_session_id
-            || handle.backend_id != resolved.caller.descriptor.backend_id
-            || handle.protocol != resolved.caller.descriptor.protocol
-            || handle.internal_uaa_session_id.trim().is_empty()
+        let native_session = match reference.schema_version {
+            1 => {
+                // The caller supplies the authenticated current or exact-Applied
+                // source authority. Typed history validates this produced handle's
+                // completion/native lineage; match that source's active owner.
+                let handle: ResumeHandleHashInputV1 =
+                    crate::execution::agent_runtime::host_session_authority::canonical_json::from_slice(&bytes)
+                        .context("decode produced current continuation handle")?;
+                if handle.participant_id != owner {
+                    continue;
+                }
+                if handle.schema_version != 1
+                    || handle.orchestration_session_id != source.orchestration_session_id
+                    || handle.backend_id != descriptor.backend_id
+                    || handle.protocol != descriptor.protocol
+                    || handle.internal_uaa_session_id.trim().is_empty()
+                {
+                    anyhow::bail!("produced continuation does not join exact source identity");
+                }
+                handle.internal_uaa_session_id
+            }
+            2 | 3 => {
+                let handle = crate::execution::agent_runtime::host_session_authority::start_continuity::decode_start_continuation_handle(reference, &bytes)
+                    .context("decode versioned durable Start continuation handle")?;
+                if handle.world_controller().is_some_and(|world| {
+                    source.world_binding.as_ref() != Some(&world.world_binding)
+                }) {
+                    anyhow::bail!("World continuation differs from current session placement");
+                }
+                if handle.authority_store_id != root.authority_store_id
+                    || handle.orchestration_session_id != source.orchestration_session_id
+                    || handle.backend_id != descriptor.backend_id
+                    || handle.protocol != descriptor.protocol
+                    || handle.internal_uaa_session_id.trim().is_empty()
+                {
+                    anyhow::bail!(config_model::user_error(
+                        "owner_unreachable: durable Start continuation does not authenticate current authority",
+                    ));
+                }
+                if handle.participant_id != owner
+                    || !matches!(handle.state, StartContinuationHandleStateV2::Settled { .. })
+                {
+                    continue;
+                }
+                handle.internal_uaa_session_id.clone()
+            }
+            _ => continue,
+        };
+        if settled
+            .replace((reference.clone(), native_session))
+            .is_some()
         {
             anyhow::bail!(config_model::user_error(
-                "owner_unreachable: durable Start continuation does not authenticate current authority"
-            ));
-        }
-        if matches!(handle.state, StartContinuationHandleStateV2::Settled { .. })
-            && settled
-                .replace((reference.clone(), handle.internal_uaa_session_id))
-                .is_some()
-        {
-            anyhow::bail!(config_model::user_error(
-                "owner_unreachable: current authority has ambiguous settled Start continuations"
+                "owner_unreachable: current authority has ambiguous owner-bound continuations",
             ));
         }
     }
     settled.ok_or_else(|| {
         config_model::user_error(
-            "owner_unreachable: current authority has no settled durable Start continuation",
+            "owner_unreachable: current authority has no settled owner-bound continuation",
         )
     })
+}
+
+#[cfg(target_os = "linux")]
+fn exact_applied_successor_source_continuation(
+    authority: &HostSessionAuthority,
+    root: &crate::execution::agent_runtime::host_session_authority::store_schema::StateRootV3,
+    applied: &HostSessionTransitionIntentV3,
+) -> Result<(
+    crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
+    String,
+)> {
+    let HostSessionAuthorityPreconditionV1::ExpectedRevision {
+        authority_revision,
+        authority_record_commitment,
+        active_authoritative_participant_id,
+        authoritative_lineage_commitment,
+        lifecycle_posture,
+    } = &applied.authority_precondition
+    else {
+        anyhow::bail!("applied successor omitted exact source precondition");
+    };
+    if !matches!(
+        applied.state,
+        HostSessionTransitionIntentStateV3::Applied { .. }
+    ) || root.successor_transition_intent_map.get(&applied.intent_id) != Some(applied)
+    {
+        anyhow::bail!("applied successor source requires its exact stored operation");
+    }
+    let source = authority
+        .resolve_exact_at_revision(&applied.orchestration_session_id, *authority_revision)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let observation = source.observation();
+    if observation.authority_store_id != root.authority_store_id
+        || observation.bootstrap_home != root.bootstrap_home
+        || source.authority_record_commitment != *authority_record_commitment
+        || source.authoritative_lineage_commitment != *authoritative_lineage_commitment
+        || source
+            .authority
+            .active_authoritative_participant_id
+            .as_ref()
+            != Some(active_authoritative_participant_id)
+        || source.authority.lifecycle_posture != *lifecycle_posture
+        || applied.source_authoritative_participant_id.as_ref()
+            != Some(active_authoritative_participant_id)
+        || applied.caller.caller_participant_id.as_ref()
+            != Some(active_authoritative_participant_id)
+        || source.authority.workspace_binding != applied.workspace_binding
+        || source.authority.world_binding != applied.world_binding
+        || source.authority.shell_trace_session_id != applied.shell_trace_session_id
+        || source.authority.host_attach_contract_ref.as_ref()
+            != Some(&applied.host_attach_contract_ref)
+    {
+        anyhow::bail!("applied successor exact source authority differs");
+    }
+    let expected_handle = match (applied.mode, applied.resume_handle_ref.as_ref()) {
+        (HostSessionTransitionModeV1::Attach, None) => None,
+        (HostSessionTransitionModeV1::ResumeOneTurn, Some(reference)) => Some(reference),
+        _ => anyhow::bail!("applied successor changed its continuation mode or reference"),
+    };
+    let bytes = authority
+        .read_authority_object_v2_at(root.root_revision, &applied.descriptor_ref)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let descriptor: crate::execution::agent_runtime::host_session_authority::schema::AgentDescriptorHashInputV1 =
+        crate::execution::agent_runtime::host_session_authority::canonical_json::from_slice(&bytes)
+            .context("decode applied successor source descriptor")?;
+    // This recovers only the existing operation's native continuity. It grants
+    // no fresh issuance, completion or replay permission.
+    exact_settled_continuation_for_authority(
+        authority,
+        root,
+        &source.authority,
+        &descriptor.descriptor,
+        expected_handle,
+    )
 }
 
 #[cfg(target_os = "linux")]
@@ -3094,6 +3550,35 @@ fn build_authority_managed_successor_launch_plan(
     transition_input: Option<&str>,
     coordination: Option<&PublicSuccessorRequestGuardV1>,
 ) -> Result<AuthorityManagedSuccessorLaunchPlanV1> {
+    build_authority_managed_successor_launch_plan_with_ordinary_source(
+        orchestration_session_id,
+        launch_intent,
+        transition_input,
+        coordination,
+        None,
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn build_authority_managed_successor_launch_plan_with_ordinary_source(
+    orchestration_session_id: &str,
+    launch_intent: AttachLaunchIntent,
+    transition_input: Option<&str>,
+    coordination: Option<&PublicSuccessorRequestGuardV1>,
+    ordinary: Option<&Arc<crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1>>,
+) -> Result<AuthorityManagedSuccessorLaunchPlanV1> {
+    let revalidate_source = || -> Result<()> {
+        if let Some(selection) = ordinary {
+            if selection.original_session_id() != orchestration_session_id {
+                anyhow::bail!("ordinary public successor source session changed");
+            }
+            crate::execution::agent_runtime::control::revalidate_ordinary_public_source_permission(
+                selection,
+            )?;
+        }
+        Ok(())
+    };
+    revalidate_source()?;
     let authority = public_start_authority()?;
     let mut resolved = authority
         .resolve_current_exact(orchestration_session_id, None)
@@ -3110,9 +3595,6 @@ fn build_authority_managed_successor_launch_plan(
     let root = authority
         .read_a12b_root()
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
-    let (resume_handle_ref, internal_uaa_session_id) =
-        exact_settled_start_continuation(&authority, &root, &resolved)?;
-
     let existing_applied = match coordination {
         Some(coordination) => coordinated_applied_public_successor(
             &authority,
@@ -3129,6 +3611,10 @@ fn build_authority_managed_successor_launch_plan(
             mode,
             transition_input.map(str::as_bytes),
         )?,
+    };
+    let (resume_handle_ref, internal_uaa_session_id) = match existing_applied.as_ref() {
+        Some(applied) => exact_applied_successor_source_continuation(&authority, &root, applied)?,
+        None => exact_settled_start_continuation(&authority, &root, &resolved)?,
     };
     let applied = match existing_applied {
         Some(applied) => applied,
@@ -3195,6 +3681,7 @@ fn build_authority_managed_successor_launch_plan(
                 post_turn_disposition: matches!(mode, HostSessionTransitionModeV1::ResumeOneTurn)
                     .then_some(HostPostTurnDispositionV1::ReconcileToAttentionParkOrTerminal),
             };
+            revalidate_source()?;
             let issued = match authority
                 .issue_successor(&resolved, &request)
                 .map_err(|error| anyhow::anyhow!(error.to_string()))?
@@ -3209,6 +3696,7 @@ fn build_authority_managed_successor_launch_plan(
             let claimant_attempt_id = coordination
                 .map(|coordination| coordination.state.claimant_attempt_id.clone())
                 .unwrap_or_else(|| format!("attempt_{}", Uuid::now_v7()));
+            revalidate_source()?;
             let claimed = match authority
                 .claim_successor(&ClaimHostSessionTransitionRequestV1 {
                     intent_id: issued.intent_id.clone(),
@@ -3231,6 +3719,7 @@ fn build_authority_managed_successor_launch_plan(
                     "authority-managed successor claim did not retain exact claim evidence"
                 );
             };
+            revalidate_source()?;
             let applied = match authority
                 .apply_successor(&ApplyHostSessionTransitionRequestV1 {
                     intent_id: claimed.intent_id.clone(),
@@ -3318,6 +3807,38 @@ fn build_authority_managed_successor_launch_plan(
     })
 }
 
+#[cfg(target_os = "linux")]
+fn build_ordinary_public_resumed_turn_launch_plan(
+    selection: &Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    orchestration_session_id: &str,
+    input: &str,
+    coordination: &PublicSuccessorRequestGuardV1,
+) -> Result<AuthorityManagedSuccessorLaunchPlanV1> {
+    for attempt in 0..8 {
+        match build_authority_managed_successor_launch_plan_with_ordinary_source(
+            orchestration_session_id,
+            AttachLaunchIntent::DetachedTurn,
+            Some(input),
+            Some(coordination),
+            Some(selection),
+        ) {
+            Ok(plan) => return Ok(plan),
+            Err(error)
+                if attempt + 1 < 8
+                    && error
+                        .chain()
+                        .any(|cause| cause.to_string() == "stale authority root revision") =>
+            {
+                thread::sleep(Duration::from_millis(10));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    anyhow::bail!("ordinary public successor retry exhausted")
+}
+
 #[cfg(all(target_os = "linux", test))]
 thread_local! {
     static PUBLIC_SUCCESSOR_LAUNCHER_FAULT: std::cell::Cell<Option<&'static str>> =
@@ -3342,20 +3863,6 @@ fn maybe_inject_public_successor_launcher_crash(stage: &str) -> Result<()> {
 #[cfg(all(target_os = "linux", not(test)))]
 fn maybe_inject_public_successor_launcher_crash(_stage: &str) -> Result<()> {
     Ok(())
-}
-
-#[cfg(target_os = "linux")]
-fn build_resumed_turn_launch_plan(
-    orchestration_session_id: &str,
-    transition_input: &str,
-    coordination: Option<&PublicSuccessorRequestGuardV1>,
-) -> Result<AuthorityManagedSuccessorLaunchPlanV1> {
-    build_authority_managed_successor_launch_plan_with_stale_retry(
-        orchestration_session_id,
-        AttachLaunchIntent::DetachedTurn,
-        Some(transition_input),
-        coordination,
-    )
 }
 
 #[cfg(all(unix, not(target_os = "linux")))]
@@ -3895,6 +4402,7 @@ struct AgentCommandContext {
     effective_config: SubstrateConfig,
     base_policy: Policy,
     inventory: BTreeMap<String, AgentInventoryEntryV1>,
+    selection_snapshot: AgentInventorySnapshotV3,
 }
 
 fn resolve_command_context(cli: &Cli) -> Result<AgentCommandContext> {
@@ -3902,12 +4410,14 @@ fn resolve_command_context(cli: &Cli) -> Result<AgentCommandContext> {
     let effective_config = resolve_effective_config(&cwd, cli)?;
     let (base_policy, _) = substrate_broker::resolve_effective_policy_with_explain(&cwd, false)
         .map_err(|err| config_model::user_error(err.to_string()))?;
-    let inventory = load_effective_agent_inventory(&cwd, &base_policy)?;
+    let selection_snapshot = load_agent_inventory_snapshot_v3(&cwd, &base_policy)?;
+    let inventory = selection_snapshot.entries.clone();
 
     Ok(AgentCommandContext {
         effective_config,
         base_policy,
         inventory,
+        selection_snapshot,
     })
 }
 
@@ -6236,6 +6746,9 @@ impl AgentExecutionScope {
     }
 }
 
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) use tests::ordinary_component_public_start_keys_for_test;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -6504,14 +7017,128 @@ mod tests {
     }
 
     fn command_context_for_test(
-        effective_config: SubstrateConfig,
+        mut effective_config: SubstrateConfig,
         base_policy: Policy,
         inventory: BTreeMap<String, AgentInventoryEntryV1>,
     ) -> AgentCommandContext {
+        let selection_snapshot =
+            start_selection_snapshot_for_test(&mut effective_config, &inventory);
         AgentCommandContext {
             effective_config,
             base_policy,
             inventory,
+            selection_snapshot,
+        }
+    }
+
+    // These controlled unit fixtures use the internal flattened descriptors;
+    // production obtains definitions only from the strict V3 source loader.
+    fn start_selection_snapshot_for_test(
+        config: &mut SubstrateConfig,
+        inventory: &BTreeMap<String, AgentInventoryEntryV1>,
+    ) -> AgentInventorySnapshotV3 {
+        use crate::execution::agent_selection::{
+            ConfiguredAgentDefinitionV3, ConfiguredAgentPlacementV3,
+        };
+        use transport_api_types::{
+            AgentConnectionAuthV1, AgentConnectionBillingV1, AgentConnectionProfileV1,
+            AgentHarnessFamilyV1, AgentSelectionSourceScopeV1, AgentSelectionSourceV1,
+            AgentSelectionTupleV1,
+        };
+        let source = AgentSelectionSourceV1 {
+            scope: AgentSelectionSourceScopeV1::BuiltIn,
+            root_identity: "unit-test-config".into(),
+            relative_path: "config/agent-routes".into(),
+            revision: "fixture-v1".into(),
+            sha256: "a".repeat(64),
+        };
+        config.selection_sources = vec![source.clone()];
+        config.selection_preference_source = Some(source.clone());
+        config.selection_profiles = vec![
+            AgentConnectionProfileV1 {
+                id: "built_in:codex-subscription".into(),
+                revision: "1".into(),
+                provider: "openai".into(),
+                billing: AgentConnectionBillingV1::Subscription,
+                endpoint_identity: "openai-codex-subscription".into(),
+                upstream_base_url: "https://chatgpt.com/backend-api".into(),
+                auth: AgentConnectionAuthV1::CodexAccount {
+                    reference: "configured-account".into(),
+                },
+                source: source.clone(),
+            },
+            AgentConnectionProfileV1 {
+                id: "built_in:claude-existing".into(),
+                revision: "1".into(),
+                provider: "anthropic".into(),
+                billing: AgentConnectionBillingV1::Api,
+                endpoint_identity: "anthropic-api".into(),
+                upstream_base_url: "https://api.anthropic.com".into(),
+                auth: AgentConnectionAuthV1::ApiKeyEnvironment {
+                    name: "ANTHROPIC_API_KEY".into(),
+                },
+                source: source.clone(),
+            },
+        ];
+        let mut definitions = BTreeMap::<String, ConfiguredAgentDefinitionV3>::new();
+        for entry in inventory.values() {
+            let scope = entry.effective_scope(config);
+            let placement = match scope {
+                AgentExecutionScope::Host => AgentSelectionPlacementV1::Host,
+                AgentExecutionScope::World => AgentSelectionPlacementV1::World,
+            };
+            let suffix = format!("-{}", placement.as_str());
+            let Some(logical) = entry.file.id.strip_suffix(&suffix) else {
+                continue;
+            };
+            let Some(family) = entry.cli_runtime_family() else {
+                continue;
+            };
+            let (harness, provider, profile, model) = match family {
+                AgentCliRuntimeFamily::Codex => (
+                    AgentHarnessFamilyV1::Codex,
+                    "openai",
+                    "built_in:codex-subscription",
+                    "codex-mini-latest",
+                ),
+                AgentCliRuntimeFamily::ClaudeCode => (
+                    AgentHarnessFamilyV1::ClaudeCode,
+                    "anthropic",
+                    "built_in:claude-existing",
+                    "claude-sonnet-4-5-20250929",
+                ),
+            };
+            let definition = definitions.entry(logical.to_string()).or_insert_with(|| {
+                ConfiguredAgentDefinitionV3 {
+                    logical_agent_id: logical.into(),
+                    enabled: true,
+                    source: AgentSelectionSourceV1 {
+                        scope: AgentSelectionSourceScopeV1::Global,
+                        root_identity: "unit-test-inventory".into(),
+                        relative_path: format!("agents/{logical}.yaml"),
+                        revision: "fixture-v1".into(),
+                        sha256: "b".repeat(64),
+                    },
+                    placements: BTreeMap::new(),
+                }
+            });
+            definition.placements.insert(
+                placement,
+                ConfiguredAgentPlacementV3 {
+                    enabled: entry.file.config.enabled,
+                    runtime_family: harness,
+                    selection: AgentSelectionTupleV1 {
+                        harness,
+                        provider: provider.into(),
+                        connection_profile: profile.into(),
+                        model: model.into(),
+                    },
+                },
+            );
+        }
+        AgentInventorySnapshotV3 {
+            entries: inventory.clone(),
+            definitions: definitions.into_values().collect(),
         }
     }
 
@@ -6520,6 +7147,8 @@ mod tests {
             agents: crate::execution::config_model::AgentsConfig {
                 enabled: true,
                 defaults: crate::execution::config_model::AgentDefaultsConfig {
+                    selection: crate::execution::config_model::AgentDefaultsConfig::default()
+                        .selection,
                     execution: crate::execution::config_model::AgentDefaultsExecutionConfig {
                         scope: default_scope,
                     },
@@ -6558,7 +7187,8 @@ mod tests {
 
     fn host_start_args() -> AgentStartArgs {
         AgentStartArgs {
-            backend: "cli:codex-host".to_string(),
+            agent: None,
+            backend: Some("cli:codex-host".to_string()),
             scope: Some(AgentStartScopeArg::Host),
             disable_capability: vec![AgentDisableCapabilityArg::SessionFork],
             prompt_source: crate::execution::cli::PublicPromptArgs::default(),
@@ -6568,7 +7198,8 @@ mod tests {
 
     fn world_start_args() -> AgentStartArgs {
         AgentStartArgs {
-            backend: "cli:claude_code-world".to_string(),
+            agent: None,
+            backend: Some("cli:claude_code-world".to_string()),
             scope: Some(AgentStartScopeArg::World),
             disable_capability: vec![AgentDisableCapabilityArg::SessionStop],
             prompt_source: crate::execution::cli::PublicPromptArgs::default(),
@@ -6579,6 +7210,12 @@ mod tests {
     fn with_state_store<T>(test: impl FnOnce(&AgentRuntimeStateStore) -> T) -> T {
         let authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = TempDir::new().expect("tempdir");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))
+                .expect("private test substrate home");
+        }
         authority_env.install_home(temp.path());
         let _shared_world_root_guard = EnvVarGuard::set(
             SHARED_WORLD_METADATA_ROOT_TEST_ENV,
@@ -6878,6 +7515,11 @@ mod tests {
         plan: &AuthorityManagedSuccessorLaunchPlanV1,
     ) {
         let authority = public_start_authority().expect("open successor guard test authority");
+        let HostSessionTransitionIntentStateV3::Applied { applied_at, .. } =
+            &plan.applied_transition.state
+        else {
+            panic!("successor guard test requires an Applied transition");
+        };
         match plan.applied_transition.mode {
             HostSessionTransitionModeV1::Attach => {
                 let request = ResolveStartupOwnershipRequestV1 {
@@ -6894,14 +7536,11 @@ mod tests {
                     protocol_event: HostStartupOwnershipProtocolEventV1::OwnershipAccepted {
                         ownership_acknowledgement_id: "guard-test-attach-accepted".into(),
                     },
-                    observed_at: hsa_test_timestamp("2026-08-30T12:01:30.000000000Z"),
+                    observed_at: applied_at.clone(),
                 };
                 assert!(matches!(
                     authority
-                        .resolve_startup_ownership_at(
-                            &request,
-                            hsa_test_timestamp("2026-08-30T12:01:31.000000000Z"),
-                        )
+                        .resolve_startup_ownership_at(&request, applied_at.clone(),)
                         .expect("settle Attach startup ownership for guard test"),
                     StartupOwnershipResolutionOutcomeV1::ResolvedSuccessor(_)
                 ));
@@ -6929,7 +7568,7 @@ mod tests {
                     kind: HostPostTurnProtocolEventKindV1::TerminalFailure {
                         reason: HostPostTurnTerminalReasonV1::ResumeRuntimeCreationRejected,
                     },
-                    emitted_at: hsa_test_timestamp("2026-08-30T12:01:30.000000000Z"),
+                    emitted_at: applied_at.clone(),
                     acceptance_record_id: "guard-test-acceptance".into(),
                     acceptance_record_revision: 1,
                     stream_id: "guard-test-stream".into(),
@@ -6964,7 +7603,7 @@ mod tests {
                                 ),
                             authority_revision_observed: *authority_revision_after,
                         },
-                    completed_at: hsa_test_timestamp("2026-08-30T12:01:31.000000000Z"),
+                    completed_at: applied_at.clone(),
                 };
                 assert!(matches!(
                     authority
@@ -7354,6 +7993,19 @@ mod tests {
             ));
             drop(retry);
 
+            build_authority_managed_successor_launch_plan(
+                orchestration_session_id,
+                AttachLaunchIntent::DetachedTurn,
+                Some("different fresh input must not use an Applied operation's source"),
+                None,
+            )
+            .expect_err("different fresh input must not reuse an Applied operation's source");
+            assert_eq!(
+                authority.read_a12b_root().unwrap(),
+                after_apply,
+                "a refused fresh input must neither issue nor rewrite the Applied operation"
+            );
+
             let applied_join = acquire_public_successor_request_guard(
                 &substrate_home,
                 orchestration_session_id,
@@ -7381,6 +8033,15 @@ mod tests {
             assert_eq!(
                 launch_plan.helper_plan.participant.run_id,
                 durable_request.run_id
+            );
+            assert_eq!(
+                launch_plan
+                    .helper_plan
+                    .participant
+                    .internal_uaa_session_id
+                    .as_deref(),
+                Some("uaa-session-crash-recovery"),
+                "exact retry must recover the seed producer's original native session"
             );
             assert_eq!(
                 authority
@@ -7489,6 +8150,10 @@ mod tests {
         );
     }
 
+    #[allow(
+        dead_code,
+        reason = "retain the shared-world-root command test fixture helper while current cases use per-test setup"
+    )]
     fn with_state_store_and_shared_world_root<T>(
         test: impl FnOnce(&AgentRuntimeStateStore, &Path) -> T,
     ) -> T {
@@ -7594,7 +8259,8 @@ mod tests {
 
     fn omitted_scope_start_args(backend_id: &str) -> AgentStartArgs {
         AgentStartArgs {
-            backend: backend_id.to_string(),
+            agent: None,
+            backend: Some(backend_id.to_string()),
             scope: None,
             disable_capability: Vec::new(),
             prompt_source: crate::execution::cli::PublicPromptArgs::default(),
@@ -7706,11 +8372,7 @@ mod tests {
                 agent_id.to_string(),
                 inventory_entry_for_test(agent_id, "claude_code", AgentExecutionScope::Host),
             );
-            let context = AgentCommandContext {
-                effective_config,
-                base_policy,
-                inventory,
-            };
+            let context = command_context_for_test(effective_config, base_policy, inventory);
 
             let report =
                 build_toolbox_status_report(&context).expect("toolbox status should stay readable");
@@ -7762,11 +8424,7 @@ mod tests {
                 "__definitely_missing_selected_claude_binary__".to_string();
             let mut inventory = BTreeMap::new();
             inventory.insert(agent_id.to_string(), entry);
-            let context = AgentCommandContext {
-                effective_config,
-                base_policy,
-                inventory,
-            };
+            let context = command_context_for_test(effective_config, base_policy, inventory);
 
             let report =
                 build_toolbox_status_report(&context).expect("toolbox status should stay readable");
@@ -8006,21 +8664,21 @@ mod tests {
     fn build_start_launch_plan_resolves_omitted_scope_from_workspace_defaults_before_global() {
         let context = command_context_for_test(
             effective_config_for_test(AgentExecutionScope::World),
-            base_policy_for_test(&["cli:codex-host", "cli:claude_code-host"]),
+            base_policy_for_test(&["cli:codex-host", "cli:claude_code-world"]),
             inventory_for_test(vec![
                 inventory_entry_for_test("codex-host", "codex", AgentExecutionScope::Host),
-                inventory_entry_with_optional_scope_for_test(
-                    "claude_code-host",
+                inventory_entry_for_test(
+                    "claude_code-world",
                     "claude_code",
-                    None,
+                    AgentExecutionScope::World,
                 ),
             ]),
         );
         let plan =
-            build_start_launch_plan(&omitted_scope_start_args("cli:claude_code-host"), &context)
+            build_start_launch_plan(&omitted_scope_start_args("cli:claude_code-world"), &context)
                 .expect("omitted scope launch plan");
 
-        assert_eq!(plan.public_identity.backend_id, "cli:claude_code-host");
+        assert_eq!(plan.public_identity.backend_id, "cli:claude_code-world");
         assert_eq!(plan.public_identity.scope, AgentExecutionScope::World);
         assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:codex-host");
     }
@@ -8110,4 +8768,2341 @@ mod tests {
 
         assert!(err.to_string().contains("policy_disallow"));
     }
+
+    fn selected_start_context_for_test() -> AgentCommandContext {
+        command_context_for_test(
+            effective_config_for_test(AgentExecutionScope::Host),
+            base_policy_for_test(&["cli:codex-host", "cli:codex-world", "cli:claude_code-world"]),
+            inventory_for_test(vec![
+                inventory_entry_for_test("codex-host", "codex", AgentExecutionScope::Host),
+                inventory_entry_for_test("codex-world", "codex", AgentExecutionScope::World),
+                inventory_entry_for_test(
+                    "claude_code-world",
+                    "claude_code",
+                    AgentExecutionScope::World,
+                ),
+            ]),
+        )
+    }
+
+    #[test]
+    #[serial]
+    fn test_start_without_explicit_selector_uses_exact_complete_preference() {
+        let context = selected_start_context_for_test();
+        let mut args = host_start_args();
+        args.backend = None;
+        let plan = build_start_launch_plan(&args, &context).unwrap();
+        assert_eq!(plan.native_selection, plan.requested_selection);
+        assert_eq!(plan.native_selection.backend_id, "cli:codex-host");
+        assert_eq!(
+            plan.native_selection.selection,
+            context.effective_config.agents.defaults.selection
+        );
+        assert_eq!(
+            plan.native_selection.selection_origin,
+            transport_api_types::AgentSelectionOriginV1::ConfiguredDefault
+        );
+        assert_eq!(
+            plan.native_selection.preference_source,
+            context.effective_config.selection_preference_source
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_start_defaults_refuse_zero_or_multiple_visible_matches() {
+        let mut context = selected_start_context_for_test();
+        let mut args = host_start_args();
+        args.backend = None;
+        context.effective_config.agents.defaults.selection.model =
+            "missing-configured-model".into();
+        assert!(build_start_launch_plan(&args, &context)
+            .unwrap_err()
+            .to_string()
+            .contains("found 0"));
+        context.effective_config.agents.defaults.selection.model = "codex-mini-latest".into();
+        let mut duplicate = context
+            .selection_snapshot
+            .definitions
+            .iter()
+            .find(|entry| entry.logical_agent_id == "codex")
+            .unwrap()
+            .clone();
+        duplicate.logical_agent_id = "other".into();
+        duplicate.source.relative_path = "agents/other.yaml".into();
+        context.selection_snapshot.definitions.push(duplicate);
+        assert!(build_start_launch_plan(&args, &context)
+            .unwrap_err()
+            .to_string()
+            .contains("found 2"));
+    }
+
+    #[test]
+    #[serial]
+    fn test_explicit_agent_and_backend_keep_their_tuple_and_refuse_conflict() {
+        let mut context = selected_start_context_for_test();
+        context.effective_config.agents.defaults.selection.model = "different-default".into();
+        let mut args = world_start_args();
+        args.backend = None;
+        args.agent = Some("claude_code".into());
+        let plan = build_start_launch_plan(&args, &context).unwrap();
+        assert_eq!(
+            plan.requested_selection.upstream_model_id,
+            "claude-sonnet-4-5-20250929"
+        );
+        assert_eq!(
+            plan.requested_selection.selection_origin,
+            transport_api_types::AgentSelectionOriginV1::ExplicitAgent
+        );
+        assert_eq!(plan.requested_selection.preference_source, None);
+        assert_eq!(plan.native_selection.backend_id, "cli:codex-host");
+        assert_eq!(plan.native_selection.selection.model, "codex-mini-latest");
+        args.backend = Some("cli:codex-world".into());
+        assert!(build_start_launch_plan(&args, &context)
+            .unwrap_err()
+            .to_string()
+            .contains("found 0"));
+        args.backend = Some(String::new());
+        assert!(build_start_launch_plan(&args, &context).is_err());
+        args.backend = None;
+        args.agent = Some(" ".into());
+        assert!(build_start_launch_plan(&args, &context).is_err());
+    }
+
+    #[test]
+    #[serial]
+    fn test_start_default_does_not_choose_from_multiple_placements_by_order() {
+        let mut context = selected_start_context_for_test();
+        context.effective_config.agents.defaults.execution.scope = AgentExecutionScope::World;
+        let args = AgentStartArgs::default();
+        let plan = build_start_launch_plan(&args, &context).unwrap();
+        assert_eq!(plan.requested_selection.backend_id, "cli:codex-world");
+        assert_eq!(plan.native_selection.backend_id, "cli:codex-host");
+        assert_eq!(
+            plan.requested_selection.selection_origin,
+            transport_api_types::AgentSelectionOriginV1::ConfiguredDefault
+        );
+        context.selection_snapshot.definitions.reverse();
+        let reordered = build_start_launch_plan(&args, &context).unwrap();
+        assert_eq!(reordered.requested_selection, plan.requested_selection);
+        assert_eq!(reordered.native_selection, plan.native_selection);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial]
+    fn test_start_request_key_binds_model_profile_sources_and_default_origin() {
+        let context = selected_start_context_for_test();
+        let mut args = host_start_args();
+        args.backend = None;
+        let plan = build_start_launch_plan(&args, &context).unwrap();
+        let key = |plan: &HostStartLaunchPlan| {
+            public_start_request_key(
+                plan,
+                &"c".repeat(64),
+                &plan.public_identity.backend_id,
+                plan.public_identity.scope,
+            )
+            .unwrap()
+        };
+        let original = key(&plan);
+        for mutation in [
+            "model",
+            "profile-identity",
+            "profile-revision",
+            "inventory-source",
+            "config-source",
+            "origin",
+        ] {
+            let mut changed = build_start_launch_plan(&args, &context).unwrap();
+            let selected = &mut changed.native_selection;
+            match mutation {
+                "model" => {
+                    selected.selection.model = "another-configured-model".into();
+                    selected.routed_model_id = selected.selection.model.clone();
+                    selected.upstream_model_id = selected.selection.model.clone();
+                }
+                "profile-identity" => {
+                    selected.connection_profile.id = "built_in:another-subscription".into();
+                    selected.selection.connection_profile = selected.connection_profile.id.clone();
+                }
+                "profile-revision" => selected.connection_profile.revision = "2".into(),
+                "inventory-source" => selected.inventory_source.sha256 = "d".repeat(64),
+                "config-source" => {
+                    selected.config_sources[0].sha256 = "e".repeat(64);
+                    selected.connection_profile.source = selected.config_sources[0].clone();
+                    selected.preference_source = Some(selected.config_sources[0].clone());
+                }
+                "origin" => {
+                    selected.selection_origin =
+                        transport_api_types::AgentSelectionOriginV1::ExplicitAgent;
+                    selected.preference_source = None;
+                }
+                _ => unreachable!(),
+            }
+            changed.native_selection = changed.native_selection.clone().seal().unwrap();
+            changed.requested_selection = changed.native_selection.clone();
+            assert_ne!(key(&changed), original, "{mutation}");
+        }
+        let mut wrong = build_start_launch_plan(&args, &context).unwrap();
+        wrong.native_selection.selection_digest = "0".repeat(64);
+        assert!(public_start_request_key(
+            &wrong,
+            &"c".repeat(64),
+            &wrong.public_identity.backend_id,
+            wrong.public_identity.scope
+        )
+        .is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn ordinary_component_public_start_keys_for_test(
+        helper: &HiddenOwnerHelperLaunchPlan,
+        selections: &crate::execution::agent_runtime::native_launch_context::OrdinaryStartSelectionsV1,
+    ) -> Result<(String, String)> {
+        let context = selected_start_context_for_test();
+        let mut args = host_start_args();
+        args.backend = None;
+        let mut plan = build_start_launch_plan(&args, &context)?;
+        plan.helper_plan = helper.clone();
+        plan.native_selection = selections.native.clone();
+        plan.requested_selection = selections.requested.clone();
+        let prompt = helper
+            .startup_prompt
+            .as_ref()
+            .context("component Start prompt absent")?;
+        let prompt_sha = public_start_digest(
+            "substrate.a1.3-p1.public-start-prompt.v1",
+            &[prompt.prompt_text.as_bytes()],
+        );
+        let key = public_start_request_key(
+            &plan,
+            &prompt_sha,
+            &selections.requested.backend_id,
+            AgentExecutionScope::World,
+        )?;
+        Ok((prompt_sha, key))
+    }
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn test_selected_helper_actual_public_producer() -> Result<()> {
+        for (world, interleaved_r0) in [(false, false), (true, false), (true, true)] {
+            crate::execution::agent_runtime::native_launch_context::with_selected_helper_component_fixture_for_test(
+                world, interleaved_r0, |helper,selections,prompt_sha,public_backend,scope| {
+                    // Use the actual production schema2 producer. The unrelated
+                    // dispatch contract is never an authentication input here.
+                    let context=selected_start_context_for_test();
+                    let mut args=host_start_args();args.backend=None;
+                    let mut plan=build_start_launch_plan(&args,&context)?;
+                    plan.helper_plan=helper.clone();
+                    plan.native_selection=selections.native.clone();
+                    plan.requested_selection=selections.requested.clone();
+
+                    let original=public_start_request_key(&plan,prompt_sha,public_backend,scope)?;
+                    for role in ["native","requested"] {
+                        for mutation in ["model","profile-identity","profile-revision","profile-source",
+                            "inventory-hash","inventory-root","inventory-path","inventory-revision",
+                            "config-hash","origin","escaped-source","control-encoding"] {
+                            let mut changed=plan.native_selection.clone();
+                            if role=="requested" {changed=plan.requested_selection.clone();}
+                            match mutation {
+                                "model" => {changed.selection.model="selected-other-model".into();
+                                    changed.routed_model_id=changed.selection.model.clone();
+                                    changed.upstream_model_id=changed.selection.model.clone();}
+                                "profile-identity" => {changed.connection_profile.id="built_in:other".into();
+                                    changed.selection.connection_profile=changed.connection_profile.id.clone();}
+                                "profile-revision" => changed.connection_profile.revision="other".into(),
+                                "profile-source" => {
+                                    let old=changed.connection_profile.source.clone();
+                                    changed.connection_profile.source.sha256="d".repeat(64);
+                                    for source in &mut changed.config_sources {
+                                        if source==&old {*source=changed.connection_profile.source.clone();}
+                                    }
+                                    if changed.preference_source.as_ref()==Some(&old) {
+                                        changed.preference_source=Some(changed.connection_profile.source.clone());
+                                    }
+                                },
+                                "inventory-hash" => changed.inventory_source.sha256="e".repeat(64),
+                                "inventory-root" => changed.inventory_source.root_identity="/other/root".into(),
+                                "inventory-path" => changed.inventory_source.relative_path="agents/other.yaml".into(),
+                                "inventory-revision" => changed.inventory_source.revision="other".into(),
+                                "config-hash" => {
+                                    let old=changed.config_sources[0].clone();
+                                    changed.config_sources[0].sha256="f".repeat(64);
+                                    if changed.connection_profile.source==old {
+                                        changed.connection_profile.source=changed.config_sources[0].clone();
+                                    }
+                                    if changed.preference_source.as_ref()==Some(&old) {
+                                        changed.preference_source=Some(changed.config_sources[0].clone());
+                                    }
+                                }
+                                "origin" => {changed.selection_origin=transport_api_types::AgentSelectionOriginV1::ExplicitBackend;
+                                    changed.preference_source=None;}
+                                "escaped-source" => changed.inventory_source.root_identity="/quoted\"\\λ".into(),
+                                "control-encoding" => {changed.selection.model="selected\t\"\\\u{0001}λ".into();
+                                    changed.routed_model_id=changed.selection.model.clone();
+                                    changed.upstream_model_id=changed.selection.model.clone();}
+                                _ => unreachable!(),
+                            }
+                            if mutation=="control-encoding" {assert!(changed.seal().is_err());continue;}
+                            let changed=changed.seal().map_err(anyhow::Error::msg)?;
+                            let saved_native=plan.native_selection.clone();
+                            let saved_requested=plan.requested_selection.clone();
+                            if scope==AgentExecutionScope::Host {
+                                plan.native_selection=changed.clone();plan.requested_selection=changed;
+                            } else if role=="native" {plan.native_selection=changed;}
+                            else {plan.requested_selection=changed;}
+                            assert_ne!(public_start_request_key(&plan,prompt_sha,public_backend,scope)?,original,
+                                "{role}/{mutation}");
+                            plan.native_selection=saved_native;plan.requested_selection=saved_requested;
+                        }
+                    }
+                    Ok(original)
+
+                })?;
+        }
+        Ok(())
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod public_configured_helper_tests {
+    use super::*;
+    use anyhow::ensure;
+    use std::io::{BufRead, Write};
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
+
+    fn checked_public_completion(
+        bytes: &[u8],
+        action: PublicPromptAction,
+        backend: &str,
+        scope: &str,
+        expected_session: Option<&str>,
+    ) -> Result<String> {
+        use crate::execution::agent_runtime::control::PublicPromptEnvelope;
+        let text = std::str::from_utf8(bytes)?;
+        ensure!(
+            text.ends_with('\n'),
+            "public JSON stream is not newline terminated"
+        );
+        let mut accepted: Option<(String, String)> = None;
+        let mut completed = false;
+        for (index, line) in text.lines().enumerate() {
+            ensure!(
+                !line.is_empty() && !completed,
+                "empty frame or frame after terminal"
+            );
+            // Typed parsing rejects duplicate known fields. Roundtrip equality also
+            // rejects unknown fields silently ignored by the supported enum.
+            let frame: PublicPromptEnvelope = serde_json::from_str(line)
+                .with_context(|| format!("invalid public JSON envelope at frame {index}"))?;
+            ensure!(
+                serde_json::to_value(&frame)? == serde_json::from_str::<serde_json::Value>(line)?,
+                "public frame differs from supported envelope schema"
+            );
+            match frame {
+                PublicPromptEnvelope::Accepted {
+                    version,
+                    action: actual,
+                    orchestration_session_id,
+                    backend_id,
+                    participant_id,
+                    scope: actual_scope,
+                } => {
+                    ensure!(
+                        index == 0
+                            && accepted.is_none()
+                            && version == 1
+                            && actual == action
+                            && backend_id == backend
+                            && actual_scope == scope,
+                        "public acceptance identity/order changed"
+                    );
+                    ensure!(
+                        !orchestration_session_id.is_empty()
+                            && expected_session
+                                .is_none_or(|expected| expected == orchestration_session_id),
+                        "public acceptance session changed"
+                    );
+                    let participant = participant_id
+                        .filter(|id| !id.is_empty())
+                        .context("public acceptance participant missing")?;
+                    accepted = Some((orchestration_session_id, participant));
+                }
+                PublicPromptEnvelope::Event {
+                    version,
+                    event_kind,
+                    data,
+                } => {
+                    ensure!(
+                        accepted.is_some()
+                            && version == 1
+                            && matches!(event_kind.as_str(), "message" | "stderr")
+                            && data.is_object(),
+                        "public event schema/order changed"
+                    );
+                }
+                PublicPromptEnvelope::Completed {
+                    version,
+                    action: actual,
+                    orchestration_session_id,
+                    backend_id,
+                    participant_id,
+                    turn_outcome,
+                    session_posture,
+                    state,
+                    warnings,
+                } => {
+                    let identity = accepted
+                        .as_ref()
+                        .context("public completion preceded acceptance")?;
+                    ensure!(
+                        version == 1
+                            && actual == action
+                            && backend_id == backend
+                            && orchestration_session_id == identity.0
+                            && participant_id.as_deref() == Some(identity.1.as_str())
+                            && turn_outcome == "success"
+                            && session_posture == PublicSessionPosture::DetachedReattachable
+                            && matches!(state.as_str(), "active" | "stopped")
+                            && warnings.is_empty(),
+                        "public terminal identity/outcome changed"
+                    );
+                    completed = true;
+                }
+                PublicPromptEnvelope::Warning { .. } | PublicPromptEnvelope::Failed { .. } => {
+                    anyhow::bail!("controlled public helper emitted warning/failure");
+                }
+            }
+        }
+        ensure!(completed, "public stream has no terminal completion");
+        Ok(accepted.context("public stream has no acceptance")?.0)
+    }
+
+    #[test]
+    fn test_public_fixture_rejects_invalid_envelopes() -> Result<()> {
+        let accepted = serde_json::json!({
+            "kind":"accepted","version":1,"action":"start",
+            "orchestration_session_id":"session","backend_id":"cli:codex-host",
+            "participant_id":"participant","scope":"host",
+        });
+        let completed = serde_json::json!({
+            "kind":"completed","version":1,"action":"start",
+            "orchestration_session_id":"session","backend_id":"cli:codex-host",
+            "participant_id":"participant","turn_outcome":"success",
+            "session_posture":"detached_reattachable","state":"active","warnings":[],
+        });
+        let valid = format!("{accepted}\n{completed}\n");
+        ensure!(
+            checked_public_completion(
+                valid.as_bytes(),
+                PublicPromptAction::Start,
+                "cli:codex-host",
+                "host",
+                None,
+            )? == "session"
+        );
+        let mut unknown = completed.clone();
+        unknown["undeclared"] = true.into();
+        for bad in [
+            format!("{accepted}\nnot-json\n{completed}\n"),
+            format!("{completed}\n"),
+            format!("{completed}\n{accepted}\n"),
+            format!("{valid}{completed}\n"),
+            format!("{accepted}\n{unknown}\n"),
+            format!("{accepted}\n"),
+            valid.trim_end().to_string(),
+        ] {
+            ensure!(
+                checked_public_completion(
+                    bad.as_bytes(),
+                    PublicPromptAction::Start,
+                    "cli:codex-host",
+                    "host",
+                    None,
+                )
+                .is_err(),
+                "invalid public envelope sequence accepted"
+            );
+        }
+        ensure!(checked_public_completion(
+            valid.as_bytes(),
+            PublicPromptAction::Turn,
+            "cli:codex-host",
+            "host",
+            None,
+        )
+        .is_err());
+        ensure!(checked_public_completion(
+            valid.as_bytes(),
+            PublicPromptAction::Start,
+            "cli:wrong",
+            "host",
+            None,
+        )
+        .is_err());
+        Ok(())
+    }
+
+    fn native_entry_count(workspace: &Path) -> Result<usize> {
+        let stages: Vec<serde_json::Value> =
+            fs::read_to_string(workspace.join("host-native-stages.jsonl"))?
+                .lines()
+                .map(serde_json::from_str)
+                .collect::<std::result::Result<_, _>>()?;
+        Ok(stages
+            .iter()
+            .filter(|entry| entry["stage"] == "native_entered")
+            .count())
+    }
+
+    fn checkpoint(phase: &str, carrier: Option<&str>) -> Result<()> {
+        println!(
+            "TASK11_FIXTURE {}",
+            serde_json::json!({"phase":phase,"carrier":carrier})
+        );
+        std::io::stdout().flush()?;
+        Ok(())
+    }
+
+    fn proceed(expected: &str) -> Result<()> {
+        let mut line = String::new();
+        std::io::stdin().lock().read_line(&mut line)?;
+        ensure!(
+            line.trim_end() == expected,
+            "public helper fixture phase changed"
+        );
+        Ok(())
+    }
+
+    fn private_file(path: &Path, bytes: &[u8]) -> Result<()> {
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(path)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        Ok(())
+    }
+
+    fn public_command(carrier: &str, world: bool, args: &[&str]) -> Command {
+        let mut command = Command::new("/fixture/substrate");
+        command.arg("--install-bootstrap-context-v1").arg(carrier);
+        command.arg(if world { "--world" } else { "--no-world" });
+        command.args(args).current_dir("/home/fixture/workspace");
+        command
+    }
+
+    fn wait_public_command(
+        child: std::process::Child,
+        workspace: &Path,
+        turn: usize,
+    ) -> Result<std::process::Output> {
+        wait_public_command_with_budget(
+            child,
+            workspace,
+            turn,
+            Duration::from_secs(if turn == 3 { 180 } else { 45 }),
+            None,
+        )
+    }
+
+    fn wait_public_command_with_budget(
+        mut child: std::process::Child,
+        workspace: &Path,
+        turn: usize,
+        budget: Duration,
+        mut progress: Option<&mut dyn FnMut() -> Result<()>>,
+    ) -> Result<std::process::Output> {
+        use std::io::Read as _;
+
+        // Bounded debug-history observation; this is not a product latency SLA.
+        let deadline = Instant::now() + budget;
+        let native_log = workspace.join("host-native.jsonl");
+        let mut released = false;
+        let mut stdout = child.stdout.take().context("public stdout pipe missing")?;
+        let mut stderr = child.stderr.take().context("public stderr pipe missing")?;
+        thread::scope(|scope| {
+            // Drain both real pipes while polling; output must not block CLI exit.
+            let stdout_reader = scope.spawn(move || {
+                let mut bytes = Vec::new();
+                stdout.read_to_end(&mut bytes).map(|_| bytes)
+            });
+            let stderr_reader = scope.spawn(move || {
+                let mut bytes = Vec::new();
+                stderr.read_to_end(&mut bytes).map(|_| bytes)
+            });
+            let observed = (|| -> Result<bool> {
+                loop {
+                    if let Some(progress) = progress.as_mut() {
+                        progress()?;
+                    }
+                    if !released && native_log.is_file() {
+                        let rows: Vec<_> = fs::read_to_string(&native_log)?
+                            .lines()
+                            .map(serde_json::from_str::<serde_json::Value>)
+                            .collect::<std::result::Result<_, _>>()?;
+                        if rows.len() == turn {
+                            let pid = rows[turn - 1]["pid"]
+                                .as_u64()
+                                .context("native PID missing")?;
+                            let stages: Vec<serde_json::Value> =
+                                fs::read_to_string(workspace.join("host-native-stages.jsonl"))?
+                                    .lines()
+                                    .map(serde_json::from_str)
+                                    .collect::<std::result::Result<_, _>>()?;
+                            if stages.iter().any(|stage| {
+                                stage["stage"] == "events_emitted" && stage["pid"] == pid
+                            }) {
+                                // This fixture stage is after terminal JSON was flushed, before
+                                // native exit. It does not itself export the SDK wait/stdio ACK.
+                                ensure!(
+                                    child.try_wait()?.is_none(),
+                                    "public completion preceded held native exit"
+                                );
+                                private_file(
+                                    &workspace.join(format!("host-release-{turn}")),
+                                    b"release\n",
+                                )?;
+                                released = true;
+                            }
+                        }
+                    }
+                    if child.try_wait()?.is_some() {
+                        return Ok(false);
+                    }
+                    if Instant::now() >= deadline {
+                        return Ok(true);
+                    }
+                    thread::sleep(Duration::from_millis(10));
+                }
+            })();
+            // Only this unreaped, still-owned CLI child and its own threads.
+            let timeout_wait = matches!(observed.as_ref(), Ok(true)).then(|| -> Result<_> {
+                let process = PathBuf::from(format!("/proc/{}", child.id()));
+                let number = |value: &str| {
+                    value.strip_prefix("0x").map_or_else(
+                        || value.parse::<i64>().ok(),
+                        |hex| i64::from_str_radix(hex, 16).ok(),
+                    )
+                };
+                let mut threads = Vec::new();
+                for entry in fs::read_dir(process.join("task"))? {
+                    let entry = entry?;
+                    let task = entry.path();
+                    let syscall =
+                        fs::read_to_string(task.join("syscall")).map_err(|e| e.to_string());
+                    let mut state = serde_json::json!({
+                        "tid": entry.file_name().to_string_lossy().into_owned(),
+                        "name": fs::read_to_string(task.join("comm")).map_err(|e| e.to_string()),
+                        "wchan": fs::read_to_string(task.join("wchan")).map_err(|e| e.to_string()),
+                        "syscall": &syscall,
+                    });
+                    if let Ok(line) = &syscall {
+                        let arguments: Vec<_> = line.split_whitespace().collect();
+                        if let [call, fd, flags, ..] = arguments.as_slice() {
+                            if let (Some(call), Some(fd), Some(flags)) =
+                                (number(call), number(fd), number(flags))
+                            {
+                                if call == libc::SYS_flock
+                                    && fd >= 0
+                                    && flags & i64::from(libc::LOCK_NB) == 0
+                                    && flags & i64::from(libc::LOCK_SH | libc::LOCK_EX) != 0
+                                {
+                                    state["blocking_flock"] = serde_json::json!({
+                                        "fd": fd,
+                                        "target": fs::read_link(process.join("fd").join(fd.to_string()))
+                                            .map_err(|e| e.to_string()),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    threads.push(state);
+                }
+                Ok(threads)
+            });
+            if !matches!(observed.as_ref(), Ok(false)) {
+                let _ = child.kill();
+            }
+            // Retain actual child and reader custody on observation errors too.
+            let status = child.wait();
+            let stdout = stdout_reader
+                .join()
+                .map_err(|_| anyhow::anyhow!("public stdout reader panicked"))??;
+            let stderr = stderr_reader
+                .join()
+                .map_err(|_| anyhow::anyhow!("public stderr reader panicked"))??;
+            let output = std::process::Output {
+                status: status?,
+                stdout,
+                stderr,
+            };
+            let timed_out = observed.with_context(|| {
+                format!(
+                    "public command observation failed: turn={turn}; released={released}; status={}; stderr={}; stdout={}",
+                    output.status,
+                    String::from_utf8_lossy(&output.stderr),
+                    String::from_utf8_lossy(&output.stdout)
+                )
+            })?;
+            ensure!(
+                !timed_out,
+                "public command timed out: turn={turn}; released={released}; wait={timeout_wait:?}; status={}; stderr={}; stdout={}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr),
+                String::from_utf8_lossy(&output.stdout)
+            );
+            ensure!(
+                released,
+                "public command ended before its held-terminal stage: turn={turn}; status={}; stderr={}; stdout={}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr),
+                String::from_utf8_lossy(&output.stdout)
+            );
+            Ok(output)
+        })
+    }
+
+    fn configured_public_helper_fixture(
+        world: bool,
+        claude: bool,
+        issued_negative: bool,
+        failed_start: bool,
+    ) -> Result<()> {
+        configured_public_helper_fixture_with_world_work(
+            world,
+            claude,
+            issued_negative,
+            failed_start,
+            false,
+            false,
+        )
+    }
+
+    fn configured_public_helper_fixture_with_world_work(
+        world: bool,
+        claude: bool,
+        issued_negative: bool,
+        failed_start: bool,
+        world_work: bool,
+        current_effects: bool,
+    ) -> Result<()> {
+        ensure!(!current_effects || world_work);
+        ensure!(!world_work || (world && !claude && !issued_negative && !failed_start));
+        ensure!(!failed_start || (!world && !claude && !issued_negative));
+        ensure!(
+            std::env::var("TASK11_PUBLIC_HELPER_FIXTURE").as_deref()
+                == Ok(if claude {
+                    "claude01"
+                } else if world_work {
+                    "world-work01"
+                } else if world {
+                    "world01"
+                } else {
+                    "host01"
+                })
+        );
+        ensure!(unsafe { libc::getuid() } == 1000 && unsafe { libc::geteuid() } == 1000);
+        ensure!(
+            !Path::new("/home/spenser").exists(),
+            "host home must not be imported"
+        );
+        let executable = fs::metadata("/fixture/substrate")?;
+        ensure!(
+            executable.is_file()
+                && executable.uid() == 1000
+                && executable.mode() & 0o022 == 0
+                && executable.mode() & 0o111 != 0
+        );
+        let home = Path::new("/home/fixture/.substrate");
+        let workspace = Path::new("/home/fixture/workspace");
+        fs::create_dir(home)?;
+        fs::set_permissions(home, fs::Permissions::from_mode(0o700))?;
+        fs::DirBuilder::new()
+            .mode(0o700)
+            .create(home.join("agents"))?;
+        fs::create_dir(workspace)?;
+        let config = "agents:\n  enabled: true\n  defaults:\n    selection: {harness: codex, provider: openai, connection_profile: \"built_in:codex-subscription\", model: gpt-6-astra}\n  hub:\n    orchestrator_agent_id: codex-host\n";
+        let config = if world_work {
+            format!("{config}  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n")
+        } else if claude {
+            config
+                .replace(
+                    "codex, provider: openai",
+                    "claude_code, provider: anthropic",
+                )
+                .replace("built_in:codex-subscription", "built_in:claude-existing")
+                .replace("gpt-6-astra", "claude-sonnet-4-5-20250929")
+                .replace("codex-host", "claude_code-host")
+        } else {
+            config.into()
+        };
+        private_file(&home.join("config.yaml"), config.as_bytes())?;
+        let mut inventory: serde_yaml::Value = serde_yaml::from_str(if claude {
+            include_str!("../../../../config/agents/claude_code.yaml")
+        } else {
+            include_str!("../../../../config/agents/codex.yaml")
+        })?;
+        if !claude {
+            for placement in ["host", "world"] {
+                inventory["config"]["placements"][placement]["selection"]["model"] =
+                    "gpt-6-astra".into();
+            }
+        }
+        inventory["config"]["placements"]["host"]["cli"]["binary"] =
+            workspace.join("codex").to_string_lossy().to_string().into();
+        let inventory_path = home.join(if claude {
+            "agents/claude_code.yaml"
+        } else {
+            "agents/codex.yaml"
+        });
+        private_file(
+            &inventory_path,
+            serde_yaml::to_string(&inventory)?.as_bytes(),
+        )?;
+        // The no-toolbox cases preserve the complete raw request; their native
+        // check adds only SDK LF. The composition case checks its runtime brief.
+        for turn in 1..=3 {
+            let prompt = format!("synthetic host turn {turn}");
+            private_file(
+                &workspace.join(format!("expected-prompt-{turn}.txt")),
+                prompt.as_bytes(),
+            )?;
+        }
+        let fixture_source = include_str!("agent_runtime/privileged_host_fixture_preview.rs");
+        let script = fixture_source
+            .split_once("const HOST_NATIVE_FIXTURE: &str = r##\"")
+            .context("native fixture declaration missing")?
+            .1
+            .split_once("\"##;")
+            .context("native fixture end missing")?
+            .0;
+        let script = script.replace(
+            "assert sys.stdin.buffer.read() == expected_prompt.encode('utf-8') + b'\\n'",
+            r#"actual_prompt = sys.stdin.buffer.read()
+expected_prompt_bytes = (root / ('expected-prompt-%s.txt' % turn)).read_bytes() + b'\n'
+assert actual_prompt == expected_prompt_bytes, json.dumps({
+    "kind": "task11_synthetic_prompt_mismatch",
+    "actual_bytes": len(actual_prompt),
+    "expected_bytes": len(expected_prompt_bytes),
+    "actual_sha256": __import__("hashlib").sha256(actual_prompt).hexdigest(),
+    "expected_sha256": __import__("hashlib").sha256(expected_prompt_bytes).hexdigest(),
+    "first_difference": next((i for i, (a, b) in enumerate(zip(actual_prompt, expected_prompt_bytes)) if a != b), min(len(actual_prompt), len(expected_prompt_bytes))),
+})"#,
+        ).replace(
+            "assert args[args.index('--model') + 1] == 'codex-mini-latest'",
+            "assert args[args.index('--model') + 1] == 'gpt-6-astra'",
+        );
+        let script = if claude {
+            PUBLIC_CLAUDE_NATIVE_FIXTURE.into()
+        } else {
+            script
+        };
+        let script = if failed_start {
+            ensure!(script.matches("stage('route_authenticated')").count() == 1);
+            script.replace(
+                "stage('route_authenticated')",
+                "stage('route_authenticated')
+stage('controlled_failure')
+raise SystemExit(17)",
+            )
+        } else {
+            script
+        };
+        let script = if world_work {
+            let fragment = if current_effects {
+                include_str!("agent_runtime/ordinary_public_current_effects_controller.py")
+            } else {
+                include_str!("agent_runtime/ordinary_public_controller_fixture.py")
+            };
+            let early = "stage('route_authenticated')";
+            ensure!(script.matches(early).count() == 1);
+            let script = script.replace(early, &format!("{early}\n{fragment}"));
+            // Toolbox-enabled native input intentionally includes its runtime
+            // brief. Preserve the exact user request once inside that envelope;
+            // the original no-toolbox fixture retains its full-byte assertion.
+            let prompt_check = "assert actual_prompt == expected_prompt_bytes,";
+            ensure!(script.matches(prompt_check).count() == 1);
+            let script = script.replace(
+                prompt_check,
+                "assert actual_prompt.count(expected_prompt_bytes[:-1]) == 1,",
+            );
+            let events = "for event in [dict(type='thread.started' if turn == 1 else 'thread.resumed', thread_id=session),\n              dict(type='turn.started', thread_id=session, turn_id='host-turn-%s' % turn),\n              dict(type='turn.completed', thread_id=session, turn_id='host-turn-%s' % turn)]:";
+            ensure!(script.matches(events).count() == 1);
+            script.replace(events, "for event in [dict(type='turn.completed', thread_id=session, turn_id='host-turn-%s' % turn)]:")
+        } else {
+            script
+        };
+        if world_work {
+            fs::DirBuilder::new()
+                .mode(0o700)
+                .create(workspace.join("world-observations"))?;
+            private_file(
+                &workspace.join("world-native-source.py"),
+                if current_effects {
+                    include_bytes!("agent_runtime/ordinary_public_current_effects_worker.py")
+                        .as_slice()
+                } else {
+                    include_bytes!("agent_runtime/ordinary_public_worker_fixture.py").as_slice()
+                },
+            )?;
+        }
+        private_file(&workspace.join("codex"), script.as_bytes())?;
+        fs::set_permissions(workspace.join("codex"), fs::Permissions::from_mode(0o700))?;
+        private_file(&home.join("policy.yaml"), b"id: public-configured-helper-fixture\nworld_fs:\n  host_visible: true\n  fail_closed: {routing: false}\n  caged_required: false\n  write: {enabled: true}\nagents:\n  allowed_backends: [cli:codex-host, cli:codex-world]\nllm:\n  allowed_backends: [cli:codex-host, cli:codex-world]\n  constraints:\n    routers: [substrate_gateway]\n    providers: [openai]\n    protocols: [openai.responses]\n    auth_authorities: [codex_subscription]\n  secrets:\n    env_allowed: [SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN, SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID]\n")?;
+        if claude {
+            let policy = fs::read_to_string(home.join("policy.yaml"))?
+                .replace("[cli:codex-host, cli:codex-world]", "[cli:codex-host, cli:codex-world, cli:claude_code-host, cli:claude_code-world]")
+                .replace("providers: [openai]", "providers: [openai, anthropic]")
+                .replace("protocols: [openai.responses]", "protocols: [openai.responses, anthropic.messages]")
+                .replace("auth_authorities: [codex_subscription]", "auth_authorities: [codex_subscription, anthropic_api_key]")
+                .replace("env_allowed: [", "env_allowed: [ANTHROPIC_API_KEY, ");
+            fs::write(home.join("policy.yaml"), policy)?;
+        }
+        if world_work {
+            let policy = fs::read_to_string(home.join("policy.yaml"))?;
+            ensure!(policy.matches("\nllm:\n").count() == 1);
+            fs::write(home.join("policy.yaml"), policy.replace("\nllm:\n", "\n  world_dispatch:\n    enabled: true\n    allowed_backends: [cli:codex-world]\n    allowed_actions: [spawn_world_worker, fork_world_worker, continue_world_worker]\n    allowed_modes: [retained]\n    max_live_retained_workers: 4\nllm:\n").as_bytes())?;
+        }
+        if current_effects {
+            let policy = fs::read_to_string(home.join("policy.yaml"))?
+                .replace("continue_world_worker]", "continue_world_worker, cancel_world_work]")
+                .replace("  world_dispatch:\n", "  host_credentials:\n    read:\n      allowed_backends: [cli:codex-host, cli:codex-world]\n  world_dispatch:\n");
+            fs::write(home.join("policy.yaml"), policy.as_bytes())?;
+            fs::DirBuilder::new()
+                .mode(0o700)
+                .create("/home/fixture/.codex")?;
+            private_file(Path::new("/home/fixture/.codex/auth.json"), br#"{"tokens":{"access_token":"synthetic-fixed-host-token","account_id":"synthetic-fixed-host-account"}}"#)?;
+        }
+        let carrier = InstallBootstrapContextCarrierV1::from_context(
+            transport_api_types::InstallBootstrapContextV1::new_unix(
+                home.to_str().unwrap(),
+                "fixture",
+                1000,
+            )
+            .map_err(anyhow::Error::msg)?,
+        )
+        .map_err(anyhow::Error::msg)?;
+        let encoded = carrier.encode().map_err(anyhow::Error::msg)?;
+        checkpoint("files", Some(&encoded))?;
+        proceed("published")?;
+        let held = crate::execution::install_bootstrap::acquire_ordinary_configured_home(&carrier)?;
+        held.revalidate()?;
+        checkpoint("admitted", None)?;
+        proceed("service")?;
+        let scope = if world { "world" } else { "host" };
+        let mut start = public_command(
+            &encoded,
+            world,
+            &[
+                "agent",
+                "start",
+                "--scope",
+                scope,
+                "--prompt",
+                "synthetic host turn 1",
+                "--json",
+            ],
+        );
+        start
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        if current_effects {
+            genuine_current_effects::run(start, workspace, held)?;
+            checkpoint("current-effects-complete", None)?;
+            return Ok(());
+        }
+        if failed_start {
+            use crate::execution::agent_runtime::control::PublicPromptEnvelope;
+            let parse = |bytes: &[u8]| -> Result<Vec<PublicPromptEnvelope>> {
+                let text = std::str::from_utf8(bytes)?;
+                ensure!(text.ends_with('\n'), "failure stream lost its final LF");
+                text.lines()
+                    .map(|line| {
+                        ensure!(!line.is_empty(), "empty public failure frame");
+                        let frame: PublicPromptEnvelope = serde_json::from_str(line)?;
+                        ensure!(
+                            serde_json::to_value(&frame)?
+                                == serde_json::from_str::<serde_json::Value>(line)?,
+                            "failure frame differs from supported schema"
+                        );
+                        Ok(frame)
+                    })
+                    .collect()
+            };
+            let output = start.output()?;
+            ensure!(
+                output.status.code() == Some(1) && output.stderr.is_empty(),
+                "controlled Start failed: status={}; stderr={}; stdout={}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr),
+                String::from_utf8_lossy(&output.stdout)
+            );
+            let frames = parse(&output.stdout)?;
+            let [PublicPromptEnvelope::Accepted {
+                version: 1,
+                action: PublicPromptAction::Start,
+                orchestration_session_id,
+                backend_id,
+                participant_id: Some(participant),
+                scope: actual_scope,
+            }, PublicPromptEnvelope::Failed {
+                version: 1,
+                terminal: true,
+                stage,
+                error_code,
+                message,
+            }] = frames.as_slice()
+            else {
+                anyhow::bail!("failed public Start did not emit Accepted then exactly one Failed");
+            };
+            ensure!(
+                !orchestration_session_id.is_empty()
+                    && !participant.is_empty()
+                    && backend_id == "cli:codex-host"
+                    && actual_scope == "host"
+                    && stage == "runtime"
+                    && error_code == "submission_outcome_unknown"
+                    && message.contains("codex exited"),
+                "failed public Start changed its identity or checked native failure"
+            );
+            let session = orchestration_session_id.clone();
+            let verifier = crate::execution::agent_runtime::native_launch_context::OrdinarySelectionAuthorityV1::from_ordinary_configured_accepted_home(Arc::clone(&held))?;
+            let before = verifier.authenticate(&session)?;
+            ensure!(before.current_participant_id() == participant);
+            let original_identity = (
+                before.original_start_intent_id().to_string(),
+                before.original_start_issuer_request_id()?,
+                before.context_sha256()?,
+            );
+            ensure!(native_entry_count(workspace)? == 1);
+            let retry = start.output()?;
+            ensure!(
+                retry.status.code() == Some(1) && retry.stderr.is_empty(),
+                "controlled Start retry failed: status={}; stderr={}; stdout={}",
+                retry.status,
+                String::from_utf8_lossy(&retry.stderr),
+                String::from_utf8_lossy(&retry.stdout)
+            );
+            let retry_frames = parse(&retry.stdout)?;
+            ensure!(
+                matches!(retry_frames.as_slice(),
+                    [PublicPromptEnvelope::Failed {
+                        version: 1, terminal: true, stage, error_code, message,
+                    }] if stage == "runtime"
+                        && error_code == "submission_outcome_unknown"
+                        && message.contains("the real prompt was not replayed")),
+                "indeterminate retry must return exactly one refusal without new acceptance"
+            );
+            let after = verifier.authenticate(&session)?;
+            ensure!(
+                after.original_session_id() == session
+                    && after.current_participant_id() == participant
+                    && original_identity
+                        == (
+                            after.original_start_intent_id().to_string(),
+                            after.original_start_issuer_request_id()?,
+                            after.context_sha256()?,
+                        ),
+                "response-only indeterminate retry changed original authority identities"
+            );
+            ensure!(
+                native_entry_count(workspace)? == 1,
+                "indeterminate Start was redelivered"
+            );
+            let stages: Vec<serde_json::Value> =
+                fs::read_to_string(workspace.join("host-native-stages.jsonl"))?
+                    .lines()
+                    .map(serde_json::from_str)
+                    .collect::<std::result::Result<_, _>>()?;
+            ensure!(
+                stages
+                    .iter()
+                    .filter(|row| row["stage"] == "controlled_failure")
+                    .count()
+                    == 1
+            );
+            checkpoint("failed-start-complete", None)?;
+            return Ok(());
+        }
+        let output = if world_work {
+            // New composed body: one actual World native per controller turn,
+            // plus controller startup/closeout. Product deadlines are unchanged.
+            wait_public_command_with_budget(
+                start.spawn()?,
+                workspace,
+                1,
+                Duration::from_secs(150),
+                None,
+            )?
+        } else {
+            wait_public_command(start.spawn()?, workspace, 1)?
+        };
+        ensure!(
+            output.status.success(),
+            "public Start failed: status={}; stderr={}; stdout={}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&output.stdout)
+        );
+        let public_backend = if claude {
+            "cli:claude_code-host"
+        } else if world {
+            "cli:codex-world"
+        } else {
+            "cli:codex-host"
+        };
+        let session = checked_public_completion(
+            &output.stdout,
+            PublicPromptAction::Start,
+            public_backend,
+            scope,
+            None,
+        )?;
+        let session = session.as_str();
+        let verifier = crate::execution::agent_runtime::native_launch_context::OrdinarySelectionAuthorityV1::from_ordinary_configured_accepted_home(held)?;
+        let original = verifier.authenticate(session)?;
+        let mut controller_participants = vec![original.current_participant_id().to_string()];
+        ensure!(
+            original.requested_selection().selection_origin
+                == transport_api_types::AgentSelectionOriginV1::ConfiguredDefault
+        );
+        let original_model = if claude {
+            "claude-sonnet-4-5-20250929"
+        } else {
+            "gpt-6-astra"
+        };
+        let routed_model = if claude {
+            "claude-sonnet-4.5"
+        } else {
+            "gpt-6-astra"
+        };
+        for selection in [original.native_selection(), original.requested_selection()] {
+            ensure!(selection.selection.model == original_model);
+            ensure!(selection.routed_model_id == routed_model);
+            ensure!(selection.upstream_model_id == original_model);
+            ensure!(!selection.inventory_source.sha256.is_empty());
+        }
+        ensure!(
+            original.native_selection().selection_origin
+                == if world {
+                    transport_api_types::AgentSelectionOriginV1::ExplicitAgent
+                } else {
+                    transport_api_types::AgentSelectionOriginV1::ConfiguredDefault
+                }
+        );
+        let inventory_sha = format!("{:x}", Sha256::digest(fs::read(&inventory_path)?));
+        let config_sha = format!("{:x}", Sha256::digest(config.as_bytes()));
+        for selection in [original.native_selection(), original.requested_selection()] {
+            selection.validate().map_err(anyhow::Error::msg)?;
+            ensure!(selection.inventory_source.sha256 == inventory_sha);
+            ensure!(selection
+                .config_sources
+                .iter()
+                .any(|source| source.sha256 == config_sha));
+            ensure!(selection.selection.provider == if claude { "anthropic" } else { "openai" });
+            ensure!(
+                selection.selection.connection_profile
+                    == if claude {
+                        "built_in:claude-existing"
+                    } else {
+                        "built_in:codex-subscription"
+                    }
+            );
+            ensure!(
+                selection.selection.harness
+                    == if claude {
+                        transport_api_types::AgentHarnessFamilyV1::ClaudeCode
+                    } else {
+                        transport_api_types::AgentHarnessFamilyV1::Codex
+                    }
+            );
+        }
+        ensure!(original.native_selection().selection.model == original_model);
+        ensure!(original.requested_selection().selection.model == original_model);
+        ensure!(original.original_world_binding().is_some() == world);
+        let original_carrier =
+            crate::execution::orchestrator_world_dispatch::ordinary_start_selection_carrier(
+                &original,
+            )?;
+        // Alter configuration, preference and source SHA. Resume must use the
+        // originally issued context and both complete original roles.
+        fs::write(
+            home.join("config.yaml"),
+            config.replace(
+                original_model,
+                if claude {
+                    "claude-sonnet-4.5"
+                } else {
+                    "codex-mini-latest"
+                },
+            ),
+        )?;
+        for placement in ["host", "world"] {
+            inventory["config"]["placements"][placement]["selection"]["model"] = if claude {
+                "claude-sonnet-4.5"
+            } else {
+                "codex-mini-latest"
+            }
+            .into();
+        }
+        fs::write(&inventory_path, serde_yaml::to_string(&inventory)?)?;
+        let public_backend = if claude {
+            "cli:claude_code-host"
+        } else if world {
+            "cli:codex-world"
+        } else {
+            "cli:codex-host"
+        };
+        for turn in 2..=3 {
+            let prompt = format!("synthetic host turn {turn}");
+            let mut command = public_command(
+                &encoded,
+                world,
+                &[
+                    "agent",
+                    "turn",
+                    "--session",
+                    session,
+                    "--backend",
+                    public_backend,
+                    "--prompt",
+                    &prompt,
+                    "--json",
+                ],
+            );
+            command
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped());
+            let mut accepted_world_turn = None;
+            let mut last_observation = Instant::now() - Duration::from_secs(1);
+            let mut join_world_terminal = || -> Result<()> {
+                if turn != 3
+                    || workspace
+                        .join("public-world-child-terminal-joined")
+                        .exists()
+                    || !workspace.join("public-world-child-receipt-ready").is_file()
+                    || last_observation.elapsed() < Duration::from_millis(500)
+                {
+                    return Ok(());
+                }
+                last_observation = Instant::now();
+                if accepted_world_turn.is_none() {
+                    use crate::execution::agent_runtime::dispatch_policy_commitment::{
+                        resolve_accepted_work_receipt_material_from_snapshot,
+                        AcceptedWorkReceiptMaterialResolutionV1,
+                        DispatchPolicyCommitmentLookupKeyV1, DispatchPolicyCommitmentSubjectKeyV1,
+                    };
+                    use crate::execution::agent_runtime::state_store::{
+                        authenticate_persisted_world_work_acceptance,
+                        WorldWorkAcceptanceLookupKeyV1,
+                    };
+                    let receipt: crate::execution::agent_runtime::dispatch_contract::ActiveRetainedTurnReceiptV1 =
+                        serde_json::from_slice(&fs::read(workspace.join("public-world-child-resume.json"))?)?;
+                    let current = verifier.authenticate(session)?;
+                    let acceptance = {
+                        let snapshot = crate::execution::agent_runtime::host_session_authority::store::read_existing_accepted_work_authority_snapshot(current.held_authority())
+                            .map_err(|error| anyhow::anyhow!("{error:?}"))?;
+                        let witness = authenticate_persisted_world_work_acceptance(
+                            &snapshot,
+                            &WorldWorkAcceptanceLookupKeyV1::new(
+                                current.authority_store_id(),
+                                &receipt.acceptance_record_id,
+                            ),
+                        )
+                        .map_err(|error| anyhow::anyhow!("{error:?}"))?;
+                        let acceptance = witness.record().clone();
+                        ensure!(
+                            acceptance.caller_participant_id == current.current_participant_id()
+                                && acceptance.orchestration_session_id == session
+                        );
+                        let key = DispatchPolicyCommitmentLookupKeyV1 {
+                            authority_store_id: acceptance.authority_store_id.clone(),
+                            orchestration_session_id: acceptance.orchestration_session_id.clone(),
+                            request_id: receipt.request_id.clone(),
+                            subject: DispatchPolicyCommitmentSubjectKeyV1::RetainedWorkerTurn {
+                                active_run_id: receipt.active_run_id.clone(),
+                                message_id: receipt.message_id.clone(),
+                            },
+                        };
+                        let AcceptedWorkReceiptMaterialResolutionV1::Resolved(material) =
+                            resolve_accepted_work_receipt_material_from_snapshot(
+                                &snapshot,
+                                &key,
+                                &acceptance,
+                            )
+                            .map_err(|error| anyhow::anyhow!("{error:?}"))?
+                        else {
+                            anyhow::bail!("foreground proof requires exact accepted E2 material");
+                        };
+                        ensure!(crate::execution::orchestrator_world_dispatch::project_active_retained_turn_receipt_for_test(&material)? == receipt,
+                            "foreground receipt differs from actual B1/E2 material");
+                        acceptance
+                    };
+                    accepted_world_turn = Some((current, acceptance));
+                }
+                let native = workspace.join("world-observations/world-native.jsonl");
+                if fs::read_to_string(&native)?.lines().count() < 3 {
+                    return Ok(());
+                }
+                let (current, acceptance) = accepted_world_turn.as_ref().unwrap();
+                let observation = current
+                    .held_authority()
+                    .observe_existing_ordinary_world_work_v1(acceptance)?;
+                if let Some(terminal) = &observation.terminal {
+                    ensure!(
+                        terminal.exit_code == 0 && observation.interruption.is_none(),
+                        "World turn did not complete cleanly: {observation:?}"
+                    );
+                    let frame = observation
+                        .journal
+                        .last()
+                        .context("World terminal journal absent")?
+                        .decode_for_c1(&observation.claim)?;
+                    ensure!(
+                        matches!(frame, transport_api_types::ExecuteStreamFrame::Exit {
+                        exit: 0, ref frame_identity, ref event_identity, ref terminal_identity, ref span_id, ..
+                    } if frame_identity == &terminal.frame_identity && event_identity == &terminal.event_identity
+                        && terminal_identity == &terminal.terminal_identity && span_id == &terminal.span_id),
+                        "World terminal differs from its exact Root journal frame"
+                    );
+                    private_file(
+                        &workspace.join("public-world-child-terminal-joined"),
+                        &serde_json::to_vec(terminal)?,
+                    )?;
+                }
+                Ok(())
+            };
+            let output = if world_work {
+                wait_public_command_with_budget(
+                    command.spawn()?,
+                    workspace,
+                    turn,
+                    Duration::from_secs(300),
+                    Some(&mut join_world_terminal),
+                )?
+            } else {
+                wait_public_command(command.spawn()?, workspace, turn)?
+            };
+            ensure!(
+                output.status.success(),
+                "public Resume {turn} failed: status={}; stderr={}; stdout={}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr),
+                String::from_utf8_lossy(&output.stdout)
+            );
+            checked_public_completion(
+                &output.stdout,
+                PublicPromptAction::Turn,
+                public_backend,
+                scope,
+                Some(session),
+            )?;
+            let current = verifier.authenticate(session)?;
+            controller_participants.push(current.current_participant_id().to_string());
+            ensure!(
+                crate::execution::orchestrator_world_dispatch::ordinary_start_selection_carrier(
+                    &current
+                )? == original_carrier
+            );
+        }
+        let rows: Vec<serde_json::Value> = fs::read_to_string(workspace.join("host-native.jsonl"))?
+            .lines()
+            .map(serde_json::from_str)
+            .collect::<std::result::Result<_, _>>()?;
+        ensure!(rows.len() == 3, "public helper redelivered accepted input");
+        for row in &rows {
+            ensure!(
+                row["home_device"] == rows[0]["home_device"]
+                    && row["home_inode"] == rows[0]["home_inode"]
+            );
+            ensure!(
+                row["history_device"] == rows[0]["history_device"]
+                    && row["history_inode"] == rows[0]["history_inode"]
+            );
+            for key in ["pid", "parent_pid"] {
+                let pid = row[key].as_u64().context("native PID missing")?;
+                let deadline = Instant::now() + Duration::from_secs(10);
+                while Path::new(&format!("/proc/{pid}")).exists() {
+                    ensure!(
+                        Instant::now() < deadline,
+                        "observed native/helper PID {pid} remained present"
+                    );
+                    thread::sleep(Duration::from_millis(10));
+                }
+            }
+        }
+        let current = verifier.authenticate(session)?;
+        let root = current
+            .held_authority()
+            .resolve_current_exact(session, None)?;
+        ensure!(matches!(
+            root.authority.lifecycle_posture,
+            HostSessionPostureV1::ParkedResumable | HostSessionPostureV1::AwaitingAttention
+        ));
+
+        if world_work {
+            use crate::execution::agent_runtime::tool_invocation_contract::{
+                HostToolForkWorldWorkerReceiptV1, HostToolSpawnWorldWorkerReceiptV1,
+            };
+            let spawn: HostToolSpawnWorldWorkerReceiptV1 =
+                serde_json::from_slice(&fs::read(workspace.join("public-world-source.json"))?)?;
+            let fork: HostToolForkWorldWorkerReceiptV1 =
+                serde_json::from_slice(&fs::read(workspace.join("public-world-child.json"))?)?;
+            let resumed: crate::execution::agent_runtime::dispatch_contract::ActiveRetainedTurnReceiptV1 = serde_json::from_slice(&fs::read(
+                workspace.join("public-world-child-resume.json"),
+            )?)?;
+            ensure!(
+                controller_participants
+                    .iter()
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .len()
+                    == 3
+            );
+            ensure!(
+                [
+                    &spawn.orchestrator_participant_id,
+                    &fork.orchestrator_participant_id,
+                    &resumed.orchestrator_participant_id
+                ] == [
+                    &controller_participants[0],
+                    &controller_participants[1],
+                    &controller_participants[2]
+                ]
+            );
+            ensure!(
+                spawn.orchestration_session_id == session
+                    && fork.orchestration_session_id == session
+                    && resumed.orchestration_session_id == session
+            );
+            ensure!(
+                fork.source_participant_id == spawn.participant_id
+                    && fork.participant_id != spawn.participant_id
+                    && resumed.target_participant_id == fork.participant_id
+            );
+            ensure!(
+                spawn.world_id == fork.world_id
+                    && fork.world_id == resumed.world_id
+                    && [
+                        spawn.world_generation,
+                        fork.world_generation,
+                        resumed.world_generation
+                    ] == [0, 0, 0]
+            );
+            ensure!(root.authority.retained_worker_refs.len() == 2);
+            ensure!(
+                root.bound_state_store.load_session(session)?.is_none(),
+                "canonical World work must not create a legacy session projection"
+            );
+            for participant in [&spawn.participant_id, &fork.participant_id] {
+                ensure!(
+                    root.bound_state_store
+                        .load_participant(participant)?
+                        .is_none(),
+                    "canonical World worker must not create a legacy participant projection"
+                );
+            }
+            let world_rows: Vec<serde_json::Value> =
+                fs::read_to_string(workspace.join("world-observations/world-native.jsonl"))?
+                    .lines()
+                    .map(serde_json::from_str)
+                    .collect::<std::result::Result<_, _>>()?;
+            ensure!(
+                world_rows.len() == 3
+                    && world_rows[0]["kind"] == "start"
+                    && world_rows[1]["kind"] == "fork"
+                    && world_rows[2]["kind"] == "resume_child"
+            );
+            for row in &world_rows {
+                ensure!(
+                    row["home_device"] == world_rows[0]["home_device"]
+                        && row["home_inode"] == world_rows[0]["home_inode"]
+                        && row["malformed_body_refusal"] == true
+                );
+                let pid = row["pid"].as_u64().context("native World PID missing")?;
+                ensure!(
+                    row["cgroup_target"]
+                        == format!("/sys/fs/cgroup/substrate/{}/cgroup.procs", spawn.world_id)
+                        && row["cgroup_self"] == format!("0::/substrate/{}\n", spawn.world_id)
+                        && row["cgroup_members"]
+                            .as_array()
+                            .is_some_and(|members| members
+                                .iter()
+                                .any(|value| value.as_u64() == Some(pid))),
+                    "native placement does not join the genuine receipt World: {row}"
+                );
+            }
+            ensure!(
+                world_rows[1]["thread_id"] == world_rows[2]["thread_id"]
+                    && world_rows[0]["thread_id"] != world_rows[1]["thread_id"]
+                    && world_rows[1]["state_device"] == world_rows[2]["state_device"]
+                    && world_rows[1]["state_inode"] == world_rows[2]["state_inode"]
+                    && world_rows[1]["turns"] == 1
+                    && world_rows[2]["turns"] == 2
+            );
+            checkpoint("complete", None)?;
+            return Ok(());
+        }
+
+        if issued_negative {
+            let raw_prompt = "must not deliver issued-helper negative";
+            let input = raw_prompt.to_string();
+            let mut request_guard = acquire_public_successor_request_guard(
+                home,
+                session,
+                HostSessionTransitionModeV1::ResumeOneTurn,
+                &public_start_digest(
+                    "substrate.public-successor-request.v1",
+                    &[
+                        session.as_bytes(),
+                        public_backend.as_bytes(),
+                        raw_prompt.as_bytes(),
+                    ],
+                ),
+            )?;
+            mark_public_successor_request_in_flight(&mut request_guard)?;
+            let source = Arc::new(verifier.authenticate(session)?);
+            let mut plan = build_ordinary_public_resumed_turn_launch_plan(
+                &source,
+                session,
+                &input,
+                &request_guard,
+            )?;
+            let listener = register_durable_start_startup_prompt_listener(
+                plan.helper_plan.orchestration_session_id(),
+                plan.helper_plan.participant_id(),
+            )?;
+            let listener_path = listener.path().to_path_buf();
+            let listener_identity = fs::symlink_metadata(&listener_path)?;
+            plan.helper_plan.startup_prompt = Some(HiddenOwnerHelperStartupPromptPlan {
+                prompt_text: input,
+                stream_path: listener_path.clone(),
+                request_key_sha256: None,
+                prompt_sha256: None,
+                public_backend_id: None,
+                public_scope: None,
+            });
+            let current = Arc::new(verifier.authenticate(session)?);
+            let result = crate::execution::agent_runtime::control::verify_ordinary_issued_helper_refusals_fixture(
+                &current, &carrier, &plan, world,
+            );
+            drop(listener);
+            let retained = fs::symlink_metadata(&listener_path)?;
+            ensure!(
+                retained.dev() == listener_identity.dev()
+                    && retained.ino() == listener_identity.ino(),
+                "issued-negative listener custody changed"
+            );
+            fs::remove_file(&listener_path)?;
+            result?;
+            checkpoint("issued-negatives-complete", None)?;
+            return Ok(());
+        }
+        let native_entries = native_entry_count(workspace)?;
+        ensure!(
+            native_entries == 3,
+            "normal public helper native entry count changed"
+        );
+        // This malformed-shape negative is supplemental only. Genuine issued
+        // stripped/repacked and bound-field tests await the actual HSA comparison API.
+        // Repacking ordinary helper data cannot instantiate generic Existing,
+        // even when it names a real current root actor.
+        let raw = serde_json::json!({
+            "mode":"resume_one_turn",
+            "descriptor":{
+                "agent_id":root.caller.descriptor.agent_id,
+                "backend_id":root.caller.descriptor.backend_id,
+                "backend_kind":if claude {"claude_code"}else{"codex"},"protocol":root.caller.descriptor.protocol,
+                "execution_scope":"host","binary_path":root.caller.descriptor.binary_path,
+            },
+            "session":{
+                "orchestration_session_id":session,
+                "shell_trace_session_id":root.authority.shell_trace_session_id,
+                "workspace_root":workspace,"world_id":root.authority.world_binding.as_ref().map(|w|w.world_id.clone()),
+                "world_generation":root.authority.world_binding.as_ref().map(|w|w.world_generation),
+            },
+            "participant":{
+                "participant_id":root.caller.participant_id,"lease_token":"stripped",
+                "run_id":"wrong-current-run","resumed_from_participant_id":"stripped","internal_uaa_session_id":"stripped",
+            },
+            "source_orchestration_session_id":null,
+        });
+        let path = workspace.join("stripped-public-helper.json");
+        private_file(&path, &serde_json::to_vec(&raw)?)?;
+        let denied = public_command(
+            &encoded,
+            world,
+            &[
+                "agent",
+                "__owner-helper",
+                "--plan-file",
+                path.to_str().unwrap(),
+            ],
+        )
+        .output()?;
+        ensure!(
+            !denied.status.success(),
+            "repacked ordinary helper entered generic Existing: status={}; stderr={}; stdout={}",
+            denied.status,
+            String::from_utf8_lossy(&denied.stderr),
+            String::from_utf8_lossy(&denied.stdout)
+        );
+        let context_path = home
+            .join("run/agent-hub/ordinary-start-contexts")
+            .join(format!("{}.json", current.original_start_intent_id()));
+        let held_context = context_path.with_extension("held");
+        fs::rename(&context_path, &held_context)?;
+        let denied = public_command(
+            &encoded,
+            world,
+            &[
+                "agent",
+                "turn",
+                "--session",
+                session,
+                "--backend",
+                public_backend,
+                "--prompt",
+                "must not deliver stripped source",
+                "--json",
+            ],
+        )
+        .output();
+        fs::rename(&held_context, &context_path)?;
+        let denied = denied?;
+        ensure!(
+            !denied.status.success(),
+            "missing original issuer entered ordinary fallback: status={}; stderr={}; stdout={}",
+            denied.status,
+            String::from_utf8_lossy(&denied.stderr),
+            String::from_utf8_lossy(&denied.stdout)
+        );
+        let fork = public_command(
+            &encoded,
+            world,
+            &["agent", "fork", "--session", session, "--json"],
+        )
+        .output()?;
+        ensure!(
+            fork.status.success(),
+            "genuine initial child allocation failed: status={}; stderr={}; stdout={}",
+            fork.status,
+            String::from_utf8_lossy(&fork.stderr),
+            String::from_utf8_lossy(&fork.stdout)
+        );
+        let child: serde_json::Value = serde_json::from_slice(&fork.stdout)?;
+        ensure!(
+            child["action"] == "fork"
+                && child["source_orchestration_session_id"] == session
+                && child["backend_id"] == original.native_selection().backend_id
+                && child["scope"] == "host"
+                && child["state"] == "parked_resumable",
+            "public fork allocation identity changed"
+        );
+        // The retained Start->Fork->original-Resume failure needs its original
+        // preconditions and separate no-additional-native/provider evidence.
+        // This Start+2Resume fixture does not claim equivalence to that failure.
+        let child_id = child["orchestration_session_id"]
+            .as_str()
+            .context("fork child missing")?;
+        let denied = public_command(
+            &encoded,
+            world,
+            &[
+                "agent",
+                "turn",
+                "--session",
+                child_id,
+                "--backend",
+                public_backend,
+                "--prompt",
+                "must not deliver unsupported child",
+                "--json",
+            ],
+        )
+        .output()?;
+        ensure!(
+            !denied.status.success(),
+            "unsupported child Resume was enabled: status={}; stderr={}; stdout={}",
+            denied.status,
+            String::from_utf8_lossy(&denied.stderr),
+            String::from_utf8_lossy(&denied.stdout)
+        );
+        ensure!(
+            fs::read_to_string(workspace.join("host-native.jsonl"))?
+                .lines()
+                .count()
+                == 3,
+            "a refused source/child/repacked request added native traffic"
+        );
+        ensure!(
+            native_entry_count(workspace)? == native_entries,
+            "a refused child/repacked request entered native"
+        );
+        checkpoint("complete", None)?;
+        println!("public configured {scope} Start+2Resume: exact public envelopes and original roles/source carrier; public completion held until native fixture release. PID absence is supporting observation. SDK native wait/stdio ACK and owned gateway/helper cleanup require separately attributed receipt/source-order evidence. World startup binding only; downstream member proof remains separate.");
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "requires exact candidate CLI/service/gateway in the reviewed isolated two-identity fixture"]
+    fn test_public_configured_host_start_and_two_resumes() -> Result<()> {
+        configured_public_helper_fixture(false, false, false, false)
+    }
+
+    #[test]
+    #[ignore = "requires exact candidate CLI/service/gateway and private backend overlay in the reviewed fixture"]
+    fn test_public_configured_world_start_and_two_resumes() -> Result<()> {
+        configured_public_helper_fixture(true, false, false, false)
+    }
+
+    #[test]
+    #[ignore = "owned normal-service public controller/Spawn/Fork/child-Resume composition fixture"]
+    fn test_public_configured_world_spawn_fork_and_child_resume() -> Result<()> {
+        configured_public_helper_fixture_with_world_work(true, false, false, false, true, false)
+    }
+
+    mod genuine_current_effects {
+        use super::*;
+        use crate::execution::agent_runtime::{
+            dispatch_contract::*, native_launch_context::*, state_store::*,
+        };
+        use transport_api_types::{ExecuteStreamFrame, OrdinaryMemberTurnSubmitRequestV1};
+
+        struct AcceptedTurn {
+            selection: Arc<AuthenticatedOrdinarySelectionV1>,
+            request: OrdinaryMemberTurnSubmitRequestV1,
+            record: WorldWorkAcceptanceRecordV1,
+        }
+
+        fn accepted(
+            verifier: &OrdinarySelectionAuthorityV1,
+            workspace: &Path,
+            name: &str,
+        ) -> Result<AcceptedTurn> {
+            let receipt: ActiveRetainedTurnReceiptV1 =
+                serde_json::from_slice(&fs::read(workspace.join(name))?)?;
+            let selection = Arc::new(verifier.authenticate(&receipt.orchestration_session_id)?);
+            ensure!(selection.current_participant_id() == receipt.orchestrator_participant_id);
+            let store = AgentRuntimeStateStore::new()?;
+            ensure!(store.substrate_home() == Path::new("/home/fixture/.substrate"));
+            let (request, _, record) = crate::execution::orchestrator_world_dispatch::reconstruct_ordinary_accepted_turn_for_test(
+                &store, &selection, &receipt.request_id)?;
+            ensure!(record.acceptance_record_id == receipt.acceptance_record_id);
+            let AcceptedWorldWorkIdentityV1::RetainedTurn {
+                active_run_id,
+                message_id,
+                target_participant_id,
+            } = &record.work_identity
+            else {
+                anyhow::bail!("current-effects fixture needs an actual retained acceptance");
+            };
+            ensure!(
+                active_run_id == &receipt.active_run_id
+                    && message_id == &receipt.message_id
+                    && target_participant_id == &receipt.target_participant_id
+            );
+            Ok(AcceptedTurn {
+                selection,
+                request,
+                record,
+            })
+        }
+
+        fn terminal(turn: &AcceptedTurn, exit: i32) -> Result<Option<Vec<serde_json::Value>>> {
+            let observation = turn
+                .selection
+                .held_authority()
+                .observe_existing_ordinary_world_work_v1(&turn.record)?;
+            let Some(terminal) = &observation.terminal else {
+                return Ok(None);
+            };
+            ensure!(
+                terminal.exit_code == exit && observation.interruption.is_none(),
+                "genuine current-effects terminal mismatch: {observation:?}"
+            );
+            let frames = observation
+                .journal
+                .iter()
+                .map(|row| {
+                    row.decode_for_c1(&observation.claim)
+                        .and_then(|frame| Ok(serde_json::to_value(frame)?))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            let frame: ExecuteStreamFrame =
+                serde_json::from_value(frames.last().context("missing terminal journal")?.clone())?;
+            ensure!(matches!(frame, ExecuteStreamFrame::Exit {
+                exit: actual, ref frame_identity, ref event_identity, ref terminal_identity, ref span_id, ..
+            } if actual == exit && frame_identity == &terminal.frame_identity && event_identity == &terminal.event_identity
+                && terminal_identity == &terminal.terminal_identity && span_id == &terminal.span_id));
+            Ok(Some(frames))
+        }
+
+        fn root_replay(
+            runtime: &tokio::runtime::Runtime,
+            turn: &AcceptedTurn,
+        ) -> Result<Vec<serde_json::Value>> {
+            use http_body_util::BodyExt as _;
+            runtime
+                .block_on(async {
+                    tokio::time::timeout(Duration::from_secs(45), async {
+                        let response =
+                            transport_api_client::AgentClient::unix_socket("/run/substrate.sock")?
+                                .submit_ordinary_member_turn_stream(turn.request.clone())
+                                .await?;
+                        let bytes = response.into_body().collect().await?.to_bytes();
+                        ensure!(bytes.ends_with(b"\n"), "Root replay lost NDJSON terminator");
+                        std::str::from_utf8(&bytes)?
+                            .lines()
+                            .map(|line| {
+                                let frame: ExecuteStreamFrame = serde_json::from_str(line)?;
+                                let value: serde_json::Value = serde_json::from_str(line)?;
+                                ensure!(
+                                    serde_json::to_value(&frame)? == value,
+                                    "unknown Root replay frame fields"
+                                );
+                                Ok(value)
+                            })
+                            .collect::<Result<Vec<_>>>()
+                    })
+                    .await
+                })
+                .context("Root replay method deadline")?
+        }
+
+        fn root_refusal(runtime: &tokio::runtime::Runtime, turn: &AcceptedTurn) -> Result<String> {
+            let result = runtime
+                .block_on(async {
+                    tokio::time::timeout(Duration::from_secs(30), async {
+                        transport_api_client::AgentClient::unix_socket("/run/substrate.sock")?
+                            .submit_ordinary_member_turn_stream(turn.request.clone())
+                            .await
+                    })
+                    .await
+                })
+                .context("Root refusal method deadline")?;
+            let error = match result {
+                Ok(_) => anyhow::bail!("Root accepted revoked original request"),
+                Err(error) => error,
+            };
+            let message = error.to_string();
+            // Current authority/account errors propagate before join and the
+            // ordinary handler maps them to this explicit generic 500 response.
+            // Keep its actual status; transport failures are not a refusal.
+            let early_authority_refusal = message
+                == "HTTP 500 Internal Server Error error: {\"error\":\"member_turn_internal_error\"}";
+            ensure!(
+                message.starts_with("HTTP 409 Conflict error: ") || early_authority_refusal,
+                "revocation did not return a supported Root refusal response: {message}"
+            );
+            Ok(message)
+        }
+
+        fn gateway_cut(phase: &str, label: &str) -> Result<()> {
+            checkpoint(phase, Some(label))?;
+            proceed(label)
+        }
+
+        fn replay_without_delivery(
+            runtime: &tokio::runtime::Runtime,
+            turn: &AcceptedTurn,
+            frames: &[serde_json::Value],
+            workspace: &Path,
+            label: &str,
+        ) -> Result<()> {
+            let native = fs::read(workspace.join("world-observations/world-native.jsonl"))?;
+            gateway_cut("effects-zero-begin", label)?;
+            let replay = root_replay(runtime, turn);
+            gateway_cut("effects-zero-end", label)?;
+            ensure!(
+                replay? == frames,
+                "Root replay differs from the exact B2 journal"
+            );
+            ensure!(
+                fs::read(workspace.join("world-observations/world-native.jsonl"))? == native,
+                "exact Root retry redelivered native input"
+            );
+            private_file(
+                &workspace.join(format!("effects-{label}.json")),
+                &serde_json::to_vec(frames)?,
+            )?;
+            Ok(())
+        }
+
+        pub(super) fn run(
+            mut start: Command,
+            workspace: &Path,
+            held: Arc<config_projection::OrdinaryConfiguredAcceptedHomeAuthorityV1>,
+        ) -> Result<()> {
+            let verifier =
+                OrdinarySelectionAuthorityV1::from_ordinary_configured_accepted_home(held)?;
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()?;
+            let mut completed = None;
+            let mut completed_frames = None;
+            let mut active_turn = None;
+            let mut restored = false;
+            let mut finished = false;
+            let mut last = Instant::now() - Duration::from_secs(1);
+            let mut progress = || -> Result<()> {
+                if finished || last.elapsed() < Duration::from_millis(500) {
+                    return Ok(());
+                }
+                last = Instant::now();
+                if completed.is_none() {
+                    if !workspace
+                        .join("current-effects-completed-receipt.json.ready")
+                        .is_file()
+                    {
+                        return Ok(());
+                    }
+                    completed = Some(accepted(
+                        &verifier,
+                        workspace,
+                        "current-effects-completed-receipt.json",
+                    )?);
+                }
+                let turn = completed.as_ref().unwrap();
+                if !restored {
+                    let Some(frames) = terminal(turn, 0)? else {
+                        return Ok(());
+                    };
+                    let native_path = workspace.join("world-observations/world-native.jsonl");
+                    ensure!(fs::read_to_string(&native_path)?.lines().count() == 2);
+                    let recipes = crate::execution::orchestrator_world_dispatch::ordinary_current_effects_parent_recipes_for_test(&turn.selection)?;
+                    private_file(
+                        &workspace.join("current-effects-parent-recipes.json"),
+                        &serde_json::to_vec(&recipes)?,
+                    )?;
+                    replay_without_delivery(
+                        &runtime,
+                        turn,
+                        &frames,
+                        workspace,
+                        "completed-replay",
+                    )?;
+                    for fault in ["account", "policy", "source"] {
+                        let native = fs::read(&native_path)?;
+                        gateway_cut("effects-zero-begin", fault)?;
+                        let home = Path::new("/home/fixture/.substrate");
+                        let path = match fault {
+                            "account" => PathBuf::from("/home/fixture/.codex/auth.json"),
+                            "policy" => home.join("policy.yaml"),
+                            "source" => {
+                                home.join("run/agent-hub/ordinary-start-contexts")
+                                    .join(format!(
+                                        "{}.json",
+                                        turn.selection.original_start_intent_id()
+                                    ))
+                            }
+                            _ => unreachable!(),
+                        };
+                        let original = fs::read(&path)?;
+                        let metadata = fs::metadata(&path)?;
+                        let held_path = path.with_extension("effects-held");
+                        match fault {
+                            "account" => {
+                                let mut auth: serde_json::Value =
+                                    serde_json::from_slice(&original)?;
+                                auth["tokens"]["account_id"] = "synthetic-revoked-account".into();
+                                fs::write(&path, serde_json::to_vec(&auth)?)?;
+                            }
+                            "policy" => {
+                                let policy = String::from_utf8(original.clone())?;
+                                ensure!(policy.contains(
+                                    "allowed_backends: [cli:codex-host, cli:codex-world]"
+                                ));
+                                fs::write(
+                                    &path,
+                                    policy.replace(
+                                        "allowed_backends: [cli:codex-host, cli:codex-world]",
+                                        "allowed_backends: [cli:codex-host]",
+                                    ),
+                                )?;
+                            }
+                            "source" => fs::rename(&path, &held_path)?,
+                            _ => unreachable!(),
+                        }
+                        let refusal = root_refusal(&runtime, turn);
+                        // Restore even when an unexpected refusal/transport result is reported.
+                        if fault == "source" {
+                            fs::rename(&held_path, &path)?
+                        } else {
+                            fs::write(&path, &original)?
+                        }
+                        let after = fs::metadata(&path)?;
+                        ensure!(
+                            after.dev() == metadata.dev()
+                                && after.ino() == metadata.ino()
+                                && fs::read(&path)? == original,
+                            "revocation fixture did not restore its original inode/bytes"
+                        );
+                        gateway_cut("effects-zero-end", fault)?;
+                        ensure!(
+                            fs::read(&native_path)? == native,
+                            "revoked input reached native"
+                        );
+                        private_file(
+                            &workspace.join(format!("effects-{fault}-refusal.json")),
+                            &serde_json::to_vec(
+                                &serde_json::json!({"root_refusal":refusal?,"same_original_inode_restored":true,"new_native_deliveries":0}),
+                            )?,
+                        )?;
+                        replay_without_delivery(
+                            &runtime,
+                            turn,
+                            &frames,
+                            workspace,
+                            &format!("{fault}-restored"),
+                        )?;
+                    }
+                    completed_frames = Some(frames);
+                    private_file(&workspace.join("current-effects-restored"), b"restored\n")?;
+                    restored = true;
+                    return Ok(());
+                }
+                if !workspace
+                    .join("current-effects-active-receipt.json.ready")
+                    .is_file()
+                {
+                    return Ok(());
+                }
+                let rows: Vec<serde_json::Value> =
+                    fs::read_to_string(workspace.join("world-observations/world-native.jsonl"))?
+                        .lines()
+                        .map(serde_json::from_str)
+                        .collect::<std::result::Result<_, _>>()?;
+                if rows.len() < 3 {
+                    return Ok(());
+                }
+                ensure!(
+                    rows.len() == 3 && rows[2]["kind"] == "resume_active" && rows[2]["turns"] == 3
+                );
+                if active_turn.is_none() {
+                    let active =
+                        accepted(&verifier, workspace, "current-effects-active-receipt.json")?;
+                    ensure!(
+                        active.selection.current_participant_id()
+                            == turn.selection.current_participant_id()
+                            && active.record.caller_participant_id
+                                == turn.record.caller_participant_id
+                    );
+                    ensure!(
+                        terminal(&active, 130)?.is_none(),
+                        "active native had already terminated"
+                    );
+                    // The owning helper must issue cancellation through its normal
+                    // toolbox route. This separate observer cannot acquire its lease.
+                    private_file(
+                        &workspace.join("current-effects-cancel-ready"),
+                        b"native owner may cancel its accepted turn\n",
+                    )?;
+                    active_turn = Some(active);
+                    return Ok(());
+                }
+                if !workspace
+                    .join("current-effects-cancel-receipt.json.ready")
+                    .is_file()
+                {
+                    return Ok(());
+                }
+                let active = active_turn.as_ref().unwrap();
+                let AcceptedWorldWorkIdentityV1::RetainedTurn {
+                    active_run_id,
+                    message_id,
+                    target_participant_id,
+                } = &active.record.work_identity
+                else {
+                    unreachable!()
+                };
+                let target = WorldDispatchControlTargetV1::AcceptedRetainedTurn {
+                    acceptance_record_id: active.record.acceptance_record_id.clone(),
+                    active_run_id: active_run_id.clone(),
+                    message_id: message_id.clone(),
+                    target_participant_id: target_participant_id.clone(),
+                };
+                let cancelled: crate::execution::agent_runtime::tool_invocation_contract::HostToolCancelWorldWorkOutcomeV1 =
+                    serde_json::from_slice(&fs::read(workspace.join("current-effects-cancel-receipt.json"))?)?;
+                private_file(
+                    &workspace.join("effects-supported-cancellation-return.json"),
+                    &serde_json::to_vec(&cancelled)?,
+                )?;
+                ensure!(
+                    matches!(
+                        cancelled.state,
+                        CancelWorldWorkTerminalStateV1::CancelAcceptedPendingCloseout
+                            | CancelWorldWorkTerminalStateV1::CancelledViaLiveTransport
+                    ),
+                    "unexpected supported native-owner cancel outcome: {cancelled:?}"
+                );
+                ensure!(
+                    cancelled.exact_target.as_ref() == Some(&target)
+                        && cancelled.cancel_request_id.is_some()
+                        && cancelled.orchestration_session_id
+                            == active.record.orchestration_session_id
+                        && cancelled.orchestrator_participant_id
+                            == active.record.caller_participant_id
+                        && cancelled.target_backend_id == active.record.target_backend_id
+                        && cancelled.world_id == active.record.world_id
+                        && cancelled.world_generation == active.record.world_generation
+                        && cancelled.action == WorldDispatchActionV1::CancelWorldWork
+                        && cancelled.mode == WorldDispatchModeV1::Retained
+                );
+                let active_frames = root_replay(&runtime, active)?;
+                let journal = terminal(active, 130)?
+                    .context("cancelled native did not publish checked B2 terminal")?;
+                ensure!(
+                    active_frames == journal,
+                    "Root cancellation terminal differs from exact B2 journal"
+                );
+                ensure!(
+                    fs::read_to_string(workspace.join("world-observations/world-native.jsonl"))?
+                        .lines()
+                        .count()
+                        == 3
+                );
+                private_file(
+                    &workspace.join("effects-supported-cancellation.json"),
+                    &serde_json::to_vec(
+                        &serde_json::json!({"native":rows[2],"cancel":cancelled,"root_frames":active_frames,"b2_journal":journal,"signal_marker_claimed":false,"raw_sdk_wait_exported":false}),
+                    )?,
+                )?;
+                replay_without_delivery(
+                    &runtime,
+                    turn,
+                    completed_frames.as_ref().unwrap(),
+                    workspace,
+                    "post-cancel-completed-replay",
+                )?;
+                checkpoint("effects-backend-replace", None)?;
+                proceed("effects-backend-replaced")?;
+                let native = fs::read(workspace.join("world-observations/world-native.jsonl"))?;
+                gateway_cut("effects-zero-begin", "backend")?;
+                let refusal = root_refusal(&runtime, turn);
+                gateway_cut("effects-zero-end", "backend")?;
+                ensure!(
+                    fs::read(workspace.join("world-observations/world-native.jsonl"))? == native
+                );
+                private_file(
+                    &workspace.join("effects-backend-refusal.json"),
+                    &serde_json::to_vec(
+                        &serde_json::json!({"root_refusal":refusal?,"new_native_deliveries":0}),
+                    )?,
+                )?;
+                private_file(&workspace.join("current-effects-finished"), b"finished\n")?;
+                finished = true;
+                Ok(())
+            };
+            let output = wait_public_command_with_budget(
+                start.spawn()?,
+                workspace,
+                1,
+                Duration::from_secs(300),
+                Some(&mut progress),
+            )?;
+            ensure!(
+                finished,
+                "current-effects controller terminated before all required cases"
+            );
+            ensure!(
+                output.status.success(),
+                "current-effects public Start failed: status={}; stderr={}; stdout={}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr),
+                String::from_utf8_lossy(&output.stdout)
+            );
+            checked_public_completion(
+                &output.stdout,
+                PublicPromptAction::Start,
+                "cli:codex-world",
+                "world",
+                None,
+            )?;
+            ensure!(
+                fs::read_to_string(workspace.join("host-native.jsonl"))?
+                    .lines()
+                    .count()
+                    == 1
+            );
+            Ok(())
+        }
+
+        #[test]
+        #[ignore = "Root-only one-shot backend replacement within owned current-effects namespace"]
+        fn replace_backend() -> Result<()> {
+            use world_api::WorldBackend as _;
+            ensure!(unsafe { libc::geteuid() } == 0 && !Path::new("/home/spenser").exists());
+            let (parent, persistent, expected): (
+                world_api::WorldSpec,
+                world_api::WorldSpec,
+                world_api::SharedWorldBindingSnapshot,
+            ) = serde_json::from_slice(&fs::read(
+                "/home/fixture/workspace/current-effects-parent-recipes.json",
+            )?)?;
+            let backend = world::LinuxLocalBackend::new();
+            let mut recovered = None;
+            for spec in [&parent, &persistent] {
+                if let Some(handle) = backend.find_compatible_session(spec)? {
+                    ensure!(
+                        handle.shared_binding.as_ref() == Some(&expected)
+                            && handle.id == expected.world_id
+                    );
+                    recovered = Some(handle);
+                    break;
+                }
+            }
+            ensure!(
+                recovered.is_some(),
+                "actual persisted backend producer could not be recovered"
+            );
+            let spec = backend.with_existing_custody_nonreconciling_v1(
+                &expected.orchestration_session_id,
+                &expected.world_id,
+                expected.world_generation,
+                &parent.project_dir,
+                |held| {
+                    let (spec, handle, path, cgroup) =
+                        held.world_placement_for_specs_v1(&[parent.clone(), persistent.clone()])?;
+                    ensure!(handle.shared_binding.as_ref() == Some(&expected));
+                    ensure!(
+                        fs::read(path.join("cgroup.procs"))?.is_empty(),
+                        "old genuine World still has live processes"
+                    );
+                    ensure!(cgroup.metadata()?.ino() == fs::metadata(&path)?.ino());
+                    Ok(spec)
+                },
+            )?;
+            let mut replacement = spec;
+            replacement.reuse_mode =
+                world_api::WorldReuseMode::SharedOrchestration(world_api::SharedWorldOwnerSpec {
+                    orchestration_session_id: expected.orchestration_session_id.clone(),
+                    action: world_api::SharedWorldOwnerAction::ReplaceExpectedGeneration {
+                        expected_generation: expected.world_generation,
+                        reason: "owned genuine current-effects backend revocation proof".into(),
+                    },
+                });
+            let actual = backend.ensure_session(&replacement)?;
+            let binding = actual
+                .shared_binding
+                .as_ref()
+                .context("replacement lost shared binding")?;
+            ensure!(
+                binding.world_id != expected.world_id
+                    && binding.world_generation == expected.world_generation + 1
+            );
+            let readback = world::LinuxLocalBackend::new()
+                .find_compatible_session(&replacement)?
+                .context("fresh replacement readback missing")?;
+            ensure!(readback.shared_binding == actual.shared_binding && readback.id == actual.id);
+            println!(
+                "GENUINE_BACKEND_REPLACEMENT {}",
+                serde_json::to_string(
+                    &serde_json::json!({"old":expected,"new":binding,"fresh_readback":readback.shared_binding,"old_cgroup_empty_before_replace":true})
+                )?
+            );
+            Ok(())
+        }
+    }
+
+    #[test]
+    #[ignore = "owned genuine Root/service revocation, exact replay and supported running-turn cancellation proof"]
+    fn test_public_configured_world_current_effects_and_exact_retry() -> Result<()> {
+        configured_public_helper_fixture_with_world_work(true, false, false, false, true, true)
+    }
+    #[test]
+    #[ignore = "requires exact candidate CLI/Claude SDK/service/gateway and synthetic API key in the reviewed fixture"]
+    fn test_public_configured_claude_host_start_and_two_resumes() -> Result<()> {
+        configured_public_helper_fixture(false, true, false, false)
+    }
+
+    #[test]
+    #[ignore = "pending actual reviewed HSA helper comparison and exact isolated public fixture"]
+    fn test_public_configured_host_issued_helper_refusals() -> Result<()> {
+        configured_public_helper_fixture(false, false, true, false)
+    }
+
+    #[test]
+    #[ignore = "pending actual reviewed HSA helper comparison and exact isolated public World fixture"]
+    fn test_public_configured_world_issued_helper_refusals() -> Result<()> {
+        configured_public_helper_fixture(true, false, true, false)
+    }
+
+    #[test]
+    #[ignore = "requires the exact isolated public CLI/service/gateway and controlled native failure"]
+    fn test_public_configured_host_start_failure_is_one_terminal_and_not_replayed() -> Result<()> {
+        configured_public_helper_fixture(false, false, false, true)
+    }
+
+    const PUBLIC_CLAUDE_NATIVE_FIXTURE: &str = r##"#!/usr/bin/python3
+import json, os, pathlib, sys, time, urllib.request, urllib.error
+args = sys.argv[1:]
+if args and args[0] in ('--version','--help'):
+    print('claude 1.2.3' if args[0] == '--version' else 'Usage: --print --output-format --resume --model')
+    raise SystemExit(0)
+root = pathlib.Path(__file__).resolve().parent
+def stage(name):
+    fd = os.open(root / 'host-native-stages.jsonl',
+        os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'a') as output: output.write(json.dumps(dict(stage=name,pid=os.getpid()))+'\n')
+stage('native_entered')
+log = root / 'host-native.jsonl'
+prior = [json.loads(s) for s in log.read_text().splitlines()] if log.exists() else []
+turn = len(prior) + 1
+session = 'thread-public-claude-helper'
+assert turn in (1,2,3)
+assert '--model' in args and args[args.index('--model')+1] == 'claude-sonnet-4.5'
+assert ('--resume' in args) == (turn > 1)
+if turn > 1: assert args[args.index('--resume')+1] == session
+assert '--fork-session' not in args
+assert args[-1].encode('utf-8') == (root / ('expected-prompt-%s.txt' % turn)).read_bytes()
+home = pathlib.Path(os.environ['CLAUDE_CONFIG_DIR'])
+assert str(home).startswith('/proc/')
+assert os.environ['HOME'] == str(home)
+for name in ('ANTHROPIC_API_KEY','OPENAI_API_KEY','SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN','SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID'):
+    assert not os.environ.get(name)
+cap = os.environ['ANTHROPIC_AUTH_TOKEN']
+assert len(cap) == 43 and cap != 'substrate-managed-gateway'
+origin = os.environ['ANTHROPIC_BASE_URL']
+assert origin.startswith('http://127.0.0.1:')
+def refused(token):
+    headers = {'Content-Type':'application/json'}
+    if token is not None: headers['Authorization'] = 'Bearer ' + token
+    request = urllib.request.Request(origin.rstrip('/')+'/v1/messages', data=b'{', headers=headers)
+    try:
+        urllib.request.urlopen(request,timeout=5)
+        raise AssertionError('malformed request accepted')
+    except urllib.error.HTTPError as error: return error.code
+deadline=time.monotonic()+5
+while True:
+    try: missing=refused(None); break
+    except urllib.error.URLError:
+        assert time.monotonic()<deadline
+        time.sleep(0.02)
+assert [missing,refused('wrong'),refused(cap)] == [403,403,400]
+history = home / 'component-host-history'
+expected = session + ''.join('\nturn-%s' % n for n in range(1,turn))
+if turn == 1:
+    with history.open('x') as output: output.write(session)
+else: assert history.read_text() == expected
+before=history.stat()
+with history.open('a') as output: output.write('\nturn-%s' % turn)
+after=history.stat()
+assert (before.st_dev,before.st_ino)==(after.st_dev,after.st_ino)
+entry=dict(turn=turn,pid=os.getpid(),parent_pid=os.getppid(),home_device=home.stat().st_dev,home_inode=home.stat().st_ino,
+    history_device=after.st_dev,history_inode=after.st_ino,history=history.read_text(),authenticated_body_refusal=True)
+with log.open('a') as output: output.write(json.dumps(entry)+'\n')
+print(json.dumps(dict(type='system',subtype='init',session_id=session)),flush=True)
+print(json.dumps(dict(type='result',subtype='success',is_error=False,session_id=session,
+    result='synthetic Claude output %s'%turn,duration_ms=1,duration_api_ms=0,num_turns=1,total_cost_usd=0)),flush=True)
+stage('events_emitted')
+deadline=time.monotonic()+15
+while not (root/('host-release-%s'%turn)).exists():
+    assert time.monotonic()<deadline
+    time.sleep(0.01)
+"##;
 }

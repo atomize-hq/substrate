@@ -417,6 +417,8 @@ fn build_agent_execute_request(
         .map_err(|err| anyhow!("invalid PolicySnapshotV3: {err}"))?;
 
     Ok(ExecuteRequest {
+        schema_version: 1,
+        ordinary_start_selection: None,
         profile: None,
         cmd: format!("bash -lc '{}'", state.raw_cmd.replace("'", "'\\''")),
         cwd: Some(effective_world_exec_cwd(state).display().to_string()),

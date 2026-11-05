@@ -8,7 +8,7 @@ use std::io::{self, Read};
 #[cfg(target_os = "linux")]
 use std::os::fd::AsRawFd;
 #[cfg(target_os = "linux")]
-use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
+use std::os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 #[cfg(unix)]
 use std::os::unix::net::UnixListener as StdUnixListener;
 #[cfg(target_os = "linux")]
@@ -97,6 +97,9 @@ pub(crate) const HIDDEN_OWNER_HELPER_SUBCOMMAND: &str = "__owner-helper";
 #[cfg(target_os = "linux")]
 const AUTHORITY_SUCCESSOR_LAUNCH_GUARD_FD_ENV: &str =
     "SUBSTRATE_AUTHORITY_SUCCESSOR_LAUNCH_GUARD_FD";
+#[cfg(target_os = "linux")]
+const ORDINARY_SUCCESSOR_STARTUP_STREAM_FD_ENV: &str =
+    "SUBSTRATE_ORDINARY_SUCCESSOR_STARTUP_STREAM_FD";
 const OWNER_HELPER_READY_TIMEOUT_ERROR_PREFIX: &str =
     "timed out waiting for authoritative owner-helper readiness for orchestration session ";
 const OWNER_HELPER_READY_TIMEOUT: Duration = Duration::from_secs(30);
@@ -165,11 +168,22 @@ pub(crate) enum PrivateTransportAvailabilityV1 {
 }
 
 #[cfg(target_os = "linux")]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 struct PrivateEpisodeEndpointIdentityV1 {
     device: u64,
     inode: u64,
+    object: Arc<fs::File>,
 }
+
+#[cfg(target_os = "linux")]
+impl PartialEq for PrivateEpisodeEndpointIdentityV1 {
+    fn eq(&self, other: &Self) -> bool {
+        self.device == other.device && self.inode == other.inode
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Eq for PrivateEpisodeEndpointIdentityV1 {}
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -637,12 +651,23 @@ fn private_transport_endpoint_metadata_availability(
 
 #[cfg(target_os = "linux")]
 fn private_episode_endpoint_identity(path: &Path) -> Result<PrivateEpisodeEndpointIdentityV1> {
-    let metadata = fs::symlink_metadata(path).with_context(|| {
-        format!(
-            "failed to inspect private episode endpoint {}",
-            path.display()
-        )
-    })?;
+    use std::os::unix::fs::OpenOptionsExt;
+
+    // Retain the filesystem object after unlink so its inode cannot be
+    // recycled while an original listener or cleanup owner still holds it.
+    let object = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_PATH | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(path)
+        .with_context(|| {
+            format!(
+                "failed to retain private episode endpoint {}",
+                path.display()
+            )
+        })?;
+    let metadata = object
+        .metadata()
+        .context("inspect retained private episode endpoint")?;
     if metadata.file_type().is_symlink() || !metadata.file_type().is_socket() {
         anyhow::bail!(
             "private episode endpoint {} is not an exact Unix socket",
@@ -652,6 +677,7 @@ fn private_episode_endpoint_identity(path: &Path) -> Result<PrivateEpisodeEndpoi
     Ok(PrivateEpisodeEndpointIdentityV1 {
         device: metadata.dev(),
         inode: metadata.ino(),
+        object: Arc::new(object),
     })
 }
 
@@ -660,6 +686,16 @@ fn remove_private_episode_endpoint_if_same(
     path: &Path,
     expected: PrivateEpisodeEndpointIdentityV1,
 ) -> Result<()> {
+    let retained = expected
+        .object
+        .metadata()
+        .context("inspect original private endpoint object")?;
+    anyhow::ensure!(
+        retained.file_type().is_socket()
+            && retained.dev() == expected.device
+            && retained.ino() == expected.inode,
+        "original private endpoint object changed identity"
+    );
     let current = match private_episode_endpoint_identity(path) {
         Ok(current) => current,
         Err(error)
@@ -785,18 +821,21 @@ fn prepare_private_episode_endpoint_for_bind(
         ensure_private_episode_owned_directory(&current, expected_uid)?;
     }
 
-    let metadata = match fs::symlink_metadata(path) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => {
-            return Err(error).with_context(|| {
-                format!(
-                    "failed to inspect private episode transport {}",
-                    path.display()
-                )
-            });
+    let stale_identity = match private_episode_endpoint_identity(path) {
+        Ok(identity) => identity,
+        Err(error)
+            if error
+                .downcast_ref::<io::Error>()
+                .is_some_and(|error| error.kind() == io::ErrorKind::NotFound) =>
+        {
+            return Ok(())
         }
+        Err(error) => return Err(error),
     };
+    let metadata = stale_identity
+        .object
+        .metadata()
+        .context("inspect original private episode transport")?;
     if metadata.file_type().is_symlink()
         || !metadata.file_type().is_socket()
         || metadata.uid() != expected_uid
@@ -807,10 +846,6 @@ fn prepare_private_episode_endpoint_for_bind(
             path.display()
         );
     }
-    let stale_identity = PrivateEpisodeEndpointIdentityV1 {
-        device: metadata.dev(),
-        inode: metadata.ino(),
-    };
     match StdUnixStream::connect(path) {
         Ok(_) => anyhow::bail!(
             "private episode transport {} is owned by an active competing publisher",
@@ -977,6 +1012,8 @@ pub(crate) struct PersistedWorldBinding {
 
 #[derive(Clone)]
 pub(crate) struct PromptSubmitRuntime {
+    #[cfg(target_os = "linux")]
+    pub authority: PromptSubmitAuthorityV1,
     pub descriptor: RuntimeSelectionDescriptor,
     pub orchestration_session: Arc<Mutex<OrchestrationSessionRecord>>,
     pub manifest: Arc<Mutex<AgentRuntimeSessionManifest>>,
@@ -1016,7 +1053,11 @@ pub(crate) fn verify_public_start_continuity_settled(
         .authority
         .internal_resume_handle_refs
         .iter()
-        .filter(|reference| reference.schema_version == 2)
+        .filter(|reference| {
+            reference.object_kind
+                == super::host_session_authority::schema::AuthorityObjectKindV1::ResumeHandle
+                && matches!(reference.schema_version, 2 | 3)
+        })
         .count();
     if resolved.authority.authority_revision < 3
         || start_handles != 2
@@ -1418,8 +1459,18 @@ pub(crate) fn launch_hidden_owner_helper_for_durable_start(
     }
 
     #[cfg(target_os = "linux")]
+    let selected = {
+        let carrier = crate::execution::install_bootstrap::checked_install_bootstrap_context_from_projections()?;
+        recover_ordinary_public_selection(&carrier, plan.orchestration_session_id())?
+    };
+    #[cfg(target_os = "linux")]
+    authenticate_ordinary_public_helper_run(&selected, plan, None)?.revalidate_before_effect()?;
+
+    #[cfg(target_os = "linux")]
     let (mut launch_episode, launch_binding) = host_execution_episode_for_helper_plan(plan)?;
 
+    #[cfg(target_os = "linux")]
+    authenticate_ordinary_public_helper_run(&selected, plan, None)?.revalidate_before_effect()?;
     let plan_path = persist_durable_start_launch_plan(plan)?;
     let exe = env::current_exe()
         .context("failed to resolve current substrate executable for hidden owner-helper launch")?;
@@ -1439,6 +1490,8 @@ pub(crate) fn launch_hidden_owner_helper_for_durable_start(
         .stdout(Stdio::null())
         .stderr(Stdio::null());
 
+    #[cfg(target_os = "linux")]
+    authenticate_ordinary_public_helper_run(&selected, plan, None)?.revalidate_before_effect()?;
     let child = command.spawn().with_context(|| {
         format!(
             "failed to spawn hidden owner-helper for orchestration session {}",
@@ -1548,6 +1601,795 @@ pub(crate) fn launch_authority_managed_successor_owner_helper(
 }
 
 #[cfg(target_os = "linux")]
+#[derive(Clone)]
+pub(crate) enum PromptSubmitAuthorityV1 {
+    Existing,
+    Ordinary(std::sync::Arc<super::native_launch_context::AuthenticatedOrdinarySelectionV1>),
+}
+
+/// The generic private-prompt protocol has no selected current-run admission.
+/// Refuse before bookkeeping, readiness, gateway, or provider effects.
+#[cfg(target_os = "linux")]
+pub(crate) fn require_prompt_submit_authority_before_effect(
+    runtime: &PromptSubmitRuntime,
+) -> Result<()> {
+    match &runtime.authority {
+        PromptSubmitAuthorityV1::Existing => Ok(()),
+        PromptSubmitAuthorityV1::Ordinary(selection) => {
+            selection.require_ordinary_configured_authority()?;
+            anyhow::bail!(
+                "selected ordinary private prompt requires guarded current-run submission"
+            );
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct OrdinaryHelperDescriptorV1 {
+    agent_id: String,
+    backend_id: String,
+    backend_kind: ResolvedRuntimeBackendKind,
+    protocol: String,
+    execution_scope: AgentExecutionScope,
+    binary_path: String,
+}
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct OrdinaryHelperSessionV1 {
+    orchestration_session_id: String,
+    shell_trace_session_id: String,
+    workspace_root: String,
+    world_id: Option<String>,
+    world_generation: Option<u64>,
+}
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct OrdinaryHelperParticipantV1 {
+    participant_id: String,
+    lease_token: String,
+    run_id: String,
+    resumed_from_participant_id: Option<String>,
+    internal_uaa_session_id: Option<String>,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct OrdinaryHelperStartupPromptV1 {
+    prompt_text: String,
+    stream_path: PathBuf,
+    request_key_sha256: Option<String>,
+    prompt_sha256: Option<String>,
+    public_backend_id: Option<String>,
+    public_scope: Option<AgentExecutionScope>,
+}
+
+/// Transport data only. Reception independently obtains the fixed-source seal.
+/// The ordinary auto-attach producer never carries a prompt or legacy contract.
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct OrdinarySuccessorHelperEnvelopeV1 {
+    schema_version: u32,
+    install_context: transport_api_types::InstallBootstrapContextCarrierV1,
+    original_start: transport_api_types::OrdinaryStartSelectionCarrierV1,
+    authority_store_id: String,
+    descriptor: OrdinaryHelperDescriptorV1,
+    session: OrdinaryHelperSessionV1,
+    participant: OrdinaryHelperParticipantV1,
+    startup_prompt: Option<OrdinaryHelperStartupPromptV1>,
+    applied_transition: HostSessionTransitionIntentV3,
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn recover_ordinary_public_selection(
+    incoming: &transport_api_types::InstallBootstrapContextCarrierV1,
+    orchestration_session_id: &str,
+) -> Result<Arc<super::native_launch_context::AuthenticatedOrdinarySelectionV1>> {
+    let configured =
+        crate::execution::install_bootstrap::acquire_ordinary_configured_home(incoming)?;
+    let verifier = super::native_launch_context::OrdinarySelectionAuthorityV1::from_ordinary_configured_accepted_home(configured)?;
+    Ok(Arc::new(verifier.authenticate(orchestration_session_id)?))
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn revalidate_ordinary_public_source_permission(
+    selection: &Arc<super::native_launch_context::AuthenticatedOrdinarySelectionV1>,
+) -> Result<()> {
+    use super::dispatch_contract::*;
+    use anyhow::ensure;
+    selection.require_ordinary_configured_authority()?;
+    selection.revalidate()?;
+    ensure!(
+        selection.current_world_binding() == selection.original_world_binding(),
+        "ordinary public source placement changed"
+    );
+    let workspace = Path::new(selection.workspace_root());
+    let home = selection.held_authority().bootstrap_home();
+    let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
+        workspace, &home,
+    )?;
+    let snapshot = crate::execution::policy_snapshot::resolve_policy_snapshot_for_bootstrap_home(
+        workspace, &home,
+    )?;
+    ensure!(
+        snapshot.snapshot_hash == selection.current_policy_snapshot_sha256(),
+        "ordinary public source policy no longer joins current authority"
+    );
+    let config = selection.captured_effective_config();
+    for (native, selected) in [
+        (true, selection.native_selection()),
+        (false, selection.requested_selection()),
+    ] {
+        let scope = match selected.placement {
+            transport_api_types::AgentSelectionPlacementV1::Host => AgentExecutionScope::Host,
+            transport_api_types::AgentSelectionPlacementV1::World => AgentExecutionScope::World,
+        };
+        let envelope = DispatchRequestEnvelope {
+            caller_kind: DispatchCallerKind::HumanStart,
+            baseline_kind: DispatchBaselineKind::InventoryLaunch,
+            backend_id: Some(selected.backend_id.clone()),
+            orchestration_session_id: Some(selection.original_session_id().into()),
+            requested_execution_scope_override: Some(scope),
+            capability_overrides: DispatchCapabilityOverrideSet::default(),
+            attach_launch_knobs: AttachLaunchKnobs {
+                requested_execution_scope: scope,
+                host_execution_client_start: HostExecutionClientStart::StartNow,
+                attach_mode_preference: AttachModePreference::ContinuityRequired,
+            },
+            has_prompt_payload: true,
+        };
+        let contract = resolve_inventory_contract_for_exact_backend(
+            workspace,
+            &config,
+            selection.captured_inventory(),
+            &policy,
+            &envelope,
+            scope,
+        )
+        .map_err(|error| anyhow::anyhow!("{error}"))?
+        .context("current policy refuses original public role")?;
+        let effective = &contract.effective_policy;
+        ensure!(
+            contract.backend_id == selected.backend_id
+                && contract.agent_id == selected.realized_agent_id
+                && contract.execution_scope == scope
+                && contract.capabilities.session_start
+                && contract.capabilities.session_resume
+                && contract.capabilities.llm
+                && contract.capabilities.event_stream
+                && !effective.llm_require_approval
+                && effective
+                    .llm_allowed_backends
+                    .iter()
+                    .any(|id| id == &selected.backend_id),
+            "current public role permission changed"
+        );
+        let (protocol, auth) = match selected.selection.harness {
+            transport_api_types::AgentHarnessFamilyV1::Codex => {
+                ("openai.responses", "codex_subscription")
+            }
+            transport_api_types::AgentHarnessFamilyV1::ClaudeCode => {
+                ("anthropic.messages", "anthropic_api_key")
+            }
+        };
+        for (value, allowed) in [
+            ("substrate_gateway", &effective.llm_constraints_routers),
+            (
+                selected.selection.provider.as_str(),
+                &effective.llm_constraints_providers,
+            ),
+            (protocol, &effective.llm_constraints_protocols),
+            (auth, &effective.llm_constraints_auth_authorities),
+        ] {
+            ensure!(
+                allowed.is_empty() || allowed.iter().any(|item| item == value),
+                "current public role route permission revoked"
+            );
+        }
+        if native {
+            let descriptor = super::validator::materialize_runtime_descriptor(&contract)
+                .map_err(|error| anyhow::anyhow!(error.reason))?;
+            ensure!(
+                ResolvedRuntimeDescriptor::from(&descriptor).agent_id
+                    == selection.context().descriptor.agent_id
+                    && descriptor.backend_id == selection.context().descriptor.backend_id
+                    && descriptor.protocol == selection.context().descriptor.protocol
+                    && descriptor.binary_path
+                        == Path::new(&selection.context().descriptor.binary_path)
+                    && descriptor.execution_scope == AgentExecutionScope::Host,
+                "original native public descriptor changed"
+            );
+            drop(selection.resolve_native_gateway_handoff(effective)?);
+        } else {
+            selection.revalidate_requested_account(effective)?;
+        }
+    }
+    let end = crate::execution::policy_snapshot::resolve_policy_snapshot_for_bootstrap_home(
+        workspace, &home,
+    )?;
+    ensure!(
+        end.snapshot_hash == snapshot.snapshot_hash,
+        "public policy changed during source preparation"
+    );
+    selection.revalidate()
+}
+
+/// The carrier is data. Only the configured original issuer and the reviewed
+/// current Applied Host run supply ordinary public-helper admission.
+#[cfg(target_os = "linux")]
+pub(crate) fn authenticate_ordinary_public_helper_run(
+    selection: &Arc<super::native_launch_context::AuthenticatedOrdinarySelectionV1>,
+    plan: &HiddenOwnerHelperLaunchPlan,
+    applied_successor: Option<&HostSessionTransitionIntentV3>,
+) -> Result<super::native_launch_context::OrdinaryHostGatewayAdmissionV1> {
+    if !matches!(
+        plan.mode,
+        OwnerHelperMode::Start | OwnerHelperMode::ResumeOneTurn
+    ) {
+        anyhow::bail!("ordinary received public helper mode is outside Start/Resume");
+    }
+    selection.revalidate()?;
+    let configured = selection.require_ordinary_configured_authority()?;
+    let observation = selection
+        .held_authority()
+        .observe_current_host_gateway_run_v1(
+            plan.orchestration_session_id(),
+            plan.participant_id(),
+            &plan.descriptor.backend_id,
+            &plan.participant.run_id,
+        )?;
+    let proof = observation.current_run();
+    let context = selection.context();
+    let original = observation.original_descriptor();
+    let original_start = observation.original_start();
+    let current_world = selection.current_world_binding();
+    if plan.source_orchestration_session_id.is_some()
+        || plan.orchestration_session_id() != selection.original_session_id()
+        || plan.participant_id() != proof.participant_id()
+        || plan.session.workspace_root != selection.workspace_root()
+        || plan.session.shell_trace_session_id != original_start.shell_trace_session_id
+        || !matches!(
+            (plan.descriptor.backend_kind, original.backend_kind),
+            (
+                ResolvedRuntimeBackendKind::Codex,
+                super::host_session_authority::schema::RuntimeBackendKindV1::Codex
+            ) | (
+                ResolvedRuntimeBackendKind::ClaudeCode,
+                super::host_session_authority::schema::RuntimeBackendKindV1::ClaudeCode
+            )
+        )
+        || plan.descriptor.backend_id != selection.native_selection().backend_id
+        || plan.descriptor.agent_id != original.agent_id
+        || plan.descriptor.protocol != original.protocol
+        || plan.descriptor.binary_path != original.binary_path
+        || plan.descriptor.execution_scope != AgentExecutionScope::Host
+        || plan.session.world_id.as_deref() != current_world.map(|(id, _)| id)
+        || plan.session.world_generation != current_world.map(|(_, generation)| generation)
+    {
+        anyhow::bail!("ordinary public helper changed original/current role or placement");
+    }
+    // The accepted comparison binds shell trace, current intent placement,
+    // lease/input/source/native identity and the exact supplied application.
+    proof.verify_selected_helper_launch_v1(plan, applied_successor, selection)?;
+    let mode = match plan.mode {
+        OwnerHelperMode::Start => {
+            super::host_session_authority::schema::HostSessionTransitionModeV1::Start
+        }
+        OwnerHelperMode::Attach => {
+            super::host_session_authority::schema::HostSessionTransitionModeV1::Attach
+        }
+        OwnerHelperMode::ResumeOneTurn => {
+            super::host_session_authority::schema::HostSessionTransitionModeV1::ResumeOneTurn
+        }
+    };
+    if proof.authority_store_id() != selection.authority_store_id()
+        || proof.transition_mode() != mode
+        || proof.original_start_intent_id() != selection.original_start_intent_id()
+        || proof.original_start_issuer_request_id()
+            != selection.original_start_issuer_request_id()?
+        || proof.original_start_run_id() != context.original_run_id
+        || (mode == super::host_session_authority::schema::HostSessionTransitionModeV1::Start
+            && (plan.participant.resumed_from_participant_id.is_some()
+                || plan.participant.internal_uaa_session_id.is_some()))
+    {
+        anyhow::bail!("ordinary public helper lacks exact original issuance/current run");
+    }
+    let verifier = super::native_launch_context::OrdinarySelectionAuthorityV1::from_ordinary_configured_accepted_home(configured)?;
+    let claim = transport_api_types::OrdinaryGatewaySelectionContextV1 {
+        schema_version: 1,
+        start: crate::execution::orchestrator_world_dispatch::ordinary_start_selection_carrier(
+            selection,
+        )?,
+        runtime: transport_api_types::OrdinaryGatewayRuntimeIdentityV1::HostActor {
+            orchestration_session_id: plan.orchestration_session_id().into(),
+            participant_id: plan.participant_id().into(),
+            backend_id: plan.descriptor.backend_id.clone(),
+            run_id: plan.participant.run_id.clone(),
+        },
+    };
+    let admission = verifier.authenticate_host_gateway_v1(&claim)?;
+    observation.revalidate()?;
+    admission.revalidate_before_effect()?;
+    proof.verify_selected_helper_launch_v1(plan, applied_successor, selection)?;
+    Ok(admission)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn validate_ordinary_successor_helper_envelope(
+    envelope: &OrdinarySuccessorHelperEnvelopeV1,
+) -> Result<AuthorityManagedSuccessorLaunchPlanV1> {
+    use super::host_session_authority::schema::HostSessionTransitionModeV1;
+    envelope
+        .install_context
+        .validate()
+        .map_err(anyhow::Error::msg)?;
+    envelope
+        .original_start
+        .validate()
+        .map_err(anyhow::Error::msg)?;
+    let mode = match envelope.applied_transition.mode {
+        HostSessionTransitionModeV1::Attach => OwnerHelperMode::Attach,
+        HostSessionTransitionModeV1::ResumeOneTurn => OwnerHelperMode::ResumeOneTurn,
+        _ => anyhow::bail!("ordinary successor requires Attach or ResumeOneTurn"),
+    };
+    if envelope.schema_version != 1
+        || envelope.original_start.authority_store_id != envelope.authority_store_id
+        || envelope.original_start.original_session_id != envelope.session.orchestration_session_id
+        || envelope.install_context.context.host_substrate_home
+            != envelope
+                .applied_transition
+                .workspace_binding
+                .authority_store_root
+                .physical_path
+    {
+        anyhow::bail!("ordinary helper original source/store/session mismatch");
+    }
+    let plan = AuthorityManagedSuccessorLaunchPlanV1 {
+        schema_version: 1,
+        authority_store_id: envelope.authority_store_id.clone(),
+        helper_plan: HiddenOwnerHelperLaunchPlan {
+            mode,
+            descriptor: serde_json::from_value(serde_json::to_value(&envelope.descriptor)?)?,
+            session: serde_json::from_value(serde_json::to_value(&envelope.session)?)?,
+            participant: serde_json::from_value(serde_json::to_value(&envelope.participant)?)?,
+            host_attach_contract: None,
+            startup_prompt: envelope
+                .startup_prompt
+                .as_ref()
+                .map(|prompt| serde_json::from_value(serde_json::to_value(prompt)?))
+                .transpose()?,
+            source_orchestration_session_id: None,
+        },
+        applied_transition: envelope.applied_transition.clone(),
+    };
+    plan.validate_transport_shape()?;
+    let intent = &plan.applied_transition;
+    if plan.helper_plan.descriptor.execution_scope != AgentExecutionScope::Host
+        || plan.helper_plan.session.workspace_root
+            != intent.workspace_binding.workspace_root.physical_path
+        || plan.helper_plan.session.world_id.as_deref()
+            != intent.world_binding.as_ref().map(|w| w.world_id.as_str())
+        || plan.helper_plan.session.world_generation
+            != intent.world_binding.as_ref().map(|w| w.world_generation)
+        || plan.helper_plan.participant.lease_token.is_empty()
+        || plan
+            .helper_plan
+            .participant
+            .internal_uaa_session_id
+            .as_ref()
+            .is_none_or(|id| id.trim().is_empty())
+    {
+        anyhow::bail!("ordinary helper runtime/placement/continuity conflict");
+    }
+    Ok(plan)
+}
+
+/// Parse canonical raw bytes before typed decoding: the canonical parser rejects
+/// duplicate keys; the raw principal check closes the otherwise permissive enum.
+#[cfg(target_os = "linux")]
+pub(crate) fn decode_ordinary_successor_helper_envelope(
+    bytes: &[u8],
+) -> Result<OrdinarySuccessorHelperEnvelopeV1> {
+    use super::host_session_authority::canonical_json;
+    let raw: serde_json::Value =
+        canonical_json::from_slice(bytes).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let mut pending = vec![&raw];
+    while let Some(value) = pending.pop() {
+        match value {
+            serde_json::Value::Object(object) => {
+                if object.get("kind").and_then(serde_json::Value::as_str) == Some("unix")
+                    && (object.len() != 3
+                        || !["kind", "account", "uid"]
+                            .iter()
+                            .all(|key| object.contains_key(*key)))
+                {
+                    anyhow::bail!("ordinary helper principal contains unknown fields");
+                }
+                pending.extend(object.values());
+            }
+            serde_json::Value::Array(values) => pending.extend(values),
+            _ => {}
+        }
+    }
+    // These existing unit enums use JSON strings, whereas the authority codec
+    // directly serializes unit variants as bound enum tags. Preserve their typed
+    // JSON representation and every declared field, including explicit nulls.
+    let envelope: OrdinarySuccessorHelperEnvelopeV1 = serde_json::from_value(raw)?;
+    let typed_json = serde_json::to_value(&envelope)?;
+    let typed_bytes = canonical_json::to_vec(&typed_json).map_err(|e| anyhow::anyhow!("{e}"))?;
+    if typed_bytes.as_slice() != bytes {
+        anyhow::bail!(
+            "ordinary helper requires every declared field and exact typed JSON encoding"
+        );
+    }
+    validate_ordinary_successor_helper_envelope(&envelope)?;
+    Ok(envelope)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn encode_ordinary_successor_helper_envelope(
+    selection: &Arc<super::native_launch_context::AuthenticatedOrdinarySelectionV1>,
+    install_context: &transport_api_types::InstallBootstrapContextCarrierV1,
+    plan: &AuthorityManagedSuccessorLaunchPlanV1,
+) -> Result<Vec<u8>> {
+    plan.validate_transport_shape()?;
+    let admission = authenticate_ordinary_public_helper_run(
+        selection,
+        &plan.helper_plan,
+        Some(&plan.applied_transition),
+    )?;
+    let original_start =
+        crate::execution::orchestrator_world_dispatch::ordinary_start_selection_carrier(selection)?;
+    let envelope = OrdinarySuccessorHelperEnvelopeV1 {
+        schema_version: 1,
+        install_context: install_context.clone(),
+        original_start,
+        authority_store_id: plan.authority_store_id.clone(),
+        descriptor: serde_json::from_value(serde_json::to_value(&plan.helper_plan.descriptor)?)?,
+        session: serde_json::from_value(serde_json::to_value(&plan.helper_plan.session)?)?,
+        participant: serde_json::from_value(serde_json::to_value(&plan.helper_plan.participant)?)?,
+        startup_prompt: plan
+            .helper_plan
+            .startup_prompt
+            .as_ref()
+            .map(|p| serde_json::from_value(serde_json::to_value(p)?))
+            .transpose()?,
+        applied_transition: plan.applied_transition.clone(),
+    };
+    let bytes =
+        super::host_session_authority::canonical_json::to_vec(&serde_json::to_value(&envelope)?)?;
+    decode_ordinary_successor_helper_envelope(&bytes)?;
+    admission.revalidate_before_effect()?;
+    Ok(bytes)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn authenticate_ordinary_successor_helper(
+    bytes: &[u8],
+    incoming: &transport_api_types::InstallBootstrapContextCarrierV1,
+) -> Result<(
+    Arc<super::native_launch_context::AuthenticatedOrdinarySelectionV1>,
+    AuthorityManagedSuccessorLaunchPlanV1,
+)> {
+    let envelope = decode_ordinary_successor_helper_envelope(bytes)?;
+    if &envelope.install_context != incoming {
+        anyhow::bail!("ordinary successor install carrier changed");
+    }
+    let selection =
+        recover_ordinary_public_selection(incoming, &envelope.session.orchestration_session_id)?;
+    if crate::execution::orchestrator_world_dispatch::ordinary_start_selection_carrier(&selection)?
+        != envelope.original_start
+    {
+        anyhow::bail!("ordinary successor original selected issuer changed");
+    }
+    let plan = validate_ordinary_successor_helper_envelope(&envelope)?;
+    // The inherited lock is checked independently of the serialized request.
+    validate_inherited_authority_successor_launch_guard(&plan)?;
+    let admission = authenticate_ordinary_public_helper_run(
+        &selection,
+        &plan.helper_plan,
+        Some(&plan.applied_transition),
+    )?;
+    admission.revalidate_before_effect()?;
+    Ok((selection, plan))
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn load_ordinary_successor_helper_envelope(path: &Path) -> Result<Vec<u8>> {
+    use std::os::unix::fs::OpenOptionsExt;
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(path)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_file()
+        || metadata.uid() != unsafe { libc::geteuid() }
+        || metadata.permissions().mode() & 0o777 != 0o600
+        || metadata.len() > 1024 * 1024
+    {
+        anyhow::bail!("ordinary helper envelope custody invalid");
+    }
+    let mut bytes = Vec::new();
+    file.take(1024 * 1024 + 1).read_to_end(&mut bytes)?;
+    if bytes.len() > 1024 * 1024 {
+        anyhow::bail!("ordinary helper envelope too large");
+    }
+    decode_ordinary_successor_helper_envelope(&bytes)?;
+    Ok(bytes)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn launch_ordinary_successor_owner_helper(
+    selection: &Arc<super::native_launch_context::AuthenticatedOrdinarySelectionV1>,
+    install_context: &transport_api_types::InstallBootstrapContextCarrierV1,
+    plan: &AuthorityManagedSuccessorLaunchPlanV1,
+    permit: AuthorityManagedSuccessorLaunchPermitV1,
+    world: bool,
+    no_world: bool,
+) -> Result<AuthorityManagedSuccessorLaunchReceiptV1> {
+    plan.validate_transport_shape()?;
+    let admission = authenticate_ordinary_public_helper_run(
+        selection,
+        &plan.helper_plan,
+        Some(&plan.applied_transition),
+    )?;
+    admission.revalidate_before_effect()?;
+    let (mut launch_episode, launch_binding) =
+        host_execution_episode_for_helper_plan(&plan.helper_plan)?;
+    if permit.authority_store_id != plan.authority_store_id
+        || permit.intent_id != plan.applied_transition.intent_id
+    {
+        anyhow::bail!("authority-managed successor launch permit identity was substituted");
+    }
+    let Some(launch_guard) = permit.launch_guard else {
+        if authority_managed_successor_completion(plan)?.is_none() {
+            anyhow::bail!("authority-managed successor joined launch lost its HSA completion");
+        }
+        return Ok(AuthorityManagedSuccessorLaunchReceiptV1 {
+            launch_receipt: authority_managed_successor_joined_receipt(plan),
+            _launch_guard: None,
+        });
+    };
+    let bytes = encode_ordinary_successor_helper_envelope(selection, install_context, plan)?;
+    let root = selection.require_ordinary_configured_authority()?;
+    let directory = Path::new(&root.accepted_home().physical_path)
+        .join("runtime-control/durable-start/ordinary-successor-plans-v1");
+    admission.revalidate_before_effect()?;
+    fs::create_dir_all(&directory)?;
+    let plan_path = directory.join(format!(
+        "{}-{}.json",
+        plan.applied_transition.intent_id,
+        Uuid::now_v7()
+    ));
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(&plan_path)?;
+    file.write_all(&bytes)?;
+    file.sync_all()?;
+    let exe = env::current_exe().context(
+        "failed to resolve current substrate executable for authority-managed owner-helper launch",
+    )?;
+    let mut command = Command::new(exe);
+    command
+        .arg("--install-bootstrap-context-v1")
+        .arg(install_context.encode().map_err(anyhow::Error::msg)?);
+    if world {
+        command.arg("--world");
+    } else if no_world {
+        command.arg("--no-world");
+    }
+    command
+        .args(["agent", HIDDEN_OWNER_HELPER_SUBCOMMAND, "--plan-file"])
+        .arg(&plan_path)
+        .current_dir(&plan.helper_plan.session.workspace_root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    let launch_guard_fd = launch_guard.lock_file.as_raw_fd();
+    command.env(
+        AUTHORITY_SUCCESSOR_LAUNCH_GUARD_FD_ENV,
+        launch_guard_fd.to_string(),
+    );
+    // Clear close-on-exec only in the forked child. Toggling the parent descriptor
+    // would let an unrelated concurrent spawn inherit and prolong this guard.
+    unsafe {
+        command.pre_exec(move || {
+            let flags = libc::fcntl(launch_guard_fd, libc::F_GETFD);
+            if flags < 0 {
+                return Err(io::Error::last_os_error());
+            }
+            if libc::fcntl(launch_guard_fd, libc::F_SETFD, flags & !libc::FD_CLOEXEC) < 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    admission.revalidate_before_effect()?;
+    // Establish only the reply transport while the invoking CLI still owns its
+    // exact listener. Child authentication remains before Accepted and delivery.
+    let startup = plan
+        .helper_plan
+        .startup_prompt
+        .as_ref()
+        .context("ordinary successor has no exact startup reply transport")?;
+    let startup_stream = StdUnixStream::connect(&startup.stream_path)
+        .context("connect ordinary successor startup reply transport")?;
+    let startup_fd = startup_stream.as_raw_fd();
+    command.env(
+        ORDINARY_SUCCESSOR_STARTUP_STREAM_FD_ENV,
+        startup_fd.to_string(),
+    );
+    // SAFETY: this second child-only hook transfers the live connected socket;
+    // the parent copy remains CLOEXEC and is dropped after spawn.
+    unsafe {
+        command.pre_exec(move || {
+            let flags = libc::fcntl(startup_fd, libc::F_GETFD);
+            if flags < 0 || libc::fcntl(startup_fd, libc::F_SETFD, flags & !libc::FD_CLOEXEC) < 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let child = command.spawn().with_context(|| {
+        format!(
+            "failed to spawn authority-managed owner-helper for orchestration session {}",
+            plan.helper_plan.session.orchestration_session_id
+        )
+    })?;
+    drop(startup_stream);
+    launch_episode.record_local_observation(
+        &launch_binding,
+        HostExecutionEpisodeObservationV1::Process(ProcessRefV1 { pid: child.id() }),
+    )?;
+
+    Ok(AuthorityManagedSuccessorLaunchReceiptV1 {
+        launch_receipt: HiddenOwnerHelperLaunchReceipt {
+            helper_pid: child.id(),
+            orchestration_session_id: plan.helper_plan.session.orchestration_session_id.clone(),
+            participant_id: plan.helper_plan.participant.participant_id.clone(),
+            backend_id: plan.helper_plan.descriptor.backend_id.clone(),
+        },
+        _launch_guard: Some(launch_guard),
+    })
+}
+
+/// Check only an inherited transport, never original/current admission or delivery.
+#[cfg(target_os = "linux")]
+fn verify_ordinary_successor_startup_stream_v1(
+    descriptor: std::os::fd::OwnedFd,
+    expected_path: &Path,
+    expected_parent: libc::pid_t,
+) -> Result<StdUnixStream> {
+    use anyhow::ensure;
+    for (option, expected) in [
+        (libc::SO_DOMAIN, libc::AF_UNIX),
+        (libc::SO_TYPE, libc::SOCK_STREAM),
+    ] {
+        let mut value: libc::c_int = 0;
+        let mut size = std::mem::size_of_val(&value) as libc::socklen_t;
+        // SAFETY: the owned fd remains open; writable output has the advertised size.
+        let result = unsafe {
+            libc::getsockopt(
+                descriptor.as_raw_fd(),
+                libc::SOL_SOCKET,
+                option,
+                (&mut value as *mut libc::c_int).cast(),
+                &mut size,
+            )
+        };
+        ensure!(
+            result == 0 && size as usize == std::mem::size_of_val(&value) && value == expected,
+            "ordinary successor reply is not a Unix stream socket"
+        );
+    }
+    // Conversion is only after the actual socket family/type have been checked.
+    let stream = StdUnixStream::from(descriptor);
+    ensure!(
+        stream.peer_addr()?.as_pathname() == Some(expected_path),
+        "ordinary successor reply listener path changed"
+    );
+    let mut peer: libc::ucred = unsafe { std::mem::zeroed() };
+    let mut peer_len = std::mem::size_of_val(&peer) as libc::socklen_t;
+    // SAFETY: peer is writable and peer_len advertises its exact size.
+    let peer_result = unsafe {
+        libc::getsockopt(
+            stream.as_raw_fd(),
+            libc::SOL_SOCKET,
+            libc::SO_PEERCRED,
+            (&mut peer as *mut libc::ucred).cast(),
+            &mut peer_len,
+        )
+    };
+    ensure!(
+        peer_result == 0
+            && peer_len as usize == std::mem::size_of_val(&peer)
+            && expected_parent > 0
+            && peer.pid == expected_parent
+            && peer.uid == unsafe { libc::geteuid() },
+        "ordinary successor reply is not owned by the invoking parent"
+    );
+    let mut readiness = libc::pollfd {
+        fd: stream.as_raw_fd(),
+        events: libc::POLLRDHUP,
+        revents: 0,
+    };
+    // SAFETY: one live pollfd, zero wait. Closing/closed parent transport grants nothing.
+    let polled = unsafe { libc::poll(&mut readiness, 1, 0) };
+    ensure!(
+        polled >= 0
+            && readiness.revents
+                & (libc::POLLRDHUP | libc::POLLHUP | libc::POLLERR | libc::POLLNVAL)
+                == 0,
+        "ordinary successor reply transport is closed"
+    );
+    Ok(stream)
+}
+
+#[cfg(target_os = "linux")]
+fn capture_ordinary_successor_startup_stream_v1(
+    inherited: libc::c_int,
+    expected_path: &Path,
+    expected_parent: libc::pid_t,
+) -> Result<StdUnixStream> {
+    use std::os::fd::{FromRawFd, OwnedFd};
+    anyhow::ensure!(
+        inherited >= 3,
+        "ordinary successor startup reply descriptor is invalid"
+    );
+    // Duplicate before inspection. A bad supplied fd never closes an unrelated owner.
+    let copied = unsafe { libc::fcntl(inherited, libc::F_DUPFD_CLOEXEC, 3) };
+    anyhow::ensure!(
+        copied >= 0,
+        "ordinary successor startup reply descriptor is closed"
+    );
+    // SAFETY: successful F_DUPFD_CLOEXEC returned this new exclusively owned fd.
+    let descriptor = unsafe { OwnedFd::from_raw_fd(copied) };
+    let stream =
+        verify_ordinary_successor_startup_stream_v1(descriptor, expected_path, expected_parent)?;
+    stream.set_nonblocking(true)?;
+    // The checked socket is the private launcher-owned original. Drop that extra
+    // inherited copy so only the CLOEXEC duplicate owns helper output/EOF.
+    if unsafe { libc::close(inherited) } != 0 {
+        return Err(io::Error::last_os_error()).context("close inherited startup reply transport");
+    }
+    Ok(stream)
+}
+
+/// Activate only after the ordinary helper's unchanged original/current checks.
+#[cfg(target_os = "linux")]
+pub(crate) fn activate_ordinary_successor_startup_stream_v1(
+    stream: StdUnixStream,
+    expected_path: &Path,
+) -> Result<StdUnixStream> {
+    verify_ordinary_successor_startup_stream_v1(stream.into(), expected_path, unsafe {
+        libc::getppid()
+    })
+}
+
+/// Capture transport custody before slow helper authentication; no Accepted
+/// envelope, authority mutation, native process or prompt delivery is enabled.
+#[cfg(target_os = "linux")]
+pub(crate) fn take_ordinary_successor_startup_stream_v1(
+    expected_path: &Path,
+) -> Result<StdUnixStream> {
+    let inherited = env::var(ORDINARY_SUCCESSOR_STARTUP_STREAM_FD_ENV)
+        .context("ordinary successor has no inherited startup reply transport")?
+        .parse::<libc::c_int>()
+        .context("ordinary successor startup reply descriptor is invalid")?;
+    capture_ordinary_successor_startup_stream_v1(inherited, expected_path, unsafe {
+        libc::getppid()
+    })
+}
+
+#[cfg(target_os = "linux")]
 pub(crate) fn acquire_authority_managed_successor_launch_permit(
     plan: &AuthorityManagedSuccessorLaunchPlanV1,
 ) -> Result<AuthorityManagedSuccessorLaunchPermitV1> {
@@ -1599,6 +2441,7 @@ fn try_acquire_authority_managed_successor_launch_guard(
         .create(true)
         .write(true)
         .truncate(false)
+        .mode(0o600)
         .open(&path)
         .with_context(|| {
             format!(
@@ -2234,10 +3077,178 @@ pub(crate) type PrivateStopRequestSender = mpsc::UnboundedSender<PrivateStopRequ
 pub(crate) type PrivateCancelRequestReceiver = mpsc::UnboundedReceiver<PrivateCancelRequest>;
 pub(crate) type PrivateCancelRequestSender = mpsc::UnboundedSender<PrivateCancelRequest>;
 
+// Accepted connections remain owned even when the listener exits or panics.
+#[cfg(unix)]
+#[derive(Clone, Debug, Default)]
+pub(crate) struct OwnedTransportHandlers {
+    state: Arc<Mutex<OwnedTransportHandlerState>>,
+}
+
+#[cfg(unix)]
+#[derive(Debug, Default)]
+struct OwnedTransportHandlerState {
+    tasks: Vec<tokio::task::JoinHandle<Result<()>>>,
+    accepted_count: usize,
+    failures: OwnedTransportFailures,
+}
+
+// Failure count survives reaping; only the first bounded detail is retained.
+#[cfg(unix)]
+#[derive(Debug, Default)]
+pub(crate) struct OwnedTransportFailures {
+    count: usize,
+    first_detail: Option<String>,
+    panicked: usize,
+    cancelled: usize,
+    timed_out: usize,
+}
+
+#[cfg(unix)]
+impl OwnedTransportFailures {
+    pub(crate) fn record(&mut self, error: impl std::fmt::Display) {
+        self.count += 1;
+        if self.first_detail.is_none() {
+            self.first_detail = Some(error.to_string().chars().take(1024).collect());
+        }
+    }
+
+    pub(crate) fn record_result(&mut self, result: Result<()>) {
+        if let Err(error) = result {
+            for cause in error.chain() {
+                if let Some(join) = cause.downcast_ref::<tokio::task::JoinError>() {
+                    self.panicked += usize::from(join.is_panic());
+                    self.cancelled += usize::from(join.is_cancelled());
+                }
+                if cause
+                    .downcast_ref::<io::Error>()
+                    .is_some_and(|error| error.kind() == io::ErrorKind::TimedOut)
+                {
+                    self.timed_out += 1;
+                }
+            }
+            self.record(format!("{error:#}"));
+        }
+    }
+
+    pub(crate) fn into_result(self) -> Result<()> {
+        if self.count != 0 {
+            anyhow::bail!(
+                "{} owned transport failure(s) (panicked={}, cancelled={}, timed_out={}); first detail (limited to 1024 characters): {}",
+                self.count, self.panicked, self.cancelled, self.timed_out,
+                self.first_detail.as_deref().unwrap_or("unavailable"),
+            );
+        }
+        Ok(())
+    }
+}
+
+#[cfg(unix)]
+impl OwnedTransportHandlers {
+    #[cfg(unix)]
+    pub(crate) fn spawn(
+        &self,
+        handler: impl std::future::Future<Output = Result<()>> + Send + 'static,
+    ) -> Result<()> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| anyhow::anyhow!("owned transport handler registry poisoned"))?;
+        // Reap completed tasks without retaining a success-history list for
+        // long-lived Start/World listeners. Pending handles stay owned.
+        let mut tasks = std::mem::take(&mut state.tasks);
+        tasks.retain_mut(|task| match futures::FutureExt::now_or_never(&mut *task) {
+            Some(Ok(Ok(()))) => false,
+            Some(Ok(Err(error))) => {
+                state
+                    .failures
+                    .record_result(Err(error).context("accepted transport handler failed"));
+                false
+            }
+            Some(Err(error)) => {
+                state.failures.record_result(
+                    Err(error).context("accepted transport handler did not finish normally"),
+                );
+                false
+            }
+            None => true,
+        });
+        state.tasks = tasks;
+        state.accepted_count += 1;
+        state.tasks.push(tokio::spawn(handler));
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) async fn drain(&self, timeout: Duration) -> Result<usize> {
+        let (state, poisoned) = match self.state.lock() {
+            Ok(mut state) => (std::mem::take(&mut *state), false),
+            Err(poisoned) => (std::mem::take(&mut *poisoned.into_inner()), true),
+        };
+        let count = state.accepted_count;
+        let mut failures = state.failures;
+        if poisoned {
+            failures.record("owned transport handler registry poisoned");
+        }
+        let deadline = tokio::time::Instant::now() + timeout;
+        for (index, task) in state.tasks.into_iter().enumerate() {
+            let mut task = Some(task);
+            if let Err(error) = join_owned_transport_task(
+                &mut task,
+                &format!("accepted transport handler {index}"),
+                deadline.saturating_duration_since(tokio::time::Instant::now()),
+            )
+            .await
+            {
+                failures.record_result(Err(error));
+            }
+        }
+        failures.into_result()?;
+        Ok(count)
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) async fn join_owned_transport_task(
+    task: &mut Option<tokio::task::JoinHandle<Result<()>>>,
+    label: &str,
+    timeout: Duration,
+) -> Result<()> {
+    let mut task = task
+        .take()
+        .with_context(|| format!("{label} ownership absent"))?;
+    match tokio::time::timeout(timeout, &mut task).await {
+        Ok(Ok(result)) => result.with_context(|| format!("{label} failed")),
+        Ok(Err(error)) => Err(error).with_context(|| format!("{label} did not finish normally")),
+        Err(_) => {
+            task.abort();
+            let result = task.await;
+            Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                format!("{label} timed out; owned task aborted and reaped: {result:?}"),
+            ))
+            .context("owned transport task did not finish normally")
+        }
+    }
+}
+
+#[cfg(unix)]
+pub(crate) fn combine_owned_transport_results(results: Vec<Result<()>>) -> Result<()> {
+    let failures = results
+        .into_iter()
+        .filter_map(|result| result.err().map(|error| format!("{error:#}")))
+        .collect::<Vec<_>>();
+    if !failures.is_empty() {
+        anyhow::bail!("{}", failures.join("; "));
+    }
+    Ok(())
+}
+
 #[derive(Debug)]
 pub(crate) struct PrivateStopTransport {
     shutdown_tx: Option<oneshot::Sender<()>>,
-    task: Option<tokio::task::JoinHandle<()>>,
+    task: Option<tokio::task::JoinHandle<Result<()>>>,
+    #[cfg(unix)]
+    handlers: OwnedTransportHandlers,
     path: PathBuf,
     #[cfg(target_os = "linux")]
     endpoint_identity: Option<PrivateEpisodeEndpointIdentityV1>,
@@ -2246,8 +3257,12 @@ pub(crate) struct PrivateStopTransport {
 #[derive(Debug)]
 pub(crate) struct PrivateCancelTransport {
     shutdown_tx: Option<oneshot::Sender<()>>,
-    task: Option<tokio::task::JoinHandle<()>>,
+    task: Option<tokio::task::JoinHandle<Result<()>>>,
+    #[cfg(unix)]
+    handlers: OwnedTransportHandlers,
     path: PathBuf,
+    #[cfg(target_os = "linux")]
+    endpoint_identity: Option<PrivateEpisodeEndpointIdentityV1>,
 }
 
 #[derive(Debug)]
@@ -2263,7 +3278,9 @@ pub(crate) type PrivatePromptRequestSender = mpsc::UnboundedSender<PrivatePrompt
 #[derive(Debug)]
 pub(crate) struct PrivatePromptTransport {
     shutdown_tx: Option<oneshot::Sender<()>>,
-    task: Option<tokio::task::JoinHandle<()>>,
+    task: Option<tokio::task::JoinHandle<Result<()>>>,
+    #[cfg(unix)]
+    handlers: OwnedTransportHandlers,
     path: PathBuf,
     #[cfg(target_os = "linux")]
     endpoint_identity: Option<PrivateEpisodeEndpointIdentityV1>,
@@ -2311,6 +3328,29 @@ impl PrivatePromptTransport {
         {
             let _ = tokio::fs::remove_file(&self.path).await;
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) async fn close_owned(&mut self, timeout: Duration) -> Result<()> {
+        if let Some(shutdown_tx) = self.shutdown_tx.take() {
+            let _ = shutdown_tx.send(());
+        }
+        let mut results = vec![
+            join_owned_transport_task(&mut self.task, "private prompt listener", timeout).await,
+        ];
+        // Never short-circuit after a listener error: accepted tasks stay owned.
+        results.push(self.handlers.drain(timeout).await.map(|_| ()));
+        let cleanup = if let Some(identity) = self.endpoint_identity.take() {
+            remove_private_episode_endpoint_if_same(&self.path, identity)
+        } else {
+            match tokio::fs::remove_file(&self.path).await {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+                Err(error) => Err(error).context("remove owned prompt endpoint"),
+            }
+        };
+        results.push(cleanup);
+        combine_owned_transport_results(results)
     }
 }
 
@@ -2382,6 +3422,59 @@ impl PrivateStopTransport {
             let _ = tokio::fs::remove_file(&self.path).await;
         }
     }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) async fn close_owned(
+        &mut self,
+        mut receiver: Option<&mut PrivateStopRequestReceiver>,
+        timeout: Duration,
+    ) -> Result<()> {
+        let mut results = Vec::new();
+        // Stop admission before joining a handler which may await this response.
+        if let Some(receiver) = receiver.as_deref_mut() {
+            receiver.close();
+            while let Ok(competing) = receiver.try_recv() {
+                let _ = competing
+                    .response_tx
+                    .send(PrivateStopOutcome::ProtocolError);
+                results.push(Err(anyhow::anyhow!(
+                    "stop competed with owned helper cleanup"
+                )));
+            }
+        }
+        if let Some(shutdown_tx) = self.shutdown_tx.take() {
+            let _ = shutdown_tx.send(());
+        }
+        results.push(
+            join_owned_transport_task(&mut self.task, "private stop listener", timeout).await,
+        );
+        results.push(match self.handlers.drain(timeout).await {
+            Ok(0) => Ok(()),
+            Ok(_) => Err(anyhow::anyhow!(
+                "accepted stop competed with owned helper cleanup"
+            )),
+            Err(error) => Err(error),
+        });
+        if receiver
+            .as_ref()
+            .is_some_and(|receiver| receiver.sender_strong_count() != 0)
+        {
+            results.push(Err(anyhow::anyhow!(
+                "accepted stop delivery remains owned after drain"
+            )));
+        }
+        let cleanup = if let Some(identity) = self.endpoint_identity.take() {
+            remove_private_episode_endpoint_if_same(&self.path, identity)
+        } else {
+            match tokio::fs::remove_file(&self.path).await {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+                Err(error) => Err(error).context("remove owned stop endpoint"),
+            }
+        };
+        results.push(cleanup);
+        combine_owned_transport_results(results)
+    }
 }
 
 impl PrivateCancelTransport {
@@ -2401,6 +3494,24 @@ impl PrivateCancelTransport {
         {
             let _ = tokio::fs::remove_file(&self.path).await;
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) async fn close_owned(&mut self, timeout: Duration) -> Result<()> {
+        if let Some(shutdown_tx) = self.shutdown_tx.take() {
+            let _ = shutdown_tx.send(());
+        }
+        let mut results = vec![
+            join_owned_transport_task(&mut self.task, "private cancel listener", timeout).await,
+        ];
+        results.push(self.handlers.drain(timeout).await.map(|_| ()));
+        let cleanup = if let Some(identity) = self.endpoint_identity.take() {
+            remove_private_episode_endpoint_if_same(&self.path, identity)
+        } else {
+            Err(anyhow::anyhow!("owned cancel endpoint identity absent"))
+        };
+        results.push(cleanup);
+        combine_owned_transport_results(results)
     }
 }
 
@@ -2861,7 +3972,7 @@ where
     );
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "linux")))]
 pub(crate) fn run_hidden_owner_helper_startup_prompt_stream_with_action(
     listener: StartupPromptTransportListener,
     json: bool,
@@ -3745,31 +4856,45 @@ pub(crate) async fn register_private_stop_transport(
     remove_existing_stop_transport_path(&path)?;
     let listener = UnixListener::bind(&path)
         .with_context(|| format!("failed to bind private stop transport {}", path.display()))?;
+    #[cfg(target_os = "linux")]
+    let endpoint_identity = private_episode_endpoint_identity(&path)?;
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
     let path_for_task = path.clone();
+    let handlers = OwnedTransportHandlers::default();
+    let handlers_for_task = handlers.clone();
+    #[cfg(target_os = "linux")]
+    let endpoint_identity_for_task = endpoint_identity.clone();
     let task = tokio::spawn(async move {
-        loop {
-            tokio::select! {
-                _ = &mut shutdown_rx => break,
-                accept = listener.accept() => {
-                    let Ok((stream, _)) = accept else {
-                        break;
-                    };
-                    let stop_tx = stop_tx.clone();
-                    tokio::spawn(async move {
-                        let _ = handle_private_stop_connection(stream, stop_tx).await;
-                    });
+        let listener_result: Result<()> = async {
+            loop {
+                tokio::select! {
+                    _ = &mut shutdown_rx => break,
+                    accept = listener.accept() => {
+                        let (stream, _) = accept.context("accept private stop connection")?;
+                        let stop_tx = stop_tx.clone();
+                        handlers_for_task.spawn(handle_private_stop_connection(stream, stop_tx))?;
+                    }
                 }
             }
+            Ok(())
         }
-        let _ = tokio::fs::remove_file(&path_for_task).await;
+        .await;
+        #[cfg(target_os = "linux")]
+        let cleanup_result =
+            remove_private_episode_endpoint_if_same(&path_for_task, endpoint_identity_for_task);
+        #[cfg(not(target_os = "linux"))]
+        let cleanup_result = tokio::fs::remove_file(&path_for_task)
+            .await
+            .map_err(anyhow::Error::from);
+        combine_owned_transport_results(vec![listener_result, cleanup_result])
     });
     Ok(PrivateStopTransport {
         shutdown_tx: Some(shutdown_tx),
         task: Some(task),
+        handlers,
         path,
         #[cfg(target_os = "linux")]
-        endpoint_identity: None,
+        endpoint_identity: Some(endpoint_identity),
     })
 }
 
@@ -3859,29 +4984,38 @@ pub(crate) async fn register_durable_start_private_stop_transport(
     }
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
     let path_for_task = path.clone();
+    let handlers = OwnedTransportHandlers::default();
+    let handlers_for_task = handlers.clone();
+    #[cfg(target_os = "linux")]
+    let endpoint_identity_for_task = endpoint_identity.clone();
     let task = tokio::spawn(async move {
-        loop {
-            tokio::select! {
-                _ = &mut shutdown_rx => break,
-                accept = listener.accept() => {
-                    let Ok((stream, _)) = accept else {
-                        break;
-                    };
-                    let stop_tx = stop_tx.clone();
-                    tokio::spawn(async move {
-                        let _ = handle_private_stop_connection(stream, stop_tx).await;
-                    });
+        let listener_result: Result<()> = async {
+            loop {
+                tokio::select! {
+                    _ = &mut shutdown_rx => break,
+                    accept = listener.accept() => {
+                        let (stream, _) = accept.context("accept private stop connection")?;
+                        let stop_tx = stop_tx.clone();
+                        handlers_for_task.spawn(handle_private_stop_connection(stream, stop_tx))?;
+                    }
                 }
             }
+            Ok(())
         }
+        .await;
         #[cfg(target_os = "linux")]
-        let _ = remove_private_episode_endpoint_if_same(&path_for_task, endpoint_identity);
+        let cleanup_result =
+            remove_private_episode_endpoint_if_same(&path_for_task, endpoint_identity_for_task);
         #[cfg(not(target_os = "linux"))]
-        let _ = tokio::fs::remove_file(&path_for_task).await;
+        let cleanup_result = tokio::fs::remove_file(&path_for_task)
+            .await
+            .map_err(anyhow::Error::from);
+        combine_owned_transport_results(vec![listener_result, cleanup_result])
     });
     Ok(PrivateStopTransport {
         shutdown_tx: Some(shutdown_tx),
         task: Some(task),
+        handlers,
         path,
         #[cfg(target_os = "linux")]
         endpoint_identity: Some(endpoint_identity),
@@ -3912,29 +5046,44 @@ pub(crate) async fn register_private_cancel_transport(
     remove_existing_private_cancel_transport_path(&path)?;
     let listener = UnixListener::bind(&path)
         .with_context(|| format!("failed to bind private cancel transport {}", path.display()))?;
+    #[cfg(target_os = "linux")]
+    let endpoint_identity = private_episode_endpoint_identity(&path)?;
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
     let path_for_task = path.clone();
+    let handlers = OwnedTransportHandlers::default();
+    let handlers_for_task = handlers.clone();
+    #[cfg(target_os = "linux")]
+    let endpoint_identity_for_task = endpoint_identity.clone();
     let task = tokio::spawn(async move {
+        let listener_result: Result<()> = async {
         loop {
             tokio::select! {
                 _ = &mut shutdown_rx => break,
                 accept = listener.accept() => {
-                    let Ok((stream, _)) = accept else {
-                        break;
-                    };
+                    let (stream, _) = accept.context("accept private cancel connection")?;
                     let cancel_tx = cancel_tx.clone();
-                    tokio::spawn(async move {
-                        let _ = handle_private_cancel_connection(stream, cancel_tx).await;
-                    });
+                    handlers_for_task.spawn(handle_private_cancel_connection(stream, cancel_tx))?;
                 }
             }
         }
-        let _ = tokio::fs::remove_file(&path_for_task).await;
+        Ok(())
+        }.await;
+        #[cfg(target_os = "linux")]
+        let cleanup_result =
+            remove_private_episode_endpoint_if_same(&path_for_task, endpoint_identity_for_task);
+        #[cfg(not(target_os = "linux"))]
+        let cleanup_result = tokio::fs::remove_file(&path_for_task)
+            .await
+            .map_err(anyhow::Error::from);
+        combine_owned_transport_results(vec![listener_result, cleanup_result])
     });
     Ok(PrivateCancelTransport {
         shutdown_tx: Some(shutdown_tx),
         task: Some(task),
+        handlers,
         path,
+        #[cfg(target_os = "linux")]
+        endpoint_identity: Some(endpoint_identity),
     })
 }
 
@@ -4086,6 +5235,8 @@ pub(crate) fn prompt_runtime_from_parts(
     host_toolbox_surface_authoritative: Arc<AtomicBool>,
 ) -> PromptSubmitRuntime {
     PromptSubmitRuntime {
+        #[cfg(target_os = "linux")]
+        authority: PromptSubmitAuthorityV1::Existing,
         descriptor,
         orchestration_session,
         manifest,
@@ -4233,6 +5384,8 @@ where
     F: FnMut(SubmittedPromptStreamEvent),
 {
     #[cfg(target_os = "linux")]
+    require_prompt_submit_authority_before_effect(runtime)?;
+    #[cfg(target_os = "linux")]
     let episode_observer = prompt_submission_episode_for_runtime(runtime)?;
     #[cfg(target_os = "linux")]
     observe_prompt_submission_episode(
@@ -4275,97 +5428,122 @@ where
         .run_control(request)
         .await
         .map_err(|err| anyhow::anyhow!("substrate: error: {}", err))?;
-    #[cfg(target_os = "linux")]
-    {
-        observe_prompt_submission_episode(
-            episode_observer.as_ref(),
-            &format!("prompt:{run_id}:accepted"),
-            HostExecutionEpisodeObservationV1::Prompt { accepted: true },
-        )?;
-        observe_prompt_submission_episode(
-            episode_observer.as_ref(),
-            &format!("prompt:{run_id}:stream-open"),
-            HostExecutionEpisodeObservationV1::Stream { active: true },
-        )?;
-    }
-    let agent_api::AgentWrapperRunHandle {
-        mut events,
-        completion,
-    } = control.handle;
+    let terminal = control.terminal;
+    let cancel = control.cancel;
+    let outcome = async {
+        #[cfg(target_os = "linux")]
+        {
+            observe_prompt_submission_episode(
+                episode_observer.as_ref(),
+                &format!("prompt:{run_id}:accepted"),
+                HostExecutionEpisodeObservationV1::Prompt { accepted: true },
+            )?;
+            observe_prompt_submission_episode(
+                episode_observer.as_ref(),
+                &format!("prompt:{run_id}:stream-open"),
+                HostExecutionEpisodeObservationV1::Stream { active: true },
+            )?;
+        }
+        let agent_api::AgentWrapperRunHandle {
+            mut events,
+            completion,
+        } = control.handle;
 
-    let mut event_index = 0_u64;
-    while let Some(wrapper_event) = events.next().await {
-        let (orchestration_snapshot, manifest_snapshot, event) = {
-            let mut orchestration_guard = runtime
-                .orchestration_session
-                .lock()
-                .expect("orchestration session mutex poisoned");
+        let mut event_index = 0_u64;
+        while let Some(wrapper_event) = events.next().await {
+            let (orchestration_snapshot, manifest_snapshot, event) = {
+                let mut orchestration_guard = runtime
+                    .orchestration_session
+                    .lock()
+                    .expect("orchestration session mutex poisoned");
+                let mut manifest_guard = runtime
+                    .manifest
+                    .lock()
+                    .expect("runtime manifest mutex poisoned");
+                if let Some(session_id) = extract_session_handle_id(wrapper_event.data.as_ref()) {
+                    if manifest_guard.internal.uaa_session_id.as_deref() != Some(session_id) {
+                        manifest_guard.set_uaa_session_id(session_id.to_string());
+                    }
+                }
+                manifest_guard.touch_event(Utc::now());
+                orchestration_guard.touch_active();
+                let event = translate_prompt_wrapper_event(
+                    &manifest_guard,
+                    &orchestration_guard,
+                    run_id,
+                    wrapper_event,
+                );
+                (orchestration_guard.clone(), manifest_guard.clone(), event)
+            };
+            #[cfg(target_os = "linux")]
+            if episode_observer.is_some() {
+                event_index += 1;
+                let observed_at = TimestampV1::parse(
+                    Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+                )
+                .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                observe_prompt_submission_episode(
+                    episode_observer.as_ref(),
+                    &format!("prompt:{run_id}:event:{event_index}"),
+                    HostExecutionEpisodeObservationV1::Heartbeat { observed_at },
+                )?;
+            } else {
+                persist_runtime_snapshots(
+                    &runtime.store,
+                    &orchestration_snapshot,
+                    &manifest_snapshot,
+                )?;
+            }
+            #[cfg(not(target_os = "linux"))]
+            persist_runtime_snapshots(&runtime.store, &orchestration_snapshot, &manifest_snapshot)?;
+            on_event(SubmittedPromptStreamEvent::Agent(Box::new(event)));
+        }
+
+        let completion = completion
+            .await
+            .map_err(|err| anyhow::anyhow!("substrate: error: {}", err))?;
+        #[cfg(target_os = "linux")]
+        observe_prompt_submission_episode(
+            episode_observer.as_ref(),
+            &format!("prompt:{run_id}:stream-closed"),
+            HostExecutionEpisodeObservationV1::Stream { active: false },
+        )?;
+        if let Some(session_id) = extract_session_handle_id(completion.data.as_ref()) {
             let mut manifest_guard = runtime
                 .manifest
                 .lock()
                 .expect("runtime manifest mutex poisoned");
-            if let Some(session_id) = extract_session_handle_id(wrapper_event.data.as_ref()) {
-                if manifest_guard.internal.uaa_session_id.as_deref() != Some(session_id) {
-                    manifest_guard.set_uaa_session_id(session_id.to_string());
-                }
+            if manifest_guard.internal.uaa_session_id.as_deref() != Some(session_id) {
+                manifest_guard.set_uaa_session_id(session_id.to_string());
             }
-            manifest_guard.touch_event(Utc::now());
-            orchestration_guard.touch_active();
-            let event = translate_prompt_wrapper_event(
-                &manifest_guard,
-                &orchestration_guard,
-                run_id,
-                wrapper_event,
-            );
-            (orchestration_guard.clone(), manifest_guard.clone(), event)
-        };
-        #[cfg(target_os = "linux")]
-        if episode_observer.is_some() {
-            event_index += 1;
-            let observed_at =
-                TimestampV1::parse(Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true))
-                    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+            #[cfg(target_os = "linux")]
             observe_prompt_submission_episode(
                 episode_observer.as_ref(),
-                &format!("prompt:{run_id}:event:{event_index}"),
-                HostExecutionEpisodeObservationV1::Heartbeat { observed_at },
+                &format!("prompt:{run_id}:handle"),
+                HostExecutionEpisodeObservationV1::Handle { present: true },
             )?;
-        } else {
-            persist_runtime_snapshots(&runtime.store, &orchestration_snapshot, &manifest_snapshot)?;
         }
-        #[cfg(not(target_os = "linux"))]
-        persist_runtime_snapshots(&runtime.store, &orchestration_snapshot, &manifest_snapshot)?;
-        on_event(SubmittedPromptStreamEvent::Agent(Box::new(event)));
+        Ok(SubmittedPromptCompletion {
+            exit_code: completion.status.code().unwrap_or(-1),
+            warning: warning_for_exit_status(&completion.status),
+        })
     }
-
-    let completion = completion
-        .await
-        .map_err(|err| anyhow::anyhow!("substrate: error: {}", err))?;
-    #[cfg(target_os = "linux")]
-    observe_prompt_submission_episode(
-        episode_observer.as_ref(),
-        &format!("prompt:{run_id}:stream-closed"),
-        HostExecutionEpisodeObservationV1::Stream { active: false },
-    )?;
-    if let Some(session_id) = extract_session_handle_id(completion.data.as_ref()) {
-        let mut manifest_guard = runtime
-            .manifest
-            .lock()
-            .expect("runtime manifest mutex poisoned");
-        if manifest_guard.internal.uaa_session_id.as_deref() != Some(session_id) {
-            manifest_guard.set_uaa_session_id(session_id.to_string());
-        }
-        #[cfg(target_os = "linux")]
-        observe_prompt_submission_episode(
-            episode_observer.as_ref(),
-            &format!("prompt:{run_id}:handle"),
-            HostExecutionEpisodeObservationV1::Handle { present: true },
-        )?;
+    .await;
+    if outcome.is_err() {
+        cancel.cancel();
     }
-    Ok(SubmittedPromptCompletion {
-        exit_code: completion.status.code().unwrap_or(-1),
-        warning: warning_for_exit_status(&completion.status),
-    })
+    let observed = terminal.wait().await;
+    observed.require_checked().map_err(|error| {
+        anyhow::Error::new(error).context(format!(
+            "submission_outcome_unknown: native acknowledgment unavailable; enclosing outcome: {}",
+            outcome
+                .as_ref()
+                .err()
+                .map(|error| format!("{error:#}"))
+                .unwrap_or_else(|| "completion received".into())
+        ))
+    })?;
+    outcome
 }
 
 fn prompt_submit_continuity_session_id(runtime: &PromptSubmitRuntime) -> String {
@@ -4711,6 +5889,7 @@ where
     F: FnMut(SubmittedPromptStreamEvent),
 {
     use http_body_util::BodyExt as _;
+    require_prompt_submit_authority_before_effect(runtime)?;
 
     let manifest = runtime
         .manifest
@@ -5599,31 +6778,44 @@ pub(crate) async fn register_private_prompt_transport(
     remove_existing_stop_transport_path(&path)?;
     let listener = UnixListener::bind(&path)
         .with_context(|| format!("failed to bind private prompt transport {}", path.display()))?;
+    #[cfg(target_os = "linux")]
+    let endpoint_identity = private_episode_endpoint_identity(&path)?;
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
     let path_for_task = path.clone();
+    let handlers = OwnedTransportHandlers::default();
+    let handlers_for_task = handlers.clone();
+    #[cfg(target_os = "linux")]
+    let endpoint_identity_for_task = endpoint_identity.clone();
     let task = tokio::spawn(async move {
+        let listener_result: Result<()> = async {
         loop {
             tokio::select! {
                 _ = &mut shutdown_rx => break,
                 accept = listener.accept() => {
-                    let Ok((stream, _)) = accept else {
-                        break;
-                    };
+                    let (stream, _) = accept.context("accept private prompt connection")?;
                     let prompt_tx = prompt_tx.clone();
-                    tokio::spawn(async move {
-                        let _ = handle_private_prompt_connection(stream, prompt_tx).await;
-                    });
+                    handlers_for_task.spawn(handle_private_prompt_connection(stream, prompt_tx))?;
                 }
             }
         }
-        let _ = tokio::fs::remove_file(&path_for_task).await;
+        Ok(())
+        }.await;
+        #[cfg(target_os = "linux")]
+        let cleanup_result =
+            remove_private_episode_endpoint_if_same(&path_for_task, endpoint_identity_for_task);
+        #[cfg(not(target_os = "linux"))]
+        let cleanup_result = tokio::fs::remove_file(&path_for_task)
+            .await
+            .map_err(anyhow::Error::from);
+        combine_owned_transport_results(vec![listener_result, cleanup_result])
     });
     Ok(PrivatePromptTransport {
         shutdown_tx: Some(shutdown_tx),
         task: Some(task),
+        handlers,
         path,
         #[cfg(target_os = "linux")]
-        endpoint_identity: None,
+        endpoint_identity: Some(endpoint_identity),
     })
 }
 
@@ -5713,29 +6905,37 @@ pub(crate) async fn register_durable_start_private_prompt_transport(
     }
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
     let path_for_task = path.clone();
+    let handlers = OwnedTransportHandlers::default();
+    let handlers_for_task = handlers.clone();
+    #[cfg(target_os = "linux")]
+    let endpoint_identity_for_task = endpoint_identity.clone();
     let task = tokio::spawn(async move {
+        let listener_result: Result<()> = async {
         loop {
             tokio::select! {
                 _ = &mut shutdown_rx => break,
                 accept = listener.accept() => {
-                    let Ok((stream, _)) = accept else {
-                        break;
-                    };
+                    let (stream, _) = accept.context("accept private prompt connection")?;
                     let prompt_tx = prompt_tx.clone();
-                    tokio::spawn(async move {
-                        let _ = handle_private_prompt_connection(stream, prompt_tx).await;
-                    });
+                    handlers_for_task.spawn(handle_private_prompt_connection(stream, prompt_tx))?;
                 }
             }
         }
+        Ok(())
+        }.await;
         #[cfg(target_os = "linux")]
-        let _ = remove_private_episode_endpoint_if_same(&path_for_task, endpoint_identity);
+        let cleanup_result =
+            remove_private_episode_endpoint_if_same(&path_for_task, endpoint_identity_for_task);
         #[cfg(not(target_os = "linux"))]
-        let _ = tokio::fs::remove_file(&path_for_task).await;
+        let cleanup_result = tokio::fs::remove_file(&path_for_task)
+            .await
+            .map_err(anyhow::Error::from);
+        combine_owned_transport_results(vec![listener_result, cleanup_result])
     });
     Ok(PrivatePromptTransport {
         shutdown_tx: Some(shutdown_tx),
         task: Some(task),
+        handlers,
         path,
         #[cfg(target_os = "linux")]
         endpoint_identity: Some(endpoint_identity),
@@ -6146,6 +7346,15 @@ async fn stream_private_prompt_request(
     request: PrivatePromptRequest,
     world_scoped: bool,
 ) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    if let Err(error) = require_prompt_submit_authority_before_effect(runtime) {
+        let _ = request.envelope_tx.send(failed_prompt_envelope(
+            "runtime",
+            "authority_refused",
+            error.to_string(),
+        ));
+        return Err(error);
+    }
     let manifest_snapshot = runtime
         .manifest
         .lock()
@@ -6218,7 +7427,9 @@ async fn stream_private_prompt_request(
                 "owner_unreachable",
                 err.to_string(),
             ));
-            request_helper_park_after_turn(runtime, request.action);
+            if err.downcast_ref::<agent_api::AgentWrapperError>().is_none() {
+                request_helper_park_after_turn(runtime, request.action);
+            }
         }
     }
     Ok(())
@@ -7027,6 +8238,239 @@ fn structured_prompt_event_fallback_text(data: &serde_json::Value) -> Option<Str
     })
 }
 
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) fn verify_ordinary_issued_helper_refusals_fixture(
+    selection: &Arc<super::native_launch_context::AuthenticatedOrdinarySelectionV1>,
+    carrier: &transport_api_types::InstallBootstrapContextCarrierV1,
+    plan: &AuthorityManagedSuccessorLaunchPlanV1,
+    world: bool,
+) -> Result<()> {
+    use anyhow::ensure;
+    type FileState = (u64, u64, u32, u32, u32, i64, i64, Vec<u8>);
+    fn snapshot(root: &Path) -> Result<BTreeMap<PathBuf, FileState>> {
+        fn visit(root: &Path, dir: &Path, files: &mut BTreeMap<PathBuf, FileState>) -> Result<()> {
+            let mut entries = fs::read_dir(dir)?.collect::<std::io::Result<Vec<_>>>()?;
+            entries.sort_by_key(|entry| entry.file_name());
+            for entry in entries {
+                let path = entry.path();
+                let metadata = fs::symlink_metadata(&path)?;
+                ensure!(
+                    !metadata.file_type().is_symlink(),
+                    "fixture authority contains symlink"
+                );
+                ensure!(
+                    metadata.is_dir() || metadata.is_file() || metadata.file_type().is_socket(),
+                    "fixture home contains unsupported entry"
+                );
+                let bytes = if metadata.is_file() {
+                    fs::read(&path)?
+                } else {
+                    Vec::new()
+                };
+                files.insert(
+                    path.strip_prefix(root)?.to_path_buf(),
+                    (
+                        metadata.dev(),
+                        metadata.ino(),
+                        metadata.mode(),
+                        metadata.uid(),
+                        metadata.gid(),
+                        metadata.mtime(),
+                        metadata.mtime_nsec(),
+                        bytes,
+                    ),
+                );
+                if metadata.is_dir() {
+                    visit(root, &path, files)?;
+                }
+            }
+            Ok(())
+        }
+        let mut files = BTreeMap::new();
+        let metadata = fs::symlink_metadata(root)?;
+        ensure!(metadata.is_dir(), "fixture home root changed");
+        files.insert(
+            PathBuf::from("."),
+            (
+                metadata.dev(),
+                metadata.ino(),
+                metadata.mode(),
+                metadata.uid(),
+                metadata.gid(),
+                metadata.mtime(),
+                metadata.mtime_nsec(),
+                Vec::new(),
+            ),
+        );
+        visit(root, root, &mut files)?;
+        Ok(files)
+    }
+    ensure!(Path::new("/fixture/substrate").is_file());
+    let bytes = encode_ordinary_successor_helper_envelope(selection, carrier, plan)?;
+    let original = decode_ordinary_successor_helper_envelope(&bytes)?;
+    let permit = acquire_authority_managed_successor_launch_permit(plan)?;
+    let guard = permit
+        .launch_guard
+        .as_ref()
+        .context("issued negative lacks real launch guard")?;
+    let fd = guard.lock_file.as_raw_fd();
+    let guarded = fs::metadata(authority_managed_successor_launch_guard_path(plan)?)?;
+    let inherited = guard.lock_file.metadata()?;
+    ensure!(guarded.dev() == inherited.dev() && guarded.ino() == inherited.ino());
+    let workspace = Path::new(selection.workspace_root());
+    let home = Path::new(&carrier.context.host_substrate_home);
+    let ordinary_directory = home.join("runtime-control/durable-start/ordinary-successor-plans-v1");
+    ensure!(
+        ordinary_directory.is_dir(),
+        "positive public turns omitted ordinary plan directory"
+    );
+    // Deliberate test-writer setup, before the measured zero-effect reads.
+    let legacy_directory = home.join("runtime-control/durable-start/successor-plans");
+    fs::create_dir_all(&legacy_directory)?;
+    let stage_path = workspace.join("host-native-stages.jsonl");
+    let stages_before = fs::read(&stage_path)?;
+    let ordinary =
+        super::host_session_authority::canonical_json::to_vec(&serde_json::to_value(&original)?)?;
+    ensure!(ordinary == bytes, "issued envelope spelling changed");
+    let mut cases: Vec<(&str, Vec<u8>)> = vec![
+        ("stripped-inner", serde_json::to_vec(&plan.helper_plan)?),
+        ("repacked-generic-successor", serde_json::to_vec(plan)?),
+    ];
+    for field in ["lease", "prompt", "source", "native", "issuer"] {
+        let mut changed = original.clone();
+        match field {
+            "lease" => changed.participant.lease_token.push_str("-substituted"),
+            "prompt" => changed
+                .startup_prompt
+                .as_mut()
+                .context("issued Resume lacks prompt")?
+                .prompt_text
+                .push_str("-substituted"),
+            "source" => {
+                changed.participant.resumed_from_participant_id = Some("wrong-source".into())
+            }
+            "native" => {
+                changed.participant.internal_uaa_session_id = Some("wrong-native-session".into())
+            }
+            "issuer" => changed
+                .applied_transition
+                .issuer_request_id
+                .push_str("-substituted"),
+            _ => unreachable!(),
+        }
+        let encoded =
+            super::host_session_authority::canonical_json::to_vec(&serde_json::to_value(changed)?)?;
+        // Each tampered case remains a complete supported transport shape.
+        decode_ordinary_successor_helper_envelope(&encoded)?;
+        cases.push((field, encoded));
+    }
+    for (name, encoded) in cases {
+        let semantic_case = !matches!(name, "stripped-inner" | "repacked-generic-successor");
+        let (directory, expected_refusal) = match name {
+            "stripped-inner" => (
+                workspace,
+                "ordinary public successor inner plan cannot enter generic Existing",
+            ),
+            "repacked-generic-successor" => (
+                legacy_directory.as_path(),
+                "ordinary public successor requires the strict original-selection envelope",
+            ),
+            _ => (
+                ordinary_directory.as_path(),
+                "selected helper source comparison refused",
+            ),
+        };
+        let path = directory.join(format!("issued-helper-negative-{name}.json"));
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(&path)?;
+        file.write_all(&encoded)?;
+        file.sync_all()?;
+        let metadata = file.metadata()?;
+        // Use the same parent-owned connected transport as the real launcher.
+        // Without it the child refuses before reaching issued HSA comparison.
+        let startup = plan
+            .helper_plan
+            .startup_prompt
+            .as_ref()
+            .context("issued Resume omitted startup listener")?;
+        let startup_stream = StdUnixStream::connect(&startup.stream_path)?;
+        let startup_fd = startup_stream.as_raw_fd();
+        let before = snapshot(home)?;
+        let mut command = Command::new("/fixture/substrate");
+        command
+            .arg("--install-bootstrap-context-v1")
+            .arg(carrier.encode().map_err(anyhow::Error::msg)?)
+            .arg(if world { "--world" } else { "--no-world" })
+            .args(["agent", HIDDEN_OWNER_HELPER_SUBCOMMAND, "--plan-file"])
+            .arg(&path)
+            .current_dir(workspace)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .env(AUTHORITY_SUCCESSOR_LAUNCH_GUARD_FD_ENV, fd.to_string())
+            .env(
+                ORDINARY_SUCCESSOR_STARTUP_STREAM_FD_ENV,
+                startup_fd.to_string(),
+            );
+        // The real permitted description is inherited only by this child.
+        unsafe {
+            command.pre_exec(move || {
+                for inherited in [fd, startup_fd] {
+                    let flags = libc::fcntl(inherited, libc::F_GETFD);
+                    if flags < 0
+                        || libc::fcntl(inherited, libc::F_SETFD, flags & !libc::FD_CLOEXEC) < 0
+                    {
+                        return Err(io::Error::last_os_error());
+                    }
+                }
+                Ok(())
+            });
+        }
+        let output = command.output()?;
+        drop(startup_stream);
+        let stderr = String::from_utf8(output.stderr)?;
+        ensure!(
+            output.status.code() == Some(1),
+            "issued helper case {name} did not exit normally with refusal: {}",
+            output.status
+        );
+        ensure!(
+            stderr.trim() == expected_refusal,
+            "issued helper case {name} missed its intended refusal boundary: {stderr}"
+        );
+        let retained = fs::symlink_metadata(&path)?;
+        ensure!(
+            retained.dev() == metadata.dev()
+                && retained.ino() == metadata.ino()
+                && fs::read(&path)? == encoded,
+            "issued helper case {name} removed/replaced its plan"
+        );
+        ensure!(
+            snapshot(home)? == before,
+            "issued helper case {name} mutated durable authority/home"
+        );
+        ensure!(
+            fs::read(&stage_path)? == stages_before,
+            "issued helper case {name} entered native before refusal"
+        );
+        println!(
+            "TASK11_ISSUED_HELPER_REFUSAL {}",
+            serde_json::json!({
+                "case":name, "exit":output.status.code(), "plan_retained":true,
+                "durable_authority_unchanged":true, "native_entries_unchanged":true,
+                "semantic_hsa_comparison":semantic_case, "stderr":stderr,
+            })
+        );
+        fs::remove_file(path)?;
+    }
+    drop(permit);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     #[cfg(unix)]
@@ -7042,6 +8486,11 @@ mod tests {
         LoadedPublicPrompt, OwnerHelperMode, PrivateCancelOutcome, PrivateStopOutcome,
         PromptSubmitRuntime, PublicPromptAction, PublicPromptCommandRequest, PublicSessionPosture,
         ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor, PURE_AGENT_PROTOCOL,
+    };
+    #[cfg(target_os = "linux")]
+    use super::{
+        authenticate_ordinary_successor_helper, decode_ordinary_successor_helper_envelope,
+        OrdinarySuccessorHelperEnvelopeV1, PromptSubmitAuthorityV1,
     };
     #[cfg(unix)]
     use super::{
@@ -7066,6 +8515,8 @@ mod tests {
         OrchestrationObligationRecord, ORCHESTRATOR_ROLE,
     };
     use crate::execution::config_model::AgentExecutionScope;
+    #[cfg(target_os = "linux")]
+    use std::fs;
     use std::path::PathBuf;
     use std::sync::atomic::AtomicBool;
     use std::sync::{Arc, Mutex};
@@ -7073,6 +8524,131 @@ mod tests {
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     #[cfg(unix)]
     use tokio::net::UnixStream;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_ordinary_successor_reply_transport_precedes_child_preparation() -> anyhow::Result<()> {
+        use std::io::Read as _;
+        use std::os::fd::{AsRawFd as _, IntoRawFd as _};
+        use std::os::unix::net::{UnixListener, UnixStream};
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("startup.sock");
+        let listener = UnixListener::bind(&path)?;
+        listener.set_nonblocking(true)?;
+        // Production's pre-spawn operation queues the exact connection before
+        // child preparation. A connection alone emits no logical Accepted bytes.
+        let connected = UnixStream::connect(&path)?;
+        let (mut receiver, _) = listener.accept()?;
+        receiver.set_nonblocking(true)?;
+        let mut byte = [0_u8; 1];
+        assert_eq!(
+            receiver.read(&mut byte).unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+        let parent = std::process::id() as libc::pid_t;
+        for (expected_path, expected_parent) in [
+            (directory.path().join("other.sock"), parent),
+            (path.clone(), parent.checked_add(1).unwrap()),
+        ] {
+            assert!(super::capture_ordinary_successor_startup_stream_v1(
+                connected.as_raw_fd(),
+                &expected_path,
+                expected_parent,
+            )
+            .is_err());
+            // Refusal closes only its duplicate, never this unrelated owner.
+            assert!(unsafe { libc::fcntl(connected.as_raw_fd(), libc::F_GETFD) } >= 0);
+        }
+        let regular = tempfile::tempfile()?;
+        assert!(super::capture_ordinary_successor_startup_stream_v1(
+            regular.as_raw_fd(),
+            &path,
+            parent,
+        )
+        .is_err());
+        assert!(unsafe { libc::fcntl(regular.as_raw_fd(), libc::F_GETFD) } >= 0);
+        assert!(super::capture_ordinary_successor_startup_stream_v1(-1, &path, parent).is_err());
+        let (unnamed, _) = UnixStream::pair()?;
+        assert!(super::capture_ordinary_successor_startup_stream_v1(
+            unnamed.as_raw_fd(),
+            &path,
+            parent,
+        )
+        .is_err());
+        let original = connected.into_raw_fd();
+        let checked = super::capture_ordinary_successor_startup_stream_v1(original, &path, parent)?;
+        let flags = unsafe { libc::fcntl(checked.as_raw_fd(), libc::F_GETFD) };
+        assert!(flags >= 0 && flags & libc::FD_CLOEXEC != 0);
+        drop(checked);
+        assert_eq!(receiver.read(&mut byte)?, 0);
+        let disconnected = UnixStream::connect(&path)?;
+        let (server, _) = listener.accept()?;
+        drop(server);
+        assert!(super::capture_ordinary_successor_startup_stream_v1(
+            disconnected.as_raw_fd(),
+            &path,
+            parent,
+        )
+        .is_err());
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_ordinary_successor_startup_reply_fd_custody_across_exec() -> anyhow::Result<()> {
+        use std::io::{Read as _, Write as _};
+        use std::os::fd::AsRawFd as _;
+        use std::os::unix::net::{UnixListener, UnixStream};
+        use std::os::unix::process::CommandExt as _;
+        const PROBE_PATH: &str = "TASK11_TEST_ORDINARY_STARTUP_REPLY_PATH";
+        if let Some(path) = std::env::var_os(PROBE_PATH) {
+            let mut checked =
+                super::take_ordinary_successor_startup_stream_v1(PathBuf::from(path).as_path())?;
+            let flags = unsafe { libc::fcntl(checked.as_raw_fd(), libc::F_GETFD) };
+            assert!(flags >= 0 && flags & libc::FD_CLOEXEC != 0);
+            checked.write_all(b"checked")?;
+            return Ok(());
+        }
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("startup.sock");
+        let listener = UnixListener::bind(&path)?;
+        let client = UnixStream::connect(&path)?;
+        let raw = client.as_raw_fd();
+        let mut command = std::process::Command::new(std::env::current_exe()?);
+        command.args(["--exact", "execution::agent_runtime::control::tests::test_ordinary_successor_startup_reply_fd_custody_across_exec", "--nocapture"])
+            .env(PROBE_PATH, &path)
+            .env(super::ORDINARY_SUCCESSOR_STARTUP_STREAM_FD_ENV, raw.to_string())
+            .stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
+        // SAFETY: only the forked test child's live socket flag is changed.
+        unsafe {
+            command.pre_exec(move || {
+                let flags = libc::fcntl(raw, libc::F_GETFD);
+                if flags < 0 || libc::fcntl(raw, libc::F_SETFD, flags & !libc::FD_CLOEXEC) < 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        let child = command.spawn()?;
+        drop(client);
+        let (mut server, _) = listener.accept()?;
+        server.set_read_timeout(Some(std::time::Duration::from_secs(10)))?;
+        let mut received = Vec::new();
+        let drained = server.read_to_end(&mut received);
+        // Always wait the actual owned child, including a read/EOF refusal.
+        let output = child.wait_with_output()?;
+        drained?;
+        assert!(
+            output.status.success(),
+            "status={}; stderr={}; stdout={}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&output.stdout)
+        );
+        assert_eq!(received, b"checked");
+        assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed; 0 failed"));
+        Ok(())
+    }
 
     #[cfg(target_os = "linux")]
     #[test]
@@ -7263,6 +8839,131 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    #[serial_test::serial]
+    fn test_ordinary_owned_stop_cleanup_preserves_replaced_endpoint() {
+        with_store(|store| {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(async {
+                    let session = format!("stop-cleanup-{}", uuid::Uuid::new_v4().simple());
+                    let (tx, _rx) = super::private_stop_request_channel();
+                    let mut transport =
+                        super::register_private_stop_transport(store, &session, "member", tx)
+                            .await
+                            .unwrap();
+                    let path = transport.path().to_path_buf();
+                    std::fs::remove_file(&path).unwrap();
+                    let replacement = std::os::unix::net::UnixListener::bind(&path).unwrap();
+                    let expected = super::private_episode_endpoint_identity(&path).unwrap();
+                    let result = transport
+                        .close_owned(None, std::time::Duration::from_secs(2))
+                        .await;
+                    assert!(
+                        path.exists(),
+                        "old Stop cleanup deleted a competing publisher's endpoint"
+                    );
+                    assert_eq!(
+                        super::private_episode_endpoint_identity(&path).unwrap(),
+                        expected
+                    );
+                    assert!(result.is_err(), "replacement leaves cleanup unresolved");
+                    assert!(transport.task.is_none());
+                    drop(replacement);
+                    std::fs::remove_file(path).unwrap();
+                });
+        });
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial_test::serial]
+    fn test_ordinary_owned_prompt_cleanup_preserves_replaced_endpoint() {
+        with_store(|store| {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(async {
+                    let session = format!("prompt-cleanup-{}", uuid::Uuid::new_v4().simple());
+                    let (tx, _rx) = super::private_prompt_request_channel();
+                    let mut transport =
+                        super::register_private_prompt_transport(store, &session, "member", tx)
+                            .await
+                            .unwrap();
+                    let path = transport.path().to_path_buf();
+                    std::fs::remove_file(&path).unwrap();
+                    let replacement = std::os::unix::net::UnixListener::bind(&path).unwrap();
+                    let expected = super::private_episode_endpoint_identity(&path).unwrap();
+                    let result = transport
+                        .close_owned(std::time::Duration::from_secs(2))
+                        .await;
+                    assert!(
+                        path.exists(),
+                        "old prompt cleanup deleted a competing publisher's endpoint"
+                    );
+                    assert_eq!(
+                        super::private_episode_endpoint_identity(&path).unwrap(),
+                        expected
+                    );
+                    assert!(result.is_err(), "replacement leaves cleanup unresolved");
+                    assert!(transport.task.is_none());
+                    drop(replacement);
+                    std::fs::remove_file(path).unwrap();
+                });
+        });
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial_test::serial]
+    fn test_private_cancel_owned_closeout_joins_accepted_handlers_and_preserves_replacement() {
+        // Actual Unix protocol/ownership test; no native cancel or provider effect.
+        with_store(|store| {
+            tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(async {
+                let session = format!("cancel-owned-{}", uuid::Uuid::new_v4().simple());
+                let (tx, mut rx) = super::private_cancel_request_channel();
+                let mut transport = super::register_private_cancel_transport(store, &session, "member", tx).await.unwrap();
+                let path = transport.path().to_path_buf();
+                let client_path = path.clone();
+                let client = tokio::spawn(async move {
+                    super::request_private_cancel(&client_path, &crate::execution::agent_runtime::dispatch_contract::WorkerCancelPayloadV1 {
+                        reason: Some("owned protocol component".into()), graceful: Some(true),
+                    }, None).await
+                });
+                let request = rx.recv().await.unwrap();
+                {
+                    let mut close = Box::pin(transport.close_owned(std::time::Duration::from_secs(2)));
+                    tokio::select! {
+                        result = &mut close => panic!("accepted handler lost before its response: {result:?}"),
+                        _ = tokio::task::yield_now() => {}
+                    }
+                    request.response_tx.send(PrivateCancelOutcome::OwnerUnreachable).unwrap();
+                    close.await.unwrap();
+                }
+                assert_eq!(client.await.unwrap().unwrap(), PrivateCancelOutcome::OwnerUnreachable);
+                assert!(transport.task.is_none());
+                assert!(!path.exists(), "joined listener must remove its own endpoint");
+
+                let (tx, _rx) = super::private_cancel_request_channel();
+                let mut transport = super::register_private_cancel_transport(store, &session, "replacement", tx).await.unwrap();
+                let path = transport.path().to_path_buf();
+                std::fs::remove_file(&path).unwrap();
+                let replacement = std::os::unix::net::UnixListener::bind(&path).unwrap();
+                let identity = super::private_episode_endpoint_identity(&path).unwrap();
+                assert!(transport.close_owned(std::time::Duration::from_secs(2)).await.is_err());
+                assert_eq!(super::private_episode_endpoint_identity(&path).unwrap(), identity,
+                    "owned closeout must preserve a replacement endpoint");
+                assert!(transport.task.is_none());
+                drop(replacement);
+                std::fs::remove_file(path).unwrap();
+            });
+        });
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn retained_turn_policy_carrier_omission_is_limited_to_unactivated_legacy_authority() {
         with_store(|store| {
             let descriptor = RuntimeSelectionDescriptor {
@@ -7330,16 +9031,17 @@ mod tests {
             )
             .expect("retained member manifest");
 
-            let error = resolve_retained_turn_policy_material_for_submit(
+            let error = match resolve_retained_turn_policy_material_for_submit(
                 store,
                 &descriptor,
                 &manifest,
                 " ",
                 None,
                 None,
-            )
-            .err()
-            .expect("empty active run identity must fail before legacy omission");
+            ) {
+                Err(error) => error,
+                Ok(_) => panic!("empty active run identity must fail before legacy omission"),
+            };
 
             assert!(format!("{error:#}")
                 .contains("retained-turn runtime identity is incomplete or inconsistent"));
@@ -7471,6 +9173,8 @@ mod tests {
         manifest: AgentRuntimeParticipantRecord,
     ) -> PromptSubmitRuntime {
         PromptSubmitRuntime {
+            #[cfg(target_os = "linux")]
+            authority: PromptSubmitAuthorityV1::Existing,
             descriptor: RuntimeSelectionDescriptor {
                 agent_id: "codex".to_string(),
                 backend_id: "cli:codex".to_string(),
@@ -9677,5 +11381,244 @@ mod tests {
         let fallback = super::toolbox_transport_path_for_episode(&long_home, 1000, &binding);
         assert!(fallback.as_os_str().len() <= super::PRIVATE_STOP_UNIX_PATH_MAX);
         assert!(fallback.starts_with("/tmp/substrate-agent-toolbox-u1000"));
+    }
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_ordinary_helper_envelope_rejects_unknown_and_missing_authority() {
+        use super::super::host_session_authority::canonical_json;
+
+        // Pure transport data only. Synthetic Applied bytes are not an
+        // authenticated transition, current-run witness, or Ordinary capability.
+        let install_context = transport_api_types::InstallBootstrapContextCarrierV1::from_context(
+            transport_api_types::InstallBootstrapContextV1::new_unix(
+                "/tmp/substrate-task11-codec-component",
+                "synthetic-user",
+                1000,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let digest = "a".repeat(64);
+        let commitment = serde_json::json!({
+            "kind": "CanonicalSha256",
+            "value": {"digest_hex": digest}
+        });
+        let object_ref = |kind: &str| {
+            serde_json::json!({
+                "ref_id": "synthetic-ref",
+                "object_kind": {"kind": kind},
+                "schema_version": 1,
+                "commitment": commitment
+            })
+        };
+        let timestamp = "2026-10-30T00:00:00.000000000Z";
+        let workspace = "/tmp/substrate-task11-codec-workspace";
+        let home = install_context.context.host_substrate_home.clone();
+        let applied_precondition: serde_json::Value = serde_json::json!({
+            "kind": "ExpectedRevision",
+            "value": {
+                "authority_revision": 1,
+                "authority_record_commitment": commitment,
+                "active_authoritative_participant_id": "old",
+                "authoritative_lineage_commitment": commitment,
+                "lifecycle_posture": {"kind": "ParkedResumable"}
+            }
+        });
+        let applied_workspace_binding: serde_json::Value = serde_json::json!({
+            "workspace_root": {
+                "physical_path": workspace,
+                "physical_identity": {"kind": "Linux", "value": {"device_id": 1, "inode": 2}}
+            },
+            "authority_store_root": {
+                "physical_path": home,
+                "physical_identity": {"kind": "Linux", "value": {"device_id": 1, "inode": 3}}
+            },
+            "authority_store_id": "store"
+        });
+        let applied_state: serde_json::Value = serde_json::json!({
+            "kind": "Applied",
+            "value": {
+                "claim_id": "claim", "claimant_attempt_id": "attempt",
+                "authority_revision_before": 1, "authority_revision_after": 2,
+                "active_authoritative_participant_id": "part",
+                "resulting_posture": {"kind": "ActiveAttached"},
+                "authority_record_commitment": commitment,
+                "application_result_ref": object_ref("ApplicationResult"),
+                "startup_ownership": {"kind": "NotApplicable"},
+                "post_turn": {"kind": "NotApplicable"}, "applied_at": timestamp
+            }
+        });
+        let applied_transition: serde_json::Value = serde_json::json!({
+            "schema_version": 3,
+            "intent_id": "intent_attach", "issuer_request_id": "synthetic-request",
+            "intent_revision": 1, "mode": {"kind": "Attach"},
+            "authority_precondition": applied_precondition,
+            "orchestration_session_id": "sess",
+            "shell_trace_session_id": "trace",
+            "caller": {
+                "kind": {"kind": "PublicCli"},
+                "caller_participant_id": null,
+                "auto_attach_obligation_id": null,
+                "auto_attach_claim_owner": null
+            },
+            "source_authoritative_participant_id": "old",
+            "target_authoritative_participant_id": "part",
+            "target_participant_lease_token_ref": object_ref("LeaseToken"),
+            "run_id": "run", "resulting_authoritative_lineage": ["old", "part"],
+            "workspace_binding": applied_workspace_binding,
+            "world_binding": null,
+            "descriptor_ref": object_ref("AgentDescriptor"),
+            "host_attach_contract_ref": object_ref("HostAttachContract"),
+            "resume_handle_ref": null, "transition_input_ref": null,
+            "post_turn_disposition": null,
+            "transport_payload_ref": object_ref("TransitionTransportPayload"),
+            "payload_commitment": commitment,
+            "issued_at": timestamp, "expires_at": timestamp,
+            "state": applied_state,
+            "input_handoff": {"kind": "NotApplicable"},
+            "transport_payload_state": {"kind": "Retained"},
+            "updated_at": timestamp
+        });
+        let envelope: OrdinarySuccessorHelperEnvelopeV1 =
+            serde_json::from_value(serde_json::json!({
+                "schema_version": 1,
+                "install_context": install_context,
+                "original_start": {
+                    "schema_version": 1,
+                    "authority_store_id": "store",
+                    "original_start_intent_id": "intent_start",
+                    "original_start_issuer_request_id": format!("req_{}", "a".repeat(64)),
+                    "original_session_id": "sess",
+                    "context_sha256": "a".repeat(64),
+                    "native_selection_sha256": "b".repeat(64),
+                    "requested_selection_sha256": "c".repeat(64)
+                },
+                "authority_store_id": "store",
+                "descriptor": {
+                    "agent_id": "codex", "backend_id": "cli:codex",
+                    "backend_kind": "codex", "protocol": "substrate.agent.session",
+                    "execution_scope": "host", "binary_path": "/usr/bin/codex"
+                },
+                "session": {
+                    "orchestration_session_id": "sess",
+                    "shell_trace_session_id": "trace", "workspace_root": workspace,
+                    "world_id": null, "world_generation": null
+                },
+                "participant": {
+                    "participant_id": "part", "lease_token": "synthetic-lease",
+                    "run_id": "run", "resumed_from_participant_id": "old",
+                    "internal_uaa_session_id": "synthetic-session"
+                },
+                "startup_prompt": null,
+                "applied_transition": applied_transition
+            }))
+            .unwrap();
+        let value = serde_json::to_value(&envelope).unwrap();
+        let bytes = canonical_json::to_vec(&value).unwrap();
+        assert_eq!(
+            decode_ordinary_successor_helper_envelope(&bytes).unwrap(),
+            envelope
+        );
+        assert!(value["startup_prompt"].is_null());
+        assert!(value["session"]["world_id"].is_null());
+
+        let mut omitted = value.clone();
+        omitted.as_object_mut().unwrap().remove("startup_prompt");
+        assert!(decode_ordinary_successor_helper_envelope(
+            &canonical_json::to_vec(&omitted).unwrap()
+        )
+        .is_err());
+        let mut omitted_nested = value.clone();
+        omitted_nested["session"]
+            .as_object_mut()
+            .unwrap()
+            .remove("world_id");
+        assert!(decode_ordinary_successor_helper_envelope(
+            &canonical_json::to_vec(&omitted_nested).unwrap()
+        )
+        .is_err());
+
+        let mut unknown = value.clone();
+        unknown["descriptor"]["extra"] = true.into();
+        assert!(decode_ordinary_successor_helper_envelope(
+            &canonical_json::to_vec(&unknown).unwrap()
+        )
+        .is_err());
+        let mut principal_extra = value.clone();
+        principal_extra["install_context"]["context"]["intended_host_principal"]["extra"] =
+            true.into();
+        let error = decode_ordinary_successor_helper_envelope(
+            &canonical_json::to_vec(&principal_extra).unwrap(),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("principal contains unknown fields"));
+
+        let text = std::str::from_utf8(&bytes).unwrap();
+        let duplicate = text.replacen(
+            "\"startup_prompt\":null",
+            "\"startup_prompt\":null,\"startup_prompt\":null",
+            1,
+        );
+        assert_ne!(duplicate, text);
+        assert!(
+            decode_ordinary_successor_helper_envelope(duplicate.as_bytes())
+                .unwrap_err()
+                .to_string()
+                .contains("CanonicalJsonV1 object keys must be unique and byte-sorted")
+        );
+        for version in [0, 2] {
+            let mut unsupported = value.clone();
+            unsupported["schema_version"] = version.into();
+            assert!(decode_ordinary_successor_helper_envelope(
+                &canonical_json::to_vec(&unsupported).unwrap()
+            )
+            .is_err());
+        }
+        let mut unsupported_start = value;
+        unsupported_start["original_start"]["schema_version"] = 2.into();
+        assert!(decode_ordinary_successor_helper_envelope(
+            &canonical_json::to_vec(&unsupported_start).unwrap()
+        )
+        .is_err());
+        assert!(decode_ordinary_successor_helper_envelope(br#"{"schema_version":1}"#).is_err());
+    }
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_ordinary_helper_current_run_refusal_precedes_effects() {
+        // Actual receiver boundary, synthetic data only. No ordinary capability
+        // or installed-source/account/current-run verification is fabricated.
+        use std::os::unix::fs::PermissionsExt;
+        let temp = tempfile::tempdir().unwrap();
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+        let sentinel = temp.path().join("preserved");
+        fs::write(&sentinel, b"component-sentinel").unwrap();
+        let before: Vec<_> = fs::read_dir(temp.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        let incoming = transport_api_types::InstallBootstrapContextCarrierV1::from_context(
+            transport_api_types::InstallBootstrapContextV1::new_unix(
+                "/tmp/substrate-task11-component-unused",
+                "synthetic-user",
+                1000,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let outcome = authenticate_ordinary_successor_helper(b"{}", &incoming);
+        let error = outcome
+            .err()
+            .expect("ordinary receiver must refuse missing genuine C")
+            .to_string();
+        assert!(error.contains("missing field"), "{error}");
+        let after: Vec<_> = fs::read_dir(temp.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(before, after);
+        assert_eq!(fs::read(&sentinel).unwrap(), b"component-sentinel");
+        assert!(!temp.path().join("authority-v1").exists());
+        assert!(!temp.path().join("ordinary-successor-plans-v1").exists());
     }
 }

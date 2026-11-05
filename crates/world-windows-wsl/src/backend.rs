@@ -416,6 +416,8 @@ impl WindowsWslBackend {
         };
 
         Ok(ExecuteRequest {
+            schema_version: 1,
+            ordinary_start_selection: None,
             profile: None,
             cmd: req.cmd.clone(),
             cwd: Some(cwd),

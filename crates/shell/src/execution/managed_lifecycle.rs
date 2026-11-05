@@ -2136,7 +2136,8 @@ mod tests {
             attempt_nonce: "nonce-1".to_string(),
             expected_executor_build: sample_executor(),
         };
-        let client = open_publisher_bootstrap_channel_v1("linux_system").unwrap();
+        // Exercise the deferred publisher without invoking a native executor.
+        let client = open_publisher_bootstrap_channel_v1("windows_host_shared").unwrap();
         let error = client.submit_publisher_request_v1(&request).unwrap_err();
         assert!(error.to_string().contains(PROVIDER_UNAVAILABLE_KIND_V1));
     }

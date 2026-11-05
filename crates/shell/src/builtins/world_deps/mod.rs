@@ -233,6 +233,9 @@ pub(crate) fn collect_doctor_snapshot_v1(
     };
     let view = surfaces::resolve_current_inventory_view(
         cwd,
+        #[cfg(target_os = "linux")]
+        cfg,
+        #[cfg(not(target_os = "linux"))]
         &cfg,
         #[cfg(target_os = "linux")]
         global_deps_dir,
@@ -444,6 +447,11 @@ mod tests {
             "world:\n  enabled: true\n  deps:\n    builtins: disabled\n    inventory_mode: merged\n    enabled: []\n",
         )
         .expect("write selected config");
+        fs::set_permissions(
+            prefix.join("config.yaml"),
+            fs::Permissions::from_mode(0o600),
+        )
+        .expect("secure selected config");
         prefix
     }
 
@@ -476,6 +484,13 @@ mod tests {
             "id: ambient-policy\nnet_allowed: [ambient.example]\n",
         )
         .expect("write ambient policy");
+        for prefix in [&selected_a, &ambient_b] {
+            fs::set_permissions(
+                prefix.join("policy.yaml"),
+                fs::Permissions::from_mode(0o600),
+            )
+            .expect("secure fixture policy");
+        }
         let carrier = carrier_for(&selected_a);
         let _env = EnvGuard::apply(&[
             ("SUBSTRATE_HOME", Some(ambient_b.as_os_str())),
@@ -568,6 +583,9 @@ mod tests {
             .prefix("substrate-route-d-snapshot-")
             .tempdir_in(account_home)
             .expect("secure snapshot fixture");
+        fs::create_dir(temp.path().join(".substrate")).expect("create workspace metadata");
+        fs::write(temp.path().join(".substrate/workspace.yaml"), "{}\n")
+            .expect("write fixture workspace boundary");
         let selected_a = prepare_prefix(temp.path(), "selected-a");
         let ambient_b = prepare_prefix(temp.path(), "ambient-b");
         write_inventory_package(&selected_a, "selected-only");

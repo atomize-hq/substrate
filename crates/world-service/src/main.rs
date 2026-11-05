@@ -48,6 +48,14 @@ fn main() -> Result<()> {
         return internal_exec::run_landlock_exec();
     }
 
+    #[cfg(target_os = "linux")]
+    if std::env::args()
+        .nth(1)
+        .is_some_and(|arg| arg == internal_exec::ORDINARY_HOME_EXEC_ARG)
+    {
+        return internal_exec::run_ordinary_home_exec();
+    }
+
     park_e3_child_transition_capabilities_before_runtime()?;
     let runtime = build_primary_runtime_after_e3_capability_parking()?;
     runtime.block_on(run_world_service())

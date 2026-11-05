@@ -23,6 +23,91 @@ use super::store_schema::{
 
 pub(crate) use super::schema::StartTurnCompletionKindV1;
 
+/// Private data borrowed only after the World owner has authenticated its
+/// genuine controller capability and captured sources. The mutation guard is
+/// separate and retains the actual physical source capabilities through commit.
+struct WorldStartSettlementSourceV1<'source> {
+    home: &'source super::schema::CanonicalDirectoryV1,
+    hsa_root_bytes: &'source [u8],
+    world_binding: &'source super::schema::WorldBindingV1,
+    native_selection: &'source transport_api_types::ResolvedAgentSelectionV1,
+    requested_selection: &'source transport_api_types::ResolvedAgentSelectionV1,
+    cut: &'source super::schema::WorldControllerWorkAttentionCutV1,
+}
+
+/// Decoded read view retaining the actual wire version. Shared field access
+/// supplies Start exchange data only. Settlement posture must use this view's
+/// version-aware method, which also consumes the World source meaning for V3.
+/// This view has no Serialize implementation and is never a published object.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum DecodedStartContinuationHandleV1 {
+    V2(Box<StartContinuationHandleHashInputV2>),
+    WorldV3(Box<super::schema::StartContinuationHandleHashInputV3>),
+}
+
+impl std::ops::Deref for DecodedStartContinuationHandleV1 {
+    type Target = StartContinuationHandleHashInputV2;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::V2(value) => value,
+            Self::WorldV3(value) => &value.continuation,
+        }
+    }
+}
+
+impl DecodedStartContinuationHandleV1 {
+    pub(crate) fn world_controller(
+        &self,
+    ) -> Option<&super::schema::StartContinuationHandleHashInputV3> {
+        match self {
+            Self::V2(_) => None,
+            Self::WorldV3(value) => Some(value),
+        }
+    }
+
+    pub(crate) fn committed_posture(
+        &self,
+    ) -> Result<HostSessionPostureV1, StartContinuityProtocolError> {
+        match self {
+            Self::WorldV3(value) => Ok(value.resulting_posture()),
+            Self::V2(value) => match &value.state {
+                StartContinuationHandleStateV2::Settled {
+                    completion_kind,
+                    obligation_snapshot,
+                    ..
+                } => committed_settlement_posture(completion_kind, obligation_snapshot),
+                _ => Err(error("registered Start has no committed terminal posture")),
+            },
+        }
+    }
+}
+
+pub(crate) fn decode_start_continuation_handle(
+    reference: &AuthorityObjectRefV1,
+    bytes: &[u8],
+) -> Result<DecodedStartContinuationHandleV1, StartContinuityProtocolError> {
+    use super::validation::ValidatedCanonicalV1 as _;
+    if reference.object_kind != AuthorityObjectKindV1::ResumeHandle {
+        return Err(error("Start continuation reference has wrong kind"));
+    }
+    match reference.schema_version {
+        2 => {
+            let value: StartContinuationHandleHashInputV2 =
+                canonical_json::from_slice(bytes).map_err(start_error)?;
+            value.validate().map_err(start_error)?;
+            Ok(DecodedStartContinuationHandleV1::V2(Box::new(value)))
+        }
+        3 => {
+            let value: super::schema::StartContinuationHandleHashInputV3 =
+                canonical_json::from_slice(bytes).map_err(start_error)?;
+            value.validate().map_err(start_error)?;
+            Ok(DecodedStartContinuationHandleV1::WorldV3(Box::new(value)))
+        }
+        _ => Err(error("Start continuation handle version is unsupported")),
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct EstablishStartContinuationRequestV1 {
     pub(crate) start_transaction_id: String,
@@ -427,7 +512,6 @@ impl HostSessionAuthority {
         let StartContinuationHandleStateV2::Settled {
             registered_resume_handle_ref,
             completion_kind,
-            obligation_snapshot,
             completed_at: settled_at,
             ..
         } = &settled.state
@@ -493,8 +577,14 @@ impl HostSessionAuthority {
                 "committed Start mixed authority ancestry does not authenticate",
             ));
         }
-        let authenticated_posture =
-            committed_settlement_posture(completion_kind, obligation_snapshot)?;
+        if let Some(world) = settled.world_controller() {
+            if session.world_binding.as_ref() != Some(&world.world_binding) {
+                return Err(error(
+                    "committed World Start source differs from session placement",
+                ));
+            }
+        }
+        let authenticated_posture = settled.committed_posture()?;
         if authenticated_posture != resulting_posture {
             return Err(error(
                 "committed Start public result conflicts with settlement posture",
@@ -638,11 +728,89 @@ impl HostSessionAuthority {
         ))
     }
 
+    /// Settle the genuine local controller from its own native terminal and an
+    /// independent exhaustive World cut. Returning historical exact retry does
+    /// not require re-materializing or revalidating today's work sources.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn settle_ordinary_world_controller_start(
+        &self,
+        request: &SettleStartTurnRequestV1,
+        controller: &super::world_bound_controller::AuthenticatedWorldBoundControllerRunV1,
+        cut: &super::super::obligation_ledger::world_bound_controller::AuthenticatedWorldControllerWorkAttentionCutV1<'_, '_>,
+    ) -> Result<StartTurnSettlementOutcomeV1, StartContinuityProtocolError> {
+        use super::world_bound_controller::WorldBoundControllerEntryV1;
+        validate_settlement_request(request)?;
+        controller.verify_workspace().map_err(start_error)?;
+        if controller.entry() != WorldBoundControllerEntryV1::Start
+            || request.intent_id != controller.intent_id()
+            || request.run_id != controller.run_id()
+            || request.orchestration_session_id != controller.selection().original_session_id()
+            || request.authority_store_id != controller.selection().authority_store_id()
+            || request.authoritative_participant_id != controller.origin().caller.participant_id
+            || request.backend_id != controller.origin().caller.descriptor.backend_id
+            || request.protocol != controller.origin().caller.descriptor.protocol
+            || self.trusted_root().identity()
+                != controller
+                    .selection()
+                    .held_authority()
+                    .trusted_root()
+                    .identity()
+        {
+            return Err(error(
+                "World Start settlement lacks its genuine issued controller identity",
+            ));
+        }
+        let physical = cut.physical_authority_snapshot();
+        let source = WorldStartSettlementSourceV1 {
+            home: physical.authority_root_identity(),
+            hsa_root_bytes: physical.hsa_state_root_bytes(),
+            world_binding: controller.world_binding(),
+            native_selection: controller.selection().native_selection(),
+            requested_selection: controller.selection().requested_selection(),
+            cut: cut.cut(),
+        };
+        let current = self.read_a12b_root().map_err(start_error)?;
+        if let Some(joined) = find_settled_handle(self, &current, request, Some(&source))? {
+            return Ok(StartTurnSettlementOutcomeV1::Joined(joined));
+        }
+        // Registration legitimately advanced authority. Refresh only through
+        // the same original held authority/seal, preserving both complete roles.
+        let refreshed = controller
+            .selection()
+            .refresh_original_selection()
+            .map_err(start_error)?;
+        let resolved = refreshed
+            .held_authority()
+            .resolve_current_exact(&request.orchestration_session_id, None)
+            .map_err(start_error)?;
+        if !std::sync::Arc::ptr_eq(
+            refreshed.held_authority(),
+            controller.selection().held_authority(),
+        ) || refreshed.native_selection() != source.native_selection
+            || refreshed.requested_selection() != source.requested_selection
+            || resolved.caller != controller.origin().caller
+            || resolved.authority.world_binding.as_ref() != Some(source.world_binding)
+            || resolved.observation.authority_revision != request.expected_authority_revision
+        {
+            return Err(error(
+                "World Start current authority or original selected roles changed",
+            ));
+        }
+        // No HSA read or IPC occurs inside this final physical-source guard.
+        self.settle_start_turn_impl(request, None, Some(&source), || {
+            controller
+                .verify_workspace()
+                .map_err(|_| store::BootstrapError::world_controller_source_guard())?;
+            cut.verify_sources()
+                .map_err(|_| store::BootstrapError::world_controller_source_guard())
+        })
+    }
+
     pub(crate) fn settle_start_turn(
         &self,
         request: &SettleStartTurnRequestV1,
     ) -> Result<StartTurnSettlementOutcomeV1, StartContinuityProtocolError> {
-        self.settle_start_turn_impl(request, None)
+        self.settle_start_turn_impl(request, None, None, || Ok(()))
     }
 
     #[cfg(test)]
@@ -651,7 +819,7 @@ impl HostSessionAuthority {
         request: &SettleStartTurnRequestV1,
         crash_point: SettleStartTurnCrashPointV1,
     ) -> Result<StartTurnSettlementOutcomeV1, StartContinuityProtocolError> {
-        self.settle_start_turn_impl(request, Some(crash_point))
+        self.settle_start_turn_impl(request, Some(crash_point), None, || Ok(()))
     }
 
     fn settle_start_turn_impl(
@@ -660,11 +828,13 @@ impl HostSessionAuthority {
         #[cfg_attr(not(test), allow(unused_variables))] crash_point: Option<
             SettleStartTurnCrashPointV1,
         >,
+        source: Option<&WorldStartSettlementSourceV1<'_>>,
+        mut publication_guard: impl FnMut() -> Result<(), store::BootstrapError>,
     ) -> Result<StartTurnSettlementOutcomeV1, StartContinuityProtocolError> {
         validate_settlement_request(request)?;
         let current = self.read_a12b_root().map_err(start_error)?;
         let (intent, authority) = exact_applied_start_for_settlement(&current, request)?;
-        if let Some(joined) = find_settled_handle(self, &current, request)? {
+        if let Some(joined) = find_settled_handle(self, &current, request, source)? {
             return Ok(StartTurnSettlementOutcomeV1::Joined(joined));
         }
         if authority.authority_revision != request.expected_authority_revision
@@ -696,7 +866,21 @@ impl HostSessionAuthority {
             ));
         }
         validate_protocol_actor(intent, request)?;
-        let resulting_posture = settlement_posture(request, intent)?;
+        if let Some(source) = source {
+            if source.home != &current.bootstrap_home
+                || source.home != self.trusted_root().identity()
+                || source.hsa_root_bytes != canonical_json::to_vec(&current).map_err(start_error)?
+                || source.cut.hsa_root_revision != current.root_revision
+                || source.cut.authority_store_id != current.authority_store_id
+                || source.cut.orchestration_session_id != request.orchestration_session_id
+                || intent.world_binding.as_ref() != Some(source.world_binding)
+                || authority.world_binding.as_ref() != Some(source.world_binding)
+                || request.obligation_ledger_read.is_some()
+            {
+                return Err(error("World Start source does not join the exact HSA preimage and original placement"));
+            }
+        }
+        publication_guard().map_err(start_error)?;
         let handle = StartContinuationHandleHashInputV2 {
             schema_version: 2,
             authority_store_id: request.authority_store_id.clone(),
@@ -730,7 +914,22 @@ impl HostSessionAuthority {
                 completed_at: request.completed_at.clone(),
             },
         };
-        let (reference, bytes) = continuation_object(&handle)?;
+        let (reference, bytes, resulting_posture) = if let Some(source) = source {
+            let world = super::schema::StartContinuationHandleHashInputV3 {
+                schema_version: 3,
+                continuation: handle.clone(),
+                world_binding: source.world_binding.clone(),
+                native_selection: source.native_selection.clone(),
+                requested_selection: source.requested_selection.clone(),
+                work_attention_cut: source.cut.clone(),
+            };
+            let posture = world.resulting_posture();
+            let (reference, bytes) = world_continuation_object(&world)?;
+            (reference, bytes, posture)
+        } else {
+            let (reference, bytes) = continuation_object(&handle)?;
+            (reference, bytes, settlement_posture(request, intent)?)
+        };
         store::prepare_typed_object_v3_opened(
             self.trusted_root(),
             current.root_revision,
@@ -773,7 +972,7 @@ impl HostSessionAuthority {
             self.trusted_root(),
             &current,
             &proposed,
-            || Ok(()),
+            &mut publication_guard,
         )
         .map_err(start_error)?;
         let receipt = StartTurnSettlementV1 {
@@ -1193,13 +1392,13 @@ fn find_registered_handle(
             provider_event_kind,
             evidence_sha256,
             observed_at,
-        } = handle.state
+        } = &handle.state
         {
-            if exchange_id != request.exchange_id
-                || exchange_sequence != request.exchange_sequence
-                || provider_event_kind != request.provider_event_kind
-                || evidence_sha256 != request.exchange_evidence_sha256
-                || observed_at != request.observed_at
+            if exchange_id != &request.exchange_id
+                || *exchange_sequence != request.exchange_sequence
+                || provider_event_kind != &request.provider_event_kind
+                || evidence_sha256 != &request.exchange_evidence_sha256
+                || observed_at != &request.observed_at
             {
                 return Err(error("conflicting Start exchange already exists"));
             }
@@ -1207,7 +1406,7 @@ fn find_registered_handle(
                 resume_handle_ref: reference.clone(),
                 authority_revision_after: handle.authority_revision_after,
                 internal_uaa_session_id: handle.internal_uaa_session_id.clone(),
-                registered_at: observed_at,
+                registered_at: observed_at.clone(),
             };
             let transaction = root
                 .start_transaction_map
@@ -1235,17 +1434,27 @@ fn find_settled_handle(
     authority: &HostSessionAuthority,
     root: &StateRootV3,
     request: &SettleStartTurnRequestV1,
+    source: Option<&WorldStartSettlementSourceV1<'_>>,
 ) -> Result<Option<StartTurnSettlementV1>, StartContinuityProtocolError> {
     let session = authority_record(root, &request.orchestration_session_id)?;
     let intent = root
         .transition_intent_map
         .get(&request.intent_id)
         .ok_or_else(|| error("Start settlement intent was not found"))?;
-    let expected_obligation_snapshot = authenticated_complete_start_snapshot(request, intent)?;
+    let expected_obligation_snapshot = if source.is_some() {
+        if request.obligation_ledger_read.is_some() {
+            return Err(error(
+                "World controller cannot substitute a retained-worker obligation result",
+            ));
+        }
+        None
+    } else {
+        authenticated_complete_start_snapshot(request, intent)?
+    };
     for reference in session
         .internal_resume_handle_refs
         .iter()
-        .filter(|reference| reference.schema_version == 2)
+        .filter(|reference| reference.schema_version == if source.is_some() { 3 } else { 2 })
     {
         let handle = read_start_handle(authority, root, reference)?;
         let StartContinuationHandleStateV2::Settled {
@@ -1264,7 +1473,18 @@ fn find_settled_handle(
         else {
             continue;
         };
-        if handle.authority_store_id == request.authority_store_id
+        let world_matches = match (source, handle.world_controller()) {
+            (Some(source), Some(world)) => {
+                source.world_binding == &world.world_binding
+                    && source.native_selection == &world.native_selection
+                    && source.requested_selection == &world.requested_selection
+                    && source.cut == &world.work_attention_cut
+            }
+            (None, None) => true,
+            _ => false,
+        };
+        if world_matches
+            && handle.authority_store_id == request.authority_store_id
             && handle.orchestration_session_id == request.orchestration_session_id
             && handle.participant_id == request.authoritative_participant_id
             && handle.backend_id == request.backend_id
@@ -1290,7 +1510,7 @@ fn find_settled_handle(
             let settlement = StartTurnSettlementV1 {
                 continuation_resume_handle_ref: reference.clone(),
                 authority_revision_after: handle.authority_revision_after,
-                resulting_posture: settlement_posture(request, intent)?,
+                resulting_posture: handle.committed_posture()?,
                 completed_at: completed_at.clone(),
             };
             let transaction = root
@@ -1499,13 +1719,7 @@ fn read_start_handle(
     authority: &HostSessionAuthority,
     root: &StateRootV3,
     reference: &AuthorityObjectRefV1,
-) -> Result<StartContinuationHandleHashInputV2, StartContinuityProtocolError> {
-    if reference.object_kind != AuthorityObjectKindV1::ResumeHandle || reference.schema_version != 2
-    {
-        return Err(error(
-            "Start continuation handle reference is not schema version 2",
-        ));
-    }
+) -> Result<DecodedStartContinuationHandleV1, StartContinuityProtocolError> {
     let bytes = store::read_typed_object_v2_or_v3_opened(
         authority.trusted_root(),
         root.root_revision,
@@ -1513,7 +1727,7 @@ fn read_start_handle(
         None,
     )
     .map_err(start_error)?;
-    canonical_json::from_slice(&bytes).map_err(start_error)
+    decode_start_continuation_handle(reference, &bytes)
 }
 
 fn authority_record<'a>(
@@ -1600,6 +1814,26 @@ fn continuation_object(
             ref_id: format!("ao_{}", &digest_hex[..32]),
             object_kind: AuthorityObjectKindV1::ResumeHandle,
             schema_version: 2,
+            commitment: AuthorityObjectCommitmentV1::CanonicalSha256 { digest_hex },
+        },
+        bytes,
+    ))
+}
+
+fn world_continuation_object(
+    handle: &super::schema::StartContinuationHandleHashInputV3,
+) -> Result<(AuthorityObjectRefV1, Vec<u8>), StartContinuityProtocolError> {
+    let bytes = canonical_object_bytes(
+        AuthorityObjectKindV1::ResumeHandle,
+        CanonicalObjectHashInputV1::WorldStartContinuationHandle(handle),
+    )
+    .map_err(start_error)?;
+    let digest_hex = canonical_sha256(handle).map_err(start_error)?;
+    Ok((
+        AuthorityObjectRefV1 {
+            ref_id: format!("ao_{}", &digest_hex[..32]),
+            object_kind: AuthorityObjectKindV1::ResumeHandle,
+            schema_version: 3,
             commitment: AuthorityObjectCommitmentV1::CanonicalSha256 { digest_hex },
         },
         bytes,

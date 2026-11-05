@@ -1128,6 +1128,738 @@ mod linux {
         ) -> Result<(), ConfigProjectionFailureV1>;
     }
 
+    /// Ordinary-only installed-home custody. It cannot mint the privileged E3 capability.
+    #[derive(Debug)]
+    pub struct OrdinaryConfiguredAcceptedHomeAuthorityV1 {
+        installed_record: InstalledAcceptedHomeBootstrapRecordV1,
+        accepted_home_descriptor: File,
+        source: OrdinaryBootstrapSourceV1,
+    }
+
+    #[derive(Debug)]
+    struct OrdinaryBootstrapSourceV1 {
+        root: File,
+        records: File,
+        active: File,
+        record: File,
+        head: InstalledAcceptedHomeBootstrapHeadV1,
+        root_identity: CanonicalDirectoryV1,
+        custody_uid: libc::uid_t,
+        substrate_gid: libc::gid_t,
+        snapshot: Vec<(String, OrdinaryBootstrapEntryV1)>,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct OrdinaryBootstrapEntryV1 {
+        device: u64,
+        inode: u64,
+        uid: u32,
+        gid: u32,
+        mode: u32,
+        links: u64,
+        size: i64,
+        changed: (i64, i64),
+        modified: (i64, i64),
+    }
+
+    impl OrdinaryConfiguredAcceptedHomeAuthorityV1 {
+        /// Read the fixed installed source for the exact ordinary invocation.
+        /// The carrier is compared with root-owned authority; it is not authority.
+        /// This does not open the private installer lock.
+        ///
+        /// ```no_run
+        /// # #[cfg(target_os = "linux")]
+        /// # fn inspect(carrier: &transport_api_types::InstallBootstrapContextCarrierV1) -> Result<(), config_projection::ConfigProjectionFailureV1> {
+        /// let held = config_projection::OrdinaryConfiguredAcceptedHomeAuthorityV1::from_installed_bootstrap_authority(carrier)?;
+        /// held.revalidate()?;
+        /// assert_eq!(held.accepted_home().physical_path, carrier.context.host_substrate_home);
+        /// # Ok(())
+        /// # }
+        /// ```
+        pub fn from_installed_bootstrap_authority(
+            expected: &transport_api_types::InstallBootstrapContextCarrierV1,
+        ) -> Result<Self, ConfigProjectionFailureV1> {
+            let source = open_ordinary_bootstrap_source(
+                Path::new("/var/lib/substrate/install-bootstrap-authority-v1"),
+                0,
+                group_gid("substrate")?,
+            )?;
+            acquire_installed_ordinary_home(source, expected)
+        }
+
+        /// Acquire an isolated component fixture through the same checked reader.
+        /// This test-support-only method proves no fixed installed-source custody.
+        /// It checks an already prepared component source; it does not install or
+        /// mint authority. Default production builds expose no such acquisition.
+        ///
+        /// ```no_run
+        /// # #[cfg(all(target_os = "linux", feature = "test-support"))]
+        /// # fn checked_component(source_root: &std::path::Path,
+        /// # expected: &transport_api_types::InstallBootstrapContextCarrierV1)
+        /// # -> Result<(), config_projection::ConfigProjectionFailureV1> {
+        /// let held = config_projection::OrdinaryConfiguredAcceptedHomeAuthorityV1::
+        ///     from_component_source_for_test(source_root, expected)?;
+        /// held.revalidate()?;
+        /// # Ok(())
+        /// # }
+        /// ```
+        #[cfg(any(test, feature = "test-support"))]
+        #[doc(hidden)]
+        pub fn from_component_source_for_test(
+            source_root: &Path,
+            expected: &transport_api_types::InstallBootstrapContextCarrierV1,
+        ) -> Result<Self, ConfigProjectionFailureV1> {
+            let uid = unsafe { libc::geteuid() };
+            if uid == 0 || unsafe { libc::getuid() } != uid {
+                return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+            }
+            let (_, _, gid) = ordinary_passwd_identity_by_uid(uid)?;
+            let source = open_ordinary_bootstrap_source(source_root, uid, gid)?;
+            acquire_installed_ordinary_home(source, expected)
+        }
+
+        /// Recheck the held installation generation and physical accepted home.
+        /// Separate effects must revalidate immediately before use; this is not
+        /// exclusion against a subsequent privileged installation.
+        pub fn revalidate(&self) -> Result<(), ConfigProjectionFailureV1> {
+            revalidate_installed_ordinary_home(self)
+        }
+
+        pub fn accepted_home(&self) -> &CanonicalDirectoryV1 {
+            &self.installed_record.accepted_home
+        }
+
+        pub fn intended_uid(&self) -> u64 {
+            self.installed_record.intended_uid
+        }
+    }
+
+    fn ordinary_bootstrap_entry_metadata(metadata: &libc::stat) -> OrdinaryBootstrapEntryV1 {
+        OrdinaryBootstrapEntryV1 {
+            device: metadata.st_dev,
+            inode: metadata.st_ino,
+            uid: metadata.st_uid,
+            gid: metadata.st_gid,
+            mode: metadata.st_mode,
+            links: metadata.st_nlink,
+            size: metadata.st_size,
+            changed: (metadata.st_ctime, metadata.st_ctime_nsec),
+            modified: (metadata.st_mtime, metadata.st_mtime_nsec),
+        }
+    }
+
+    fn verify_held_bootstrap_entry(
+        parent: BorrowedFd<'_>,
+        name: &str,
+        held: &File,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        let name = CString::new(name).map_err(|_| ConfigProjectionFailureV1::Malformed)?;
+        let mut named = std::mem::MaybeUninit::<libc::stat>::uninit();
+        if unsafe {
+            libc::fstatat(
+                parent.as_raw_fd(),
+                name.as_ptr(),
+                named.as_mut_ptr(),
+                libc::AT_SYMLINK_NOFOLLOW,
+            )
+        } != 0
+        {
+            return Err(map_io_error());
+        }
+        let named = unsafe { named.assume_init() };
+        if ordinary_bootstrap_entry_metadata(&named)
+            != ordinary_bootstrap_entry_metadata(&fstat(held.as_raw_fd())?)
+        {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        Ok(())
+    }
+
+    fn validate_bootstrap_quiescence(
+        directory: &File,
+        allowed_kind: &str,
+    ) -> Result<Vec<String>, ConfigProjectionFailureV1> {
+        let names = list_names(directory)?;
+        for name in &names {
+            if let Some(rest) = name.strip_prefix(".e3-bootstrap-tmp.") {
+                let (identity, kind) = rest
+                    .rsplit_once('.')
+                    .ok_or(ConfigProjectionFailureV1::Malformed)?;
+                let identity_uuid =
+                    Uuid::parse_str(identity).map_err(|_| ConfigProjectionFailureV1::Malformed)?;
+                if kind != allowed_kind
+                    || identity_uuid.get_version_num() != 7
+                    || identity_uuid.to_string() != identity
+                {
+                    return Err(ConfigProjectionFailureV1::Malformed);
+                }
+                // Only the privileged publisher may reconcile even a recognized
+                // pending object. In particular, never accept the previous head
+                // merely because it was observed twice during this window.
+                return Err(ConfigProjectionFailureV1::PartialPublication);
+            }
+        }
+        Ok(names)
+    }
+
+    fn ordinary_bootstrap_snapshot(
+        root: &File,
+        records: &File,
+        custody_uid: libc::uid_t,
+        substrate_gid: libc::gid_t,
+    ) -> Result<Vec<(String, OrdinaryBootstrapEntryV1)>, ConfigProjectionFailureV1> {
+        verify_directory(root, custody_uid, 0o750)?;
+        verify_group(root, substrate_gid)?;
+        verify_directory(records, custody_uid, 0o750)?;
+        verify_group(records, substrate_gid)?;
+        verify_held_bootstrap_entry(root.as_fd(), "records", records)?;
+        let root_names = validate_bootstrap_quiescence(root, "head")?;
+        if root_names != ["active.json", "lock", "records"] {
+            return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+        }
+        let mut snapshot = vec![
+            (
+                ".".into(),
+                ordinary_bootstrap_entry_metadata(&fstat(root.as_raw_fd())?),
+            ),
+            (
+                "records".into(),
+                ordinary_bootstrap_entry_metadata(&fstat(records.as_raw_fd())?),
+            ),
+        ];
+        // The lock's metadata belongs to the closed namespace. Never open it,
+        // including with O_PATH; no reader lock or permission change is used.
+        let mut lock = std::mem::MaybeUninit::<libc::stat>::uninit();
+        if unsafe {
+            libc::fstatat(
+                root.as_raw_fd(),
+                c"lock".as_ptr(),
+                lock.as_mut_ptr(),
+                libc::AT_SYMLINK_NOFOLLOW,
+            )
+        } != 0
+        {
+            return Err(map_io_error());
+        }
+        let lock = unsafe { lock.assume_init() };
+        if lock.st_uid != custody_uid
+            || lock.st_mode & libc::S_IFMT != libc::S_IFREG
+            || lock.st_mode & 0o7777 != 0o600
+            || lock.st_nlink != 1
+        {
+            return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+        }
+        snapshot.push(("lock".into(), ordinary_bootstrap_entry_metadata(&lock)));
+        let active = open_file_at(root.as_fd(), "active.json", libc::O_RDONLY, 0)?;
+        verify_regular_file(&active, custody_uid, 0o640)?;
+        verify_group(&active, substrate_gid)?;
+        verify_held_bootstrap_entry(root.as_fd(), "active.json", &active)?;
+        snapshot.push((
+            "active.json".into(),
+            ordinary_bootstrap_entry_metadata(&fstat(active.as_raw_fd())?),
+        ));
+        for name in validate_bootstrap_quiescence(records, "record")? {
+            let hash = name
+                .strip_suffix(".json")
+                .ok_or(ConfigProjectionFailureV1::Malformed)?;
+            validate_sha256(hash)?;
+            let record = open_file_at(records.as_fd(), &name, libc::O_RDONLY, 0)?;
+            verify_regular_file(&record, custody_uid, 0o640)?;
+            verify_group(&record, substrate_gid)?;
+            verify_held_bootstrap_entry(records.as_fd(), &name, &record)?;
+            let metadata = fstat(record.as_raw_fd())?;
+            if metadata.st_size < 0 || metadata.st_size as u64 > MAX_AUTHORITY_OBJECT_BYTES {
+                return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+            }
+            snapshot.push((
+                format!("records/{name}"),
+                ordinary_bootstrap_entry_metadata(&metadata),
+            ));
+        }
+        // Recheck directory metadata after the whole namespace walk. A
+        // publisher may have created/removed a temporary after its list read.
+        let root_after = ordinary_bootstrap_entry_metadata(&fstat(root.as_raw_fd())?);
+        let records_after = ordinary_bootstrap_entry_metadata(&fstat(records.as_raw_fd())?);
+        if snapshot.first().map(|entry| &entry.1) != Some(&root_after)
+            || snapshot.get(1).map(|entry| &entry.1) != Some(&records_after)
+        {
+            return Err(ConfigProjectionFailureV1::StaleRevision);
+        }
+        Ok(snapshot)
+    }
+
+    fn validate_bootstrap_source_custody(
+        source: &OrdinaryBootstrapSourceV1,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        if source.custody_uid == 0
+            && source.root_identity.physical_path
+                == "/var/lib/substrate/install-bootstrap-authority-v1"
+        {
+            for path in ["/", "/var", "/var/lib"] {
+                let parent = open_absolute_directory(Path::new(path))?;
+                let metadata = fstat(parent.as_raw_fd())?;
+                if metadata.st_mode & 0o022 != 0 {
+                    return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+                }
+                verify_directory(&parent, 0, metadata.st_mode & 0o7777)?;
+            }
+        } else {
+            // This private alternative is compiled only for isolated component
+            // fixtures. The public constructor always selects the literal root
+            // and UID 0; a fixture never establishes installed-source access.
+            #[cfg(not(any(test, feature = "test-support")))]
+            return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+            #[cfg(any(test, feature = "test-support"))]
+            if source.custody_uid != unsafe { libc::geteuid() } {
+                return Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture);
+            }
+        }
+        source
+            .root_identity
+            .revalidate_linux_from_fd(source.root.as_fd())?;
+        verify_held_bootstrap_entry(source.root.as_fd(), "records", &source.records)?;
+        verify_held_bootstrap_entry(source.root.as_fd(), "active.json", &source.active)?;
+        verify_held_bootstrap_entry(
+            source.records.as_fd(),
+            &format!("{}.json", source.head.head_record_hash),
+            &source.record,
+        )?;
+        if ordinary_bootstrap_snapshot(
+            &source.root,
+            &source.records,
+            source.custody_uid,
+            source.substrate_gid,
+        )? != source.snapshot
+        {
+            return Err(ConfigProjectionFailureV1::StaleRevision);
+        }
+        Ok(())
+    }
+
+    fn open_ordinary_bootstrap_source(
+        path: &Path,
+        custody_uid: libc::uid_t,
+        substrate_gid: libc::gid_t,
+    ) -> Result<OrdinaryBootstrapSourceV1, ConfigProjectionFailureV1> {
+        let root = open_absolute_directory(path)?;
+        let root_identity = CanonicalDirectoryV1::capture_linux_from_fd(root.as_fd())?;
+        let records = open_directory_raw_at(root.as_fd(), "records")?;
+        let snapshot = ordinary_bootstrap_snapshot(&root, &records, custody_uid, substrate_gid)?;
+        let mut active = open_file_at(root.as_fd(), "active.json", libc::O_RDONLY, 0)?;
+        let head = read_canonical_file(&mut active)?;
+        validate_installed_head(&head)?;
+        let record = open_file_at(
+            records.as_fd(),
+            &format!("{}.json", head.head_record_hash),
+            libc::O_RDONLY,
+            0,
+        )?;
+        let source = OrdinaryBootstrapSourceV1 {
+            root,
+            records,
+            active,
+            record,
+            head,
+            root_identity,
+            custody_uid,
+            substrate_gid,
+            snapshot,
+        };
+        validate_bootstrap_source_custody(&source)?;
+        Ok(source)
+    }
+
+    fn ordinary_passwd_identity_by_uid(
+        uid: libc::uid_t,
+    ) -> Result<(String, u32, u32), ConfigProjectionFailureV1> {
+        let mut pwd = std::mem::MaybeUninit::<libc::passwd>::uninit();
+        let mut result = std::ptr::null_mut();
+        let mut buffer = vec![0_u8; 16 * 1024];
+        if unsafe {
+            libc::getpwuid_r(
+                uid,
+                pwd.as_mut_ptr(),
+                buffer.as_mut_ptr().cast(),
+                buffer.len(),
+                &mut result,
+            )
+        } != 0
+            || result.is_null()
+        {
+            return Err(ConfigProjectionFailureV1::UnsupportedConfiguration);
+        }
+        let pwd = unsafe { pwd.assume_init() };
+        if pwd.pw_name.is_null() {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        let account = unsafe { CStr::from_ptr(pwd.pw_name) }
+            .to_str()
+            .map_err(|_| ConfigProjectionFailureV1::WrongBinding)?
+            .to_string();
+        Ok((account, pwd.pw_uid, pwd.pw_gid))
+    }
+
+    fn validate_ordinary_principal(
+        record: &InstalledAcceptedHomeBootstrapRecordV1,
+        expected: &transport_api_types::InstallBootstrapContextCarrierV1,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        expected
+            .validate()
+            .map_err(|_| ConfigProjectionFailureV1::WrongBinding)?;
+        validate_installed_record(record)?;
+        validate_installed_carrier_binding(record)?;
+        let uid = checked_uid(record.intended_uid)?;
+        let gid = checked_uid(record.intended_gid)?;
+        if uid == 0
+            || unsafe { libc::getuid() } != uid
+            || unsafe { libc::geteuid() } != uid
+            || unsafe { libc::getgid() } != gid
+            || unsafe { libc::getegid() } != gid
+            || expected
+                .encode()
+                .map_err(|_| ConfigProjectionFailureV1::WrongBinding)?
+                != record.install_bootstrap_carrier
+            || ordinary_passwd_identity_by_uid(uid)? != (record.intended_account.clone(), uid, gid)
+        {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        Ok(())
+    }
+
+    fn acquire_installed_ordinary_home(
+        source: OrdinaryBootstrapSourceV1,
+        expected: &transport_api_types::InstallBootstrapContextCarrierV1,
+    ) -> Result<OrdinaryConfiguredAcceptedHomeAuthorityV1, ConfigProjectionFailureV1> {
+        let mut record_file = open_file_at(
+            source.records.as_fd(),
+            &format!("{}.json", source.head.head_record_hash),
+            libc::O_RDONLY,
+            0,
+        )?;
+        let record: InstalledAcceptedHomeBootstrapRecordV1 = read_canonical_file(&mut record_file)?;
+        if record.record_hash != source.head.head_record_hash {
+            return Err(ConfigProjectionFailureV1::WrongBinding);
+        }
+        validate_ordinary_principal(&record, expected)?;
+        let accepted_home_descriptor =
+            open_absolute_directory(Path::new(&record.accepted_home.physical_path))?;
+        let result = OrdinaryConfiguredAcceptedHomeAuthorityV1 {
+            installed_record: record,
+            accepted_home_descriptor,
+            source,
+        };
+        result.revalidate()?;
+        Ok(result)
+    }
+
+    fn revalidate_installed_ordinary_home(
+        held: &OrdinaryConfiguredAcceptedHomeAuthorityV1,
+    ) -> Result<(), ConfigProjectionFailureV1> {
+        validate_bootstrap_source_custody(&held.source)?;
+        let expected = transport_api_types::InstallBootstrapContextCarrierV1::decode(
+            &held.installed_record.install_bootstrap_carrier,
+        )
+        .map_err(|_| ConfigProjectionFailureV1::WrongBinding)?;
+        validate_ordinary_principal(&held.installed_record, &expected)?;
+        let mut active = open_file_at(held.source.root.as_fd(), "active.json", libc::O_RDONLY, 0)?;
+        let head: InstalledAcceptedHomeBootstrapHeadV1 = read_canonical_file(&mut active)?;
+        validate_installed_head(&head)?;
+        let mut record_file = open_file_at(
+            held.source.records.as_fd(),
+            &format!("{}.json", head.head_record_hash),
+            libc::O_RDONLY,
+            0,
+        )?;
+        let record: InstalledAcceptedHomeBootstrapRecordV1 = read_canonical_file(&mut record_file)?;
+        validate_installed_record(&record)?;
+        if head != held.source.head || record != held.installed_record {
+            return Err(ConfigProjectionFailureV1::StaleRevision);
+        }
+        verify_directory(
+            &held.accepted_home_descriptor,
+            checked_uid(record.intended_uid)?,
+            0o700,
+        )?;
+        verify_group(
+            &held.accepted_home_descriptor,
+            checked_uid(record.intended_gid)?,
+        )?;
+        record
+            .accepted_home
+            .revalidate_linux_from_fd(held.accepted_home_descriptor.as_fd())?;
+        validate_bootstrap_source_custody(&held.source)
+    }
+
+    // Every fixture below is component-only. Its user-owned source directory is
+    // admitted only by cfg(test); none proves access to the installed root.
+    #[cfg(test)]
+    fn test_ordinary_bootstrap_fixture() -> (
+        tempfile::TempDir,
+        OrdinaryConfiguredAcceptedHomeAuthorityV1,
+        transport_api_types::InstallBootstrapContextCarrierV1,
+    ) {
+        use std::os::unix::fs::PermissionsExt;
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("bootstrap");
+        let records = root.join("records");
+        let home = temp.path().join("home");
+        std::fs::create_dir_all(&records).unwrap();
+        std::fs::create_dir(&home).unwrap();
+        for directory in [&root, &records] {
+            std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o750)).unwrap();
+        }
+        std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let uid = unsafe { libc::geteuid() };
+        let (account, _, gid) = ordinary_passwd_identity_by_uid(uid).unwrap();
+        assert_ne!(
+            uid, 0,
+            "component fixtures require the ordinary nonroot test runner"
+        );
+        let carrier = transport_api_types::InstallBootstrapContextCarrierV1::from_context(
+            transport_api_types::InstallBootstrapContextV1::new_unix(
+                home.to_str().unwrap(),
+                &account,
+                uid,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let accepted_home =
+            CanonicalDirectoryV1::capture_linux_from_fd(File::open(&home).unwrap().as_fd())
+                .unwrap();
+        let mut record = InstalledAcceptedHomeBootstrapRecordV1 {
+            schema_version: 1,
+            install_bootstrap_carrier: carrier.encode().unwrap(),
+            host_context_commitment: carrier.host_context_commitment.clone(),
+            intended_account: account,
+            intended_uid: u64::from(uid),
+            intended_gid: u64::from(gid),
+            accepted_home,
+            installed_at: Timestamp("2026-10-29T00:00:00.000000Z".into()),
+            record_hash: String::new(),
+        };
+        record.record_hash = hash_omitting(
+            "substrate.e3.installed-accepted-home-bootstrap.v1",
+            "record",
+            &record,
+            "record_hash",
+        )
+        .unwrap();
+        let mut head = InstalledAcceptedHomeBootstrapHeadV1 {
+            schema_version: 1,
+            head_record_hash: record.record_hash.clone(),
+            predecessor_head_hash: None,
+            updated_at: record.installed_at.clone(),
+            head_hash: String::new(),
+        };
+        head.head_hash = hash_omitting(
+            "substrate.e3.installed-accepted-home-bootstrap-head.v1",
+            "head",
+            &head,
+            "head_hash",
+        )
+        .unwrap();
+        let write = |path: &Path, bytes: &[u8], mode| {
+            std::fs::write(path, bytes).unwrap();
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).unwrap();
+        };
+        write(&root.join("lock"), b"", 0o600);
+        write(
+            &records.join(format!("{}.json", record.record_hash)),
+            &ConfigProjectionCodecV1::encode_canonical_json(&record).unwrap(),
+            0o640,
+        );
+        write(
+            &root.join("active.json"),
+            &ConfigProjectionCodecV1::encode_canonical_json(&head).unwrap(),
+            0o640,
+        );
+        let source = open_ordinary_bootstrap_source(&root, uid, gid).unwrap();
+        let configured = acquire_installed_ordinary_home(source, &carrier).unwrap();
+        (temp, configured, carrier)
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn test_ordinary_bootstrap_accepts_quiescent_snapshot() {
+        let (_temp, held, carrier) = test_ordinary_bootstrap_fixture();
+        held.revalidate().unwrap();
+        assert_eq!(
+            held.accepted_home().physical_path,
+            carrier.context.host_substrate_home
+        );
+        assert_eq!(held.intended_uid(), u64::from(unsafe { libc::geteuid() }));
+        assert_eq!(fstat(held.source.active.as_raw_fd()).unwrap().st_nlink, 1);
+        assert_eq!(fstat(held.source.record.as_raw_fd()).unwrap().st_nlink, 1);
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn test_ordinary_bootstrap_rejects_temporary_and_recovery_windows() {
+        use std::os::unix::fs::PermissionsExt;
+        for (directory, suffix, expected) in [
+            ("", "head", ConfigProjectionFailureV1::PartialPublication),
+            (
+                "records",
+                "record",
+                ConfigProjectionFailureV1::PartialPublication,
+            ),
+            ("records", "head", ConfigProjectionFailureV1::Malformed),
+        ] {
+            let (_temp, held, _carrier) = test_ordinary_bootstrap_fixture();
+            let path = Path::new(&held.source.root_identity.physical_path)
+                .join(directory)
+                .join(format!(".e3-bootstrap-tmp.{}.{}", Uuid::now_v7(), suffix));
+            std::fs::write(&path, b"pending: not reader authority").unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o640)).unwrap();
+            assert_eq!(held.revalidate(), Err(expected));
+        }
+        let (temp, held, _carrier) = test_ordinary_bootstrap_fixture();
+        let record_path = Path::new(&held.source.root_identity.physical_path)
+            .join("records")
+            .join(format!("{}.json", held.source.head.head_record_hash));
+        std::fs::hard_link(&record_path, temp.path().join("record-publication-link")).unwrap();
+        assert_eq!(
+            held.revalidate(),
+            Err(ConfigProjectionFailureV1::UnsupportedSecurityPosture)
+        );
+        let (_temp, held, _carrier) = test_ordinary_bootstrap_fixture();
+        std::fs::write(
+            Path::new(&held.source.root_identity.physical_path)
+                .join(".e3-bootstrap-tmp.not-a-uuid.head"),
+            b"pending",
+        )
+        .unwrap();
+        assert_eq!(held.revalidate(), Err(ConfigProjectionFailureV1::Malformed));
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn test_ordinary_bootstrap_rejects_source_substitution_and_head_advance() {
+        use std::os::unix::fs::PermissionsExt;
+        for entry in ["active.json", "records"] {
+            let (_temp, held, _carrier) = test_ordinary_bootstrap_fixture();
+            let path = Path::new(&held.source.root_identity.physical_path).join(entry);
+            let saved = path.with_extension("saved");
+            std::fs::rename(&path, &saved).unwrap();
+            if entry == "records" {
+                std::fs::create_dir(&path).unwrap();
+                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o750)).unwrap();
+            } else {
+                std::fs::copy(&saved, &path).unwrap();
+                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o640)).unwrap();
+            }
+            assert_eq!(
+                held.revalidate(),
+                Err(ConfigProjectionFailureV1::WrongBinding)
+            );
+        }
+        let (_temp, held, _carrier) = test_ordinary_bootstrap_fixture();
+        let root = Path::new(&held.source.root_identity.physical_path);
+        let mut head = held.source.head.clone();
+        head.predecessor_head_hash = Some(head.head_hash.clone());
+        head.updated_at = Timestamp("2026-10-29T00:00:01.000000Z".into());
+        head.head_hash = hash_omitting(
+            "substrate.e3.installed-accepted-home-bootstrap-head.v1",
+            "head",
+            &head,
+            "head_hash",
+        )
+        .unwrap();
+        let next = root.join("replacement");
+        std::fs::write(
+            &next,
+            ConfigProjectionCodecV1::encode_canonical_json(&head).unwrap(),
+        )
+        .unwrap();
+        std::fs::set_permissions(&next, std::fs::Permissions::from_mode(0o640)).unwrap();
+        std::fs::rename(next, root.join("active.json")).unwrap();
+        assert_eq!(
+            held.revalidate(),
+            Err(ConfigProjectionFailureV1::WrongBinding)
+        );
+        let (temp, held, _carrier) = test_ordinary_bootstrap_fixture();
+        let root = Path::new(&held.source.root_identity.physical_path);
+        std::fs::rename(root, temp.path().join("old-bootstrap")).unwrap();
+        std::fs::create_dir(root).unwrap();
+        assert!(held.revalidate().is_err());
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn test_ordinary_bootstrap_rejects_wrong_custody_and_principal() {
+        use std::os::unix::fs::PermissionsExt;
+        for entry in ["active.json", "records", "lock"] {
+            let (_temp, held, _carrier) = test_ordinary_bootstrap_fixture();
+            let path = Path::new(&held.source.root_identity.physical_path).join(entry);
+            let original_permissions = std::fs::metadata(&path).unwrap().permissions();
+            let invalid_mode = if entry == "records" { 0o770 } else { 0o666 };
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(invalid_mode)).unwrap();
+            let result = held.revalidate();
+            std::fs::set_permissions(&path, original_permissions).unwrap();
+            assert!(result.is_err());
+        }
+        let (_temp, held, carrier) = test_ordinary_bootstrap_fixture();
+        assert!(open_ordinary_bootstrap_source(
+            Path::new(&held.source.root_identity.physical_path),
+            unsafe { libc::geteuid() }.checked_add(1).unwrap(),
+            held.source.substrate_gid,
+        )
+        .is_err());
+        let mut record = held.installed_record.clone();
+        record.intended_gid = record.intended_gid.checked_add(1).unwrap();
+        record.record_hash = hash_omitting(
+            "substrate.e3.installed-accepted-home-bootstrap.v1",
+            "record",
+            &record,
+            "record_hash",
+        )
+        .unwrap();
+        assert_eq!(
+            validate_ordinary_principal(&record, &carrier),
+            Err(ConfigProjectionFailureV1::WrongBinding)
+        );
+        let mut wrong = carrier;
+        wrong.host_context_commitment = "f".repeat(64);
+        assert_eq!(
+            validate_ordinary_principal(&held.installed_record, &wrong),
+            Err(ConfigProjectionFailureV1::WrongBinding)
+        );
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn test_ordinary_bootstrap_rejects_canonical_or_physical_tampering() {
+        use std::os::unix::fs::PermissionsExt;
+        let (_temp, held, carrier) = test_ordinary_bootstrap_fixture();
+        let root = Path::new(&held.source.root_identity.physical_path);
+        let record_path = root
+            .join("records")
+            .join(format!("{}.json", held.source.head.head_record_hash));
+        let mut body = std::fs::read(&record_path).unwrap();
+        body.push(b'\n');
+        std::fs::write(&record_path, body).unwrap();
+        let fresh = open_ordinary_bootstrap_source(
+            root,
+            held.source.custody_uid,
+            held.source.substrate_gid,
+        )
+        .unwrap();
+        assert!(matches!(
+            acquire_installed_ordinary_home(fresh, &carrier),
+            Err(ConfigProjectionFailureV1::Malformed)
+        ));
+        let (temp, held, _carrier) = test_ordinary_bootstrap_fixture();
+        let home = Path::new(&held.installed_record.accepted_home.physical_path);
+        std::fs::rename(home, temp.path().join("old-home")).unwrap();
+        std::fs::create_dir(home).unwrap();
+        std::fs::set_permissions(home, std::fs::Permissions::from_mode(0o700)).unwrap();
+        assert_eq!(
+            held.revalidate(),
+            Err(ConfigProjectionFailureV1::WrongBinding)
+        );
+    }
+
     /// Sealed installed accepted-home capability.
     #[derive(Debug)]
     pub struct ConfiguredAcceptedHomeAuthorityV1 {

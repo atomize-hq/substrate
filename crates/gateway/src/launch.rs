@@ -18,6 +18,8 @@ pub const GATEWAY_MODE_HOST_ONLY: &str = "host_only";
 pub enum GatewayMode {
     InWorld,
     HostOnly,
+    /// Service-owned startup with explicit inherited listener and auth custody.
+    ManagedHost,
 }
 
 impl GatewayMode {
@@ -25,6 +27,7 @@ impl GatewayMode {
         match self {
             Self::InWorld => GATEWAY_MODE_IN_WORLD,
             Self::HostOnly => GATEWAY_MODE_HOST_ONLY,
+            Self::ManagedHost => "managed_host",
         }
     }
 
@@ -44,6 +47,7 @@ impl GatewayMode {
         match value {
             GATEWAY_MODE_IN_WORLD => Ok(Self::InWorld),
             GATEWAY_MODE_HOST_ONLY => Ok(Self::HostOnly),
+            "managed_host" => Ok(Self::ManagedHost),
             other => Err(anyhow!(
                 "Invalid {} value '{}'; expected '{}' or '{}'",
                 SUBSTRATE_LLM_GATEWAY_MODE,
@@ -138,6 +142,9 @@ fn resolve_config_path(
 
     match mode {
         GatewayMode::HostOnly => default_config_path(),
+        GatewayMode::ManagedHost => Err(anyhow!(
+            "Managed Host startup requires an explicit config descriptor"
+        )),
         GatewayMode::InWorld => Err(anyhow!(
             "Integrated gateway launch requires an explicit config path via --config or {}",
             SUBSTRATE_LLM_GATEWAY_CONFIG_PATH
@@ -152,6 +159,14 @@ fn resolve_token_store(
     let disable_persistence =
         read_bool_env(SUBSTRATE_LLM_GATEWAY_DISABLE_TOKEN_PERSISTENCE)?.unwrap_or(false);
     let token_store_path = read_path_env(SUBSTRATE_LLM_GATEWAY_TOKEN_STORE_PATH)?;
+
+    if mode == GatewayMode::ManagedHost {
+        anyhow::ensure!(
+            disable_persistence && token_store_path.is_none(),
+            "Managed Host token persistence must be disabled"
+        );
+        return Ok(TokenStoreStrategy::Disabled);
+    }
 
     if disable_persistence && token_store_path.is_some() {
         return Err(anyhow!(
@@ -171,6 +186,7 @@ fn resolve_token_store(
 
     match mode {
         GatewayMode::HostOnly => default_token_store_path().map(TokenStoreStrategy::Persistent),
+        GatewayMode::ManagedHost => unreachable!("managed Host handled above"),
         GatewayMode::InWorld => Err(anyhow!(
             "Integrated gateway launch requires {} or {}=1",
             SUBSTRATE_LLM_GATEWAY_TOKEN_STORE_PATH,

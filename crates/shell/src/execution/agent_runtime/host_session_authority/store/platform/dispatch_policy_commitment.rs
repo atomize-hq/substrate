@@ -11,6 +11,12 @@ use super::transaction::{
 };
 
 const DIRECTORY: &str = "dispatch-policy-commitment-v1";
+
+#[cfg(target_os = "linux")]
+pub(super) fn held_snapshot_namespace_name() -> &'static str {
+    DIRECTORY
+}
+
 const REGISTRY_FILE: &str = "registry-v1.json";
 const KEYS_DIRECTORY: &str = "keys";
 const TEMP_DIRECTORY: &str = "tmp";
@@ -70,169 +76,216 @@ impl<'scope, 'root> DispatchPolicyCommitmentReadCapabilityV1<'scope, 'root> {
         else {
             return Ok(DispatchPolicyCommitmentPhysicalReadV1::Absent);
         };
-        let root = ReadOnlyDirectoryGuardV1::capture(
-            self.transaction.authority_directory(),
-            root_entry,
-            E2_RM_NAMESPACE,
-        )?;
-        let mut guard = ReadOnlyE2NamespaceGuardV1 {
-            root,
-            keys: None,
-            temporary: None,
-            registry: None,
-            key_files: Vec::new(),
-            key_temporary_files: Vec::new(),
-            registry_temporary_files: Vec::new(),
-        };
-        let result = (|| {
-            for entry in &guard.root.manifest {
-                if !matches!(
-                    (entry.name.as_str(), entry.kind),
-                    (KEYS_DIRECTORY | TEMP_DIRECTORY, EntryKind::Directory)
-                        | (REGISTRY_FILE, EntryKind::RegularFile)
-                ) {
-                    return Err(ReadOnlyAuthoritySnapshotErrorV1::UnsafeNamespaceEntry {
-                        namespace: E2_RM_NAMESPACE,
-                        name: entry.name.clone(),
-                    });
-                }
-            }
-            let registry_entry = required_entry(
-                &guard.root.manifest,
-                REGISTRY_FILE,
-                EntryKind::RegularFile,
-                E2_RM_NAMESPACE,
-            )?;
-            let keys_entry = required_entry(
-                &guard.root.manifest,
-                KEYS_DIRECTORY,
-                EntryKind::Directory,
-                E2_RM_NAMESPACE,
-            )?;
-            let temporary_entry = required_entry(
-                &guard.root.manifest,
-                TEMP_DIRECTORY,
-                EntryKind::Directory,
-                E2_RM_NAMESPACE,
-            )?;
-            guard.registry = Some(ReadOnlyFileGuardV1::capture(
-                &guard.root.directory,
-                registry_entry,
-                E2_RM_NAMESPACE,
-            )?);
-            guard.keys = Some(ReadOnlyDirectoryGuardV1::capture(
-                &guard.root.directory,
-                keys_entry,
-                E2_RM_KEYS_NAMESPACE,
-            )?);
-            guard.temporary = Some(ReadOnlyDirectoryGuardV1::capture(
-                &guard.root.directory,
-                temporary_entry,
-                E2_RM_TEMP_NAMESPACE,
-            )?);
-
-            let keys = guard
-                .keys
-                .as_ref()
-                .ok_or(ReadOnlyAuthoritySnapshotErrorV1::Io {
-                    operation: "retain E2-RM keys guard",
-                })?;
-            let mut key_files = BTreeMap::new();
-            let mut failure = None;
-            for entry in &keys.manifest {
-                if entry.kind == EntryKind::RegularFile && key_temp_name(&entry.name) {
-                    match ReadOnlyFileGuardV1::capture(&keys.directory, entry, E2_RM_KEYS_NAMESPACE)
-                    {
-                        Ok(temporary_key) => {
-                            failure.get_or_insert(
-                                ReadOnlyAuthoritySnapshotErrorV1::UnsafeTemporaryMaterial {
-                                    namespace: E2_RM_KEYS_NAMESPACE,
-                                    name: temporary_key.entry.name.clone(),
-                                },
-                            );
-                            guard.key_temporary_files.push(temporary_key);
-                        }
-                        Err(error) => {
-                            failure.get_or_insert(error);
-                        }
-                    }
-                    continue;
-                }
-                if entry.kind != EntryKind::RegularFile || !key_file_name(&entry.name) {
-                    failure.get_or_insert(ReadOnlyAuthoritySnapshotErrorV1::UnsafeNamespaceEntry {
-                        namespace: E2_RM_KEYS_NAMESPACE,
-                        name: entry.name.clone(),
-                    });
-                    continue;
-                }
-                match ReadOnlyFileGuardV1::capture(&keys.directory, entry, E2_RM_KEYS_NAMESPACE) {
-                    Ok(key) => {
-                        key_files.insert(entry.name.clone(), key.bytes.clone());
-                        guard.key_files.push(key);
-                    }
-                    Err(error) => {
-                        failure.get_or_insert(error);
-                    }
-                }
-            }
-
-            let temporary =
-                guard
-                    .temporary
-                    .as_ref()
-                    .ok_or(ReadOnlyAuthoritySnapshotErrorV1::Io {
-                        operation: "retain E2-RM temporary guard",
-                    })?;
-            for entry in &temporary.manifest {
-                if entry.kind != EntryKind::RegularFile || !registry_temp_name(&entry.name) {
-                    failure.get_or_insert(
-                        ReadOnlyAuthoritySnapshotErrorV1::UnsafeTemporaryMaterial {
-                            namespace: E2_RM_TEMP_NAMESPACE,
-                            name: entry.name.clone(),
-                        },
-                    );
-                    continue;
-                }
-                match ReadOnlyFileGuardV1::capture(
-                    &temporary.directory,
-                    entry,
-                    E2_RM_TEMP_NAMESPACE,
-                ) {
-                    Ok(temporary_registry) => {
-                        failure.get_or_insert(
-                            ReadOnlyAuthoritySnapshotErrorV1::UnsafeTemporaryMaterial {
-                                namespace: E2_RM_TEMP_NAMESPACE,
-                                name: temporary_registry.entry.name.clone(),
-                            },
-                        );
-                        guard.registry_temporary_files.push(temporary_registry);
-                    }
-                    Err(error) => {
-                        failure.get_or_insert(error);
-                    }
-                }
-            }
-            if let Some(error) = failure {
-                return Err(error);
-            }
-
-            Ok(DispatchPolicyCommitmentPhysicalReadV1::Present(
-                DispatchPolicyCommitmentPhysicalSnapshotV1 {
-                    registry_bytes: guard
-                        .registry
-                        .as_ref()
-                        .ok_or(ReadOnlyAuthoritySnapshotErrorV1::Io {
-                            operation: "retain E2-RM registry guard",
-                        })?
-                        .bytes
-                        .clone(),
-                    key_files,
-                },
-            ))
-        })();
+        let (result, guard) =
+            capture_existing_e2_namespace(self.transaction.authority_directory(), root_entry)?;
         self.transaction.retain_e2_guard(guard)?;
         result
     }
+}
+
+#[cfg(target_os = "linux")]
+fn capture_existing_e2_namespace(
+    authority: &TrustedDirectory,
+    root_entry: &DirectoryEntry,
+) -> Result<
+    (
+        Result<DispatchPolicyCommitmentPhysicalReadV1, ReadOnlyAuthoritySnapshotErrorV1>,
+        ReadOnlyE2NamespaceGuardV1,
+    ),
+    ReadOnlyAuthoritySnapshotErrorV1,
+> {
+    let root = ReadOnlyDirectoryGuardV1::capture(authority, root_entry, E2_RM_NAMESPACE)?;
+    let mut guard = ReadOnlyE2NamespaceGuardV1 {
+        root,
+        keys: None,
+        temporary: None,
+        registry: None,
+        key_files: Vec::new(),
+        key_temporary_files: Vec::new(),
+        registry_temporary_files: Vec::new(),
+    };
+    let result = (|| {
+        for entry in &guard.root.manifest {
+            if !matches!(
+                (entry.name.as_str(), entry.kind),
+                (KEYS_DIRECTORY | TEMP_DIRECTORY, EntryKind::Directory)
+                    | (REGISTRY_FILE, EntryKind::RegularFile)
+            ) {
+                return Err(ReadOnlyAuthoritySnapshotErrorV1::UnsafeNamespaceEntry {
+                    namespace: E2_RM_NAMESPACE,
+                    name: entry.name.clone(),
+                });
+            }
+        }
+        let registry_entry = required_entry(
+            &guard.root.manifest,
+            REGISTRY_FILE,
+            EntryKind::RegularFile,
+            E2_RM_NAMESPACE,
+        )?;
+        let keys_entry = required_entry(
+            &guard.root.manifest,
+            KEYS_DIRECTORY,
+            EntryKind::Directory,
+            E2_RM_NAMESPACE,
+        )?;
+        let temporary_entry = required_entry(
+            &guard.root.manifest,
+            TEMP_DIRECTORY,
+            EntryKind::Directory,
+            E2_RM_NAMESPACE,
+        )?;
+        guard.registry = Some(ReadOnlyFileGuardV1::capture(
+            &guard.root.directory,
+            registry_entry,
+            E2_RM_NAMESPACE,
+        )?);
+        guard.keys = Some(ReadOnlyDirectoryGuardV1::capture(
+            &guard.root.directory,
+            keys_entry,
+            E2_RM_KEYS_NAMESPACE,
+        )?);
+        guard.temporary = Some(ReadOnlyDirectoryGuardV1::capture(
+            &guard.root.directory,
+            temporary_entry,
+            E2_RM_TEMP_NAMESPACE,
+        )?);
+
+        let keys = guard
+            .keys
+            .as_ref()
+            .ok_or(ReadOnlyAuthoritySnapshotErrorV1::Io {
+                operation: "retain E2-RM keys guard",
+            })?;
+        let mut key_files = BTreeMap::new();
+        let mut failure = None;
+        for entry in &keys.manifest {
+            if entry.kind == EntryKind::RegularFile && key_temp_name(&entry.name) {
+                match ReadOnlyFileGuardV1::capture(&keys.directory, entry, E2_RM_KEYS_NAMESPACE) {
+                    Ok(temporary_key) => {
+                        failure.get_or_insert(
+                            ReadOnlyAuthoritySnapshotErrorV1::UnsafeTemporaryMaterial {
+                                namespace: E2_RM_KEYS_NAMESPACE,
+                                name: temporary_key.entry.name.clone(),
+                            },
+                        );
+                        guard.key_temporary_files.push(temporary_key);
+                    }
+                    Err(error) => {
+                        failure.get_or_insert(error);
+                    }
+                }
+                continue;
+            }
+            if entry.kind != EntryKind::RegularFile || !key_file_name(&entry.name) {
+                failure.get_or_insert(ReadOnlyAuthoritySnapshotErrorV1::UnsafeNamespaceEntry {
+                    namespace: E2_RM_KEYS_NAMESPACE,
+                    name: entry.name.clone(),
+                });
+                continue;
+            }
+            match ReadOnlyFileGuardV1::capture(&keys.directory, entry, E2_RM_KEYS_NAMESPACE) {
+                Ok(key) => {
+                    key_files.insert(entry.name.clone(), key.bytes.clone());
+                    guard.key_files.push(key);
+                }
+                Err(error) => {
+                    failure.get_or_insert(error);
+                }
+            }
+        }
+
+        let temporary = guard
+            .temporary
+            .as_ref()
+            .ok_or(ReadOnlyAuthoritySnapshotErrorV1::Io {
+                operation: "retain E2-RM temporary guard",
+            })?;
+        for entry in &temporary.manifest {
+            if entry.kind != EntryKind::RegularFile || !registry_temp_name(&entry.name) {
+                failure.get_or_insert(ReadOnlyAuthoritySnapshotErrorV1::UnsafeTemporaryMaterial {
+                    namespace: E2_RM_TEMP_NAMESPACE,
+                    name: entry.name.clone(),
+                });
+                continue;
+            }
+            match ReadOnlyFileGuardV1::capture(&temporary.directory, entry, E2_RM_TEMP_NAMESPACE) {
+                Ok(temporary_registry) => {
+                    failure.get_or_insert(
+                        ReadOnlyAuthoritySnapshotErrorV1::UnsafeTemporaryMaterial {
+                            namespace: E2_RM_TEMP_NAMESPACE,
+                            name: temporary_registry.entry.name.clone(),
+                        },
+                    );
+                    guard.registry_temporary_files.push(temporary_registry);
+                }
+                Err(error) => {
+                    failure.get_or_insert(error);
+                }
+            }
+        }
+        if let Some(error) = failure {
+            return Err(error);
+        }
+
+        Ok(DispatchPolicyCommitmentPhysicalReadV1::Present(
+            DispatchPolicyCommitmentPhysicalSnapshotV1 {
+                registry_bytes: guard
+                    .registry
+                    .as_ref()
+                    .ok_or(ReadOnlyAuthoritySnapshotErrorV1::Io {
+                        operation: "retain E2-RM registry guard",
+                    })?
+                    .bytes
+                    .clone(),
+                key_files,
+            },
+        ))
+    })();
+    Ok((result, guard))
+}
+
+/// Capture E2 once inside the caller's existing root writer guard. The same
+/// physical guards are finalized after success or semantic refusal, including
+/// publication by the admission owner in its separate namespace.
+#[cfg(target_os = "linux")]
+pub(super) fn with_existing_e2_source_in_locked_authority<T>(
+    authority: &TrustedDirectory,
+    operation: impl FnOnce(
+        &DispatchPolicyCommitmentPhysicalReadV1,
+        &dyn Fn() -> Result<(), BootstrapError>,
+    ) -> Result<T, BootstrapError>,
+) -> Result<T, BootstrapError> {
+    let entries = authority
+        .entries()
+        .map_err(|_| BootstrapError("enumerate locked E2 source"))?;
+    let Some(entry) = entries.iter().find(|entry| entry.name == DIRECTORY) else {
+        let verify = || {
+            if authority
+                .entry_kind(DIRECTORY)
+                .map_err(|_| BootstrapError("verify locked E2 source absence"))?
+                .is_some()
+            {
+                return Err(BootstrapError("locked E2 source absence changed"));
+            }
+            Ok(())
+        };
+        let result = operation(&DispatchPolicyCommitmentPhysicalReadV1::Absent, &verify);
+        verify()?;
+        return result;
+    };
+    let (captured, guard) = capture_existing_e2_namespace(authority, entry)
+        .map_err(|_| BootstrapError("capture locked E2 source refused"))?;
+    let verify = || {
+        super::transaction::verify_e2_population_source_guard(&guard, authority)
+            .map_err(|_| BootstrapError("locked E2 source changed"))
+    };
+    let result = match captured {
+        Ok(physical) => operation(&physical, &verify),
+        Err(_) => Err(BootstrapError("locked E2 source is incomplete or unsafe")),
+    };
+    verify()?;
+    result
 }
 
 #[cfg(target_os = "linux")]
@@ -260,9 +313,13 @@ fn required_entry<'a>(
 pub(crate) struct DispatchPolicyCommitmentStorageV1 {
     root: TrustedAuthorityRoot,
     authority_store_id: String,
+    #[cfg(target_os = "linux")]
+    publication: Option<crate::execution::agent_runtime::host_session_authority::world_bound_controller::AuthenticatedOrdinaryWorldPublicationV1>,
 }
 
 pub(crate) struct DispatchPolicyCommitmentStorageTransactionV1 {
+    #[cfg(target_os = "linux")]
+    authority_root: VersionedStateRoot,
     authority: TrustedDirectory,
     directory: TrustedDirectory,
     keys: TrustedDirectory,
@@ -281,19 +338,43 @@ impl DispatchPolicyCommitmentStorageV1 {
         ) -> Result<T, BootstrapError>,
     ) -> Result<T, BootstrapError> {
         with_opened_existing_versioned_semantic_preflight(&self.root, |transaction| {
+            #[cfg(target_os = "linux")]
+            if let Some(publication) = &self.publication {
+                publication.verify_locked_ordinary_world_publication(&transaction.root)?;
+            }
             transaction.reconcile()?;
             if transaction.root.authority_store_id() != self.authority_store_id {
                 return Err(BootstrapError(
                     "dispatch policy commitment capability authority store changed",
                 ));
             }
-            let mut storage = open_transaction(transaction.layout)?;
+            let mut storage = open_transaction(
+                transaction.layout,
+                #[cfg(target_os = "linux")]
+                &transaction.root,
+            )?;
             operation(&mut storage)
         })
     }
 }
 
 impl DispatchPolicyCommitmentStorageTransactionV1 {
+    #[cfg(target_os = "linux")]
+    pub(crate) fn with_existing_retained_admission_source<T>(
+        &self,
+        operation: impl FnOnce(
+            &VersionedStateRoot,
+            &[u8],
+            Vec<(String, Vec<u8>)>,
+            &dyn Fn() -> Result<(), BootstrapError>,
+        ) -> Result<T, BootstrapError>,
+    ) -> Result<T, BootstrapError> {
+        super::transaction::with_existing_retained_admission_source_in_locked_authority(
+            &self.authority,
+            |bytes, keys, verify| operation(&self.authority_root, bytes, keys, verify),
+        )
+    }
+
     pub(crate) fn read_registry(&self) -> Result<Option<Vec<u8>>, BootstrapError> {
         match self
             .directory
@@ -408,6 +489,25 @@ impl DispatchPolicyCommitmentStorageTransactionV1 {
         self.publish_registry(temp_name, bytes, true)
     }
 
+    pub(crate) fn replace_registry_with_source_guard(
+        &self,
+        temp_name: &str,
+        bytes: &[u8],
+        verify: &dyn Fn() -> Result<(), BootstrapError>,
+    ) -> Result<(), BootstrapError> {
+        verify()?;
+        self.stage_registry_temp(temp_name, bytes)?;
+        let file = self
+            .tmp
+            .open_file(temp_name)
+            .map_err(|_| BootstrapError("open dispatch policy commitment registry temp"))?;
+        verify()?;
+        self.tmp
+            .rename_replace(temp_name, file, &self.directory, REGISTRY_FILE)
+            .map_err(|_| BootstrapError("replace dispatch policy commitment registry"))?;
+        sync_publication(&self.tmp, &self.directory, &self.authority)
+    }
+
     #[cfg(test)]
     pub(crate) fn stage_registry_replacement_for_test(
         &self,
@@ -463,6 +563,18 @@ impl DispatchPolicyCommitmentStorageTransactionV1 {
 pub(crate) fn dispatch_policy_commitment_storage_opened(
     opened: &TrustedAuthorityRoot,
 ) -> Result<DispatchPolicyCommitmentStorageV1, BootstrapError> {
+    dispatch_policy_commitment_storage_opened_with_publication(
+        opened,
+        #[cfg(target_os = "linux")]
+        None,
+    )
+}
+
+pub(in crate::execution::agent_runtime::host_session_authority::store) fn dispatch_policy_commitment_storage_opened_with_publication(
+    opened: &TrustedAuthorityRoot,
+    #[cfg(target_os = "linux")]
+    publication: Option<crate::execution::agent_runtime::host_session_authority::world_bound_controller::AuthenticatedOrdinaryWorldPublicationV1>,
+) -> Result<DispatchPolicyCommitmentStorageV1, BootstrapError> {
     opened
         .revalidate()
         .map_err(|_| BootstrapError("revalidate dispatch policy commitment authority root"))?;
@@ -476,12 +588,18 @@ pub(crate) fn dispatch_policy_commitment_storage_opened(
     }
     let authority_store_id =
         with_opened_existing_versioned_semantic_preflight(&rebound, |transaction| {
+            #[cfg(target_os = "linux")]
+            if let Some(publication) = &publication {
+                publication.verify_locked_ordinary_world_publication(&transaction.root)?;
+            }
             transaction.reconcile()?;
             Ok(transaction.root.authority_store_id().to_owned())
         })?;
     Ok(DispatchPolicyCommitmentStorageV1 {
         root: rebound,
         authority_store_id,
+        #[cfg(target_os = "linux")]
+        publication,
     })
 }
 
@@ -546,6 +664,7 @@ pub(crate) fn dispatch_policy_commitment_registry_exists_opened(
 
 fn open_transaction(
     layout: &StoreLayout<'_>,
+    #[cfg(target_os = "linux")] authority_root: &VersionedStateRoot,
 ) -> Result<DispatchPolicyCommitmentStorageTransactionV1, BootstrapError> {
     let directory = match layout
         .authority
@@ -615,6 +734,8 @@ fn open_transaction(
         .sync()
         .map_err(|_| BootstrapError("sync dispatch policy authority layout"))?;
     Ok(DispatchPolicyCommitmentStorageTransactionV1 {
+        #[cfg(target_os = "linux")]
+        authority_root: authority_root.clone(),
         authority,
         directory,
         keys,

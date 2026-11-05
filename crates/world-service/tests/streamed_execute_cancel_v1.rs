@@ -46,6 +46,8 @@ fn make_request(cwd: &Path, cmd: &str) -> ExecuteRequest {
         "1".to_string(),
     );
     ExecuteRequest {
+        schema_version: 1,
+        ordinary_start_selection: None,
         profile: None,
         cmd: cmd.to_string(),
         cwd: Some(cwd.display().to_string()),

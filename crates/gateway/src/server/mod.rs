@@ -66,6 +66,10 @@ impl IntegratedGatewayAuthContext {
         match mode {
             GatewayMode::HostOnly => Ok(None),
             GatewayMode::InWorld => Self::from_auth_bundle_env().map(Some),
+            GatewayMode::ManagedHost => {
+                harden_managed_host_startup()?;
+                Self::from_auth_bundle_env().map(Some)
+            }
         }
     }
 
@@ -212,6 +216,12 @@ fn prepare_startup_config(
     install_integrated_codex_auth_handoff(None)?;
 
     match mode {
+        GatewayMode::ManagedHost => {
+            let context = integrated_auth
+                .ok_or_else(|| anyhow::anyhow!("Managed Host auth descriptor missing"))?;
+            context.apply_to_config(config)?;
+            config.resolve_env_vars_for_integrated_mode()?;
+        }
         GatewayMode::HostOnly => {
             if integrated_auth.is_some() {
                 anyhow::bail!(
@@ -526,6 +536,23 @@ pub async fn start_server(
         mode, token_store, ..
     } = launch;
 
+    if mode == GatewayMode::ManagedHost {
+        anyhow::ensure!(
+            matches!(token_store, TokenStoreStrategy::Disabled),
+            "Managed Host token persistence must be disabled"
+        );
+    }
+    #[cfg(target_os = "linux")]
+    let managed_admission = if mode == GatewayMode::ManagedHost {
+        Some(crate::managed_host_admission::ManagedHostRouteV1::adopt()?)
+    } else {
+        None
+    };
+    #[cfg(not(target_os = "linux"))]
+    anyhow::ensure!(
+        mode != GatewayMode::ManagedHost,
+        "managed Host unsupported on this platform"
+    );
     prepare_startup_config(&mut config, mode, integrated_auth.as_ref())?;
     let router = Router::new(config.clone());
 
@@ -545,15 +572,26 @@ pub async fn start_server(
     }
 
     // Initialize provider registry from config (with token store and model mappings)
-    let provider_registry = Arc::new(
-        ProviderRegistry::from_configs_with_models_and_mode(
+    #[cfg(target_os = "linux")]
+    let managed_registry = match managed_admission.as_ref() {
+        Some(_) => Some(ProviderRegistry::from_managed_host(
+            &config.providers,
+            &config.models,
+        )?),
+        None => None,
+    };
+    #[cfg(not(target_os = "linux"))]
+    let managed_registry: Option<ProviderRegistry> = None;
+    let provider_registry = Arc::new(match managed_registry {
+        Some(registry) => registry,
+        None => ProviderRegistry::from_configs_with_models_and_mode(
             &config.providers,
             Some(token_store.clone()),
             &config.models,
             mode,
         )
         .map_err(|e| anyhow::anyhow!("Failed to initialize provider registry: {}", e))?,
-    );
+    });
 
     info!(
         "📦 Loaded {} providers with {} models",
@@ -579,40 +617,51 @@ pub async fn start_server(
 
     // Clone state before moving it
     let oauth_state = state.clone();
+    #[cfg(target_os = "linux")]
+    let app = match managed_admission {
+        Some(admission) => build_managed_host_app(state, admission),
+        None => build_app(state),
+    };
+    #[cfg(not(target_os = "linux"))]
     let app = build_app(state);
 
     // Bind to main address
     let addr = format!("{}:{}", config.server.host, config.server.port);
-    let listener = TcpListener::bind(&addr).await?;
+    let listener = if mode == GatewayMode::ManagedHost {
+        take_managed_host_listener(&config)?
+    } else {
+        TcpListener::bind(&addr).await?
+    };
 
     info!("🚀 Server listening on {}", addr);
 
     // Start OAuth callback server on port 1455 (required for OpenAI Codex)
     // This is necessary because OpenAI's OAuth app only allows localhost:1455/auth/callback
-    tokio::spawn(async move {
-        let oauth_callback_app = AxumRouter::new()
-            .route("/auth/callback", get(oauth_handlers::oauth_callback))
-            .with_state(oauth_state);
+    if mode != GatewayMode::ManagedHost {
+        tokio::spawn(async move {
+            let oauth_callback_app = AxumRouter::new()
+                .route("/auth/callback", get(oauth_handlers::oauth_callback))
+                .with_state(oauth_state);
 
-        let oauth_addr = "127.0.0.1:1455";
-        match TcpListener::bind(oauth_addr).await {
-            Ok(oauth_listener) => {
-                info!("🔐 OAuth callback server listening on {}", oauth_addr);
-                if let Err(e) = axum::serve(oauth_listener, oauth_callback_app).await {
-                    error!("OAuth callback server error: {}", e);
+            let oauth_addr = "127.0.0.1:1455";
+            match TcpListener::bind(oauth_addr).await {
+                Ok(oauth_listener) => {
+                    info!("🔐 OAuth callback server listening on {}", oauth_addr);
+                    if let Err(e) = axum::serve(oauth_listener, oauth_callback_app).await {
+                        error!("OAuth callback server error: {}", e);
+                    }
+                }
+                Err(e) => {
+                    // Don't fail if port 1455 is already in use - just warn
+                    error!(
+                        "⚠️  Failed to bind OAuth callback server on {}: {}",
+                        oauth_addr, e
+                    );
+                    error!("⚠️  OpenAI Codex OAuth will not work. Port 1455 must be available.");
                 }
             }
-            Err(e) => {
-                // Don't fail if port 1455 is already in use - just warn
-                error!(
-                    "⚠️  Failed to bind OAuth callback server on {}: {}",
-                    oauth_addr, e
-                );
-                error!("⚠️  OpenAI Codex OAuth will not work. Port 1455 must be available.");
-            }
-        }
-    });
-
+        });
+    }
     // Start main server
     axum::serve(listener, app).await?;
 
@@ -3175,4 +3224,131 @@ pub(crate) async fn serve_e3_inherited_listener(
     drop(probe);
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn take_managed_host_listener(config: &AppConfig) -> anyhow::Result<TcpListener> {
+    let raw = env::var("SUBSTRATE_HOST_GATEWAY_LISTENER_FD")
+        .map_err(|_| anyhow::anyhow!("Managed Host listener missing"))?;
+    env::remove_var("SUBSTRATE_HOST_GATEWAY_LISTENER_FD");
+    let fd: i32 = raw
+        .parse()
+        .map_err(|_| anyhow::anyhow!("Managed Host listener invalid"))?;
+    anyhow::ensure!(
+        fd >= 3 && raw == fd.to_string(),
+        "Managed Host listener invalid"
+    );
+    let owned = adopt_managed_host_listener_fd_v1(fd)?;
+    let listener = std::net::TcpListener::from(owned);
+    let address = listener.local_addr()?;
+    anyhow::ensure!(
+        address.ip() == std::net::Ipv4Addr::LOCALHOST
+            && address.port() != 0
+            && config.server.host == "127.0.0.1"
+            && config.server.port == address.port(),
+        "Managed Host listener binding differs"
+    );
+    listener.set_nonblocking(true)?;
+    Ok(TcpListener::from_std(listener)?)
+}
+
+#[cfg(target_os = "linux")]
+fn adopt_managed_host_listener_fd_v1(fd: i32) -> anyhow::Result<std::os::fd::OwnedFd> {
+    use nix::libc;
+    use std::os::fd::{FromRawFd, OwnedFd};
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
+    anyhow::ensure!(fd >= 3 && flags >= 0, "Managed Host listener unavailable");
+    let owned = unsafe { OwnedFd::from_raw_fd(fd) };
+    // Parent cleared CLOEXEC only for this exec handoff. Restore it before any
+    // future gateway child can inherit the route's listening socket.
+    anyhow::ensure!(
+        unsafe { libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC) } == 0,
+        "Managed Host listener adoption failed"
+    );
+    Ok(owned)
+}
+
+#[cfg(all(test, target_os = "linux"))]
+#[test]
+fn test_managed_host_listener_adoption_restores_cloexec() {
+    use nix::libc;
+    use std::os::fd::{AsRawFd, IntoRawFd};
+    // OS descriptor custody fixture only; no service/native/provider admission.
+    let listener = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).unwrap();
+    let raw = listener.into_raw_fd();
+    let flags = unsafe { libc::fcntl(raw, libc::F_GETFD) };
+    assert!(flags >= 0);
+    assert_eq!(
+        unsafe { libc::fcntl(raw, libc::F_SETFD, flags & !libc::FD_CLOEXEC) },
+        0
+    );
+    let owned = adopt_managed_host_listener_fd_v1(raw).unwrap();
+    assert_ne!(
+        unsafe { libc::fcntl(owned.as_raw_fd(), libc::F_GETFD) } & libc::FD_CLOEXEC,
+        0
+    );
+    drop(owned);
+}
+
+#[cfg(not(target_os = "linux"))]
+fn take_managed_host_listener(_config: &AppConfig) -> anyhow::Result<TcpListener> {
+    anyhow::bail!("Managed Host startup requires Linux inherited custody")
+}
+
+#[cfg(target_os = "linux")]
+fn harden_managed_host_startup() -> anyhow::Result<()> {
+    use nix::libc;
+    let limit = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    anyhow::ensure!(
+        unsafe { libc::setrlimit(libc::RLIMIT_CORE, &limit) } == 0
+            && unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0, 0, 0, 0) } == 0,
+        "Managed Host startup hardening failed"
+    );
+    Ok(())
+}
+#[cfg(not(target_os = "linux"))]
+fn harden_managed_host_startup() -> anyhow::Result<()> {
+    anyhow::bail!("Managed Host startup requires Linux inherited custody")
+}
+
+#[cfg(target_os = "linux")]
+fn build_managed_host_app(
+    state: Arc<AppState>,
+    admission: Arc<crate::managed_host_admission::ManagedHostRouteV1>,
+) -> AxumRouter {
+    let search = Arc::new(codex_search::SearchState::new(&state.snapshot()));
+    let images = Arc::new(codex_images::ImageState::new(&state.snapshot()));
+    // No OAuth/admin/token mutation route exists. Supported selected request
+    // bodies are reused; Host caller authority never enters the E3 World wrapper.
+    let effects = AxumRouter::new()
+        .route(
+            "/v1/responses",
+            post(openai_responses::handle_openai_responses),
+        )
+        .route("/v1/chat/completions", post(handle_openai_chat_completions))
+        .route("/v1/messages", post(handle_messages))
+        .route("/v1/structured-events", post(handle_structured_events))
+        .route("/v1/messages/count_tokens", post(handle_count_tokens))
+        .route(
+            "/v1/alpha/search",
+            post(codex_search::handle_codex_search).layer(axum::Extension(search)),
+        )
+        .route(
+            "/v1/images/generations",
+            post(codex_images::generate).layer(axum::Extension(images.clone())),
+        )
+        .route(
+            "/v1/images/edits",
+            post(codex_images::edit).layer(axum::Extension(images)),
+        )
+        .route_layer(axum::middleware::from_fn_with_state(
+            admission,
+            crate::managed_host_admission::authenticate_native_request,
+        ));
+    effects
+        .route("/health", get(health_check))
+        .with_state(state)
 }

@@ -567,6 +567,8 @@ fn build_gateway_request_context(
         let placement_posture = Some(derive_gateway_placement_posture(&effective_config)?);
 
         let request = GatewayLifecycleRequestV1 {
+            schema_version: 1,
+            ordinary_selection: None,
             profile: None,
             cwd: Some(cwd.display().to_string()),
             env: Some(env),
@@ -598,12 +600,16 @@ fn derive_gateway_identity_tuple(
     selected_backend: &str,
 ) -> anyhow::Result<IdentityTuple> {
     let protocol = match selected_backend {
-        backend if is_cli_codex_backend(backend) || backend == API_OPENAI_BACKEND => {
+        backend
+            if is_cli_codex_backend(backend)
+                || matches!(backend, API_OPENAI_BACKEND | "api:openai-world") =>
+        {
             "openai.responses"
         }
-        CLI_CLAUDE_CODE_HOST_BACKEND | CLI_CLAUDE_CODE_WORLD_BACKEND | API_ANTHROPIC_BACKEND => {
-            "anthropic.messages"
-        }
+        CLI_CLAUDE_CODE_HOST_BACKEND
+        | CLI_CLAUDE_CODE_WORLD_BACKEND
+        | API_ANTHROPIC_BACKEND
+        | "api:anthropic-world" => "anthropic.messages",
         other => {
             return Err(gateway_invalid_integration_error(format!(
                 "unsupported backend '{}' for gateway identity tuple publication",
@@ -612,12 +618,16 @@ fn derive_gateway_identity_tuple(
         }
     };
     let provider = match selected_backend {
-        backend if is_cli_codex_backend(backend) || backend == API_OPENAI_BACKEND => {
+        backend
+            if is_cli_codex_backend(backend)
+                || matches!(backend, API_OPENAI_BACKEND | "api:openai-world") =>
+        {
             Some("openai".to_string())
         }
-        CLI_CLAUDE_CODE_HOST_BACKEND | CLI_CLAUDE_CODE_WORLD_BACKEND | API_ANTHROPIC_BACKEND => {
-            Some("anthropic".to_string())
-        }
+        CLI_CLAUDE_CODE_HOST_BACKEND
+        | CLI_CLAUDE_CODE_WORLD_BACKEND
+        | API_ANTHROPIC_BACKEND
+        | "api:anthropic-world" => Some("anthropic".to_string()),
         _ => None,
     };
     let tuple = IdentityTuple {
@@ -930,7 +940,7 @@ fn resolve_integrated_auth_payload(
     }
 }
 
-fn resolve_claude_code_integrated_auth(
+pub(crate) fn resolve_claude_code_integrated_auth(
     selected_backend: &str,
     effective_policy: &substrate_broker::Policy,
 ) -> anyhow::Result<Option<GatewayIntegratedAuthPayloadV1>> {
@@ -951,7 +961,7 @@ fn resolve_claude_code_integrated_auth(
     }))
 }
 
-fn resolve_cli_codex_integrated_auth(
+pub(crate) fn resolve_cli_codex_integrated_auth(
     effective_policy: &substrate_broker::Policy,
     backend_id: &str,
     auth_path: &Path,
@@ -1619,8 +1629,7 @@ mod classification_tests {
             },
         };
         use config_projection::{
-            CanonicalDirectoryV1, E3EffectiveConfigInputV1, EffectiveSubstrateConfigSourceV1,
-            LogicalAgentConfigProjectionV1,
+            CanonicalDirectoryV1, ConfigProjectionCodecV1, LogicalAgentConfigProjectionV1,
         };
         use serial_test::serial;
         use std::os::{
@@ -1628,14 +1637,21 @@ mod classification_tests {
             unix::{ffi::OsStrExt, fs::PermissionsExt},
         };
 
-        // Resolve actual V3 bytes through the existing strict inventory resolver. The
-        // known source is fixture input, not a new production inventory selector.
+        // These auth unit inputs come from checked ordinary V3 selection. Plain
+        // logical data does not authenticate the protected E3 selection ingress.
         fn with_selection(
             test: impl FnOnce(&config_model::SubstrateConfig, &LogicalAgentConfigProjectionV1, &Path),
         ) {
             let _env = crate::execution::AuthorityEnvTestGuard::preserve();
-            let home = tempfile::tempdir().unwrap();
-            let workspace = tempfile::tempdir().unwrap();
+            let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| {
+                    PathBuf::from(std::env::var_os("HOME").expect("tests require HOME"))
+                        .join(".cache")
+                });
+            fs::create_dir_all(&safe_parent).unwrap();
+            let home = tempfile::tempdir_in(&safe_parent).unwrap();
+            let workspace = tempfile::tempdir_in(&safe_parent).unwrap();
             fs::set_permissions(home.path(), fs::Permissions::from_mode(0o700)).unwrap();
             fs::set_permissions(workspace.path(), fs::Permissions::from_mode(0o700)).unwrap();
             fs::create_dir(home.path().join("agents")).unwrap();
@@ -1644,6 +1660,19 @@ mod classification_tests {
                 fs::Permissions::from_mode(0o700),
             )
             .unwrap();
+            fs::create_dir(workspace.path().join(".substrate")).unwrap();
+            fs::set_permissions(
+                workspace.path().join(".substrate"),
+                fs::Permissions::from_mode(0o700),
+            )
+            .unwrap();
+            for (path, bytes) in [
+                (home.path().join("config.yaml"), "llm: {enabled: true, gateway: {enabled: true, mode: in_world}, routing: {default_backend: 'cli:codex-world'}}\nagents: {enabled: true, defaults: {execution: {scope: world}, cli: {mode: persistent}}}\nworld: {enabled: true}\n"),
+                (workspace.path().join(".substrate/workspace.yaml"), "{}\n"),
+            ] {
+                fs::write(&path, bytes).unwrap();
+                fs::set_permissions(path, fs::Permissions::from_mode(0o600)).unwrap();
+            }
             fs::write(home.path().join("policy.yaml"), "{}\n").unwrap();
             fs::set_permissions(
                 home.path().join("policy.yaml"),
@@ -1675,8 +1704,8 @@ config:
         event_stream: true
         llm: true
         mcp_client: false
+      selection: {harness: codex, provider: openai, connection_profile: "built_in:codex-subscription", model: codex-mini-latest}
       runtime_projection:
-        model: codex
         mcp_servers: []
         features: []
 "#,
@@ -1705,38 +1734,64 @@ config:
             let local = HeldE3AgentInventoryRootV1::from_workspace(&trusted_workspace).unwrap();
             let selected =
                 HeldE3AgentInventorySourceV1::open(&global, "agents/codex.yaml").unwrap();
-            let mut config = config_model::SubstrateConfig::default();
-            config.llm.gateway.enabled = true;
-            config.llm.gateway.mode = LlmGatewayMode::InWorld;
-            config.llm.routing.default_backend = CLI_CODEX_WORLD_BACKEND.into();
-            let source = EffectiveSubstrateConfigSourceV1 {
-                schema_version: 1,
-                authority_store_id: "as_018f0f3a-9b2c-7def-8abc-0123456789ab".into(),
-                accepted_home: CanonicalDirectoryV1::capture_linux_from_fd(
-                    fs::File::open(home.path()).unwrap().as_fd(),
+            let bootstrap = authority.bootstrap_home();
+            let config = config_model::resolve_effective_config_for_bootstrap_home(
+                workspace.path(),
+                &Default::default(),
+                &bootstrap,
+            )
+            .unwrap();
+            let inventory = agent_inventory::load_agent_inventory_snapshot_for_bootstrap_home_v3(
+                workspace.path(),
+                &policy(),
+                &bootstrap,
+            )
+            .unwrap();
+            let resolved = inventory
+                .resolve_selection(
+                    &config,
+                    None,
+                    Some(CLI_CODEX_WORLD_BACKEND),
+                    config_model::AgentExecutionScope::World,
                 )
-                .unwrap(),
-                workspace_root: workspace_identity,
-                values: E3EffectiveConfigInputV1 {
-                    llm_enabled: true,
-                    agents_enabled: true,
-                    world_enabled: true,
-                    default_execution_scope: "world".into(),
-                    default_cli_mode: "persistent".into(),
-                    managed_gateway_enabled: config.llm.gateway.enabled,
-                    managed_gateway_mode: "in_world".into(),
-                    default_backend_id: config.llm.routing.default_backend.clone(),
-                },
-                ordered_explain_origins: vec![],
-                source_revision: "1".into(),
-                source_hash: "a".repeat(64),
+                .unwrap();
+            assert_eq!(
+                resolved.inventory_source.sha256,
+                selected.source_material().raw_bytes_sha256
+            );
+            let entry = &inventory.entries[&resolved.realized_agent_id];
+            let mut capabilities = serde_json::to_value(&entry.file.config.capabilities)
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .iter()
+                .filter(|(_, enabled)| enabled.as_bool() == Some(true))
+                .map(|(name, _)| name.clone())
+                .collect::<Vec<_>>();
+            capabilities.sort_by(|left, right| left.as_bytes().cmp(right.as_bytes()));
+            let mut logical = LogicalAgentConfigProjectionV1 {
+                projection_hash: String::new(),
+                // No protected projection source references are issued by this unit fixture.
+                sources: vec![],
+                logical_agent_id: resolved.logical_agent_id.clone(),
+                placement: resolved.placement.as_str().into(),
+                realized_agent_id: resolved.realized_agent_id.clone(),
+                backend_id: resolved.backend_id.clone(),
+                kind: entry.file.config.kind.as_str().into(),
+                protocol: entry.file.config.protocol.clone().unwrap(),
+                execution_scope: "world".into(),
+                cli_mode: "persistent".into(),
+                runtime_family: "codex".into(),
+                capabilities,
+                requested_model: resolved.selection.model.clone(),
+                requested_mcp_servers: vec![],
+                requested_features: vec![],
             };
-            let logical = agent_inventory::resolve_e3_selected_inventory_projection_v1(
-                &authority.bootstrap_home(),
-                &global,
-                &local,
-                &source,
-                selected.source_material(),
+            let mut value = serde_json::to_value(&logical).unwrap();
+            value.as_object_mut().unwrap().remove("projection_hash");
+            logical.projection_hash = ConfigProjectionCodecV1::domain_sha256(
+                "substrate.e3.logical-config-projection.v1",
+                &serde_json::json!({"projection": value}),
             )
             .unwrap();
             test(&config, &logical, home.path());
@@ -1843,19 +1898,26 @@ config:
                         }
                         _ => unreachable!(),
                     }
-                    let error =
-                        resolve_e3_integrated_auth_payload(&config, &policy(), &selected, home)
-                            .err()
-                            .expect("E3 authentication must reject");
+                    let error = match resolve_e3_integrated_auth_payload(
+                        &config,
+                        &policy(),
+                        &selected,
+                        home,
+                    ) {
+                        Err(error) => error,
+                        Ok(_) => panic!("E3 authentication must reject"),
+                    };
                     assert_eq!(
                         format!("{error:#}"),
                         "UnsupportedConfiguration",
                         "case {case}"
                     );
                 }
-                let error = resolve_e3_integrated_auth_payload(config, &policy(), selected, home)
-                    .err()
-                    .expect("E3 authentication must reject");
+                let error =
+                    match resolve_e3_integrated_auth_payload(config, &policy(), selected, home) {
+                        Err(error) => error,
+                        Ok(_) => panic!("E3 authentication must reject"),
+                    };
                 assert_eq!(
                     format!("{error:#}"),
                     "E3 integrated authentication unavailable"
@@ -1883,10 +1945,15 @@ config:
                     denied_policy
                         .llm_secrets_env_allowed
                         .retain(|name| name != denied);
-                    let error =
-                        resolve_e3_integrated_auth_payload(config, &denied_policy, selected, home)
-                            .err()
-                            .expect("E3 authentication must reject");
+                    let error = match resolve_e3_integrated_auth_payload(
+                        config,
+                        &denied_policy,
+                        selected,
+                        home,
+                    ) {
+                        Err(error) => error,
+                        Ok(_) => panic!("E3 authentication must reject"),
+                    };
                     assert_eq!(
                         format!("{error:#}"),
                         "E3 integrated authentication unavailable"
@@ -1900,10 +1967,15 @@ config:
                 denied_policy
                     .agents_host_credentials_read_allowed_backends
                     .clear();
-                let error =
-                    resolve_e3_integrated_auth_payload(config, &denied_policy, selected, home)
-                        .err()
-                        .expect("E3 authentication must reject");
+                let error = match resolve_e3_integrated_auth_payload(
+                    config,
+                    &denied_policy,
+                    selected,
+                    home,
+                ) {
+                    Err(error) => error,
+                    Ok(_) => panic!("E3 authentication must reject"),
+                };
                 assert_eq!(
                     format!("{error:#}"),
                     "E3 integrated authentication unavailable"
@@ -1930,9 +2002,11 @@ config:
                         write_auth(home, bytes);
                     }
                     let error =
-                        resolve_e3_integrated_auth_payload(config, &policy(), selected, home)
-                            .err()
-                            .expect("E3 authentication must reject");
+                        match resolve_e3_integrated_auth_payload(config, &policy(), selected, home)
+                        {
+                            Err(error) => error,
+                            Ok(_) => panic!("E3 authentication must reject"),
+                        };
                     assert_eq!(
                         format!("{error:#}"),
                         "E3 integrated authentication unavailable"
@@ -1942,9 +2016,11 @@ config:
                     CODEX_ACCOUNT_ID_ENV,
                     Some(std::ffi::OsStr::new("synthetic-orphan-account")),
                 )]);
-                let error = resolve_e3_integrated_auth_payload(config, &policy(), selected, home)
-                    .err()
-                    .expect("E3 authentication must reject");
+                let error =
+                    match resolve_e3_integrated_auth_payload(config, &policy(), selected, home) {
+                        Err(error) => error,
+                        Ok(_) => panic!("E3 authentication must reject"),
+                    };
                 assert_eq!(
                     format!("{error:#}"),
                     "E3 integrated authentication unavailable"
@@ -2079,17 +2155,17 @@ config:
             .expect("secure selected agents");
         fs::write(
             selected.join("config.yaml"),
-            b"world:\n  enabled: true\n  net:\n    filter: true\nllm:\n  enabled: true\n  gateway:\n    enabled: true\n    mode: in_world\n  routing:\n    default_backend: api:openai\n",
+            b"world:\n  enabled: true\n  net:\n    filter: true\nllm:\n  enabled: true\n  gateway:\n    enabled: true\n    mode: in_world\n  routing:\n    default_backend: api:openai-world\n",
         )
         .expect("write selected config");
         fs::write(
             selected.join("policy.yaml"),
-            b"id: selected-policy\nllm:\n  allowed_backends: [api:openai]\nnet_allowed: [selected.example]\n",
+            b"id: selected-policy\nllm:\n  allowed_backends: [api:openai-world]\nnet_allowed: [selected.example]\n",
         )
         .expect("write selected policy");
         fs::write(
             agents.join("openai.yaml"),
-            b"version: 1\nid: openai\nconfig:\n  enabled: true\n  kind: api\n  api:\n    base_url: https://api.openai.com/v1\n    auth:\n      env: [OPENAI_API_KEY]\n  capabilities:\n    llm: true\n",
+            b"version: 3\nid: openai\nconfig:\n  enabled: true\n  kind: api\n  placements:\n    world:\n      enabled: true\n      api:\n        base_url: https://api.openai.com/v1\n        auth:\n          env: [OPENAI_API_KEY]\n      capabilities:\n        llm: true\n",
         )
         .expect("write selected inventory");
         for path in [
@@ -2141,7 +2217,7 @@ config:
                                 .as_ref()
                                 .and_then(|env| env.get("SUBSTRATE_LLM_DEFAULT_BACKEND"))
                                 .map(String::as_str),
-                            Some("api:openai")
+                            Some("api:openai-world")
                         );
                         assert_eq!(
                             context.request.policy_snapshot.net_allowed,
@@ -2227,7 +2303,7 @@ config:
                 .as_ref()
                 .and_then(|env| env.get("SUBSTRATE_LLM_DEFAULT_BACKEND"))
                 .map(String::as_str),
-            Some("api:openai")
+            Some("api:openai-world")
         );
         assert!(context.request.integrated_auth.is_none());
         assert_eq!(

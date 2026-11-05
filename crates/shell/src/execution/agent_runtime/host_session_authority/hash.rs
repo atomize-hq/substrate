@@ -68,6 +68,7 @@ pub(crate) enum CanonicalObjectHashInputV1<'a> {
     RetainedWorker(&'a super::schema::RetainedWorkerObjectHashInputV1),
     ResumeHandle(&'a super::schema::ResumeHandleHashInputV1),
     StartContinuationHandle(&'a super::schema::StartContinuationHandleHashInputV2),
+    WorldStartContinuationHandle(&'a super::schema::StartContinuationHandleHashInputV3),
     Policy(&'a super::schema::PolicyObjectHashInputV1),
     HostAttachContract(&'a super::schema::HostAttachContractHashInputV1),
     TransitionTransportPayload(&'a super::schema::TransitionTransportPayloadObjectV1),
@@ -77,6 +78,10 @@ pub(crate) enum CanonicalObjectHashInputV1<'a> {
     ObligationSnapshot(&'a super::schema::ObligationSnapshotHashInputV1),
     PostTurnProtocolEvent(&'a super::schema::PostTurnProtocolEventHashInputV1),
     PostTurnCompletion(&'a super::schema::PostTurnCompletionHashInputV1),
+    PostTurnProtocolEventV2(&'a super::schema::PostTurnProtocolEventHashInputV2),
+    PostTurnCompletionV2(&'a super::schema::PostTurnCompletionHashInputV2),
+    PostTurnCompletionV3(&'a super::schema::PostTurnCompletionHashInputV3),
+    PostTurnCompletionV4(&'a super::schema::PostTurnCompletionHashInputV4),
     TerminalHandoff(&'a super::schema::TerminalHandoffHashInputV1),
     TerminalHandoffV2(&'a super::schema::TerminalHandoffHashInputV2),
 }
@@ -86,9 +91,9 @@ impl CanonicalObjectHashInputV1<'_> {
         match self {
             Self::AgentDescriptor(_) => AuthorityObjectKindV1::AgentDescriptor,
             Self::RetainedWorker(_) => AuthorityObjectKindV1::RetainedWorker,
-            Self::ResumeHandle(_) | Self::StartContinuationHandle(_) => {
-                AuthorityObjectKindV1::ResumeHandle
-            }
+            Self::ResumeHandle(_)
+            | Self::StartContinuationHandle(_)
+            | Self::WorldStartContinuationHandle(_) => AuthorityObjectKindV1::ResumeHandle,
             Self::Policy(_) => AuthorityObjectKindV1::Policy,
             Self::HostAttachContract(_) => AuthorityObjectKindV1::HostAttachContract,
             Self::TransitionTransportPayload(_) => {
@@ -98,8 +103,13 @@ impl CanonicalObjectHashInputV1<'_> {
             Self::InputAcceptance(_) => AuthorityObjectKindV1::InputAcceptance,
             Self::StartupOwnershipResult(_) => AuthorityObjectKindV1::StartupOwnershipResult,
             Self::ObligationSnapshot(_) => AuthorityObjectKindV1::ObligationSnapshot,
-            Self::PostTurnProtocolEvent(_) => AuthorityObjectKindV1::PostTurnProtocolEvent,
-            Self::PostTurnCompletion(_) => AuthorityObjectKindV1::PostTurnCompletion,
+            Self::PostTurnProtocolEvent(_) | Self::PostTurnProtocolEventV2(_) => {
+                AuthorityObjectKindV1::PostTurnProtocolEvent
+            }
+            Self::PostTurnCompletion(_)
+            | Self::PostTurnCompletionV2(_)
+            | Self::PostTurnCompletionV3(_)
+            | Self::PostTurnCompletionV4(_) => AuthorityObjectKindV1::PostTurnCompletion,
             Self::TerminalHandoff(_) | Self::TerminalHandoffV2(_) => {
                 AuthorityObjectKindV1::TerminalHandoff
             }
@@ -125,6 +135,7 @@ pub(crate) fn canonical_object_bytes(
         CanonicalObjectHashInputV1::RetainedWorker(value) => encode!(value),
         CanonicalObjectHashInputV1::ResumeHandle(value) => encode!(value),
         CanonicalObjectHashInputV1::StartContinuationHandle(value) => encode!(value),
+        CanonicalObjectHashInputV1::WorldStartContinuationHandle(value) => encode!(value),
         CanonicalObjectHashInputV1::Policy(value) => encode!(value),
         CanonicalObjectHashInputV1::HostAttachContract(value) => encode!(value),
         CanonicalObjectHashInputV1::TransitionTransportPayload(value) => encode!(value),
@@ -134,6 +145,10 @@ pub(crate) fn canonical_object_bytes(
         CanonicalObjectHashInputV1::ObligationSnapshot(value) => encode!(value),
         CanonicalObjectHashInputV1::PostTurnProtocolEvent(value) => encode!(value),
         CanonicalObjectHashInputV1::PostTurnCompletion(value) => encode!(value),
+        CanonicalObjectHashInputV1::PostTurnProtocolEventV2(value) => encode!(value),
+        CanonicalObjectHashInputV1::PostTurnCompletionV2(value) => encode!(value),
+        CanonicalObjectHashInputV1::PostTurnCompletionV3(value) => encode!(value),
+        CanonicalObjectHashInputV1::PostTurnCompletionV4(value) => encode!(value),
         CanonicalObjectHashInputV1::TerminalHandoff(value) => encode!(value),
         CanonicalObjectHashInputV1::TerminalHandoffV2(value) => encode!(value),
     }

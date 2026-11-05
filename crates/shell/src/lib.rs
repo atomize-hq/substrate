@@ -25,3 +25,25 @@ pub use transport_api_types::{
 
 #[cfg(target_os = "linux")]
 pub use execution::agent_runtime::host_session_authority::facade::OpenedConfigProjectionHsaAuthorityV1;
+#[cfg(target_os = "linux")]
+pub use execution::agent_runtime::native_launch_context::{
+    AuthenticatedOrdinarySelectionV1, OrdinaryHostGatewayAdmissionV1, OrdinarySelectionAuthorityV1,
+};
+
+#[cfg(target_os = "linux")]
+pub use execution::orchestrator_world_dispatch::{
+    OrdinaryInitialBootstrapCloseoutReaderV1, OrdinaryWorldBootstrapEffectAdmissionV1,
+    OrdinaryWorldExecuteAdmissionV1, OrdinaryWorldParentPlacementV1, OrdinaryWorldTurnAdmissionV1,
+};
+
+#[cfg(target_os = "linux")]
+pub use execution::workspace_open::{
+    workspace_association_update_for_peer_v1, workspace_current_for_peer_v1,
+    workspace_initialize_native_v1, workspace_open_native_v1, workspace_preflight_for_peer_v1,
+    WorkspaceNativePeerV1,
+};
+
+#[cfg(target_os = "linux")]
+pub use execution::agent_runtime::retained_worker_runtime::{
+    OrdinaryRetainedStopAdmissionV1, OrdinaryRetainedStopControlReaderV1,
+};

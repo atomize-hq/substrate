@@ -1568,6 +1568,83 @@ pub(crate) struct ActiveEphemeralTaskInspectSnapshotV1 {
     pub cancel_supported: bool,
 }
 
+/// Authenticated initial control and closeout source data. Pending control
+/// identities grant no cleanup acknowledgment; a retirement ID identifies the
+/// separate checked initial-owner report. None asserts current native liveness.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RetainedInitialControlInspectSnapshotV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cancel_request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stop_request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retirement_id: Option<String>,
+}
+
+/// Bootstrap and admitted control/closeout DATA, never execution authority.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RetainedBootstrapInspectSnapshotV1 {
+    #[serde(deserialize_with = "deserialize_retained_bootstrap_inspect_version")]
+    pub schema_version: u32,
+    pub bootstrap_kind: RetainedBootstrapKindV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub registration_id: Option<String>,
+    pub native_bootstrap_completed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initial_control: Option<RetainedInitialControlInspectSnapshotV1>,
+}
+
+fn deserialize_retained_bootstrap_inspect_version<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<u32, D::Error> {
+    let version = u32::deserialize(deserializer)?;
+    if version != 1 {
+        return Err(serde::de::Error::custom(
+            "unsupported retained bootstrap inspection schema version",
+        ));
+    }
+    Ok(version)
+}
+
+/// Historical MACed logical Stop facts. An intent is pending until its exact
+/// checked service acknowledgment is stored. Neither state proves native
+/// process liveness or substitutes for accepted-work terminal observation.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RetainedStopInspectSnapshotV1 {
+    #[serde(deserialize_with = "deserialize_retained_stop_inspect_version")]
+    pub schema_version: u32,
+    pub request: transport_api_types::OrdinaryRetainedWorkerStopRequestV1,
+    pub accepted_work_ids_at_admission: Vec<String>,
+    pub admitted_at: super::host_session_authority::schema::TimestampV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub acknowledgment:
+        Option<Box<transport_api_types::OrdinaryRetainedWorkerStopAcknowledgmentV1>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<super::host_session_authority::schema::TimestampV1>,
+}
+
+fn deserialize_retained_stop_inspect_version<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<u32, D::Error> {
+    let version = u32::deserialize(deserializer)?;
+    if version != 1 {
+        return Err(serde::de::Error::custom(
+            "unsupported retained Stop inspection schema version",
+        ));
+    }
+    Ok(version)
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum RetainedBootstrapKindV1 {
+    Spawn,
+    Fork,
+}
+
 #[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct InspectWorldWorkerOutcomeV1 {
@@ -1595,6 +1672,10 @@ pub(crate) struct InspectWorldWorkerOutcomeV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_admission: Option<PendingAdmissionInspectProjectionV1>,
     pub summary: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bootstrap_snapshot: Option<RetainedBootstrapInspectSnapshotV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stop_snapshot: Option<Box<RetainedStopInspectSnapshotV1>>,
 }
 
 #[allow(dead_code)]
@@ -2455,10 +2536,18 @@ fn persisted_host_attach_mode_label(value: HostAttachModePreference) -> &'static
 enum InventoryDispatchCandidateV1<'a> {
     Legacy(&'a ProjectedInventoryEntryV1),
     #[cfg(target_os = "linux")]
+    #[allow(
+        dead_code,
+        reason = "held E3 selected-inventory resolution is staged without a production caller"
+    )]
     E3(&'a crate::execution::agent_inventory::PlacementProjectedInventoryEntryV3),
 }
 
 #[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "held E3 selected-inventory resolution is staged without a production caller; retain its exact eligibility checks"
+)]
 pub(crate) fn resolve_e3_selected_inventory_contract(
     base_policy: &Policy,
     envelope: &DispatchRequestEnvelope,
@@ -5114,6 +5203,8 @@ mod tests {
     #[test]
     fn world_dispatch_contract_round_trips_typed_inspect_outcome_shape() {
         let outcome = WorldDispatchOutcomeV1::InspectWorldWorker(InspectWorldWorkerOutcomeV1 {
+            bootstrap_snapshot: None,
+            stop_snapshot: None,
             request_id: "req-35".to_string(),
             orchestration_session_id: "sess-35".to_string(),
             action: WorldDispatchActionV1::InspectWorldWorker,
@@ -6063,6 +6154,295 @@ mod tests {
         assert_eq!(
             WorldDispatchSteeringDenialV1::WorldDispatchDisabled.format_message(""),
             "world_dispatch_disabled"
+        );
+    }
+}
+
+/// Explicit ordinary syntax only. This type supplies no configured-selection,
+/// current-policy or execution authority. The default transport codec stays V1.
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(try_from = "OrdinaryDispatchPolicyNarrowingPatchV2Def")]
+pub(crate) struct OrdinaryDispatchPolicyNarrowingPatchV2 {
+    pub(crate) schema_version: u32,
+    pub(crate) request_id: String,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) caller_participant_id: String,
+    pub(crate) target_backend_id: String,
+    pub(crate) target_world: transport_api_types::WorldBindingRefV1,
+    pub(crate) applies_to: transport_api_types::DispatchCapabilitySubjectV1,
+    pub(crate) parent_policy_ref: AuthorityObjectRefV1,
+    pub(crate) parent_policy_revision: String,
+    pub(crate) restricted_policy_patch: transport_api_types::RestrictedPolicyPatchV1,
+    pub(crate) reason: Option<String>,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OrdinaryDispatchPolicyNarrowingPatchV2Def {
+    pub(crate) schema_version: u32,
+    pub(crate) request_id: String,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) caller_participant_id: String,
+    pub(crate) target_backend_id: String,
+    pub(crate) target_world: transport_api_types::WorldBindingRefV1,
+    pub(crate) applies_to: transport_api_types::DispatchCapabilitySubjectV1,
+    pub(crate) parent_policy_ref: AuthorityObjectRefV1,
+    pub(crate) parent_policy_revision: String,
+    pub(crate) restricted_policy_patch: transport_api_types::RestrictedPolicyPatchV1,
+    pub(crate) reason: Option<String>,
+}
+
+#[cfg(target_os = "linux")]
+impl TryFrom<OrdinaryDispatchPolicyNarrowingPatchV2Def> for OrdinaryDispatchPolicyNarrowingPatchV2 {
+    type Error = anyhow::Error;
+    fn try_from(value: OrdinaryDispatchPolicyNarrowingPatchV2Def) -> anyhow::Result<Self> {
+        let value = Self {
+            schema_version: value.schema_version,
+            request_id: value.request_id,
+            orchestration_session_id: value.orchestration_session_id,
+            caller_participant_id: value.caller_participant_id,
+            target_backend_id: value.target_backend_id,
+            target_world: value.target_world,
+            applies_to: value.applies_to,
+            parent_policy_ref: value.parent_policy_ref,
+            parent_policy_revision: value.parent_policy_revision,
+            restricted_policy_patch: value.restricted_policy_patch,
+            reason: value.reason,
+        };
+        value.validate()?;
+        Ok(value)
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl OrdinaryDispatchPolicyNarrowingPatchV2 {
+    pub(crate) fn from_patch(
+        value: &transport_api_types::DispatchPolicyNarrowingPatchV1,
+    ) -> anyhow::Result<Self> {
+        if value.schema_version != 1 {
+            anyhow::bail!("ordinary logical patch requires E1 schema 1");
+        }
+        let result = Self {
+            schema_version: 2,
+            request_id: value.request_id.clone(),
+            orchestration_session_id: value.orchestration_session_id.clone(),
+            caller_participant_id: value.caller_participant_id.clone(),
+            target_backend_id: value.target_backend_id.clone(),
+            target_world: value.target_world.clone(),
+            applies_to: value.applies_to.clone(),
+            parent_policy_ref: ordinary_policy_ref_from_transport(&value.parent_policy_ref)?,
+            parent_policy_revision: value.parent_policy_revision.clone(),
+            restricted_policy_patch: value.restricted_policy_patch.clone(),
+            reason: value.reason.clone(),
+        };
+        result.validate()?;
+        Ok(result)
+    }
+
+    pub(crate) fn into_patch(
+        self,
+    ) -> anyhow::Result<transport_api_types::DispatchPolicyNarrowingPatchV1> {
+        self.validate()?;
+        Ok(transport_api_types::DispatchPolicyNarrowingPatchV1 {
+            schema_version: 1,
+            request_id: self.request_id,
+            orchestration_session_id: self.orchestration_session_id,
+            caller_participant_id: self.caller_participant_id,
+            target_backend_id: self.target_backend_id,
+            target_world: self.target_world,
+            applies_to: self.applies_to,
+            parent_policy_ref: super::dispatch_policy_commitment::transport_policy_ref(
+                &self.parent_policy_ref,
+            ),
+            parent_policy_revision: self.parent_policy_revision,
+            restricted_policy_patch: self.restricted_policy_patch,
+            reason: self.reason,
+        })
+    }
+
+    fn validate(&self) -> anyhow::Result<()> {
+        if self.schema_version != 2 {
+            anyhow::bail!("unsupported ordinary narrowing schema version");
+        }
+        for value in [
+            &self.request_id,
+            &self.orchestration_session_id,
+            &self.caller_participant_id,
+            &self.target_backend_id,
+            &self.target_world.world_id,
+            &self.parent_policy_revision,
+        ] {
+            if value.is_empty() || value.trim() != value || value.chars().any(char::is_control) {
+                anyhow::bail!("ordinary narrowing identity is not canonical");
+            }
+        }
+        match &self.applies_to {
+            transport_api_types::DispatchCapabilitySubjectV1::EphemeralTask => {}
+            transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerTurn {
+                retained_participant_id,
+            } if !retained_participant_id.is_empty()
+                && retained_participant_id.trim() == retained_participant_id
+                && !retained_participant_id.chars().any(char::is_control) => {}
+            _ => {
+                anyhow::bail!("ordinary narrowing requires an exact Task or retained-turn subject")
+            }
+        }
+        super::dispatch_policy_commitment::transport_policy_ref(&self.parent_policy_ref)
+            .validate()
+            .map_err(anyhow::Error::msg)?;
+        if self.reason.as_ref().is_some_and(|reason| {
+            reason.is_empty() || reason.trim() != reason || reason.chars().any(char::is_control)
+        }) {
+            anyhow::bail!("ordinary narrowing reason is not canonical");
+        }
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl WorldDispatchRequestV1 {
+    /// Validate representation without granting ordinary admission. Effect callers
+    /// must join the genuine configured issuer, held selection and current policy.
+    pub(crate) fn validate_ordinary_representation(
+        mut self,
+    ) -> anyhow::Result<ValidatedWorldDispatchRequestV1> {
+        let patch = self.dispatch_policy_narrowing.take();
+        let mut request = self.validate()?;
+        if let Some(patch) = patch {
+            OrdinaryDispatchPolicyNarrowingPatchV2::from_patch(&patch)?;
+            if patch.request_id != request.request_id
+                || patch.orchestration_session_id != request.orchestration_session_id
+                || patch.caller_participant_id != request.caller_participant_id
+                || patch.target_backend_id != request.target_backend_id
+                || patch.target_world.world_id != request.world_id
+                || patch.target_world.world_generation != request.world_generation
+            {
+                anyhow::bail!("ordinary narrowing changed exact request scope");
+            }
+            let subject = match (&patch.applies_to, request.action) {
+                (
+                    transport_api_types::DispatchCapabilitySubjectV1::EphemeralTask,
+                    WorldDispatchActionV1::RunWorldTask,
+                ) => true,
+                (
+                    transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerTurn {
+                        retained_participant_id,
+                    },
+                    WorldDispatchActionV1::ContinueWorldWorker,
+                ) => request.target_participant_id.as_ref() == Some(retained_participant_id),
+                _ => false,
+            };
+            if !subject {
+                anyhow::bail!("ordinary narrowing changed exact work subject");
+            }
+            request.dispatch_policy_narrowing = Some(patch);
+        }
+        Ok(request)
+    }
+}
+
+/// Project a validated data reference into the closed ordinary canonical field.
+/// This conversion supplies no root, issuer, selection or current-policy authority.
+#[cfg(target_os = "linux")]
+fn ordinary_policy_ref_from_transport(
+    reference: &transport_api_types::PolicyRefV1,
+) -> anyhow::Result<AuthorityObjectRefV1> {
+    reference.validate().map_err(anyhow::Error::msg)?;
+    let commitment = match &reference.commitment {
+        transport_api_types::OpaqueAuthorityCommitmentV1::CanonicalSha256 { digest_hex } => {
+            AuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: digest_hex.clone(),
+            }
+        }
+        transport_api_types::OpaqueAuthorityCommitmentV1::StoreHmacSha256 {
+            key_id,
+            domain,
+            digest_hex,
+        } => AuthorityObjectCommitmentV1::StoreHmacSha256 {
+            key_id: key_id.clone(),
+            domain: domain.clone(),
+            digest_hex: digest_hex.clone(),
+        },
+    };
+    Ok(AuthorityObjectRefV1 {
+        ref_id: reference.ref_id.clone(),
+        object_kind: super::host_session_authority::schema::AuthorityObjectKindV1::Policy,
+        schema_version: reference.schema_version,
+        commitment,
+    })
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod ordinary_patch_representation_tests {
+    use super::*;
+    use crate::execution::agent_runtime::host_session_authority::canonical_json;
+
+    #[test]
+    fn test_ordinary_policy_reference_canonical_field_is_strict() {
+        let patch = transport_api_types::DispatchPolicyNarrowingPatchV1 {
+            schema_version: 1,
+            request_id: "ordinary-patch-request".into(),
+            orchestration_session_id: "ordinary-session".into(),
+            caller_participant_id: "ordinary-caller".into(),
+            target_backend_id: "codex".into(),
+            target_world: transport_api_types::WorldBindingRefV1 {
+                world_id: "ordinary-world".into(),
+                world_generation: 0,
+            },
+            applies_to: transport_api_types::DispatchCapabilitySubjectV1::EphemeralTask,
+            parent_policy_ref: transport_api_types::PolicyRefV1 {
+                ref_id: format!("ao_{}", "b".repeat(32)),
+                object_kind: transport_api_types::AuthorityObjectKindV1::Policy,
+                schema_version: 1,
+                commitment: transport_api_types::OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                    digest_hex: "a".repeat(64),
+                },
+            },
+            parent_policy_revision: "ordinary-policy-revision".into(),
+            restricted_policy_patch: transport_api_types::RestrictedPolicyPatchV1 {
+                world_fs: Some(transport_api_types::RestrictedWorldFsPatchV1 {
+                    host_visible: Some(false),
+                    ..Default::default()
+                }),
+            },
+            reason: None,
+        };
+        let ordinary = OrdinaryDispatchPolicyNarrowingPatchV2::from_patch(&patch).unwrap();
+        let bytes = canonical_json::to_vec(&ordinary).unwrap();
+        let decoded: OrdinaryDispatchPolicyNarrowingPatchV2 =
+            canonical_json::from_slice(&bytes).unwrap();
+        assert_eq!(canonical_json::to_vec(&decoded).unwrap(), bytes);
+        assert_eq!(decoded.into_patch().unwrap(), patch);
+        assert!(
+            serde_json::from_slice::<transport_api_types::DispatchPolicyNarrowingPatchV1>(&bytes)
+                .is_err()
+        );
+        for mutation in 0..4 {
+            let mut bad: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            match mutation {
+                0 => bad["parent_policy_ref"]["unknown"] = true.into(),
+                1 => bad["parent_policy_ref"]["object_kind"]["kind"] = "RetainedWorker".into(),
+                2 => bad["parent_policy_ref"]["schema_version"] = 0.into(),
+                _ => bad["schema_version"] = 1.into(),
+            }
+            let bad = canonical_json::to_vec(&bad).unwrap();
+            assert!(
+                canonical_json::from_slice::<OrdinaryDispatchPolicyNarrowingPatchV2>(&bad).is_err(),
+                "ordinary canonical mutation {mutation}"
+            );
+        }
+        let duplicate = String::from_utf8(bytes).unwrap().replacen(
+            "\"request_id\":",
+            "\"request_id\":\"duplicate\",\"request_id\":",
+            1,
+        );
+        assert!(
+            canonical_json::from_slice::<OrdinaryDispatchPolicyNarrowingPatchV2>(
+                duplicate.as_bytes()
+            )
+            .is_err()
         );
     }
 }

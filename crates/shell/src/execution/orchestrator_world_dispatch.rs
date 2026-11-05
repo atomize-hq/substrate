@@ -398,7 +398,7 @@ fn decode_orchestrator_world_dispatch_exact_target_v1(
 }
 
 #[cfg(target_os = "linux")]
-fn resolve_orchestrator_world_dispatch_exact_target_v1(
+pub(crate) fn resolve_orchestrator_world_dispatch_exact_target_v1(
     request: &ValidatedWorldDispatchRequestV1,
 ) -> Result<Option<WorldDispatchControlTargetV1>> {
     let task_target = decode_orchestrator_world_dispatch_exact_target_v1(
@@ -632,6 +632,8 @@ fn build_inspect_world_worker_outcome_v1(
     summary: String,
 ) -> WorldDispatchOutcomeV1 {
     WorldDispatchOutcomeV1::InspectWorldWorker(InspectWorldWorkerOutcomeV1 {
+        bootstrap_snapshot: None,
+        stop_snapshot: None,
         request_id: request.request_id.clone(),
         orchestration_session_id,
         action: WorldDispatchActionV1::InspectWorldWorker,
@@ -3717,6 +3719,28 @@ pub(crate) fn adapt_retained_spawn_preparation_failure_v1(
 }
 
 #[cfg(target_os = "linux")]
+pub(crate) struct PreparedOrdinarySpawnWorldWorkerBootstrap {
+    pub request: ValidatedWorldDispatchRequestV1,
+    pub descriptor: crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
+    #[allow(
+        dead_code,
+        reason = "prepared ordinary spawn retains the selected workspace with authenticated authority through startup handoff"
+    )]
+    pub workspace_root: PathBuf,
+    pub(crate) authority: std::sync::Arc<HostSessionAuthority>,
+    pub(crate) selection: std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    admission_bootstrap_home: PathBuf,
+    pub(crate) admission_plan: RetainedWorkerAdmissionPlanV1,
+    pub(crate) dispatch_policy_reservation_proof: AuthenticatedFreshSpawnReservationProofV1,
+    pub(crate) exact_policy_snapshot: ExactDispatchPolicySnapshotMaterialV1,
+    pub(crate) launch_authority_proof: RetainedWorkerLaunchAuthorityProofV1,
+    pub(crate) e2_launch_activation: transport_api_types::E2MemberLaunchActivationCarrierV1,
+    _concurrency_guard: Option<WorldDispatchConcurrencyGuard>,
+}
+
+#[cfg(target_os = "linux")]
 pub(crate) struct PreparedForkWorldWorkerBootstrap {
     pub request: ValidatedWorldDispatchRequestV1,
     pub descriptor: crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
@@ -3731,6 +3755,7 @@ pub(crate) struct PreparedForkWorldWorkerBootstrap {
 
 #[cfg(target_os = "linux")]
 pub(crate) struct PreparedForkPolicyCommitmentV1 {
+    pub(crate) native_issuance: Option<crate::execution::agent_runtime::dispatch_policy_commitment::AuthenticatedOrdinaryForkIssuanceV1>,
     pub(crate) commitment_ref:
         crate::execution::agent_runtime::dispatch_policy_commitment::DispatchPolicyCommitmentRefV1,
     pub(crate) child_participant_id: String,
@@ -3784,6 +3809,7 @@ struct ResolvedE2DispatchPolicyV1 {
 
 #[cfg(target_os = "linux")]
 struct E2AcceptedWorkPublicationContextV1 {
+    ordinary: Option<crate::execution::agent_runtime::dispatch_policy_commitment::AuthenticatedOrdinaryAcceptedWorkPublicationV1>,
     authority: HostSessionAuthority,
     idempotency_key: String,
     applied_patch: AppliedDispatchPolicyPatchIdentityV1,
@@ -4056,6 +4082,13 @@ fn project_active_ephemeral_task_receipt_v1(
     })
 }
 
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) fn project_active_retained_turn_receipt_for_test(
+    material: &AuthenticatedAcceptedWorkReceiptMaterialV1,
+) -> Result<ActiveRetainedTurnReceiptV1> {
+    project_active_retained_turn_receipt_v1(material)
+}
+
 #[cfg(target_os = "linux")]
 fn project_active_retained_turn_receipt_v1(
     material: &AuthenticatedAcceptedWorkReceiptMaterialV1,
@@ -4084,11 +4117,11 @@ fn project_active_retained_turn_receipt_v1(
     let cap = material.retained_worker_cap().ok_or_else(|| {
         anyhow::anyhow!("accepted_work_receipt_material_error: retained_cap_missing")
     })?;
+    // Cap caller provenance belongs to launch. This receipt attributes the
+    // independently authenticated accepted turn, including successor callers.
     if cap.retained_participant_id() != target_participant_id
         || cap.authority_store_id() != material.authority_store_id()
         || cap.orchestration_session_id() != material.orchestration_session_id()
-        || cap.caller_participant_id() != material.caller_participant_id()
-        || cap.caller_backend_id() != material.caller_backend_id()
         || cap.target_backend_id() != material.target_backend_id()
         || cap.world_id() != material.world_id()
         || cap.world_generation() != material.world_generation()
@@ -4437,6 +4470,10 @@ fn retained_turn_state_revision(state: ActiveRetainedTurnStateV1) -> u64 {
 }
 
 #[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "E3 projection preparation custody is staged without production construction; retain cancellation and expiry ownership"
+)]
 pub(crate) struct E3ProducerPreparationCustodyV1 {
     authoring_input_ref: config_projection::ConfigProjectionAuthoringInputRefV1,
     expected_effective: config_projection::EffectiveSubstrateConfigSourceV1,
@@ -4456,6 +4493,10 @@ pub(crate) struct E3ProducerPreparationCustodyV1 {
 
 #[cfg(target_os = "linux")]
 #[derive(PartialEq, Eq)]
+#[allow(
+    dead_code,
+    reason = "E3 projection submission states are staged with the preparation owner and its cancellation tests"
+)]
 enum E3ProducerSubmissionStateV1 {
     Unsent,
     PrepareEntered,
@@ -4468,6 +4509,10 @@ enum E3ProducerSubmissionStateV1 {
 }
 
 #[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "E3 projection response validation is retained for the staged preparation owner and negative-edge tests"
+)]
 fn validate_e3_projection_prepare_response_v1(
     custody: &E3ProducerPreparationCustodyV1,
     response: &transport_api_types::E3ConfigProjectionPrepareResponseV1,
@@ -4716,6 +4761,10 @@ fn validate_e3_projection_prepare_response_v1(
 }
 
 #[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "E3 projection preparation submission is tested before production adoption; retain exact cancellation and ambiguity handling"
+)]
 pub(crate) async fn submit_e3_projection_preparation_v1(
     custody: &mut E3ProducerPreparationCustodyV1,
     request: transport_api_types::E3ConfigProjectionPrepareRequestV1,
@@ -4783,6 +4832,10 @@ pub(crate) async fn submit_e3_projection_preparation_v1(
 }
 
 #[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "E3 projection preparation cancellation is tested before production adoption; retain exact owned cancellation coordinates"
+)]
 pub(crate) async fn cancel_e3_projection_preparation_v1(
     custody: &mut E3ProducerPreparationCustodyV1,
     client: &transport_api_client::AgentClient,
@@ -4826,9 +4879,2489 @@ struct E3ContinueForkInputsV1<'a, 'home, 'roots> {
     selection: &'a crate::execution::agent_inventory::HeldE3SelectedInventoryProjectionV1<'roots>,
     configured: &'a config_projection::ConfiguredAcceptedHomeAuthorityV1,
     bootstrap_home: &'a crate::execution::agent_runtime::OpenedBootstrapHomeV1<'home>,
+    #[allow(
+        dead_code,
+        reason = "E3 continue-fork inputs retain the projection service for the staged preparation join"
+    )]
     service: &'a std::sync::Arc<config_projection::AgentConfigProjectionServiceV1>,
+    #[allow(
+        dead_code,
+        reason = "E3 continue-fork inputs retain the projection registry for the staged preparation join"
+    )]
     registry: &'a std::sync::Arc<config_projection::ConfigProjectionRegistryV1>,
     registry_authority: &'a ResolvedWorldWorkRegistryAuthorityV1,
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn revalidate_ordinary_current_launch_permission(
+    configured: &std::sync::Arc<config_projection::OrdinaryConfiguredAcceptedHomeAuthorityV1>,
+    authority: &std::sync::Arc<HostSessionAuthority>,
+    workspace: &crate::execution::agent_runtime::host_session_authority::schema::WorkspaceBindingV1,
+    selections: &crate::execution::agent_runtime::native_launch_context::OrdinaryStartSelectionsV1,
+    sources: &crate::execution::agent_runtime::native_launch_context::CapturedOrdinarySourcesV1,
+    expected_policy_hash: &str,
+) -> Result<Policy> {
+    configured.revalidate()?;
+    let home = authority.bootstrap_home();
+    let identity = home.identity()?;
+    let bound = configured.accepted_home();
+    let same_physical=match (&identity.physical_identity,&bound.physical_identity) {
+        (crate::execution::agent_runtime::host_session_authority::schema::DirectoryPhysicalIdentityV1::Linux{device_id:a,inode:b},
+         config_projection::DirectoryPhysicalIdentityV1::Linux{device_id:c,inode:d})=>a==c && b==d,
+        _=>false,
+    };
+    if identity.physical_path != bound.physical_path
+        || !same_physical
+        || identity != &workspace.authority_store_root
+    {
+        anyhow::bail!("ordinary birth held-home binding changed");
+    }
+    let cwd = Path::new(&workspace.workspace_root.physical_path);
+    let config = crate::execution::config_model::resolve_effective_config_for_bootstrap_home(
+        cwd,
+        &crate::execution::config_model::CliConfigOverrides::default(),
+        &home,
+    )?;
+    if !config.agents.enabled {
+        anyhow::bail!("ordinary birth agents permission revoked");
+    }
+    let policy =
+        crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(cwd, &home)?;
+    let snapshot =
+        crate::execution::policy_snapshot::resolve_policy_snapshot_for_bootstrap_home(cwd, &home)?;
+    if snapshot.snapshot_hash != expected_policy_hash {
+        anyhow::bail!("ordinary birth policy changed before effect");
+    }
+    let inventory =
+        crate::execution::agent_inventory::load_agent_inventory_snapshot_for_bootstrap_home_v3(
+            cwd, &policy, &home,
+        )?;
+    let current =
+        crate::execution::agent_runtime::native_launch_context::CapturedOrdinarySourcesV1::capture(
+            &config, &inventory, selections,
+        )?;
+    let mut current_source = serde_json::to_value(&current)?;
+    let mut original_source = serde_json::to_value(sources)?;
+    current_source
+        .as_object_mut()
+        .context("ordinary source not object")?
+        .remove("config");
+    original_source
+        .as_object_mut()
+        .context("ordinary source not object")?
+        .remove("config");
+    if current_source != original_source
+        || serde_json::to_value(&config.agents)?
+            != serde_json::to_value(&sources.effective_config().agents)?
+    {
+        anyhow::bail!("ordinary birth selected config/inventory/source changed before effect");
+    }
+    for selected in [&selections.native, &selections.requested] {
+        let scope = match selected.placement {
+            transport_api_types::AgentSelectionPlacementV1::Host => AgentExecutionScope::Host,
+            transport_api_types::AgentSelectionPlacementV1::World => AgentExecutionScope::World,
+        };
+        let envelope = DispatchRequestEnvelope {
+            caller_kind: DispatchCallerKind::HumanStart,
+            baseline_kind: DispatchBaselineKind::InventoryLaunch,
+            backend_id: Some(selected.backend_id.clone()),
+            orchestration_session_id: None,
+            requested_execution_scope_override: Some(scope),
+            capability_overrides: DispatchCapabilityOverrideSet::default(),
+            attach_launch_knobs: AttachLaunchKnobs {
+                requested_execution_scope: scope,
+                host_execution_client_start: HostExecutionClientStart::StartNow,
+                attach_mode_preference: AttachModePreference::ContinuityRequired,
+            },
+            has_prompt_payload: true,
+        };
+        let contract = resolve_inventory_contract_for_exact_backend(
+            cwd,
+            &config,
+            &inventory.entries,
+            &policy,
+            &envelope,
+            scope,
+        )
+        .map_err(|e| anyhow::anyhow!("{e}"))?
+        .context("ordinary birth role permission revoked")?;
+        if contract.agent_id != selected.realized_agent_id
+            || contract.backend_id != selected.backend_id
+            || contract.execution_scope != scope
+            || !contract.capabilities.session_start
+            || !contract.capabilities.llm
+            || !contract.capabilities.event_stream
+            || contract.effective_policy.llm_require_approval
+            || !contract
+                .effective_policy
+                .llm_allowed_backends
+                .iter()
+                .any(|b| b == &selected.backend_id)
+        {
+            anyhow::bail!("ordinary birth current runtime/capability/LLM permission revoked");
+        }
+        let (protocol, auth) = match selected.selection.harness {
+            transport_api_types::AgentHarnessFamilyV1::Codex => {
+                ("openai.responses", "codex_subscription")
+            }
+            transport_api_types::AgentHarnessFamilyV1::ClaudeCode => {
+                ("anthropic.messages", "anthropic_api_key")
+            }
+        };
+        for (value, allowed) in [
+            (
+                "substrate_gateway",
+                &contract.effective_policy.llm_constraints_routers,
+            ),
+            (
+                selected.selection.provider.as_str(),
+                &contract.effective_policy.llm_constraints_providers,
+            ),
+            (
+                protocol,
+                &contract.effective_policy.llm_constraints_protocols,
+            ),
+            (
+                auth,
+                &contract.effective_policy.llm_constraints_auth_authorities,
+            ),
+        ] {
+            if !allowed.is_empty() && !allowed.iter().any(|candidate| candidate == value) {
+                anyhow::bail!("ordinary birth current connection permission revoked");
+            }
+        }
+    }
+    configured.revalidate()?;
+    home.revalidate()?;
+    Ok(policy)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn ordinary_start_selection_carrier(
+    selection: &crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+) -> Result<transport_api_types::OrdinaryStartSelectionCarrierV1> {
+    // Structural validation grants no permission. The opaque result supplies
+    // original identities; mutable current observations never enter this DTO.
+    selection
+        .native_selection()
+        .validate()
+        .map_err(anyhow::Error::msg)?;
+    selection
+        .requested_selection()
+        .validate()
+        .map_err(anyhow::Error::msg)?;
+    let carrier = transport_api_types::OrdinaryStartSelectionCarrierV1 {
+        schema_version: 1,
+        authority_store_id: selection.authority_store_id().to_string(),
+        original_start_intent_id: selection.original_start_intent_id().to_string(),
+        original_start_issuer_request_id: selection.original_start_issuer_request_id()?,
+        original_session_id: selection.original_session_id().to_string(),
+        context_sha256: selection.context_sha256()?,
+        native_selection_sha256: selection.native_selection().selection_digest.clone(),
+        requested_selection_sha256: selection.requested_selection().selection_digest.clone(),
+    };
+    carrier.validate().map_err(anyhow::Error::msg)?;
+    Ok(carrier)
+}
+
+#[cfg(target_os = "linux")]
+fn authenticate_refreshed_ordinary_world_dispatch(
+    previous: &std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+) -> Result<
+    std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+> {
+    let refreshed = authenticate_current_ordinary_world_dispatch(previous)?;
+    if previous.current_participant_id() != refreshed.current_participant_id() {
+        anyhow::bail!("ordinary bootstrap refresh changed actual caller");
+    }
+    Ok(refreshed)
+}
+
+#[cfg(target_os = "linux")]
+fn authenticate_current_ordinary_world_dispatch(
+    previous: &std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+) -> Result<
+    std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+> {
+    let refreshed = previous.refresh_original_selection()?;
+    if ordinary_start_selection_carrier(previous)? != ordinary_start_selection_carrier(&refreshed)?
+        || previous.native_selection() != refreshed.native_selection()
+        || previous.requested_selection() != refreshed.requested_selection()
+        || previous.original_world_binding() != refreshed.original_world_binding()
+        || previous.workspace_root() != refreshed.workspace_root()
+    {
+        anyhow::bail!("ordinary dispatch refresh changed immutable original selection");
+    }
+    // Refresh authenticates the genuine current caller from the same held
+    // authority. Every operation still joins its own current caller and permit.
+    refreshed.revalidate()?;
+    Ok(std::sync::Arc::new(refreshed))
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_ordinary_world_dispatch_context(
+    selection: &crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+) -> Result<InternalDispatchContext> {
+    let home = selection.held_authority().bootstrap_home();
+    let base_policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
+        Path::new(selection.workspace_root()),
+        &home,
+    )?;
+    selection.revalidate()?;
+    Ok(InternalDispatchContext {
+        effective_config: selection.captured_effective_config(),
+        inventory: selection.captured_inventory().clone(),
+        base_policy,
+    })
+}
+
+/// Owned ordinary World admission. It grants no lease across authority/policy
+/// changes. Consumers retain it and recheck immediately before each effect.
+/// Backend recovery and fresh backend/cgroup observations remain consumer-owned.
+///
+/// Revalidate the held admission before an effect:
+/// ```no_run
+/// # #[cfg(target_os = "linux")]
+/// # fn checked(admission: &substrate_shell::OrdinaryWorldExecuteAdmissionV1) -> anyhow::Result<()> {
+/// admission.revalidate_before_world_effect()?;
+/// # Ok(())
+/// # }
+/// ```
+#[cfg(target_os = "linux")]
+pub struct OrdinaryWorldExecuteAdmissionV1 {
+    selection: std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    request: transport_api_types::ExecuteRequest,
+    runtime: transport_api_types::OrdinaryGatewayRuntimeIdentityV1,
+}
+
+/// Original initial receiver source custody for closeout data and control
+/// receipt retries. This retains no Execute input, World backend, gateway,
+/// SDK, history-use or exclusion lease and exposes no native launch operation.
+/// ```no_run
+/// # #[cfg(target_os = "linux")]
+/// # fn read(admission: &substrate_shell::OrdinaryWorldExecuteAdmissionV1) -> anyhow::Result<()> {
+/// let _reader = admission.initial_bootstrap_closeout_reader("spn_actual_owner")?;
+/// # Ok(()) }
+/// ```
+#[cfg(target_os = "linux")]
+pub struct OrdinaryInitialBootstrapCloseoutReaderV1 {
+    selection: std::sync::Arc<crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1>,
+    scope: crate::execution::agent_runtime::retained_worker_runtime::OrdinaryInitialBootstrapReceiverScopeV1,
+}
+
+#[cfg(target_os = "linux")]
+impl OrdinaryInitialBootstrapCloseoutReaderV1 {
+    /// Encode independently observed owner closeout facts under the original
+    /// receiver identity. The producer must actually join custody and retire
+    /// its member before publishing; encoding grants neither fact nor authority.
+    /// ```no_run
+    /// # #[cfg(target_os = "linux")]
+    /// # fn encode(reader: &substrate_shell::OrdinaryInitialBootstrapCloseoutReaderV1,
+    /// # native: transport_api_types::OrdinaryInitialBootstrapProcessCloseoutV1,
+    /// # gateway: transport_api_types::OrdinaryGatewayDisposalV1,
+    /// # frame: transport_api_types::RuntimeFrameIdentityV1, event: transport_api_types::RuntimeEventIdentityV1) -> anyhow::Result<()> {
+    /// let _report = reader.build_report("obrt_0192a839-0000-7000-8000-000000000001".into(), native, gateway, frame, event)?;
+    /// # Ok(()) }
+    /// ```
+    pub fn build_report(
+        &self,
+        retirement_id: String,
+        native: transport_api_types::OrdinaryInitialBootstrapProcessCloseoutV1,
+        gateway: transport_api_types::OrdinaryGatewayDisposalV1,
+        frame: transport_api_types::RuntimeFrameIdentityV1,
+        event: transport_api_types::RuntimeEventIdentityV1,
+    ) -> Result<transport_api_types::OrdinaryInitialBootstrapRetirementV1> {
+        self.scope
+            .build_report(retirement_id, native, gateway, frame, event)
+    }
+
+    /// Admit this receiver's separately stored operation under current source,
+    /// peer and policy guards. The Root registry owner must independently match
+    /// its actual live owner or cached receipt. No lock may span IPC or waits.
+    /// ```no_run
+    /// # #[cfg(target_os = "linux")]
+    /// # fn read(reader: &substrate_shell::OrdinaryInitialBootstrapCloseoutReaderV1,
+    /// # request: &transport_api_types::OrdinaryInitialBootstrapControlRequestV1, uid: u32) -> anyhow::Result<()> {
+    /// let _ = reader.with_control(request, uid, || Ok(false))?;
+    /// # Ok(()) }
+    /// ```
+    pub fn with_control(
+        &self,
+        request: &transport_api_types::OrdinaryInitialBootstrapControlRequestV1,
+        peer_uid: u32,
+        observe_or_cancel: impl FnOnce() -> Result<bool>,
+    ) -> Result<bool> {
+        RetainedWorkerRuntime.with_initial_bootstrap_control_scope_v1(
+            &self.selection,
+            &self.scope,
+            request,
+            peer_uid,
+            observe_or_cancel,
+        )
+    }
+}
+
+///
+/// Revalidate the held admission before an effect:
+/// ```no_run
+/// # #[cfg(target_os = "linux")]
+/// # fn checked(admission: &substrate_shell::OrdinaryWorldTurnAdmissionV1) -> anyhow::Result<()> {
+/// admission.revalidate_before_world_effect()?;
+/// # Ok(())
+/// # }
+/// ```
+#[cfg(target_os = "linux")]
+pub struct OrdinaryWorldTurnAdmissionV1 {
+    selection: std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    bootstrap: transport_api_types::MemberDispatchRequestV1,
+    request: transport_api_types::MemberTurnSubmitRequestV1,
+    runtime: transport_api_types::OrdinaryGatewayRuntimeIdentityV1,
+}
+
+#[cfg(target_os = "linux")]
+struct EvaluatedOrdinaryWorldExecuteV1 {
+    selection: std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    policy: Policy,
+    runtime: transport_api_types::OrdinaryGatewayRuntimeIdentityV1,
+}
+
+#[cfg(target_os = "linux")]
+impl crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1 {
+    /// Authenticate the original selected request and current permission before
+    /// creating, recovering, or adopting a World.
+    pub fn prepare_world_execute(
+        self: &std::sync::Arc<Self>,
+        request: &transport_api_types::ExecuteRequest,
+    ) -> Result<OrdinaryWorldExecuteAdmissionV1> {
+        let evaluated = evaluate_ordinary_world_execute(self, request, false)?;
+        Ok(OrdinaryWorldExecuteAdmissionV1 {
+            selection: evaluated.selection,
+            request: request.clone(),
+            runtime: evaluated.runtime,
+        })
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl OrdinaryWorldExecuteAdmissionV1 {
+    /// Admit each already stored intent for this actual initial receiver under
+    /// fresh operation policy. The owner must independently match its pending
+    /// reservation or existing SDK control. The callback cannot launch or await.
+    /// Ephemeral acceptance preserves its independent supervisor path.
+    /// ```no_run
+    /// # #[cfg(target_os = "linux")]
+    /// # fn adopt(admission: &substrate_shell::OrdinaryWorldExecuteAdmissionV1) -> anyhow::Result<()> {
+    /// admission.with_stored_initial_bootstrap_controls("spn_actual_owner", |_control| Ok(()))?;
+    /// # Ok(()) }
+    /// ```
+    pub fn with_stored_initial_bootstrap_controls(
+        &self,
+        span_id: &str,
+        mut observe_or_latch: impl FnMut(
+            &transport_api_types::OrdinaryInitialBootstrapControlRequestV1,
+        ) -> Result<()>,
+    ) -> Result<()> {
+        if self.request.acceptance_context.is_some() {
+            return Ok(());
+        }
+        let transport_api_types::PlatformPrincipalV1::Unix { uid, .. } =
+            self.selection.native_principal()
+        else {
+            anyhow::bail!("stored initial control requires original Unix role");
+        };
+        let controls = RetainedWorkerRuntime.read_initial_bootstrap_controls_for_owner_v1(
+            &self.selection,
+            &self.request,
+            span_id,
+        )?;
+        for control in controls {
+            self.with_initial_bootstrap_control(&control, *uid, || {
+                observe_or_latch(&control)?;
+                Ok(true)
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Copy the exact consumed receiver identity from authenticated existing
+    /// sources. This cleanup read issues no receiver or Native permission and
+    /// does not require a new MaySend/account grant.
+    /// ```no_run
+    /// # #[cfg(target_os = "linux")]
+    /// # fn read(admission: &substrate_shell::OrdinaryWorldExecuteAdmissionV1) -> anyhow::Result<()> {
+    /// let _ = admission.initial_bootstrap_closeout_reader("spn_actual_owner")?;
+    /// # Ok(()) }
+    /// ```
+    pub fn initial_bootstrap_closeout_reader(
+        &self,
+        span_id: &str,
+    ) -> Result<OrdinaryInitialBootstrapCloseoutReaderV1> {
+        let scope = RetainedWorkerRuntime.read_initial_bootstrap_receiver_scope_v1(
+            &self.selection,
+            &self.request,
+            span_id,
+        )?;
+        Ok(OrdinaryInitialBootstrapCloseoutReaderV1 {
+            selection: std::sync::Arc::clone(&self.selection),
+            scope,
+        })
+    }
+
+    /// Admit control of this exact initial receiver under original physical
+    /// source guards and the Root lock. The callback may synchronously latch
+    /// cancellation or invoke the existing SDK cancel handle, never launch or
+    /// perform IPC. Success acknowledges neither settlement nor retirement.
+    /// ```no_run
+    /// # #[cfg(target_os = "linux")]
+    /// # fn checked(value: &substrate_shell::OrdinaryWorldExecuteAdmissionV1,
+    /// # request: &transport_api_types::OrdinaryInitialBootstrapControlRequestV1, uid: u32) -> anyhow::Result<()> {
+    /// let delivered = value.with_initial_bootstrap_control(request, uid, || Ok(false))?;
+    /// # let _ = delivered; Ok(()) }
+    /// ```
+    pub fn with_initial_bootstrap_control(
+        &self,
+        request: &transport_api_types::OrdinaryInitialBootstrapControlRequestV1,
+        peer_uid: u32,
+        cancel: impl FnOnce() -> Result<bool>,
+    ) -> Result<bool> {
+        RetainedWorkerRuntime.with_initial_bootstrap_control_v1(
+            &self.selection,
+            &self.request,
+            request,
+            peer_uid,
+            cancel,
+        )
+    }
+
+    /// Consume the exact ordinary initial receiver slot once, before native
+    /// preparation. Repeated or unmarked historical claims refuse; consumption
+    /// is not an execution outcome or later permission. Other effect checks
+    /// remain necessary, including when this publication succeeds.
+    /// ```no_run
+    /// # #[cfg(target_os = "linux")]
+    /// # fn checked(value: &substrate_shell::OrdinaryWorldExecuteAdmissionV1) -> anyhow::Result<()> {
+    /// value.claim_initial_bootstrap_receiver("spn_actual_service_span")?;
+    /// # Ok(()) }
+    /// ```
+    pub fn claim_initial_bootstrap_receiver(&self, service_span_id: &str) -> Result<()> {
+        self.revalidate_before_world_effect()?;
+        if self.request.acceptance_context.is_some() {
+            let home = self.selection.held_authority().bootstrap_home();
+            let identity = home
+                .identity()
+                .map_err(|error| anyhow::anyhow!("{error}"))?;
+            let registry = WorldWorkReceiptRegistry::bind(
+                Path::new(&identity.physical_path),
+                identity,
+                self.selection.authority_store_id(),
+            )?;
+            return registry.claim_ordinary_task_receiver_v1(
+                &self.selection,
+                &self.request,
+                service_span_id,
+            );
+        }
+        crate::execution::agent_runtime::retained_worker_runtime::RetainedWorkerRuntime
+            .claim_initial_bootstrap_receiver(&self.selection, &self.request, service_span_id)
+            .map_err(|error| anyhow::anyhow!("{error}"))
+    }
+
+    /// Retain only original source identity for eventual Stop acknowledgment
+    /// retries. This reader holds no World/native/gateway/exclusion lease and
+    /// grants no execution or retirement without its independently checked intent.
+    /// ```no_run
+    /// # #[cfg(target_os = "linux")]
+    /// # fn checked(value: &substrate_shell::OrdinaryWorldExecuteAdmissionV1) -> anyhow::Result<()> {
+    /// let reader = value.ordinary_retained_stop_control_reader()?;
+    /// # let _ = reader; Ok(())
+    /// # }
+    /// ```
+    pub fn ordinary_retained_stop_control_reader(
+        &self,
+    ) -> Result<crate::OrdinaryRetainedStopControlReaderV1> {
+        let member = self
+            .request
+            .member_dispatch
+            .as_ref()
+            .and_then(transport_api_types::MemberDispatchRequest::as_v1)
+            .ok_or_else(|| {
+                anyhow::anyhow!("ordinary Stop reader requires original member admission")
+            })?;
+        if self.request.acceptance_context.is_some() {
+            anyhow::bail!("ordinary ephemeral admission has no retained Stop lifecycle");
+        }
+        let activation = member.e2_launch_activation.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("ordinary retained Stop reader has no actual E2 activation")
+        })?;
+        crate::OrdinaryRetainedStopControlReaderV1::from_bootstrap(
+            std::sync::Arc::clone(&self.selection),
+            activation.clone(),
+        )
+    }
+
+    /// Join an initial Fork to the source's independently held original admission.
+    /// The source check permits existing R0 Routable state, never fresh issuance.
+    /// Neither the returned identity data nor the source guard grants a launch.
+    ///
+    /// ```no_run
+    /// # #[cfg(target_os = "linux")]
+    /// # fn check(child: &substrate_shell::OrdinaryWorldExecuteAdmissionV1,
+    /// # source: &substrate_shell::OrdinaryWorldExecuteAdmissionV1) -> anyhow::Result<()> {
+    /// let authenticated_source = child.validate_initial_fork_source(source)?;
+    /// # let _ = authenticated_source;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn validate_initial_fork_source(
+        &self,
+        source: &Self,
+    ) -> Result<transport_api_types::E2MemberLaunchActivationCarrierV1> {
+        use crate::execution::agent_runtime::dispatch_policy_commitment::{
+            authenticate_dispatch_policy_commitment, authenticate_ordinary_member_launch_source_v1,
+            resolve_retained_worker_cap, ResolvedPolicyCommitmentCompatibilityV1,
+        };
+        let child = evaluate_ordinary_world_execute(&self.selection, &self.request, false)?;
+        let original = authenticate_current_ordinary_world_dispatch(&source.selection)?;
+        source.request.validate().map_err(anyhow::Error::msg)?;
+        let child_member = self
+            .request
+            .member_dispatch
+            .as_ref()
+            .and_then(transport_api_types::MemberDispatchRequest::as_v1)
+            .ok_or_else(|| anyhow::anyhow!("ordinary Fork child omitted member"))?;
+        let source_member = source
+            .request
+            .member_dispatch
+            .as_ref()
+            .and_then(transport_api_types::MemberDispatchRequest::as_v1)
+            .ok_or_else(|| anyhow::anyhow!("ordinary Fork source omitted original member"))?;
+        let expected_source_runtime =
+            transport_api_types::OrdinaryGatewayRuntimeIdentityV1::WorldWorker {
+                orchestration_session_id: source_member.orchestration_session_id.clone(),
+                caller_participant_id: source_member.orchestrator_participant_id.clone(),
+                participant_id: source_member.participant_id.clone(),
+                backend_id: source_member.backend_id.clone(),
+                run_id: source_member.run_id.clone(),
+                world_id: source_member.world_id.clone(),
+                world_generation: source_member.world_generation,
+            };
+        if source.request.schema_version != 2
+            || source.request.ordinary_start_selection.as_ref()
+                != Some(&ordinary_start_selection_carrier(&original)?)
+            || source.request.cwd.as_deref() != Some(original.workspace_root())
+            || source.request.acceptance_context.is_some()
+            || source.request.shared_world.as_ref().is_some_and(|owner| {
+                owner.orchestration_session_id != source_member.orchestration_session_id
+                    || !matches!(
+                        owner.action,
+                        world_api::SharedWorldOwnerAction::AttachOrCreate
+                    )
+            })
+        {
+            anyhow::bail!("ordinary Fork source changed original request scope");
+        }
+        let child_activation = child_member
+            .e2_launch_activation
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("ordinary Fork omitted authenticated activation"))?;
+        if child_activation.launch_kind != transport_api_types::E2MemberLaunchKindV1::Fork
+            || child_activation.source_participant_id.as_deref()
+                != Some(source_member.participant_id.as_str())
+            || child_member.participant_id == source_member.participant_id
+            || child.runtime != self.runtime
+            || expected_source_runtime != source.runtime
+            || ordinary_start_selection_carrier(&child.selection)?
+                != ordinary_start_selection_carrier(&original)?
+            || child.selection.requested_selection() != original.requested_selection()
+            || child_member.resolved_runtime != source_member.resolved_runtime
+            || child_member.protocol != source_member.protocol
+            || child_member.world_id != source_member.world_id
+            || child_member.world_generation != source_member.world_generation
+        {
+            anyhow::bail!(
+                "ordinary Fork source differs from authenticated original runtime/selection"
+            );
+        }
+        let ResolvedPolicyCommitmentCompatibilityV1::Compatible { cap: child_cap } =
+            resolve_retained_worker_cap(
+                child.selection.held_authority(),
+                &child_member.orchestration_session_id,
+                &child_member.participant_id,
+            )
+            .map_err(|error| anyhow::anyhow!("{error}"))?
+        else {
+            anyhow::bail!("ordinary Fork child cap is unavailable");
+        };
+        let authenticated_child = authenticate_dispatch_policy_commitment(
+            child.selection.held_authority(),
+            child_cap.commitment_ref(),
+        )
+        .map_err(|error| anyhow::anyhow!("{error}"))?;
+        let authenticated_source = authenticate_ordinary_member_launch_source_v1(
+            original.held_authority(),
+            source_member,
+            &source.request.policy_snapshot,
+            true,
+        )
+        .map_err(|error| anyhow::anyhow!("{error}"))?;
+        let current = original
+            .held_authority()
+            .resolve_current_exact(&source_member.orchestration_session_id, None)
+            .map_err(|error| anyhow::anyhow!("{error}"))?;
+        // Native source history is usable only for a genuine R0 Routable worker.
+        // The child's fresh Fork permission never revives the historical caller.
+        crate::execution::agent_runtime::state_store::resolve_canonical_retained_world_dispatch_target(
+            original.held_authority(), &current, &source_member.participant_id, &source_member.backend_id,
+        )?;
+        let source_activation = authenticated_source
+            .member_launch_activation_carrier()
+            .map_err(|error| anyhow::anyhow!("{error}"))?;
+        if authenticated_child
+            .member_launch_activation_carrier()
+            .map_err(|error| anyhow::anyhow!("{error}"))?
+            != *child_activation
+            || authenticated_child.fork_source_cap_ref()
+                != Some(&authenticated_source.commitment_ref())
+            || source_member.e2_launch_activation.as_ref() != Some(&source_activation)
+        {
+            anyhow::bail!(
+                "ordinary Fork source cap/issuer differs from exact authenticated ancestry"
+            );
+        }
+        // These are fresh separate reads, not an atomic cross-store observation.
+        original.revalidate()?;
+        self.revalidate_before_world_effect()?;
+        Ok(source_activation)
+    }
+
+    /// Test-only recheck of a structurally valid substituted source request.
+    /// Never returns an admission or bypasses authentication/issuer validation.
+    #[cfg(test)]
+    pub(crate) fn recheck_initial_fork_source_request_for_test(
+        &self,
+        source: &Self,
+        request: &transport_api_types::ExecuteRequest,
+    ) -> Result<transport_api_types::E2MemberLaunchActivationCarrierV1> {
+        request.validate().map_err(anyhow::Error::msg)?;
+        let substituted = Self {
+            selection: std::sync::Arc::clone(&source.selection),
+            request: request.clone(),
+            runtime: source.runtime.clone(),
+        };
+        self.validate_initial_fork_source(&substituted)
+    }
+
+    pub fn requested_selection(&self) -> &transport_api_types::ResolvedAgentSelectionV1 {
+        self.selection.requested_selection()
+    }
+
+    pub fn authenticated_runtime(&self) -> transport_api_types::OrdinaryGatewayRuntimeIdentityV1 {
+        self.runtime.clone()
+    }
+
+    pub fn revalidate_before_world_effect(&self) -> Result<()> {
+        let evaluated = evaluate_ordinary_world_execute(&self.selection, &self.request, false)?;
+        if evaluated.runtime != self.runtime {
+            anyhow::bail!("ordinary World bootstrap effect subject changed");
+        }
+        Ok(())
+    }
+
+    pub fn revalidate_for_effect(
+        &self,
+        actual_binding: &world_api::SharedWorldBindingSnapshot,
+    ) -> Result<()> {
+        self.revalidate_before_world_effect()?;
+        let member = self
+            .request
+            .member_dispatch
+            .as_ref()
+            .and_then(transport_api_types::MemberDispatchRequest::as_v1)
+            .ok_or_else(|| anyhow::anyhow!("ordinary bootstrap omitted MemberDispatch V1"))?;
+        if actual_binding.binding_state != world_api::SharedWorldBindingState::Active
+            || actual_binding.orchestration_session_id != member.orchestration_session_id
+            || actual_binding.world_id != member.world_id
+            || actual_binding.world_generation != member.world_generation
+        {
+            anyhow::bail!("ordinary World bootstrap changed actual backend binding");
+        }
+        Ok(())
+    }
+
+    /// A later turn authenticates its own B1/E2 run and message, independently
+    /// from the immutable bootstrap run retained by this guard.
+    pub fn prepare_turn(
+        &self,
+        request: &transport_api_types::MemberTurnSubmitRequestV1,
+    ) -> Result<OrdinaryWorldTurnAdmissionV1> {
+        let bootstrap = self
+            .request
+            .member_dispatch
+            .as_ref()
+            .and_then(transport_api_types::MemberDispatchRequest::as_v1)
+            .ok_or_else(|| anyhow::anyhow!("ordinary turn omitted original member"))?;
+        if bootstrap.e2_launch_activation.is_none() {
+            anyhow::bail!("ordinary ephemeral member cannot acquire retained turn permission");
+        }
+        let evaluated = evaluate_ordinary_world_turn(&self.selection, bootstrap, request)?;
+        Ok(OrdinaryWorldTurnAdmissionV1 {
+            selection: evaluated.selection,
+            bootstrap: bootstrap.clone(),
+            request: request.clone(),
+            runtime: evaluated.runtime,
+        })
+    }
+
+    /// Transient gateway-only credential material; never persist, log, or
+    /// render this payload into native configuration or transport environment.
+    pub fn resolve_current_gateway_handoff(
+        &self,
+    ) -> Result<transport_api_types::GatewayIntegratedAuthPayloadV1> {
+        let evaluated = evaluate_ordinary_world_execute(&self.selection, &self.request, false)?;
+        let payload = evaluated
+            .selection
+            .resolve_requested_gateway_handoff(&evaluated.policy)?;
+        self.revalidate_before_world_effect()?;
+        Ok(payload)
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl OrdinaryWorldTurnAdmissionV1 {
+    /// Match the complete submitted request and revalidate its genuine configured
+    /// authority. This is required before ordinary service registry effects.
+    ///
+    /// ```no_run
+    /// # fn check(admission: &substrate_shell::OrdinaryWorldTurnAdmissionV1,
+    /// # request: &transport_api_types::MemberTurnSubmitRequestV1) -> anyhow::Result<()> {
+    /// admission.validate_exact_request(request)
+    /// # }
+    /// ```
+    pub fn validate_exact_request(
+        &self,
+        request: &transport_api_types::MemberTurnSubmitRequestV1,
+    ) -> Result<()> {
+        if request != &self.request {
+            anyhow::bail!("ordinary admission does not own this exact turn request");
+        }
+        self.revalidate_before_world_effect()
+    }
+
+    pub fn requested_selection(&self) -> &transport_api_types::ResolvedAgentSelectionV1 {
+        self.selection.requested_selection()
+    }
+
+    pub fn authenticated_runtime(&self) -> transport_api_types::OrdinaryGatewayRuntimeIdentityV1 {
+        self.runtime.clone()
+    }
+
+    pub fn revalidate_before_world_effect(&self) -> Result<()> {
+        let evaluated =
+            evaluate_ordinary_world_turn(&self.selection, &self.bootstrap, &self.request)?;
+        if evaluated.runtime != self.runtime {
+            anyhow::bail!("ordinary turn effect subject changed");
+        }
+        Ok(())
+    }
+
+    pub fn revalidate_for_effect(
+        &self,
+        actual_binding: &world_api::SharedWorldBindingSnapshot,
+    ) -> Result<()> {
+        self.revalidate_before_world_effect()?;
+        if actual_binding.binding_state != world_api::SharedWorldBindingState::Active
+            || actual_binding.orchestration_session_id != self.request.orchestration_session_id
+            || actual_binding.world_id != self.request.world_id
+            || actual_binding.world_generation != self.request.world_generation
+        {
+            anyhow::bail!("ordinary turn changed actual backend binding");
+        }
+        Ok(())
+    }
+
+    /// Transient gateway-only handoff for this authenticated turn's selected
+    /// account. The turn's runtime getter, not the bootstrap run, names its route.
+    pub fn resolve_current_gateway_handoff(
+        &self,
+    ) -> Result<transport_api_types::GatewayIntegratedAuthPayloadV1> {
+        let evaluated =
+            evaluate_ordinary_world_turn(&self.selection, &self.bootstrap, &self.request)?;
+        let payload = evaluated
+            .selection
+            .resolve_requested_gateway_handoff(&evaluated.policy)?;
+        self.revalidate_before_world_effect()?;
+        Ok(payload)
+    }
+}
+
+/// Resolve current held-root policy and pinned runtime material without any E2
+/// initialization/publication or World effect.
+#[cfg(target_os = "linux")]
+fn evaluate_ordinary_dispatch_policy(
+    selection: &std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    member: &transport_api_types::MemberDispatchRequestV1,
+    action: WorldDispatchActionV1,
+    mode: WorldDispatchModeV1,
+) -> Result<(
+    std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    InternalDispatchContext,
+    transport_api_types::PolicySnapshotV3,
+)> {
+    let selection = authenticate_refreshed_ordinary_world_dispatch(selection)?;
+    evaluate_current_ordinary_dispatch_policy(
+        selection,
+        member,
+        &member.orchestrator_participant_id,
+        action,
+        mode,
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn evaluate_current_ordinary_dispatch_policy(
+    selection: std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    member: &transport_api_types::MemberDispatchRequestV1,
+    caller_participant_id: &str,
+    action: WorldDispatchActionV1,
+    mode: WorldDispatchModeV1,
+) -> Result<(
+    std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    InternalDispatchContext,
+    transport_api_types::PolicySnapshotV3,
+)> {
+    selection.revalidate()?;
+    member.validate().map_err(anyhow::Error::msg)?;
+    let native = selection.native_selection();
+    let requested = selection.requested_selection();
+    if native.placement != transport_api_types::AgentSelectionPlacementV1::Host
+        || requested.placement != transport_api_types::AgentSelectionPlacementV1::World
+        || member.orchestration_session_id != selection.original_session_id()
+        || caller_participant_id != selection.current_participant_id()
+        || member.backend_id != requested.backend_id
+    {
+        anyhow::bail!("ordinary World request changed original roles or actual caller");
+    }
+    // Existing non-upgrading reader performs temporary-material reconciliation.
+    // Historical/current reads remain separate transactions, not atomic.
+    let current = selection
+        .held_authority()
+        .resolve_current_exact(&member.orchestration_session_id, None)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let current_world = current
+        .authority
+        .world_binding
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("ordinary current authority omitted World binding"))?;
+    if current.observation.authority_store_id != selection.authority_store_id()
+        || current.caller.participant_id != caller_participant_id
+        || current.caller.descriptor.backend_id != native.backend_id
+        || current.caller.descriptor.agent_id != native.realized_agent_id
+        || current
+            .authority
+            .workspace_binding
+            .workspace_root
+            .physical_path
+            != selection.workspace_root()
+        || current_world.world_id != member.world_id
+        || current_world.world_generation != member.world_generation
+        || selection.current_world_binding()
+            != Some((
+                current_world.world_id.as_str(),
+                current_world.world_generation,
+            ))
+    {
+        anyhow::bail!("ordinary current caller/workspace/World authority changed");
+    }
+    let context = resolve_ordinary_world_dispatch_context(&selection)?;
+    enforce_ordinary_world_execute_steering(&context.base_policy, member, action, mode)?;
+    let envelope = DispatchRequestEnvelope {
+        caller_kind: DispatchCallerKind::OrchestratorMemberStart,
+        baseline_kind: DispatchBaselineKind::InventoryLaunch,
+        backend_id: Some(member.backend_id.clone()),
+        orchestration_session_id: Some(member.orchestration_session_id.clone()),
+        requested_execution_scope_override: Some(AgentExecutionScope::World),
+        capability_overrides: DispatchCapabilityOverrideSet::default(),
+        attach_launch_knobs: AttachLaunchKnobs {
+            requested_execution_scope: AgentExecutionScope::World,
+            host_execution_client_start: HostExecutionClientStart::Defer,
+            attach_mode_preference: AttachModePreference::FreshAllowed,
+        },
+        has_prompt_payload: true,
+    };
+    let contract = resolve_inventory_contract_for_exact_backend(
+        Path::new(selection.workspace_root()),
+        &context.effective_config,
+        &context.inventory,
+        &context.base_policy,
+        &envelope,
+        AgentExecutionScope::World,
+    )
+    .map_err(|error| anyhow::anyhow!("{error}"))?
+    .ok_or_else(|| anyhow::anyhow!("ordinary current policy refuses pinned runtime"))?;
+    let descriptor =
+        crate::execution::agent_runtime::validator::materialize_runtime_descriptor(&contract)
+            .map_err(|error| anyhow::anyhow!("{}", error.reason))?;
+    let kind = match requested.selection.harness {
+        transport_api_types::AgentHarnessFamilyV1::Codex => AgentRuntimeBackendKind::Codex,
+        transport_api_types::AgentHarnessFamilyV1::ClaudeCode => {
+            AgentRuntimeBackendKind::ClaudeCode
+        }
+    };
+    if contract.agent_id != requested.realized_agent_id
+        || contract.backend_id != requested.backend_id
+        || contract.backend_kind != kind
+        || contract.execution_scope != AgentExecutionScope::World
+        || descriptor.protocol != member.protocol
+        || descriptor.binary_path != Path::new(&member.resolved_runtime.binary_path)
+        || member_runtime_backend_kind(descriptor.backend_kind)
+            != member.resolved_runtime.backend_kind
+        || !contract.capabilities.session_start
+        || !contract.capabilities.event_stream
+        || (mode == WorldDispatchModeV1::Retained && !contract.capabilities.session_resume)
+        || (action == WorldDispatchActionV1::ForkWorldWorker && !contract.capabilities.session_fork)
+    {
+        anyhow::bail!("ordinary current runtime or capability permission changed");
+    }
+    let home = selection.held_authority().bootstrap_home();
+    let snapshot = crate::execution::policy_snapshot::resolve_policy_snapshot_for_bootstrap_home(
+        Path::new(selection.workspace_root()),
+        &home,
+    )?;
+    if snapshot.snapshot_hash != current.current_policy.canonical_policy_snapshot_sha256 {
+        anyhow::bail!("ordinary current held policy no longer joins current authority");
+    }
+    selection.revalidate_requested_account(&context.base_policy)?;
+    selection.revalidate()?;
+    Ok((selection, context, snapshot.snapshot))
+}
+
+#[cfg(target_os = "linux")]
+fn enforce_ordinary_world_execute_steering(
+    policy: &Policy,
+    member: &transport_api_types::MemberDispatchRequestV1,
+    action: WorldDispatchActionV1,
+    mode: WorldDispatchModeV1,
+) -> Result<()> {
+    let steering = policy.world_dispatch_policy();
+    if !steering.enabled
+        || !steering
+            .allowed_actions
+            .iter()
+            .any(|value| value == action.as_str())
+        || !steering
+            .allowed_modes
+            .iter()
+            .any(|value| value == mode.as_str())
+        || !steering
+            .allowed_backends
+            .iter()
+            .any(|value| value == &member.backend_id)
+        || (mode == WorldDispatchModeV1::Ephemeral && steering.max_concurrent_ephemeral == 0)
+        || (mode == WorldDispatchModeV1::Retained && steering.max_live_retained_workers == 0)
+    {
+        anyhow::bail!("ordinary current policy refuses World action/mode/backend");
+    }
+    // Exact session/caller/current World joins are mandatory in the evaluator,
+    // including when current policy permits a broader steering envelope.
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn evaluate_ordinary_world_execute(
+    selection: &std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    request: &transport_api_types::ExecuteRequest,
+    allow_already_routable: bool,
+) -> Result<EvaluatedOrdinaryWorldExecuteV1> {
+    use crate::execution::agent_runtime::dispatch_policy_commitment::{
+        authenticate_ordinary_member_launch_policy_v1, ordinary_policy_snapshot_within_current_v1,
+    };
+    request.validate().map_err(anyhow::Error::msg)?;
+    if request.schema_version != 2
+        || request.ordinary_start_selection.as_ref()
+            != Some(&ordinary_start_selection_carrier(selection)?)
+    {
+        anyhow::bail!("ordinary Execute request omitted exact original Start carrier");
+    }
+    let member = request
+        .member_dispatch
+        .as_ref()
+        .and_then(transport_api_types::MemberDispatchRequest::as_v1)
+        .ok_or_else(|| anyhow::anyhow!("ordinary Execute requires MemberDispatch V1"))?;
+    let action = match member
+        .e2_launch_activation
+        .as_ref()
+        .map(|activation| activation.launch_kind)
+    {
+        Some(transport_api_types::E2MemberLaunchKindV1::FreshSpawn) => {
+            WorldDispatchActionV1::SpawnWorldWorker
+        }
+        Some(transport_api_types::E2MemberLaunchKindV1::Fork) => {
+            WorldDispatchActionV1::ForkWorldWorker
+        }
+        None => WorldDispatchActionV1::RunWorldTask,
+    };
+    let mode = if action == WorldDispatchActionV1::RunWorldTask {
+        WorldDispatchModeV1::Ephemeral
+    } else {
+        WorldDispatchModeV1::Retained
+    };
+    let (selection, context, current_snapshot) =
+        evaluate_ordinary_dispatch_policy(selection, member, action, mode)?;
+    if request.cwd.as_deref() != Some(selection.workspace_root())
+        || request.shared_world.as_ref().is_some_and(|owner| {
+            owner.orchestration_session_id != member.orchestration_session_id
+                || !matches!(
+                    owner.action,
+                    world_api::SharedWorldOwnerAction::AttachOrCreate
+                )
+        })
+    {
+        anyhow::bail!(
+            "ordinary request changed held workspace or current World routing permission"
+        );
+    }
+    match action {
+        WorldDispatchActionV1::RunWorldTask => {
+            if member.retained_worker_launch_authority.is_some()
+                || member.parent_participant_id.is_some()
+                || member.resumed_from_participant_id.is_some()
+            {
+                anyhow::bail!("ordinary Task supplied retained lineage or launch authority");
+            }
+            let acceptance = request.acceptance_context.as_ref().ok_or_else(|| {
+                anyhow::anyhow!("ordinary Task omitted durable B1 proposal context")
+            })?;
+            let snapshot =
+                read_existing_accepted_work_authority_snapshot(selection.held_authority())
+                    .map_err(|error| anyhow::anyhow!("{error:?}"))?;
+            let (authenticated, template) = crate::execution::agent_runtime::state_store::authenticate_pending_ordinary_task_proposal_v2(
+                &snapshot, &member.orchestration_session_id, acceptance,
+            )?;
+            let proposal = authenticated.proposal();
+            validate_task_submission_against_proposal(request, proposal)?;
+            validate_ordinary_task_template_subject(proposal, &template)?;
+            if context.base_policy.world_fs_mode == transport_api_types::WorldFsMode::ReadOnly
+                && request.world_fs_mode != Some(transport_api_types::WorldFsMode::ReadOnly)
+            {
+                anyhow::bail!("ordinary current policy revoked writable Task placement");
+            }
+            let WorldWorkSubmissionIdentityV1::EphemeralTask {
+                validated_dispatch_request,
+                ..
+            } = &proposal.submission_identity
+            else {
+                anyhow::bail!("ordinary Task proposal changed family");
+            };
+            if proposal.authority_store_id != selection.authority_store_id()
+                || proposal.caller_participant_id != selection.current_participant_id()
+                || proposal.caller_backend_id != selection.native_selection().backend_id
+                || proposal.target_backend_id != member.backend_id
+                || proposal.world_id != member.world_id
+                || proposal.world_generation != member.world_generation
+                || validated_dispatch_request.action != action
+                || validated_dispatch_request.mode != mode
+                || (!context
+                    .base_policy
+                    .agents_world_dispatch_allow_capability_narrowing
+                    && validated_dispatch_request
+                        .dispatch_policy_narrowing
+                        .is_some())
+            {
+                anyhow::bail!(
+                    "ordinary Task authenticated proposal does not join current permission"
+                );
+            }
+            ordinary_policy_snapshot_within_current_v1(&current_snapshot, &request.policy_snapshot)
+                .map_err(|error| anyhow::anyhow!("{error}"))?;
+        }
+        WorldDispatchActionV1::SpawnWorldWorker | WorldDispatchActionV1::ForkWorldWorker => {
+            if request.acceptance_context.is_some() {
+                anyhow::bail!("ordinary retained bootstrap supplied Task acceptance context");
+            }
+            let activation = authenticate_ordinary_member_launch_policy_v1(
+                selection.held_authority(),
+                member,
+                &current_snapshot,
+                &request.policy_snapshot,
+                context
+                    .base_policy
+                    .agents_world_dispatch_allow_capability_narrowing,
+                allow_already_routable,
+            )
+            .map_err(|error| anyhow::anyhow!("{error}"))?;
+            if activation.caller_backend_id != selection.native_selection().backend_id {
+                anyhow::bail!("ordinary retained cap changed actual caller backend");
+            }
+        }
+        _ => anyhow::bail!("ordinary bootstrap cannot admit another dispatch action"),
+    }
+    selection.revalidate()?;
+    let runtime = transport_api_types::OrdinaryGatewayRuntimeIdentityV1::WorldWorker {
+        orchestration_session_id: member.orchestration_session_id.clone(),
+        caller_participant_id: member.orchestrator_participant_id.clone(),
+        participant_id: member.participant_id.clone(),
+        backend_id: member.backend_id.clone(),
+        run_id: member.run_id.clone(),
+        world_id: member.world_id.clone(),
+        world_generation: member.world_generation,
+    };
+    runtime.validate().map_err(anyhow::Error::msg)?;
+    Ok(EvaluatedOrdinaryWorldExecuteV1 {
+        selection,
+        policy: context.base_policy,
+        runtime,
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn evaluate_ordinary_world_turn(
+    selection: &std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    bootstrap: &transport_api_types::MemberDispatchRequestV1,
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
+) -> Result<EvaluatedOrdinaryWorldExecuteV1> {
+    request
+        .validate_ordinary_representation()
+        .map_err(anyhow::Error::msg)?;
+    if request.orchestration_session_id != bootstrap.orchestration_session_id
+        || request.participant_id != bootstrap.participant_id
+        || request.backend_id != bootstrap.backend_id
+        || request.world_id != bootstrap.world_id
+        || request.world_generation != bootstrap.world_generation
+    {
+        anyhow::bail!("ordinary turn changed original member or actual placement");
+    }
+    let current_selection = authenticate_current_ordinary_world_dispatch(selection)?;
+    let (selection, context, current_snapshot) = evaluate_current_ordinary_dispatch_policy(
+        current_selection,
+        bootstrap,
+        &request.orchestrator_participant_id,
+        WorldDispatchActionV1::ContinueWorldWorker,
+        WorldDispatchModeV1::Retained,
+    )?;
+    let acceptance = request.acceptance_context.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("ordinary turn omitted exact durable B1 proposal context")
+    })?;
+    let snapshot = read_existing_accepted_work_authority_snapshot(selection.held_authority())
+        .map_err(|error| anyhow::anyhow!("{error:?}"))?;
+    let authenticated = crate::execution::agent_runtime::state_store::authenticate_pending_ordinary_world_work_proposal_v1(
+        &snapshot, &request.orchestration_session_id, acceptance,
+    )?;
+    let proposal = authenticated.proposal();
+    validate_ordinary_retained_submission_against_proposal(request, proposal)?;
+    let WorldWorkSubmissionIdentityV1::RetainedTurn {
+        validated_dispatch_request,
+        ..
+    } = &proposal.submission_identity
+    else {
+        anyhow::bail!("ordinary turn proposal changed family");
+    };
+    if proposal.authority_store_id != selection.authority_store_id()
+        || proposal.caller_participant_id != selection.current_participant_id()
+        || proposal.caller_backend_id != selection.native_selection().backend_id
+        || validated_dispatch_request.action != WorldDispatchActionV1::ContinueWorldWorker
+        || (!context
+            .base_policy
+            .agents_world_dispatch_allow_capability_narrowing
+            && validated_dispatch_request
+                .dispatch_policy_narrowing
+                .is_some())
+    {
+        anyhow::bail!("ordinary turn changed authenticated current caller/patch permission");
+    }
+    crate::execution::agent_runtime::dispatch_policy_commitment::authenticate_ordinary_member_turn_policy_v1(
+        selection.held_authority(), request, &current_snapshot,
+    ).map_err(|error| anyhow::anyhow!("{error}"))?;
+    // Resolve exact retained R0/E2 target under the same held authority. A copied
+    // launch binding and bootstrap run are not a fresh turn or backend proof.
+    let current = selection
+        .held_authority()
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .map_err(|error| anyhow::anyhow!("{error}"))?;
+    crate::execution::agent_runtime::state_store::resolve_canonical_retained_world_dispatch_target(
+        selection.held_authority(),
+        &current,
+        &request.participant_id,
+        &request.backend_id,
+    )?;
+    selection.revalidate()?;
+    let runtime = transport_api_types::OrdinaryGatewayRuntimeIdentityV1::WorldWorker {
+        orchestration_session_id: request.orchestration_session_id.clone(),
+        caller_participant_id: request.orchestrator_participant_id.clone(),
+        participant_id: request.participant_id.clone(),
+        backend_id: request.backend_id.clone(),
+        run_id: request.run_id.clone(),
+        world_id: request.world_id.clone(),
+        world_generation: request.world_generation,
+    };
+    runtime.validate().map_err(anyhow::Error::msg)?;
+    Ok(EvaluatedOrdinaryWorldExecuteV1 {
+        selection,
+        policy: context.base_policy,
+        runtime,
+    })
+}
+
+#[cfg(target_os = "linux")]
+struct OrdinaryWorldDispatchInputsV1 {
+    selection: std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    request: ValidatedWorldDispatchRequestV1,
+    start: transport_api_types::OrdinaryStartSelectionCarrierV1,
+    original_world_binding: Option<(String, u64)>,
+    current:
+        crate::execution::agent_runtime::host_session_authority::facade::ResolvedCurrentAuthorityV1,
+    context: InternalDispatchContext,
+    registry_authority: ResolvedWorldWorkRegistryAuthorityV1,
+}
+
+#[cfg(target_os = "linux")]
+impl OrdinaryWorldDispatchInputsV1 {
+    fn revalidate(&self) -> Result<()> {
+        self.selection.revalidate()?;
+        if ordinary_start_selection_carrier(&self.selection)? != self.start
+            || self
+                .selection
+                .original_world_binding()
+                .map(|(id, generation)| (id.to_string(), generation))
+                != self.original_world_binding
+        {
+            anyhow::bail!("ordinary original Start selection changed during dispatch");
+        }
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn authenticate_ordinary_world_dispatch(
+    selection: &std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    request: &ValidatedWorldDispatchRequestV1,
+) -> Result<OrdinaryWorldDispatchInputsV1> {
+    if !matches!(
+        request.action,
+        WorldDispatchActionV1::RunWorldTask
+            | WorldDispatchActionV1::SpawnWorldWorker
+            | WorldDispatchActionV1::ForkWorldWorker
+            | WorldDispatchActionV1::ContinueWorldWorker
+    ) {
+        anyhow::bail!("ordinary selection admission requires ordinary Task, Spawn, or Fork");
+    }
+    let selection = authenticate_refreshed_ordinary_world_dispatch(selection)?;
+    let native = selection.native_selection();
+    let requested = selection.requested_selection();
+    if native.placement != transport_api_types::AgentSelectionPlacementV1::Host
+        || requested.placement != transport_api_types::AgentSelectionPlacementV1::World
+        || request.target_backend_id != requested.backend_id
+        || request.orchestration_session_id != selection.original_session_id()
+        || request.caller_participant_id != selection.current_participant_id()
+    {
+        anyhow::bail!("ordinary request does not match original roles and actual caller");
+    }
+    let current = selection
+        .held_authority()
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let world = current
+        .authority
+        .world_binding
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("ordinary current authority omits World binding"))?;
+    if current.observation.authority_store_id != selection.authority_store_id()
+        || current.observation.authority_revision != selection.current_authority_revision()
+        || current.authority.orchestration_session_id != request.orchestration_session_id
+        || current.caller.participant_id != request.caller_participant_id
+        || current.caller.descriptor.backend_id != native.backend_id
+        || current.caller.descriptor.agent_id != native.realized_agent_id
+        || current
+            .authority
+            .workspace_binding
+            .workspace_root
+            .physical_path
+            != selection.workspace_root()
+        || world.world_id != request.world_id
+        || world.world_generation != request.world_generation
+        || selection.current_world_binding()
+            != Some((world.world_id.as_str(), world.world_generation))
+    {
+        anyhow::bail!("stale_linkage: ordinary current authority/caller/World join changed");
+    }
+    let context = resolve_ordinary_world_dispatch_context(&selection)?;
+    selection.revalidate_requested_account(&context.base_policy)?;
+    let registry_authority =
+        bind_ordinary_world_work_registry_authority(&selection, &current, request)?;
+    let inputs = OrdinaryWorldDispatchInputsV1 {
+        request: request.clone(),
+        start: ordinary_start_selection_carrier(&selection)?,
+        original_world_binding: selection
+            .original_world_binding()
+            .map(|(id, generation)| (id.to_string(), generation)),
+        selection,
+        current,
+        context,
+        registry_authority,
+    };
+    inputs.revalidate()?;
+    Ok(inputs)
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_ordinary_world_dispatch_contract(
+    inputs: &OrdinaryWorldDispatchInputsV1,
+    request: &ValidatedWorldDispatchRequestV1,
+    action_label: &str,
+) -> Result<ResolvedLaunchContract> {
+    inputs.revalidate()?;
+    let selected = inputs.selection.requested_selection();
+    if request != &inputs.request || request.target_backend_id != selected.backend_id {
+        anyhow::bail!("ordinary dispatch request differs from authenticated input");
+    }
+    // Runtime/capability material comes from captured config/inventory under
+    // current policy. Keep the original complete DTO and selection_origin.
+    let contract = resolve_world_dispatch_contract(
+        Path::new(inputs.selection.workspace_root()),
+        &inputs.context,
+        request,
+        action_label,
+    )?;
+    let kind = match selected.selection.harness {
+        transport_api_types::AgentHarnessFamilyV1::Codex => AgentRuntimeBackendKind::Codex,
+        transport_api_types::AgentHarnessFamilyV1::ClaudeCode => {
+            AgentRuntimeBackendKind::ClaudeCode
+        }
+    };
+    if contract.backend_id != selected.backend_id
+        || contract.agent_id != selected.realized_agent_id
+        || contract.backend_kind != kind
+        || contract.execution_scope != AgentExecutionScope::World
+    {
+        anyhow::bail!("ordinary runtime contract differs from original requested selection");
+    }
+    inputs.revalidate()?;
+    Ok(contract)
+}
+
+#[cfg(target_os = "linux")]
+fn bind_ordinary_world_work_registry_authority(
+    selection: &crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    current: &crate::execution::agent_runtime::host_session_authority::facade::ResolvedCurrentAuthorityV1,
+    request: &ValidatedWorldDispatchRequestV1,
+) -> Result<ResolvedWorldWorkRegistryAuthorityV1> {
+    selection.revalidate()?;
+    let home = selection.held_authority().bootstrap_home();
+    let identity = home
+        .identity()
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    if identity != &current.observation.bootstrap_home
+        || current.observation.authority_store_id != selection.authority_store_id()
+        || current.authority.orchestration_session_id != request.orchestration_session_id
+        || current.caller.participant_id != request.caller_participant_id
+    {
+        anyhow::bail!("ordinary receipt registry does not join held authority custody");
+    }
+    let world = current.authority.world_binding.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("ordinary registry current authority omits World binding")
+    })?;
+    if world.world_id != request.world_id || world.world_generation != request.world_generation {
+        anyhow::bail!("ordinary registry current World binding changed");
+    }
+    let policy_ref = current
+        .authority
+        .current_policy_ref
+        .clone()
+        .ok_or_else(|| {
+            anyhow::anyhow!("ordinary registry current authority omits policy reference")
+        })?;
+    if policy_ref.object_kind
+        != crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectKindV1::Policy
+    {
+        anyhow::bail!("ordinary registry current policy reference is not Policy");
+    }
+    let revision = current
+        .authority
+        .current_policy_revision
+        .clone()
+        .ok_or_else(|| {
+            anyhow::anyhow!("ordinary registry current authority omits policy revision")
+        })?;
+    // This locator is supplied by the held root, never a request or ambient
+    // StateStore. Both binders verify its canonical root identity/store.
+    let receipt_registry = WorldWorkReceiptRegistry::bind(
+        Path::new(&identity.physical_path),
+        identity,
+        &current.observation.authority_store_id,
+    )?;
+    let execution_supervisor = WorldWorkExecutionSupervisor::bind(
+        Path::new(&identity.physical_path),
+        identity,
+        &current.observation.authority_store_id,
+    )?;
+    let retained_target = if matches!(
+        request.action,
+        WorldDispatchActionV1::ForkWorldWorker | WorldDispatchActionV1::ContinueWorldWorker
+    ) {
+        let participant = request.target_participant_id.as_deref().ok_or_else(|| {
+            anyhow::anyhow!("ordinary Fork omitted exact retained source participant")
+        })?;
+        Some(crate::execution::agent_runtime::state_store::resolve_canonical_retained_world_dispatch_target(
+            selection.held_authority(), current, participant, &request.target_backend_id,
+        )?)
+    } else {
+        None
+    };
+    selection.revalidate()?;
+    Ok(ResolvedWorldWorkRegistryAuthorityV1 {
+        receipt_registry,
+        execution_supervisor,
+        authority_store_id: current.observation.authority_store_id.clone(),
+        authority_revision_observed: current.observation.authority_revision,
+        orchestration_session_id: current.authority.orchestration_session_id.clone(),
+        caller_participant_id: current.caller.participant_id.clone(),
+        caller_backend_id: current.caller.descriptor.backend_id.clone(),
+        workspace_root: current
+            .authority
+            .workspace_binding
+            .workspace_root
+            .physical_path
+            .clone(),
+        world_id: world.world_id.clone(),
+        world_generation: world.world_generation,
+        host_session_posture: current.authority.lifecycle_posture,
+        current_policy_snapshot_ref: policy_ref,
+        current_policy_snapshot_hash: current
+            .current_policy
+            .canonical_policy_snapshot_sha256
+            .clone(),
+        current_policy_revision: revision,
+        retained_target,
+    })
+}
+
+#[cfg(target_os = "linux")]
+struct ResolvedOrdinaryE2DispatchPolicyV1 {
+    #[allow(
+        dead_code,
+        reason = "resolved ordinary E2 policy retains authenticated selection and its held authority for the policy material lifetime"
+    )]
+    selection: std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    exact_policy_snapshot: ExactDispatchPolicySnapshotMaterialV1,
+    validated_policy_snapshot: ValidatedPolicySnapshotMaterialV1,
+    applied_patch: AppliedDispatchPolicyPatchIdentityV1,
+    reason: Option<String>,
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_ordinary_e2_dispatch_policy(
+    inputs: &OrdinaryWorldDispatchInputsV1,
+    request: &ValidatedWorldDispatchRequestV1,
+    applies_to: transport_api_types::DispatchCapabilitySubjectV1,
+) -> Result<ResolvedOrdinaryE2DispatchPolicyV1> {
+    inputs.revalidate()?;
+    if request != &inputs.request {
+        anyhow::bail!("ordinary E2 request differs from authenticated input");
+    }
+    let home = inputs.selection.held_authority().bootstrap_home();
+    let workspace = Path::new(inputs.selection.workspace_root());
+    let parent_ref = inputs
+        .registry_authority
+        .current_policy_snapshot_ref
+        .clone();
+    let (snapshot, hash) = match request.dispatch_policy_narrowing.as_ref() {
+        Some(patch) => {
+            let transport_parent_ref =
+                crate::execution::agent_runtime::dispatch_policy_commitment::transport_policy_ref(
+                    &parent_ref,
+                );
+            let authenticated = crate::execution::policy_snapshot::AuthenticatedDispatchPolicyNarrowingContextV1::from_resolved_authority(
+                crate::execution::policy_snapshot::ResolvedDispatchPolicyNarrowingAuthorityV1 {
+                    request_id: request.request_id.clone(),
+                    orchestration_session_id: request.orchestration_session_id.clone(),
+                    caller_participant_id: request.caller_participant_id.clone(),
+                    target_backend_id: request.target_backend_id.clone(),
+                    target_world: transport_api_types::WorldBindingRefV1 {
+                        world_id: request.world_id.clone(), world_generation: request.world_generation,
+                    },
+                    applies_to, parent_policy_ref: transport_parent_ref,
+                    parent_policy: inputs.current.current_policy.clone(),
+                    parent_allows_capability_narrowing: inputs.context.base_policy.agents_world_dispatch_allow_capability_narrowing,
+                },
+            )?;
+            let resolved = if matches!(
+                request.action,
+                WorldDispatchActionV1::RunWorldTask | WorldDispatchActionV1::ContinueWorldWorker
+            ) {
+                crate::execution::policy_snapshot::resolve_ordinary_dispatch_narrowed_policy_snapshot(&inputs.selection, &inputs.context.base_policy, patch, &authenticated, workspace)?
+            } else {
+                crate::execution::policy_snapshot::resolve_dispatch_narrowed_policy_snapshot(
+                    &inputs.context.base_policy,
+                    patch,
+                    &authenticated,
+                    workspace,
+                )?
+            };
+            (resolved.snapshot, resolved.snapshot_hash)
+        }
+        None => {
+            let resolved =
+                crate::execution::policy_snapshot::resolve_policy_snapshot_for_bootstrap_home(
+                    workspace, &home,
+                )?;
+            if resolved.snapshot_hash
+                != inputs
+                    .current
+                    .current_policy
+                    .canonical_policy_snapshot_sha256
+            {
+                anyhow::bail!("stale_linkage: ordinary held-home current policy snapshot changed");
+            }
+            (resolved.snapshot, resolved.snapshot_hash)
+        }
+    };
+    let bytes =
+        serde_json::to_vec(&snapshot).context("serialize ordinary exact E1 PolicySnapshotV3")?;
+    let validated_policy_snapshot = validate_policy_snapshot_material(
+        &snapshot,
+        &bytes,
+        &parent_ref,
+        &hash,
+        &inputs.current.current_policy.policy_revision,
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let exact_policy_snapshot =
+        ExactDispatchPolicySnapshotMaterialV1::from_exact_e1_material(snapshot, bytes, hash)?;
+    let applied_patch =
+        if matches!(request.action, WorldDispatchActionV1::RunWorldTask | WorldDispatchActionV1::ContinueWorldWorker) {
+            crate::execution::agent_runtime::dispatch_policy_commitment::ordinary_applied_dispatch_policy_patch_identity(request.dispatch_policy_narrowing.as_ref())
+        } else { applied_dispatch_policy_patch_identity(request.dispatch_policy_narrowing.as_ref()) }
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    inputs.revalidate()?;
+    inputs.revalidate()?;
+    Ok(ResolvedOrdinaryE2DispatchPolicyV1 {
+        selection: std::sync::Arc::clone(&inputs.selection),
+        exact_policy_snapshot,
+        validated_policy_snapshot,
+        applied_patch,
+        reason: dispatch_policy_narrowing_reason(request.dispatch_policy_narrowing.as_ref()),
+    })
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn prepare_ordinary_authority_bound_spawn_world_worker(
+    selection: std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    request: ValidatedWorldDispatchRequestV1,
+) -> Result<PreparedOrdinarySpawnWorldWorkerBootstrap> {
+    if request.action != WorldDispatchActionV1::SpawnWorldWorker
+        || request.mode != WorldDispatchModeV1::Retained
+    {
+        anyhow::bail!(
+            "invalid_dispatch_action: authority-bound retained admission requires spawn_world_worker"
+        );
+    }
+    let WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 { prompt }) = &request.payload
+    else {
+        anyhow::bail!(
+            "invalid_dispatch_payload: action spawn_world_worker requires matching typed payload"
+        );
+    };
+    let mut inputs = authenticate_ordinary_world_dispatch(&selection, &request)?;
+    let authority = std::sync::Arc::clone(inputs.selection.held_authority());
+    let bootstrap_home = PathBuf::from(
+        &authority
+            .bootstrap_home()
+            .identity()
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?
+            .physical_path,
+    );
+    let exact = &inputs.current;
+    let workspace_root = PathBuf::from(inputs.selection.workspace_root());
+    let context = &inputs.context;
+    let steering_policy = context.base_policy.world_dispatch_policy();
+    if !steering_policy.enabled {
+        return Err(steering_policy_denial(
+            WorldDispatchSteeringDenialV1::WorldDispatchDisabled,
+            "host-to-world steering is disabled by effective policy",
+        ));
+    }
+    if !steering_policy
+        .allowed_actions
+        .iter()
+        .any(|value| value == request.action.as_str())
+    {
+        return Err(steering_policy_denial(
+            WorldDispatchSteeringDenialV1::ActionNotAllowed,
+            format!(
+                "effective policy does not allow {}",
+                request.action.as_str()
+            ),
+        ));
+    }
+    if !steering_policy
+        .allowed_modes
+        .iter()
+        .any(|value| value == request.mode.as_str())
+    {
+        return Err(steering_policy_denial(
+            WorldDispatchSteeringDenialV1::ModeNotAllowed,
+            format!("effective policy does not allow {}", request.mode.as_str()),
+        ));
+    }
+    if !steering_policy
+        .allowed_backends
+        .iter()
+        .any(|value| value == &request.target_backend_id)
+    {
+        return Err(steering_policy_denial(
+            WorldDispatchSteeringDenialV1::BackendNotAllowed,
+            format!(
+                "effective policy does not allow backend {}",
+                request.target_backend_id
+            ),
+        ));
+    }
+    let resolved_contract =
+        resolve_ordinary_world_dispatch_contract(&inputs, &request, "spawn_world_worker")?;
+    let descriptor = materialize_runtime_descriptor(&resolved_contract).map_err(|err| {
+        anyhow::anyhow!(
+            "runtime_start_failed: selected runtime '{}' is not runtime-realizable: {}",
+            resolved_contract.agent_id,
+            err.reason
+        )
+    })?;
+    let authority_descriptor = AuthorityAgentDescriptorV1 {
+        schema_version: 1,
+        agent_id: descriptor.agent_id.clone(),
+        backend_id: descriptor.backend_id.clone(),
+        backend_kind: match descriptor.backend_kind {
+            AgentRuntimeBackendKind::Codex => AuthorityRuntimeBackendKindV1::Codex,
+            AgentRuntimeBackendKind::ClaudeCode => AuthorityRuntimeBackendKindV1::ClaudeCode,
+        },
+        protocol: descriptor.protocol.clone(),
+        execution_scope: AuthorityAgentExecutionScopeV1::World,
+        binary_path: descriptor.binary_path.display().to_string(),
+    };
+    let current_policy_ref = exact.authority.current_policy_ref.clone().ok_or_else(|| {
+        anyhow::anyhow!("retained admission authority omits current policy reference")
+    })?;
+    let canonical_spawn_request = CanonicalValidatedSpawnRequestV1 {
+        schema_version: 1,
+        request_id: request.request_id.clone(),
+        idempotency_key: request.idempotency_key.clone(),
+        orchestration_session_id: request.orchestration_session_id.clone(),
+        caller_participant_id: request.caller_participant_id.clone(),
+        action: request.action.as_str().to_string(),
+        mode: request.mode.as_str().to_string(),
+        target_backend_id: request.target_backend_id.clone(),
+        task_run_id: request.task_run_id.clone(),
+        target_participant_id: request.target_participant_id.clone(),
+        world_id: request.world_id.clone(),
+        world_generation: request.world_generation,
+        payload: CanonicalWorkerSpawnPayloadV1 {
+            prompt: prompt.clone(),
+        },
+    };
+    let e2_policy = resolve_ordinary_e2_dispatch_policy(
+        &inputs,
+        &request,
+        transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerSpawn,
+    )?;
+    let validated_policy_snapshot = e2_policy.validated_policy_snapshot;
+    let applied_patch = e2_policy.applied_patch;
+    inputs.revalidate()?;
+    let reservation = crate::execution::agent_runtime::dispatch_policy_commitment::reserve_ordinary_fresh_spawn(
+        crate::execution::agent_runtime::dispatch_policy_commitment::AuthenticatedOrdinaryFreshSpawnInputV1::authenticate(
+            std::sync::Arc::clone(&inputs.selection),
+            FreshSpawnReservationInputV1 {
+            spawn_request: canonical_spawn_request.clone(),
+            caller_backend_id: exact.caller.descriptor.backend_id.clone(),
+            parent_policy_ref: current_policy_ref.clone(),
+            parent_policy_revision: exact.current_policy.policy_revision.clone(),
+            applied_patch,
+            policy_snapshot: validated_policy_snapshot.clone(),
+            reason: dispatch_policy_narrowing_reason(request.dispatch_policy_narrowing.as_ref()),
+            },
+        ).map_err(|error| anyhow::anyhow!(error.to_string()))?,
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let mut admission_plan = RetainedWorkerAdmissionPlanV1 {
+        issuer_request_id: request.request_id.clone(),
+        spawn_request: canonical_spawn_request.clone(),
+        exact_authority: CanonicalExactCurrentAuthorityV1::from_resolved(exact),
+        descriptor_and_runtime_plan: CanonicalDescriptorAndRuntimePlanV1 {
+            schema_version: 1,
+            descriptor: authority_descriptor,
+            runtime_role: "member".to_string(),
+            internal_uaa_session_id_domain: "substrate.retained-worker.internal-uaa-session.v1"
+                .to_string(),
+        },
+        policy_and_admission_cap: CanonicalPolicyAndAdmissionCapV1 {
+            schema_version: 1,
+            current_policy_ref,
+            current_policy: exact.current_policy.clone(),
+            dispatch_enabled: context.base_policy.agents_world_dispatch_enabled,
+            allowed_backends: context
+                .base_policy
+                .agents_world_dispatch_allowed_backends
+                .clone(),
+            allowed_actions: context
+                .base_policy
+                .agents_world_dispatch_allowed_actions
+                .clone(),
+            allowed_modes: context
+                .base_policy
+                .agents_world_dispatch_allowed_modes
+                .clone(),
+            same_session_only: context.base_policy.agents_world_dispatch_same_session_only,
+            same_world_binding_only: context
+                .base_policy
+                .agents_world_dispatch_same_world_binding_only,
+            allow_capability_narrowing: context
+                .base_policy
+                .agents_world_dispatch_allow_capability_narrowing,
+            max_live_retained_workers: context
+                .base_policy
+                .agents_world_dispatch_max_live_retained_workers
+                .into(),
+            max_concurrent_ephemeral: context
+                .base_policy
+                .agents_world_dispatch_max_concurrent_ephemeral
+                .into(),
+        },
+    };
+    let dispatch_policy_reservation_proof = reservation
+        .authenticate_admission_plan(&admission_plan)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let recovery = RetainedSpawnAdmissionRecoveryV1::from_parts(
+        bootstrap_home.clone(),
+        &request,
+        dispatch_policy_reservation_proof
+            .retained_participant_id()
+            .to_string(),
+    );
+    let runtime = RetainedWorkerRuntime;
+    let reserved = runtime
+        .reserve_admission_slot(
+            &authority,
+            &admission_plan,
+            Some(&dispatch_policy_reservation_proof),
+        )
+        .map_err(|error| {
+            recovery.retain_preparation_failure(&authority, anyhow::anyhow!(error.to_string()))
+        })?;
+    if reserved.joined {
+        admission_plan = runtime
+            .canonical_plan_for_existing_admission(
+                &authority,
+                &admission_plan,
+                &reserved.record,
+                Some(&dispatch_policy_reservation_proof),
+            )
+            .map_err(|error| {
+                recovery.retain_preparation_failure(&authority, anyhow::anyhow!(error.to_string()))
+            })?;
+    }
+    let registered = runtime
+        .register_admitted_worker(
+            &authority,
+            &admission_plan,
+            Some(&dispatch_policy_reservation_proof),
+        )
+        .map_err(|error| {
+            recovery.retain_preparation_failure(&authority, anyhow::anyhow!(error.to_string()))
+        })?;
+    inputs = authenticate_ordinary_world_dispatch(&inputs.selection, &request)?;
+    resolve_ordinary_world_dispatch_contract(&inputs, &request, "spawn_world_worker")?;
+    let dispatch_policy_commitment = publish_fresh_spawn_commitment(
+        &authority,
+        &dispatch_policy_reservation_proof,
+        &registered.record,
+    )
+    .map_err(|error| {
+        recovery.retain_preparation_failure(&authority, anyhow::anyhow!(error.to_string()))
+    })?;
+    let authenticated_dispatch_policy = authenticate_dispatch_policy_commitment(
+        &authority,
+        &dispatch_policy_commitment.commitment_ref(),
+    )
+    .map_err(|error| {
+        recovery.retain_preparation_failure(&authority, anyhow::anyhow!(error.to_string()))
+    })?;
+    let exact_policy_snapshot = ExactDispatchPolicySnapshotMaterialV1::from_exact_e1_material(
+        authenticated_dispatch_policy.policy_snapshot().clone(),
+        authenticated_dispatch_policy
+            .policy_snapshot_bytes()
+            .to_vec(),
+        authenticated_dispatch_policy
+            .policy_snapshot_hash()
+            .to_string(),
+    )
+    .map_err(|error| recovery.retain_preparation_failure(&authority, error))?;
+    let e2_launch_activation = authenticated_dispatch_policy
+        .member_launch_activation_carrier()
+        .map_err(|error| {
+            recovery.retain_preparation_failure(&authority, anyhow::anyhow!(error.to_string()))
+        })?;
+    let claim = runtime
+        .claim_admission_transport(
+            &authority,
+            &admission_plan,
+            &registered.record.retained_participant_id,
+            Some(&dispatch_policy_reservation_proof),
+        )
+        .map_err(|error| {
+            recovery.retain_preparation_failure(&authority, anyhow::anyhow!(error.to_string()))
+        })?;
+    if !claim.newly_claimed {
+        let message = match claim.record.state {
+            RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal { .. } => {
+                "retained_spawn_transport_claimed: exact retained Spawn transport is already claimed and remains nonterminal"
+            }
+            RetainedWorkerAdmissionStateV1::Routable { .. } => {
+                "retained_spawn_already_routable: exact retained Spawn is already durably routable"
+            }
+            RetainedWorkerAdmissionStateV1::InterruptedNonterminal { .. } => {
+                "retained_spawn_interrupted_nonterminal: exact retained Spawn has ambiguous nonterminal transport truth"
+            }
+            RetainedWorkerAdmissionStateV1::Terminal { .. } => {
+                "retained_spawn_already_terminal: exact retained Spawn is already durably terminal"
+            }
+            RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration { .. }
+            | RetainedWorkerAdmissionStateV1::CancelledBeforeTransport { .. }
+            | RetainedWorkerAdmissionStateV1::CancellationAcceptedTransportCloseoutPending {
+                ..
+            } => {
+                "retained_spawn_cancelled: exact retained Spawn admission has durable cancellation truth"
+            }
+            RetainedWorkerAdmissionStateV1::SlotReserved { .. }
+            | RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
+            | RetainedWorkerAdmissionStateV1::PreTransportNonterminal { .. }
+            | RetainedWorkerAdmissionStateV1::RejectedBeforeRegistration { .. } => {
+                "retained_spawn_claim_conflict: exact retained Spawn did not return a transport-claimed durable state"
+            }
+        };
+        let source = anyhow::anyhow!(message);
+        let outcome = recovery
+            .project_record(&claim.record, source.to_string())
+            .expect("transport claim record must preserve retained Spawn identity");
+        return Err(anyhow::Error::new(
+            RetainedSpawnAdmissionPreparationFailureV1 { source, outcome },
+        ));
+    }
+    let launch_authority_proof = runtime
+        .launch_authority_proof_for_claim(
+            &authority,
+            &admission_plan,
+            &claim,
+            Some(&dispatch_policy_reservation_proof),
+        )
+        .map_err(|error| {
+            recovery.retain_preparation_failure(&authority, anyhow::anyhow!(error.to_string()))
+        })?;
+
+    inputs.revalidate()?;
+    Ok(PreparedOrdinarySpawnWorldWorkerBootstrap {
+        selection: inputs.selection,
+        request,
+        descriptor,
+        workspace_root,
+        authority,
+        admission_bootstrap_home: bootstrap_home,
+        admission_plan,
+        dispatch_policy_reservation_proof,
+        exact_policy_snapshot,
+        launch_authority_proof,
+        e2_launch_activation,
+        _concurrency_guard: None,
+    })
+}
+
+#[cfg(target_os = "linux")]
+impl RetainedSpawnAdmissionRecoveryV1 {
+    pub(crate) fn from_ordinary_prepared(
+        prepared: &PreparedOrdinarySpawnWorldWorkerBootstrap,
+    ) -> Self {
+        Self::from_parts(
+            prepared.admission_bootstrap_home.clone(),
+            &prepared.request,
+            prepared
+                .dispatch_policy_reservation_proof
+                .retained_participant_id()
+                .to_string(),
+        )
+    }
+    pub(crate) fn project_ordinary_failure(
+        &self,
+        selection: &std::sync::Arc<crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1>,
+        error: anyhow::Error,
+    ) -> Result<WorldDispatchOutcomeV1> {
+        let refreshed = authenticate_refreshed_ordinary_world_dispatch(selection)?;
+        self.project_with_authority(refreshed.held_authority(), error.to_string())
+            .ok_or(error)
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn prepare_ordinary_fork_policy_commitment(
+    inputs: &OrdinaryWorldDispatchInputsV1,
+    request: &ValidatedWorldDispatchRequestV1,
+) -> Result<PreparedForkPolicyCommitmentV1> {
+    inputs.revalidate()?;
+    let registry_authority = &inputs.registry_authority;
+    let fork_patch = request.dispatch_policy_narrowing.clone();
+    if registry_authority.world_id != request.world_id
+        || registry_authority.world_generation != request.world_generation
+    {
+        anyhow::bail!("stale_linkage: E2 Fork world authority changed");
+    }
+    let retained_target = registry_authority.retained_target.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("E2 Fork authority omitted the exact retained source target")
+    })?;
+    let source_participant_id = retained_target.participant_id.as_str();
+    if retained_target.participant_id != source_participant_id
+        || retained_target.backend_id != request.target_backend_id
+    {
+        anyhow::bail!("stale_linkage: E2 Fork retained-source identity changed");
+    }
+    let source_cap = match &retained_target.policy_cap_compatibility {
+        ResolvedPolicyCommitmentCompatibilityV1::Compatible { cap } => cap.clone(),
+        ResolvedPolicyCommitmentCompatibilityV1::UnsupportedLegacyState {
+            retained_participant_id,
+            reason,
+        } => {
+            anyhow::bail!(
+                "unsupported_legacy_state: retained worker {} has no authentic immutable policy cap ({reason:?})",
+                retained_participant_id
+            )
+        }
+    };
+
+    let mut policy_request = request.clone();
+    policy_request.dispatch_policy_narrowing = fork_patch.clone();
+    let e2_policy = resolve_ordinary_e2_dispatch_policy(
+        inputs,
+        &policy_request,
+        transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerFork {
+            source_participant_id: source_participant_id.to_string(),
+        },
+    )?;
+    inputs.revalidate()?;
+    if e2_policy.validated_policy_snapshot.snapshot_ref()
+        != &registry_authority.current_policy_snapshot_ref
+        || e2_policy.validated_policy_snapshot.revision()
+            != registry_authority.current_policy_revision
+    {
+        anyhow::bail!("stale_linkage: E2 Fork current-parent authority changed");
+    }
+    let authenticated_policy = crate::execution::agent_runtime::dispatch_policy_commitment::resolve_ordinary_fork_policy_material(
+        &inputs.selection,
+        ForkPolicyResolutionInputV1 {
+            source_cap,
+            current_parent_and_fork_patch: e2_policy.validated_policy_snapshot.clone(),
+            request_id: request.request_id.clone(),
+            orchestration_session_id: request.orchestration_session_id.clone(),
+            caller_participant_id: request.caller_participant_id.clone(),
+            caller_backend_id: registry_authority.caller_backend_id.clone(),
+            target_backend_id: request.target_backend_id.clone(),
+            world_id: request.world_id.clone(),
+            world_generation: request.world_generation,
+            source_participant_id: source_participant_id.to_string(),
+            fork_patch,
+        },
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let canonical_validated_dispatch_request =
+        crate::execution::agent_runtime::dispatch_policy_commitment::canonical_validated_fork_request_bytes(
+            request,
+        )
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    inputs.revalidate()?;
+    let (persisted, native_issuance) = crate::execution::agent_runtime::dispatch_policy_commitment::publish_ordinary_fork_commitment(
+        &inputs.selection,
+        ForkPolicyCommitmentInputV1 {
+            request_id: request.request_id.clone(),
+            idempotency_key: request.idempotency_key.clone(),
+            orchestration_session_id: request.orchestration_session_id.clone(),
+            caller_participant_id: request.caller_participant_id.clone(),
+            caller_backend_id: registry_authority.caller_backend_id.clone(),
+            target_backend_id: request.target_backend_id.clone(),
+            world_id: request.world_id.clone(),
+            world_generation: request.world_generation,
+            source_participant_id: source_participant_id.to_string(),
+            canonical_validated_dispatch_request,
+            parent_policy_ref: e2_policy.validated_policy_snapshot.snapshot_ref().clone(),
+            parent_policy_revision: e2_policy.validated_policy_snapshot.revision().to_string(),
+            applied_patch: e2_policy.applied_patch,
+            authenticated_policy,
+            reason: e2_policy.reason,
+        },
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let child_participant_id = persisted
+        .fork_child_participant_id()
+        .ok_or_else(|| anyhow::anyhow!("E2 Fork commitment omitted child identity"))?
+        .to_string();
+    let bootstrap_run_id = persisted
+        .fork_bootstrap_run_id()
+        .ok_or_else(|| anyhow::anyhow!("E2 Fork commitment omitted bootstrap identity"))?
+        .to_string();
+    let commitment_ref = persisted.commitment_ref();
+    let authenticated =
+        authenticate_dispatch_policy_commitment(inputs.selection.held_authority(), &commitment_ref)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    if !matches!(
+        authenticated.subject(),
+        DispatchPolicyCommitmentSubjectV1::RetainedWorkerFork {
+            source_participant_id: stored_source,
+            child_participant_id: stored_child,
+            bootstrap_run_id: stored_bootstrap,
+        } if stored_source == source_participant_id
+            && stored_child == &child_participant_id
+            && stored_bootstrap == &bootstrap_run_id
+    ) {
+        anyhow::bail!("E2 Fork committed subject changed after durable publication");
+    }
+    let exact_policy_snapshot = ExactDispatchPolicySnapshotMaterialV1::from_exact_e1_material(
+        authenticated.policy_snapshot().clone(),
+        authenticated.policy_snapshot_bytes().to_vec(),
+        authenticated.policy_snapshot_hash().to_string(),
+    )?;
+    let e2_launch_activation = authenticated
+        .member_launch_activation_carrier()
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    inputs.revalidate()?;
+    Ok(PreparedForkPolicyCommitmentV1 {
+        native_issuance,
+        commitment_ref,
+        child_participant_id,
+        bootstrap_run_id,
+        exact_policy_snapshot,
+        e2_launch_activation,
+    })
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) struct PreparedOrdinaryForkWorldWorkerBootstrap {
+    pub(crate) bootstrap: PreparedForkWorldWorkerBootstrap,
+    pub(crate) selection: std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+}
+#[cfg(target_os = "linux")]
+pub(crate) fn prepare_ordinary_fork_world_worker_bootstrap(
+    selection: std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    store: &AgentRuntimeStateStore,
+    request: ValidatedWorldDispatchRequestV1,
+) -> Result<PreparedOrdinaryForkWorldWorkerBootstrap> {
+    if request.action != WorldDispatchActionV1::ForkWorldWorker
+        || request.mode != WorldDispatchModeV1::Retained
+    {
+        anyhow::bail!("ordinary Fork admission requires retained fork_world_worker");
+    }
+    let inputs = authenticate_ordinary_world_dispatch(&selection, &request)?;
+    let prepared = PreparedOrchestratorWorldDispatch {
+        store: store.clone(),
+        request: request.clone(),
+        b_owned_authority: Some(inputs.registry_authority.clone()),
+        compatibility: None,
+    };
+    enforce_world_dispatch_steering_policy(&prepared, &inputs.context.base_policy)?;
+    let contract =
+        resolve_ordinary_world_dispatch_contract(&inputs, &request, "fork_world_worker")?;
+    let descriptor = materialize_runtime_descriptor(&contract).map_err(|error| {
+        anyhow::anyhow!(
+            "runtime_start_failed: selected runtime '{}' is not runtime-realizable: {}",
+            contract.agent_id,
+            error.reason
+        )
+    })?;
+    let concurrency_guard =
+        acquire_world_dispatch_concurrency_guard(&prepared, &inputs.context.base_policy)?;
+    inputs.revalidate()?;
+    let policy_commitment = prepare_ordinary_fork_policy_commitment(&inputs, &request)?;
+    let source_participant_id = inputs
+        .registry_authority
+        .retained_target
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("ordinary Fork omitted authenticated retained source"))?
+        .participant_id
+        .clone();
+    inputs.revalidate()?;
+    Ok(PreparedOrdinaryForkWorldWorkerBootstrap {
+        selection: inputs.selection,
+        bootstrap: PreparedForkWorldWorkerBootstrap {
+            request,
+            descriptor,
+            source_participant_id,
+            orchestrator_participant_id: inputs.registry_authority.caller_participant_id,
+            legacy_resolved: None,
+            policy_commitment: Some(policy_commitment),
+            _concurrency_guard: concurrency_guard,
+        },
+    })
+}
+
+/// Fresh authenticated current parent material for the existing backend's
+/// exact physical compatibility/adoption check. It does not describe or prove
+/// the persisted realization, and it grants no lease or standalone authority.
+///
+/// Inspect the authenticated parent recipe separately from the child cap:
+/// ```no_run
+/// # #[cfg(target_os = "linux")]
+/// # fn inspected(parent: &substrate_shell::OrdinaryWorldParentPlacementV1) {
+/// assert_eq!(parent.world_spec().fs_mode, parent.world_fs_mode());
+/// # }
+/// ```
+#[cfg(target_os = "linux")]
+pub struct OrdinaryWorldParentPlacementV1 {
+    policy_snapshot: transport_api_types::PolicySnapshotV3,
+    world_spec: world_api::WorldSpec,
+    policy_ref_id: String,
+    policy_revision: String,
+    adoption_correlation_id: String,
+}
+
+#[cfg(target_os = "linux")]
+impl OrdinaryWorldParentPlacementV1 {
+    pub fn policy_snapshot(&self) -> &transport_api_types::PolicySnapshotV3 {
+        &self.policy_snapshot
+    }
+
+    pub fn world_fs_mode(&self) -> substrate_common::WorldFsMode {
+        self.world_spec.fs_mode
+    }
+
+    pub fn world_spec(&self) -> &world_api::WorldSpec {
+        &self.world_spec
+    }
+
+    pub fn policy_ref_id(&self) -> &str {
+        &self.policy_ref_id
+    }
+
+    pub fn policy_revision(&self) -> &str {
+        &self.policy_revision
+    }
+
+    pub fn adoption_correlation_id(&self) -> &str {
+        &self.adoption_correlation_id
+    }
+
+    fn from_evaluated(
+        evaluated: &EvaluatedOrdinaryWorldExecuteV1,
+        adoption_correlation_id: String,
+    ) -> Result<Self> {
+        let selection = &evaluated.selection;
+        selection.revalidate()?;
+        let transport_api_types::OrdinaryGatewayRuntimeIdentityV1::WorldWorker {
+            orchestration_session_id,
+            caller_participant_id,
+            world_id,
+            world_generation,
+            ..
+        } = &evaluated.runtime
+        else {
+            anyhow::bail!("ordinary parent placement requires an authenticated World worker");
+        };
+        let current = selection
+            .held_authority()
+            .resolve_current_exact(orchestration_session_id, None)
+            .map_err(|error| anyhow::anyhow!("{error}"))?;
+        let actual = current
+            .authority
+            .world_binding
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("ordinary current parent omitted World binding"))?;
+        if current.observation.authority_store_id != selection.authority_store_id()
+            || current.caller.participant_id != *caller_participant_id
+            || current.caller.descriptor.backend_id != selection.native_selection().backend_id
+            || current.caller.descriptor.agent_id != selection.native_selection().realized_agent_id
+            || current
+                .authority
+                .workspace_binding
+                .workspace_root
+                .physical_path
+                != selection.workspace_root()
+            || actual.world_id != *world_id
+            || actual.world_generation != *world_generation
+            || selection.current_world_binding()
+                != Some((actual.world_id.as_str(), actual.world_generation))
+            || adoption_correlation_id.trim().is_empty()
+        {
+            anyhow::bail!("ordinary parent placement changed held caller/workspace/World");
+        }
+        let parent = current
+            .authority
+            .current_policy_ref
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("ordinary current parent omitted policy reference"))?;
+        let revision = current
+            .authority
+            .current_policy_revision
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("ordinary current parent omitted policy revision"))?;
+        if parent.object_kind
+            != crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectKindV1::Policy
+            || revision != &current.current_policy.policy_revision
+        {
+            anyhow::bail!("ordinary current parent policy reference/revision changed");
+        }
+        let home = selection.held_authority().bootstrap_home();
+        let config = selection.captured_effective_config();
+        let network =
+            crate::execution::policy_snapshot::resolve_world_network_policy_for_bootstrap_home(
+                Path::new(selection.workspace_root()),
+                &home,
+                &config,
+            )?;
+        let bytes = serde_json::to_vec(&network.snapshot)
+            .context("serialize current ordinary parent PolicySnapshotV3")?;
+        let hash = format!("{:x}", Sha256::digest(&bytes));
+        if hash != current.current_policy.canonical_policy_snapshot_sha256 {
+            anyhow::bail!("ordinary parent bytes do not join authenticated current policy");
+        }
+        // Reuse the actual shell recipe, including always_isolate=false and
+        // backend_policy=Some(parent material). Never substitute the child's
+        // narrower E2 snapshot or the service's legacy WorldSpec defaults.
+        let world_spec = crate::execution::policy_snapshot::world_spec_for_network_policy(
+            PathBuf::from(selection.workspace_root()),
+            evaluated.policy.world_fs_mode,
+            &network,
+        );
+        selection.revalidate()?;
+        Ok(Self {
+            policy_snapshot: network.snapshot,
+            world_spec,
+            policy_ref_id: parent.ref_id.clone(),
+            policy_revision: revision.clone(),
+            adoption_correlation_id,
+        })
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl OrdinaryWorldExecuteAdmissionV1 {
+    /// Recompute current permission and parent material. The consumer must
+    /// verify the existing backend's complete persisted physical spec before
+    /// adoption/effect; an incompatible realization is refused, not recreated.
+    pub fn current_world_parent_policy(&self) -> Result<OrdinaryWorldParentPlacementV1> {
+        let evaluated = evaluate_ordinary_world_execute(&self.selection, &self.request, false)?;
+        let member = self
+            .request
+            .member_dispatch
+            .as_ref()
+            .and_then(transport_api_types::MemberDispatchRequest::as_v1)
+            .ok_or_else(|| anyhow::anyhow!("ordinary parent placement omitted member"))?;
+        // Evaluation authenticated the exact B1 proposal or E2/R0 claim.
+        // These correlations name that authentic source; IDs grant no permit.
+        let correlation = if let Some(context) = self.request.acceptance_context.as_ref() {
+            context.proposed_acceptance_record_id.clone()
+        } else if let Some(proof) = member.retained_worker_launch_authority.as_ref() {
+            proof.transport_claim_id.clone()
+        } else {
+            member
+                .e2_launch_activation
+                .as_ref()
+                .ok_or_else(|| {
+                    anyhow::anyhow!("ordinary parent placement omitted authenticated E2 activation")
+                })?
+                .activation_id
+                .clone()
+        };
+        let parent = OrdinaryWorldParentPlacementV1::from_evaluated(&evaluated, correlation)?;
+        self.revalidate_before_world_effect()?;
+        Ok(parent)
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl OrdinaryWorldTurnAdmissionV1 {
+    /// Authenticate this turn's own B1/E2 subject and current parent separately
+    /// from its immutable worker cap and the bootstrap run.
+    pub fn current_world_parent_policy(&self) -> Result<OrdinaryWorldParentPlacementV1> {
+        let evaluated =
+            evaluate_ordinary_world_turn(&self.selection, &self.bootstrap, &self.request)?;
+        let correlation = self
+            .request
+            .acceptance_context
+            .as_ref()
+            .ok_or_else(|| {
+                anyhow::anyhow!("ordinary turn parent omitted authenticated B1 proposal")
+            })?
+            .proposed_acceptance_record_id
+            .clone();
+        let parent = OrdinaryWorldParentPlacementV1::from_evaluated(&evaluated, correlation)?;
+        self.revalidate_before_world_effect()?;
+        Ok(parent)
+    }
+}
+
+/// Current permission for effects of an already-owned live initial process.
+/// This is distinct from fresh Execute/native-launch admission. Consumers retain
+/// their actual native handle and re-observe the backend after preauthorization.
+///
+/// Revalidate the held admission before an effect:
+/// ```no_run
+/// # #[cfg(target_os = "linux")]
+/// # fn checked(admission: &substrate_shell::OrdinaryWorldBootstrapEffectAdmissionV1) -> anyhow::Result<()> {
+/// admission.revalidate_before_world_effect()?;
+/// # Ok(())
+/// # }
+/// ```
+#[cfg(target_os = "linux")]
+pub struct OrdinaryWorldBootstrapEffectAdmissionV1 {
+    bootstrap: std::sync::Arc<OrdinaryWorldExecuteAdmissionV1>,
+}
+
+#[cfg(target_os = "linux")]
+impl OrdinaryWorldExecuteAdmissionV1 {
+    /// Bind only after the consumer owns the actual live native bootstrap.
+    /// Supplied identities do not grant authority or prove fresh physical state;
+    /// they join that owned observation to this already-authenticated admission.
+    /// This computation performs no backend lookup/recovery and grants no launch.
+    pub fn bind_live_bootstrap_effect(
+        self: &std::sync::Arc<Self>,
+        actual_runtime: &transport_api_types::OrdinaryGatewayRuntimeIdentityV1,
+        actual_binding: &world_api::SharedWorldBindingSnapshot,
+    ) -> Result<OrdinaryWorldBootstrapEffectAdmissionV1> {
+        if actual_runtime != &self.runtime {
+            anyhow::bail!("ordinary live bootstrap changed actual owned runtime");
+        }
+        let effect = OrdinaryWorldBootstrapEffectAdmissionV1 {
+            bootstrap: std::sync::Arc::clone(self),
+        };
+        effect.revalidate_for_effect(actual_binding)?;
+        Ok(effect)
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl OrdinaryWorldBootstrapEffectAdmissionV1 {
+    pub fn requested_selection(&self) -> &transport_api_types::ResolvedAgentSelectionV1 {
+        self.bootstrap.requested_selection()
+    }
+
+    pub fn authenticated_runtime(&self) -> transport_api_types::OrdinaryGatewayRuntimeIdentityV1 {
+        self.bootstrap.authenticated_runtime()
+    }
+
+    /// Authenticate current permission before any effectful recovery/lookup.
+    pub fn revalidate_before_world_effect(&self) -> Result<()> {
+        let evaluated = evaluate_ordinary_world_execute(
+            &self.bootstrap.selection,
+            &self.bootstrap.request,
+            true,
+        )?;
+        if evaluated.runtime != self.bootstrap.runtime {
+            anyhow::bail!("ordinary live bootstrap effect subject changed");
+        }
+        Ok(())
+    }
+
+    /// Check the consumer's subsequent fresh actual backend observation.
+    pub fn revalidate_for_effect(
+        &self,
+        actual_binding: &world_api::SharedWorldBindingSnapshot,
+    ) -> Result<()> {
+        self.revalidate_before_world_effect()?;
+        let transport_api_types::OrdinaryGatewayRuntimeIdentityV1::WorldWorker {
+            orchestration_session_id,
+            world_id,
+            world_generation,
+            ..
+        } = &self.bootstrap.runtime
+        else {
+            anyhow::bail!("ordinary live bootstrap is not a World worker");
+        };
+        if actual_binding.binding_state != world_api::SharedWorldBindingState::Active
+            || actual_binding.orchestration_session_id != *orchestration_session_id
+            || actual_binding.world_id != *world_id
+            || actual_binding.world_generation != *world_generation
+        {
+            anyhow::bail!("ordinary live bootstrap changed actual backend binding");
+        }
+        Ok(())
+    }
+
+    pub fn current_world_parent_policy(&self) -> Result<OrdinaryWorldParentPlacementV1> {
+        let evaluated = evaluate_ordinary_world_execute(
+            &self.bootstrap.selection,
+            &self.bootstrap.request,
+            true,
+        )?;
+        let member = self
+            .bootstrap
+            .request
+            .member_dispatch
+            .as_ref()
+            .and_then(transport_api_types::MemberDispatchRequest::as_v1)
+            .ok_or_else(|| anyhow::anyhow!("ordinary live bootstrap omitted member"))?;
+        let correlation = if let Some(context) = self.bootstrap.request.acceptance_context.as_ref()
+        {
+            context.proposed_acceptance_record_id.clone()
+        } else if let Some(proof) = member.retained_worker_launch_authority.as_ref() {
+            proof.transport_claim_id.clone()
+        } else {
+            member
+                .e2_launch_activation
+                .as_ref()
+                .ok_or_else(|| {
+                    anyhow::anyhow!("ordinary live bootstrap omitted authenticated E2 activation")
+                })?
+                .activation_id
+                .clone()
+        };
+        let parent = OrdinaryWorldParentPlacementV1::from_evaluated(&evaluated, correlation)?;
+        self.revalidate_before_world_effect()?;
+        Ok(parent)
+    }
+
+    /// Fresh transient gateway-only account material for this same initial run.
+    pub fn resolve_current_gateway_handoff(
+        &self,
+    ) -> Result<transport_api_types::GatewayIntegratedAuthPayloadV1> {
+        let evaluated = evaluate_ordinary_world_execute(
+            &self.bootstrap.selection,
+            &self.bootstrap.request,
+            true,
+        )?;
+        let payload = evaluated
+            .selection
+            .resolve_requested_gateway_handoff(&evaluated.policy)?;
+        self.revalidate_before_world_effect()?;
+        Ok(payload)
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -5077,12 +7610,661 @@ fn prepare_fork_policy_commitment(
         .member_launch_activation_carrier()
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     Ok(PreparedForkPolicyCommitmentV1 {
+        native_issuance: None,
         commitment_ref,
         child_participant_id,
         bootstrap_run_id,
         exact_policy_snapshot,
         e2_launch_activation,
     })
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn reconstruct_ordinary_task_execute_request(
+    proposal: &WorldWorkAcceptanceProposalV1,
+    template: &crate::execution::agent_runtime::state_store::OrdinaryTaskExecuteTemplateV2,
+) -> Result<transport_api_types::ExecuteRequest> {
+    if template.schema_version != 2
+        || template.cwd.is_empty()
+        || template.agent_id.trim().is_empty()
+    {
+        anyhow::bail!("ordinary Task template has an invalid closed representation");
+    }
+    template
+        .ordinary_start_selection
+        .validate()
+        .map_err(anyhow::Error::msg)?;
+    for key in template.env.keys() {
+        if !matches!(
+            key.as_str(),
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR"
+                | "SUBSTRATE_WORLD_FS_ENFORCEMENT_PLAN_B64"
+                | "PATH"
+                | "HOME"
+                | "XDG_CONFIG_HOME"
+                | "XDG_DATA_HOME"
+                | "XDG_CACHE_HOME"
+                | "TERM"
+                | "LANG"
+                | "TZ"
+                | "NO_COLOR"
+                | "LC_ALL"
+                | "LC_CTYPE"
+                | "LC_COLLATE"
+                | "LC_MESSAGES"
+                | "LC_MONETARY"
+                | "LC_NUMERIC"
+                | "LC_TIME"
+                | "LC_ADDRESS"
+                | "LC_IDENTIFICATION"
+                | "LC_MEASUREMENT"
+                | "LC_NAME"
+                | "LC_PAPER"
+                | "LC_TELEPHONE"
+        ) {
+            anyhow::bail!("ordinary Task template contains an unlisted environment key");
+        }
+    }
+    let snapshot: transport_api_types::PolicySnapshotV3 =
+        serde_json::from_str(&template.policy_snapshot_json)?;
+    if serde_json::to_vec(&snapshot)? != template.policy_snapshot_json.as_bytes()
+        || serde_json::to_vec(&snapshot.canonicalize().map_err(anyhow::Error::msg)?)?
+            != template.policy_snapshot_json.as_bytes()
+    {
+        anyhow::bail!("ordinary Task template changed exact canonical policy bytes");
+    }
+    let mode = match template.world_fs_mode.as_str() {
+        "writable" => transport_api_types::WorldFsMode::Writable,
+        "read_only" => transport_api_types::WorldFsMode::ReadOnly,
+        _ => anyhow::bail!("ordinary Task template has an invalid filesystem mode"),
+    };
+    let WorldWorkSubmissionIdentityV1::EphemeralTask {
+        member_dispatch_request,
+        ..
+    } = &proposal.submission_identity
+    else {
+        anyhow::bail!("ordinary Task template changed proposal family");
+    };
+    if member_dispatch_request.e2_launch_activation.is_some()
+        || member_dispatch_request
+            .retained_worker_launch_authority
+            .is_some()
+        || member_dispatch_request.parent_participant_id.is_some()
+        || member_dispatch_request
+            .resumed_from_participant_id
+            .is_some()
+        || proposal.proposed_work != ProposedWorldWorkIdentityV1::EphemeralTask
+        || proposal.acceptance_context.message_id.is_some()
+        || template.ordinary_start_selection.authority_store_id != proposal.authority_store_id
+        || template.ordinary_start_selection.original_session_id
+            != proposal.orchestration_session_id
+    {
+        anyhow::bail!("ordinary Task template changed original Start or work family");
+    }
+    let request = transport_api_types::ExecuteRequest {
+        schema_version: 2,
+        profile: template.profile.clone(),
+        cmd: String::new(),
+        cwd: Some(template.cwd.clone()),
+        env: Some(template.env.clone().into_iter().collect()),
+        pty: false,
+        agent_id: template.agent_id.clone(),
+        budget: None,
+        policy_snapshot: snapshot,
+        shared_world: None,
+        world_network: template.world_network.as_ref().map(|network| {
+            transport_api_types::WorldNetworkRoutingV1 {
+                isolate_network: network.isolate_network,
+                allowed_domains: network.allowed_domains.clone(),
+            }
+        }),
+        world_fs_mode: Some(mode),
+        member_dispatch: Some(transport_api_types::MemberDispatchRequest::V1(
+            member_dispatch_request.clone(),
+        )),
+        acceptance_context: Some(proposal.acceptance_context.clone()),
+        ordinary_start_selection: Some(template.ordinary_start_selection.clone()),
+    };
+    request.validate().map_err(anyhow::Error::msg)?;
+    Ok(request)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn validate_ordinary_task_template_subject(
+    proposal: &WorldWorkAcceptanceProposalV1,
+    template: &crate::execution::agent_runtime::state_store::OrdinaryTaskExecuteTemplateV2,
+) -> Result<()> {
+    proposal.validate()?;
+    let WorldWorkSubmissionIdentityV1::EphemeralTask {
+        validated_dispatch_request,
+        canonical_execute_request_sha256,
+        ..
+    } = &proposal.submission_identity
+    else {
+        anyhow::bail!("ordinary Task template belongs to a different work family");
+    };
+    let request = reconstruct_ordinary_task_execute_request(proposal, template)?;
+    validate_policy_snapshot_material(
+        &request.policy_snapshot,
+        template.policy_snapshot_json.as_bytes(),
+        &proposal.current_policy_snapshot_ref,
+        &proposal.current_policy_snapshot_hash,
+        &proposal.current_policy_revision,
+    )
+    .map_err(|error| anyhow::anyhow!("{error}"))?;
+    let hash = canonical_world_work_submission_sha256(validated_dispatch_request, &request)?;
+    if &hash != canonical_execute_request_sha256 {
+        anyhow::bail!("ordinary Task template conflicts with original durable submission hash");
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "retain inline accepted and proposed task handoff custody including registry, supervisor, request, publication and concurrency guard"
+)]
+enum PreparedOrdinaryTaskAcceptanceSubmissionV2 {
+    Accepted {
+        selection: std::sync::Arc<
+            crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+        >,
+        record: WorldWorkAcceptanceRecordV1,
+    },
+    Proposed {
+        selection: std::sync::Arc<
+            crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+        >,
+        receipt_registry: WorldWorkReceiptRegistry,
+        execution_supervisor: WorldWorkExecutionSupervisor,
+        proposal: WorldWorkAcceptanceProposalV1,
+        client: transport_api_client::AgentClient,
+        request: transport_api_types::ExecuteRequest,
+        publication: E2AcceptedWorkPublicationContextV1,
+        concurrency_guard: Option<WorldDispatchConcurrencyGuard>,
+    },
+}
+
+#[cfg(target_os = "linux")]
+fn prepare_ordinary_task_acceptance_submission(
+    store: &AgentRuntimeStateStore,
+    selection: std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    request: ValidatedWorldDispatchRequestV1,
+) -> Result<PreparedOrdinaryTaskAcceptanceSubmissionV2> {
+    use crate::execution::agent_runtime::state_store::OrdinaryTaskExecuteTemplateV2;
+    let configured = selection.require_ordinary_configured_authority()?;
+    let inputs = authenticate_ordinary_world_dispatch(&selection, &request)?;
+    let selected = std::sync::Arc::clone(&inputs.selection);
+    if request.action != WorldDispatchActionV1::RunWorldTask
+        || request.mode != WorldDispatchModeV1::Ephemeral
+        || store.substrate_home() != Path::new(&configured.accepted_home().physical_path)
+    {
+        anyhow::bail!("ordinary Task changed action, mode, or bound runtime store");
+    }
+    let contract = resolve_ordinary_world_dispatch_contract(&inputs, &request, "run_world_task")?;
+    let descriptor = materialize_runtime_descriptor(&contract)
+        .map_err(|error| anyhow::anyhow!("{}", error.reason))?;
+    let prepared = PreparedOrchestratorWorldDispatch {
+        store: store.clone(),
+        request: request.clone(),
+        b_owned_authority: Some(inputs.registry_authority.clone()),
+        compatibility: None,
+    };
+    enforce_world_dispatch_steering_policy(&prepared, &inputs.context.base_policy)?;
+    let concurrency_guard =
+        acquire_world_dispatch_concurrency_guard(&prepared, &inputs.context.base_policy)?;
+    let registry = &inputs.registry_authority.receipt_registry;
+    let existing = registry.inspect_ordinary_task_acceptance_proposal(
+        &request.orchestration_session_id,
+        &request.request_id,
+    )?;
+    // Capture every source/environment/permission input before the transaction.
+    // Existing entries retain their exact original template and policy bytes.
+    let candidate_policy = if existing.is_none() {
+        Some(resolve_ordinary_e2_dispatch_policy(
+            &inputs,
+            &request,
+            transport_api_types::DispatchCapabilitySubjectV1::EphemeralTask,
+        )?)
+    } else {
+        None
+    };
+    let candidate_template = match &candidate_policy {
+        Some(policy) => Some(
+            OrdinaryTaskExecuteTemplateV2::capture_ordinary_task_execute_template(
+                &selected,
+                &policy.exact_policy_snapshot,
+            )?,
+        ),
+        None => None,
+    };
+    let candidate_member = if existing.is_none() {
+        let transport = build_run_world_task_transport_request(&request, &descriptor)?;
+        Some(transport_api_types::MemberDispatchRequestV1 {
+            schema_version: 1,
+            orchestration_session_id: transport.orchestration_session_id,
+            participant_id: transport.participant_id,
+            orchestrator_participant_id: transport.orchestrator_participant_id,
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+            backend_id: transport.backend_id,
+            protocol: transport.protocol,
+            run_id: transport.run_id,
+            world_id: transport.world_id,
+            world_generation: transport.world_generation,
+            initial_prompt: transport.initial_prompt,
+            resolved_runtime: transport_api_types::ResolvedMemberRuntimeDescriptorV1 {
+                backend_kind: transport.backend_kind,
+                binary_path: transport.binary_path,
+            },
+            retained_worker_launch_authority: None,
+            e2_launch_activation: None,
+        })
+    } else {
+        None
+    };
+    let authority_data = &inputs.registry_authority;
+    let current_inputs = authenticate_ordinary_world_dispatch(&selected, &request)?;
+    resolve_ordinary_world_dispatch_contract(&current_inputs, &request, "run_world_task")?;
+    let (outcome, template) = registry.prepare_authenticated_ordinary_task_acceptance_proposal(
+        &current_inputs.selection,
+        &request.orchestration_session_id,
+        &request.request_id,
+        candidate_template,
+        |allocation, template| {
+            // PURE: the raced/existing proposal owns its original template.
+            if let Some(existing) = allocation.existing_proposal.as_ref() {
+                let WorldWorkSubmissionIdentityV1::EphemeralTask {
+                    validated_dispatch_request,
+                    ..
+                } = &existing.submission_identity
+                else {
+                    anyhow::bail!("ordinary Task retry changed work family");
+                };
+                if validated_dispatch_request != &request {
+                    anyhow::bail!("ordinary Task retry changed validated request");
+                }
+                return Ok(existing.clone());
+            }
+            let policy = candidate_policy
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("ordinary Task lost captured policy"))?;
+            let member = candidate_member
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("ordinary Task lost captured member"))?
+                .clone();
+            let context = world_work_acceptance_context(
+                &allocation,
+                &request.request_id,
+                &authority_data.caller_backend_id,
+            );
+            let mut proposal = WorldWorkAcceptanceProposalV1 {
+                schema_version: 1,
+                acceptance_context: context,
+                authority_store_id: authority_data.authority_store_id.clone(),
+                authority_revision_observed: authority_data.authority_revision_observed,
+                orchestration_session_id: request.orchestration_session_id.clone(),
+                caller_participant_id: request.caller_participant_id.clone(),
+                caller_backend_id: authority_data.caller_backend_id.clone(),
+                target_backend_id: request.target_backend_id.clone(),
+                world_id: request.world_id.clone(),
+                world_generation: request.world_generation,
+                proposed_work: ProposedWorldWorkIdentityV1::EphemeralTask,
+                submission_identity: WorldWorkSubmissionIdentityV1::EphemeralTask {
+                    validated_dispatch_request: request.clone(),
+                    member_dispatch_request: member,
+                    canonical_execute_request_sha256: String::new(),
+                },
+                current_policy_snapshot_ref: policy
+                    .validated_policy_snapshot
+                    .snapshot_ref()
+                    .clone(),
+                current_policy_snapshot_hash: policy.validated_policy_snapshot.hash().to_string(),
+                current_policy_revision: policy.validated_policy_snapshot.revision().to_string(),
+                created_at: allocation.created_at,
+            };
+            let execute = reconstruct_ordinary_task_execute_request(&proposal, template)?;
+            let hash = canonical_world_work_submission_sha256(&request, &execute)?;
+            let WorldWorkSubmissionIdentityV1::EphemeralTask {
+                canonical_execute_request_sha256,
+                ..
+            } = &mut proposal.submission_identity
+            else {
+                unreachable!();
+            };
+            *canonical_execute_request_sha256 = hash;
+            Ok(proposal)
+        },
+    )?;
+    // B1 pins data, not continuing permission. Re-admit current policy,
+    // account, placement and contract before even returning an accepted receipt.
+    let post_inputs = authenticate_ordinary_world_dispatch(&selected, &request)?;
+    resolve_ordinary_world_dispatch_contract(&post_inputs, &request, "run_world_task")?;
+    let post_prepared = PreparedOrchestratorWorldDispatch {
+        store: store.clone(),
+        request: request.clone(),
+        b_owned_authority: Some(post_inputs.registry_authority.clone()),
+        compatibility: None,
+    };
+    enforce_world_dispatch_steering_policy(&post_prepared, &post_inputs.context.base_policy)?;
+    let selected = std::sync::Arc::clone(&post_inputs.selection);
+    let proposal = match outcome {
+        WorldWorkProposalReservationOutcomeV1::Accepted(record) => {
+            return Ok(PreparedOrdinaryTaskAcceptanceSubmissionV2::Accepted {
+                selection: selected,
+                record,
+            });
+        }
+        WorldWorkProposalReservationOutcomeV1::Proposed(proposal) => proposal,
+    };
+    let execute = reconstruct_ordinary_task_execute_request(&proposal, &template)?;
+    validate_ordinary_task_template_subject(&proposal, &template)?;
+    let original_policy = validate_policy_snapshot_material(
+        &execute.policy_snapshot,
+        template.policy_snapshot_json.as_bytes(),
+        &proposal.current_policy_snapshot_ref,
+        &proposal.current_policy_snapshot_hash,
+        &proposal.current_policy_revision,
+    )
+    .map_err(|error| anyhow::anyhow!("{error}"))?;
+    let applied_patch =
+        crate::execution::agent_runtime::dispatch_policy_commitment::ordinary_applied_dispatch_policy_patch_identity(request.dispatch_policy_narrowing.as_ref())
+            .map_err(|error| anyhow::anyhow!("{error}"))?;
+    // Recheck the pinned Execute policy against current held-root permission
+    // before E2 registry initialization or any later publication.
+    selected
+        .prepare_world_execute(&execute)?
+        .revalidate_before_world_effect()?;
+    // Retain an owned HSA handle obtained only under the positive configured
+    // seal and checked against the already-held physical root, for old E2 API.
+    let held_identity = selected
+        .held_authority()
+        .bootstrap_home()
+        .identity()?
+        .clone();
+    let root = TrustedAuthorityRoot::open_for_owner(
+        Path::new(&configured.accepted_home().physical_path),
+        u32::try_from(configured.intended_uid())?,
+    )?;
+    if root.identity() != &held_identity {
+        anyhow::bail!("ordinary Task E2 root differs from genuine held authority");
+    }
+    configured.revalidate()?;
+    let publication_authority = HostSessionAuthority::from_trusted_root(root)?;
+    initialize_dispatch_policy_commitment_registry(&publication_authority)
+        .map_err(|error| anyhow::anyhow!("{error}"))?;
+    let client =
+        OrdinaryTaskExecuteTemplateV2::build_ordinary_task_agent_client(&selected, &execute)?;
+    let ordinary_publication = crate::execution::agent_runtime::dispatch_policy_commitment::authenticate_ordinary_accepted_work_publication_v1(std::sync::Arc::clone(&selected), &proposal, &applied_patch, &original_policy).map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    Ok(PreparedOrdinaryTaskAcceptanceSubmissionV2::Proposed {
+        selection: selected,
+        receipt_registry: registry.clone(),
+        execution_supervisor: authority_data.execution_supervisor.clone(),
+        proposal,
+        client,
+        request: execute,
+        publication: E2AcceptedWorkPublicationContextV1 {
+            ordinary: Some(ordinary_publication),
+            authority: publication_authority,
+            idempotency_key: request.idempotency_key,
+            applied_patch,
+            policy_snapshot: original_policy,
+            reason: dispatch_policy_narrowing_reason(request.dispatch_policy_narrowing.as_ref()),
+            retained_worker_cap_ref: None,
+        },
+        concurrency_guard,
+    })
+}
+
+// Source-owner fixture only: the Start below is synthetic. All proposal,
+// acceptance, E2 and journal bytes are emitted by their production publishers.
+// This performs no execute request and provides no native terminal evidence.
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) fn publish_ordinary_task_source_fixture_for_test(
+    store: &AgentRuntimeStateStore,
+    selection: std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    request: ValidatedWorldDispatchRequestV1,
+) -> Result<(
+    WorldWorkAcceptanceRecordV1,
+    WorldWorkExecutionSupervisor,
+    crate::execution::agent_runtime::world_work_execution_supervisor::WorldWorkExecutionClaimV1,
+    OrdinaryWorldExecuteAdmissionV1,
+)> {
+    publish_ordinary_task_source_fixture_with_receiver_for_test(
+        store,
+        selection,
+        request,
+        |_, _, _, _| Ok(()),
+    )
+}
+
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) fn publish_ordinary_task_source_fixture_with_receiver_for_test(
+    store: &AgentRuntimeStateStore,
+    selection: std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    request: ValidatedWorldDispatchRequestV1,
+    before_start: impl FnOnce(
+        &OrdinaryWorldExecuteAdmissionV1,
+        &str,
+        &WorldWorkReceiptRegistry,
+        &WorldWorkAcceptanceProposalV1,
+    ) -> Result<()>,
+) -> Result<(
+    WorldWorkAcceptanceRecordV1,
+    WorldWorkExecutionSupervisor,
+    crate::execution::agent_runtime::world_work_execution_supervisor::WorldWorkExecutionClaimV1,
+    OrdinaryWorldExecuteAdmissionV1,
+)> {
+    let PreparedOrdinaryTaskAcceptanceSubmissionV2::Proposed {
+        receipt_registry,
+        execution_supervisor,
+        proposal,
+        request,
+        publication,
+        concurrency_guard: _concurrency_guard,
+        ..
+    } = prepare_ordinary_task_acceptance_submission(
+        store,
+        std::sync::Arc::clone(&selection),
+        request,
+    )?
+    else {
+        anyhow::bail!("source fixture requires a fresh genuine proposal");
+    };
+    let admission = selection.prepare_world_execute(&request)?;
+    let start = transport_api_types::ExecuteStreamFrame::Start {
+        frame_identity: transport_api_types::RuntimeFrameIdentityV1 {
+            schema_version: transport_api_types::RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: format!("rts_source_fixture_{}", Uuid::now_v7()),
+            frame_sequence: 1,
+        },
+        span_id: format!("source_fixture_span_{}", Uuid::now_v7()),
+    };
+    let transport_api_types::ExecuteStreamFrame::Start { span_id, .. } = &start else {
+        unreachable!()
+    };
+    before_start(&admission, span_id, &receipt_registry, &proposal)?;
+    let mut accepted = None;
+    consume_task_acceptance_acknowledgement(&request, &proposal, Some(&start), false, |record| {
+        let persisted =
+            receipt_registry.persist_world_work_acceptance_for_supervision(record.clone())?;
+        let claim = execution_supervisor.claim_persisted_world_work(&persisted)?;
+        execution_supervisor.journal_frame(
+            &claim,
+            &start,
+            &start.canonical_ndjson_bytes().map_err(anyhow::Error::msg)?,
+        )?;
+        publish_e2_accepted_work(&publication, &record, &claim)?;
+        accepted = Some((record, claim));
+        Ok(())
+    })?;
+    let (record, claim) =
+        accepted.ok_or_else(|| anyhow::anyhow!("source fixture lost acceptance"))?;
+    Ok((record, execution_supervisor, claim, admission))
+}
+
+#[cfg(target_os = "linux")]
+#[allow(clippy::too_many_arguments)]
+async fn launch_ordinary_task_supervision_and_handoff_receipt(
+    selection: std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    receipt_registry: WorldWorkReceiptRegistry,
+    execution_supervisor: WorldWorkExecutionSupervisor,
+    client: transport_api_client::AgentClient,
+    execute_request: transport_api_types::ExecuteRequest,
+    acceptance_proposal: WorldWorkAcceptanceProposalV1,
+    started_task_run_id_tx: Option<UnboundedSender<String>>,
+    e2_publication: E2AcceptedWorkPublicationContextV1,
+    concurrency_guard: Option<WorldDispatchConcurrencyGuard>,
+) -> Result<ActiveEphemeralTaskReceiptV1> {
+    selection.require_ordinary_configured_authority()?;
+    let admission = selection.prepare_world_execute(&execute_request)?;
+    let (receipt_tx, receipt_rx) = oneshot::channel();
+    let supervisor_for_failure = execution_supervisor.clone();
+    let proposal_for_failure = acceptance_proposal.clone();
+    let observer_owner = std::sync::Arc::clone(&selection);
+    let observation = tokio::spawn(async move {
+        let _concurrency_guard = concurrency_guard;
+        let outcome = match admission.revalidate_before_world_effect() {
+            Ok(()) => {
+                observe_run_world_task_stream(
+                    &receipt_registry,
+                    &execution_supervisor,
+                    client,
+                    execute_request,
+                    &acceptance_proposal,
+                    started_task_run_id_tx,
+                    Some(e2_publication),
+                    Some(receipt_tx),
+                )
+                .await
+            }
+            Err(error) => Err(error),
+        };
+        if outcome.is_err() {
+            if let Ok(Some(observation)) = execution_supervisor
+                .inspect_observation_by_acceptance_id(
+                    &acceptance_proposal
+                        .acceptance_context
+                        .proposed_acceptance_record_id,
+                )
+            {
+                let _ = execution_supervisor.mark_interrupted(
+                    &observation.claim,
+                    WorldWorkInterruptionReasonV1::ObserverFailure,
+                );
+            }
+        }
+    });
+    observer_owner.retain_issued_world_observer(observation);
+    receipt_rx
+        .await
+        .map_err(|_| {
+            let detail = supervisor_for_failure
+                .inspect_observation_by_acceptance_id(
+                    &proposal_for_failure
+                        .acceptance_context
+                        .proposed_acceptance_record_id,
+                )
+                .ok()
+                .flatten()
+                .map_or("before durable Start", |_| "after durable Start");
+            anyhow::anyhow!("run_world_task supervision ended {detail} before receipt handoff")
+        })?
+        .map_err(anyhow::Error::msg)
+}
+
+#[cfg(target_os = "linux")]
+async fn run_ordinary_world_task_with_receipt(
+    store: &AgentRuntimeStateStore,
+    selection: std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    request: ValidatedWorldDispatchRequestV1,
+    started_task_run_id_tx: Option<UnboundedSender<String>>,
+) -> Result<WorldDispatchOutcomeV1> {
+    match prepare_ordinary_task_acceptance_submission(store, selection, request)? {
+        PreparedOrdinaryTaskAcceptanceSubmissionV2::Accepted { selection, record } => {
+            let AcceptedWorldWorkIdentityV1::EphemeralTask { task_run_id } = &record.work_identity
+            else {
+                anyhow::bail!("ordinary Task accepted a different work family");
+            };
+            let key = DispatchPolicyCommitmentLookupKeyV1 {
+                authority_store_id: record.authority_store_id.clone(),
+                orchestration_session_id: record.orchestration_session_id.clone(),
+                request_id: record.request_id.clone(),
+                subject: DispatchPolicyCommitmentSubjectKeyV1::EphemeralWork {
+                    task_run_id: task_run_id.clone(),
+                },
+            };
+            let receipt = adapt_accepted_work_receipt_material_resolution_v1(
+                resolve_accepted_work_receipt_material(selection.held_authority(), &key, &record),
+                &record.work_identity,
+            )?;
+            let AcceptedForegroundReceiptV1::Ephemeral(task) = &receipt else {
+                anyhow::bail!("ordinary Task receipt changed family");
+            };
+            if let Some(tx) = started_task_run_id_tx {
+                let _ = tx.send(task.task_run_id.clone());
+            }
+            Ok(WorldDispatchOutcomeV1::AcceptedForeground(Box::new(
+                receipt,
+            )))
+        }
+        PreparedOrdinaryTaskAcceptanceSubmissionV2::Proposed {
+            selection,
+            receipt_registry,
+            execution_supervisor,
+            proposal,
+            client,
+            request,
+            publication,
+            concurrency_guard,
+        } => {
+            let receipt = launch_ordinary_task_supervision_and_handoff_receipt(
+                selection,
+                receipt_registry,
+                execution_supervisor,
+                client,
+                request,
+                proposal,
+                started_task_run_id_tx,
+                publication,
+                concurrency_guard,
+            )
+            .await?;
+            Ok(WorldDispatchOutcomeV1::AcceptedForeground(Box::new(
+                AcceptedForegroundReceiptV1::Ephemeral(receipt),
+            )))
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) async fn dispatch_ordinary_run_world_task_request(
+    store: &AgentRuntimeStateStore,
+    selection: std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    request: WorldDispatchRequestV1,
+    started_task_run_id_tx: Option<UnboundedSender<String>>,
+) -> Result<WorldDispatchOutcomeV1> {
+    let selection = authenticate_refreshed_ordinary_world_dispatch(&selection)?;
+    selection.require_ordinary_configured_authority()?;
+    let request = request.validate_ordinary_representation()?;
+    if request.action != WorldDispatchActionV1::RunWorldTask
+        || request.mode != WorldDispatchModeV1::Ephemeral
+    {
+        anyhow::bail!("ordinary Task entry requires explicit ephemeral Task action");
+    }
+    run_ordinary_world_task_with_receipt(store, selection, request, started_task_run_id_tx).await
 }
 
 #[cfg(target_os = "linux")]
@@ -5666,6 +8848,7 @@ async fn run_world_task_with_started_task_run_id_tx(
         )));
     };
     let e2_publication = E2AcceptedWorkPublicationContextV1 {
+        ordinary: None,
         authority: dispatch_policy_authority,
         idempotency_key: prepared.request.idempotency_key.clone(),
         applied_patch: applied_dispatch_policy_patch,
@@ -6642,6 +9825,1019 @@ pub(crate) async fn spawn_prepared_world_worker(
 }
 
 #[cfg(target_os = "linux")]
+pub(crate) async fn continue_ordinary_world_worker(
+    store: &AgentRuntimeStateStore,
+    selection: std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    install_context: transport_api_types::InstallBootstrapContextCarrierV1,
+    request: WorldDispatchRequestV1,
+) -> Result<WorldDispatchOutcomeV1> {
+    let selection = authenticate_refreshed_ordinary_world_dispatch(&selection)?;
+    selection.require_ordinary_configured_authority()?;
+    let request = request.validate_ordinary_representation()?;
+    if request.action != WorldDispatchActionV1::ContinueWorldWorker
+        || request.mode != WorldDispatchModeV1::Retained
+    {
+        anyhow::bail!("ordinary retained continuation requires exact Continue action");
+    }
+    if !matches!(&request.payload, WorldDispatchPayloadV1::WorkerContinue(_)) {
+        anyhow::bail!("ordinary Continue payload requires its independently authenticated control/fork operation; later Fork Resume R0Routable dependency remains");
+    }
+    let inputs = authenticate_ordinary_world_dispatch(&selection, &request)?;
+    let seal = inputs.selection.require_ordinary_configured_authority()?;
+    if store.substrate_home() != Path::new(&seal.accepted_home().physical_path)
+        || install_context.context.host_substrate_home != seal.accepted_home().physical_path
+    {
+        anyhow::bail!("ordinary Continue lost original store/install carrier");
+    }
+    let prepared = PreparedOrchestratorWorldDispatch {
+        store: store.clone(),
+        request: request.clone(),
+        b_owned_authority: Some(inputs.registry_authority.clone()),
+        compatibility: None,
+    };
+    let base_policy = inputs.context.base_policy.clone();
+    enforce_world_dispatch_steering_policy(&prepared, &base_policy)?;
+    enforce_continue_world_worker_payload_policy(&prepared, &base_policy)?;
+    let registry = &inputs.registry_authority;
+    let target = registry
+        .retained_target
+        .as_ref()
+        .context("ordinary retained target missing")?;
+    let cap = match &target.policy_cap_compatibility {
+        ResolvedPolicyCommitmentCompatibilityV1::Compatible { cap } => cap.clone(),
+        ResolvedPolicyCommitmentCompatibilityV1::UnsupportedLegacyState { reason, .. } => {
+            anyhow::bail!("unsupported_legacy_state: {reason:?}")
+        }
+    };
+    let e2 = resolve_ordinary_e2_dispatch_policy(
+        &inputs,
+        &request,
+        transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerTurn {
+            retained_participant_id: target.participant_id.clone(),
+        },
+    )?;
+    let cap_ref = cap.commitment_ref().clone();
+    let initial_carrier = crate::execution::agent_runtime::dispatch_policy_commitment::resolve_ordinary_retained_turn_policy_material(
+        &inputs.selection,
+        RetainedTurnPolicyResolutionInputV1 {
+            cap: cap.clone(),
+            current_parent_and_turn_patch: e2.validated_policy_snapshot.clone(),
+            orchestration_session_id: registry.orchestration_session_id.clone(),
+            caller_participant_id: registry.caller_participant_id.clone(),
+            caller_backend_id: registry.caller_backend_id.clone(),
+            target_backend_id: target.backend_id.clone(),
+            world_id: registry.world_id.clone(),
+            world_generation: registry.world_generation,
+            retained_participant_id: target.participant_id.clone(),
+            active_run_id: request.request_id.clone(),
+            message_id: None,
+            turn_patch: request.dispatch_policy_narrowing.clone(),
+        },
+    )
+    .map_err(|e| anyhow::anyhow!("{e}"))?
+    .into_carrier();
+    let target_participant_id = target.participant_id.clone();
+    let caller_backend_id = registry.caller_backend_id.clone();
+    // Correlation data only: this scan is not current Host-run authentication.
+    // Original Start has no Resume candidate; a matching but missing/ambiguous
+    // candidate refuses rather than manufacturing None. A registration after an
+    // applied Resume may fail this exact-revision join until a genuine compatible
+    // current observation is available. No C verifier is supplied by this scan.
+    let host_transition_correlation = {
+        let mut host_transition_correlation = None;
+        {
+            let authority = inputs.selection.held_authority();
+            let hsa_root = authority
+                .read_a12b_root()
+                .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+            let resolved = authority
+                .resolve_current_exact(&prepared.request.orchestration_session_id, None)
+                .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+            if hsa_root.authority_store_id != registry.authority_store_id
+                || resolved.observation.authority_store_id != registry.authority_store_id
+                || resolved.observation.authority_revision != registry.authority_revision_observed
+                || resolved.caller.participant_id != prepared.request.caller_participant_id
+            {
+                anyhow::bail!(
+                    "retained B1 submission authority changed before transition correlation"
+                );
+            }
+            let mut saw_resume_candidate = false;
+            for intent in hsa_root.successor_transition_intent_map.values() {
+                if intent.mode == HostSessionTransitionModeV1::ResumeOneTurn
+                    && intent.orchestration_session_id == prepared.request.orchestration_session_id
+                    && intent.target_authoritative_participant_id
+                        == prepared.request.caller_participant_id
+                {
+                    saw_resume_candidate = true;
+                }
+                let HostSessionTransitionIntentStateV3::Applied {
+                    authority_revision_after,
+                    authority_record_commitment,
+                    active_authoritative_participant_id,
+                    post_turn,
+                    ..
+                } = &intent.state
+                else {
+                    continue;
+                };
+                if intent.mode != HostSessionTransitionModeV1::ResumeOneTurn
+                    || intent.orchestration_session_id != prepared.request.orchestration_session_id
+                    || intent.target_authoritative_participant_id
+                        != prepared.request.caller_participant_id
+                    || active_authoritative_participant_id
+                        != &prepared.request.caller_participant_id
+                    || *authority_revision_after != registry.authority_revision_observed
+                    || authority_record_commitment
+                        != &resolved.observation.authority_record_commitment
+                    || !matches!(
+                        intent.input_handoff,
+                        HostSessionTransitionInputHandoffV1::Accepted { .. }
+                    )
+                    || !matches!(
+                        post_turn.as_ref(),
+                        HostSessionPostTurnApplicationV2::Pending { .. }
+                    )
+                {
+                    continue;
+                }
+                let transition_payload_commitment = match &intent.payload_commitment {
+                    AuthorityObjectCommitmentV1::CanonicalSha256 { digest_hex } => {
+                        substrate_common::OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                            digest_hex: digest_hex.clone(),
+                        }
+                    }
+                    AuthorityObjectCommitmentV1::StoreHmacSha256 {
+                        key_id,
+                        domain,
+                        digest_hex,
+                    } => substrate_common::OpaqueAuthorityCommitmentV1::StoreHmacSha256 {
+                        key_id: key_id.clone(),
+                        domain: domain.clone(),
+                        digest_hex: digest_hex.clone(),
+                    },
+                };
+                let correlation = substrate_common::HostTransitionWorkCorrelationV1 {
+                    schema_version: 1,
+                    authority_store_id: hsa_root.authority_store_id.clone(),
+                    orchestration_session_id: intent.orchestration_session_id.clone(),
+                    authoritative_participant_id: intent
+                        .target_authoritative_participant_id
+                        .clone(),
+                    transition_intent_id: intent.intent_id.clone(),
+                    transition_intent_revision_observed: intent.intent_revision,
+                    transition_run_id: intent.run_id.clone(),
+                    transition_payload_commitment,
+                    authority_revision_observed: *authority_revision_after,
+                };
+                correlation.validate().map_err(anyhow::Error::msg)?;
+                if host_transition_correlation.replace(correlation).is_some() {
+                    anyhow::bail!(
+                        "retained B1 submission has ambiguous ResumeOneTurn transition correlation"
+                    );
+                }
+            }
+            if saw_resume_candidate && host_transition_correlation.is_none() {
+                anyhow::bail!(
+                "retained B1 submission has no exact accepted ResumeOneTurn transition correlation"
+            );
+            }
+        }
+
+        host_transition_correlation
+    };
+    inputs.revalidate()?;
+    let current_inputs = authenticate_ordinary_world_dispatch(&inputs.selection, &request)?;
+    resolve_ordinary_world_dispatch_contract(&current_inputs, &request, "continue_world_worker")?;
+    let outcome = registry
+        .receipt_registry
+        .prepare_authenticated_ordinary_retained_turn_acceptance_proposal(
+            &current_inputs.selection,
+            &request.orchestration_session_id,
+            &request.request_id,
+            |allocation| {
+                if let Some(existing) = allocation.existing_proposal.as_ref() {
+                    let WorldWorkSubmissionIdentityV1::RetainedTurn {
+                        validated_dispatch_request,
+                        ..
+                    } = &existing.submission_identity
+                    else {
+                        anyhow::bail!("ordinary retained request family conflict");
+                    };
+                    if validated_dispatch_request != &request {
+                        anyhow::bail!("ordinary retained request subject conflict");
+                    }
+                    return Ok(existing.clone());
+                }
+                let mut context = world_work_acceptance_context(
+                    &allocation,
+                    &request.request_id,
+                    &caller_backend_id,
+                );
+                context.host_transition_correlation = host_transition_correlation.clone();
+                let mut carrier = initial_carrier.clone();
+                carrier.subject.message_id = context.message_id.clone();
+                let submit = build_ordinary_continue_world_worker_submit_request(
+                    &prepared,
+                    carrier,
+                    Some(context.clone()),
+                )?;
+                let message_id = context
+                    .message_id
+                    .clone()
+                    .context("ordinary retained allocation omitted message")?;
+                Ok(WorldWorkAcceptanceProposalV1 {
+                    schema_version: 1,
+                    acceptance_context: context,
+                    authority_store_id: registry.authority_store_id.clone(),
+                    authority_revision_observed: registry.authority_revision_observed,
+                    orchestration_session_id: request.orchestration_session_id.clone(),
+                    caller_participant_id: request.caller_participant_id.clone(),
+                    caller_backend_id: caller_backend_id.clone(),
+                    target_backend_id: request.target_backend_id.clone(),
+                    world_id: request.world_id.clone(),
+                    world_generation: request.world_generation,
+                    proposed_work: ProposedWorldWorkIdentityV1::RetainedTurn {
+                        active_run_id: request.request_id.clone(),
+                        message_id,
+                        target_participant_id: target_participant_id.clone(),
+                    },
+                    submission_identity: WorldWorkSubmissionIdentityV1::RetainedTurn {
+                        validated_dispatch_request: request.clone(),
+                        canonical_member_turn_submit_request_sha256:
+                            canonical_world_work_submission_sha256(&request, &submit)?,
+                    },
+                    current_policy_snapshot_ref: registry.current_policy_snapshot_ref.clone(),
+                    current_policy_snapshot_hash: e2.validated_policy_snapshot.hash().into(),
+                    current_policy_revision: registry.current_policy_revision.clone(),
+                    created_at: allocation.created_at,
+                })
+            },
+        )?;
+    // Current permission is independent from the immutable B1 correlation,
+    // proposal and policy bytes retained above. No authority read occurs in B1.
+    let post_inputs = authenticate_ordinary_world_dispatch(&inputs.selection, &request)?;
+    resolve_ordinary_world_dispatch_contract(&post_inputs, &request, "continue_world_worker")?;
+    let post_prepared = PreparedOrchestratorWorldDispatch {
+        store: store.clone(),
+        request: request.clone(),
+        b_owned_authority: Some(post_inputs.registry_authority.clone()),
+        compatibility: None,
+    };
+    enforce_world_dispatch_steering_policy(&post_prepared, &post_inputs.context.base_policy)?;
+    enforce_continue_world_worker_payload_policy(&post_prepared, &post_inputs.context.base_policy)?;
+    if let WorldWorkProposalReservationOutcomeV1::Accepted(record) = &outcome {
+        let AcceptedWorldWorkIdentityV1::RetainedTurn {
+            active_run_id,
+            message_id,
+            ..
+        } = &record.work_identity
+        else {
+            anyhow::bail!("ordinary retained accepted family mismatch");
+        };
+        let key = DispatchPolicyCommitmentLookupKeyV1 {
+            authority_store_id: record.authority_store_id.clone(),
+            orchestration_session_id: record.orchestration_session_id.clone(),
+            request_id: record.request_id.clone(),
+            subject: DispatchPolicyCommitmentSubjectKeyV1::RetainedWorkerTurn {
+                active_run_id: active_run_id.clone(),
+                message_id: message_id.clone(),
+            },
+        };
+        let receipt = adapt_accepted_work_receipt_material_resolution_with_runtime_v1(
+            resolve_accepted_work_receipt_material(inputs.selection.held_authority(), &key, record),
+            &record.work_identity,
+            Some(store),
+            Some(&registry.execution_supervisor),
+        )?;
+        return Ok(WorldDispatchOutcomeV1::AcceptedForeground(Box::new(
+            receipt,
+        )));
+    }
+    let proposal = resolve_retained_acceptance_proposal(
+        &registry.receipt_registry,
+        &request.request_id,
+        outcome,
+    )?;
+    let final_carrier = crate::execution::agent_runtime::dispatch_policy_commitment::resolve_ordinary_retained_turn_policy_material(
+        &inputs.selection,
+        RetainedTurnPolicyResolutionInputV1 {
+            cap,
+            current_parent_and_turn_patch: e2.validated_policy_snapshot.clone(),
+            orchestration_session_id: registry.orchestration_session_id.clone(),
+            caller_participant_id: registry.caller_participant_id.clone(),
+            caller_backend_id: registry.caller_backend_id.clone(),
+            target_backend_id: target.backend_id.clone(),
+            world_id: registry.world_id.clone(),
+            world_generation: registry.world_generation,
+            retained_participant_id: target.participant_id.clone(),
+            active_run_id: request.request_id.clone(),
+            message_id: proposal.acceptance_context.message_id.clone(),
+            turn_patch: request.dispatch_policy_narrowing.clone(),
+        },
+    )
+    .map_err(|e| anyhow::anyhow!("{e}"))?
+    .into_carrier();
+    let submit = build_ordinary_continue_world_worker_submit_request(
+        &prepared,
+        final_carrier,
+        Some(proposal.acceptance_context.clone()),
+    )?;
+    validate_ordinary_retained_submission_against_proposal(&submit, &proposal)?;
+    let effect_inputs = authenticate_ordinary_world_dispatch(&post_inputs.selection, &request)?;
+    resolve_ordinary_world_dispatch_contract(&effect_inputs, &request, "continue_world_worker")?;
+    let effect_prepared = PreparedOrchestratorWorldDispatch {
+        store: store.clone(),
+        request: request.clone(),
+        b_owned_authority: Some(effect_inputs.registry_authority.clone()),
+        compatibility: None,
+    };
+    enforce_world_dispatch_steering_policy(&effect_prepared, &effect_inputs.context.base_policy)?;
+    enforce_continue_world_worker_payload_policy(
+        &effect_prepared,
+        &effect_inputs.context.base_policy,
+    )?;
+    let current_snapshot =
+        crate::execution::policy_snapshot::resolve_policy_snapshot_for_bootstrap_home(
+            Path::new(effect_inputs.selection.workspace_root()),
+            &effect_inputs.selection.held_authority().bootstrap_home(),
+        )?;
+    crate::execution::agent_runtime::dispatch_policy_commitment::authenticate_ordinary_member_turn_policy_v1(
+        effect_inputs.selection.held_authority(), &submit, &current_snapshot.snapshot,
+    ).map_err(|error| anyhow::anyhow!("{error}"))?;
+    effect_inputs.revalidate()?;
+    let trusted = TrustedAuthorityRoot::open_for_owner(
+        Path::new(&seal.accepted_home().physical_path),
+        u32::try_from(seal.intended_uid())?,
+    )
+    .map_err(|e| anyhow::anyhow!("{e}"))?;
+    if trusted.identity()
+        != inputs
+            .selection
+            .held_authority()
+            .bootstrap_home()
+            .identity()?
+    {
+        anyhow::bail!("ordinary retained publication root changed");
+    }
+    let publication_authority =
+        HostSessionAuthority::from_trusted_root(trusted).map_err(|e| anyhow::anyhow!("{e}"))?;
+    initialize_dispatch_policy_commitment_registry(&publication_authority)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let ordinary_publication = crate::execution::agent_runtime::dispatch_policy_commitment::authenticate_ordinary_accepted_work_publication_v1(std::sync::Arc::clone(&inputs.selection), &proposal, &e2.applied_patch, &e2.validated_policy_snapshot).map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let publication = E2AcceptedWorkPublicationContextV1 {
+        ordinary: Some(ordinary_publication),
+        authority: publication_authority,
+        idempotency_key: request.idempotency_key.clone(),
+        applied_patch: e2.applied_patch,
+        policy_snapshot: e2.validated_policy_snapshot,
+        reason: e2.reason,
+        retained_worker_cap_ref: Some(cap_ref),
+    };
+    let receipt = launch_ordinary_retained_turn_supervision_and_handoff_receipt(
+        std::sync::Arc::clone(&inputs.selection),
+        install_context,
+        store.clone(),
+        submit,
+        base_policy,
+        ContinueWorldWorkerTurnKind::GenericContinue,
+        registry.receipt_registry.clone(),
+        registry.execution_supervisor.clone(),
+        proposal,
+        publication,
+    )
+    .await?;
+    Ok(WorldDispatchOutcomeV1::AcceptedForeground(Box::new(
+        AcceptedForegroundReceiptV1::Retained(receipt),
+    )))
+}
+
+#[cfg(target_os = "linux")]
+fn spawn_ordinary_router_auto_attach_discovery_trigger(
+    store: AgentRuntimeStateStore,
+    selection: std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    install_context: transport_api_types::InstallBootstrapContextCarrierV1,
+) -> Result<()> {
+    selection.require_ordinary_configured_authority()?;
+    let observer_owner = std::sync::Arc::clone(&selection);
+    let observation = tokio::task::spawn_blocking(move || {
+        if let Err(error) =
+            run_ordinary_router_auto_attach_discovery_once(&store, &selection, &install_context)
+        {
+            tracing::warn!("ordinary auto-attach refused: {error:#}");
+        }
+    });
+    observer_owner.retain_issued_world_observer(observation);
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn run_ordinary_router_auto_attach_discovery_once(
+    store: &AgentRuntimeStateStore,
+    selection: &std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    install_context: &transport_api_types::InstallBootstrapContextCarrierV1,
+) -> Result<()> {
+    selection.require_ordinary_configured_authority()?;
+    let ordinary = crate::execution::agent_runtime::auto_attach::OrdinaryAutoAttachAuthorityV1 {
+        selection: std::sync::Arc::clone(selection),
+        install_context: install_context.clone(),
+    };
+    crate::execution::agent_runtime::auto_attach::execute_ordinary_router_auto_attach_for_session(
+        store,
+        &ordinary,
+        selection.original_session_id(),
+        "ordinary-retained-router",
+        false,
+        false,
+    )?;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "retain separate authenticated selection, request, B1 acceptance, store, E2 publication and receipt inputs at the retained observer boundary"
+)]
+async fn execute_ordinary_continue_world_worker_stream_for_turn_kind_impl(
+    selection: &std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
+    _policy: &Policy,
+    turn_kind: ContinueWorldWorkerTurnKind,
+    acceptance: Option<(
+        &WorldWorkReceiptRegistry,
+        &WorldWorkExecutionSupervisor,
+        &WorldWorkAcceptanceProposalV1,
+    )>,
+    store: Option<&AgentRuntimeStateStore>,
+    e2_publication: Option<E2AcceptedWorkPublicationContextV1>,
+    mut receipt_tx: Option<
+        oneshot::Sender<std::result::Result<ActiveRetainedTurnReceiptV1, String>>,
+    >,
+) -> Result<ContinueWorldWorkerStreamResult> {
+    use http_body_util::BodyExt as _;
+    use transport_api_types::ExecuteStreamFrame;
+
+    selection.require_ordinary_configured_authority()?;
+    let (_, _, proposal) = acceptance.context("ordinary retained observer requires B1 proposal")?;
+    let WorldWorkSubmissionIdentityV1::RetainedTurn {
+        validated_dispatch_request,
+        ..
+    } = &proposal.submission_identity
+    else {
+        anyhow::bail!("ordinary retained observer proposal family changed");
+    };
+    let inputs = authenticate_ordinary_world_dispatch(selection, validated_dispatch_request)?;
+    validate_ordinary_retained_submission_against_proposal(request, proposal)?;
+    let snapshot = crate::execution::policy_snapshot::resolve_policy_snapshot_for_bootstrap_home(
+        Path::new(inputs.selection.workspace_root()),
+        &inputs.selection.held_authority().bootstrap_home(),
+    )?;
+    crate::execution::agent_runtime::dispatch_policy_commitment::authenticate_ordinary_member_turn_policy_v1(
+        inputs.selection.held_authority(),request,&snapshot.snapshot,
+    ).map_err(|e|anyhow::anyhow!("{e}"))?;
+    let policy = &inputs.context.base_policy;
+    inputs.selection.revalidate_requested_account(policy)?;
+    inputs.revalidate()?;
+    // Use the same explicit World endpoint override as ordinary initial Start.
+    // Endpoint routing grants no selection, current-target or delivery authority.
+    let socket = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("/run/substrate.sock"));
+    let client = transport_api_client::AgentClient::unix_socket(&socket)?;
+    let response = client
+        .submit_ordinary_member_turn_stream(
+            transport_api_types::OrdinaryMemberTurnSubmitRequestV1::from_request(request.clone())
+                .map_err(anyhow::Error::msg)?,
+        )
+        .await
+        .context("failed to submit continue_world_worker over world member turn seam")?;
+
+    let mut body = std::pin::pin!(response.into_body());
+    let mut buffer = Vec::new();
+    let mut active_span_id = None::<String>;
+    let mut active_claim = None;
+    let mut exit_code = None::<i32>;
+    let mut stream_error = None::<String>;
+    let mut surfaced_thread_id = None::<String>;
+    let mut surfaced_worker_event = None::<ContinueWorldWorkerEventV1>;
+    let retained_execution_supervisor =
+        acceptance.map(|(_, execution_supervisor, _)| execution_supervisor);
+    let mut publish_and_handoff = |
+        accepted: &WorldWorkAcceptanceRecordV1,
+        claim: &crate::execution::agent_runtime::world_work_execution_supervisor::WorldWorkExecutionClaimV1,
+    | -> Result<()> {
+        let Some(context) = e2_publication.as_ref() else {
+            return Ok(());
+        };
+        publish_e2_accepted_work(context, accepted, claim)?;
+        let AcceptedWorldWorkIdentityV1::RetainedTurn {
+            active_run_id,
+            message_id,
+            ..
+        } = &accepted.work_identity
+        else {
+            anyhow::bail!(
+                "accepted_work_receipt_material_error: retained_receipt_family_mismatch"
+            )
+        };
+        let key = DispatchPolicyCommitmentLookupKeyV1 {
+            authority_store_id: accepted.authority_store_id.clone(),
+            orchestration_session_id: accepted.orchestration_session_id.clone(),
+            request_id: accepted.request_id.clone(),
+            subject: DispatchPolicyCommitmentSubjectKeyV1::RetainedWorkerTurn {
+                active_run_id: active_run_id.clone(),
+                message_id: message_id.clone(),
+            },
+        };
+        let receipt = match adapt_accepted_work_receipt_material_resolution_with_runtime_v1(
+            resolve_accepted_work_receipt_material(&context.authority, &key, accepted),
+            &accepted.work_identity,
+            store,
+            retained_execution_supervisor,
+        ) {
+            Ok(AcceptedForegroundReceiptV1::Retained(receipt)) => receipt,
+            Ok(AcceptedForegroundReceiptV1::Ephemeral(_)) => {
+                anyhow::bail!(
+                    "accepted_work_receipt_material_error: retained_receipt_family_mismatch"
+                )
+            }
+            Err(error) => {
+                if let Some(receipt_tx) = receipt_tx.take() {
+                    let _ = receipt_tx.send(Err(error.to_string()));
+                }
+                return Err(error);
+            }
+        };
+        if let Some(receipt_tx) = receipt_tx.take() {
+            let _ = receipt_tx.send(Ok(receipt));
+        }
+        Ok(())
+    };
+
+    while let Some(frame) = body.as_mut().frame().await {
+        let frame = match frame {
+            Ok(frame) => frame,
+            Err(err) => {
+                cancel_continue_world_worker_turn(&client, active_span_id.as_deref()).await;
+                return Err(anyhow::anyhow!("stream frame error: {err}"));
+            }
+        };
+        let Some(data) = frame.data_ref() else {
+            continue;
+        };
+        buffer.extend_from_slice(data);
+
+        while let Some(pos) = buffer.iter().position(|&byte| byte == b'\n') {
+            let line: Vec<u8> = buffer.drain(..=pos).collect();
+            if line.len() <= 1 {
+                continue;
+            }
+            let payload = &line[..line.len() - 1];
+            if payload.is_empty() {
+                continue;
+            }
+            let frame: ExecuteStreamFrame =
+                match serde_json::from_slice(payload).with_context(|| {
+                    format!(
+                        "invalid continue_world_worker stream frame: {}",
+                        String::from_utf8_lossy(payload)
+                    )
+                }) {
+                    Ok(frame) => frame,
+                    Err(err) => {
+                        cancel_continue_world_worker_turn(&client, active_span_id.as_deref()).await;
+                        return Err(err);
+                    }
+                };
+
+            let classified_event = if let ExecuteStreamFrame::Event {
+                frame_identity,
+                event,
+            } = &frame
+            {
+                if active_span_id.is_none() {
+                    anyhow::bail!(
+                        "continue_world_worker stream emitted Event before Start acknowledgement"
+                    );
+                }
+                Some(
+                    match classify_continue_world_worker_event_with_frame_identity(
+                        request,
+                        turn_kind,
+                        frame_identity,
+                        event,
+                    ) {
+                        Ok(classified_event) => classified_event,
+                        Err(err) => {
+                            cancel_continue_world_worker_turn(&client, active_span_id.as_deref())
+                                .await;
+                            if acceptance.is_some() {
+                                if stream_error.is_none() {
+                                    stream_error = Some(format!("{err:#}"));
+                                }
+                                continue;
+                            }
+                            return Err(err);
+                        }
+                    },
+                )
+            } else {
+                None
+            };
+            if !matches!(
+                frame,
+                ExecuteStreamFrame::Start { .. } | ExecuteStreamFrame::Event { .. }
+            ) {
+                if let Some((_, execution_supervisor, _)) = acceptance {
+                    let claim = active_claim.as_ref().ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "accepted continue_world_worker stream emitted a frame before durable Start claim"
+                        )
+                    })?;
+                    if execution_supervisor.journal_frame(claim, &frame, &line)?
+                        == WorldWorkJournalAppendOutcomeV1::ExactReplay
+                    {
+                        continue;
+                    }
+                }
+            }
+
+            match frame {
+                start_frame @ ExecuteStreamFrame::Start { .. } => {
+                    if let Some((receipt_registry, execution_supervisor, acceptance_proposal)) =
+                        acceptance
+                    {
+                        let ExecuteStreamFrame::Start { span_id, .. } = &start_frame else {
+                            unreachable!("matched Start frame")
+                        };
+                        let existing_observation = match active_claim.as_ref() {
+                            Some(claim) => Some(
+                                execution_supervisor
+                                    .inspect_observation_by_acceptance_id(
+                                        &claim.acceptance_record_id,
+                                    )?
+                                    .ok_or_else(|| {
+                                        anyhow::anyhow!(
+                                            "B2.1 retained observation disappeared after claim"
+                                        )
+                                    })?,
+                            ),
+                            None => execution_supervisor.inspect_observation_by_acceptance_id(
+                                &acceptance_proposal
+                                    .acceptance_context
+                                    .proposed_acceptance_record_id,
+                            )?,
+                        };
+                        if let Some(observation) = existing_observation {
+                            if observation.claim.runtime_submission_id != *span_id {
+                                anyhow::bail!(
+                                    "replayed continue_world_worker Start changed runtime submission identity"
+                                );
+                            }
+                            let claim = observation.claim;
+                            let append_outcome =
+                                execution_supervisor.journal_frame(&claim, &start_frame, &line)?;
+                            let accepted = receipt_registry
+                                .inspect_world_work_acceptance_by_id(
+                                    acceptance_proposal.authority_store_id.as_str(),
+                                    &claim.acceptance_record_id,
+                                )?
+                                .ok_or_else(|| {
+                                    anyhow::anyhow!(
+                                        "durable B1 retained acceptance disappeared before E2 retry publication"
+                                    )
+                                })?;
+                            active_claim = Some(claim);
+                            active_span_id = Some(span_id.clone());
+                            publish_and_handoff(
+                                &accepted,
+                                active_claim.as_ref().expect("stored retained replay claim"),
+                            )?;
+                            if append_outcome == WorldWorkJournalAppendOutcomeV1::ExactReplay {
+                                continue;
+                            }
+                            continue;
+                        }
+                        let mut claimed = None;
+                        let span_id = consume_ordinary_retained_acceptance_acknowledgement(
+                            request,
+                            acceptance_proposal,
+                            Some(&start_frame),
+                            active_span_id.is_some(),
+                            |record| {
+                                let accepted = receipt_registry
+                                    .persist_world_work_acceptance_for_supervision(record)?;
+                                claimed = Some(
+                                    execution_supervisor.claim_persisted_world_work(&accepted)?,
+                                );
+                                Ok(())
+                            },
+                        )?;
+                        let claim = claimed.ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "B2.1 retained acceptance omitted durable supervisor claim"
+                            )
+                        })?;
+                        let accepted = receipt_registry
+                            .inspect_world_work_acceptance_by_id(
+                                acceptance_proposal.authority_store_id.as_str(),
+                                &claim.acceptance_record_id,
+                            )?
+                            .ok_or_else(|| {
+                                anyhow::anyhow!(
+                                    "B1 retained acceptance disappeared before E2 publication"
+                                )
+                            })?;
+                        let append_outcome =
+                            execution_supervisor.journal_frame(&claim, &start_frame, &line)?;
+                        active_claim = Some(claim);
+                        active_span_id = Some(span_id);
+                        publish_and_handoff(
+                            &accepted,
+                            active_claim.as_ref().expect("stored retained fresh claim"),
+                        )?;
+                        if append_outcome == WorldWorkJournalAppendOutcomeV1::ExactReplay {
+                            continue;
+                        }
+                    } else {
+                        let ExecuteStreamFrame::Start { span_id, .. } = start_frame else {
+                            unreachable!("matched Start frame")
+                        };
+                        if active_span_id.is_some() {
+                            anyhow::bail!(
+                                "continue_world_worker stream emitted repeated Start frame"
+                            );
+                        }
+                        active_span_id = Some(span_id);
+                    }
+                }
+                ExecuteStreamFrame::Event {
+                    frame_identity: _,
+                    ref event,
+                } => {
+                    if surfaced_thread_id.is_none() {
+                        surfaced_thread_id = surfaced_thread_id_from_event(event);
+                    }
+                    if let Some((_, execution_supervisor, _)) = acceptance {
+                        let claim = active_claim.as_ref().ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "accepted continue_world_worker stream emitted a frame before durable Start claim"
+                            )
+                        })?;
+                        if execution_supervisor.journal_frame(claim, &frame, &line)?
+                            == WorldWorkJournalAppendOutcomeV1::ExactReplay
+                        {
+                            continue;
+                        }
+                    }
+                    let classified_event = classified_event
+                        .expect("event frames must compute retained classification");
+                    if surfaced_thread_id.is_none() {
+                        surfaced_thread_id = classified_event
+                            .as_ref()
+                            .and_then(|classified_event| classified_event.thread_id.clone());
+                    }
+                    if let Some(classified_event) = classified_event {
+                        if let Err(err) = enforce_continue_world_worker_event_policy(
+                            policy,
+                            classified_event.event_class,
+                        ) {
+                            cancel_continue_world_worker_turn(&client, active_span_id.as_deref())
+                                .await;
+                            if acceptance.is_some() {
+                                if stream_error.is_none() {
+                                    stream_error = Some(format!("{err:#}"));
+                                }
+                                continue;
+                            }
+                            return Err(err);
+                        }
+                        if let (
+                            Some((receipt_registry, execution_supervisor, _)),
+                            Some(claim),
+                            Some(store),
+                        ) = (acceptance, active_claim.as_ref(), store)
+                        {
+                            if let Err(err) = reconcile_retained_event_obligations(
+                                store,
+                                receipt_registry,
+                                execution_supervisor,
+                                &claim.acceptance_record_id,
+                            ) {
+                                if stream_error.is_none() {
+                                    stream_error = Some(format!("{err:#}"));
+                                }
+                                continue;
+                            }
+                        }
+                        let preserve_existing_live_event =
+                            surfaced_worker_event.as_ref().is_some_and(|existing| {
+                                continue_world_worker_event_persists_live_obligation(
+                                    existing.event_class,
+                                )
+                            });
+                        if !preserve_existing_live_event {
+                            // Preserve the first surfaced durable worker obligation even if
+                            // later obligation-like or ordinary stream events arrive before exit.
+                            surfaced_worker_event = Some(classified_event.compatibility());
+                        }
+                    }
+                }
+                ExecuteStreamFrame::Exit { exit, .. } => {
+                    if active_span_id.is_none() {
+                        anyhow::bail!(
+                            "continue_world_worker stream emitted terminal Exit before Start acknowledgement"
+                        );
+                    }
+                    exit_code = Some(exit);
+                    if acceptance.is_none() {
+                        break;
+                    }
+                    if let (
+                        Some((receipt_registry, execution_supervisor, _)),
+                        Some(claim),
+                        Some(store),
+                    ) = (acceptance, active_claim.as_ref(), store)
+                    {
+                        if let Err(err) = reconcile_retained_event_obligations(
+                            store,
+                            receipt_registry,
+                            execution_supervisor,
+                            &claim.acceptance_record_id,
+                        ) {
+                            if stream_error.is_none() {
+                                stream_error = Some(format!("{err:#}"));
+                            }
+                        }
+                    }
+                }
+                ExecuteStreamFrame::Error { message, .. } => {
+                    cancel_continue_world_worker_turn(&client, active_span_id.as_deref()).await;
+                    if acceptance.is_none() {
+                        anyhow::bail!(message);
+                    }
+                    if stream_error.is_none() {
+                        stream_error = Some(message);
+                    }
+                }
+                ExecuteStreamFrame::Stdout { .. } | ExecuteStreamFrame::Stderr { .. } => {
+                    if active_span_id.is_none() {
+                        anyhow::bail!(
+                            "continue_world_worker stream emitted output before Start acknowledgement"
+                        );
+                    }
+                }
+            }
+        }
+        if acceptance.is_none() && exit_code.is_some() {
+            break;
+        }
+    }
+    if acceptance.is_some() && !buffer.is_empty() {
+        anyhow::bail!("continue_world_worker stream ended with an incomplete canonical frame");
+    }
+
+    let observed_exit_code = match exit_code {
+        Some(exit_code) => exit_code,
+        None => {
+            cancel_continue_world_worker_turn(&client, active_span_id.as_deref()).await;
+            if let Some(message) = stream_error.take() {
+                anyhow::bail!(message);
+            }
+            anyhow::bail!("continue_world_worker stream ended without a terminal exit frame");
+        }
+    };
+    let exit_code = if let (Some((_, execution_supervisor, _)), Some(claim)) =
+        (acceptance, active_claim.as_ref())
+    {
+        let terminal = execution_supervisor
+            .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)?
+            .and_then(|observation| observation.terminal)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "accepted continue_world_worker stream ended without durable B0 terminal truth"
+                )
+            })?;
+        if terminal.exit_code != observed_exit_code {
+            anyhow::bail!("continue_world_worker terminal exit changed after durable journaling");
+        }
+        terminal.exit_code
+    } else {
+        observed_exit_code
+    };
+    if let Some(message) = stream_error {
+        anyhow::bail!(message);
+    }
+    if surfaced_thread_id.is_none() {
+        surfaced_thread_id = surfaced_worker_event
+            .as_ref()
+            .and_then(|worker_event| worker_event.thread_id.clone());
+    }
+
+    Ok(ContinueWorldWorkerStreamResult {
+        exit_code,
+        surfaced_thread_id,
+        surfaced_worker_event,
+    })
+}
+
+#[cfg(target_os = "linux")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "retain explicit owned selection, install context, state, policy, acceptance and publication custody through retained turn supervision handoff"
+)]
+async fn launch_ordinary_retained_turn_supervision_and_handoff_receipt(
+    selection: std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    install_context: transport_api_types::InstallBootstrapContextCarrierV1,
+    store: AgentRuntimeStateStore,
+    request: transport_api_types::MemberTurnSubmitRequestV1,
+    policy: Policy,
+    turn_kind: ContinueWorldWorkerTurnKind,
+    receipt_registry: WorldWorkReceiptRegistry,
+    execution_supervisor: WorldWorkExecutionSupervisor,
+    acceptance_proposal: WorldWorkAcceptanceProposalV1,
+    e2_publication: E2AcceptedWorkPublicationContextV1,
+) -> Result<ActiveRetainedTurnReceiptV1> {
+    let (receipt_tx, receipt_rx) = oneshot::channel();
+    let supervisor_for_failure = execution_supervisor.clone();
+    let proposal_for_failure = acceptance_proposal.clone();
+    let observer_owner = std::sync::Arc::clone(&selection);
+    let observation = tokio::spawn(async move {
+        let outcome = execute_ordinary_continue_world_worker_stream_for_turn_kind_impl(
+            &selection,
+            &request,
+            &policy,
+            turn_kind,
+            Some((
+                &receipt_registry,
+                &execution_supervisor,
+                &acceptance_proposal,
+            )),
+            Some(&store),
+            Some(e2_publication),
+            Some(receipt_tx),
+        )
+        .await;
+        if outcome
+            .as_ref()
+            .ok()
+            .and_then(|result| result.surfaced_worker_event.as_ref())
+            .is_some_and(|event| {
+                continue_world_worker_event_persists_live_obligation(event.event_class)
+            })
+        {
+            let _ = spawn_ordinary_router_auto_attach_discovery_trigger(
+                store.clone(),
+                std::sync::Arc::clone(&selection),
+                install_context,
+            );
+        }
+        if outcome.is_err() {
+            if let Ok(Some(observation)) = execution_supervisor
+                .inspect_observation_by_acceptance_id(
+                    &acceptance_proposal
+                        .acceptance_context
+                        .proposed_acceptance_record_id,
+                )
+            {
+                let _ = execution_supervisor.mark_interrupted(
+                    &observation.claim,
+                    WorldWorkInterruptionReasonV1::ObserverFailure,
+                );
+            }
+        }
+    });
+    observer_owner.retain_issued_world_observer(observation);
+    receipt_rx
+        .await
+        .map_err(|_| {
+            let detail = supervisor_for_failure
+                .inspect_observation_by_acceptance_id(
+                    &proposal_for_failure
+                        .acceptance_context
+                        .proposed_acceptance_record_id,
+                )
+                .ok()
+                .flatten()
+                .map_or("before durable Start", |_| "after durable Start");
+            anyhow::anyhow!(
+                "continue_world_worker supervision ended {detail} before receipt handoff"
+            )
+        })?
+        .map_err(anyhow::Error::msg)
+}
+
+#[cfg(target_os = "linux")]
 async fn continue_world_worker(
     prepared: PreparedOrchestratorWorldDispatch,
     intended_host_principal: Option<&PlatformPrincipalV1>,
@@ -6714,6 +10910,7 @@ async fn continue_world_worker(
                 base_policy,
             } => {
                 let e2_publication = E2AcceptedWorkPublicationContextV1 {
+                    ordinary: None,
                     authority: dispatch_policy_authority,
                     idempotency_key: prepared.request.idempotency_key.clone(),
                     applied_patch: applied_dispatch_policy_patch,
@@ -6779,6 +10976,7 @@ async fn continue_world_worker(
             )
         };
         let e2_publication = E2AcceptedWorkPublicationContextV1 {
+            ordinary: None,
             authority: dispatch_policy_authority,
             idempotency_key: prepared.request.idempotency_key.clone(),
             applied_patch: applied_dispatch_policy_patch,
@@ -6899,8 +11097,8 @@ fn retained_turn_uses_compatibility_transport(
 async fn continue_world_worker_fork_command_bootstrap_after_delivery(
     prepared: &PreparedOrchestratorWorldDispatch,
     intended_host_principal: Option<&PlatformPrincipalV1>,
-    e3_inputs: Option<&E3ContinueForkInputsV1<'_, '_, '_>>,
-    classification_snapshot: Option<&config_model::E3EffectiveConfigResolutionSnapshotV1<'_>>,
+    _e3_inputs: Option<&E3ContinueForkInputsV1<'_, '_, '_>>,
+    _classification_snapshot: Option<&config_model::E3EffectiveConfigResolutionSnapshotV1<'_>>,
 ) -> Result<Option<ContinueWorldWorkerForkBootstrapOutcome>> {
     let WorldDispatchPayloadV1::WorkerContinueForkCommand(_) = &prepared.request.payload else {
         return Ok(None);
@@ -7823,6 +12021,474 @@ fn continue_world_worker_persisted_event_label(
     }
 }
 
+/// Route initial control through its original receiver, independently from
+/// accepted-work leases. Neither delivery path acknowledges native termination.
+#[cfg(target_os = "linux")]
+pub(crate) async fn control_ordinary_initial_bootstrap_request(
+    selection: &crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    request: &ValidatedWorldDispatchRequestV1,
+) -> Result<Option<WorldDispatchOutcomeV1>> {
+    control_ordinary_initial_bootstrap_request_using(selection, request, |wire| async move {
+        connect_world_agent_client()?
+            .control_ordinary_initial_bootstrap(&wire)
+            .await
+    })
+    .await
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) async fn control_ordinary_initial_bootstrap_request_using<F, Fut>(
+    selection: &crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    request: &ValidatedWorldDispatchRequestV1,
+    deliver: F,
+) -> Result<Option<WorldDispatchOutcomeV1>>
+where
+    F: FnOnce(transport_api_types::OrdinaryInitialBootstrapControlRequestV1) -> Fut,
+    Fut: std::future::Future<
+        Output = Result<transport_api_types::OrdinaryInitialBootstrapControlResponseV1>,
+    >,
+{
+    use transport_api_types::OrdinaryInitialBootstrapControlDeliveryV1 as Delivery;
+    if let Some(pending) = RetainedWorkerRuntime
+        .prepare_initial_bootstrap_control_before_receiver_v1(selection, request)?
+    {
+        if request.action == WorldDispatchActionV1::StopWorldWorker {
+            anyhow::bail!("refused_transport: Stop accepted pending closeout; original receiver and checked physical retirement remain unconfirmed");
+        }
+        let exact = resolve_orchestrator_world_dispatch_exact_target_v1(request)?;
+        let target = world_dispatch_outcome_target_identity_v1(request, exact.as_ref());
+        anyhow::ensure!(
+            target == pending.target_participant_id,
+            "initial pending control result target differs"
+        );
+        return Ok(Some(with_cancel_world_work_evidence_v1(build_cancel_world_work_outcome_v1(request,
+            request.orchestration_session_id.clone(), request.caller_participant_id.clone(), target,
+            request.target_backend_id.clone(), request.world_id.clone(), request.world_generation,
+            CancelWorldWorkTerminalStateV1::CancelAcceptedPendingCloseout, exact, None, None,
+            "Initial cancellation intent is admitted; receiver delivery and physical closeout remain unconfirmed.".into()),
+            Some(pending.control_request_id), None)));
+    }
+    let Some(wire) = RetainedWorkerRuntime
+        .prepare_initial_bootstrap_control_if_pending_v1(selection, request)?
+    else {
+        return Ok(None);
+    };
+    // Historical Source truth can answer after a Root restart. This is a fresh
+    // operation-authorized read, never another delivery or native attempt.
+    let (stored, _) = RetainedWorkerRuntime.read_initial_bootstrap_retirement_for_control_v1(
+        selection,
+        &wire,
+        &request.caller_participant_id,
+    )?;
+    // Source publication and all original guards have finalized before IPC.
+    let response = if let Some(report) = stored {
+        Ok(
+            transport_api_types::OrdinaryInitialBootstrapControlResponseV1 {
+                schema_version: 1,
+                delivery: Delivery::Retired {
+                    report: Box::new(report),
+                },
+            },
+        )
+    } else {
+        deliver(wire.clone()).await
+    };
+    if let Ok(response) = &response {
+        anyhow::ensure!(
+            response.schema_version == 1,
+            "invalid initial control response schema"
+        );
+    }
+    if let Ok(transport_api_types::OrdinaryInitialBootstrapControlResponseV1 {
+        delivery: Delivery::Retired { report },
+        ..
+    }) = &response
+    {
+        anyhow::ensure!(
+            report.matches_control(&wire),
+            "recovery_failed: initial closeout changed original receiver"
+        );
+        RetainedWorkerRuntime
+            .record_initial_bootstrap_retirement_v1(selection, report)
+            .map_err(|_| {
+                anyhow::anyhow!(
+                    "recovery_failed: actual initial retirement could not join its original Source"
+                )
+            })?;
+        let (_, active_host) = RetainedWorkerRuntime
+            .read_initial_bootstrap_retirement_for_control_v1(
+                selection,
+                &wire,
+                &request.caller_participant_id,
+            )?;
+        if request.action == WorldDispatchActionV1::StopWorldWorker {
+            anyhow::ensure!(active_host, "recovery_failed: worker is retired but current Host observation changed; no session closeout is asserted");
+            return Ok(Some(WorldDispatchOutcomeV1::StopWorldWorker(StopWorldWorkerOutcomeV1 {
+                request_id: request.request_id.clone(), orchestration_session_id: request.orchestration_session_id.clone(),
+                action: request.action, mode: request.mode, orchestrator_participant_id: request.caller_participant_id.clone(),
+                target_participant_id: wire.activation.retained_participant_id.clone(), target_backend_id: request.target_backend_id.clone(),
+                world_id: request.world_id.clone(), world_generation: request.world_generation,
+                closeout: crate::execution::agent_runtime::dispatch_contract::RetainedWorkerStopCloseoutV1 {
+                    participant_state: AgentRuntimeSessionState::Stopped,
+                    session_state: crate::execution::agent_runtime::orchestration_session::OrchestrationSessionState::Active,
+                }, summary: "Initial worker retired after checked bootstrap closeout.".into(),
+            })));
+        }
+        let exact = resolve_orchestrator_world_dispatch_exact_target_v1(request)?;
+        let target = world_dispatch_outcome_target_identity_v1(request, exact.as_ref());
+        return Ok(Some(with_cancel_world_work_evidence_v1(build_cancel_world_work_outcome_v1(request,
+            request.orchestration_session_id.clone(), request.caller_participant_id.clone(), target,
+            request.target_backend_id.clone(), request.world_id.clone(), request.world_generation,
+            CancelWorldWorkTerminalStateV1::AlreadyTerminal, exact,
+            Some(RetainedWorkerCancelCloseoutV1 { participant_state: Some(AgentRuntimeSessionState::Stopped),
+                session_state: active_host.then_some(crate::execution::agent_runtime::orchestration_session::OrchestrationSessionState::Active) }),
+            None, "Initial worker has checked retirement; no native input was resent.".into()), Some(wire.control_request_id), None)));
+    }
+    if request.action == WorldDispatchActionV1::StopWorldWorker {
+        // The legacy Stop result asserts Stopped. A delivery receipt, including
+        // an invoked SDK handle, cannot populate that result before retirement.
+        anyhow::bail!("refused_transport: Stop accepted pending closeout; initial bootstrap control delivery {}; checked physical retirement remains unconfirmed",
+            response.as_ref().map(|value| format!("{:?}", value.delivery)).unwrap_or_else(|_| "unknown".into()));
+    }
+    let exact = resolve_orchestrator_world_dispatch_exact_target_v1(request)?;
+    let target = world_dispatch_outcome_target_identity_v1(request, exact.as_ref());
+    let (state, summary) = match response {
+        Ok(response) => match response.delivery {
+            Delivery::Latched => (CancelWorldWorkTerminalStateV1::CancelAcceptedPendingCloseout,
+                "Initial receiver cancellation is latched by its actual owner; native settlement and retirement remain unconfirmed."),
+            Delivery::Delivered => (CancelWorldWorkTerminalStateV1::CancelAcceptedPendingCloseout,
+                "Initial receiver cancellation reached its SDK handle; native settlement and retirement remain unconfirmed."),
+            Delivery::UnknownOwner => (CancelWorldWorkTerminalStateV1::OwnerUnreachable,
+                "Initial receiver owner is unknown; no native absence or retirement is established."),
+            Delivery::Retired { .. } => unreachable!("checked initial retirement handled above"),
+        },
+        Err(_) => (CancelWorldWorkTerminalStateV1::OwnerUnreachable,
+            "Initial receiver cancellation delivery is unknown; no native absence or retirement is established."),
+    };
+    Ok(Some(with_cancel_world_work_evidence_v1(
+        build_cancel_world_work_outcome_v1(
+            request,
+            request.orchestration_session_id.clone(),
+            request.caller_participant_id.clone(),
+            target,
+            request.target_backend_id.clone(),
+            request.world_id.clone(),
+            request.world_generation,
+            state,
+            exact,
+            None,
+            None,
+            summary.into(),
+        ),
+        Some(wire.control_request_id),
+        None,
+    )))
+}
+
+/// Cancel initial or accepted ordinary work through its own exact source grant.
+/// Delivery is not checked native terminal acknowledgement.
+#[cfg(target_os = "linux")]
+pub(crate) async fn cancel_ordinary_world_work_request(
+    selection: &crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    request: WorldDispatchRequestV1,
+) -> Result<WorldDispatchOutcomeV1> {
+    let validated = request.clone().validate()?;
+    anyhow::ensure!(
+        validated.action == WorldDispatchActionV1::CancelWorldWork,
+        "ordinary cancel route requires Cancel"
+    );
+    if let Some(outcome) = control_ordinary_initial_bootstrap_request(selection, &validated).await?
+    {
+        return Ok(outcome);
+    }
+    cancel_ordinary_world_work_request_using(selection, request, |wire| async move {
+        let response = connect_world_agent_client()?
+            .cancel_ordinary_accepted_work(&wire)
+            .await?;
+        Ok(transport_api_types::ExecuteCancelResponseV1 {
+            schema_version: 1,
+            delivered: response.delivered,
+        })
+    })
+    .await
+}
+
+// A single delivery boundary keeps the ordinary owner and lease unchanged in
+// source fixtures. Production above always selects the authenticated Root UDS
+// for retained work; injected fixture delivery is not installed-service proof.
+#[cfg(target_os = "linux")]
+pub(crate) async fn cancel_ordinary_world_work_request_using<F, Fut>(
+    selection: &crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    request: WorldDispatchRequestV1,
+    deliver: F,
+) -> Result<WorldDispatchOutcomeV1>
+where
+    F: FnOnce(transport_api_types::OrdinaryAcceptedWorkCancelRequestV1) -> Fut,
+    Fut: std::future::Future<Output = Result<transport_api_types::ExecuteCancelResponseV1>>,
+{
+    use crate::execution::agent_runtime::world_work_execution_supervisor::OrdinaryCancellationDecisionV1;
+    let request = request.validate()?;
+    if request.action != WorldDispatchActionV1::CancelWorldWork {
+        anyhow::bail!("ordinary cancel route requires Cancel");
+    }
+    let exact = resolve_orchestrator_world_dispatch_exact_target_v1(&request)?;
+    let target = world_dispatch_outcome_target_identity_v1(&request, exact.as_ref());
+    let build = |state, summary| {
+        build_cancel_world_work_outcome_v1(
+            &request,
+            request.orchestration_session_id.clone(),
+            request.caller_participant_id.clone(),
+            target.clone(),
+            request.target_backend_id.clone(),
+            request.world_id.clone(),
+            request.world_generation,
+            state,
+            exact.clone(),
+            None,
+            None,
+            summary,
+        )
+    };
+    let decision = match WorldWorkExecutionSupervisor::accept_or_join_ordinary_cancellation(
+        selection, &request,
+    ) {
+        Ok(decision) => decision,
+        Err(error) => {
+            let message = error.to_string();
+            if let Some(state) = cancel_world_work_state_from_resolution_message(&message) {
+                return Ok(build(
+                    state,
+                    format!("ordinary cancellation refused before transport: {message}"),
+                ));
+            }
+            return Err(error);
+        }
+    };
+    let prepared = match decision {
+        OrdinaryCancellationDecisionV1::NoActiveCancelableWork => return Ok(build(CancelWorldWorkTerminalStateV1::NoActiveCancelableWork,
+            "ordinary retained target has no accepted nonterminal work; worker lifecycle is unchanged".into())),
+        OrdinaryCancellationDecisionV1::AmbiguousTarget => return Ok(build(CancelWorldWorkTerminalStateV1::AmbiguousTarget,
+            "ordinary cancellation requires one exact accepted receipt; multiple nonterminal targets remain".into())),
+        OrdinaryCancellationDecisionV1::OwnerUnreachable(reason) => return Ok(build(CancelWorldWorkTerminalStateV1::OwnerUnreachable, reason.into())),
+        OrdinaryCancellationDecisionV1::Accepted(prepared) => prepared,
+    };
+    let (supervisor, acceptance, cancellation) = prepared.into_parts();
+    let cancel_id = cancellation.accepted_cancel_request_id.clone();
+    if let Some(terminal) = &cancellation.terminal {
+        return Ok(with_cancel_world_work_evidence_v1(
+            build(
+                CancelWorldWorkTerminalStateV1::AlreadyTerminal,
+                "exact ordinary work is already terminal; no cancellation transport was sent"
+                    .into(),
+            ),
+            cancel_id,
+            Some(terminal),
+        ));
+    }
+    let observe = || {
+        selection
+            .held_authority()
+            .observe_existing_ordinary_world_work_v1(&acceptance)
+            .map_err(|error| {
+                anyhow::anyhow!(
+                    "accepted cancellation {} remains unresolved: {error}",
+                    cancel_id.as_deref().unwrap_or("unknown")
+                )
+            })
+    };
+    let Some(delivery_claim_id) = cancellation.delivery_claim_id.as_deref() else {
+        let observation = observe()?;
+        let state = if observation.terminal.is_some() {
+            CancelWorldWorkTerminalStateV1::AlreadyTerminal
+        } else {
+            CancelWorldWorkTerminalStateV1::CancelAcceptedPendingCloseout
+        };
+        return Ok(with_cancel_world_work_evidence_v1(build(state,
+            "ordinary cancellation joined its original durable request; no duplicate transport was sent".into()), cancel_id, observation.terminal.as_ref()));
+    };
+    let payload = match &request.payload {
+        WorldDispatchPayloadV1::WorkerCancel(payload) => payload,
+        _ => anyhow::bail!("ordinary cancel payload changed family"),
+    };
+    // The source/Root mutation scope has ended. No lock survives this IPC.
+    let wire = transport_api_types::OrdinaryAcceptedWorkCancelRequestV1 {
+        schema_version: 1,
+        authority_store_id: acceptance.authority_store_id.clone(),
+        orchestration_session_id: acceptance.orchestration_session_id.clone(),
+        acceptance_record_id: acceptance.acceptance_record_id.clone(),
+        cancel_request_id: cancel_id
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("ordinary cancellation original request absent"))?,
+        delivery_claim_id: delivery_claim_id.into(),
+        runtime_submission_id: cancellation.execution_claim.runtime_submission_id.clone(),
+        target_backend_id: acceptance.target_backend_id.clone(),
+        world_id: acceptance.world_id.clone(),
+        world_generation: acceptance.world_generation,
+        signal: active_ephemeral_cancel_signal(payload).into(),
+        control: transport_api_types::OrdinaryAcceptedWorkCancelControlV1::CancelWork {},
+    };
+    let transport_result = deliver(wire).await;
+    supervisor.record_cancellation_delivery_result(
+        &cancellation.execution_claim,
+        delivery_claim_id,
+        active_ephemeral_cancellation_delivery_result_v1(&transport_result),
+    )?;
+    let delivered = transport_result
+        .as_ref()
+        .is_ok_and(|response| response.delivered);
+    let deadline = Instant::now() + ACTIVE_EPHEMERAL_CANCEL_TERMINAL_WAIT_TIMEOUT;
+    loop {
+        let observation = observe()?;
+        if let Some(terminal) = &observation.terminal {
+            let state = if delivered
+                && world_task_terminal_state_from_exit_code(terminal.exit_code)
+                    == WorldTaskTerminalStateV1::Cancelled
+            {
+                CancelWorldWorkTerminalStateV1::CancelledViaLiveTransport
+            } else {
+                CancelWorldWorkTerminalStateV1::AlreadyTerminal
+            };
+            return Ok(with_cancel_world_work_evidence_v1(build(state,
+                "ordinary cancellation observed exact terminal truth after the service's checked native settlement and gateway disposal".into()), cancel_id, Some(terminal)));
+        }
+        if !delivered {
+            return Ok(with_cancel_world_work_evidence_v1(build(CancelWorldWorkTerminalStateV1::OwnerUnreachable,
+                "ordinary cancellation delivery is unavailable or ambiguous; exact work remains nonterminal".into()), cancel_id, None));
+        }
+        if Instant::now() >= deadline {
+            return Ok(with_cancel_world_work_evidence_v1(build(CancelWorldWorkTerminalStateV1::CancelAcceptedPendingCloseout,
+                "ordinary cancellation was delivered; exact checked terminal closeout remains pending".into()), cancel_id, None));
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+}
+
+/// Read canonical ordinary worker/task facts through one original guarded read.
+/// No executing selection refresh, account acquisition or legacy manifest read.
+#[cfg(target_os = "linux")]
+pub(crate) fn inspect_ordinary_world_worker_request(
+    selection: &crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    request: WorldDispatchRequestV1,
+) -> Result<WorldDispatchOutcomeV1> {
+    use crate::execution::agent_runtime::retained_worker_runtime::{
+        read_ordinary_ephemeral_task_observation_v1, read_ordinary_retained_turn_observation_v1,
+        read_ordinary_retained_worker_from_sources_v1, OrdinaryRetainedWorkerReadV1,
+    };
+    let request = request.validate()?;
+    if request.action != WorldDispatchActionV1::InspectWorldWorker {
+        anyhow::bail!("ordinary inspection requires the Inspect action");
+    }
+    let exact_target = resolve_orchestrator_world_dispatch_exact_target_v1(&request)?;
+
+    selection.with_ordinary_inspection_sources_v1(|context, facts| {
+        let current = &facts.current;
+        let world = current.authority.world_binding.as_ref().ok_or_else(|| anyhow::anyhow!("ordinary inspection current World missing"))?;
+        if context.selections.native.placement != transport_api_types::AgentSelectionPlacementV1::Host
+            || context.selections.requested.placement != transport_api_types::AgentSelectionPlacementV1::World
+            || request.orchestration_session_id != context.orchestration_session_id
+            || request.caller_participant_id != current.caller.participant_id
+            || current.caller.descriptor.backend_id != context.selections.native.backend_id
+            || current.caller.descriptor.agent_id != context.selections.native.realized_agent_id
+            || request.target_backend_id != context.selections.requested.backend_id
+            || request.world_id != world.world_id || request.world_generation != world.world_generation
+        { anyhow::bail!("ordinary inspection original/current caller/selection/World differs"); }
+        let home = selection.held_authority().bootstrap_home();
+        let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
+            Path::new(&context.workspace_binding.workspace_root.physical_path), &home)?;
+        enforce_world_dispatch_read_or_effect_policy(&request, &policy)?;
+        facts.with_retained_sources(|snapshot, admission, keys, supervisor| -> Result<WorldDispatchOutcomeV1> {
+            if request.mode == WorldDispatchModeV1::Ephemeral {
+                if current.authority.lifecycle_posture != crate::execution::agent_runtime::host_session_authority::schema::HostSessionPostureV1::ActiveAttached {
+                    anyhow::bail!("ordinary ephemeral inspection requires current active-attached authority");
+                }
+                let observation = read_ordinary_ephemeral_task_observation_v1(snapshot, supervisor, &request, &context.selections.native.backend_id)?;
+                let task = request.task_run_id.as_deref().ok_or_else(|| anyhow::anyhow!("ordinary ephemeral inspection task missing"))?;
+                let mut outcome = build_inspect_world_worker_outcome_v1(&request, request.orchestration_session_id.clone(),
+                    request.caller_participant_id.clone(), task.into(), request.target_backend_id.clone(),
+                    world.world_id.clone(), world.world_generation, None, None, None,
+                    format!("accepted task {task} has exact durable supervisor evidence; native process liveness requires its own evidence"));
+                if let WorldDispatchOutcomeV1::InspectWorldWorker(inspect) = &mut outcome {
+                    inspect.ephemeral_snapshot = Some(ActiveEphemeralTaskInspectSnapshotV1 {
+                        // Live means accepted logical work remains nonterminal.
+                        // A durable acceptance does not prove a running process.
+                        state: ActiveTaskStateV1::Accepted, authoritative_live: true, cancel_supported: true,
+                    });
+                }
+                return Ok(project_active_ephemeral_inspect_outcome_v1(outcome, observation.terminal.as_ref()));
+            }
+            let target = match &exact_target {
+                Some(WorldDispatchControlTargetV1::PendingRetainedAdmission { target_participant_id, .. }
+                    | WorldDispatchControlTargetV1::AcceptedRetainedTurn { target_participant_id, .. }) => target_participant_id.as_str(),
+                None => request.target_participant_id.as_deref().ok_or_else(|| anyhow::anyhow!("ordinary retained inspection target missing"))?,
+            };
+            let row = read_ordinary_retained_worker_from_sources_v1(snapshot, admission, keys,
+                &request.orchestration_session_id, world, target, &ordinary_start_selection_carrier(selection)?).map_err(|error| anyhow::anyhow!("{error}"))?;
+            let registration = row.inspection_registration();
+            if let Some(registration) = registration {
+                let graph = facts.retained_target_graph(&registration.registration_id, target).map_err(|error| anyhow::anyhow!("{error}"))?;
+                row.validate_inspected_graph(&graph).map_err(|error| anyhow::anyhow!("{error}"))?;
+                let expected_kind = match context.selections.requested.selection.harness {
+                    transport_api_types::AgentHarnessFamilyV1::Codex => crate::execution::agent_runtime::host_session_authority::schema::RuntimeBackendKindV1::Codex,
+                    transport_api_types::AgentHarnessFamilyV1::ClaudeCode => crate::execution::agent_runtime::host_session_authority::schema::RuntimeBackendKindV1::ClaudeCode,
+                };
+                if graph.descriptor.agent_id != context.selections.requested.realized_agent_id || graph.descriptor.backend_kind != expected_kind {
+                    anyhow::bail!("ordinary inspection R0 requested role differs");
+                }
+            }
+            let (issuer, completed, family, pending) = match &row {
+                OrdinaryRetainedWorkerReadV1::Spawn { record, native_bootstrap_completed, .. } => (
+                    record.issuer_request_id.as_str(), *native_bootstrap_completed, "Spawn",
+                    Some(project_pending_admission_inspect_projection_v1(record))),
+                OrdinaryRetainedWorkerReadV1::Fork { record, native_bootstrap_completed, .. } => {
+                    if record.start != ordinary_start_selection_carrier(selection)? {
+                        anyhow::bail!("ordinary inspection Fork original Start differs");
+                    }
+                    (record.activation.request_id.as_str(), *native_bootstrap_completed, "Fork", None)
+                }
+            };
+            if let Some(WorldDispatchControlTargetV1::PendingRetainedAdmission { issuer_request_id, target_participant_id }) = &exact_target {
+                if issuer_request_id != issuer || target_participant_id != target { anyhow::bail!("ordinary inspection exact admission identity differs"); }
+            }
+            let initial_retired = match &row {
+                OrdinaryRetainedWorkerReadV1::Spawn { initial_control, .. } | OrdinaryRetainedWorkerReadV1::Fork { initial_control, .. } =>
+                    initial_control.as_ref().is_some_and(|control| control.retirement_id.is_some()),
+            };
+            let summary = format!("retained {family} worker {target}: R0 {}, native bootstrap {}; current liveness requires its own evidence",
+                if registration.is_some() { "registered" } else { "pending" },
+                if completed { "checked complete" } else if initial_retired { "retired before completion" } else { "unresolved" });
+            let mut outcome = build_inspect_world_worker_outcome_v1(&request, request.orchestration_session_id.clone(),
+                request.caller_participant_id.clone(), target.to_owned(), request.target_backend_id.clone(),
+                world.world_id.clone(), world.world_generation, exact_target.clone(), None, pending, summary);
+            if let WorldDispatchOutcomeV1::InspectWorldWorker(inspect) = &mut outcome {
+                inspect.stop_snapshot = crate::execution::agent_runtime::retained_worker_runtime::read_ordinary_retained_stop_from_sources_v1(
+                    snapshot, admission, keys, &request.orchestration_session_id, world, target, &ordinary_start_selection_carrier(selection)?)
+                    .map_err(|error| anyhow::anyhow!("{error}"))?;
+                inspect.bootstrap_snapshot = Some(crate::execution::agent_runtime::dispatch_contract::RetainedBootstrapInspectSnapshotV1 {
+                    schema_version: 1,
+                    bootstrap_kind: match &row {
+                        OrdinaryRetainedWorkerReadV1::Spawn { .. } => crate::execution::agent_runtime::dispatch_contract::RetainedBootstrapKindV1::Spawn,
+                        OrdinaryRetainedWorkerReadV1::Fork { .. } => crate::execution::agent_runtime::dispatch_contract::RetainedBootstrapKindV1::Fork,
+                    },
+                    registration_id: registration.map(|registration| registration.registration_id.clone()),
+                    native_bootstrap_completed: completed,
+                    initial_control: match &row {
+                        OrdinaryRetainedWorkerReadV1::Spawn { initial_control, .. }
+                        | OrdinaryRetainedWorkerReadV1::Fork { initial_control, .. } => initial_control.clone(),
+                    },
+                });
+            }
+            if let Some(exact @ WorldDispatchControlTargetV1::AcceptedRetainedTurn { .. }) = &exact_target {
+                if registration.is_none() { anyhow::bail!("ordinary inspection exact accepted turn has no R0 registration"); }
+                let observation = read_ordinary_retained_turn_observation_v1(snapshot, supervisor, &request,
+                    &context.selections.native.backend_id, exact)?;
+                Ok(match &observation.terminal {
+                    Some(terminal) => with_inspect_world_work_terminal_evidence_v1(outcome, terminal), None => outcome,
+                })
+            } else { Ok(outcome) }
+        }).map_err(|error| anyhow::anyhow!("{error}"))?
+    })
+}
+
 #[cfg(target_os = "linux")]
 async fn inspect_world_worker(
     prepared: PreparedOrchestratorWorldDispatch,
@@ -8652,6 +13318,24 @@ fn enforce_world_dispatch_steering_policy(
     prepared: &PreparedOrchestratorWorldDispatch,
     base_policy: &Policy,
 ) -> Result<()> {
+    enforce_world_dispatch_read_or_effect_policy(&prepared.request, base_policy)?;
+    let steering_policy = base_policy.world_dispatch_policy();
+
+    if steering_policy.same_session_only {
+        validate_authoritative_session_boundary(prepared)?;
+    }
+    if steering_policy.same_world_binding_only {
+        validate_authoritative_world_binding_for_steering(prepared)?;
+    }
+
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+pub(crate) fn enforce_world_dispatch_read_or_effect_policy(
+    request: &ValidatedWorldDispatchRequestV1,
+    base_policy: &Policy,
+) -> Result<()> {
     let steering_policy = base_policy.world_dispatch_policy();
     if !steering_policy.enabled {
         return Err(steering_policy_denial(
@@ -8662,48 +13346,38 @@ fn enforce_world_dispatch_steering_policy(
     if !steering_policy
         .allowed_actions
         .iter()
-        .any(|value| value == prepared.request.action.as_str())
+        .any(|value| value == request.action.as_str())
     {
         return Err(steering_policy_denial(
             WorldDispatchSteeringDenialV1::ActionNotAllowed,
             format!(
                 "effective policy does not allow {}",
-                prepared.request.action.as_str()
+                request.action.as_str()
             ),
         ));
     }
     if !steering_policy
         .allowed_modes
         .iter()
-        .any(|value| value == prepared.request.mode.as_str())
+        .any(|value| value == request.mode.as_str())
     {
         return Err(steering_policy_denial(
             WorldDispatchSteeringDenialV1::ModeNotAllowed,
-            format!(
-                "effective policy does not allow {}",
-                prepared.request.mode.as_str()
-            ),
+            format!("effective policy does not allow {}", request.mode.as_str()),
         ));
     }
     if !steering_policy
         .allowed_backends
         .iter()
-        .any(|value| value == &prepared.request.target_backend_id)
+        .any(|value| value == &request.target_backend_id)
     {
         return Err(steering_policy_denial(
             WorldDispatchSteeringDenialV1::BackendNotAllowed,
             format!(
                 "effective policy does not allow backend {}",
-                prepared.request.target_backend_id
+                request.target_backend_id
             ),
         ));
-    }
-
-    if steering_policy.same_session_only {
-        validate_authoritative_session_boundary(prepared)?;
-    }
-    if steering_policy.same_world_binding_only {
-        validate_authoritative_world_binding_for_steering(prepared)?;
     }
 
     Ok(())
@@ -9007,7 +13681,7 @@ fn build_world_work_acceptance_record(
 }
 
 #[cfg(target_os = "linux")]
-fn validate_task_submission_against_proposal(
+pub(crate) fn validate_task_submission_against_proposal(
     execute_request: &transport_api_types::ExecuteRequest,
     proposal: &WorldWorkAcceptanceProposalV1,
 ) -> Result<()> {
@@ -9050,6 +13724,26 @@ fn validate_retained_submission_against_proposal(
 ) -> Result<()> {
     proposal.validate()?;
     request.validate().map_err(anyhow::Error::msg)?;
+    validate_retained_submission_identity(request, proposal)
+}
+
+#[cfg(target_os = "linux")]
+fn validate_ordinary_retained_submission_against_proposal(
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
+    proposal: &WorldWorkAcceptanceProposalV1,
+) -> Result<()> {
+    proposal.validate()?;
+    request
+        .validate_ordinary_representation()
+        .map_err(anyhow::Error::msg)?;
+    validate_retained_submission_identity(request, proposal)
+}
+
+#[cfg(target_os = "linux")]
+fn validate_retained_submission_identity(
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
+    proposal: &WorldWorkAcceptanceProposalV1,
+) -> Result<()> {
     if request.acceptance_context.as_ref() != Some(&proposal.acceptance_context) {
         anyhow::bail!("B1 retained request context changed before runtime submission");
     }
@@ -9145,6 +13839,56 @@ where
         anyhow::bail!("continue_world_worker stream emitted repeated Start frame");
     }
     validate_retained_submission_against_proposal(request, proposal)?;
+    let Some(transport_api_types::ExecuteStreamFrame::Start {
+        frame_identity,
+        span_id,
+    }) = frame
+    else {
+        anyhow::bail!("retained B1 acceptance requires a preterminal Start frame");
+    };
+    frame_identity.validate().map_err(anyhow::Error::msg)?;
+    if frame_identity.frame_sequence != 1 {
+        anyhow::bail!("retained B1 acceptance requires Start frame sequence 1");
+    }
+    if span_id.is_empty() || span_id.trim() != span_id {
+        anyhow::bail!("retained B1 Start frame omitted runtime submission identity");
+    }
+    let ProposedWorldWorkIdentityV1::RetainedTurn {
+        active_run_id,
+        message_id,
+        target_participant_id,
+    } = &proposal.proposed_work
+    else {
+        anyhow::bail!("retained B1 acknowledgement joined task proposal");
+    };
+    persist(build_world_work_acceptance_record(
+        proposal,
+        AcceptedWorldWorkIdentityV1::RetainedTurn {
+            active_run_id: active_run_id.clone(),
+            message_id: message_id.clone(),
+            target_participant_id: target_participant_id.clone(),
+        },
+        frame_identity,
+        span_id.clone(),
+    ))?;
+    Ok(span_id.clone())
+}
+
+#[cfg(target_os = "linux")]
+fn consume_ordinary_retained_acceptance_acknowledgement<F>(
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
+    proposal: &WorldWorkAcceptanceProposalV1,
+    frame: Option<&transport_api_types::ExecuteStreamFrame>,
+    already_accepted: bool,
+    persist: F,
+) -> Result<String>
+where
+    F: FnOnce(WorldWorkAcceptanceRecordV1) -> Result<()>,
+{
+    if already_accepted {
+        anyhow::bail!("continue_world_worker stream emitted repeated Start frame");
+    }
+    validate_ordinary_retained_submission_against_proposal(request, proposal)?;
     let Some(transport_api_types::ExecuteStreamFrame::Start {
         frame_identity,
         span_id,
@@ -9502,6 +14246,44 @@ fn build_continue_world_worker_submit_request_from_authenticated_carrier(
         acceptance_context: None,
         policy_snapshot_carrier: Some(carrier.clone()),
     };
+    Ok(request)
+}
+
+#[cfg(target_os = "linux")]
+fn build_ordinary_continue_world_worker_submit_request(
+    prepared: &PreparedOrchestratorWorldDispatch,
+    carrier: transport_api_types::DispatchPolicySnapshotCarrierV1,
+    acceptance_context: Option<transport_api_types::WorldWorkAcceptanceContextV1>,
+) -> Result<transport_api_types::MemberTurnSubmitRequestV1> {
+    carrier
+        .validate_ordinary_representation()
+        .map_err(anyhow::Error::msg)?;
+    let authority = prepared.b_owned_authority.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("authenticated E2 retained carrier requires B-owned authority")
+    })?;
+    let target = authority.retained_target.as_ref().ok_or_else(|| {
+        anyhow::anyhow!(
+            "invalid_dispatch_target: ordinary continue_world_worker requires exact canonical retained target"
+        )
+    })?;
+    let request = transport_api_types::MemberTurnSubmitRequestV1 {
+        schema_version: 1,
+        orchestration_session_id: authority.orchestration_session_id.clone(),
+        participant_id: target.participant_id.clone(),
+        orchestrator_participant_id: authority.caller_participant_id.clone(),
+        backend_id: target.backend_id.clone(),
+        run_id: prepared.request.request_id.clone(),
+        world_id: authority.world_id.clone(),
+        world_generation: authority.world_generation,
+        prompt: render_continue_world_worker_transport_prompt(&prepared.request.payload)?,
+        acceptance_context,
+        policy_snapshot_carrier: Some(carrier),
+    };
+    if request.acceptance_context.is_some() {
+        request
+            .validate_ordinary_representation()
+            .map_err(anyhow::Error::msg)?;
+    }
     Ok(request)
 }
 
@@ -9894,18 +14676,19 @@ fn publish_e2_accepted_work(
     acceptance: &WorldWorkAcceptanceRecordV1,
     claim: &crate::execution::agent_runtime::world_work_execution_supervisor::WorldWorkExecutionClaimV1,
 ) -> Result<()> {
-    publish_accepted_work_commitment(
-        &context.authority,
-        AcceptedWorkPolicyCommitmentInputV1 {
-            idempotency_key: context.idempotency_key.clone(),
-            acceptance: acceptance.clone(),
-            execution_claim: claim.clone(),
-            applied_patch: context.applied_patch.clone(),
-            policy_snapshot: context.policy_snapshot.clone(),
-            reason: context.reason.clone(),
-            retained_worker_cap_ref: context.retained_worker_cap_ref.clone(),
-        },
-    )
+    let input = AcceptedWorkPolicyCommitmentInputV1 {
+        idempotency_key: context.idempotency_key.clone(),
+        acceptance: acceptance.clone(),
+        execution_claim: claim.clone(),
+        applied_patch: context.applied_patch.clone(),
+        policy_snapshot: context.policy_snapshot.clone(),
+        reason: context.reason.clone(),
+        retained_worker_cap_ref: context.retained_worker_cap_ref.clone(),
+    };
+    match context.ordinary.as_ref() {
+        Some(proof) => crate::execution::agent_runtime::dispatch_policy_commitment::publish_ordinary_accepted_work_commitment(proof, input),
+        None => publish_accepted_work_commitment(&context.authority, input),
+    }
     .map(|_| ())
     .map_err(|error| anyhow::anyhow!(error.to_string()))
 }
@@ -9932,12 +14715,19 @@ async fn observe_run_world_task_stream(
     use transport_api_types::{ExecuteCancelRequestV1, ExecuteStreamFrame};
 
     validate_task_submission_against_proposal(&execute_request, acceptance_proposal)?;
-    let response = client
-        .execute_stream(execute_request.clone())
-        .await
-        .map_err(|err| {
-            anyhow::anyhow!("failed to launch run_world_task over world member dispatch: {err:#}")
-        })?;
+    let execute_result = if execute_request.ordinary_start_selection.is_some() {
+        client
+            .execute_ordinary_member_stream(execute_request.clone())
+            .await
+    } else {
+        client
+            .execute_stream(execute_request.clone())
+            .await
+            .map(|response| response.map(|body| body.boxed_unsync()))
+    };
+    let response = execute_result.map_err(|err| {
+        anyhow::anyhow!("failed to launch run_world_task over world member dispatch: {err:#}")
+    })?;
 
     let mut body = std::pin::pin!(response.into_body());
     let mut buffer = Vec::new();
@@ -10247,7 +15037,15 @@ async fn execute_spawn_world_worker_stream(
                 );
             }
         };
-    let response = match client.execute_stream(execute_request).await {
+    let execute_result = if execute_request.ordinary_start_selection.is_some() {
+        client.execute_ordinary_member_stream(execute_request).await
+    } else {
+        client
+            .execute_stream(execute_request)
+            .await
+            .map(|response| response.map(|body| body.boxed_unsync()))
+    };
+    let response = match execute_result {
         Ok(response) => response,
         Err(err) => {
             if let Some((authority, plan, reservation_proof)) = admission_runtime.as_ref() {
@@ -13190,6 +17988,473 @@ fn agent_runtime_session_state_label(state: &AgentRuntimeSessionState) -> &'stat
     }
 }
 
+/// Actual durable intent plus original scope for local observer disposal. This
+/// carries no native-send permission and is neither Clone nor deserializable.
+#[cfg(target_os = "linux")]
+pub(crate) struct PreparedOrdinaryStopDispatchV1 {
+    request: ValidatedWorldDispatchRequestV1,
+    prepared:
+        Box<crate::execution::agent_runtime::retained_worker_runtime::PreparedOrdinaryWorkerStopV1>,
+}
+#[cfg(target_os = "linux")]
+impl PreparedOrdinaryStopDispatchV1 {
+    pub(crate) fn scope(
+        &self,
+    ) -> &crate::execution::agent_runtime::retained_worker_runtime::PreparedOrdinaryWorkerStopV1
+    {
+        &self.prepared
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn prepare_ordinary_world_worker_stop(
+    selection: &crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    request: WorldDispatchRequestV1,
+) -> Result<PreparedOrdinaryStopDispatchV1> {
+    let request = request.validate()?;
+    let prepared = RetainedWorkerRuntime
+        .prepare_ordinary_stop_intent_v1(selection, &request)
+        .map_err(|error| {
+            anyhow::anyhow!("stale_authority: ordinary Stop source refused: {error}")
+        })?;
+    Ok(PreparedOrdinaryStopDispatchV1 {
+        request,
+        prepared: Box::new(prepared),
+    })
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) async fn finish_ordinary_world_worker_stop(
+    selection: &crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    prepared: PreparedOrdinaryStopDispatchV1,
+) -> Result<WorldDispatchOutcomeV1> {
+    let request = prepared.request;
+    // Local ingress/observer disposal is a separate lifetime operation. Capture
+    // fresh original sources and current Stop permission after that await; the
+    // durable immutable intent, not two equal rereads, joins these phases.
+    let mut current = RetainedWorkerRuntime
+        .resume_ordinary_stop_intent_v1(selection, &prepared.prepared)
+        .map_err(|error| {
+            anyhow::anyhow!("stale_authority: ordinary Stop continuation refused: {error}")
+        })?;
+    if current.request() != prepared.prepared.request() {
+        anyhow::bail!("stale_authority: ordinary Stop immutable intent changed during local observer disposal");
+    }
+    let already_closed = current.acknowledgment().is_some();
+    let closed = if already_closed {
+        current
+    } else {
+        if current.active_acceptance_record().is_some() {
+            use crate::execution::agent_runtime::world_work_execution_supervisor::OrdinaryCancellationDecisionV1;
+            let accepted = WorldWorkExecutionSupervisor::accept_or_join_ordinary_stop_cancellation(
+                selection, &current,
+            )
+            .map_err(|_| {
+                anyhow::anyhow!(
+                    "stale_authority: original Stop cancellation grant or sources changed"
+                )
+            })?;
+            let OrdinaryCancellationDecisionV1::Accepted(accepted) = accepted else {
+                anyhow::bail!("refused_transport: Stop accepted pending closeout; original accepted cancellation owner is unavailable");
+            };
+            let (supervisor, acceptance, cancellation) = accepted.into_parts();
+            if let Some(delivery_claim_id) = cancellation.delivery_claim_id.as_ref() {
+                let wire = transport_api_types::OrdinaryAcceptedWorkCancelRequestV1 {
+                    schema_version: 1,
+                    authority_store_id: acceptance.authority_store_id.clone(),
+                    orchestration_session_id: acceptance.orchestration_session_id.clone(),
+                    acceptance_record_id: acceptance.acceptance_record_id.clone(),
+                    cancel_request_id: cancellation.accepted_cancel_request_id.clone().ok_or_else(
+                        || {
+                            anyhow::anyhow!(
+                                "recovery_failed: original Stop cancellation request absent"
+                            )
+                        },
+                    )?,
+                    delivery_claim_id: delivery_claim_id.clone(),
+                    runtime_submission_id: cancellation
+                        .execution_claim
+                        .runtime_submission_id
+                        .clone(),
+                    target_backend_id: acceptance.target_backend_id.clone(),
+                    world_id: acceptance.world_id.clone(),
+                    world_generation: acceptance.world_generation,
+                    signal: "INT".into(),
+                    control: transport_api_types::OrdinaryAcceptedWorkCancelControlV1::StopWorker {
+                        stop: Box::new(current.request().clone()),
+                    },
+                };
+                // The original source/lease publication has fully finalized;
+                // no Root/member mutex crosses this transport or terminal wait.
+                let result = match connect_world_agent_client() {
+                    Ok(client) => {
+                        client
+                            .cancel_ordinary_accepted_work(&wire)
+                            .await
+                            .map(|response| transport_api_types::ExecuteCancelResponseV1 {
+                                schema_version: 1,
+                                delivered: response.delivered,
+                            })
+                    }
+                    Err(error) => Err(error),
+                };
+                supervisor.record_cancellation_delivery_result(
+                    &cancellation.execution_claim,
+                    delivery_claim_id,
+                    active_ephemeral_cancellation_delivery_result_v1(&result),
+                )?;
+            }
+            let deadline = Instant::now() + ACTIVE_EPHEMERAL_CANCEL_TERMINAL_WAIT_TIMEOUT;
+            loop {
+                let observed = selection.held_authority().observe_existing_ordinary_world_work_v1(&acceptance)
+                    .map_err(|_| anyhow::anyhow!("recovery_failed: Stop original accepted terminal observation is unresolved"))?;
+                if observed.terminal.is_some() {
+                    break;
+                }
+                if Instant::now() >= deadline {
+                    anyhow::bail!("refused_transport: Stop accepted pending closeout; exact checked accepted terminal remains unresolved");
+                }
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+            current = RetainedWorkerRuntime
+                .resume_ordinary_stop_intent_v1(selection, &prepared.prepared)
+                .map_err(|_| {
+                    anyhow::anyhow!(
+                        "stale_authority: Stop sources changed after accepted-work cleanup"
+                    )
+                })?;
+            anyhow::ensure!(
+                current.request() == prepared.prepared.request()
+                    && current.active_acceptance_record().is_none(),
+                "recovery_failed: Stop original accepted work cut did not close"
+            );
+        }
+        let client = connect_world_agent_client().map_err(|_| {
+            anyhow::anyhow!(
+                "missing_transport: ordinary Stop has no authenticated service endpoint"
+            )
+        })?;
+        let response = client.retire_ordinary_retained_worker(current.request()).await.map_err(|error| {
+            let category = if error.to_string().contains("unsupported_configuration") { "missing_transport" } else { "refused_transport" };
+            anyhow::anyhow!("{category}: Stop accepted pending closeout; authenticated native retirement was not acknowledged")
+        })?;
+        match response.response() {
+            transport_api_types::OrdinaryRetainedWorkerStopResponseV1::Retired { .. } => {}
+            transport_api_types::OrdinaryRetainedWorkerStopResponseV1::NotQuiescent { .. } => {
+                anyhow::bail!(
+                "refused_transport: Stop accepted pending closeout; native owner is not quiescent"
+            )
+            }
+            transport_api_types::OrdinaryRetainedWorkerStopResponseV1::UnknownOwner {} => {
+                anyhow::bail!(
+                "recovery_failed: Stop accepted pending closeout; actual native owner is unknown"
+            )
+            }
+        }
+        RetainedWorkerRuntime.complete_ordinary_stop_v1(selection, &current, response)
+            .map_err(|error| anyhow::anyhow!("recovery_failed: service acknowledged native retirement; durable worker closeout remains unresolved: {error}"))?
+    };
+    // This legacy public result has a session-state field. Populate it only
+    // from an actual current Active Host observation; never infer global World
+    // or controller settlement from retirement of one worker.
+    if !closed.observes_active_controller(&request.caller_participant_id) {
+        anyhow::bail!("recovery_failed: worker closeout is recorded but current Host observation changed; no session closeout is asserted");
+    }
+    Ok(WorldDispatchOutcomeV1::StopWorldWorker(StopWorldWorkerOutcomeV1 {
+        request_id: request.request_id, orchestration_session_id: request.orchestration_session_id,
+        action: request.action, mode: request.mode, orchestrator_participant_id: request.caller_participant_id,
+        target_participant_id: closed.request().target_participant_id.clone(), target_backend_id: request.target_backend_id,
+        world_id: request.world_id, world_generation: request.world_generation,
+        closeout: RetainedWorkerStopCloseoutV1 { participant_state: AgentRuntimeSessionState::Stopped,
+            session_state: crate::execution::agent_runtime::orchestration_session::OrchestrationSessionState::Active },
+        summary: if already_closed { "Retained worker is already stopped.".into() } else { "Retained worker stopped.".into() },
+    }))
+}
+
+#[cfg(target_os = "linux")]
+impl OrdinaryWorldTurnAdmissionV1 {
+    /// Authorize cancellation of this exact admitted turn independently from
+    /// execution/gateway permission. The callback performs only synchronous SDK
+    /// cancellation while original source guards and the Root lock are held.
+    /// No IPC, native launch or authority publication may occur in the callback.
+    /// ```no_run
+    /// # fn checked(value: &substrate_shell::OrdinaryWorldTurnAdmissionV1,
+    /// # request: &transport_api_types::OrdinaryAcceptedWorkCancelRequestV1, uid: u32) -> anyhow::Result<()> {
+    /// let delivered = value.with_ordinary_accepted_cancellation(request, uid, || Ok(false))?;
+    /// # let _ = delivered; Ok(())
+    /// # }
+    /// ```
+    pub fn with_ordinary_accepted_cancellation(
+        &self,
+        request: &transport_api_types::OrdinaryAcceptedWorkCancelRequestV1,
+        peer_uid: u32,
+        cancel: impl FnOnce() -> Result<bool>,
+    ) -> Result<bool> {
+        anyhow::ensure!(
+            self.request
+                .acceptance_context
+                .as_ref()
+                .is_some_and(
+                    |context| context.proposed_acceptance_record_id == request.acceptance_record_id
+                ),
+            "ordinary cancellation changed the actual admitted acceptance"
+        );
+        crate::execution::agent_runtime::world_work_execution_supervisor::with_ordinary_retained_cancel_admission_v1(
+            &self.selection, request, &self.runtime, peer_uid, cancel)
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl OrdinaryWorldExecuteAdmissionV1 {
+    /// Authorize only the ephemeral acceptance held by this actual native owner.
+    /// Original context/HSA/B1/E2/Supervisor guards and the Root lock survive the
+    /// synchronous SDK callback. This never grants execution or gateway access.
+    /// ```no_run
+    /// # fn checked(value: &substrate_shell::OrdinaryWorldExecuteAdmissionV1,
+    /// # request: &transport_api_types::OrdinaryAcceptedWorkCancelRequestV1, uid: u32) -> anyhow::Result<()> {
+    /// let delivered = value.with_ordinary_accepted_cancellation(request, uid, || Ok(false))?;
+    /// # let _ = delivered; Ok(())
+    /// # }
+    /// ```
+    pub fn with_ordinary_accepted_cancellation(
+        &self,
+        request: &transport_api_types::OrdinaryAcceptedWorkCancelRequestV1,
+        peer_uid: u32,
+        cancel: impl FnOnce() -> Result<bool>,
+    ) -> Result<bool> {
+        anyhow::ensure!(
+            self.request
+                .acceptance_context
+                .as_ref()
+                .is_some_and(
+                    |context| context.proposed_acceptance_record_id == request.acceptance_record_id
+                ),
+            "ordinary cancellation changed the actual ephemeral acceptance"
+        );
+        crate::execution::agent_runtime::world_work_execution_supervisor::with_ordinary_ephemeral_cancel_admission_v1(
+            &self.selection, request, &self.runtime, &self.request, peer_uid, cancel)
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl OrdinaryWorldExecuteAdmissionV1 {
+    /// Identity of this original admitted request, for routing control to its
+    /// existing native owner. This boolean supplies no cancellation permission.
+    /// ```no_run
+    /// # fn inspect(value: &substrate_shell::OrdinaryWorldExecuteAdmissionV1) {
+    /// let ephemeral = value.owns_ephemeral_acceptance();
+    /// # let _ = ephemeral;
+    /// # }
+    /// ```
+    pub fn owns_ephemeral_acceptance(&self) -> bool {
+        self.request.acceptance_context.is_some()
+    }
+}
+
+// Reconstruct only a genuinely persisted proposal using the production builder.
+// The exact persisted canonical wire hash must match before this DTO can be sent.
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) fn reconstruct_ordinary_accepted_turn_for_test(
+    store: &AgentRuntimeStateStore,
+    selection: &std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    request_id: &str,
+) -> Result<(
+    transport_api_types::OrdinaryMemberTurnSubmitRequestV1,
+    crate::execution::agent_runtime::state_store::ResolvedWorldWorkRegistryAuthorityV1,
+    crate::execution::agent_runtime::state_store::WorldWorkAcceptanceRecordV1,
+)> {
+    use crate::execution::agent_runtime::state_store::authenticate_ordinary_world_work_session_cut_v1;
+    selection.revalidate()?;
+    let current = selection
+        .held_authority()
+        .resolve_current_exact(selection.original_session_id(), None)
+        .map_err(|error| anyhow::anyhow!("{error}"))?;
+    let world = current
+        .authority
+        .world_binding
+        .clone()
+        .context("fixture current authority omitted World")?;
+    drop(current);
+    let (proposal, record) = {
+        let snapshot = read_existing_accepted_work_authority_snapshot(selection.held_authority())
+            .map_err(|error| anyhow::anyhow!("{error:?}"))?;
+        let cut = authenticate_ordinary_world_work_session_cut_v1(
+            &snapshot,
+            selection.original_session_id(),
+            &world,
+        )?;
+        let proposals = cut
+            .proposals()
+            .iter()
+            .filter(|p| p.acceptance_context.request_id == request_id)
+            .collect::<Vec<_>>();
+        anyhow::ensure!(
+            proposals.len() == 1,
+            "fixture requires one actual accepted proposal"
+        );
+        let proposal = (*proposals[0]).clone();
+        let records = cut
+            .acceptances()
+            .iter()
+            .filter(|r| r.request_id == request_id)
+            .collect::<Vec<_>>();
+        anyhow::ensure!(records.len() == 1, "fixture requires one actual acceptance");
+        let record = (*records[0]).clone();
+        (proposal, record)
+    };
+    let WorldWorkSubmissionIdentityV1::RetainedTurn {
+        validated_dispatch_request: request,
+        ..
+    } = &proposal.submission_identity
+    else {
+        anyhow::bail!("fixture expected actual retained turn");
+    };
+    let inputs = authenticate_ordinary_world_dispatch(selection, request)?;
+    let registry = &inputs.registry_authority;
+    let canonical_proposal = registry
+        .receipt_registry
+        .inspect_world_work_proposal_for_accepted_record(&record)?
+        .context("fixture actual acceptance lost proposal")?;
+    anyhow::ensure!(canonical_proposal == proposal, "fixture proposal changed");
+    let target = registry
+        .retained_target
+        .as_ref()
+        .context("fixture target absent")?;
+    let ResolvedPolicyCommitmentCompatibilityV1::Compatible { cap } =
+        &target.policy_cap_compatibility
+    else {
+        anyhow::bail!("fixture requires genuine immutable cap");
+    };
+    let e2 = resolve_ordinary_e2_dispatch_policy(
+        &inputs,
+        request,
+        transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerTurn {
+            retained_participant_id: target.participant_id.clone(),
+        },
+    )?;
+    let carrier = crate::execution::agent_runtime::dispatch_policy_commitment::resolve_ordinary_retained_turn_policy_material(
+        &inputs.selection, RetainedTurnPolicyResolutionInputV1 {
+            cap: cap.clone(), current_parent_and_turn_patch: e2.validated_policy_snapshot,
+            orchestration_session_id: registry.orchestration_session_id.clone(),
+            caller_participant_id: registry.caller_participant_id.clone(),
+            caller_backend_id: registry.caller_backend_id.clone(),
+            target_backend_id: target.backend_id.clone(), world_id: registry.world_id.clone(),
+            world_generation: registry.world_generation,
+            retained_participant_id: target.participant_id.clone(),
+            active_run_id: request.request_id.clone(),
+            message_id: proposal.acceptance_context.message_id.clone(),
+            turn_patch: request.dispatch_policy_narrowing.clone(),
+        }).map_err(|error| anyhow::anyhow!("{error}"))?.into_carrier();
+    let prepared = PreparedOrchestratorWorldDispatch {
+        store: store.clone(),
+        request: request.clone(),
+        b_owned_authority: Some(inputs.registry_authority.clone()),
+        compatibility: None,
+    };
+    let submit = build_ordinary_continue_world_worker_submit_request(
+        &prepared,
+        carrier,
+        Some(proposal.acceptance_context.clone()),
+    )?;
+    // This joins the actual persisted original canonical wire fingerprint.
+    // Never repair or send a DTO that fails this comparison.
+    validate_ordinary_retained_submission_against_proposal(&submit, &proposal)?;
+    inputs.revalidate()?;
+    Ok((
+        transport_api_types::OrdinaryMemberTurnSubmitRequestV1::from_request(submit)
+            .map_err(anyhow::Error::msg)?,
+        inputs.registry_authority,
+        record,
+    ))
+}
+
+// Test-only current policy recipes are data. The Root backend independently
+// qualifies complete recipes against the actual persisted physical producer.
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) fn ordinary_current_effects_parent_recipes_for_test(
+    selection: &crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+) -> Result<(
+    world_api::WorldSpec,
+    world_api::WorldSpec,
+    world_api::SharedWorldBindingSnapshot,
+)> {
+    selection.revalidate()?;
+    let current = selection
+        .held_authority()
+        .resolve_current_exact(selection.original_session_id(), None)
+        .map_err(|error| anyhow::anyhow!("{error}"))?;
+    let world = current
+        .authority
+        .world_binding
+        .as_ref()
+        .context("current-effects fixture requires current World")?;
+    anyhow::ensure!(
+        current.caller.participant_id == selection.current_participant_id()
+            && selection.current_world_binding()
+                == Some((world.world_id.as_str(), world.world_generation)),
+        "fixture current controller/World changed"
+    );
+    let home = selection.held_authority().bootstrap_home();
+    let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
+        Path::new(selection.workspace_root()),
+        &home,
+    )?;
+    selection.revalidate_requested_account(&policy)?;
+    let network =
+        crate::execution::policy_snapshot::resolve_world_network_policy_for_bootstrap_home(
+            Path::new(selection.workspace_root()),
+            &home,
+            &selection.captured_effective_config(),
+        )?;
+    let hash = format!(
+        "{:x}",
+        Sha256::digest(serde_json::to_vec(&network.snapshot)?)
+    );
+    anyhow::ensure!(
+        hash == current.current_policy.canonical_policy_snapshot_sha256
+            && current.authority.current_policy_revision.as_ref()
+                == Some(&current.current_policy.policy_revision),
+        "fixture parent network policy changed"
+    );
+    let owner = world_api::SharedWorldOwnerSpec {
+        orchestration_session_id: selection.original_session_id().into(),
+        action: world_api::SharedWorldOwnerAction::AttachOrCreate,
+    };
+    let mut parent = crate::execution::policy_snapshot::world_spec_for_network_policy(
+        PathBuf::from(selection.workspace_root()),
+        policy.world_fs_mode,
+        &network,
+    );
+    parent.reuse_mode = world_api::WorldReuseMode::SharedOrchestration(owner.clone());
+    // Exact normal service build_world_spec recipe; the Root owner must match
+    // one complete physical producer commitment, not mix fields between them.
+    let persistent = world_api::WorldSpec {
+        reuse_session: true,
+        reuse_mode: world_api::WorldReuseMode::SharedOrchestration(owner),
+        isolate_network: parent.isolate_network,
+        limits: world_api::ResourceLimits::default(),
+        enable_preload: false,
+        allowed_domains: parent.allowed_domains.clone(),
+        project_dir: parent.project_dir.clone(),
+        always_isolate: true,
+        fs_mode: parent.fs_mode,
+        backend_policy: None,
+    };
+    selection.revalidate()?;
+    Ok((
+        parent,
+        persistent,
+        world_api::SharedWorldBindingSnapshot {
+            orchestration_session_id: selection.original_session_id().into(),
+            world_id: world.world_id.clone(),
+            world_generation: world.world_generation,
+            binding_state: world_api::SharedWorldBindingState::Active,
+        },
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -14402,7 +19667,7 @@ config:
     fn test_e3f_submission_cancel_and_ambiguity_uninstalled_negative_edges() {
         use crate::execution::agent_runtime::host_session_authority::facade::OpenedConfigProjectionHsaAuthorityV1;
         use crate::execution::agent_runtime::host_session_authority::trusted_fs::{
-            HeldE3AgentInventoryRootV1, TrustedWorkspaceRoot,
+            HeldE3AgentInventoryRootV1, HeldE3AgentInventorySourceV1, TrustedWorkspaceRoot,
         };
         use config_projection::{
             AgentConfigProjectionServiceV1, CanonicalDirectoryV1, ConfigProjectionCodecV1,
@@ -14413,7 +19678,6 @@ config:
         use std::os::unix::fs::PermissionsExt;
         use transport_api_types::{InstallBootstrapContextCarrierV1, InstallBootstrapContextV1};
 
-        use crate::execution::agent_inventory::hold_e3_selected_inventory_projection_v1;
         let _env = world_env_guard();
         let _binary = EnvVarGuard::set_path(
             "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
@@ -14437,9 +19701,8 @@ config:
             fs::Permissions::from_mode(0o600),
         )
         .unwrap();
-        write_runtime_inventory_entry(home.path(), "codex-world", AgentExecutionScope::World);
         let workspace = tempdir().unwrap();
-        activate_b_owned_dispatch_authority(
+        let authority = activate_b_owned_dispatch_authority(
             home.path(),
             workspace.path(),
             "sess_dispatch",
@@ -14448,8 +19711,8 @@ config:
             "world-17",
             2,
         );
-        let (_, authority) =
-            seed_routable_e2_spawn_source("req-e3f-input-source", "orch_dispatch", "world-17", 2);
+        // This negative submission fixture needs the real registry parent, not
+        // an admitted E2 worker or a protected E3 selection capability.
         let accepted_home = CanonicalDirectoryV1::capture_linux_from_fd(
             fs::File::open(home.path()).unwrap().as_fd(),
         )
@@ -14494,7 +19757,23 @@ config:
         );
 
         fs::create_dir_all(workspace.path().join(".substrate")).unwrap();
+        fs::set_permissions(
+            workspace.path().join(".substrate"),
+            fs::Permissions::from_mode(0o700),
+        )
+        .unwrap();
         fs::write(workspace.path().join(".substrate/workspace.yaml"), "{}\n").unwrap();
+        fs::set_permissions(
+            workspace.path().join(".substrate/workspace.yaml"),
+            fs::Permissions::from_mode(0o600),
+        )
+        .unwrap();
+        fs::create_dir(home.path().join("agents")).unwrap();
+        fs::set_permissions(
+            home.path().join("agents"),
+            fs::Permissions::from_mode(0o700),
+        )
+        .unwrap();
         fs::write(home.path().join("config.yaml"), "llm: {enabled: true, gateway: {enabled: true, mode: in_world}, routing: {default_backend: 'cli:codex-world'}}\nagents: {enabled: true, defaults: {execution: {scope: world}, cli: {mode: persistent}}}\nworld: {enabled: true}\n").unwrap();
         fs::set_permissions(
             home.path().join("config.yaml"),
@@ -14519,6 +19798,7 @@ config:
       api: null
       capabilities:
         session_start: true
+      selection: {harness: codex, provider: openai, connection_profile: "built_in:codex-subscription", model: codex-mini-latest}
       runtime_projection: null
     world:
       enabled: true
@@ -14536,8 +19816,8 @@ config:
         event_stream: true
         llm: true
         mcp_client: false
+      selection: {harness: codex, provider: openai, connection_profile: "built_in:codex-subscription", model: codex-mini-latest}
       runtime_projection:
-        model: codex
         mcp_servers: []
         features: []
 "#,
@@ -14575,14 +19855,88 @@ config:
         .unwrap();
         let global = HeldE3AgentInventoryRootV1::from_global(&trusted_home).unwrap();
         let local = HeldE3AgentInventoryRootV1::from_workspace(&trusted_workspace).unwrap();
-        let selection = hold_e3_selected_inventory_projection_v1(
+        let selected = HeldE3AgentInventorySourceV1::open(&global, "agents/codex.yaml").unwrap();
+        let ordinary_config = config_model::resolve_effective_config_for_bootstrap_home(
+            workspace.path(),
+            &Default::default(),
             &bootstrap_home,
-            &global,
-            &local,
-            &effective,
-            None,
         )
         .unwrap();
+        let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
+            workspace.path(),
+            &bootstrap_home,
+        )
+        .unwrap();
+        let inventory =
+            crate::execution::agent_inventory::load_agent_inventory_snapshot_for_bootstrap_home_v3(
+                workspace.path(),
+                &policy,
+                &bootstrap_home,
+            )
+            .unwrap();
+        let resolved = inventory
+            .resolve_selection(
+                &ordinary_config,
+                None,
+                Some("cli:codex-world"),
+                AgentExecutionScope::World,
+            )
+            .unwrap();
+        assert_eq!(
+            resolved.inventory_source.sha256,
+            selected.source_material().raw_bytes_sha256
+        );
+        let entry = &inventory.entries[&resolved.realized_agent_id];
+        let mut capabilities = serde_json::to_value(&entry.file.config.capabilities)
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .iter()
+            .filter(|(_, enabled)| enabled.as_bool() == Some(true))
+            .map(|(name, _)| name.clone())
+            .collect::<Vec<_>>();
+        capabilities.sort_by(|left, right| left.as_bytes().cmp(right.as_bytes()));
+        // Plain expected data for the unbound-response negative control. This
+        // does not construct HeldE3SelectedInventoryProjectionV1 or admit a worker.
+        let mut logical = config_projection::LogicalAgentConfigProjectionV1 {
+            projection_hash: String::new(),
+            sources: vec![
+                config_projection::LogicalConfigSourceRefV1::EffectiveSubstrateConfig {
+                    authority_store_id: effective.authority_store_id.clone(),
+                    source_revision: effective.source_revision.clone(),
+                    source_hash: effective.source_hash.clone(),
+                },
+                config_projection::LogicalConfigSourceRefV1::AgentInventory {
+                    authority_store_id: effective.authority_store_id.clone(),
+                    inventory_scope: selected.source_material().inventory_scope.clone(),
+                    source_revision: selected.source_material().source_revision.clone(),
+                    source_hash: selected.source_material().source_hash.clone(),
+                },
+            ],
+            logical_agent_id: resolved.logical_agent_id.clone(),
+            placement: resolved.placement.as_str().into(),
+            realized_agent_id: resolved.realized_agent_id.clone(),
+            backend_id: resolved.backend_id.clone(),
+            kind: entry.file.config.kind.as_str().into(),
+            protocol: entry.file.config.protocol.clone().unwrap(),
+            execution_scope: "world".into(),
+            cli_mode: "persistent".into(),
+            runtime_family: "codex".into(),
+            capabilities,
+            requested_model: resolved.selection.model.clone(),
+            requested_mcp_servers: vec![],
+            requested_features: vec![],
+        };
+        let mut value = serde_json::to_value(&logical).unwrap();
+        value.as_object_mut().unwrap().remove("projection_hash");
+        logical.projection_hash = ConfigProjectionCodecV1::domain_sha256(
+            "substrate.e3.logical-config-projection.v1",
+            &serde_json::json!({"projection": value}),
+        )
+        .unwrap();
+        selected.revalidate().unwrap();
+        global.revalidate().unwrap();
+        local.revalidate().unwrap();
 
         let (transport, input, auth) = e3f_prepare_request_fixture(true);
         let id = format!("e3p_{}", uuid::Uuid::now_v7());
@@ -14596,12 +19950,8 @@ config:
         let mut custody = E3ProducerPreparationCustodyV1 {
             authoring_input_ref: input.clone(),
             expected_effective: effective,
-            expected_inventory: selection
-                .selected_source()
-                .unwrap()
-                .source_material()
-                .clone(),
-            expected_logical: selection.logical().clone(),
+            expected_inventory: selected.source_material().clone(),
+            expected_logical: logical,
             expected_artifact_manifest: config_projection::TrustedRuntimeArtifactManifestV1 {
                 schema_version: 1,
                 authority_store_id: input.authority_store_id.clone(),
@@ -16662,6 +22012,8 @@ config:
             e2_launch_activation: None,
         };
         let execute_request = ExecuteRequest {
+            schema_version: 1,
+            ordinary_start_selection: None,
             profile: None,
             cmd: String::new(),
             cwd: Some("/tmp".to_string()),
@@ -17704,6 +23056,7 @@ config:
             let (acceptance, claim) = winner.expect("concurrent B2.2 winner is durable");
             publish_e2_accepted_work(
                 &E2AcceptedWorkPublicationContextV1 {
+                    ordinary: None,
                     authority: dispatch_policy_authority,
                     idempotency_key,
                     applied_patch: applied_dispatch_policy_patch,
@@ -20520,6 +25873,8 @@ config:
         );
 
         ExecuteRequest {
+            schema_version: 1,
+            ordinary_start_selection: None,
             profile: None,
             cmd: String::new(),
             cwd: Some(cwd.display().to_string()),
@@ -37089,6 +42444,7 @@ agents:
             &snapshot_hash,
         );
         let policy_commitment = PreparedForkPolicyCommitmentV1 {
+            native_issuance: None,
             commitment_ref: crate::execution::agent_runtime::dispatch_policy_commitment::DispatchPolicyCommitmentRefV1 {
                 authority_store_id: "authority-store-e2-fork".to_string(),
                 commitment_id: "dpc_018f0f3a-9b2c-7def-8abc-0123456789ad".to_string(),

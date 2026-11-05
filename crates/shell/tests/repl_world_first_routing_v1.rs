@@ -1417,7 +1417,6 @@ fn persist_test_fork_child_participant_manifest(
     let member_dispatch = member_dispatch.common();
     let source_participant_id = member_dispatch
         .parent_participant_id
-        .as_deref()
         .expect("fork child persistence requires source parent_participant_id");
     let mut child = read_participant_manifest(&config.substrate_home, source_participant_id);
     let timestamp = chrono::Utc::now().to_rfc3339();
@@ -1460,8 +1459,8 @@ fn persist_test_fork_child_participant_manifest(
 
     let participant_path = canonical_participant_path(
         &config.substrate_home,
-        &member_dispatch.orchestration_session_id,
-        &member_dispatch.participant_id,
+        member_dispatch.orchestration_session_id,
+        member_dispatch.participant_id,
     );
     if let Some(parent) = participant_path.parent() {
         fs::create_dir_all(parent).expect("create canonical participant dir");
@@ -3224,10 +3223,7 @@ fn c3_first_targeted_world_turn_uses_initial_prompt_in_member_dispatch() {
         .and_then(|request| request.member_dispatch.as_ref())
         .expect("captured member dispatch request");
     let dispatch = dispatch.common();
-    assert_eq!(
-        dispatch.initial_prompt.as_deref(),
-        Some("member targeted first turn")
-    );
+    assert_eq!(dispatch.initial_prompt, Some("member targeted first turn"));
     drop(guard);
 
     repl.send_line("exit");
@@ -7275,10 +7271,7 @@ fn c3_targeted_world_turn_relaunches_exact_backend_after_world_restart() {
         .and_then(|request| request.member_dispatch.as_ref())
         .expect("replacement member dispatch request");
     let replacement_dispatch = replacement_dispatch.common();
-    assert_eq!(
-        replacement_dispatch.initial_prompt.as_deref(),
-        Some("second")
-    );
+    assert_eq!(replacement_dispatch.initial_prompt, Some("second"));
     assert_eq!(
         replacement_dispatch.resolved_runtime.binary_path,
         replacement

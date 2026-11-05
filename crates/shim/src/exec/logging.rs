@@ -1,5 +1,5 @@
 use crate::context::{world_features_enabled, ShimContext};
-use crate::logger::{format_timestamp, get_shim_fingerprint, write_log_entry};
+use crate::logger::{format_timestamp, get_shim_fingerprint, write_log_entry_with_context};
 use anyhow::Error;
 use serde_json::json;
 use std::collections::HashSet;
@@ -11,6 +11,7 @@ use transport_api_types::{InstallBootstrapContextCarrierV1, PlatformBootstrapMap
 use world_api::FsDiff;
 
 pub(crate) fn log_spawn_failure(
+    trace_context: &substrate_trace::TraceContext,
     ctx: &ShimContext,
     real_binary: &Path,
     timestamp: SystemTime,
@@ -35,7 +36,7 @@ pub(crate) fn log_spawn_failure(
             }
         }
 
-        let _ = write_log_entry(log_path, &error_entry);
+        let _ = write_log_entry_with_context(trace_context, log_path, &error_entry);
     }
 }
 
@@ -393,7 +394,9 @@ managers:
         let io_err = std::io::Error::from(std::io::ErrorKind::NotFound);
         let errno = io_err.raw_os_error();
         let log_error: anyhow::Error = io_err.into();
+        let trace_context = substrate_trace::TraceContext::explicit_product(temp.path()).unwrap();
         log_spawn_failure(
+            &trace_context,
             &ctx,
             Path::new("/tmp/missing"),
             SystemTime::now(),

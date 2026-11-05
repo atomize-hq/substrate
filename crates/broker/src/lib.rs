@@ -48,3 +48,8 @@ pub(crate) use broker::matches_pattern;
 
 #[cfg(test)]
 mod tests;
+
+pub use effective_policy::{
+    resolve_workspace_authority_from_sources_v1, WorkspaceAuthorityEffectiveV1,
+};
+pub use policy::{WorkspaceAuthorityDecisionV1, WorkspaceAuthorityPolicyV1};

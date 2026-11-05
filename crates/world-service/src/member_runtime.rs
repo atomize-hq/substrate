@@ -1,6 +1,6 @@
 use agent_api::{
     AgentWrapperCancelHandle, AgentWrapperCompletion, AgentWrapperError, AgentWrapperEvent,
-    AgentWrapperEventKind, AgentWrapperRunControl, AgentWrapperRunRequest,
+    AgentWrapperEventKind, AgentWrapperRunRequest,
 };
 use anyhow::{anyhow, Context, Result};
 use axum::{
@@ -39,7 +39,10 @@ use crate::member_turn_join::{
     MemberTurnJoinError, MemberTurnJoinLeader, MemberTurnJoinRegistry, MemberTurnJoinStateV1,
     MemberTurnJoinSubscription,
 };
-use crate::prompt_fulfillment::PromptFulfillmentBridge;
+use crate::prompt_fulfillment::{
+    join_failed_control, NativeSettlementOutcome, NativeTerminalObservation,
+    PromptFulfillmentBridge, PromptFulfillmentRunControl,
+};
 use crate::runtime_replay::{
     publish_replayable_frame, RuntimeReplayPublisher, RuntimeReplayRegistry,
 };
@@ -50,6 +53,7 @@ const SESSION_HANDLE_SCHEMA_V1: &str = "agent_api.session.handle.v1";
 const CANCELLED_MESSAGE: &str = "cancelled";
 const ADD_DIRS_EXTENSION_V1: &str = "agent_api.exec.add_dirs.v1";
 const SESSION_RESUME_EXTENSION_V1: &str = "agent_api.session.resume.v1";
+const SESSION_FORK_EXTENSION_V1: &str = "agent_api.session.fork.v1";
 const SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV: &str = "SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME";
 const SUBSTRATE_E2_TURN_ACTUAL_BINARY_ENV: &str = "SUBSTRATE_E2_TURN_ACTUAL_BINARY";
 const SUBSTRATE_E2_TURN_WORLD_ENTRY_ENV: &str = "SUBSTRATE_E2_TURN_WORLD_ENTRY";
@@ -68,6 +72,23 @@ export SUBSTRATE_WORLD_ENTRY_BINARY="${SUBSTRATE_LANDLOCK_HELPER_SRC}"
 exec "${SUBSTRATE_E2_TURN_WORLD_ENTRY}" "__substrate_world_landlock_exec"
 "##;
 
+const ORDINARY_HOME_POLICY_LAUNCHER_BYTES: &[u8] = br##"#!/bin/bash
+set -euo pipefail
+: "${SUBSTRATE_ORDINARY_HOME_HANDOFF:?}"
+: "${SUBSTRATE_E2_TURN_ACTUAL_BINARY:?}"
+: "${SUBSTRATE_E2_TURN_WORLD_ENTRY:?}"
+: "${SUBSTRATE_LANDLOCK_HELPER_SRC:?}"
+export SUBSTRATE_INNER_CMD=': ordinary issued argv is executed directly'
+export SUBSTRATE_WORLD_ENTRY_BINARY="${SUBSTRATE_LANDLOCK_HELPER_SRC}"
+exec "${SUBSTRATE_E2_TURN_WORLD_ENTRY}" "__substrate_ordinary_world_home_exec" "$@"
+"##;
+
+#[cfg(test)]
+#[path = "member_runtime_ordinary_fixture_tests.rs"]
+mod ordinary_fixture_tests;
+#[cfg(test)]
+use ordinary_fixture_tests::CheckedOrdinaryNativeFixtureV1;
+
 #[derive(Clone)]
 pub(crate) struct MemberRuntimeManager {
     active_members: Arc<RwLock<ActiveMemberRegistry>>,
@@ -75,18 +96,47 @@ pub(crate) struct MemberRuntimeManager {
     runtime_replay: RuntimeReplayRegistry,
     member_turn_join: Option<MemberTurnJoinRegistry>,
     privileged_child_exclusion: Arc<E3PrivilegedChildExclusionV1>,
+    #[cfg(test)]
+    ordinary_native_fixture: Option<Arc<CheckedOrdinaryNativeFixtureV1>>,
 }
 
 pub(crate) struct MemberRuntimeLaunchAdmissionV1 {
     pub(crate) dispatch: MemberDispatchRequestV1,
     pub(crate) acceptance_context: Option<transport_api_types::WorldWorkAcceptanceContextV1>,
     pub(crate) policy_snapshot: transport_api_types::PolicySnapshotV3,
+    pub(crate) ordinary_effect: Option<Arc<crate::service::OrdinaryWorldEffectContextV1>>,
 }
 
 #[derive(Default)]
 struct ActiveMemberRegistry {
+    ordinary_pending_participants: BTreeMap<String, Arc<PendingOrdinaryBootstrapV1>>,
     by_participant_id: HashMap<String, Arc<ActiveMemberRuntime>>,
     by_retained_key: HashMap<RetainedMemberKey, RetainedMemberSlot>,
+    #[cfg(target_os = "linux")]
+    ordinary_retirements: BTreeMap<(String, String, String), CachedOrdinaryRetirementV1>,
+    #[cfg(target_os = "linux")]
+    ordinary_initial_retirements:
+        BTreeMap<(String, String, String, String), CachedOrdinaryInitialRetirementV1>,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone)]
+struct CachedOrdinaryInitialRetirementV1 {
+    reader: Arc<substrate_shell::OrdinaryInitialBootstrapCloseoutReaderV1>,
+    report: transport_api_types::OrdinaryInitialBootstrapRetirementV1,
+}
+
+#[cfg(target_os = "linux")]
+struct PreparedOrdinaryInitialRetirementV1 {
+    frames: Vec<ExecuteStreamFrame>,
+    receipt: CachedOrdinaryInitialRetirementV1,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone)]
+struct CachedOrdinaryRetirementV1 {
+    reader: Arc<substrate_shell::OrdinaryRetainedStopControlReaderV1>,
+    acknowledgment: transport_api_types::OrdinaryRetainedWorkerStopAcknowledgmentV1,
 }
 
 struct ActiveMemberRuntime {
@@ -103,6 +153,9 @@ struct ActiveMemberRuntime {
     workspace_dir: std::path::PathBuf,
     process_working_dir: std::path::PathBuf,
     env: BTreeMap<String, String>,
+    ordinary_effect: Option<Arc<crate::service::OrdinaryWorldEffectContextV1>>,
+    ordinary_native_home: Mutex<Option<Arc<PreparedOrdinaryNativeHomeV1>>>,
+    ordinary_native_history: Option<Arc<OrdinaryNativeWorkerHistoryV1>>,
     binding: SharedWorldBindingSnapshot,
     protocol: serde_json::Value,
     bootstrap: Mutex<Option<ActiveBootstrapRuntime>>,
@@ -123,14 +176,1907 @@ struct RetainedTurnWorkerCapIdentity {
 
 struct ActiveBootstrapRuntime {
     span_id: String,
+    terminal: Option<NativeTerminalObservation>,
     cancel: Option<AgentWrapperCancelHandle>,
     last_signal: Option<String>,
+    initial_control: Option<Arc<OrdinaryInitialBootstrapCancellationV1>>,
+}
+
+/// One initial launch's existing SDK cancellation handle. A pending request is
+/// only latched; it is never a native terminal or logical-retirement ACK.
+#[derive(Default)]
+struct OrdinaryInitialBootstrapCancellationV1 {
+    state: Mutex<InitialBootstrapCancellationStateV1>,
+}
+#[derive(Default)]
+struct InitialBootstrapCancellationStateV1 {
+    signal: Option<String>,
+    native: Option<(AgentWrapperCancelHandle, NativeTerminalObservation)>,
+}
+impl OrdinaryInitialBootstrapCancellationV1 {
+    fn request_initial_control(&self, signal: &str) -> Result<bool> {
+        anyhow::ensure!(
+            matches!(signal, "INT" | "TERM"),
+            "invalid initial control signal"
+        );
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| anyhow!("initial control latch poisoned"))?;
+        state.signal = Some(signal.into());
+        if let Some((cancel, terminal)) = &state.native {
+            terminal.request_route_disposal();
+            cancel.cancel();
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+    fn bind_native_control(
+        &self,
+        cancel: AgentWrapperCancelHandle,
+        terminal: NativeTerminalObservation,
+    ) -> Result<()> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| anyhow!("initial control latch poisoned"))?;
+        anyhow::ensure!(
+            state.native.is_none(),
+            "initial native control already installed"
+        );
+        if state.signal.is_some() {
+            terminal.request_route_disposal();
+            cancel.cancel();
+        }
+        state.native = Some((cancel, terminal));
+        Ok(())
+    }
+    fn initial_signal(&self) -> Result<Option<String>> {
+        Ok(self
+            .state
+            .lock()
+            .map_err(|_| anyhow!("initial control latch poisoned"))?
+            .signal
+            .clone())
+    }
+    fn initial_control_requested(&self) -> Result<bool> {
+        Ok(self.initial_signal()?.is_some())
+    }
+}
+
+struct PendingOrdinaryBootstrapV1 {
+    effect: Arc<crate::service::OrdinaryWorldEffectContextV1>,
+    span_id: String,
+    control: Arc<OrdinaryInitialBootstrapCancellationV1>,
 }
 
 struct ActiveSubmittedTurn {
+    terminal: NativeTerminalObservation,
+    ordinary_effect: Option<Arc<crate::service::OrdinaryWorldEffectContextV1>>,
+    ordinary_native_home: Option<Arc<PreparedOrdinaryNativeHomeV1>>,
     participant_id: String,
     cancel: AgentWrapperCancelHandle,
     last_signal: Mutex<Option<String>>,
+}
+
+struct OrdinaryMemberLaunchReservationV1 {
+    registry: Arc<RwLock<ActiveMemberRegistry>>,
+    participant_id: String,
+    pending: Arc<PendingOrdinaryBootstrapV1>,
+}
+
+impl Drop for OrdinaryMemberLaunchReservationV1 {
+    fn drop(&mut self) {
+        if let Ok(mut registry) = self.registry.write() {
+            if registry
+                .ordinary_pending_participants
+                .get(&self.participant_id)
+                .is_some_and(|actual| Arc::ptr_eq(actual, &self.pending))
+            {
+                registry
+                    .ordinary_pending_participants
+                    .remove(&self.participant_id);
+            }
+        }
+    }
+}
+
+/// Physical history is retained by the original admitted worker, independently
+/// from any one native process or gateway. These identity fields grant no permit.
+struct OrdinaryNativeWorkerHistoryV1 {
+    path: std::path::PathBuf,
+    parent_path: std::path::PathBuf,
+    parent: fs::File,
+    directory: fs::File,
+    start: transport_api_types::OrdinaryStartSelectionCarrierV1,
+    runtime: transport_api_types::OrdinaryGatewayRuntimeIdentityV1,
+    selection_digest: String,
+    config: Arc<Mutex<Option<(String, String)>>>,
+    in_use: Arc<OrdinaryNativeHistoryStateV1>,
+    // An explicit child identity over the SAME held native store. Retaining
+    // the genuine source owner/ID is essential; no copied home reconstructs it.
+    fork_source: Option<Arc<PinnedOrdinaryForkSourceV1>>,
+    handoff_terminal: Arc<OrdinaryHomeHandoffTerminalV1>,
+}
+
+enum OrdinaryNativeHistoryRequestV1 {
+    InitialStart,
+    Resume(Arc<OrdinaryNativeWorkerHistoryV1>),
+    Fork(Arc<PinnedOrdinaryForkSourceV1>),
+}
+
+struct PinnedOrdinaryForkSourceV1 {
+    active: Arc<ActiveMemberRuntime>,
+    history: Arc<OrdinaryNativeWorkerHistoryV1>,
+    session_id: String,
+    effect: Arc<crate::service::OrdinaryWorldEffectContextV1>,
+    ownership: OrdinaryForkSourceOwnershipV1,
+}
+
+impl PinnedOrdinaryForkSourceV1 {
+    fn revalidate(&self) -> Result<()> {
+        self.history.in_use.require_usable()?;
+        if self.ownership.is_transferred()? {
+            // Genuine native thread_fork identity has been surfaced by this
+            // child's owned UAA control. Source Stop cannot revoke child data.
+            // This is retained data custody only. Each new child effect separately
+            // authenticates its own current turn, never this retired bootstrap.
+            return self.history.revalidate();
+        }
+        self.ownership.require_initial_source(&self.active)?;
+        let original = self
+            .active
+            .ordinary_effect
+            .as_ref()
+            .ok_or_else(|| anyhow!("ordinary Fork source has no original admission"))?;
+        let activation = self.effect.validate_initial_fork_source(original)?;
+        let cap = self
+            .active
+            .authenticated_worker_cap_identity
+            .lock()
+            .map_err(|_| anyhow!("ordinary Fork source cap lock poisoned"))?;
+        if self.active.e2_launch_activation.as_ref() != Some(&activation)
+            || cap.as_ref()
+                != Some(&RetainedTurnWorkerCapIdentity {
+                    commitment_ref: activation.immutable_worker_cap_ref,
+                    created_revision: activation.immutable_worker_cap_created_revision,
+                    application_revision: activation.immutable_worker_cap_application_revision,
+                })
+            || self.active.uaa_session_id().as_deref() != Some(self.session_id.as_str())
+        {
+            anyhow::bail!("ordinary Fork held source cap/session changed");
+        }
+        self.history.require_original_worker(
+            original.ordinary_start_selection(),
+            &original.authenticated_runtime(),
+            original.requested_selection(),
+        )
+    }
+}
+
+/// Registry/lifetime join only. This never authenticates a cap or grants a
+/// native effect. Transfer is called only from this child's owned UAA facet.
+struct OrdinaryForkSourceOwnershipV1 {
+    registry: std::sync::Weak<RwLock<ActiveMemberRegistry>>,
+    child_session: Mutex<Option<String>>,
+}
+impl OrdinaryForkSourceOwnershipV1 {
+    fn is_transferred(&self) -> Result<bool> {
+        Ok(self
+            .child_session
+            .lock()
+            .map_err(|_| anyhow!("ordinary Fork ownership lock poisoned"))?
+            .is_some())
+    }
+
+    fn require_initial_source(&self, source: &Arc<ActiveMemberRuntime>) -> Result<()> {
+        if self.is_transferred()? {
+            anyhow::bail!("consumed ordinary Fork source cannot issue another initial launch");
+        }
+        let registry = self
+            .registry
+            .upgrade()
+            .ok_or_else(|| anyhow!("ordinary Fork source registry retired"))?;
+        let registry = registry
+            .read()
+            .map_err(|_| anyhow!("ordinary Fork source registry lock poisoned"))?;
+        if !registry
+            .by_participant_id
+            .get(&source.participant_id)
+            .is_some_and(|current| Arc::ptr_eq(current, source))
+            || source.has_active_bootstrap()
+            || source
+                .active_turn_span_id
+                .lock()
+                .map_err(|_| anyhow!("ordinary Fork source turn lock poisoned"))?
+                .is_some()
+        {
+            anyhow::bail!("ordinary Fork source is no longer the exact retained idle owner");
+        }
+        Ok(())
+    }
+
+    fn observe_child_session(&self, source: &str, child: &str) -> Result<()> {
+        if child.trim().is_empty() || child == source {
+            anyhow::bail!("ordinary Fork did not surface a distinct child identity");
+        }
+        let mut observed = self
+            .child_session
+            .lock()
+            .map_err(|_| anyhow!("ordinary Fork ownership lock poisoned"))?;
+        if observed.as_ref().is_some_and(|previous| previous != child) {
+            anyhow::bail!("ordinary Fork changed its surfaced child identity");
+        }
+        *observed = Some(child.to_owned());
+        Ok(())
+    }
+}
+
+/// Every physical-store writer shares this state. An unconfirmed wait/stdio
+/// outcome permanently closes reuse before custody can be dropped; a later
+/// lease Drop cannot turn indeterminate ownership into permission.
+#[derive(Default)]
+struct OrdinaryNativeHistoryStateV1(std::sync::atomic::AtomicU8);
+impl OrdinaryNativeHistoryStateV1 {
+    fn require_usable(&self) -> Result<()> {
+        if self.0.load(std::sync::atomic::Ordering::Acquire) == 2 {
+            anyhow::bail!("ordinary native history has unconfirmed native custody");
+        }
+        Ok(())
+    }
+
+    fn poison(&self) {
+        self.0.store(2, std::sync::atomic::Ordering::Release);
+    }
+}
+struct OrdinaryNativeHistoryUseV1 {
+    state: Arc<OrdinaryNativeHistoryStateV1>,
+    closed: OrdinaryNativeHistoryUseClosedV1,
+}
+/// Read-only release data for one exact use. It holds no store-use lease and
+/// cannot establish that another worker's use is absent or that reuse is safe.
+#[derive(Clone)]
+struct OrdinaryNativeHistoryUseClosedV1(Arc<std::sync::atomic::AtomicBool>);
+impl OrdinaryNativeHistoryUseClosedV1 {
+    fn is_closed(&self) -> bool {
+        self.0.load(std::sync::atomic::Ordering::Acquire)
+    }
+}
+impl OrdinaryNativeHistoryUseV1 {
+    fn acquire(in_use: Arc<OrdinaryNativeHistoryStateV1>) -> Result<Self> {
+        in_use
+            .0
+            .compare_exchange(
+                0,
+                1,
+                std::sync::atomic::Ordering::AcqRel,
+                std::sync::atomic::Ordering::Acquire,
+            )
+            .map_err(|_| anyhow!("ordinary native history busy or native custody unconfirmed"))?;
+        Ok(Self {
+            state: in_use,
+            closed: OrdinaryNativeHistoryUseClosedV1(Arc::new(std::sync::atomic::AtomicBool::new(
+                false,
+            ))),
+        })
+    }
+
+    fn closed_observation(&self) -> OrdinaryNativeHistoryUseClosedV1 {
+        self.closed.clone()
+    }
+}
+impl Drop for OrdinaryNativeHistoryUseV1 {
+    fn drop(&mut self) {
+        let _ = self.state.0.compare_exchange(
+            1,
+            0,
+            std::sync::atomic::Ordering::AcqRel,
+            std::sync::atomic::Ordering::Acquire,
+        );
+        self.closed
+            .0
+            .store(true, std::sync::atomic::Ordering::Release);
+    }
+}
+
+impl OrdinaryNativeWorkerHistoryV1 {
+    fn fork_child(source: Arc<PinnedOrdinaryForkSourceV1>) -> Result<Self> {
+        source.ownership.require_initial_source(&source.active)?;
+        source.revalidate()?;
+        let original = &source.history;
+        let child = Self {
+            path: original.path.clone(),
+            parent_path: original.parent_path.clone(),
+            parent: original.parent.try_clone()?,
+            directory: original.directory.try_clone()?,
+            start: source.effect.ordinary_start_selection().clone(),
+            runtime: source.effect.authenticated_runtime(),
+            selection_digest: source.effect.requested_selection().selection_digest.clone(),
+            config: Arc::clone(&original.config),
+            in_use: Arc::clone(&original.in_use),
+            handoff_terminal: Arc::clone(&original.handoff_terminal),
+            fork_source: Some(source),
+        };
+        child.revalidate()?;
+        Ok(child)
+    }
+
+    fn create(
+        launcher_dir: &Path,
+        start: &transport_api_types::OrdinaryStartSelectionCarrierV1,
+        runtime: &transport_api_types::OrdinaryGatewayRuntimeIdentityV1,
+        selected: &transport_api_types::ResolvedAgentSelectionV1,
+    ) -> Result<Self> {
+        use std::os::fd::{AsRawFd, FromRawFd};
+        start.validate().map_err(anyhow::Error::msg)?;
+        selected.validate().map_err(anyhow::Error::msg)?;
+        runtime.validate().map_err(anyhow::Error::msg)?;
+        if start.requested_selection_sha256 != selected.selection_digest
+            || runtime.backend_id() != selected.backend_id
+        {
+            anyhow::bail!("ordinary history identity data conflicts with original selection");
+        }
+        if !matches!(
+            runtime,
+            transport_api_types::OrdinaryGatewayRuntimeIdentityV1::WorldWorker { .. }
+        ) {
+            anyhow::bail!("ordinary worker history requires World-worker identity");
+        }
+        let parent = fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_DIRECTORY | libc::O_CLOEXEC)
+            .open(launcher_dir)?;
+        let metadata = parent.metadata()?;
+        if !metadata.is_dir()
+            || metadata.uid() != unsafe { libc::geteuid() }
+            || metadata.permissions().mode() & 0o022 != 0
+        {
+            anyhow::bail!("ordinary native launcher directory changed");
+        }
+        let name = format!("ordinary-native-{}", uuid::Uuid::now_v7());
+        let child = std::ffi::CString::new(name.as_str())?;
+        if unsafe { libc::mkdirat(parent.as_raw_fd(), child.as_ptr(), 0o700) } != 0 {
+            return Err(std::io::Error::last_os_error()).context("create ordinary worker history");
+        }
+        let raw = unsafe {
+            libc::openat(
+                parent.as_raw_fd(),
+                child.as_ptr(),
+                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+            )
+        };
+        if raw < 0 {
+            return Err(std::io::Error::last_os_error()).context("hold ordinary worker history");
+        }
+        let history = Self {
+            path: launcher_dir.join(name),
+            parent_path: launcher_dir.to_path_buf(),
+            parent,
+            directory: unsafe { fs::File::from_raw_fd(raw) },
+            start: start.clone(),
+            runtime: runtime.clone(),
+            selection_digest: selected.selection_digest.clone(),
+            config: Arc::new(Mutex::new(None)),
+            in_use: Arc::new(OrdinaryNativeHistoryStateV1::default()),
+            fork_source: None,
+            handoff_terminal: Arc::new(OrdinaryHomeHandoffTerminalV1::default()),
+        };
+        history.revalidate()?;
+        Ok(history)
+    }
+
+    fn require_original_worker(
+        &self,
+        start: &transport_api_types::OrdinaryStartSelectionCarrierV1,
+        runtime: &transport_api_types::OrdinaryGatewayRuntimeIdentityV1,
+        selected: &transport_api_types::ResolvedAgentSelectionV1,
+    ) -> Result<()> {
+        // The current run remains authenticated independently by the effect.
+        // Only the run ID varies between turns of this exact original worker.
+        let mut current = runtime.clone();
+        match (&self.runtime, &mut current) {
+            (
+                transport_api_types::OrdinaryGatewayRuntimeIdentityV1::WorldWorker {
+                    run_id: original,
+                    ..
+                },
+                transport_api_types::OrdinaryGatewayRuntimeIdentityV1::WorldWorker {
+                    run_id, ..
+                },
+            ) => {
+                *run_id = original.clone();
+            }
+            _ => anyhow::bail!("ordinary history role differs from original World worker"),
+        }
+        if self.start != *start
+            || self.runtime != current
+            || self.selection_digest != selected.selection_digest
+        {
+            anyhow::bail!("ordinary native history differs from original admitted worker");
+        }
+        self.revalidate()
+    }
+
+    fn require_admitted_turn(
+        &self,
+        effect: &crate::service::OrdinaryWorldEffectContextV1,
+    ) -> Result<()> {
+        effect.turn_admission()?;
+        effect.revalidate_for_effect()?;
+        let mut current = effect.authenticated_runtime();
+        match (&self.runtime, &mut current) {
+            (
+                transport_api_types::OrdinaryGatewayRuntimeIdentityV1::WorldWorker {
+                    caller_participant_id: original,
+                    ..
+                },
+                transport_api_types::OrdinaryGatewayRuntimeIdentityV1::WorldWorker {
+                    caller_participant_id,
+                    ..
+                },
+            ) => *caller_participant_id = original.clone(),
+            _ => anyhow::bail!("ordinary turn history requires the exact World-worker role"),
+        }
+        // Normalize only this comparison after real current B1/E2 admission.
+        // The original history and actual current effect identities stay intact.
+        self.require_original_worker(
+            effect.ordinary_start_selection(),
+            &current,
+            effect.requested_selection(),
+        )?;
+        effect.revalidate_for_effect()
+    }
+
+    fn revalidate(&self) -> Result<()> {
+        self.in_use.require_usable()?;
+        if let Some(source) = &self.fork_source {
+            source.history.revalidate()?;
+        }
+        let parent = fs::symlink_metadata(&self.parent_path)?;
+        let held_parent = self.parent.metadata()?;
+        let actual = fs::symlink_metadata(&self.path)?;
+        let held = self.directory.metadata()?;
+        if !parent.is_dir()
+            || !actual.is_dir()
+            || (parent.dev(), parent.ino()) != (held_parent.dev(), held_parent.ino())
+            || (actual.dev(), actual.ino()) != (held.dev(), held.ino())
+            || parent.uid() != unsafe { libc::geteuid() }
+            || actual.uid() != unsafe { libc::geteuid() }
+            || parent.permissions().mode() & 0o022 != 0
+            || actual.permissions().mode() & 0o777 != 0o700
+        {
+            anyhow::bail!("ordinary native history physical binding changed");
+        }
+        let config = self
+            .config
+            .lock()
+            .map_err(|_| anyhow!("ordinary history config lock poisoned"))?;
+        if let Some((name, digest)) = config.as_ref() {
+            self.validate_config(name, digest)?;
+        }
+        Ok(())
+    }
+
+    fn validate_config(&self, name: &str, digest: &str) -> Result<()> {
+        use std::{
+            io::Read,
+            os::fd::{AsRawFd, FromRawFd},
+        };
+        let name = std::ffi::CString::new(name)?;
+        let raw = unsafe {
+            libc::openat(
+                self.directory.as_raw_fd(),
+                name.as_ptr(),
+                libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+            )
+        };
+        if raw < 0 {
+            return Err(std::io::Error::last_os_error()).context("reopen ordinary native config");
+        }
+        let file = unsafe { fs::File::from_raw_fd(raw) };
+        let meta = file.metadata()?;
+        if !meta.is_file()
+            || meta.uid() != unsafe { libc::geteuid() }
+            || meta.permissions().mode() & 0o777 != 0o600
+            || meta.len() > 65536
+        {
+            anyhow::bail!("ordinary native config shape changed");
+        }
+        let mut bytes = Vec::new();
+        file.take(65537).read_to_end(&mut bytes)?;
+        if format!("{:x}", Sha256::digest(&bytes)) != digest {
+            anyhow::bail!("ordinary native config differs from pinned rendering");
+        }
+        Ok(())
+    }
+
+    fn write_config(&self, name: &str, content: &str) -> Result<String> {
+        use std::os::fd::{AsRawFd, FromRawFd};
+        self.revalidate()?;
+        let mut config = self
+            .config
+            .lock()
+            .map_err(|_| anyhow!("ordinary history config lock poisoned"))?;
+        if config
+            .as_ref()
+            .is_some_and(|(previous, _)| previous != name)
+        {
+            anyhow::bail!("ordinary native history changed harness configuration");
+        }
+        let temporary =
+            std::ffi::CString::new(format!(".ordinary-config-{}", uuid::Uuid::now_v7()))?;
+        let name_c = std::ffi::CString::new(name)?;
+        let raw = unsafe {
+            libc::openat(
+                self.directory.as_raw_fd(),
+                temporary.as_ptr(),
+                libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                0o600,
+            )
+        };
+        if raw < 0 {
+            return Err(std::io::Error::last_os_error()).context("create ordinary native config");
+        }
+        let mut file = unsafe { fs::File::from_raw_fd(raw) };
+        file.write_all(content.as_bytes())?;
+        file.sync_all()?;
+        if unsafe {
+            libc::renameat(
+                self.directory.as_raw_fd(),
+                temporary.as_ptr(),
+                self.directory.as_raw_fd(),
+                name_c.as_ptr(),
+            )
+        } != 0
+        {
+            return Err(std::io::Error::last_os_error()).context("replace ordinary native config");
+        }
+        self.directory.sync_all()?;
+        let digest = format!("{:x}", Sha256::digest(content.as_bytes()));
+        *config = Some((name.into(), digest.clone()));
+        drop(config);
+        self.revalidate()?;
+        Ok(digest)
+    }
+
+    fn descriptor_path(&self) -> Result<std::path::PathBuf> {
+        use std::os::fd::AsRawFd;
+        self.revalidate()?;
+        let path = std::path::PathBuf::from(format!(
+            "/proc/{}/fd/{}",
+            std::process::id(),
+            self.directory.as_raw_fd()
+        ));
+        let observed = fs::metadata(&path)?;
+        let held = self.directory.metadata()?;
+        if !observed.is_dir() || (observed.dev(), observed.ino()) != (held.dev(), held.ino()) {
+            anyhow::bail!("ordinary native descriptor path is unavailable");
+        }
+        Ok(path)
+    }
+}
+
+/// Each process owns fresh effect/gateway custody, while history survives turns.
+struct PreparedOrdinaryNativeHomeV1 {
+    _history_use: OrdinaryNativeHistoryUseV1,
+    history: Arc<OrdinaryNativeWorkerHistoryV1>,
+    config_sha256: String,
+    gateway: Arc<crate::gateway_runtime::OrdinaryGatewayRuntimeLeaseV1>,
+    effect: Arc<crate::service::OrdinaryWorldEffectContextV1>,
+    #[cfg(test)]
+    ordinary_native_fixture: Option<Arc<CheckedOrdinaryNativeFixtureV1>>,
+}
+
+impl PreparedOrdinaryNativeHomeV1 {
+    // The checked fixture adds an eighth argument only in test builds.
+    #[cfg_attr(test, allow(clippy::too_many_arguments))]
+    fn create(
+        history: Arc<OrdinaryNativeWorkerHistoryV1>,
+        history_use: OrdinaryNativeHistoryUseV1,
+        workspace_dir: &Path,
+        selected: &transport_api_types::ResolvedAgentSelectionV1,
+        wiring: &transport_api_types::GatewayClientWiringV1,
+        gateway: Arc<crate::gateway_runtime::OrdinaryGatewayRuntimeLeaseV1>,
+        effect: Arc<crate::service::OrdinaryWorldEffectContextV1>,
+        #[cfg(test)] ordinary_native_fixture: Option<Arc<CheckedOrdinaryNativeFixtureV1>>,
+    ) -> Result<Self> {
+        let (name, content) = ordinary_native_config(workspace_dir, selected, wiring)?;
+        let config_sha256 = history.write_config(name, &content)?;
+        let home = Self {
+            _history_use: history_use,
+            history,
+            config_sha256,
+            gateway,
+            effect,
+            #[cfg(test)]
+            ordinary_native_fixture,
+        };
+        home.revalidate()?;
+        Ok(home)
+    }
+
+    fn revalidate(&self) -> Result<()> {
+        if let Some(source) = &self.history.fork_source {
+            source.revalidate()?;
+        }
+        #[cfg(test)]
+        if let Some(fixture) = self.ordinary_native_fixture.as_ref() {
+            fixture.revalidate_for_effect(&self.effect)?;
+        }
+        self.history.revalidate()?;
+        let config = self
+            .history
+            .config
+            .lock()
+            .map_err(|_| anyhow!("ordinary history config lock poisoned"))?;
+        if config
+            .as_ref()
+            .is_none_or(|(_, digest)| *digest != self.config_sha256)
+        {
+            anyhow::bail!("ordinary process config no longer matches its owned rendering");
+        }
+        Ok(())
+    }
+}
+
+impl Drop for PreparedOrdinaryNativeHomeV1 {
+    fn drop(&mut self) {
+        // Permission revocation never prevents dropping owned route custody.
+        // History remains retained data and is never deleted by process cleanup.
+        self.effect
+            .native_open
+            .store(false, std::sync::atomic::Ordering::Release);
+    }
+}
+
+fn ordinary_native_config(
+    workspace_dir: &Path,
+    selected: &transport_api_types::ResolvedAgentSelectionV1,
+    wiring: &transport_api_types::GatewayClientWiringV1,
+) -> Result<(&'static str, String)> {
+    selected.validate().map_err(anyhow::Error::msg)?;
+    let openai = ordinary_native_managed_origin(&wiring.openai_base_url)?;
+    ordinary_native_managed_origin(&wiring.anthropic_base_url)?;
+    let (name, content) = match selected.selection.harness {
+        transport_api_types::AgentHarnessFamilyV1::Codex => {
+            let quote = |value: &str| toml::Value::String(value.to_string()).to_string();
+            ("config.toml", format!(
+            "model = {model}\nmodel_provider = \"substrate-managed-gateway\"\ncheck_for_update_on_startup = false\ncli_auth_credentials_store = \"ephemeral\"\n[model_providers.substrate-managed-gateway]\nname = \"Substrate managed gateway\"\nbase_url = {url}\nwire_api = \"responses\"\nrequires_openai_auth = false\nsupports_websockets = false\n[projects.{workspace}]\ntrust_level = \"untrusted\"\n",
+            model = quote(&selected.routed_model_id), url = quote(&format!("{openai}/v1")),
+            workspace = quote(&workspace_dir.to_string_lossy()),
+        ))
+        }
+        transport_api_types::AgentHarnessFamilyV1::ClaudeCode => {
+            ("settings.json", "{}\n".to_string())
+        }
+    };
+    Ok((name, content))
+}
+
+fn ordinary_native_managed_origin(endpoint: &str) -> Result<String> {
+    let port = endpoint
+        .strip_prefix("http://127.0.0.1:")
+        .and_then(|port| port.parse::<u16>().ok())
+        .filter(|port| *port != 0)
+        .ok_or_else(|| anyhow!("ordinary native requires canonical managed local endpoint"))?;
+    let canonical = format!("http://127.0.0.1:{port}");
+    if endpoint != canonical {
+        anyhow::bail!("ordinary native endpoint is not a canonical local origin");
+    }
+    Ok(canonical)
+}
+
+fn mask_ordinary_native_inherited_env(runtime_env: &mut BTreeMap<String, String>) {
+    let recognized = |key: &str| {
+        [
+            "OPENAI_",
+            "ANTHROPIC_",
+            "CODEX_",
+            "CLAUDE_",
+            "CHATGPT_",
+            "SUBSTRATE_LLM_",
+            "SUBSTRATE_INTERNAL_CODEX_",
+            "SUBSTRATE_ORDINARY_HOME_",
+        ]
+        .iter()
+        .any(|prefix| key.starts_with(prefix))
+            || [
+                "HOME",
+                "XDG_CONFIG_HOME",
+                "HTTP_PROXY",
+                "HTTPS_PROXY",
+                "ALL_PROXY",
+                "NO_PROXY",
+                "http_proxy",
+                "https_proxy",
+                "all_proxy",
+                "no_proxy",
+            ]
+            .contains(&key)
+    };
+    let keys: BTreeSet<String> = runtime_env
+        .keys()
+        .cloned()
+        .chain(std::env::vars_os().filter_map(|(key, _)| key.into_string().ok()))
+        .filter(|key| recognized(key))
+        .collect();
+    for key in keys {
+        runtime_env.insert(key, String::new());
+    }
+}
+
+fn configure_ordinary_native_env(
+    runtime_env: &mut BTreeMap<String, String>,
+    selected: &transport_api_types::ResolvedAgentSelectionV1,
+    native_path: &Path,
+    wiring: &transport_api_types::GatewayClientWiringV1,
+) -> Result<()> {
+    selected.validate().map_err(anyhow::Error::msg)?;
+    ordinary_native_managed_origin(&wiring.openai_base_url)?;
+    ordinary_native_managed_origin(&wiring.anthropic_base_url)?;
+    mask_ordinary_native_inherited_env(runtime_env);
+    let native_path = native_path.display().to_string();
+    runtime_env.insert("HOME".into(), native_path.clone());
+    runtime_env.insert("XDG_CONFIG_HOME".into(), native_path.clone());
+    runtime_env.insert("NO_PROXY".into(), "127.0.0.1,::1,localhost".into());
+    match selected.selection.harness {
+        transport_api_types::AgentHarnessFamilyV1::Codex => {
+            runtime_env.insert("CODEX_HOME".into(), native_path);
+        }
+        transport_api_types::AgentHarnessFamilyV1::ClaudeCode => {
+            runtime_env.insert("CLAUDE_CONFIG_DIR".into(), native_path);
+            runtime_env.insert(
+                "ANTHROPIC_BASE_URL".into(),
+                ordinary_native_managed_origin(&wiring.anthropic_base_url)?,
+            );
+            runtime_env.insert(
+                "ANTHROPIC_AUTH_TOKEN".into(),
+                "substrate-managed-gateway".into(),
+            );
+            runtime_env.insert("ANTHROPIC_MODEL".into(), selected.routed_model_id.clone());
+        }
+    }
+    Ok(())
+}
+
+async fn prepare_ordinary_native_runtime_env(
+    runtime_env: &mut BTreeMap<String, String>,
+    effect: &Arc<crate::service::OrdinaryWorldEffectContextV1>,
+    workspace_dir: &Path,
+    launcher_dir: &Path,
+    request: OrdinaryNativeHistoryRequestV1,
+    #[cfg(test)] ordinary_native_fixture: Option<Arc<CheckedOrdinaryNativeFixtureV1>>,
+) -> Result<Arc<PreparedOrdinaryNativeHomeV1>> {
+    effect.revalidate_for_effect()?;
+    let history = match request {
+        OrdinaryNativeHistoryRequestV1::InitialStart => {
+            Arc::new(OrdinaryNativeWorkerHistoryV1::create(
+                launcher_dir,
+                effect.ordinary_start_selection(),
+                &effect.authenticated_runtime(),
+                effect.requested_selection(),
+            )?)
+        }
+        OrdinaryNativeHistoryRequestV1::Resume(history) => {
+            // Reject missing/substituted history before acquiring a gateway.
+            history.require_admitted_turn(effect)?;
+            history
+        }
+        OrdinaryNativeHistoryRequestV1::Fork(source) => {
+            Arc::new(OrdinaryNativeWorkerHistoryV1::fork_child(source)?)
+        }
+    };
+    let history_use = OrdinaryNativeHistoryUseV1::acquire(Arc::clone(&history.in_use))?;
+    let (wiring, gateway) = effect.prepare_ordinary_native_gateway(None).await?;
+    let selected = effect.requested_selection();
+    let home = Arc::new(PreparedOrdinaryNativeHomeV1::create(
+        history,
+        history_use,
+        workspace_dir,
+        selected,
+        &wiring,
+        gateway,
+        Arc::clone(effect),
+        #[cfg(test)]
+        ordinary_native_fixture,
+    )?);
+    configure_ordinary_native_env(
+        runtime_env,
+        selected,
+        &home.history.descriptor_path()?,
+        &wiring,
+    )?;
+    runtime_env.remove(crate::internal_exec::ordinary_home_handoff::HANDOFF_ENV);
+    effect.revalidate_for_effect()?;
+    home.revalidate()?;
+    Ok(home)
+}
+
+/// Bounded to one latest run. The independent supervisor writes only after the
+/// actual listener JoinHandle resolves, including when its startup awaiter dies.
+#[derive(Default)]
+struct OrdinaryHomeHandoffTerminalV1 {
+    latest: Mutex<Option<(String, Option<&'static str>)>>,
+    changed: tokio::sync::Notify,
+}
+
+struct OrdinaryHomeHandoffOwnerV1 {
+    shutdown: tokio::sync::oneshot::Sender<()>,
+    completed: tokio::sync::oneshot::Receiver<&'static str>,
+}
+
+#[cfg(test)]
+fn observe_ordinary_home_stage_for_test(stage: &str, details: serde_json::Value) {
+    let Some(root) = std::env::var_os("SUBSTRATE_TEST_ORDINARY_EVIDENCE_ROOT") else {
+        return;
+    };
+    if matches!(
+        stage,
+        "listener_scheduled"
+            | "listener_first_poll"
+            | "peer_accepted"
+            | "before_current_effect_revalidation"
+            | "after_current_effect_revalidation"
+            | "after_history_revalidation"
+            | "reply_written"
+    ) {
+        tracing::debug!(target: "substrate::ordinary_home_io", phase = stage,
+            peer_pid = details.get("peer_pid").and_then(serde_json::Value::as_i64),
+            "ordinary home timing");
+    }
+    // Only the explicitly invoked synthetic component fixture enables this.
+    // Never record the locator/nonce, request environment, or credential inputs.
+    let record = json!({"component_only":true,"stage":stage,"details":details});
+    let path = Path::new(&root).join("ordinary-home-stages.jsonl");
+    let observed = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .and_then(|mut file| writeln!(file, "{record}"));
+    if let Err(error) = observed {
+        eprintln!("could not retain ordinary component stage: {error}");
+    }
+}
+
+fn supervise_ordinary_home_handoff(
+    listener_task: tokio::task::JoinHandle<Result<bool>>,
+    stop_tx: tokio::sync::oneshot::Sender<()>,
+    terminal: Arc<OrdinaryHomeHandoffTerminalV1>,
+    run_id: String,
+) -> OrdinaryHomeHandoffOwnerV1 {
+    let (shutdown, shutdown_rx) = tokio::sync::oneshot::channel();
+    let (mut completed_tx, completed) = tokio::sync::oneshot::channel();
+    // This owner is independent of run_control's awaiter and owns the actual
+    // JoinHandle. Dropping that awaiter closes completed, requests stop, then
+    // still joins the entire accepted callback/listener before recording terminal.
+    tokio::spawn(async move {
+        let mut listener_task = listener_task;
+        let joined = tokio::select! {
+            result = &mut listener_task => result,
+            _ = shutdown_rx => { let _ = stop_tx.send(()); listener_task.await },
+            _ = completed_tx.closed() => { let _ = stop_tx.send(()); listener_task.await },
+        };
+        #[cfg(test)]
+        observe_ordinary_home_stage_for_test(
+            "listener_join",
+            match &joined {
+                Ok(Ok(used)) => json!({"used":used}),
+                Ok(Err(error)) => json!({"listener_error":format!("{error:#}")}),
+                Err(error) => json!({"join_error":error.to_string()}),
+            },
+        );
+        let result = match joined {
+            Ok(Ok(true)) => "joined_used",
+            Ok(Ok(false)) => "joined_stopped",
+            Ok(Err(_)) => "joined_refused",
+            Err(_) => "joined_failed",
+        };
+        if let Ok(mut latest) = terminal.latest.lock() {
+            *latest = Some((run_id, Some(result)));
+        }
+        terminal.changed.notify_waiters();
+        let _ = completed_tx.send(result);
+    });
+    OrdinaryHomeHandoffOwnerV1 {
+        shutdown,
+        completed,
+    }
+}
+
+fn prepare_ordinary_start_home_launcher(
+    actual_binary: &Path,
+    launcher_dir: &Path,
+    snapshot: &transport_api_types::PolicySnapshotV3,
+    placement: &LinuxWorldPlacementContext,
+    process_cwd: &Path,
+    runtime_env: &mut BTreeMap<String, String>,
+) -> Result<PreparedSubmittedTurnPolicyLauncher> {
+    let baseline = runtime_env
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    let mut current = crate::service::build_member_runtime_turn_env(
+        baseline,
+        snapshot,
+        &placement.working_dir,
+        process_cwd,
+    )?;
+    current.insert(
+        SUBSTRATE_E2_TURN_ACTUAL_BINARY_ENV.into(),
+        actual_binary.display().to_string(),
+    );
+    current.insert(
+        SUBSTRATE_E2_TURN_WORLD_ENTRY_ENV.into(),
+        launcher_dir.join("world-entry.sh").display().to_string(),
+    );
+    let launcher = write_submitted_turn_policy_launcher(launcher_dir, true)?;
+    *runtime_env = current.into_iter().collect();
+    Ok(launcher)
+}
+
+/// Exact pinned app-server argv, callable only after genuine Fork admission.
+fn classify_ordinary_fork_codex_args(args: &[String]) -> Result<Option<usize>> {
+    let borrowed: Vec<_> = args.iter().map(String::as_str).collect();
+    for (index, probe) in [
+        vec!["--version"],
+        vec!["features", "list", "--json"],
+        vec!["features", "list"],
+        vec!["--help"],
+    ]
+    .iter()
+    .enumerate()
+    {
+        if &borrowed == probe {
+            return Ok(Some(index));
+        }
+    }
+    if borrowed != ["app-server"] {
+        anyhow::bail!("ordinary Fork argv differs from exact pinned app-server invocation");
+    }
+    Ok(None)
+}
+
+/// Closed pinned-Codex shapes only. Some(index) denotes one of four probes;
+/// None denotes the single actual admitted Start/Resume invocation.
+fn classify_ordinary_codex_args(
+    args: &[String],
+    resume: Option<&str>,
+    sdk_temp: &Path,
+    selected_model: &str,
+    selected_workspace: &Path,
+) -> Result<Option<usize>> {
+    let borrowed: Vec<_> = args.iter().map(String::as_str).collect();
+    for (index, probe) in [
+        vec!["--version"],
+        vec!["features", "list", "--json"],
+        vec!["features", "list"],
+        vec!["--help"],
+    ]
+    .iter()
+    .enumerate()
+    {
+        if &borrowed == probe {
+            return Ok(Some(index));
+        }
+    }
+    // Complete pinned UAA0.3.7/Codex0.3.7 argv, not a contains/ends_with parser.
+    // Start reads stdin without a '-' argv; Resume appends resume,id,'-'.
+    let output = args
+        .get(11)
+        .context("ordinary SDK output argument missing")?;
+    let mut expected = vec![
+        "--dangerously-bypass-approvals-and-sandbox".to_owned(),
+        "exec".into(),
+        "--color".into(),
+        "never".into(),
+        "--skip-git-repo-check".into(),
+        "--json".into(),
+        "--model".into(),
+        selected_model.into(),
+        "--add-dir".into(),
+        selected_workspace
+            .to_str()
+            .context("ordinary selected workspace is not UTF-8")?
+            .into(),
+        "--output-last-message".into(),
+        output.clone(),
+    ];
+    if let Some(id) = resume {
+        expected.extend(["resume".into(), id.into(), "-".into()]);
+    }
+    if args != expected {
+        anyhow::bail!(
+            "ordinary native argv conflicts with exact selected model/workspace/session/options"
+        );
+    }
+    let output = Path::new(output);
+    let name = output
+        .file_name()
+        .and_then(|v| v.to_str())
+        .context("ordinary SDK output filename")?;
+    let suffix = format!("_{}.txt", std::process::id());
+    let timestamp = name
+        .strip_prefix("codex_last_message_")
+        .and_then(|v| v.strip_suffix(&suffix));
+    if output.parent() != Some(sdk_temp)
+        || timestamp.is_none_or(|v| v.is_empty() || !v.bytes().all(|b| b.is_ascii_digit()))
+        || fs::symlink_metadata(output).is_ok()
+    {
+        anyhow::bail!("ordinary SDK output is not its exact new parent-generated scratch file");
+    }
+    Ok(None)
+}
+
+/// The current ordinary Claude adapter emits one closed Start/explicit Resume
+/// shape. Selection and prompt come from the independently admitted request;
+/// no ambient session, native Fork, extra config, or generic fallback is admitted.
+fn classify_ordinary_claude_args(
+    args: &[String],
+    resume: Option<&str>,
+    selected_model: &str,
+    selected_prompt: &str,
+) -> Result<()> {
+    let mut expected: Vec<String> = [
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--model",
+        selected_model,
+        "--permission-mode",
+        "bypassPermissions",
+        "--include-partial-messages",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect();
+    if let Some(id) = resume {
+        expected.extend(["--resume".into(), id.into()]);
+    }
+    expected.extend(["--verbose".into(), selected_prompt.into()]);
+    if args != expected {
+        anyhow::bail!(
+            "ordinary Claude argv conflicts with exact selected model/prompt/session/options"
+        );
+    }
+    Ok(())
+}
+
+fn observe_ordinary_home_io_failure(
+    operation: &'static str,
+    peer_pid: libc::pid_t,
+    started: std::time::Instant,
+    error: &std::io::Error,
+) {
+    tracing::debug!(target: "substrate::ordinary_home_io", operation, peer_pid,
+        elapsed_us = started.elapsed().as_micros() as u64,
+        error_kind = ?error.kind(), errno = error.raw_os_error(),
+        "ordinary child handoff I/O failed");
+}
+
+async fn issue_ordinary_home_handoff(
+    home: &Arc<PreparedOrdinaryNativeHomeV1>,
+    request: &mut AgentWrapperRunRequest,
+) -> Result<OrdinaryHomeHandoffOwnerV1> {
+    let runtime_env = &mut request.env;
+    use crate::internal_exec::ordinary_home_handoff::{
+        HomeReply, Locator, HANDOFF_ENV, HOME_REPLY_TIMEOUT,
+    };
+    use std::io::Read as _;
+    use std::os::fd::AsRawFd;
+    use std::os::linux::net::SocketAddrExt;
+    use std::os::unix::net::{SocketAddr, UnixListener};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    if runtime_env
+        .get("SUBSTRATE_WORLD_FS_ISOLATION")
+        .is_some_and(|v| v.eq_ignore_ascii_case("full"))
+        || runtime_env
+            .get("SUBSTRATE_MOUNT_FS_MODE")
+            .is_some_and(|v| v.eq_ignore_ascii_case("read_only"))
+    {
+        anyhow::bail!("ordinary child-home custody unsupported for this filesystem posture");
+    }
+    // A dropped prior startup awaiter does not let a later turn resurrect its IPC.
+    loop {
+        let notified = home.history.handoff_terminal.changed.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
+        let pending = home
+            .history
+            .handoff_terminal
+            .latest
+            .lock()
+            .map_err(|_| anyhow!("ordinary handoff terminal state poisoned"))?
+            .as_ref()
+            .is_some_and(|(_, result)| result.is_none());
+        if !pending {
+            break;
+        }
+        tokio::time::timeout(std::time::Duration::from_secs(5), notified)
+            .await
+            .context("previous ordinary home handoff did not join")?;
+    }
+    if runtime_env.contains_key(crate::enforcement_plan::WORLD_FS_ENFORCEMENT_PLAN_B64_ENV) {
+        anyhow::bail!("ordinary child-home custody does not admit deny-plan posture");
+    }
+    let sdk_temp = std::env::temp_dir();
+    if !home.history.path.starts_with("/tmp")
+        || fs::canonicalize(&home.history.path)? != home.history.path
+        || !sdk_temp.starts_with("/tmp")
+        || fs::canonicalize(&sdk_temp)? != sdk_temp
+    {
+        anyhow::bail!(
+            "ordinary managed home and SDK output require existing canonical /tmp scratch coverage"
+        );
+    }
+    home.effect.revalidate_for_effect()?;
+    home.revalidate()?;
+    let mut entropy = [0u8; 32];
+    fs::File::open("/dev/urandom")?.read_exact(&mut entropy)?;
+    let nonce: String = entropy.iter().map(|byte| format!("{byte:02x}")).collect();
+    let locator = Locator {
+        socket: format!("substrate-ordinary-home-{}", &nonce[..32]),
+        nonce: nonce.clone(),
+    };
+    let address = SocketAddr::from_abstract_name(locator.socket.as_bytes())?;
+    let listener = UnixListener::bind_addr(&address)?;
+    listener.set_nonblocking(true)?;
+    let listener = tokio::net::UnixListener::from_std(listener)?;
+    let selected_harness = home.effect.requested_selection().selection.harness;
+    let selected_prompt = request.prompt.clone();
+    let binary = runtime_env
+        .get(SUBSTRATE_E2_TURN_ACTUAL_BINARY_ENV)
+        .cloned()
+        .context("ordinary actual binary missing")?;
+    let helper = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(
+            runtime_env
+                .get(crate::service::LANDLOCK_HELPER_SRC_ENV)
+                .context("ordinary source helper missing")?,
+        )?;
+    let helper_identity = helper.metadata()?;
+    if !helper_identity.is_file() || helper_identity.permissions().mode() & 0o022 != 0 {
+        anyhow::bail!("ordinary helper executable custody changed");
+    }
+    let resume = request
+        .extensions
+        .get(SESSION_RESUME_EXTENSION_V1)
+        .map(|v| {
+            if v.get("selector").and_then(|v| v.as_str()) != Some("id") {
+                anyhow::bail!("ordinary Resume selector changed");
+            }
+            v.get("id")
+                .and_then(|v| v.as_str())
+                .map(str::to_owned)
+                .context("ordinary Resume session missing")
+        })
+        .transpose()?;
+    // Fork lineage remains pinned for the child's lifetime. A genuine admitted
+    // turn resumes that child; only its bootstrap uses the initial Fork path.
+    let retained_turn = home.effect.turn_admission().is_ok();
+    if retained_turn && resume.is_none() {
+        anyhow::bail!("ordinary retained turn requires Resume");
+    }
+    let fork = if retained_turn {
+        None
+    } else {
+        home.history.fork_source.as_ref()
+    };
+    let initial_fork = fork.is_some();
+    if initial_fork && resume.is_some() {
+        anyhow::bail!("ordinary initial Fork cannot include Resume");
+    }
+    if let Some(source) = fork {
+        source.revalidate()?;
+        if selected_harness != transport_api_types::AgentHarnessFamilyV1::Codex
+            || request.extensions.len() != 1
+            || request.extensions.get(SESSION_FORK_EXTENSION_V1)
+                != Some(&json!({"selector":"id","id":source.session_id}))
+        {
+            anyhow::bail!("ordinary Fork selector/options differ from exact held source");
+        }
+    } else if request.extensions.contains_key(SESSION_FORK_EXTENSION_V1) {
+        anyhow::bail!("ordinary native Fork omitted authenticated source ownership");
+    }
+    let selected_model = home.effect.requested_selection().routed_model_id.clone();
+    if fork.is_none()
+        && request
+            .extensions
+            .get("agent_api.config.model.v1")
+            .and_then(|v| v.as_str())
+            != Some(selected_model.as_str())
+    {
+        anyhow::bail!("ordinary request model differs from held selection");
+    }
+    let selected_workspace = request
+        .working_dir
+        .clone()
+        .context("ordinary request workspace missing")?;
+    let declared_dirs = request
+        .extensions
+        .get(ADD_DIRS_EXTENSION_V1)
+        .and_then(|v| v.get("dirs"))
+        .and_then(|v| v.as_array());
+    match selected_harness {
+        transport_api_types::AgentHarnessFamilyV1::Codex => {
+            if fork.is_none()
+                && declared_dirs.is_none_or(|dirs| {
+                    dirs.len() != 1 || dirs[0].as_str() != selected_workspace.to_str()
+                })
+            {
+                anyhow::bail!("ordinary declared add-dir differs from held process workspace");
+            }
+        }
+        transport_api_types::AgentHarnessFamilyV1::ClaudeCode => {
+            // The current adapter uses the exact working directory and no add-dir
+            // extension. Do not reinterpret an injected empty/extra extension.
+            if request.extensions.contains_key(ADD_DIRS_EXTENSION_V1)
+                || request.extensions.len() != 1 + usize::from(resume.is_some())
+                || request.extensions.keys().any(|key| {
+                    key != "agent_api.config.model.v1" && key != SESSION_RESUME_EXTENSION_V1
+                })
+            {
+                anyhow::bail!("ordinary Claude workspace/options differ from issued request");
+            }
+        }
+    }
+    let held_workspace = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(&selected_workspace)?;
+    let history = Arc::clone(&home.history);
+    let effect = Arc::clone(&home.effect);
+    let config_sha256 = home.config_sha256.clone();
+    #[cfg(test)]
+    let fixture = home.ordinary_native_fixture.clone();
+    let run_id = match effect.authenticated_runtime() {
+        transport_api_types::OrdinaryGatewayRuntimeIdentityV1::WorldWorker { run_id, .. } => run_id,
+        _ => anyhow::bail!("ordinary child-home handoff requires World-worker admission"),
+    };
+    *history
+        .handoff_terminal
+        .latest
+        .lock()
+        .map_err(|_| anyhow!("ordinary handoff terminal state poisoned"))? =
+        Some((run_id.clone(), None));
+    let (stop_tx, stop_rx) = tokio::sync::oneshot::channel();
+    #[cfg(test)]
+    observe_ordinary_home_stage_for_test("listener_scheduled", json!({}));
+    let listener_task = tokio::spawn(async move {
+        #[cfg(test)]
+        observe_ordinary_home_stage_for_test("listener_first_poll", json!({}));
+        let serving = async move {
+            let _held_helper = helper;
+            let held_workspace_identity = held_workspace.metadata()?;
+            let _held_workspace = held_workspace;
+            // UAA probes once, then lower Codex streaming probes once: both
+            // explicitly bypass the process cache when env overrides are present.
+            // Each of these four closed shapes is admitted at most twice.
+            let mut probes = [0u8; 4];
+            loop {
+                let (mut stream, _) = listener.accept().await?;
+                let callback_started = std::time::Instant::now();
+                let callback = async {
+                    // The SDK starts this process directly; every submitted launcher step
+                    // execs in-place. Kernel peer identity is checked in both directions.
+                    let peer = crate::internal_exec::ordinary_home_handoff::peer_credentials(
+                        stream.as_raw_fd(),
+                    )?;
+                    if peer.uid != unsafe { libc::geteuid() } {
+                        anyhow::bail!("ordinary home child UID differs from issuer");
+                    }
+                    crate::internal_exec::ordinary_home_handoff::require_direct_child(
+                        peer.pid,
+                        std::process::id(),
+                    )?;
+                    #[cfg(test)]
+                    observe_ordinary_home_stage_for_test(
+                        "peer_accepted",
+                        json!({"peer_pid":peer.pid,"elapsed_us":callback_started.elapsed().as_micros()}),
+                    );
+                    let mut presented = Vec::new();
+                    (&mut stream)
+                        .take(65)
+                        .read_to_end(&mut presented)
+                        .await
+                        .inspect_err(|error| {
+                            observe_ordinary_home_io_failure(
+                                "nonce_read",
+                                peer.pid,
+                                callback_started,
+                                error,
+                            );
+                        })?;
+                    if presented != nonce.as_bytes() {
+                        anyhow::bail!("ordinary home nonce differs from current issued handoff");
+                    }
+                    let mapped =
+                        fs::metadata(format!("/proc/{}/exe", peer.pid)).inspect_err(|error| {
+                            observe_ordinary_home_io_failure(
+                                "proc_exe_metadata",
+                                peer.pid,
+                                callback_started,
+                                error,
+                            );
+                        })?;
+                    if (mapped.dev(), mapped.ino())
+                        != (helper_identity.dev(), helper_identity.ino())
+                    {
+                        anyhow::bail!("ordinary handoff peer is not the held source helper");
+                    }
+                    let cmdline =
+                        fs::read(format!("/proc/{}/cmdline", peer.pid)).inspect_err(|error| {
+                            observe_ordinary_home_io_failure(
+                                "proc_cmdline_read",
+                                peer.pid,
+                                callback_started,
+                                error,
+                            );
+                        })?;
+                    if cmdline.len() > 4096 {
+                        anyhow::bail!("ordinary helper argv exceeds handoff shape");
+                    }
+                    let argv: Vec<String> = cmdline
+                        .split(|b| *b == 0)
+                        .filter(|b| !b.is_empty())
+                        .map(|b| String::from_utf8(b.to_vec()).map_err(anyhow::Error::from))
+                        .collect::<Result<_>>()?;
+                    if argv.get(1).map(String::as_str)
+                        != Some(crate::internal_exec::ORDINARY_HOME_EXEC_ARG)
+                    {
+                        anyhow::bail!("ordinary child entered a different helper mode");
+                    }
+                    let args = argv.into_iter().skip(2).collect::<Vec<_>>();
+                    let child_cwd =
+                        fs::metadata(format!("/proc/{}/cwd", peer.pid)).inspect_err(|error| {
+                            observe_ordinary_home_io_failure(
+                                "proc_cwd_metadata",
+                                peer.pid,
+                                callback_started,
+                                error,
+                            );
+                        })?;
+                    if (child_cwd.dev(), child_cwd.ino())
+                        != (held_workspace_identity.dev(), held_workspace_identity.ino())
+                    {
+                        anyhow::bail!(
+                            "ordinary actual child working directory differs from held workspace"
+                        );
+                    }
+                    let probe = match selected_harness {
+                        transport_api_types::AgentHarnessFamilyV1::Codex => {
+                            if initial_fork {
+                                // The source ownership above is revalidated again at effect.
+                                classify_ordinary_fork_codex_args(&args)?
+                            } else {
+                                classify_ordinary_codex_args(
+                                    &args,
+                                    resume.as_deref(),
+                                    &sdk_temp,
+                                    &selected_model,
+                                    &selected_workspace,
+                                )?
+                            }
+                        }
+                        transport_api_types::AgentHarnessFamilyV1::ClaudeCode => {
+                            classify_ordinary_claude_args(
+                                &args,
+                                resume.as_deref(),
+                                &selected_model,
+                                &selected_prompt,
+                            )?;
+                            None
+                        }
+                    };
+                    if let Some(index) = probe {
+                        probes[index] += 1;
+                        if probes[index] > 2 {
+                            anyhow::bail!(
+                                "ordinary SDK probe repeated outside pinned two-pass budget"
+                            );
+                        }
+                    }
+
+                    #[cfg(test)]
+                    observe_ordinary_home_stage_for_test(
+                        "peer_proc_and_argv_validated",
+                        json!({"peer_pid":peer.pid,"probe_index":probe,
+                            "elapsed_us":callback_started.elapsed().as_micros()}),
+                    );
+                    // A bearer route/nonce is not a permit. The live sealed current-run
+                    // owner independently revalidates source/account/policy immediately
+                    // before issuing this exact still-held directory/config descriptor.
+                    #[cfg(test)]
+                    observe_ordinary_home_stage_for_test(
+                        "before_current_effect_revalidation",
+                        json!({"peer_pid":peer.pid,"elapsed_us":callback_started.elapsed().as_micros()}),
+                    );
+                    #[cfg(not(test))]
+                    effect.revalidate_for_effect()?;
+                    #[cfg(test)]
+                    match fixture.as_ref() {
+                        // This existing checked fixture method performs its
+                        // physical+worker checks and a full current effect join.
+                        Some(fixture) => fixture.revalidate_for_effect(&effect)?,
+                        None => effect.revalidate_for_effect()?,
+                    }
+                    #[cfg(test)]
+                    observe_ordinary_home_stage_for_test(
+                        "after_current_effect_revalidation",
+                        json!({"peer_pid":peer.pid,"elapsed_us":callback_started.elapsed().as_micros()}),
+                    );
+                    #[cfg(test)]
+                    observe_ordinary_home_stage_for_test(
+                        "after_fixture_revalidation",
+                        json!({"peer_pid":peer.pid,"elapsed_us":callback_started.elapsed().as_micros()}),
+                    );
+                    if let Some(source) = &history.fork_source {
+                        source.revalidate()?;
+                    }
+                    history.revalidate()?;
+                    #[cfg(test)]
+                    observe_ordinary_home_stage_for_test(
+                        "after_history_revalidation",
+                        json!({"peer_pid":peer.pid,"elapsed_us":callback_started.elapsed().as_micros()}),
+                    );
+                    let (config_name, pinned_digest) = history
+                        .config
+                        .lock()
+                        .map_err(|_| anyhow!("ordinary history config lock poisoned"))?
+                        .clone()
+                        .context("ordinary issued config missing")?;
+                    if pinned_digest != config_sha256 {
+                        anyhow::bail!("ordinary issued current-run config changed");
+                    }
+                    let metadata = history.directory.metadata()?;
+                    let reply = HomeReply {
+                        nonce: nonce.clone(),
+                        service_pid: std::process::id(),
+                        child_pid: peer.pid as u32,
+                        source_fd: history.directory.as_raw_fd(),
+                        device: metadata.dev(),
+                        inode: metadata.ino(),
+                        uid: metadata.uid(),
+                        config_name,
+                        config_sha256: config_sha256.clone(),
+                        sdk_temp: sdk_temp.display().to_string(),
+                        binary: binary.clone(),
+                        args,
+                    };
+                    let bytes = serde_json::to_vec(&reply)?;
+                    if bytes.len() > 4096 {
+                        anyhow::bail!("ordinary home reply exceeds fixed shape");
+                    }
+                    #[cfg(test)]
+                    {
+                        // Only this authenticated direct child is inspected. State is
+                        // metadata, never a substitute for its SDK-owned Child.wait.
+                        let peer_state = fs::read_to_string(format!("/proc/{}/stat", peer.pid))
+                            .map(|stat| {
+                                stat.rsplit_once(')')
+                                    .and_then(|(_, tail)| tail.split_whitespace().next())
+                                    .map(str::to_owned)
+                            });
+                        observe_ordinary_home_stage_for_test(
+                            "before_reply_write",
+                            json!({"peer_pid":peer.pid,"elapsed_us":callback_started.elapsed().as_micros(),
+                                "peer_state":peer_state.as_ref().ok(),
+                                "peer_state_error":peer_state.err().map(|error|error.to_string())}),
+                        );
+                    }
+                    stream.write_all(&bytes).await?;
+                    #[cfg(test)]
+                    observe_ordinary_home_stage_for_test(
+                        "reply_written",
+                        json!({"peer_pid":peer.pid,"elapsed_us":callback_started.elapsed().as_micros()}),
+                    );
+                    stream.shutdown().await?;
+                    Ok::<_, anyhow::Error>(probe.is_none())
+                };
+                let used = tokio::time::timeout(HOME_REPLY_TIMEOUT, callback)
+                    .await
+                    .context("ordinary home callback deadline")??;
+                if used {
+                    return Ok::<_, anyhow::Error>(true);
+                }
+            }
+        };
+        tokio::select! {
+            _ = stop_rx => Ok(false),
+            // Two real SDK passes of at most four closed probes, then one
+            // native Start/Resume. Each callback retains the same finite limit;
+            // at most nine successful replies can be issued for this one-use run.
+            result = tokio::time::timeout(HOME_REPLY_TIMEOUT.saturating_mul(9), serving) => result.context("ordinary home handoff deadline")?,
+        }
+    });
+    let owner = supervise_ordinary_home_handoff(
+        listener_task,
+        stop_tx,
+        Arc::clone(&home.history.handoff_terminal),
+        run_id,
+    );
+    runtime_env.insert(HANDOFF_ENV.into(), serde_json::to_string(&locator)?);
+    Ok(owner)
+}
+async fn run_ordinary_native_control<C: Send + 'static>(
+    prompt_fulfillment: Arc<PromptFulfillmentBridge>,
+    mut request: AgentWrapperRunRequest,
+    home: Option<Arc<PreparedOrdinaryNativeHomeV1>>,
+    custody: C,
+) -> std::result::Result<PromptFulfillmentRunControl, AgentWrapperError> {
+    // Preserve the existing nonordinary/protected request path and its future.
+    let Some(home) = home else {
+        return prompt_fulfillment.run_control(request).await;
+    };
+    let route = OrdinaryNativeRouteDisposalV1::from_home(&home);
+    let deadline = request
+        .timeout
+        .filter(|value| !value.is_zero())
+        .map(|value| tokio::time::Instant::now() + value);
+    let startup_home = Arc::clone(&home);
+    let startup = async move {
+        let home = Some(&startup_home);
+        // Both ordinary Start and Resume now use the same admitted policy helper.
+        #[cfg(test)]
+        observe_ordinary_home_stage_for_test(
+            "issue_begin",
+            json!({"isolation":request.env.get("SUBSTRATE_WORLD_FS_ISOLATION"),
+            "fs_mode":request.env.get("SUBSTRATE_MOUNT_FS_MODE"),
+            "plan_present":request.env.contains_key(crate::enforcement_plan::WORLD_FS_ENFORCEMENT_PLAN_B64_ENV),
+            "plan_empty":request.env.get(crate::enforcement_plan::WORLD_FS_ENFORCEMENT_PLAN_B64_ENV).map(|v|v.is_empty())}),
+        );
+        let handoff = match home {
+            Some(home) => Some(
+                issue_ordinary_home_handoff(home, &mut request)
+                    .await
+                    .map_err(|error| {
+                        #[cfg(test)]
+                        observe_ordinary_home_stage_for_test(
+                            "issue_refused",
+                            json!({"error":format!("{error:#}")}),
+                        );
+                        #[cfg(not(test))]
+                        let _ = error;
+                        AgentWrapperError::Backend {
+                            message: "ordinary current-run home handoff refused".into(),
+                        }
+                    })?,
+            ),
+            None => None,
+        };
+        #[cfg(test)]
+        observe_ordinary_home_stage_for_test("sdk_startup_begin", json!({}));
+        let control = prompt_fulfillment.run_control(request).await;
+        #[cfg(test)]
+        observe_ordinary_home_stage_for_test(
+            "sdk_startup_returned",
+            match &control {
+                Ok(_) => json!({"returned_control":true}),
+                Err(error) => json!({"returned_control":false,"error":error.to_string()}),
+            },
+        );
+        match control {
+            Ok(mut control) => {
+                let completion = control.handle.completion;
+                #[cfg(test)]
+                let observed_home = home.cloned();
+                control.handle.completion = Box::pin(async move {
+                    let outcome = completion.await;
+                    let handoff_result = if let Some(owner) = handoff {
+                        let _ = owner.shutdown.send(());
+                        Some(owner.completed.await.unwrap_or("join_result_lost"))
+                    } else {
+                        None
+                    };
+                    #[cfg(test)]
+                    if let (Some(home), Some(root)) = (
+                        observed_home,
+                        std::env::var_os("SUBSTRATE_TEST_ORDINARY_ROOT"),
+                    ) {
+                        use std::io::Write as _;
+                        let (success, final_text) = match &outcome {
+                            Ok(result) => (result.status.success(), result.final_text.clone()),
+                            Err(_) => (false, None),
+                        };
+                        let latest = home.history.handoff_terminal.latest.lock().unwrap().clone();
+                        let mut log = fs::OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(Path::new(&root).join("sdk-completions.jsonl"))
+                            .unwrap();
+                        writeln!(
+                            log,
+                            "{}",
+                            json!({"success":success,"final_text":final_text,
+                        "handoff":handoff_result,"latest_join":latest})
+                        )
+                        .unwrap();
+                    }
+                    if handoff_result.is_some_and(|v| v != "joined_used") {
+                        return Err(AgentWrapperError::Backend {
+                            message: format!(
+                                "ordinary home handoff terminal join failed; backend outcome: {}",
+                                outcome
+                                    .as_ref()
+                                    .err()
+                                    .map(ToString::to_string)
+                                    .unwrap_or_else(|| "backend completion received".into())
+                            ),
+                        });
+                    }
+                    outcome
+                });
+                Ok(control)
+            }
+            Err(error) => {
+                if let Some(owner) = handoff {
+                    let _ = owner.shutdown.send(());
+                    // Actual join is awaited on returned startup failure. Dropped
+                    // awaiters are independently handled by the supervisor above.
+                    let joined = owner.completed.await;
+                    #[cfg(test)]
+                    observe_ordinary_home_stage_for_test(
+                        "sdk_startup_refusal_cleanup",
+                        json!({"handoff_join":joined.ok()}),
+                    );
+                    #[cfg(not(test))]
+                    let _ = joined;
+                }
+                Err(error)
+            }
+        }
+    };
+    retain_ordinary_native_startup(startup, route, (home, custody), deadline).await
+}
+
+/// Disposal-only references, derived from the already held admitted home. This
+/// type has no effect API and does not mint admission or acknowledge native wait.
+#[derive(Clone)]
+struct OrdinaryNativeRouteDisposalV1 {
+    history_state: Arc<OrdinaryNativeHistoryStateV1>,
+    native_open: Arc<std::sync::atomic::AtomicBool>,
+    gateway: Arc<crate::gateway_runtime::OrdinaryGatewayRuntimeLeaseV1>,
+    #[cfg(test)]
+    runtime: transport_api_types::OrdinaryGatewayRuntimeIdentityV1,
+}
+impl OrdinaryNativeRouteDisposalV1 {
+    fn from_home(home: &PreparedOrdinaryNativeHomeV1) -> Self {
+        Self {
+            history_state: Arc::clone(&home.history.in_use),
+            native_open: Arc::clone(&home.effect.native_open),
+            gateway: Arc::clone(&home.gateway),
+            #[cfg(test)]
+            runtime: home.effect.authenticated_runtime(),
+        }
+    }
+
+    async fn dispose(&self) -> Result<(), AgentWrapperError> {
+        self.native_open
+            .store(false, std::sync::atomic::Ordering::Release);
+        let _terminal =
+            self.gateway
+                .finish_owned()
+                .await
+                .map_err(|error| AgentWrapperError::Backend {
+                    message: format!("ordinary owned gateway terminal disposal failed: {error:#}"),
+                })?;
+        #[cfg(test)]
+        if let Some(root) = std::env::var_os("SUBSTRATE_TEST_ORDINARY_ROOT") {
+            use std::os::unix::process::ExitStatusExt as _;
+            let (pid, status) = _terminal;
+            let record = fs::OpenOptions::new().create(true).append(true)
+                .open(Path::new(&root).join("gateway-terminals.jsonl"))
+                .and_then(|mut log| writeln!(log, "{}", json!({
+                    "component_only":true,"pid":pid,"code":status.code(),
+                    "signal":status.signal(),"runtime_id":self.gateway.runtime_id,
+                    "native_open":self.native_open.load(std::sync::atomic::Ordering::Acquire),
+                    "runtime":self.runtime,"owned_child_terminal":true,
+                    "manifest_and_entry_disposed":true,
+                })));
+            if let Err(error) = record {
+                return Err(AgentWrapperError::Backend {
+                    message: format!(
+                        "could not retain ordinary gateway terminal observation: {error}"
+                    ),
+                });
+            }
+        }
+        Ok(())
+    }
+}
+
+async fn ordinary_route_deadline(deadline: Option<tokio::time::Instant>) {
+    match deadline {
+        Some(deadline) => tokio::time::sleep_until(deadline).await,
+        None => std::future::pending().await,
+    }
+}
+
+fn ordinary_route_result<T>(
+    outcome: Result<T, AgentWrapperError>,
+    disposal: Result<(), AgentWrapperError>,
+) -> Result<T, AgentWrapperError> {
+    match disposal {
+        Ok(()) => outcome,
+        Err(error) => Err(AgentWrapperError::Backend {
+            message: format!(
+                "{error}; original backend outcome: {}",
+                outcome
+                    .as_ref()
+                    .err()
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| "backend completion received".into())
+            ),
+        }),
+    }
+}
+
+/// Own startup, home and exclusion before the first startup await. Dropping the
+/// delivery future revokes the route concurrently; it never drops native startup
+/// or its custody before the SDK returns its control/error. Successful delivery
+/// transfers custody into the retained completion owner before exposing control.
+fn retain_ordinary_native_startup<C, F>(
+    startup: F,
+    route: OrdinaryNativeRouteDisposalV1,
+    custody: C,
+    deadline: Option<tokio::time::Instant>,
+) -> impl std::future::Future<Output = Result<PromptFulfillmentRunControl, AgentWrapperError>>
+where
+    C: Send + 'static,
+    F: std::future::Future<Output = Result<PromptFulfillmentRunControl, AgentWrapperError>>
+        + Send
+        + 'static,
+{
+    let (mut sender, receiver) = tokio::sync::oneshot::channel();
+    tokio::spawn(async move {
+        let mut startup = Box::pin(startup);
+        let (outcome, early_disposal) = tokio::select! {
+            outcome = &mut startup => (outcome, None),
+            _ = sender.closed() => {
+                let (outcome, disposal) = tokio::join!(startup, route.dispose());
+                (outcome, Some(disposal))
+            },
+            // The SDK owns its timeout outcome. This timer only revokes routes;
+            // invoking cancel here could replace a normative timeout with cancelled.
+            _ = ordinary_route_deadline(deadline) => {
+                let (outcome, disposal) = tokio::join!(startup, route.dispose());
+                (outcome, Some(disposal))
+            },
+        };
+        let outcome = match outcome {
+            Ok(mut control) => {
+                // Even a route-disposal failure cannot drop a returned native
+                // control before its completion/custody owner has been installed.
+                if let Some(disposal) = early_disposal {
+                    let completion = control.handle.completion;
+                    control.handle.completion =
+                        Box::pin(async move { ordinary_route_result(completion.await, disposal) });
+                }
+                let terminate = control.cancel.clone();
+                control.handle.completion = retain_ordinary_native_completion(
+                    control.handle.completion,
+                    route,
+                    control.terminal.clone(),
+                    custody,
+                    move || terminate.cancel(),
+                    deadline,
+                );
+                Ok(control)
+            }
+            Err(error) => {
+                let disposal = match early_disposal {
+                    Some(disposal) => disposal,
+                    None => route.dispose().await,
+                };
+                ordinary_route_result(Err(error), disposal)
+            }
+        };
+        // Failed delivery drops the control whose independent completion owner
+        // requests cancellation and continues to retain the actual native custody.
+        let _ = sender.send(outcome);
+    });
+    async move {
+        receiver.await.map_err(|_| AgentWrapperError::Backend {
+            message: "submission_outcome_unknown: ordinary startup owner abandoned".into(),
+        })?
+    }
+}
+
+/// Normal returned-control completion includes exact owned gateway disposal.
+/// The existing independent supervisor retains this future if its caller drops.
+fn retain_ordinary_native_completion<C: Send + 'static>(
+    mut completion: agent_api::DynAgentWrapperCompletion,
+    route: OrdinaryNativeRouteDisposalV1,
+    native_terminal: NativeTerminalObservation,
+    custody: C,
+    terminate: impl FnOnce() + Send + 'static,
+    deadline: Option<tokio::time::Instant>,
+) -> agent_api::DynAgentWrapperCompletion {
+    let abandonment = native_terminal.clone();
+    let completion = Box::pin(async move {
+        let ready = tokio::select! {
+            outcome = &mut completion => Some(outcome),
+            _ = native_terminal.route_disposal_requested() => None,
+            _ = ordinary_route_deadline(deadline) => None,
+        };
+        let (outcome, disposal) = match ready {
+            Some(outcome) => (outcome, route.dispose().await),
+            None => tokio::join!(completion, route.dispose()),
+        };
+        let observed = native_terminal.wait().await;
+        #[cfg(test)]
+        if let Some(root) = std::env::var_os("SUBSTRATE_TEST_ORDINARY_ROOT") {
+            let record = fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(Path::new(&root).join("native-history-settlements.jsonl"))
+                .and_then(|mut log| {
+                    writeln!(
+                        log,
+                        "{}",
+                        json!({
+                            "component_only":true,"runtime":route.runtime,
+                            "checked":observed.require_checked().is_ok(),
+                        })
+                    )
+                });
+            if let Err(error) = record {
+                eprintln!("could not preserve checked native history settlement: {error}");
+            }
+        }
+        if observed.require_checked().is_err() {
+            // The publisher may retire the member later. No retained/captured
+            // source may acquire this shared store in the intervening window.
+            route.history_state.poison();
+            tracing::warn!("owned gateway disposed with native acknowledgment unconfirmed");
+        }
+        // Raw SDK completion is preserved. The enclosing publisher checks the
+        // independent native outcome and cannot treat route disposal as native ACK.
+        ordinary_route_result(outcome, disposal)
+    });
+    retain_ordinary_world_completion(completion, custody, move || {
+        abandonment.request_route_disposal();
+        terminate();
+    })
+}
+
+/// Keep actual ordinary resources through SDK terminal observation even when a
+/// later fallible registration/persistence step drops the public completion.
+fn retain_ordinary_world_completion<C: Send + 'static>(
+    mut completion: agent_api::DynAgentWrapperCompletion,
+    custody: C,
+    terminate: impl FnOnce() + Send + 'static,
+) -> agent_api::DynAgentWrapperCompletion {
+    let (mut sender, receiver) = tokio::sync::oneshot::channel();
+    tokio::spawn(async move {
+        let result = tokio::select! {
+            result = &mut completion => result,
+            _ = sender.closed() => { terminate(); completion.await },
+        };
+        drop(custody);
+        let _ = sender.send(result);
+    });
+    Box::pin(async move {
+        receiver.await.map_err(|_| AgentWrapperError::Backend {
+            message: "ordinary World supervisor ended before SDK terminal observation".into(),
+        })?
+    })
+}
+
+fn cleanup_prepared_ordinary_member_launcher(
+    launcher_dir: &mut Option<std::path::PathBuf>,
+    ordinary: bool,
+) {
+    if ordinary {
+        // Even failed/retired ordinary histories remain private data. Neither
+        // this pathname nor an orphan directory can reconstruct admission.
+        launcher_dir.take();
+    } else {
+        cleanup_prepared_launcher_dir(launcher_dir);
+    }
 }
 
 struct PreparedSubmittedTurnPolicyLauncher {
@@ -194,6 +2140,8 @@ impl MemberRuntimeManager {
             runtime_replay: RuntimeReplayRegistry::default(),
             member_turn_join: None,
             privileged_child_exclusion,
+            #[cfg(test)]
+            ordinary_native_fixture: None,
         }
     }
 
@@ -220,7 +2168,40 @@ impl MemberRuntimeManager {
             runtime_replay,
             member_turn_join,
             privileged_child_exclusion,
+            #[cfg(test)]
+            ordinary_native_fixture: None,
         }
+    }
+
+    /// Unit-test composition only; never called by production service construction.
+    #[cfg(test)]
+    pub(crate) fn with_checked_ordinary_native_fixture_for_test(
+        mut self,
+        path: &Path,
+        digest: &str,
+    ) -> Result<Self> {
+        {
+            let members = self
+                .active_members
+                .read()
+                .map_err(|_| anyhow!("members lock poisoned"))?;
+            if self.ordinary_native_fixture.is_some()
+                || !members.ordinary_pending_participants.is_empty()
+                || !members.by_participant_id.is_empty()
+                || !members.by_retained_key.is_empty()
+                || !self
+                    .active_turns_by_span_id
+                    .read()
+                    .map_err(|_| anyhow!("turns lock poisoned"))?
+                    .is_empty()
+            {
+                anyhow::bail!("component executable must be composed before runtime admission");
+            }
+        }
+        self.ordinary_native_fixture = Some(Arc::new(CheckedOrdinaryNativeFixtureV1::open(
+            path, digest,
+        )?));
+        Ok(self)
     }
 
     pub(crate) async fn launch(
@@ -232,11 +2213,20 @@ impl MemberRuntimeManager {
         binding: SharedWorldBindingSnapshot,
         placement: LinuxWorldPlacementContext,
     ) -> Result<Response> {
+        let ordinary_launch = admission.ordinary_effect.is_some();
         let MemberRuntimeLaunchAdmissionV1 {
             dispatch,
             acceptance_context,
             policy_snapshot,
+            ordinary_effect,
         } = admission;
+        let ordinary_launch_reservation = ordinary_effect
+            .as_ref()
+            .map(|effect| self.reserve_ordinary_launch(effect, &span_id))
+            .transpose()?;
+        if let Some(effect) = ordinary_effect.as_ref() {
+            effect.revalidate_for_effect()?;
+        }
         if let Some(context) = acceptance_context.as_ref() {
             context
                 .validate()
@@ -257,9 +2247,87 @@ impl MemberRuntimeManager {
         )?;
         let requires_exact_registered_readiness =
             dispatch.retained_worker_launch_authority.is_some() || pinned_e2_activation.is_some();
+        #[cfg(test)]
+        let ordinary_native_fixture = match (&self.ordinary_native_fixture, &ordinary_effect) {
+            (Some(fixture), Some(effect))
+                if dispatch
+                    .e2_launch_activation
+                    .as_ref()
+                    .is_some_and(|activation| {
+                        activation.launch_kind == E2MemberLaunchKindV1::Fork
+                    }) =>
+            {
+                let source_id = dispatch
+                    .e2_launch_activation
+                    .as_ref()
+                    .unwrap()
+                    .source_participant_id
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("component Fork omitted exact source"))?;
+                let source = self
+                    .active_members
+                    .read()
+                    .map_err(|_| anyhow!("component source registry lock poisoned"))?
+                    .by_participant_id
+                    .get(source_id)
+                    .cloned()
+                    .ok_or_else(|| anyhow!("component Fork source is not held"))?;
+                let source_effect = source
+                    .ordinary_effect
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("component source has no original admission"))?;
+                Some(fixture.for_authenticated_fork(effect, source_effect)?)
+            }
+            _ => self.ordinary_native_fixture.clone(),
+        };
+        #[cfg(not(test))]
         let actual_binary = validate_member_runtime_binary(&dispatch)?;
+        #[cfg(test)]
+        let actual_binary = match (&ordinary_native_fixture, &ordinary_effect) {
+            (Some(fixture), Some(effect)) => {
+                fixture.bind_dispatch(effect, &dispatch, &binding, &placement.working_dir)?
+            }
+            (Some(_), None) => {
+                anyhow::bail!("component executable cannot replace nonordinary admission")
+            }
+            (None, _) => validate_member_runtime_binary(&dispatch)?,
+        };
+        let ordinary_fork_source = match ordinary_effect.as_ref() {
+            Some(effect)
+                if dispatch
+                    .e2_launch_activation
+                    .as_ref()
+                    .is_some_and(|activation| {
+                        activation.launch_kind == E2MemberLaunchKindV1::Fork
+                    }) =>
+            {
+                Some(self.find_ordinary_fork_source(
+                    &dispatch,
+                    effect,
+                    &placement.working_dir,
+                    &binding,
+                    &actual_binary,
+                )?)
+            }
+            _ => None,
+        };
+        // Durable reception precedes launcher/home/SDK preparation. A restarted
+        // service cannot turn an exact already-claimed Execute into new input.
+        if let Some(effect) = ordinary_effect.as_ref() {
+            effect.claim_initial_bootstrap_receiver(&span_id)?;
+            let reservation = ordinary_launch_reservation
+                .as_ref()
+                .ok_or_else(|| anyhow!("ordinary receiver actual reservation absent"))?;
+            effect.adopt_stored_initial_bootstrap_controls(&span_id, |request| {
+                reservation
+                    .pending
+                    .control
+                    .request_initial_control(&request.signal)?;
+                Ok(())
+            })?;
+        }
         let PreparedMemberRuntimeLauncher {
-            launcher_path,
+            mut launcher_path,
             launcher_dir,
             env: launcher_env,
         } = prepare_member_runtime_launcher(&actual_binary, &placement)?;
@@ -274,30 +2342,87 @@ impl MemberRuntimeManager {
             &launcher_dir,
         );
         let mut prepared_launcher_dir = Some(launcher_dir.clone());
-        if let Err(err) = prepare_runtime_env_for_member_backend(
-            &mut runtime_env,
-            dispatch.resolved_runtime.backend_kind,
-            &placement.working_dir,
-            &launcher_dir,
-        ) {
-            cleanup_prepared_launcher_dir(&mut prepared_launcher_dir);
-            return Err(err);
-        }
+        let ordinary_native_home = match ordinary_effect.as_ref() {
+            Some(effect) => match prepare_ordinary_native_runtime_env(
+                &mut runtime_env,
+                effect,
+                &placement.working_dir,
+                &launcher_dir,
+                match ordinary_fork_source.as_ref() {
+                    Some(source) => OrdinaryNativeHistoryRequestV1::Fork(Arc::clone(source)),
+                    None => OrdinaryNativeHistoryRequestV1::InitialStart,
+                },
+                #[cfg(test)]
+                ordinary_native_fixture.clone(),
+            )
+            .await
+            {
+                Ok(home) => Some(home),
+                Err(error) => {
+                    cleanup_prepared_ordinary_member_launcher(
+                        &mut prepared_launcher_dir,
+                        ordinary_launch,
+                    );
+                    return Err(error);
+                }
+            },
+            None => {
+                if let Err(err) = prepare_runtime_env_for_member_backend(
+                    &mut runtime_env,
+                    dispatch.resolved_runtime.backend_kind,
+                    &placement.working_dir,
+                    &launcher_dir,
+                ) {
+                    cleanup_prepared_ordinary_member_launcher(
+                        &mut prepared_launcher_dir,
+                        ordinary_launch,
+                    );
+                    return Err(err);
+                }
+                None
+            }
+        };
 
+        let mut ordinary_start_policy_launcher = None;
+        if ordinary_native_home.is_some() {
+            match prepare_ordinary_start_home_launcher(
+                &actual_binary,
+                &launcher_dir,
+                &policy_snapshot,
+                &placement,
+                &process_working_dir,
+                &mut runtime_env,
+            ) {
+                Ok(launcher) => {
+                    launcher_path = launcher.path.clone();
+                    ordinary_start_policy_launcher = Some(launcher);
+                }
+                Err(error) => {
+                    cleanup_prepared_ordinary_member_launcher(&mut prepared_launcher_dir, true);
+                    return Err(error);
+                }
+            }
+        }
         let prompt_fulfillment = match PromptFulfillmentBridge::for_member_backend(
             &dispatch.resolved_runtime.backend_kind,
             launcher_path,
         ) {
             Ok(prompt_fulfillment) => prompt_fulfillment,
             Err(err) => {
-                cleanup_prepared_launcher_dir(&mut prepared_launcher_dir);
+                cleanup_prepared_ordinary_member_launcher(
+                    &mut prepared_launcher_dir,
+                    ordinary_launch,
+                );
                 return Err(err);
             }
         };
         let initial_prompt = match dispatch.initial_prompt.clone() {
             Some(initial_prompt) => initial_prompt,
             None => {
-                cleanup_prepared_launcher_dir(&mut prepared_launcher_dir);
+                cleanup_prepared_ordinary_member_launcher(
+                    &mut prepared_launcher_dir,
+                    ordinary_launch,
+                );
                 return Err(crate::service::BadRequestError::new(
                     "member_dispatch.initial_prompt is required for launch-time first turn"
                         .to_string(),
@@ -305,30 +2430,145 @@ impl MemberRuntimeManager {
                 .into());
             }
         };
-        let launch_extensions = member_runtime_workspace_access_extensions(
+        let mut launch_extensions = member_runtime_workspace_access_extensions(
             dispatch.resolved_runtime.backend_kind,
             &placement.working_dir,
         );
+        if let Some(source) = ordinary_fork_source.as_ref() {
+            // Pinned UAA Fork rejects model/add-dir overrides. Selection comes
+            // from the authenticated source and the same held rendered home.
+            launch_extensions.clear();
+            launch_extensions.insert(
+                SESSION_FORK_EXTENSION_V1.into(),
+                json!({"selector":"id","id":source.session_id}),
+            );
+        } else if let Some(effect) = ordinary_effect.as_ref() {
+            launch_extensions.insert(
+                "agent_api.config.model.v1".into(),
+                json!(effect.requested_selection().routed_model_id),
+            );
+        }
         let privileged_child_exclusion_lease = Arc::new(
             self.privileged_child_exclusion
                 .acquire_non_e3_child()
                 .context("UnsupportedSecurityPosture: member child admission is closed")?,
         );
-        let AgentWrapperRunControl { handle, cancel } = match prompt_fulfillment
-            .run_control(AgentWrapperRunRequest {
+        if let Some(effect) = ordinary_effect.as_ref() {
+            if let Err(error) = effect.revalidate_for_effect().and_then(|_| {
+                ordinary_native_home
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("ordinary native home missing"))?
+                    .revalidate()
+            }) {
+                cleanup_prepared_ordinary_member_launcher(
+                    &mut prepared_launcher_dir,
+                    ordinary_launch,
+                );
+                return Err(error);
+            }
+        }
+        let PromptFulfillmentRunControl {
+            handle,
+            cancel,
+            terminal,
+        } = match run_ordinary_native_control(
+            Arc::new(prompt_fulfillment),
+            AgentWrapperRunRequest {
                 prompt: initial_prompt,
                 working_dir: Some(process_working_dir.clone()),
                 timeout: None,
                 env: runtime_env.clone(),
                 extensions: launch_extensions,
-            })
-            .await
+            },
+            ordinary_native_home.clone(),
+            ordinary_native_home.as_ref().map(|_| {
+                (
+                    Arc::clone(&privileged_child_exclusion_lease),
+                    ordinary_start_policy_launcher.take(),
+                )
+            }),
+        )
+        .await
         {
             Ok(control) => control,
             Err(err) => {
-                cleanup_prepared_launcher_dir(&mut prepared_launcher_dir);
+                cleanup_prepared_ordinary_member_launcher(
+                    &mut prepared_launcher_dir,
+                    ordinary_launch,
+                );
                 return Err(map_wrapper_error(err));
             }
+        };
+
+        if let Some(reservation) = &ordinary_launch_reservation {
+            if let Err(error) = reservation
+                .pending
+                .control
+                .bind_native_control(cancel.clone(), terminal.clone())
+            {
+                let error = join_failed_control(error, handle, cancel, terminal).await;
+                cleanup_prepared_ordinary_member_launcher(
+                    &mut prepared_launcher_dir,
+                    ordinary_launch,
+                );
+                return Err(error);
+            }
+            if reservation.pending.control.initial_control_requested()? {
+                reservation
+                    .pending
+                    .effect
+                    .native_open
+                    .store(false, std::sync::atomic::Ordering::Release);
+            }
+        }
+        let cleanup_cancel = cancel.clone();
+
+        let ordinary_effect = match ordinary_effect {
+            Some(effect) => {
+                // These are the actual validated arguments used by the owned
+                // native control above, joined to the observed backend binding.
+                let actual_runtime =
+                    transport_api_types::OrdinaryGatewayRuntimeIdentityV1::WorldWorker {
+                        orchestration_session_id: dispatch.orchestration_session_id.clone(),
+                        caller_participant_id: dispatch.orchestrator_participant_id.clone(),
+                        participant_id: dispatch.participant_id.clone(),
+                        backend_id: dispatch.backend_id.clone(),
+                        run_id: dispatch.run_id.clone(),
+                        world_id: binding.world_id.clone(),
+                        world_generation: binding.world_generation,
+                    };
+                let owner = effect
+                    .bind_live_bootstrap_effect(&actual_runtime, &binding)
+                    .or_else(|error| {
+                        if effect
+                            .native_open
+                            .load(std::sync::atomic::Ordering::Acquire)
+                        {
+                            Err(error)
+                        } else {
+                            effect.retain_sealed_bootstrap_owner(&actual_runtime, &binding)
+                        }
+                    });
+                match owner {
+                    Ok(live) => Some(live),
+                    Err(error) => {
+                        let error = join_failed_control(
+                            error,
+                            handle,
+                            cleanup_cancel.clone(),
+                            terminal.clone(),
+                        )
+                        .await;
+                        drop(ordinary_native_home);
+                        cleanup_prepared_ordinary_member_launcher(
+                            &mut prepared_launcher_dir,
+                            ordinary_launch,
+                        );
+                        return Err(error);
+                    }
+                }
+            }
+            None => None,
         };
 
         let active = Arc::new(ActiveMemberRuntime {
@@ -347,12 +2587,21 @@ impl MemberRuntimeManager {
             workspace_dir: placement.working_dir.clone(),
             process_working_dir,
             env: runtime_env,
+            ordinary_effect,
+            ordinary_native_history: ordinary_native_home
+                .as_ref()
+                .map(|home| Arc::clone(&home.history)),
+            ordinary_native_home: Mutex::new(ordinary_native_home),
             binding: binding.clone(),
             protocol: json!(dispatch.protocol),
             bootstrap: Mutex::new(Some(ActiveBootstrapRuntime {
                 span_id: span_id.clone(),
+                terminal: Some(terminal.clone()),
                 cancel: Some(cancel),
                 last_signal: None,
+                initial_control: ordinary_launch_reservation
+                    .as_ref()
+                    .map(|reservation| Arc::clone(&reservation.pending.control)),
             })),
             active_turn_span_id: Mutex::new(None),
             uaa_session_id: Mutex::new(None),
@@ -361,7 +2610,8 @@ impl MemberRuntimeManager {
             privileged_child_exclusion_lease,
         });
         if let Err(err) = self.register_member(active.clone()) {
-            active.cancel_bootstrap();
+            let err =
+                join_failed_control(err, handle, cleanup_cancel.clone(), terminal.clone()).await;
             active.close_bootstrap();
             active.cleanup_launcher_dir();
             return Err(err);
@@ -386,7 +2636,9 @@ impl MemberRuntimeManager {
         ) {
             Ok(stream) => stream,
             Err(error) => {
-                active.cancel_bootstrap();
+                let error =
+                    join_failed_control(error, handle, cleanup_cancel.clone(), terminal.clone())
+                        .await;
                 self.unregister_member(&active.participant_id);
                 return Err(error);
             }
@@ -397,7 +2649,9 @@ impl MemberRuntimeManager {
         {
             Ok(publisher) => publisher,
             Err(error) => {
-                active.cancel_bootstrap();
+                let error =
+                    join_failed_control(error, handle, cleanup_cancel.clone(), terminal.clone())
+                        .await;
                 self.unregister_member(&active.participant_id);
                 return Err(error);
             }
@@ -405,6 +2659,9 @@ impl MemberRuntimeManager {
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<ExecuteStreamFrame>();
         let _ = tx.send(start);
 
+        // The active bootstrap now owns the same latch. Release the actual
+        // pending reservation before a fast completion can publish retirement.
+        drop(ordinary_launch_reservation);
         let manager = self.clone();
         let participant_id = dispatch.participant_id.clone();
         tokio::spawn(async move {
@@ -413,7 +2670,10 @@ impl MemberRuntimeManager {
             let mut emitted_registered = false;
             let mut pending_authority_bootstrap_events = Vec::new();
 
-            while let Some(wrapper_event) = events.next().await {
+            while let Some(wrapper_event) = tokio::select! {
+                _ = tx.closed() => { active.cancel_bootstrap(); None },
+                event = events.next() => event,
+            } {
                 if let Some(session_id) =
                     surfaced_uaa_session_id_from_data(wrapper_event.data.as_ref())
                 {
@@ -500,7 +2760,11 @@ impl MemberRuntimeManager {
                 }
             }
 
-            let completion = completion.await;
+            drop(events);
+            terminal.request_route_disposal();
+            let raw_completion = completion.await;
+            let native_terminal = terminal.wait().await;
+            let completion = native_terminal.enclosing_result(raw_completion);
             if let Ok(ref completion) = completion {
                 if let Some(session_id) =
                     surfaced_uaa_session_id_from_data(completion.data.as_ref())
@@ -564,24 +2828,90 @@ impl MemberRuntimeManager {
                     }
                 }
             }
-            let preserve_retained_member = completion.as_ref().ok().is_some_and(|completion| {
+            let mut preserve_retained_member = completion.as_ref().ok().is_some_and(|completion| {
                 should_preserve_retained_member_after_clean_bootstrap(
-                    &dispatch.participant_id,
+                    active.as_ref(),
                     &completion.status,
-                    active.uaa_session_id().is_some(),
                 )
             });
-            let frames = frames_from_completion(
-                &context,
-                &binding,
-                &span_id,
-                completion,
-                active.bootstrap_last_signal(),
-                &mut emitted_registered,
-                MemberStreamMode::Bootstrap,
-                active.agent_id.as_str(),
-                &mut producer,
-            );
+            let mut initial_retirement = None;
+            let frames = if preserve_retained_member && active.ordinary_effect.is_some() {
+                match completion {
+                    Ok(completion) => {
+                        prepare_retained_native_bootstrap_frames(
+                            active.as_ref(),
+                            &context,
+                            &binding,
+                            &span_id,
+                            completion,
+                            &terminal,
+                            emitted_registered,
+                            &mut producer,
+                        )
+                        .await
+                    }
+                    Err(error) => Err(anyhow!(error)),
+                }
+            } else if active.ordinary_effect.is_some() && context.acceptance_context.is_none() {
+                let logical_exit = match &completion {
+                    Ok(completion) => exit_code_from_status(&completion.status),
+                    Err(AgentWrapperError::Backend { message }) if message == CANCELLED_MESSAGE => {
+                        cancel_exit_code(active.bootstrap_last_signal().as_deref())
+                    }
+                    Err(_) => 1,
+                };
+                match manager
+                    .prepare_failed_ordinary_initial_bootstrap_frames(
+                        &active,
+                        &context,
+                        &binding,
+                        &span_id,
+                        logical_exit,
+                        &mut producer,
+                    )
+                    .await
+                {
+                    Ok(prepared) => {
+                        initial_retirement = Some(prepared.receipt);
+                        Ok(prepared.frames)
+                    }
+                    Err(error) => Err(error),
+                }
+            } else {
+                frames_from_completion(
+                    &context,
+                    &binding,
+                    &span_id,
+                    completion,
+                    active.bootstrap_last_signal(),
+                    &mut emitted_registered,
+                    MemberStreamMode::Bootstrap,
+                    active.agent_id.as_str(),
+                    &mut producer,
+                )
+            };
+            if frames.is_err() {
+                preserve_retained_member = false;
+            }
+            manager.finish_bootstrap(&participant_id, preserve_retained_member);
+            // In particular, the failed initial report may become observable
+            // only after this task releases its actual member/exclusion owner.
+            drop(active);
+            // Publish the cache only after releasing actual member custody;
+            // concurrent control requests must not observe premature retirement.
+            if let Some(receipt) = initial_retirement {
+                let observed = receipt.report.observation();
+                let key = (
+                    observed.source_start.authority_store_id.clone(),
+                    observed.activation.orchestration_session_id.clone(),
+                    observed.activation.retained_participant_id.clone(),
+                    observed.service_span_id.clone(),
+                );
+                match manager.active_members.write() {
+                    Ok(mut registry) => { registry.ordinary_initial_retirements.insert(key, receipt); },
+                    Err(_) => tracing::error!("initial retirement receipt cache unavailable; original stream report remains authoritative data"),
+                }
+            }
             match frames {
                 Ok(frames) => {
                     for frame in frames {
@@ -595,13 +2925,74 @@ impl MemberRuntimeManager {
                 }
                 Err(err) => {
                     tracing::error!(error = %err, "failed to identify member bootstrap completion");
+                    // Missing/failed native acknowledgment is not logical-worker
+                    // retirement. The client records interrupted ownership.
+                    if let Ok(frame) = producer
+                        .transport_error(format!("native bootstrap completion unconfirmed: {err}"))
+                    {
+                        publish_member_replay_frame(
+                            replay_publisher.as_ref(),
+                            &tx,
+                            frame,
+                            "unconfirmed native bootstrap",
+                        );
+                    }
                 }
             }
-
-            manager.finish_bootstrap(&participant_id, preserve_retained_member);
         });
 
         stream_response(rx)
+    }
+
+    pub(crate) async fn submit_ordinary_turn(
+        &self,
+        req: transport_api_types::OrdinaryMemberTurnSubmitRequestV1,
+    ) -> Result<Response> {
+        let req = req.into_request();
+        let active = self.find_submit_target(&req)?;
+        let bootstrap_effect = active.ordinary_effect.as_ref().ok_or_else(|| {
+            crate::service::BadRequestError::new(
+                "ordinary retained intake requires an actual held ordinary member".to_string(),
+            )
+        })?;
+        // This joins the actual received B1 request hash and independently
+        // authenticated E2 cap under configured current authority. The route
+        // and zero-capable decoder cannot select or manufacture admission.
+        let effect = bootstrap_effect.prepare_turn(&req)?;
+        let caller = authenticated_ordinary_turn_caller(active.as_ref(), &effect)?;
+        validate_submit_turn_request(
+            &req,
+            RetainedMemberIdentity {
+                orchestrator_participant_id: &caller,
+                ..RetainedMemberIdentity::from_active(active.as_ref())
+            },
+        )?;
+        self.validate_submit_target_slot(&req)?;
+        effect.revalidate_for_effect()?;
+        active
+            .ordinary_native_history
+            .as_ref()
+            .ok_or_else(|| anyhow!("ordinary Resume omitted original worker history"))?;
+        let registry = self
+            .member_turn_join
+            .as_ref()
+            .ok_or_else(|| anyhow::Error::new(MemberTurnJoinError::UnsupportedLegacyState))?;
+        if let Some(reservation) = registry
+            .join_existing_ordinary(&req, effect.turn_admission()?)
+            .map_err(anyhow::Error::new)?
+        {
+            if let Some(response) = self.replay_joined_e2_turn(registry, reservation)? {
+                return Ok(response);
+            }
+        }
+        let snapshot = resolve_submitted_turn_policy(&req, active.as_ref())?;
+        let session = active.uaa_session_id().ok_or_else(|| {
+            crate::service::BadRequestError::new(
+                "ordinary retained member has no surfaced native session".to_string(),
+            )
+        })?;
+        self.submit_e2_turn(req, active, snapshot, session, Some(effect))
+            .await
     }
 
     pub(crate) async fn submit_turn(&self, req: MemberTurnSubmitRequestV1) -> Result<Response> {
@@ -613,6 +3004,18 @@ impl MemberRuntimeManager {
             }
         }
         let active = self.find_submit_target(&req)?;
+        let ordinary_effect = active
+            .ordinary_effect
+            .as_ref()
+            .map(|effect| effect.prepare_turn(&req))
+            .transpose()?;
+        if let Some(effect) = ordinary_effect.as_ref() {
+            effect.revalidate_for_effect()?;
+            active
+                .ordinary_native_history
+                .as_ref()
+                .ok_or_else(|| anyhow!("ordinary Resume omitted original worker history"))?;
+        }
         validate_submit_turn_request(&req, RetainedMemberIdentity::from_active(active.as_ref()))?;
         let turn_policy_snapshot = resolve_submitted_turn_policy(&req, active.as_ref())?;
         self.validate_submit_target_slot(&req)?;
@@ -625,14 +3028,20 @@ impl MemberRuntimeManager {
 
         if req.policy_snapshot_carrier.is_some() && req.acceptance_context.is_some() {
             return self
-                .submit_e2_turn(req, active, turn_policy_snapshot, uaa_session_id)
+                .submit_e2_turn(
+                    req,
+                    active,
+                    turn_policy_snapshot,
+                    uaa_session_id,
+                    ordinary_effect,
+                )
                 .await;
         }
 
         let span_id = format!("spn_{}", uuid::Uuid::now_v7());
         self.reserve_turn_slot(&active, &span_id)?;
 
-        let turn_policy_launcher = match turn_policy_snapshot.as_ref() {
+        let mut turn_policy_launcher = match turn_policy_snapshot.as_ref() {
             Some(_) => match prepare_submitted_turn_policy_launcher(active.as_ref()) {
                 Ok(launcher) => Some(launcher),
                 Err(error) => {
@@ -656,7 +3065,7 @@ impl MemberRuntimeManager {
                 return Err(error);
             }
         };
-        let run_request = match build_submitted_turn_run_request(
+        let mut run_request = match build_submitted_turn_run_request(
             active.as_ref(),
             req.prompt.clone(),
             &uaa_session_id,
@@ -668,14 +3077,74 @@ impl MemberRuntimeManager {
                 return Err(error);
             }
         };
-        let AgentWrapperRunControl { handle, cancel } =
-            match prompt_fulfillment.run_control(run_request).await {
-                Ok(control) => control,
-                Err(err) => {
-                    self.clear_reserved_turn_slot(&active, &span_id);
-                    return Err(map_wrapper_error(err));
+        let ordinary_native_home = match ordinary_effect.as_ref() {
+            Some(effect) => {
+                match prepare_ordinary_native_runtime_env(
+                    &mut run_request.env,
+                    effect,
+                    &active.workspace_dir,
+                    &active.launcher_dir,
+                    OrdinaryNativeHistoryRequestV1::Resume(Arc::clone(
+                        active.ordinary_native_history.as_ref().ok_or_else(|| {
+                            anyhow!("ordinary Resume omitted original worker history")
+                        })?,
+                    )),
+                    #[cfg(test)]
+                    self.ordinary_native_fixture.clone(),
+                )
+                .await
+                {
+                    Ok(home) => {
+                        run_request.extensions.insert(
+                            "agent_api.config.model.v1".into(),
+                            json!(effect.requested_selection().routed_model_id),
+                        );
+                        Some(home)
+                    }
+                    Err(error) => {
+                        self.clear_reserved_turn_slot(&active, &span_id);
+                        return Err(error);
+                    }
                 }
-            };
+            }
+            None => None,
+        };
+        if let Some(effect) = ordinary_effect.as_ref() {
+            if let Err(error) = effect.revalidate_for_effect().and_then(|_| {
+                ordinary_native_home
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("ordinary native home missing"))?
+                    .revalidate()
+            }) {
+                self.clear_reserved_turn_slot(&active, &span_id);
+                return Err(error);
+            }
+        }
+        let PromptFulfillmentRunControl {
+            handle,
+            cancel,
+            terminal,
+        } = match run_ordinary_native_control(
+            Arc::new(prompt_fulfillment),
+            run_request,
+            ordinary_native_home.clone(),
+            ordinary_native_home.as_ref().map(|_| {
+                (
+                    Arc::clone(&active.privileged_child_exclusion_lease),
+                    turn_policy_launcher.take(),
+                )
+            }),
+        )
+        .await
+        {
+            Ok(control) => control,
+            Err(err) => {
+                self.clear_reserved_turn_slot(&active, &span_id);
+                return Err(map_wrapper_error(err));
+            }
+        };
+
+        let cleanup_cancel = cancel.clone();
 
         let context = active.submit_context(req.run_id.clone(), req.acceptance_context.clone());
         let (mut producer, start) = match start_member_runtime_stream(
@@ -685,7 +3154,12 @@ impl MemberRuntimeManager {
         ) {
             Ok(stream) => stream,
             Err(error) => {
-                cancel.cancel();
+                let error =
+                    join_failed_control(error, handle, cleanup_cancel.clone(), terminal.clone())
+                        .await;
+                if terminal.wait().await.require_checked().is_err() {
+                    self.unregister_member(&active.participant_id);
+                }
                 self.clear_reserved_turn_slot(&active, &span_id);
                 return Err(error);
             }
@@ -696,12 +3170,20 @@ impl MemberRuntimeManager {
         {
             Ok(publisher) => publisher,
             Err(error) => {
-                cancel.cancel();
+                let error =
+                    join_failed_control(error, handle, cleanup_cancel.clone(), terminal.clone())
+                        .await;
+                if terminal.wait().await.require_checked().is_err() {
+                    self.unregister_member(&active.participant_id);
+                }
                 self.clear_reserved_turn_slot(&active, &span_id);
                 return Err(error);
             }
         };
         let turn = Arc::new(ActiveSubmittedTurn {
+            terminal: terminal.clone(),
+            ordinary_effect,
+            ordinary_native_home,
             participant_id: active.participant_id.clone(),
             cancel,
             last_signal: Mutex::new(None),
@@ -718,7 +3200,10 @@ impl MemberRuntimeManager {
             let completion = handle.completion;
             let mut emitted_registered = false;
 
-            while let Some(wrapper_event) = events.next().await {
+            while let Some(wrapper_event) = tokio::select! {
+                _ = tx.closed() => { turn.terminal.request_route_disposal(); turn.cancel.cancel(); None },
+                event = events.next() => event,
+            } {
                 if let Some(session_id) =
                     surfaced_uaa_session_id_from_data(wrapper_event.data.as_ref())
                 {
@@ -745,12 +3230,18 @@ impl MemberRuntimeManager {
                     Ok(None) => {}
                     Err(err) => {
                         tracing::error!(error = %err, "failed to identify submitted member Event");
+                        turn.terminal.request_route_disposal();
+                        turn.cancel.cancel();
                         break;
                     }
                 }
             }
 
-            let completion = completion.await;
+            drop(events);
+            terminal.request_route_disposal();
+            let raw_completion = completion.await;
+            let native_terminal = terminal.wait().await;
+            let completion = native_terminal.enclosing_result(raw_completion);
             if let Ok(ref completion) = completion {
                 if let Some(session_id) =
                     surfaced_uaa_session_id_from_data(completion.data.as_ref())
@@ -785,6 +3276,12 @@ impl MemberRuntimeManager {
                 }
             }
 
+            if matches!(
+                &native_terminal.settlement,
+                NativeSettlementOutcome::Checked(Err(_))
+            ) {
+                manager.unregister_member(&active.participant_id);
+            }
             manager.unregister_turn(&span_id);
         });
 
@@ -805,6 +3302,14 @@ impl MemberRuntimeManager {
         else {
             return Ok(None);
         };
+        self.replay_joined_e2_turn(registry, reservation)
+    }
+
+    fn replay_joined_e2_turn(
+        &self,
+        registry: &MemberTurnJoinRegistry,
+        reservation: crate::member_turn_join::MemberTurnJoinReservation,
+    ) -> Result<Option<Response>> {
         let state = registry
             .recover_orphaned(&reservation)
             .map_err(anyhow::Error::new)?;
@@ -838,12 +3343,20 @@ impl MemberRuntimeManager {
         active: Arc<ActiveMemberRuntime>,
         turn_policy_snapshot: Option<transport_api_types::PolicySnapshotV3>,
         uaa_session_id: String,
+        ordinary_effect: Option<Arc<crate::service::OrdinaryWorldEffectContextV1>>,
     ) -> Result<Response> {
         let registry = self
             .member_turn_join
             .as_ref()
             .ok_or_else(|| anyhow::Error::new(MemberTurnJoinError::UnsupportedLegacyState))?;
-        let reservation = registry.reserve(&req).map_err(anyhow::Error::new)?;
+        let reservation = match ordinary_effect.as_ref() {
+            Some(effect) => {
+                effect.revalidate_for_effect()?;
+                registry.reserve_ordinary(&req, effect.turn_admission()?)
+            }
+            None => registry.reserve(&req),
+        }
+        .map_err(anyhow::Error::new)?;
         if let MemberTurnJoinStateV1::FailedBeforeLaunch {
             error_code,
             http_status,
@@ -914,7 +3427,7 @@ impl MemberRuntimeManager {
                 return Err(failure);
             }
         };
-        let run_request = match build_submitted_turn_run_request(
+        let mut run_request = match build_submitted_turn_run_request(
             active.as_ref(),
             req.prompt.clone(),
             &uaa_session_id,
@@ -932,7 +3445,63 @@ impl MemberRuntimeManager {
                 return Err(failure);
             }
         };
-        let context = active.submit_context(req.run_id.clone(), req.acceptance_context.clone());
+        let ordinary_native_home = match ordinary_effect.as_ref() {
+            Some(effect) => {
+                match prepare_ordinary_native_runtime_env(
+                    &mut run_request.env,
+                    effect,
+                    &active.workspace_dir,
+                    &active.launcher_dir,
+                    OrdinaryNativeHistoryRequestV1::Resume(Arc::clone(
+                        active.ordinary_native_history.as_ref().ok_or_else(|| {
+                            anyhow!("ordinary Resume omitted original worker history")
+                        })?,
+                    )),
+                    #[cfg(test)]
+                    self.ordinary_native_fixture.clone(),
+                )
+                .await
+                {
+                    Ok(home) => {
+                        run_request.extensions.insert(
+                            "agent_api.config.model.v1".into(),
+                            json!(effect.requested_selection().routed_model_id),
+                        );
+                        Some(home)
+                    }
+                    Err(_error) => {
+                        let failure = persist_prelaunch_failure(
+                            &mut leader,
+                            "ordinary_native_preparation_refused_v1",
+                            400,
+                        );
+                        self.clear_reserved_turn_slot(&active, reservation.span_id());
+                        return Err(failure);
+                    }
+                }
+            }
+            None => None,
+        };
+        if let Some(effect) = ordinary_effect.as_ref() {
+            if effect.revalidate_for_effect().is_err()
+                || ordinary_native_home
+                    .as_ref()
+                    .is_none_or(|home| home.revalidate().is_err())
+            {
+                let failure = persist_prelaunch_failure(
+                    &mut leader,
+                    "ordinary_native_effect_refused_v1",
+                    400,
+                );
+                self.clear_reserved_turn_slot(&active, reservation.span_id());
+                return Err(failure);
+            }
+        }
+        let mut context = active.submit_context(req.run_id.clone(), req.acceptance_context.clone());
+        if let Some(effect) = ordinary_effect.as_ref() {
+            context.orchestrator_participant_id =
+                authenticated_ordinary_turn_caller(active.as_ref(), effect)?;
+        }
         context.validate_acceptance_for_mode(MemberStreamMode::SubmittedTurn)?;
         leader.mark_call_entered().map_err(anyhow::Error::new)?;
 
@@ -941,25 +3510,63 @@ impl MemberRuntimeManager {
         let stream_id = reservation.stream_id().to_string();
         let binding = active.binding.clone();
         tokio::spawn(async move {
-            let _turn_policy_launcher = turn_policy_launcher;
-            let AgentWrapperRunControl { handle, cancel } =
-                match prompt_fulfillment.run_control(run_request).await {
-                    Ok(control) => control,
-                    Err(_error) => {
-                        let _ = leader
-                            .mark_launch_indeterminate("run_control_failed_after_call_entered_v1");
-                        manager.clear_reserved_turn_slot(&active, &span_id);
-                        tracing::error!(
-                            error_code = "run_control_failed_after_call_entered_v1",
-                            "E2 member-turn launch became indeterminate"
-                        );
-                        return;
-                    }
-                };
+            let mut _turn_policy_launcher = turn_policy_launcher;
+            if let Some(effect) = ordinary_effect.as_ref() {
+                if effect.revalidate_for_effect().is_err()
+                    || ordinary_native_home
+                        .as_ref()
+                        .is_none_or(|home| home.revalidate().is_err())
+                {
+                    let _ = leader
+                        .mark_launch_indeterminate("ordinary_effect_changed_after_call_entered_v1");
+                    manager.clear_reserved_turn_slot(&active, &span_id);
+                    return;
+                }
+            }
+            let PromptFulfillmentRunControl {
+                handle,
+                cancel,
+                terminal,
+            } = match run_ordinary_native_control(
+                Arc::new(prompt_fulfillment),
+                run_request,
+                ordinary_native_home.clone(),
+                ordinary_native_home.as_ref().map(|_| {
+                    (
+                        Arc::clone(&active.privileged_child_exclusion_lease),
+                        _turn_policy_launcher.take(),
+                    )
+                }),
+            )
+            .await
+            {
+                Ok(control) => control,
+                Err(_error) => {
+                    let _ = leader
+                        .mark_launch_indeterminate("run_control_failed_after_call_entered_v1");
+                    manager.clear_reserved_turn_slot(&active, &span_id);
+                    tracing::error!(
+                        error_code = "run_control_failed_after_call_entered_v1",
+                        "E2 member-turn launch became indeterminate"
+                    );
+                    return;
+                }
+            };
+            let cleanup_cancel = cancel.clone();
+
             let mut producer = match RuntimeEventStreamProducer::with_stream_id(stream_id) {
                 Ok(producer) => producer,
                 Err(error) => {
-                    cancel.cancel();
+                    let error = join_failed_control(
+                        error,
+                        handle,
+                        cleanup_cancel.clone(),
+                        terminal.clone(),
+                    )
+                    .await;
+                    if terminal.wait().await.require_checked().is_err() {
+                        manager.unregister_member(&active.participant_id);
+                    }
                     let _ = leader.mark_launch_indeterminate("reserved_stream_identity_invalid_v1");
                     manager.clear_reserved_turn_slot(&active, &span_id);
                     tracing::error!(error = %error, "invalid reserved E2 member-turn stream identity");
@@ -969,7 +3576,16 @@ impl MemberRuntimeManager {
             let start = match producer.start(span_id.clone()) {
                 Ok(start) => start,
                 Err(error) => {
-                    cancel.cancel();
+                    let error = join_failed_control(
+                        error,
+                        handle,
+                        cleanup_cancel.clone(),
+                        terminal.clone(),
+                    )
+                    .await;
+                    if terminal.wait().await.require_checked().is_err() {
+                        manager.unregister_member(&active.participant_id);
+                    }
                     let _ = leader.mark_launch_indeterminate("start_construction_failed_v1");
                     manager.clear_reserved_turn_slot(&active, &span_id);
                     tracing::error!(error = %error, "failed to construct real E2 member-turn Start");
@@ -977,7 +3593,16 @@ impl MemberRuntimeManager {
                 }
             };
             if let Err(error) = leader.publish_frame(&start) {
-                cancel.cancel();
+                let error = join_failed_control(
+                    error.into(),
+                    handle,
+                    cleanup_cancel.clone(),
+                    terminal.clone(),
+                )
+                .await;
+                if terminal.wait().await.require_checked().is_err() {
+                    manager.unregister_member(&active.participant_id);
+                }
                 let _ = leader.mark_launch_indeterminate("start_persistence_failed_v1");
                 manager.clear_reserved_turn_slot(&active, &span_id);
                 tracing::error!(error = %error, "failed to persist real E2 member-turn Start");
@@ -985,6 +3610,9 @@ impl MemberRuntimeManager {
             }
 
             let turn = Arc::new(ActiveSubmittedTurn {
+                terminal: terminal.clone(),
+                ordinary_effect,
+                ordinary_native_home,
                 participant_id: active.participant_id.clone(),
                 cancel,
                 last_signal: Mutex::new(None),
@@ -1014,6 +3642,7 @@ impl MemberRuntimeManager {
                     Ok(Some(frame)) => {
                         if let Err(error) = leader.publish_frame(&frame) {
                             tracing::error!(error = %error, "failed to persist E2 member-turn Event");
+                            turn.terminal.request_route_disposal();
                             turn.cancel.cancel();
                             persistence_failed = true;
                             break;
@@ -1022,6 +3651,7 @@ impl MemberRuntimeManager {
                     Ok(None) => {}
                     Err(error) => {
                         tracing::error!(error = %error, "failed to identify E2 member-turn Event");
+                        turn.terminal.request_route_disposal();
                         turn.cancel.cancel();
                         persistence_failed = true;
                         break;
@@ -1029,13 +3659,26 @@ impl MemberRuntimeManager {
                 }
             }
 
-            let completion = completion.await;
+            drop(events);
+            terminal.request_route_disposal();
+            let raw_completion = completion.await;
+            let native_terminal = terminal.wait().await;
+            let completion = native_terminal.enclosing_result(raw_completion);
             if let Ok(ref completion) = completion {
                 if let Some(session_id) =
                     surfaced_uaa_session_id_from_data(completion.data.as_ref())
                 {
                     manager.remember_uaa_session_id(&turn.participant_id, session_id);
                 }
+            }
+            if matches!(
+                &native_terminal.settlement,
+                NativeSettlementOutcome::Checked(Err(_))
+            ) {
+                let _ = leader.mark_launch_indeterminate("native_settlement_unconfirmed_v1");
+                manager.unregister_member(&active.participant_id);
+                manager.unregister_turn(&span_id);
+                return;
             }
             if !persistence_failed {
                 match frames_from_completion(
@@ -1077,7 +3720,215 @@ impl MemberRuntimeManager {
         durable_stream_response(subscription)
     }
 
+    #[cfg(target_os = "linux")]
+    pub(crate) fn control_ordinary_initial_bootstrap(
+        &self,
+        request: &transport_api_types::OrdinaryInitialBootstrapControlRequestV1,
+        peer_uid: u32,
+    ) -> Result<transport_api_types::OrdinaryInitialBootstrapControlDeliveryV1> {
+        use transport_api_types::OrdinaryInitialBootstrapControlDeliveryV1 as Delivery;
+        request.validate().map_err(anyhow::Error::msg)?;
+        let registry = self
+            .active_members
+            .read()
+            .map_err(|_| anyhow!("initial member registry poisoned"))?;
+        let target = &request.activation.retained_participant_id;
+        if let Some(pending) = registry.ordinary_pending_participants.get(target) {
+            anyhow::ensure!(
+                pending.span_id == request.service_span_id,
+                "initial control actual pending span differs"
+            );
+            let mut delivered = false;
+            pending
+                .effect
+                .with_initial_bootstrap_control(request, peer_uid, || {
+                    delivered = pending.control.request_initial_control(&request.signal)?;
+                    if delivered {
+                        pending
+                            .effect
+                            .native_open
+                            .store(false, std::sync::atomic::Ordering::Release);
+                    }
+                    Ok(true)
+                })?;
+            return Ok(if delivered {
+                Delivery::Delivered
+            } else {
+                Delivery::Latched
+            });
+        }
+        let Some(active) = registry.by_participant_id.get(target) else {
+            let key = (
+                request.source_start.authority_store_id.clone(),
+                request.activation.orchestration_session_id.clone(),
+                target.clone(),
+                request.service_span_id.clone(),
+            );
+            let Some(cached) = registry.ordinary_initial_retirements.get(&key) else {
+                return Ok(Delivery::UnknownOwner);
+            };
+            cached.reader.with_control(request, peer_uid, || {
+                anyhow::ensure!(
+                    cached.report.matches_control(request),
+                    "initial retirement cached receiver differs"
+                );
+                Ok(true)
+            })?;
+            return Ok(Delivery::Retired {
+                report: Box::new(cached.report.clone()),
+            });
+        };
+        let effect = active
+            .ordinary_effect
+            .as_ref()
+            .ok_or_else(|| anyhow!("initial control has no actual ordinary owner"))?;
+        let mut delivery = Delivery::UnknownOwner;
+        effect.with_initial_bootstrap_control(request, peer_uid, || {
+            let held = active
+                .bootstrap
+                .lock()
+                .map_err(|_| anyhow!("initial bootstrap state poisoned"))?;
+            let Some(bootstrap) = held.as_ref() else {
+                return Ok(false);
+            };
+            anyhow::ensure!(
+                bootstrap.span_id == request.service_span_id,
+                "initial control actual bootstrap span differs"
+            );
+            let control = bootstrap
+                .initial_control
+                .as_ref()
+                .ok_or_else(|| anyhow!("initial control actual latch absent"))?;
+            anyhow::ensure!(
+                bootstrap.cancel.is_some() && bootstrap.terminal.is_some(),
+                "initial control actual SDK owner absent"
+            );
+            effect
+                .native_open
+                .store(false, std::sync::atomic::Ordering::Release);
+            delivery = if control.request_initial_control(&request.signal)? {
+                Delivery::Delivered
+            } else {
+                Delivery::Latched
+            };
+            Ok(true)
+        })?;
+        Ok(delivery)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn cancel_ordinary_accepted_work(
+        &self,
+        request: &transport_api_types::OrdinaryAcceptedWorkCancelRequestV1,
+        peer_uid: u32,
+    ) -> Result<bool> {
+        request.validate().map_err(anyhow::Error::msg)?;
+        // The span is only a locator. Keep the actual owner registration read
+        // locked through source admission and the synchronous SDK cancellation.
+        let turns = self
+            .active_turns_by_span_id
+            .read()
+            .map_err(|_| anyhow!("ordinary cancellation turn registry poisoned"))?;
+        if let Some(turn) = turns.get(&request.runtime_submission_id) {
+            let effect = turn
+                .ordinary_effect
+                .as_ref()
+                .ok_or_else(|| anyhow!("ordinary cancellation owner has no original admission"))?;
+            if let transport_api_types::OrdinaryAcceptedWorkCancelControlV1::StopWorker { stop } =
+                &request.control
+            {
+                let members = self
+                    .active_members
+                    .read()
+                    .map_err(|_| anyhow!("ordinary cancellation member registry poisoned"))?;
+                let member = members
+                    .by_participant_id
+                    .get(&turn.participant_id)
+                    .ok_or_else(|| {
+                        anyhow!("ordinary Stop cancellation actual member unavailable")
+                    })?;
+                anyhow::ensure!(
+                    member.uaa_session_id().as_deref() == Some(stop.native_session_id.as_str()),
+                    "ordinary Stop cancellation changed actual native member"
+                );
+            }
+            return effect.with_ordinary_accepted_cancellation(request, peer_uid, || {
+                *turn
+                    .last_signal
+                    .lock()
+                    .map_err(|_| anyhow!("ordinary cancellation signal owner poisoned"))? =
+                    Some(request.signal.clone());
+                turn.terminal.request_route_disposal();
+                turn.cancel.cancel();
+                Ok(true)
+            });
+        }
+        drop(turns);
+        // Ephemeral execution owns its SDK handle in the original bootstrap,
+        // rather than the retained submitted-turn map. Hold its actual member
+        // registration, but acquire the bootstrap mutex only inside admission.
+        let members = self
+            .active_members
+            .read()
+            .map_err(|_| anyhow!("ordinary cancellation member registry poisoned"))?;
+        for member in members.by_participant_id.values() {
+            let matches_span = member
+                .bootstrap
+                .lock()
+                .map_err(|_| anyhow!("ordinary cancellation bootstrap owner poisoned"))?
+                .as_ref()
+                .is_some_and(|bootstrap| bootstrap.span_id == request.runtime_submission_id);
+            if !matches_span {
+                continue;
+            }
+            let effect = member.ordinary_effect.as_ref().ok_or_else(|| {
+                anyhow!("ordinary cancellation bootstrap has no original admission")
+            })?;
+            return effect.with_ordinary_accepted_cancellation(request, peer_uid, || {
+                let mut held = member
+                    .bootstrap
+                    .lock()
+                    .map_err(|_| anyhow!("ordinary cancellation bootstrap owner poisoned"))?;
+                let bootstrap = held
+                    .as_mut()
+                    .filter(|bootstrap| bootstrap.span_id == request.runtime_submission_id)
+                    .ok_or_else(|| {
+                        anyhow!("ordinary cancellation original bootstrap owner closed")
+                    })?;
+                let terminal = bootstrap
+                    .terminal
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("ordinary cancellation actual terminal owner absent"))?;
+                let cancel = bootstrap
+                    .cancel
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("ordinary cancellation actual SDK handle absent"))?;
+                bootstrap.last_signal = Some(request.signal.clone());
+                terminal.request_route_disposal();
+                cancel.cancel();
+                Ok(true)
+            });
+        }
+        anyhow::bail!("ordinary cancellation actual native owner unavailable")
+    }
+
+    // Native fixture cleanup remains an internal owner action. Public generic
+    // HTTP cancellation cannot turn possession of an ordinary span into control.
+    #[cfg(test)]
     pub(crate) fn cancel(&self, span_id: &str, sig: &str) -> Result<bool> {
+        self.cancel_with_control(span_id, sig, true)
+    }
+
+    pub(crate) fn cancel_for_legacy_http(&self, span_id: &str, sig: &str) -> Result<bool> {
+        self.cancel_with_control(span_id, sig, false)
+    }
+
+    fn cancel_with_control(
+        &self,
+        span_id: &str,
+        sig: &str,
+        internal_cleanup: bool,
+    ) -> Result<bool> {
         validate_cancel_signal(sig)?;
         let normalized_signal = sig.trim().to_ascii_uppercase();
 
@@ -1088,9 +3939,14 @@ impl MemberRuntimeManager {
             .get(span_id)
             .cloned();
         if let Some(submitted_turn) = submitted_turn {
+            anyhow::ensure!(
+                internal_cleanup || submitted_turn.ordinary_effect.is_none(),
+                "ordinary accepted cancellation requires independent source and delivery admission"
+            );
             if let Ok(mut guard) = submitted_turn.last_signal.lock() {
                 *guard = Some(normalized_signal.clone());
             }
+            submitted_turn.terminal.request_route_disposal();
             submitted_turn.cancel.cancel();
             return Ok(true);
         }
@@ -1104,11 +3960,178 @@ impl MemberRuntimeManager {
             .cloned()
             .collect::<Vec<_>>();
         for active in active_members {
+            if !internal_cleanup && active.ordinary_effect.is_some() {
+                let bootstrap = active
+                    .bootstrap
+                    .lock()
+                    .map_err(|_| anyhow!("ordinary cancellation bootstrap owner poisoned"))?;
+                anyhow::ensure!(bootstrap.as_ref().is_none_or(|bootstrap| bootstrap.span_id != span_id),
+                    "ordinary initial cancellation requires independent source and actual owner admission");
+            }
             if active.cancel_bootstrap_if_span_matches(span_id, normalized_signal.as_str()) {
                 return Ok(true);
             }
         }
         Ok(false)
+    }
+
+    fn find_ordinary_fork_source(
+        &self,
+        dispatch: &MemberDispatchRequestV1,
+        effect: &Arc<crate::service::OrdinaryWorldEffectContextV1>,
+        workspace: &Path,
+        binding: &SharedWorldBindingSnapshot,
+        actual_binary: &Path,
+    ) -> Result<Arc<PinnedOrdinaryForkSourceV1>> {
+        let activation = dispatch
+            .e2_launch_activation
+            .as_ref()
+            .filter(|activation| activation.launch_kind == E2MemberLaunchKindV1::Fork)
+            .ok_or_else(|| anyhow!("ordinary Fork omitted launch activation"))?;
+        let source_id = activation
+            .source_participant_id
+            .as_ref()
+            .ok_or_else(|| anyhow!("ordinary Fork omitted source participant"))?;
+        let source = self
+            .active_members
+            .read()
+            .map_err(|_| anyhow!("ordinary Fork source registry lock poisoned"))?
+            .by_participant_id
+            .get(source_id)
+            .cloned()
+            .ok_or_else(|| anyhow!("ordinary Fork exact source runtime is not held"))?;
+        if source.backend_kind != MemberRuntimeBackendKindV1::Codex
+            || dispatch.resolved_runtime.backend_kind != MemberRuntimeBackendKindV1::Codex
+            || source.orchestration_session_id != dispatch.orchestration_session_id
+            || source.backend_id != dispatch.backend_id
+            || source.protocol != json!(dispatch.protocol)
+            || source.binary_path != actual_binary
+            || source.workspace_dir != workspace
+            || source.binding != *binding
+            || source.has_active_bootstrap()
+            || source
+                .active_turn_span_id
+                .lock()
+                .map_err(|_| anyhow!("ordinary Fork source turn lock poisoned"))?
+                .is_some()
+        {
+            anyhow::bail!(
+                "ordinary Fork source differs from exact idle Codex runtime/workspace/World"
+            );
+        }
+        let pinned = Arc::new(PinnedOrdinaryForkSourceV1 {
+            history: Arc::clone(
+                source
+                    .ordinary_native_history
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("ordinary Fork source has no held native history"))?,
+            ),
+            session_id: source.uaa_session_id().ok_or_else(|| {
+                anyhow!("ordinary Fork source has no surfaced UAA session identity")
+            })?,
+            active: source,
+            effect: Arc::clone(effect),
+            ownership: OrdinaryForkSourceOwnershipV1 {
+                registry: Arc::downgrade(&self.active_members),
+                child_session: Mutex::new(None),
+            },
+        });
+        pinned.revalidate()?;
+        Ok(pinned)
+    }
+
+    fn reserve_ordinary_launch(
+        &self,
+        effect: &Arc<crate::service::OrdinaryWorldEffectContextV1>,
+        span_id: &str,
+    ) -> Result<OrdinaryMemberLaunchReservationV1> {
+        effect.revalidate_for_effect()?;
+        let transport_api_types::OrdinaryGatewayRuntimeIdentityV1::WorldWorker {
+            participant_id,
+            ..
+        } = effect.authenticated_runtime()
+        else {
+            anyhow::bail!("ordinary launch requires authenticated member");
+        };
+        let mut registry = self
+            .active_members
+            .write()
+            .map_err(|_| anyhow!("ordinary member registry lock poisoned"))?;
+        if registry.by_participant_id.contains_key(&participant_id)
+            || registry
+                .ordinary_pending_participants
+                .contains_key(&participant_id)
+        {
+            anyhow::bail!("ordinary member already active or reserved");
+        }
+        let pending = Arc::new(PendingOrdinaryBootstrapV1 {
+            effect: Arc::clone(effect),
+            span_id: span_id.into(),
+            control: Arc::new(OrdinaryInitialBootstrapCancellationV1::default()),
+        });
+        registry
+            .ordinary_pending_participants
+            .insert(participant_id.clone(), Arc::clone(&pending));
+        Ok(OrdinaryMemberLaunchReservationV1 {
+            registry: Arc::clone(&self.active_members),
+            participant_id,
+            pending,
+        })
+    }
+
+    pub(crate) fn ordinary_gateway_effect(
+        &self,
+        runtime: &transport_api_types::OrdinaryGatewayRuntimeIdentityV1,
+    ) -> Result<(
+        Arc<crate::service::OrdinaryWorldEffectContextV1>,
+        Arc<crate::gateway_runtime::OrdinaryGatewayRuntimeLeaseV1>,
+    )> {
+        // A copied ActiveMember binding or prior bootstrap run is never enough.
+        // Only a currently registered native bootstrap/turn keeps its own route.
+        let turns = self
+            .active_turns_by_span_id
+            .read()
+            .map_err(|_| anyhow!("ordinary turn registry lock poisoned"))?;
+        for turn in turns.values() {
+            if let (Some(effect), Some(home)) = (&turn.ordinary_effect, &turn.ordinary_native_home)
+            {
+                if &effect.authenticated_runtime() == runtime {
+                    effect.revalidate_for_effect()?;
+                    home.revalidate()?;
+                    return Ok((Arc::clone(effect), Arc::clone(&home.gateway)));
+                }
+            }
+        }
+        drop(turns);
+        let members = self
+            .active_members
+            .read()
+            .map_err(|_| anyhow!("ordinary member registry lock poisoned"))?;
+        for member in members.by_participant_id.values() {
+            if member
+                .bootstrap
+                .lock()
+                .map_err(|_| anyhow!("ordinary bootstrap lock poisoned"))?
+                .is_none()
+            {
+                continue;
+            }
+            if let Some(effect) = &member.ordinary_effect {
+                if &effect.authenticated_runtime() == runtime {
+                    let home = member
+                        .ordinary_native_home
+                        .lock()
+                        .map_err(|_| anyhow!("ordinary native home lock poisoned"))?;
+                    let home = home
+                        .as_ref()
+                        .ok_or_else(|| anyhow!("ordinary native home is unavailable"))?;
+                    effect.revalidate_for_effect()?;
+                    home.revalidate()?;
+                    return Ok((Arc::clone(effect), Arc::clone(&home.gateway)));
+                }
+            }
+        }
+        anyhow::bail!("selected gateway has no exact active native runtime")
     }
 
     fn register_member(&self, active: Arc<ActiveMemberRuntime>) -> Result<()> {
@@ -1149,6 +4172,220 @@ impl MemberRuntimeManager {
         Ok(())
     }
 
+    /// Explicit ordinary parked-member retirement. Source permission and the
+    /// accepted-work cut come from the original runtime owner; this manager
+    /// separately checks its actual registered native participant and cleanup.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn retire_ordinary_member(
+        &self,
+        request: &transport_api_types::OrdinaryRetainedWorkerStopRequestV1,
+        peer_uid: u32,
+    ) -> Result<transport_api_types::OrdinaryRetainedWorkerStopResponseV1> {
+        use transport_api_types::{
+            OrdinaryRetainedWorkerStopAcknowledgmentV1 as Ack,
+            OrdinaryRetainedWorkerStopBusyReasonV1 as Busy,
+            OrdinaryRetainedWorkerStopResponseV1 as Response,
+        };
+        request.validate().map_err(anyhow::Error::msg)?;
+        let key = (
+            request.authority_store_id.clone(),
+            request.orchestration_session_id.clone(),
+            request.target_participant_id.clone(),
+        );
+        // Match the existing ordinary gateway reader's registry -> Root order.
+        // In particular, never wait for this write lock while holding Root.
+        let mut registry = self
+            .active_members
+            .write()
+            .map_err(|_| anyhow!("member registry poisoned"))?;
+        let active = registry
+            .by_participant_id
+            .get(&request.target_participant_id)
+            .cloned();
+        let cached = registry.ordinary_retirements.get(&key).cloned();
+        let reader = match (&active, &cached) {
+            (_, Some(cached)) => Arc::clone(&cached.reader),
+            (Some(active), None) => Arc::new(
+                active
+                    .ordinary_effect
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("ordinary Stop requires an actual ordinary member"))?
+                    .retained_stop_control_reader()?,
+            ),
+            (None, None) => return Ok(Response::UnknownOwner {}),
+        };
+        reader.with_locked_retirement(request, peer_uid, |admission| {
+            if let Some(cached) = registry.ordinary_retirements.get(&key) {
+                cached
+                    .acknowledgment
+                    .validate(request)
+                    .map_err(anyhow::Error::msg)?;
+                if admission
+                    .existing_acknowledgment()
+                    .is_some_and(|ack| ack != &cached.acknowledgment)
+                {
+                    anyhow::bail!(
+                        "ordinary Stop historical acknowledgment differs from actual member owner"
+                    );
+                }
+                admission.revalidate_before_retirement()?;
+                return Ok(Response::Retired {
+                    acknowledgment: Box::new(cached.acknowledgment.clone()),
+                });
+            }
+            // A historical Closed record is never a new retirement grant.
+            if admission.existing_acknowledgment().is_some() {
+                return Ok(Response::UnknownOwner {});
+            }
+            let Some(active) = active.as_ref().filter(|active| {
+                registry
+                    .by_participant_id
+                    .get(&request.target_participant_id)
+                    .is_some_and(|actual| Arc::ptr_eq(actual, active))
+            }) else {
+                return Ok(Response::UnknownOwner {});
+            };
+            let effect = active
+                .ordinary_effect
+                .as_ref()
+                .ok_or_else(|| anyhow!("ordinary Stop actual member admission absent"))?;
+            let activation = active
+                .e2_launch_activation
+                .as_ref()
+                .ok_or_else(|| anyhow!("ordinary Stop actual E2 activation absent"))?;
+            let cap = active
+                .authenticated_worker_cap_identity
+                .lock()
+                .map_err(|_| anyhow!("ordinary Stop cap state poisoned"))?;
+            anyhow::ensure!(
+                active.orchestration_session_id == request.orchestration_session_id
+                    && active.backend_id == request.target_backend_id
+                    && active.participant_id == request.target_participant_id
+                    && active.binding.orchestration_session_id == request.orchestration_session_id
+                    && active.binding.world_id == request.world_id
+                    && active.binding.world_generation == request.world_generation
+                    && activation.bootstrap_run_id == request.bootstrap_run_id
+                    && activation.immutable_worker_cap_ref == request.worker_cap_ref
+                    && active.uaa_session_id().as_deref()
+                        == Some(request.native_session_id.as_str())
+                    && cap.as_ref()
+                        == Some(&RetainedTurnWorkerCapIdentity {
+                            commitment_ref: request.worker_cap_ref.clone(),
+                            created_revision: activation.immutable_worker_cap_created_revision,
+                            application_revision: activation
+                                .immutable_worker_cap_application_revision
+                        }),
+                "ordinary Stop actual native member/cap differs from admitted target"
+            );
+            let bootstrap = active
+                .bootstrap
+                .lock()
+                .map_err(|_| anyhow!("ordinary Stop bootstrap state poisoned"))?;
+            if bootstrap.is_some() {
+                return Ok(Response::NotQuiescent {
+                    reason: Busy::Bootstrap,
+                });
+            }
+            let turn = active
+                .active_turn_span_id
+                .lock()
+                .map_err(|_| anyhow!("ordinary Stop turn state poisoned"))?;
+            if turn.is_some() {
+                return Ok(Response::NotQuiescent {
+                    reason: Busy::AcceptedTurn,
+                });
+            }
+            let home = active
+                .ordinary_native_home
+                .lock()
+                .map_err(|_| anyhow!("ordinary Stop native home state poisoned"))?;
+            if home.is_some() {
+                return Ok(Response::NotQuiescent {
+                    reason: Busy::NativeHistoryUse,
+                });
+            }
+            let history = active
+                .ordinary_native_history
+                .as_ref()
+                .ok_or_else(|| anyhow!("ordinary Stop native history absent"))?;
+            history.require_original_worker(
+                effect.ordinary_start_selection(),
+                &effect.authenticated_runtime(),
+                effect.requested_selection(),
+            )?;
+            history.in_use.require_usable()?;
+            let history_use = match OrdinaryNativeHistoryUseV1::acquire(Arc::clone(&history.in_use))
+            {
+                Ok(lease) => lease,
+                Err(_) => {
+                    return Ok(Response::NotQuiescent {
+                        reason: Busy::NativeHistoryUse,
+                    })
+                }
+            };
+            let handoff = history
+                .handoff_terminal
+                .latest
+                .lock()
+                .map_err(|_| anyhow!("ordinary Stop listener terminal state poisoned"))?;
+            if !handoff
+                .as_ref()
+                .is_some_and(|(_, outcome)| outcome.is_some())
+            {
+                return Ok(Response::NotQuiescent {
+                    reason: Busy::NativeHistoryUse,
+                });
+            }
+            let retained_key = RetainedMemberKey::from_active(active);
+            let slot = registry
+                .by_retained_key
+                .get(&retained_key)
+                .filter(|slot| slot.contains(&active.participant_id))
+                .ok_or_else(|| anyhow!("ordinary Stop actual retained slot owner differs"))?;
+            let next_slot = slot.clone().without_participant(&active.participant_id);
+            effect.revalidate_original_stop_world_placement(request)?;
+            let acknowledgment = Ack {
+                schema_version: 1,
+                request: request.clone(),
+                retirement_id: format!("ormr_{}", uuid::Uuid::now_v7()),
+            };
+            acknowledgment
+                .validate(request)
+                .map_err(anyhow::Error::msg)?;
+            admission.revalidate_before_retirement()?;
+            // This write lock linearizes removal against both turn reservation
+            // and an initial Fork's exact source-membership check. Children and
+            // the original physical history remain independent retained data.
+            registry.by_participant_id.remove(&active.participant_id);
+            match next_slot {
+                Some(slot) => {
+                    registry.by_retained_key.insert(retained_key, slot);
+                }
+                None => {
+                    registry.by_retained_key.remove(&retained_key);
+                }
+            }
+            registry.ordinary_retirements.insert(
+                key.clone(),
+                CachedOrdinaryRetirementV1 {
+                    reader: Arc::clone(&reader),
+                    acknowledgment: acknowledgment.clone(),
+                },
+            );
+            drop(handoff);
+            drop(history_use);
+            drop(home);
+            drop(turn);
+            drop(bootstrap);
+            drop(cap);
+            Ok(Response::Retired {
+                acknowledgment: Box::new(acknowledgment),
+            })
+        })
+        // The local active Arc drops before the returned response is observable;
+        // the retry cache holds only identity/source custody and checked data.
+    }
+
     fn unregister_member(&self, participant_id: &str) {
         if let Ok(mut guard) = self.active_members.write() {
             if let Some(active) = guard.by_participant_id.remove(participant_id) {
@@ -1167,6 +4404,234 @@ impl MemberRuntimeManager {
                 active.cleanup_launcher_dir();
             }
         }
+    }
+
+    /// Only the actual registered initial owner can produce this report. SDK
+    /// waits, home callback/listener join and gateway disposal remain separate
+    /// predicates; a raw Exit or cancellation request supplies none of them.
+    async fn prepare_failed_ordinary_initial_bootstrap_frames(
+        &self,
+        active: &Arc<ActiveMemberRuntime>,
+        context: &MemberStreamContext,
+        binding: &SharedWorldBindingSnapshot,
+        span_id: &str,
+        logical_exit: i32,
+        producer: &mut RuntimeEventStreamProducer,
+    ) -> Result<PreparedOrdinaryInitialRetirementV1> {
+        use std::os::unix::process::ExitStatusExt;
+        use transport_api_types::{
+            NativeProcessTerminationV1 as Status, OrdinaryGatewayDisposalV1 as Gateway,
+            OrdinaryInitialBootstrapRetirementV1 as Report,
+        };
+        let effect = active
+            .ordinary_effect
+            .as_ref()
+            .ok_or_else(|| anyhow!("initial retirement requires actual ordinary ownership"))?;
+        let activation = active
+            .e2_launch_activation
+            .as_ref()
+            .ok_or_else(|| anyhow!("initial retirement actual E2 absent"))?;
+        anyhow::ensure!(
+            context.acceptance_context.is_none()
+                && context.orchestration_session_id == active.orchestration_session_id
+                && context.participant_id == active.participant_id
+                && context.backend_id == active.backend_id
+                && context.orchestrator_participant_id == active.orchestrator_participant_id
+                && context.run_id == activation.bootstrap_run_id
+                && binding.orchestration_session_id == active.binding.orchestration_session_id
+                && binding.world_id == active.binding.world_id
+                && binding.world_generation == active.binding.world_generation,
+            "initial retirement actual member context differs"
+        );
+        let terminal = {
+            let bootstrap = active
+                .bootstrap
+                .lock()
+                .map_err(|_| anyhow!("initial retirement bootstrap poisoned"))?;
+            let bootstrap = bootstrap
+                .as_ref()
+                .ok_or_else(|| anyhow!("initial retirement bootstrap owner absent"))?;
+            anyhow::ensure!(
+                bootstrap.span_id == span_id
+                    && bootstrap.initial_control.is_some()
+                    && bootstrap.cancel.is_some(),
+                "initial retirement actual receiver/SDK owner differs"
+            );
+            bootstrap
+                .terminal
+                .clone()
+                .ok_or_else(|| anyhow!("initial retirement SDK terminal owner absent"))?
+        };
+        let observed = terminal.wait().await;
+        let native = observed
+            .initial_bootstrap_process_closeout()
+            .map_err(|error| anyhow!(error))?;
+        let home = active
+            .ordinary_native_home
+            .lock()
+            .map_err(|_| anyhow!("initial retirement home poisoned"))?
+            .as_ref()
+            .cloned()
+            .ok_or_else(|| anyhow!("initial retirement actual home absent"))?;
+        let history = Arc::clone(&home.history);
+        let history_use_closed = home._history_use.closed_observation();
+        history.require_original_worker(
+            effect.ordinary_start_selection(),
+            &effect.authenticated_runtime(),
+            effect.requested_selection(),
+        )?;
+        {
+            let joined = history
+                .handoff_terminal
+                .latest
+                .lock()
+                .map_err(|_| anyhow!("initial retirement handoff poisoned"))?;
+            anyhow::ensure!(
+                joined
+                    .as_ref()
+                    .is_some_and(|(run, outcome)| run == &activation.bootstrap_run_id
+                        && matches!(outcome, Some("joined_used" | "joined_stopped"))),
+                "initial retirement actual handoff join unconfirmed"
+            );
+        }
+        let (pid, status) = home.gateway.finish_owned().await?;
+        let gateway_runtime_id = home.gateway.runtime_id.clone();
+        let termination = match (status.code(), status.signal()) {
+            (Some(exit_code), _) => Status::Exited { exit_code },
+            (_, Some(signal)) => Status::Signaled { signal },
+            _ => anyhow::bail!("initial retirement gateway terminal status unavailable"),
+        };
+        anyhow::ensure!(
+            !effect
+                .native_open
+                .load(std::sync::atomic::Ordering::Acquire),
+            "initial retirement native admission remains open"
+        );
+        effect.revalidate_sealed_bootstrap_world_placement(
+            &effect.authenticated_runtime(),
+            binding,
+        )?;
+        let reader = effect.initial_bootstrap_closeout_reader(span_id)?;
+        {
+            let mut registry = self
+                .active_members
+                .write()
+                .map_err(|_| anyhow!("initial retirement registry poisoned"))?;
+            anyhow::ensure!(
+                registry
+                    .by_participant_id
+                    .get(&active.participant_id)
+                    .is_some_and(|actual| Arc::ptr_eq(actual, active))
+                    && !registry
+                        .ordinary_pending_participants
+                        .contains_key(&active.participant_id),
+                "initial retirement actual registry owner changed"
+            );
+            let bootstrap = active
+                .bootstrap
+                .lock()
+                .map_err(|_| anyhow!("initial retirement bootstrap poisoned"))?;
+            anyhow::ensure!(
+                bootstrap
+                    .as_ref()
+                    .is_some_and(|bootstrap| bootstrap.span_id == span_id),
+                "initial retirement actual bootstrap changed"
+            );
+            anyhow::ensure!(
+                active
+                    .active_turn_span_id
+                    .lock()
+                    .map_err(|_| anyhow!("initial retirement turn state poisoned"))?
+                    .is_none(),
+                "initial retirement has accepted turn ownership"
+            );
+            anyhow::ensure!(
+                active
+                    .ordinary_native_home
+                    .lock()
+                    .map_err(|_| anyhow!("initial retirement home poisoned"))?
+                    .as_ref()
+                    .is_some_and(|actual| Arc::ptr_eq(actual, &home)),
+                "initial retirement actual home changed"
+            );
+            let key = RetainedMemberKey::from_active(active);
+            let slot = registry
+                .by_retained_key
+                .get(&key)
+                .filter(|slot| slot.contains(&active.participant_id))
+                .ok_or_else(|| anyhow!("initial retirement retained slot differs"))?;
+            let next = slot.clone().without_participant(&active.participant_id);
+            registry.by_participant_id.remove(&active.participant_id);
+            match next {
+                Some(next) => {
+                    registry.by_retained_key.insert(key, next);
+                }
+                None => {
+                    registry.by_retained_key.remove(&key);
+                }
+            }
+        }
+        active.close_bootstrap();
+        drop(home);
+        // Check this exact home's actual release. A parent or descendant may
+        // independently acquire the same store afterward; that is not this use.
+        anyhow::ensure!(
+            history_use_closed.is_closed(),
+            "initial retirement actual history use remains owned"
+        );
+        let mut event = AgentEvent::message(
+            active.agent_id.as_str(),
+            context.orchestration_session_id.clone(),
+            context.run_id.clone(),
+            MessageEventKind::Status,
+            "initial bootstrap retired",
+        );
+        stamp_event_identity(
+            &mut event,
+            active.agent_id.as_str(),
+            context,
+            binding,
+            span_id,
+            None,
+        );
+        let mut announcement = producer.event(event)?;
+        let ExecuteStreamFrame::Event {
+            frame_identity,
+            event,
+        } = &mut announcement
+        else {
+            unreachable!()
+        };
+        let report = reader.build_report(
+            format!("obrt_{}", uuid::Uuid::now_v7()),
+            native,
+            Gateway::ProcessWaited {
+                runtime_id: gateway_runtime_id,
+                pid,
+                termination,
+            },
+            frame_identity.clone(),
+            event
+                .event_identity
+                .clone()
+                .ok_or_else(|| anyhow!("initial retirement event identity absent"))?,
+        )?;
+        event.data = json!({(Report::EVENT_DATA_KEY): report.clone()});
+        Report::from_service_event(frame_identity, event).map_err(anyhow::Error::msg)?;
+        let exit = producer.exit(
+            logical_exit,
+            span_id.into(),
+            Vec::new(),
+            None,
+            ProcessTelemetry::default(),
+        )?;
+        Ok(PreparedOrdinaryInitialRetirementV1 {
+            frames: vec![announcement, exit],
+            receipt: CachedOrdinaryInitialRetirementV1 {
+                reader: Arc::new(reader),
+                report,
+            },
+        })
     }
 
     fn finish_bootstrap(&self, participant_id: &str, preserve_retained_member: bool) {
@@ -1208,6 +4673,22 @@ impl MemberRuntimeManager {
     }
 
     fn reserve_turn_slot(&self, active: &Arc<ActiveMemberRuntime>, span_id: &str) -> Result<()> {
+        // Retirement owns the write side. Keep this read lock through slot
+        // reservation so a stale cloned member cannot launch after removal.
+        let registry = self
+            .active_members
+            .read()
+            .map_err(|_| anyhow!("member registry poisoned"))?;
+        if !registry
+            .by_participant_id
+            .get(&active.participant_id)
+            .is_some_and(|actual| Arc::ptr_eq(actual, active))
+        {
+            return Err(crate::service::BadRequestError::new(
+                "retained member is no longer registered",
+            )
+            .into());
+        }
         let mut guard = active
             .active_turn_span_id
             .lock()
@@ -1836,10 +5317,22 @@ fn resolve_submitted_turn_policy(
 fn prepare_submitted_turn_policy_launcher(
     active: &ActiveMemberRuntime,
 ) -> Result<PreparedSubmittedTurnPolicyLauncher> {
-    let launcher_dir_metadata = fs::symlink_metadata(&active.launcher_dir).with_context(|| {
+    write_submitted_turn_policy_launcher(&active.launcher_dir, active.ordinary_effect.is_some())
+}
+
+fn write_submitted_turn_policy_launcher(
+    launcher_dir: &Path,
+    ordinary: bool,
+) -> Result<PreparedSubmittedTurnPolicyLauncher> {
+    let bytes = if ordinary {
+        ORDINARY_HOME_POLICY_LAUNCHER_BYTES
+    } else {
+        SUBMITTED_TURN_POLICY_LAUNCHER_BYTES
+    };
+    let launcher_dir_metadata = fs::symlink_metadata(launcher_dir).with_context(|| {
         format!(
             "inspect retained-turn launcher directory {}",
-            active.launcher_dir.display()
+            launcher_dir.display()
         )
     })?;
     if !launcher_dir_metadata.file_type().is_dir()
@@ -1851,7 +5344,7 @@ fn prepare_submitted_turn_policy_launcher(
         );
     }
 
-    let world_entry_path = active.launcher_dir.join("world-entry.sh");
+    let world_entry_path = launcher_dir.join("world-entry.sh");
     let world_entry_metadata = fs::symlink_metadata(&world_entry_path).with_context(|| {
         format!(
             "inspect retained world entry {}",
@@ -1865,7 +5358,7 @@ fn prepare_submitted_turn_policy_launcher(
         anyhow::bail!("retained world entry is not an owned executable regular file");
     }
 
-    let path = active.launcher_dir.join(format!(
+    let path = launcher_dir.join(format!(
         "e2-retained-turn-entry-{}.sh",
         uuid::Uuid::now_v7()
     ));
@@ -1876,7 +5369,7 @@ fn prepare_submitted_turn_policy_launcher(
         .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
         .open(&path)
         .with_context(|| format!("create retained-turn policy launcher {}", path.display()))?;
-    file.write_all(SUBMITTED_TURN_POLICY_LAUNCHER_BYTES)
+    file.write_all(bytes)
         .with_context(|| format!("write retained-turn policy launcher {}", path.display()))?;
     file.sync_all()
         .with_context(|| format!("fsync retained-turn policy launcher {}", path.display()))?;
@@ -1887,18 +5380,18 @@ fn prepare_submitted_turn_policy_launcher(
     if !metadata.file_type().is_file()
         || metadata.uid() != unsafe { libc::geteuid() }
         || metadata.permissions().mode() & 0o777 != 0o700
-        || metadata.len() != SUBMITTED_TURN_POLICY_LAUNCHER_BYTES.len() as u64
-        || fs::read(&path)? != SUBMITTED_TURN_POLICY_LAUNCHER_BYTES
+        || metadata.len() != bytes.len() as u64
+        || fs::read(&path)? != bytes
     {
         let _ = fs::remove_file(&path);
         anyhow::bail!("retained-turn policy launcher exact readback changed");
     }
-    fs::File::open(&active.launcher_dir)
+    fs::File::open(launcher_dir)
         .and_then(|directory| directory.sync_all())
         .with_context(|| {
             format!(
                 "fsync retained-turn launcher directory {}",
-                active.launcher_dir.display()
+                launcher_dir.display()
             )
         })?;
 
@@ -2073,6 +5566,224 @@ fn should_suppress_untyped_retained_transport_advisory(
         && !normalized_world_worker_runtime_tools_facet(wrapper_event.data.as_ref())
 }
 
+/// Emit a typed status report followed by its exact original Exit frame.
+/// The report never changes old Exit semantics in a stream that lacks it.
+#[allow(clippy::too_many_arguments)]
+async fn prepare_retained_native_bootstrap_frames(
+    active: &ActiveMemberRuntime,
+    context: &MemberStreamContext,
+    binding: &SharedWorldBindingSnapshot,
+    span_id: &str,
+    completion: AgentWrapperCompletion,
+    terminal: &NativeTerminalObservation,
+    emitted_registered: bool,
+    producer: &mut RuntimeEventStreamProducer,
+) -> Result<Vec<ExecuteStreamFrame>> {
+    use std::os::unix::process::ExitStatusExt;
+    use transport_api_types::{
+        NativeProcessTerminationV1, NativeSettlementAcknowledgmentV1, OrdinaryGatewayDisposalV1,
+        RetainedBootstrapCompletionV1, RetainedBootstrapObservationV1,
+    };
+    let observed_terminal = terminal.wait().await;
+    observed_terminal
+        .require_checked()
+        .map_err(|error| anyhow!(error))?;
+    if !emitted_registered
+        || !completion.status.success()
+        || !observed_terminal
+            .raw
+            .as_ref()
+            .is_ok_and(|raw| raw.status == completion.status)
+        || completion.data.as_ref().is_some_and(|data| {
+            data.get(RetainedBootstrapCompletionV1::EVENT_DATA_KEY)
+                .is_some()
+                || data
+                    .get(transport_api_types::RetainedForkBootstrapCompletionV1::EVENT_DATA_KEY)
+                    .is_some()
+                || data
+                    .get(transport_api_types::OrdinaryInitialBootstrapRetirementV1::EVENT_DATA_KEY)
+                    .is_some()
+        })
+    {
+        anyhow::bail!("retained bootstrap lacks exact checked native Registered/completion");
+    }
+    let effect = active
+        .ordinary_effect
+        .as_ref()
+        .ok_or_else(|| anyhow!("ordinary bootstrap owner missing"))?;
+    let activation = active
+        .e2_launch_activation
+        .clone()
+        .ok_or_else(|| anyhow!("ordinary bootstrap activation missing"))?;
+    let native_session_id = active
+        .uaa_session_id()
+        .ok_or_else(|| anyhow!("ordinary bootstrap native identity missing"))?;
+    let history = active
+        .ordinary_native_history
+        .as_ref()
+        .ok_or_else(|| anyhow!("ordinary native history owner missing"))?;
+    history.in_use.require_usable()?;
+    let fork_provenance = match (activation.launch_kind, history.fork_source.as_ref()) {
+        (E2MemberLaunchKindV1::FreshSpawn, None) => None,
+        (E2MemberLaunchKindV1::Fork, Some(source)) => {
+            // Held data ancestry survives source Stop. This does not grant the
+            // historical source caller another send or account permission.
+            source.history.revalidate()?;
+            let original = source
+                .active
+                .ordinary_effect
+                .as_ref()
+                .ok_or_else(|| anyhow!("ordinary Fork source admission missing"))?;
+            source.history.require_original_worker(
+                original.ordinary_start_selection(),
+                &original.authenticated_runtime(),
+                original.requested_selection(),
+            )?;
+            if original.ordinary_start_selection() != effect.ordinary_start_selection()
+                || source.active.uaa_session_id().as_deref() != Some(source.session_id.as_str())
+            {
+                anyhow::bail!("ordinary Fork source native ancestry changed");
+            }
+            let transferred_child_native_session_id = source
+                .ownership
+                .child_session
+                .lock()
+                .map_err(|_| anyhow!("ordinary Fork ownership lock poisoned"))?
+                .clone()
+                .ok_or_else(|| anyhow!("ordinary Fork child transfer unobserved"))?;
+            Some(transport_api_types::OrdinaryForkBootstrapProvenanceV1 {
+                source_runtime: original.authenticated_runtime(),
+                source_activation: source
+                    .active
+                    .e2_launch_activation
+                    .clone()
+                    .ok_or_else(|| anyhow!("ordinary Fork source activation missing"))?,
+                source_native_session_id: source.session_id.clone(),
+                transferred_child_native_session_id,
+            })
+        }
+        _ => anyhow::bail!("ordinary bootstrap launch kind/history ancestry conflicts"),
+    };
+    // Fork's raw status is protocol success, not the MCP process wait. Only
+    // actual copied SDK child waits may populate its physical observation.
+    let native_processes = if fork_provenance.is_some() {
+        match observed_terminal.initial_bootstrap_process_closeout()
+            .map_err(|error| anyhow!(error))? {
+            transport_api_types::OrdinaryInitialBootstrapProcessCloseoutV1::ProcessesWaited { processes } => processes,
+            transport_api_types::OrdinaryInitialBootstrapProcessCloseoutV1::ClosedBeforeAnySpawn {} =>
+                anyhow::bail!("Fork bootstrap closed before any actual app-server spawn"),
+        }
+    } else {
+        Vec::new()
+    };
+    let native_termination = if fork_provenance.is_some() {
+        native_processes
+            .first()
+            .ok_or_else(|| anyhow!("Fork child wait snapshot is empty"))?
+            .termination
+            .clone()
+    } else {
+        NativeProcessTerminationV1::Exited {
+            exit_code: completion
+                .status
+                .code()
+                .ok_or_else(|| anyhow!("native bootstrap was signaled"))?,
+        }
+    };
+    // Clone owned cleanup custody under the mutex; no synchronous guard spans
+    // the asynchronous wait. This re-observes the exact already closed lease.
+    let gateway = active
+        .ordinary_native_home
+        .lock()
+        .map_err(|_| anyhow!("ordinary native home poisoned"))?
+        .as_ref()
+        .map(|home| Arc::clone(&home.gateway))
+        .ok_or_else(|| anyhow!("ordinary native cleanup owner missing"))?;
+    let (pid, status) = gateway.finish_owned().await?;
+    let gateway_termination = match (status.code(), status.signal()) {
+        (Some(exit_code), _) => NativeProcessTerminationV1::Exited { exit_code },
+        (_, Some(signal)) => NativeProcessTerminationV1::Signaled { signal },
+        _ => anyhow::bail!("ordinary gateway wait omitted a terminal status"),
+    };
+    let mut event = AgentEvent::message(
+        active.agent_id.as_str(),
+        context.orchestration_session_id.clone(),
+        context.run_id.clone(),
+        MessageEventKind::Status,
+        "retained bootstrap completed",
+    );
+    stamp_event_identity(
+        &mut event,
+        active.agent_id.as_str(),
+        context,
+        binding,
+        span_id,
+        None,
+    );
+    let mut announcement = producer.event(event)?;
+    let exit = producer.exit(
+        exit_code_from_status(&completion.status),
+        span_id.into(),
+        Vec::new(),
+        None,
+        ProcessTelemetry::default(),
+    )?;
+    let ExecuteStreamFrame::Exit {
+        frame_identity,
+        event_identity,
+        terminal_identity,
+        ..
+    } = &exit
+    else {
+        unreachable!()
+    };
+    let observation = RetainedBootstrapObservationV1 {
+        source_start: effect.ordinary_start_selection().clone(),
+        runtime: effect.authenticated_runtime(),
+        activation,
+        native_session_id,
+        span_id: span_id.into(),
+        frame_identity: frame_identity.clone(),
+        event_identity: event_identity.clone(),
+        terminal_identity: terminal_identity.clone(),
+        native_settlement: NativeSettlementAcknowledgmentV1::SdkChecked,
+        native_termination,
+        gateway_disposal: OrdinaryGatewayDisposalV1::ProcessWaited {
+            runtime_id: gateway.runtime_id.clone(),
+            pid,
+            termination: gateway_termination,
+        },
+    };
+    let ExecuteStreamFrame::Event {
+        frame_identity,
+        event,
+    } = &mut announcement
+    else {
+        unreachable!()
+    };
+    if let Some(provenance) = fork_provenance {
+        let report = transport_api_types::RetainedForkBootstrapCompletionV1::from_observation(
+            observation,
+            provenance,
+            native_processes,
+        )
+        .map_err(anyhow::Error::msg)?;
+        event.data = json!({(transport_api_types::RetainedForkBootstrapCompletionV1::EVENT_DATA_KEY): report});
+        transport_api_types::RetainedForkBootstrapCompletionV1::from_service_event(
+            frame_identity,
+            event,
+        )
+        .map_err(anyhow::Error::msg)?;
+    } else {
+        let report = RetainedBootstrapCompletionV1::from_observation(observation)
+            .map_err(anyhow::Error::msg)?;
+        event.data = json!({(RetainedBootstrapCompletionV1::EVENT_DATA_KEY): report});
+        RetainedBootstrapCompletionV1::from_service_event(frame_identity, event)
+            .map_err(anyhow::Error::msg)?;
+    }
+    Ok(vec![announcement, exit])
+}
+
 #[allow(clippy::too_many_arguments)]
 fn frames_from_completion(
     context: &MemberStreamContext,
@@ -2133,6 +5844,18 @@ fn agent_event_from_wrapper_event(
     mode: MemberStreamMode,
     agent_id: &str,
 ) -> Result<PreparedMemberRuntimeEvent> {
+    if wrapper_event.data.as_ref().is_some_and(|data| {
+        data.get(transport_api_types::RetainedBootstrapCompletionV1::EVENT_DATA_KEY)
+            .is_some()
+            || data
+                .get(transport_api_types::RetainedForkBootstrapCompletionV1::EVENT_DATA_KEY)
+                .is_some()
+            || data
+                .get(transport_api_types::OrdinaryInitialBootstrapRetirementV1::EVENT_DATA_KEY)
+                .is_some()
+    }) {
+        anyhow::bail!("native backend supplied a reserved service completion marker");
+    }
     let worker_event_facet = normalized_world_worker_event_facet_v1(context, mode, &wrapper_event)?;
     let surfaced_thread_id = worker_event_facet
         .as_ref()
@@ -2778,6 +6501,39 @@ fn typed_retained_thread_id_from_data(data: Option<&serde_json::Value>) -> Optio
     None
 }
 
+/// Return an actual current caller only after this turn's admitted worker,
+/// World and retained native slot all join. Request labels alone grant nothing.
+fn authenticated_ordinary_turn_caller(
+    active: &ActiveMemberRuntime,
+    effect: &crate::service::OrdinaryWorldEffectContextV1,
+) -> Result<String> {
+    effect.turn_admission()?;
+    // These held identity comparisons perform no effect. Authenticate current
+    // permission after they join, before returning the caller to the consumer.
+    let transport_api_types::OrdinaryGatewayRuntimeIdentityV1::WorldWorker {
+        orchestration_session_id,
+        caller_participant_id,
+        participant_id,
+        backend_id,
+        world_id,
+        world_generation,
+        ..
+    } = effect.authenticated_runtime()
+    else {
+        anyhow::bail!("ordinary retained turn changed runtime role");
+    };
+    if orchestration_session_id != active.orchestration_session_id
+        || participant_id != active.participant_id
+        || backend_id != active.backend_id
+        || world_id != active.binding.world_id
+        || world_generation != active.binding.world_generation
+    {
+        anyhow::bail!("ordinary current turn differs from held native worker/World");
+    }
+    effect.revalidate_for_effect()?;
+    Ok(caller_participant_id)
+}
+
 #[derive(Clone, Copy)]
 struct RetainedMemberIdentity<'a> {
     orchestration_session_id: &'a str,
@@ -2963,6 +6719,21 @@ fn persist_prelaunch_failure(
 impl ActiveMemberRuntime {
     fn remember_uaa_session_id(&self, session_id: String) {
         if let Ok(mut guard) = self.uaa_session_id.lock() {
+            if let Some(source) = self
+                .ordinary_native_history
+                .as_ref()
+                .and_then(|history| history.fork_source.as_ref())
+            {
+                if let Err(error) = source
+                    .ownership
+                    .observe_child_session(&source.session_id, &session_id)
+                {
+                    tracing::warn!(error = %error, "ordinary Fork child identity refused");
+                    drop(guard);
+                    self.cancel_bootstrap();
+                    return;
+                }
+            }
             *guard = Some(session_id);
         }
     }
@@ -2976,10 +6747,28 @@ impl ActiveMemberRuntime {
 
     fn bootstrap_last_signal(&self) -> Option<String> {
         self.bootstrap.lock().ok().and_then(|guard| {
-            guard
-                .as_ref()
-                .and_then(|bootstrap| bootstrap.last_signal.clone())
+            guard.as_ref().and_then(|bootstrap| {
+                bootstrap
+                    .initial_control
+                    .as_ref()
+                    .and_then(|control| control.initial_signal().ok().flatten())
+                    .or_else(|| bootstrap.last_signal.clone())
+            })
         })
+    }
+
+    fn initial_control_requested(&self) -> Result<bool> {
+        let bootstrap = self
+            .bootstrap
+            .lock()
+            .map_err(|_| anyhow!("initial bootstrap state poisoned"))?;
+        match bootstrap
+            .as_ref()
+            .and_then(|bootstrap| bootstrap.initial_control.as_ref())
+        {
+            Some(control) => control.initial_control_requested(),
+            None => Ok(false),
+        }
     }
 
     fn has_active_bootstrap(&self) -> bool {
@@ -2997,6 +6786,9 @@ impl ActiveMemberRuntime {
     fn cancel_bootstrap(&self) {
         if let Ok(guard) = self.bootstrap.lock() {
             if let Some(bootstrap) = guard.as_ref() {
+                if let Some(terminal) = bootstrap.terminal.as_ref() {
+                    terminal.request_route_disposal();
+                }
                 if let Some(cancel) = bootstrap.cancel.as_ref() {
                     cancel.cancel();
                 }
@@ -3016,6 +6808,9 @@ impl ActiveMemberRuntime {
         }
 
         bootstrap.last_signal = Some(signal.to_string());
+        if let Some(terminal) = bootstrap.terminal.as_ref() {
+            terminal.request_route_disposal();
+        }
         if let Some(cancel) = bootstrap.cancel.as_ref() {
             cancel.cancel();
         }
@@ -3026,10 +6821,15 @@ impl ActiveMemberRuntime {
         if let Ok(mut guard) = self.bootstrap.lock() {
             guard.take();
         }
+        if let Ok(mut home) = self.ordinary_native_home.lock() {
+            home.take();
+        }
     }
 
     fn cleanup_launcher_dir(&self) {
-        let _ = fs::remove_dir_all(&self.launcher_dir);
+        if self.ordinary_native_history.is_none() {
+            let _ = fs::remove_dir_all(&self.launcher_dir);
+        }
     }
 
     fn submit_context(
@@ -3174,8 +6974,34 @@ impl RetainedMemberSlot {
                 retained_slot_registration_conflict_error(retained_key, &self, candidate).into(),
             );
         };
+        // A genuine ordinary Fork may be issued by a later controller while
+        // its source retains the original controller identity. Its private
+        // native-history pin must join this exact registry parent and this
+        // child's authenticated effect; metadata alone never grants this edge.
+        // Do not revalidate the source here: that would reacquire this registry
+        // while register_member holds its write lock. Native handoff performs
+        // the independent current-effect revalidation before the actual spawn.
+        let orchestrator_matches =
+            parent.orchestrator_participant_id == candidate.orchestrator_participant_id;
+        let pinned_ordinary_fork = !orchestrator_matches
+            && parent.ordinary_effect.is_some()
+            && candidate
+                .ordinary_effect
+                .as_ref()
+                .zip(candidate.ordinary_native_history.as_ref())
+                .is_some_and(|(effect, history)| {
+                    history.fork_source.as_ref().is_some_and(|source| {
+                        Arc::ptr_eq(&source.active, parent)
+                            && parent
+                                .ordinary_native_history
+                                .as_ref()
+                                .is_some_and(|history| Arc::ptr_eq(history, &source.history))
+                            && source.effect.authenticated_runtime()
+                                == effect.authenticated_runtime()
+                    })
+                });
         if parent.orchestration_session_id != candidate.orchestration_session_id
-            || parent.orchestrator_participant_id != candidate.orchestrator_participant_id
+            || (!orchestrator_matches && !pinned_ordinary_fork)
             || parent.backend_id != candidate.backend_id
             || parent.binding.world_id != candidate.binding.world_id
             || parent.binding.world_generation != candidate.binding.world_generation
@@ -3302,22 +7128,129 @@ fn retained_slot_registration_conflict_error(
 }
 
 fn should_preserve_retained_member_after_clean_bootstrap(
-    participant_id: &str,
+    active: &ActiveMemberRuntime,
     completion_status: &std::process::ExitStatus,
-    has_uaa_session_id: bool,
 ) -> bool {
-    // Only retained worker bootstraps (`ash_*`) may occupy the retained slot after
-    // a clean bootstrap exit. Ephemeral `run_world_task` bootstraps (`awm_*`) can
-    // surface resumable session identity, but they must still clean up immediately.
-    participant_id.starts_with("ash_")
-        && has_uaa_session_id
-        && exit_code_from_status(completion_status) == 0
+    // Ephemeral tasks still close immediately, even if they surface a session.
+    if active.participant_id.starts_with("awm_")
+        || active.uaa_session_id().is_none()
+        || exit_code_from_status(completion_status) != 0
+        || active.initial_control_requested().unwrap_or(true)
+    {
+        return false;
+    }
+    let Some(effect) = active.ordinary_effect.as_ref() else {
+        // Preserve the existing protected/legacy retained-worker behavior.
+        return active.participant_id.starts_with("ash_");
+    };
+    let Some(activation) = active.e2_launch_activation.as_ref() else {
+        return false;
+    };
+    let transport_api_types::OrdinaryGatewayRuntimeIdentityV1::WorldWorker {
+        orchestration_session_id,
+        caller_participant_id,
+        participant_id,
+        backend_id,
+        run_id,
+        world_id,
+        world_generation,
+    } = effect.authenticated_runtime()
+    else {
+        return false;
+    };
+    let Ok(worker_cap) = active.authenticated_worker_cap_identity.lock() else {
+        return false;
+    };
+    // Retention parks the exact already admitted worker; it grants no new turn.
+    // A subsequent Resume independently authenticates its current source/policy.
+    // Do not re-open the completed native effect owner or trust an rwp_* prefix.
+    matches!(
+        activation.launch_kind,
+        E2MemberLaunchKindV1::FreshSpawn | E2MemberLaunchKindV1::Fork
+    ) && orchestration_session_id == active.orchestration_session_id
+        && orchestration_session_id == active.binding.orchestration_session_id
+        && orchestration_session_id == activation.orchestration_session_id
+        && caller_participant_id == active.orchestrator_participant_id
+        && caller_participant_id == activation.caller_participant_id
+        && participant_id == active.participant_id
+        && participant_id == activation.retained_participant_id
+        && backend_id == active.backend_id
+        && backend_id == activation.target_backend_id
+        && run_id == activation.bootstrap_run_id
+        && world_id == active.binding.world_id
+        && world_id == activation.target_world.world_id
+        && world_generation == active.binding.world_generation
+        && world_generation == activation.target_world.world_generation
+        && worker_cap.as_ref().is_some_and(|cap| {
+            cap.commitment_ref == activation.immutable_worker_cap_ref
+                && cap.created_revision == activation.immutable_worker_cap_created_revision
+                && cap.application_revision == activation.immutable_worker_cap_application_revision
+        })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs;
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_initial_control_latches_before_sdk_handle_and_delivers_once() {
+        // Actual public SDK control, canceled before its startup driver is
+        // polled. This proves no service source grant, World or retirement.
+        let latch = OrdinaryInitialBootstrapCancellationV1::default();
+        assert!(!latch.initial_control_requested().unwrap());
+        assert!(
+            !latch.request_initial_control("INT").unwrap(),
+            "accepted pending request has no SDK handle yet"
+        );
+        assert_eq!(latch.initial_signal().unwrap().as_deref(), Some("INT"));
+        let bridge = PromptFulfillmentBridge::for_member_backend(
+            &MemberRuntimeBackendKindV1::Codex,
+            "/bin/false".into(),
+        )
+        .unwrap();
+        let control = bridge
+            .run_control(AgentWrapperRunRequest {
+                prompt: "SDK admission closeout fixture".into(),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        let unit = control.cancel.settlement().unwrap();
+        let processes = control.cancel.process_settlement().unwrap();
+        latch
+            .bind_native_control(control.cancel.clone(), control.terminal.clone())
+            .unwrap();
+        assert!(latch.request_initial_control("TERM").unwrap());
+        assert_eq!(latch.initial_signal().unwrap().as_deref(), Some("TERM"));
+        assert!(
+            latch
+                .bind_native_control(control.cancel.clone(), control.terminal.clone())
+                .is_err(),
+            "one reservation cannot substitute another native control"
+        );
+        assert!(latch.request_initial_control("KILL").is_err());
+        assert_eq!(latch.initial_signal().unwrap().as_deref(), Some("TERM"));
+        tokio::time::timeout(std::time::Duration::from_secs(3), unit)
+            .await
+            .unwrap()
+            .unwrap();
+        let observed = processes.await;
+        assert!(observed.acknowledged);
+        assert_eq!(observed.closed_before_any_spawn, Some(true));
+        assert_eq!(observed.observations, Some(Vec::new()));
+        let mut events = control.handle.events;
+        while events.next().await.is_some() {}
+        assert!(
+            matches!(control.handle.completion.await, Err(AgentWrapperError::Backend { message }) if message == "cancelled")
+        );
+        let terminal = control.terminal.wait().await;
+        terminal.require_checked().unwrap();
+        assert!(matches!(
+            terminal.initial_bootstrap_process_closeout().unwrap(),
+            transport_api_types::OrdinaryInitialBootstrapProcessCloseoutV1::ClosedBeforeAnySpawn {}
+        ));
+    }
 
     include!("member_runtime_native0156_tests.rs");
 
@@ -3437,6 +7370,7 @@ fi
                 env,
                 "spn_fixture_bootstrap".to_string(),
                 MemberRuntimeLaunchAdmissionV1 {
+                    ordinary_effect: None,
                     dispatch,
                     acceptance_context: None,
                     policy_snapshot: sample_e2_submit_turn_request()
@@ -3857,6 +7791,7 @@ fi
                 HashMap::new(),
                 "spn_missing_proof".to_string(),
                 MemberRuntimeLaunchAdmissionV1 {
+                    ordinary_effect: None,
                     policy_snapshot: missing
                         .e2_launch_activation
                         .as_ref()
@@ -3895,6 +7830,7 @@ fi
                 HashMap::new(),
                 "spn_malformed_proof".to_string(),
                 MemberRuntimeLaunchAdmissionV1 {
+                    ordinary_effect: None,
                     policy_snapshot: malformed
                         .e2_launch_activation
                         .as_ref()
@@ -3933,6 +7869,7 @@ fi
                 HashMap::new(),
                 "spn_mismatched_proof".to_string(),
                 MemberRuntimeLaunchAdmissionV1 {
+                    ordinary_effect: None,
                     policy_snapshot: mismatched
                         .e2_launch_activation
                         .as_ref()
@@ -3985,6 +7922,7 @@ fi
                 HashMap::new(),
                 "spn_substituted_launch_snapshot".to_string(),
                 MemberRuntimeLaunchAdmissionV1 {
+                    ordinary_effect: None,
                     dispatch,
                     acceptance_context: None,
                     policy_snapshot: substituted_snapshot,
@@ -4218,6 +8156,43 @@ fi
         }
     }
 
+    #[test]
+    fn test_retired_member_clone_cannot_reserve_another_turn() {
+        // Registry/slot seam only: no native/service retirement is fabricated.
+        let manager = MemberRuntimeManager::new();
+        let root = tempfile::tempdir().unwrap();
+        let original = sample_active_member_runtime(&root, "slot-owner", "bootstrap-original");
+        original.close_bootstrap();
+        manager.register_member(Arc::clone(&original)).unwrap();
+        manager
+            .reserve_turn_slot(&original, "before-removal")
+            .unwrap();
+        manager.clear_reserved_turn_slot(&original, "before-removal");
+        manager.unregister_member("slot-owner");
+        assert!(manager.reserve_turn_slot(&original, "stale-clone").is_err());
+        assert!(original.active_turn_span_id.lock().unwrap().is_none());
+        let replacement_root = tempfile::tempdir().unwrap();
+        let replacement =
+            sample_active_member_runtime(&replacement_root, "slot-owner", "bootstrap-replacement");
+        replacement.close_bootstrap();
+        manager.register_member(Arc::clone(&replacement)).unwrap();
+        assert!(
+            manager.reserve_turn_slot(&original, "stale-clone").is_err(),
+            "same text ID cannot substitute for actual registered member"
+        );
+        manager
+            .reserve_turn_slot(&replacement, "new-owner")
+            .unwrap();
+        manager
+            .reserve_turn_slot(&replacement, "new-owner")
+            .unwrap();
+        assert!(manager
+            .reserve_turn_slot(&replacement, "different-turn")
+            .is_err());
+        manager.clear_reserved_turn_slot(&replacement, "new-owner");
+        manager.unregister_member("slot-owner");
+    }
+
     fn sample_active_member_runtime(
         temp_dir: &tempfile::TempDir,
         participant_id: &str,
@@ -4274,12 +8249,17 @@ fi
             workspace_dir,
             process_working_dir,
             env: BTreeMap::from([("CODEX_HOME".to_string(), codex_home.display().to_string())]),
+            ordinary_effect: None,
+            ordinary_native_home: Mutex::new(None),
+            ordinary_native_history: None,
             binding: sample_world_binding(),
             protocol: json!("substrate.agent.session"),
             bootstrap: Mutex::new(Some(ActiveBootstrapRuntime {
                 span_id: bootstrap_span_id.to_string(),
+                terminal: None,
                 cancel: None,
                 last_signal: None,
+                initial_control: None,
             })),
             active_turn_span_id: Mutex::new(None),
             uaa_session_id: Mutex::new(None),
@@ -5347,6 +9327,39 @@ base_url = "https://gateway.example.invalid/v1"
     }
 
     #[test]
+    fn test_native_backend_cannot_supply_service_completion_marker() {
+        for marker in [
+            transport_api_types::RetainedBootstrapCompletionV1::EVENT_DATA_KEY,
+            transport_api_types::RetainedForkBootstrapCompletionV1::EVENT_DATA_KEY,
+            transport_api_types::OrdinaryInitialBootstrapRetirementV1::EVENT_DATA_KEY,
+        ] {
+            for mode in [MemberStreamMode::Bootstrap, MemberStreamMode::SubmittedTurn] {
+                let result = agent_event_from_wrapper_event(
+                    &sample_stream_context(),
+                    &sample_world_binding(),
+                    "bootstrap-span",
+                    AgentWrapperEvent {
+                        agent_kind: agent_api::AgentWrapperKind::new("codex").unwrap(),
+                        kind: AgentWrapperEventKind::Status,
+                        channel: None,
+                        text: None,
+                        message: None,
+                        data: Some(json!({(marker): {"schema_version":1}})),
+                    },
+                    &mut false,
+                    mode,
+                    "codex_world",
+                );
+                assert!(result
+                    .err()
+                    .unwrap()
+                    .to_string()
+                    .contains("reserved service completion marker"));
+            }
+        }
+    }
+
+    #[test]
     fn bootstrap_completion_without_session_handle_emits_only_exit() {
         let mut emitted_registered = false;
         let mut producer = RuntimeEventStreamProducer::new();
@@ -5964,6 +9977,63 @@ base_url = "https://gateway.example.invalid/v1"
         );
     }
 
+    #[tokio::test]
+    async fn test_initial_retirement_refuses_unowned_scope_without_removing_member() {
+        let temp = tempfile::tempdir().unwrap();
+        let active = sample_active_member_runtime(&temp, "ash_member", "spn_bootstrap");
+        let manager = MemberRuntimeManager::new();
+        manager.register_member(Arc::clone(&active)).unwrap();
+        let context = sample_stream_context();
+        let (mut producer, _) = start_member_runtime_stream(
+            &context,
+            MemberStreamMode::Bootstrap,
+            "spn_bootstrap".into(),
+        )
+        .unwrap();
+        assert!(manager
+            .prepare_failed_ordinary_initial_bootstrap_frames(
+                &active,
+                &context,
+                &active.binding,
+                "spn_bootstrap",
+                130,
+                &mut producer
+            )
+            .await
+            .is_err());
+        let registry = manager.active_members.read().unwrap();
+        assert!(registry
+            .by_participant_id
+            .get(&active.participant_id)
+            .is_some_and(|actual| Arc::ptr_eq(actual, &active)));
+        assert!(active.bootstrap.lock().unwrap().is_some());
+        assert!(active.launcher_dir.exists());
+    }
+
+    #[test]
+    fn test_history_release_observation_is_owned_and_does_not_grant_store_reuse() {
+        let shared = Arc::new(OrdinaryNativeHistoryStateV1::default());
+        let child_use = OrdinaryNativeHistoryUseV1::acquire(Arc::clone(&shared)).unwrap();
+        let child_closed = child_use.closed_observation();
+        assert!(!child_closed.is_closed());
+        assert!(OrdinaryNativeHistoryUseV1::acquire(Arc::clone(&shared)).is_err());
+        drop(child_use);
+        let parent_use = OrdinaryNativeHistoryUseV1::acquire(Arc::clone(&shared)).unwrap();
+        assert!(
+            child_closed.is_closed(),
+            "another worker's use cannot erase this owner's actual release"
+        );
+        let parent_closed = parent_use.closed_observation();
+        assert!(!parent_closed.is_closed());
+        shared.poison();
+        drop(parent_use);
+        assert!(parent_closed.is_closed());
+        assert!(
+            OrdinaryNativeHistoryUseV1::acquire(shared).is_err(),
+            "release data cannot turn poisoned custody into reuse permission"
+        );
+    }
+
     #[test]
     fn finish_bootstrap_unregisters_member_without_resumable_identity() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
@@ -6001,6 +10071,44 @@ base_url = "https://gateway.example.invalid/v1"
     }
 
     #[test]
+    fn test_retained_bootstrap_preservation_requires_origin_session_and_success() {
+        use std::os::unix::process::ExitStatusExt;
+
+        let success = std::process::ExitStatus::from_raw(0);
+        let failure = std::process::ExitStatus::from_raw(1 << 8);
+        let signalled = std::process::ExitStatus::from_raw(libc::SIGTERM);
+        let legacy_dir = tempfile::tempdir().expect("legacy fixture");
+        let legacy = sample_active_member_runtime(&legacy_dir, "ash_member", "spn_bootstrap");
+        assert!(!should_preserve_retained_member_after_clean_bootstrap(
+            legacy.as_ref(),
+            &success,
+        ));
+        legacy.remember_uaa_session_id("legacy-session".to_string());
+        assert!(should_preserve_retained_member_after_clean_bootstrap(
+            legacy.as_ref(),
+            &success,
+        ));
+        for status in [&failure, &signalled] {
+            assert!(!should_preserve_retained_member_after_clean_bootstrap(
+                legacy.as_ref(),
+                status,
+            ));
+        }
+
+        // A plausible retained prefix and structural E2 carrier are not authority.
+        // These data-only fixtures deliberately have no held ordinary effect.
+        for participant in ["rwp_member", "awm_task"] {
+            let temp = tempfile::tempdir().expect("unheld fixture");
+            let active = sample_e2_active_member_runtime(&temp, participant, "spn_bootstrap");
+            active.remember_uaa_session_id("unheld-session".to_string());
+            assert!(!should_preserve_retained_member_after_clean_bootstrap(
+                active.as_ref(),
+                &success,
+            ));
+        }
+    }
+
+    #[test]
     fn finish_bootstrap_unregisters_ephemeral_member_even_with_resumable_identity() {
         use std::os::unix::process::ExitStatusExt;
 
@@ -6015,9 +10123,8 @@ base_url = "https://gateway.example.invalid/v1"
         manager.finish_bootstrap(
             &active.participant_id,
             should_preserve_retained_member_after_clean_bootstrap(
-                &active.participant_id,
+                active.as_ref(),
                 &std::process::ExitStatus::from_raw(0),
-                active.uaa_session_id().is_some(),
             ),
         );
 
@@ -6085,6 +10192,46 @@ base_url = "https://gateway.example.invalid/v1"
             }),
             "shared retained slot should only track the source plus its direct fork child"
         );
+    }
+
+    #[test]
+    fn test_register_member_rejects_successor_caller_without_genuine_fork_source() {
+        // These are deliberately unissued registry fixtures. Parent-like
+        // metadata and a claimed Fork activation cannot substitute for the
+        // ordinary path's genuine pinned source across controller successors.
+        for claimed_kind in [
+            None,
+            Some(E2MemberLaunchKindV1::FreshSpawn),
+            Some(E2MemberLaunchKindV1::Fork),
+        ] {
+            let source_dir = tempfile::tempdir().expect("source temp dir");
+            let child_dir = tempfile::tempdir().expect("child temp dir");
+            let source = sample_active_member_runtime(&source_dir, "rwp_source", "spn_source");
+            let mut child = sample_active_member_runtime_with_lineage(
+                &child_dir,
+                "ash_child",
+                "spn_child",
+                Some("rwp_source"),
+                None,
+            );
+            let child_mut = Arc::get_mut(&mut child).expect("unique child fixture");
+            child_mut.orchestrator_participant_id = "ash_successor_controller".into();
+            if let Some(kind) = claimed_kind {
+                let mut activation = sample_e2_launch_activation("ash_child", "rwr_child");
+                activation.launch_kind = kind;
+                activation.source_participant_id = Some("rwp_source".into());
+                child_mut.e2_launch_activation = Some(activation);
+            }
+            let manager = MemberRuntimeManager::new();
+            manager.register_member(source).expect("register source");
+            let error = manager.register_member(child).expect_err(
+                "a successor caller needs the actual ordinary authenticated source pin",
+            );
+            assert!(error.to_string().contains("retained member slot conflict"));
+            let guard = manager.active_members.read().expect("registry");
+            assert_eq!(guard.by_participant_id.len(), 1);
+            assert!(!guard.by_participant_id.contains_key("ash_child"));
+        }
     }
 
     #[test]
@@ -6357,5 +10504,1473 @@ base_url = "https://gateway.example.invalid/v1"
             !guard.by_retained_key.contains_key(&retained_key),
             "shared retained slot should clear once the last participant leaves"
         );
+    }
+
+    // Component ownership proof. The outer gate deliberately delays the service
+    // acknowledgment; it is not an injected failure in the SDK's OS wait/stdio.
+    // SDK hidden-startup/completion-before-ACK branches have separate SDK tests.
+    #[test]
+    fn test_service_route_disposal_while_native_ack_pending() {
+        const CHILD: &str = "SUBSTRATE_SERVICE_ROUTE_ACK_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let root = tempfile::tempdir().unwrap();
+            fs::set_permissions(root.path(), fs::Permissions::from_mode(0o700)).unwrap();
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "member_runtime::tests::test_service_route_disposal_while_native_ack_pending",
+                    "--nocapture",
+                    "--test-threads=1",
+                ])
+                .env(CHILD, "1")
+                .env("SUBSTRATE_GATEWAY_RUNTIME_ROOT", root.path())
+                .output()
+                .unwrap();
+            print!("{}", String::from_utf8_lossy(&output.stdout));
+            eprint!("{}", String::from_utf8_lossy(&output.stderr));
+            assert!(output.status.success());
+            root.close().unwrap();
+            return;
+        }
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(service_route_ack_cases());
+    }
+
+    struct RouteCustodyObservation {
+        history: std::sync::Weak<OrdinaryNativeWorkerHistoryV1>,
+        lease: std::sync::Weak<HeldNonE3PrivilegedChildLeaseV1>,
+        history_file: std::path::PathBuf,
+        policy: std::path::PathBuf,
+    }
+    impl RouteCustodyObservation {
+        fn assert_held(&self, exclusion: &Arc<E3PrivilegedChildExclusionV1>) {
+            assert!(self.history.upgrade().is_some());
+            assert!(self.lease.upgrade().is_some());
+            assert!(self.history_file.is_file());
+            assert!(self.policy.is_file());
+            assert!(exclusion
+                .acquire_e3_exclusive("route-component", 7)
+                .is_err());
+        }
+        async fn assert_released(&self, exclusion: &Arc<E3PrivilegedChildExclusionV1>) {
+            tokio::time::timeout(std::time::Duration::from_secs(3), async {
+                while self.history.upgrade().is_some() || self.lease.upgrade().is_some() {
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await
+            .unwrap();
+            assert!(!self.policy.exists());
+            assert!(
+                self.history_file.is_file(),
+                "retired history is not deleted by route cleanup"
+            );
+            let mut e3 = exclusion
+                .acquire_e3_exclusive("route-component", 7)
+                .unwrap();
+            e3.release_after_cleanup_v1().unwrap();
+        }
+    }
+    struct RouteTestCustody {
+        _history: Arc<OrdinaryNativeWorkerHistoryV1>,
+        _lease: Arc<HeldNonE3PrivilegedChildLeaseV1>,
+        _policy: PreparedSubmittedTurnPolicyLauncher,
+    }
+    fn route_test_custody(
+        temp: &Path,
+        exclusion: &Arc<E3PrivilegedChildExclusionV1>,
+    ) -> (
+        RouteTestCustody,
+        RouteCustodyObservation,
+        transport_api_types::OrdinaryGatewayRuntimeIdentityV1,
+    ) {
+        let launcher = temp.join("launcher");
+        fs::create_dir(&launcher).unwrap();
+        fs::set_permissions(&launcher, fs::Permissions::from_mode(0o700)).unwrap();
+        let (selected, start, runtime) =
+            ordinary_worker_component_fixture(transport_api_types::AgentHarnessFamilyV1::Codex);
+        let history = Arc::new(
+            OrdinaryNativeWorkerHistoryV1::create(&launcher, &start, &runtime, &selected).unwrap(),
+        );
+        let history_file = history.path.join("history");
+        fs::write(&history_file, "retained actual history").unwrap();
+        let policy = launcher.join("turn-policy.sh");
+        fs::write(&policy, "component policy launcher").unwrap();
+        let lease = Arc::new(exclusion.acquire_non_e3_child().unwrap());
+        let observed = RouteCustodyObservation {
+            history: Arc::downgrade(&history),
+            lease: Arc::downgrade(&lease),
+            history_file,
+            policy: policy.clone(),
+        };
+        (
+            RouteTestCustody {
+                _history: history,
+                _lease: lease,
+                _policy: PreparedSubmittedTurnPolicyLauncher { path: policy },
+            },
+            observed,
+            runtime,
+        )
+    }
+
+    async fn service_route_ack_cases() {
+        use crate::gateway_runtime::member_runtime_route_disposal_tests::RouteFixture;
+        use std::{
+            sync::atomic::{AtomicBool, Ordering},
+            time::Duration,
+        };
+        for mode in [
+            "cancel",
+            "bootstrap-cancel",
+            "drop",
+            "deadline",
+            "raw-error",
+            "normal",
+            "failed-control",
+            "startup-delivery-drop",
+        ] {
+            for fail_ack in [false, true] {
+                let temp = tempfile::tempdir().unwrap();
+                let exclusion = E3PrivilegedChildExclusionV1::new_recovering().unwrap();
+                exclusion.finish_recovery().unwrap();
+                let gateway = RouteFixture::new(&exclusion);
+                let (custody, observed, runtime) = route_test_custody(temp.path(), &exclusion);
+                let open = Arc::new(AtomicBool::new(true));
+                let route = OrdinaryNativeRouteDisposalV1 {
+                    history_state: Arc::clone(&custody._history.in_use),
+                    native_open: Arc::clone(&open),
+                    gateway: Arc::clone(&gateway.lease),
+                    runtime,
+                };
+                let binary = temp.path().join("native.sh");
+                fs::write(
+                    &binary,
+                    r##"#!/bin/sh
+set -eu
+case "${1-}" in
+ --version) printf 'codex 1.2.3\n'; exit 0 ;;
+ --help) printf 'Usage: --add-dir --allow-dangerously-skip-permissions\n'; exit 0 ;;
+ features) printf '{"features":["add_dir"]}\n'; exit 0 ;;
+esac
+cat >/dev/null
+printf '%s\n' "$$" >> "$FIXTURE_DIR/native-started"
+if [ "$FIXTURE_MODE" = wait ]; then exec /bin/sleep 30; fi
+printf '{"type":"thread.started","thread_id":"route-component"}\n'
+printf '{"type":"turn.completed","thread_id":"route-component"}\n'
+"##,
+                )
+                .unwrap();
+                fs::set_permissions(&binary, fs::Permissions::from_mode(0o700)).unwrap();
+                let bridge = PromptFulfillmentBridge::for_member_backend(
+                    &MemberRuntimeBackendKindV1::Codex,
+                    binary,
+                )
+                .unwrap();
+                let control = bridge
+                    .run_control(AgentWrapperRunRequest {
+                        prompt: "component route custody".into(),
+                        working_dir: Some(temp.path().to_path_buf()),
+                        timeout: (mode == "deadline").then_some(Duration::from_secs(2)),
+                        env: BTreeMap::from([
+                            ("FIXTURE_DIR".into(), temp.path().display().to_string()),
+                            (
+                                "FIXTURE_MODE".into(),
+                                if matches!(mode, "normal" | "raw-error") {
+                                    "finish"
+                                } else {
+                                    "wait"
+                                }
+                                .into(),
+                            ),
+                        ]),
+                        extensions: BTreeMap::new(),
+                    })
+                    .await
+                    .unwrap();
+                let cancel = control.cancel.clone();
+                let native_terminal = control.terminal.clone();
+                let actual_waited = Arc::new(AtomicBool::new(false));
+                let waited = Arc::clone(&actual_waited);
+                let (release_ack, ack) = tokio::sync::oneshot::channel();
+                let completion = control.handle.completion;
+                let completion: agent_api::DynAgentWrapperCompletion = Box::pin(async move {
+                    let raw = completion.await;
+                    if mode == "raw-error" {
+                        raw?;
+                        Err(AgentWrapperError::Backend {
+                            message: "original injected service failure".into(),
+                        })
+                    } else {
+                        raw
+                    }
+                });
+                let terminate = cancel.clone();
+                let (completion, terminal) = crate::prompt_fulfillment::retain_native_completion(
+                    completion,
+                    Some(Box::pin(async move {
+                        native_terminal.wait().await.require_checked()?;
+                        waited.store(true, Ordering::Release);
+                        ack.await.unwrap();
+                        if fail_ack {
+                            Err(AgentWrapperError::Backend {
+                                message: "deliberately failed service ACK".into(),
+                            })
+                        } else {
+                            Ok(())
+                        }
+                    })),
+                    (),
+                    move || terminate.cancel(),
+                    None,
+                    cancel.disposal_requested(),
+                );
+                let mut events = control.handle.events;
+                let event_owner =
+                    tokio::spawn(async move { while events.next().await.is_some() {} });
+                let native_pid = tokio::time::timeout(Duration::from_secs(5), async {
+                    loop {
+                        match fs::read_to_string(temp.path().join("native-started")) {
+                            Ok(contents) if contents.is_empty() || !contents.ends_with('\n') => {}
+                            Ok(contents) => {
+                                assert_eq!(
+                                    contents.lines().count(),
+                                    1,
+                                    "duplicate native invocation"
+                                );
+                                let pid = contents
+                                    .strip_suffix('\n')
+                                    .unwrap()
+                                    .parse::<i32>()
+                                    .expect("native fixture must publish a complete valid PID");
+                                assert!(pid > 0, "native fixture PID must be positive");
+                                break pid;
+                            }
+                            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                            Err(error) => panic!("read native fixture PID: {error}"),
+                        }
+                        tokio::task::yield_now().await;
+                    }
+                })
+                .await
+                .unwrap();
+                let manager = MemberRuntimeManager::with_replay_and_e3_projection_service(
+                    RuntimeReplayRegistry::default(),
+                    None,
+                    Arc::clone(&exclusion),
+                );
+                manager.register_turn(
+                    "route-span".into(),
+                    Arc::new(ActiveSubmittedTurn {
+                        terminal: terminal.clone(),
+                        ordinary_effect: None,
+                        ordinary_native_home: None,
+                        participant_id: "structural-route-worker".into(),
+                        cancel: cancel.clone(),
+                        last_signal: Mutex::new(None),
+                    }),
+                );
+                assert!(!manager.cancel("different-span", "TERM").unwrap());
+                let terminate = cancel.clone();
+                let mut completion = if mode == "startup-delivery-drop" {
+                    let (release_control, held_control) = tokio::sync::oneshot::channel();
+                    let retained_terminal = terminal.clone();
+                    let retained_cancel = cancel.clone();
+                    let delivery = retain_ordinary_native_startup(
+                        async move {
+                            held_control.await.unwrap();
+                            Ok(PromptFulfillmentRunControl {
+                                handle: agent_api::AgentWrapperRunHandle {
+                                    events: Box::pin(futures_util::stream::empty()),
+                                    completion,
+                                },
+                                cancel: retained_cancel,
+                                terminal: retained_terminal,
+                            })
+                        },
+                        route,
+                        custody,
+                        None,
+                    );
+                    drop(delivery);
+                    gateway.assert_disposed().await;
+                    assert!(!open.load(Ordering::Acquire));
+                    observed.assert_held(&exclusion);
+                    release_control.send(()).unwrap();
+                    None
+                } else {
+                    Some(retain_ordinary_native_completion(
+                        completion,
+                        route,
+                        terminal.clone(),
+                        custody,
+                        move || terminate.cancel(),
+                        (mode == "deadline")
+                            .then(|| tokio::time::Instant::now() + Duration::from_millis(20)),
+                    ))
+                };
+                let bootstrap_temp = tempfile::tempdir().unwrap();
+                let bootstrap = sample_active_member_runtime(
+                    &bootstrap_temp,
+                    "bootstrap-worker",
+                    "bootstrap-span",
+                );
+                if mode == "bootstrap-cancel" {
+                    *bootstrap.bootstrap.lock().unwrap() = Some(ActiveBootstrapRuntime {
+                        span_id: "bootstrap-span".into(),
+                        terminal: Some(terminal.clone()),
+                        cancel: Some(cancel.clone()),
+                        last_signal: None,
+                        initial_control: None,
+                    });
+                    manager.register_member(Arc::clone(&bootstrap)).unwrap();
+                    assert!(manager.cancel("bootstrap-span", "TERM").unwrap());
+                } else if mode == "cancel" {
+                    assert!(manager.cancel("route-span", "TERM").unwrap());
+                } else if mode == "drop" {
+                    drop(completion.take());
+                } else if mode == "failed-control" {
+                    let completion = completion.take().unwrap();
+                    let (raw_sender, raw_receiver) = tokio::sync::oneshot::channel();
+                    let terminal_for_failure = terminal.clone();
+                    let cancel_for_failure = cancel.clone();
+                    tokio::spawn(async move {
+                        let error = join_failed_control(
+                            anyhow!("original registration failure"),
+                            agent_api::AgentWrapperRunHandle {
+                                events: Box::pin(futures_util::stream::empty()),
+                                completion,
+                            },
+                            cancel_for_failure,
+                            terminal_for_failure,
+                        )
+                        .await;
+                        let _ = raw_sender.send(error);
+                    });
+                    // Observe route/custody before releasing the same held ACK.
+                    gateway.assert_disposed().await;
+                    assert!(!open.load(Ordering::Acquire));
+                    observed.assert_held(&exclusion);
+                    let mut raw_receiver = raw_receiver;
+                    assert!(
+                        tokio::time::timeout(Duration::from_millis(10), &mut raw_receiver)
+                            .await
+                            .is_err()
+                    );
+                    release_ack.send(()).unwrap();
+                    let error = raw_receiver.await.unwrap();
+                    let message = format!("{error:#}");
+                    assert!(message.contains("original registration failure"));
+                    assert_eq!(
+                        message.contains("native acknowledgment unavailable"),
+                        fail_ack
+                    );
+                    observed.assert_released(&exclusion).await;
+                    event_owner.await.unwrap();
+                    manager.unregister_turn("route-span");
+                    continue;
+                }
+                gateway.assert_disposed().await;
+                assert!(
+                    !open.load(Ordering::Acquire),
+                    "exact per-turn admission is closed before ACK"
+                );
+                observed.assert_held(&exclusion);
+                let mut checked = Box::pin(terminal.wait());
+                assert!(
+                    tokio::time::timeout(Duration::from_millis(10), &mut checked)
+                        .await
+                        .is_err()
+                );
+                if let Some(completion) = &mut completion {
+                    assert!(tokio::time::timeout(Duration::from_millis(10), completion)
+                        .await
+                        .is_err());
+                }
+                // The actual SDK ACK remains separate from our deliberately held
+                // service ACK. Wait for genuine checked SDK ownership before releasing it.
+                tokio::time::timeout(Duration::from_secs(5), async {
+                    while !actual_waited.load(Ordering::Acquire) {
+                        tokio::task::yield_now().await;
+                    }
+                })
+                .await
+                .unwrap();
+                observed.assert_held(&exclusion);
+                release_ack.send(()).unwrap();
+                let checked = checked.await;
+                assert_eq!(checked.require_checked().is_err(), fail_ack);
+                if let Some(completion) = completion {
+                    let raw = completion.await;
+                    if matches!(mode, "cancel" | "bootstrap-cancel") {
+                        assert!(
+                            matches!(&raw, Err(AgentWrapperError::Backend { message }) if message == "cancelled")
+                        );
+                    } else if mode == "raw-error" {
+                        assert!(
+                            matches!(&raw, Err(AgentWrapperError::Backend { message }) if message == "original injected service failure")
+                        );
+                    } else if mode == "normal" {
+                        assert!(raw.as_ref().unwrap().status.success());
+                    } else {
+                        assert!(raw.is_err());
+                    }
+                    let enclosing = checked.enclosing_result(raw);
+                    if fail_ack {
+                        assert!(
+                            matches!(enclosing, Err(AgentWrapperError::Backend { message }) if message.contains("submission_outcome_unknown") && message.contains("deliberately failed service ACK"))
+                        );
+                    }
+                }
+                observed.assert_released(&exclusion).await;
+                event_owner.await.unwrap();
+                assert_ne!(unsafe { libc::kill(native_pid, 0) }, 0);
+                assert_eq!(
+                    fs::read_to_string(temp.path().join("native-started"))
+                        .unwrap()
+                        .lines()
+                        .count(),
+                    1,
+                    "accepted native input must not be delivered again"
+                );
+                manager.unregister_turn("route-span");
+                if mode == "bootstrap-cancel" {
+                    manager.unregister_member("bootstrap-worker");
+                }
+                eprintln!("service route case={mode} ack_failed={fail_ack}: real gateway disposed before synthetic service ACK; actual SDK wait separately checked");
+            }
+        }
+        service_route_startup_cases().await;
+    }
+
+    async fn service_route_startup_cases() {
+        use crate::gateway_runtime::member_runtime_route_disposal_tests::RouteFixture;
+        use std::{
+            sync::atomic::{AtomicBool, Ordering},
+            time::Duration,
+        };
+        for mode in ["startup-error", "startup-drop", "startup-deadline"] {
+            let temp = tempfile::tempdir().unwrap();
+            let exclusion = E3PrivilegedChildExclusionV1::new_recovering().unwrap();
+            exclusion.finish_recovery().unwrap();
+            let gateway = RouteFixture::new(&exclusion);
+            let (custody, observed, runtime) = route_test_custody(temp.path(), &exclusion);
+            let open = Arc::new(AtomicBool::new(true));
+            let route = OrdinaryNativeRouteDisposalV1 {
+                history_state: Arc::clone(&custody._history.in_use),
+                native_open: Arc::clone(&open),
+                gateway: Arc::clone(&gateway.lease),
+                runtime,
+            };
+            let (release, held) = tokio::sync::oneshot::channel();
+            let waited = Arc::new(AtomicBool::new(false));
+            let actual_waited = Arc::clone(&waited);
+            let mut child = tokio::process::Command::new("/bin/sleep")
+                .arg("0.01")
+                .kill_on_drop(true)
+                .spawn()
+                .unwrap();
+            let startup = async move {
+                held.await.unwrap();
+                assert!(child.wait().await.unwrap().success());
+                actual_waited.store(true, Ordering::Release);
+                Err(AgentWrapperError::Backend {
+                    message: "original startup error".into(),
+                })
+            };
+            let delivery = retain_ordinary_native_startup(
+                startup,
+                route,
+                custody,
+                (mode == "startup-deadline")
+                    .then(|| tokio::time::Instant::now() + Duration::from_millis(10)),
+            );
+            let mut delivery = Box::pin(delivery);
+            if mode == "startup-drop" {
+                drop(delivery);
+                gateway.assert_disposed().await;
+                assert!(!open.load(Ordering::Acquire));
+                observed.assert_held(&exclusion);
+                assert!(!waited.load(Ordering::Acquire));
+                release.send(()).unwrap();
+            } else if mode == "startup-deadline" {
+                gateway.assert_disposed().await;
+                observed.assert_held(&exclusion);
+                assert!(!open.load(Ordering::Acquire));
+                assert!(
+                    tokio::time::timeout(Duration::from_millis(10), &mut delivery)
+                        .await
+                        .is_err()
+                );
+                release.send(()).unwrap();
+                assert!(
+                    matches!(delivery.await, Err(AgentWrapperError::Backend { message }) if message == "original startup error")
+                );
+            } else {
+                release.send(()).unwrap();
+                assert!(
+                    matches!(delivery.await, Err(AgentWrapperError::Backend { message }) if message == "original startup error")
+                );
+                gateway.assert_disposed().await;
+            }
+            observed.assert_released(&exclusion).await;
+            assert!(waited.load(Ordering::Acquire));
+        }
+    }
+
+    // Checked lifetime/registry seam only. No synthetic cap is admitted and no
+    // claim is made about a vendor-native child's history format.
+    #[test]
+    fn test_initial_fork_source_registry_transfer_and_checked_stop_preserve_store() {
+        let temp = tempfile::tempdir().unwrap();
+        let manager = MemberRuntimeManager::new();
+        let mut source = sample_active_member_runtime(&temp, "source-owner", "source-span");
+        let (selected, start, runtime) =
+            ordinary_worker_component_fixture(transport_api_types::AgentHarnessFamilyV1::Codex);
+        let history = Arc::new(
+            OrdinaryNativeWorkerHistoryV1::create(
+                &source.launcher_dir,
+                &start,
+                &runtime,
+                &selected,
+            )
+            .unwrap(),
+        );
+        Arc::get_mut(&mut source).unwrap().ordinary_native_history = Some(Arc::clone(&history));
+        source.close_bootstrap();
+        manager.register_member(Arc::clone(&source)).unwrap();
+        let ownership = OrdinaryForkSourceOwnershipV1 {
+            registry: Arc::downgrade(&manager.active_members),
+            child_session: Mutex::new(None),
+        };
+        ownership.require_initial_source(&source).unwrap();
+        *source.active_turn_span_id.lock().unwrap() = Some("concurrent-resume".into());
+        assert!(ownership.require_initial_source(&source).is_err());
+        *source.active_turn_span_id.lock().unwrap() = None;
+        ownership.require_initial_source(&source).unwrap();
+        // Physical store serialization independently refuses a concurrent writer.
+        let child_store_lease =
+            OrdinaryNativeHistoryUseV1::acquire(Arc::clone(&history.in_use)).unwrap();
+        assert!(OrdinaryNativeHistoryUseV1::acquire(Arc::clone(&history.in_use)).is_err());
+        let unconsumed = OrdinaryForkSourceOwnershipV1 {
+            registry: Arc::downgrade(&manager.active_members),
+            child_session: Mutex::new(None),
+        };
+        let child_temp = tempfile::tempdir().unwrap();
+        let child = sample_active_member_runtime_with_lineage(
+            &child_temp,
+            "child-owner",
+            "child-span",
+            Some("source-owner"),
+            None,
+        );
+        manager.register_member(Arc::clone(&child)).unwrap();
+        ownership
+            .observe_child_session("source-session", "child-session")
+            .unwrap();
+        assert!(ownership
+            .observe_child_session("source-session", "other-child")
+            .is_err());
+        assert!(
+            ownership.require_initial_source(&source).is_err(),
+            "a consumed pin cannot admit a new Fork even while source remains registered"
+        );
+        manager.unregister_member("source-owner");
+        assert!(
+            unconsumed.require_initial_source(&source).is_err(),
+            "a captured unconsumed pin must observe source retirement"
+        );
+        assert!(ownership.is_transferred().unwrap());
+        assert!(manager
+            .active_members
+            .read()
+            .unwrap()
+            .by_participant_id
+            .get("child-owner")
+            .is_some_and(|actual| Arc::ptr_eq(actual, &child)));
+        history.revalidate().unwrap();
+        assert!(
+            history.path.is_dir(),
+            "checked source retirement retains physical history"
+        );
+        assert!(OrdinaryNativeHistoryUseV1::acquire(Arc::clone(&history.in_use)).is_err());
+        drop(child_store_lease);
+        drop(OrdinaryNativeHistoryUseV1::acquire(Arc::clone(&history.in_use)).unwrap());
+        // A different retained object with the same textual ID is no substitute.
+        let replacement_temp = tempfile::tempdir().unwrap();
+        let replacement =
+            sample_active_member_runtime(&replacement_temp, "source-owner", "replacement-span");
+        replacement.close_bootstrap();
+        manager
+            .active_members
+            .write()
+            .unwrap()
+            .by_participant_id
+            .insert("source-owner".into(), replacement);
+        assert!(unconsumed.require_initial_source(&source).is_err());
+    }
+
+    #[test]
+    fn test_initial_fork_shared_history_unconfirmed_ack_refuses_reuse() {
+        const CHILD: &str = "SUBSTRATE_FORK_HISTORY_ACK_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let root = tempfile::tempdir().unwrap();
+            fs::set_permissions(root.path(), fs::Permissions::from_mode(0o700)).unwrap();
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "member_runtime::tests::test_initial_fork_shared_history_unconfirmed_ack_refuses_reuse",
+                    "--nocapture", "--test-threads=1"])
+                .env(CHILD, "1").env("SUBSTRATE_GATEWAY_RUNTIME_ROOT", root.path()).output().unwrap();
+            print!("{}", String::from_utf8_lossy(&output.stdout));
+            eprint!("{}", String::from_utf8_lossy(&output.stderr));
+            assert!(output.status.success());
+            return;
+        }
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(initial_fork_history_ack_cases());
+    }
+
+    async fn initial_fork_history_ack_cases() {
+        use crate::gateway_runtime::member_runtime_route_disposal_tests::RouteFixture;
+        for mode in ["checked", "native-wait-error", "unsupported"] {
+            let temp = tempfile::tempdir().unwrap();
+            let exclusion = E3PrivilegedChildExclusionV1::new_recovering().unwrap();
+            exclusion.finish_recovery().unwrap();
+            let gateway = RouteFixture::new(&exclusion);
+            let (custody, _, runtime) = route_test_custody(temp.path(), &exclusion);
+            let state = Arc::clone(&custody._history.in_use);
+            let lease = OrdinaryNativeHistoryUseV1::acquire(Arc::clone(&state)).unwrap();
+            let route = OrdinaryNativeRouteDisposalV1 {
+                history_state: Arc::clone(&state),
+                native_open: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+                gateway: Arc::clone(&gateway.lease),
+                runtime,
+            };
+            let (release, ack) = tokio::sync::oneshot::channel();
+            let settlement: Option<agent_api::DynAgentWrapperSettlement> = if mode == "unsupported"
+            {
+                None
+            } else {
+                Some(Box::pin(async move {
+                    ack.await.unwrap();
+                    if mode == "native-wait-error" {
+                        Err(AgentWrapperError::Backend {
+                            message: "native wait unconfirmed".into(),
+                        })
+                    } else {
+                        Ok(())
+                    }
+                }))
+            };
+            let (completion, terminal) = crate::prompt_fulfillment::retain_native_completion(
+                Box::pin(async {
+                    Err(AgentWrapperError::Backend {
+                        message: "original native error".into(),
+                    })
+                }),
+                settlement,
+                (),
+                || {},
+                None,
+                None,
+            );
+            let completion = retain_ordinary_native_completion(
+                completion,
+                route,
+                terminal.clone(),
+                (custody, lease),
+                || {},
+                None,
+            );
+            tokio::pin!(completion);
+            gateway.assert_disposed().await;
+            if mode != "unsupported" {
+                assert!(tokio::time::timeout(
+                    std::time::Duration::from_millis(20),
+                    &mut completion
+                )
+                .await
+                .is_err());
+                assert!(OrdinaryNativeHistoryUseV1::acquire(Arc::clone(&state)).is_err());
+                release.send(()).unwrap();
+            }
+            let raw = completion.await;
+            assert!(
+                matches!(raw, Err(AgentWrapperError::Backend { message }) if message == "original native error")
+            );
+            let outcome = terminal.wait().await;
+            assert_eq!(outcome.require_checked().is_ok(), mode == "checked");
+            // No publisher/retirement has run: the failed/unsupported ACK itself
+            // must poison the shared store before the enclosing custody drops.
+            if mode == "checked" {
+                drop(OrdinaryNativeHistoryUseV1::acquire(Arc::clone(&state)).unwrap());
+            } else {
+                assert!(state.require_usable().is_err());
+                assert!(OrdinaryNativeHistoryUseV1::acquire(Arc::clone(&state)).is_err());
+            }
+        }
+    }
+}
+
+// These fixtures construct identity data only. They do not create an ordinary
+// configured-home seal, HSA permit, World effect or installed service authority.
+#[cfg(test)]
+fn ordinary_worker_component_fixture(
+    harness: transport_api_types::AgentHarnessFamilyV1,
+) -> (
+    transport_api_types::ResolvedAgentSelectionV1,
+    transport_api_types::OrdinaryStartSelectionCarrierV1,
+    transport_api_types::OrdinaryGatewayRuntimeIdentityV1,
+) {
+    use transport_api_types::*;
+    let source = AgentSelectionSourceV1 {
+        scope: AgentSelectionSourceScopeV1::Global,
+        root_identity: "component-root".into(),
+        relative_path: "config.yaml".into(),
+        revision: "component-revision".into(),
+        sha256: "a".repeat(64),
+    };
+    let codex = harness == AgentHarnessFamilyV1::Codex;
+    let provider = if codex { "openai" } else { "anthropic" };
+    let upstream = if codex {
+        "component-model"
+    } else {
+        "claude-sonnet-4-5-20250929"
+    };
+    let selected = ResolvedAgentSelectionV1 {
+        version: 1,
+        logical_agent_id: "component".into(),
+        realized_agent_id: "component-world".into(),
+        backend_id: "cli:component-world".into(),
+        placement: AgentSelectionPlacementV1::World,
+        harness_contract_revision: if codex {
+            "codex-cli.v1"
+        } else {
+            "claude-code-cli.v1"
+        }
+        .into(),
+        selection: AgentSelectionTupleV1 {
+            harness,
+            provider: provider.into(),
+            connection_profile: "global:component".into(),
+            model: upstream.into(),
+        },
+        connection_profile: AgentConnectionProfileV1 {
+            id: "global:component".into(),
+            revision: "component-profile".into(),
+            provider: provider.into(),
+            billing: if codex {
+                AgentConnectionBillingV1::Subscription
+            } else {
+                AgentConnectionBillingV1::Api
+            },
+            endpoint_identity: "component-provider".into(),
+            upstream_base_url: if codex {
+                "https://chatgpt.com/backend-api"
+            } else {
+                "https://api.anthropic.com"
+            }
+            .into(),
+            auth: if codex {
+                AgentConnectionAuthV1::CodexAccount {
+                    reference: "component-account".into(),
+                }
+            } else {
+                AgentConnectionAuthV1::ApiKeyEnvironment {
+                    name: "ANTHROPIC_API_KEY".into(),
+                }
+            },
+            source: source.clone(),
+        },
+        routed_model_id: if codex { upstream } else { "claude-sonnet-4.5" }.into(),
+        upstream_model_id: upstream.into(),
+        route_revision: if codex {
+            "codex-subscription.v1"
+        } else {
+            "claude-code-existing.v1"
+        }
+        .into(),
+        selection_origin: AgentSelectionOriginV1::ConfiguredDefault,
+        inventory_source: AgentSelectionSourceV1 {
+            relative_path: "agents/component.yaml".into(),
+            ..source.clone()
+        },
+        config_sources: vec![source.clone()],
+        preference_source: Some(source),
+        selection_digest: String::new(),
+    }
+    .seal()
+    .expect("valid component selection data");
+    let start = OrdinaryStartSelectionCarrierV1 {
+        schema_version: 1,
+        authority_store_id: "component-authority".into(),
+        original_start_intent_id: "component-start".into(),
+        original_start_issuer_request_id: format!("req_{}", "b".repeat(64)),
+        original_session_id: "component-session".into(),
+        context_sha256: "c".repeat(64),
+        native_selection_sha256: "d".repeat(64),
+        requested_selection_sha256: selected.selection_digest.clone(),
+    };
+    let runtime = OrdinaryGatewayRuntimeIdentityV1::WorldWorker {
+        orchestration_session_id: "component-session".into(),
+        caller_participant_id: "component-orchestrator".into(),
+        participant_id: "component-worker".into(),
+        backend_id: selected.backend_id.clone(),
+        run_id: "component-bootstrap".into(),
+        world_id: "component-world".into(),
+        world_generation: 7,
+    };
+    (selected, start, runtime)
+}
+
+#[cfg(test)]
+#[test]
+fn test_ordinary_worker_history_reuses_exact_start_and_refuses_substitution() {
+    use transport_api_types::{AgentHarnessFamilyV1, OrdinaryGatewayRuntimeIdentityV1};
+    let temp = tempfile::tempdir().unwrap();
+    let launcher = temp.path().join("launcher");
+    fs::create_dir(&launcher).unwrap();
+    fs::set_permissions(&launcher, fs::Permissions::from_mode(0o700)).unwrap();
+    let (selected, start, runtime) = ordinary_worker_component_fixture(AgentHarnessFamilyV1::Codex);
+    let original_start = serde_json::to_vec(&start).unwrap();
+    let history =
+        OrdinaryNativeWorkerHistoryV1::create(&launcher, &start, &runtime, &selected).unwrap();
+    let original = history.directory.metadata().unwrap();
+    let wiring = transport_api_types::GatewayClientWiringV1 {
+        openai_base_url: "http://127.0.0.1:32123".into(),
+        anthropic_base_url: "http://127.0.0.1:32123".into(),
+    };
+    let (name, config) = ordinary_native_config(temp.path(), &selected, &wiring).unwrap();
+    history.write_config(name, &config).unwrap();
+    let mut pids = BTreeSet::new();
+    for index in 0..3 {
+        let mut current = runtime.clone();
+        if let OrdinaryGatewayRuntimeIdentityV1::WorldWorker { run_id, .. } = &mut current {
+            *run_id = format!("component-turn-{index}");
+        }
+        history
+            .require_original_worker(&start, &current, &selected)
+            .unwrap();
+        let output = std::process::Command::new("/bin/sh").arg("-c")
+            .arg("set -eu; test -f \"$HOME/config.toml\"; printf '%s\\n' \"$COMPONENT_TURN\" >> \"$HOME/history\"; printf '%s' \"$$\"")
+            .env("HOME", history.descriptor_path().unwrap()).env("COMPONENT_TURN", index.to_string()).output().unwrap();
+        assert!(output.status.success());
+        pids.insert(String::from_utf8(output.stdout).unwrap());
+        let now = fs::metadata(&history.path).unwrap();
+        assert_eq!((original.dev(), original.ino()), (now.dev(), now.ino()));
+    }
+    assert_eq!(pids.len(), 3);
+    assert_eq!(
+        fs::read_to_string(history.path.join("history")).unwrap(),
+        "0\n1\n2\n"
+    );
+    let mut wrong_worker = runtime.clone();
+    if let OrdinaryGatewayRuntimeIdentityV1::WorldWorker { participant_id, .. } = &mut wrong_worker
+    {
+        *participant_id = "different-worker".into();
+    }
+    assert!(history
+        .require_original_worker(&start, &wrong_worker, &selected)
+        .is_err());
+    let host = OrdinaryGatewayRuntimeIdentityV1::HostActor {
+        orchestration_session_id: "component-session".into(),
+        participant_id: "component-worker".into(),
+        backend_id: selected.backend_id.clone(),
+        run_id: "component-turn".into(),
+    };
+    assert!(history
+        .require_original_worker(&start, &host, &selected)
+        .is_err());
+    let mut wrong_start = start.clone();
+    wrong_start.original_start_intent_id = "different-start".into();
+    assert!(history
+        .require_original_worker(&wrong_start, &runtime, &selected)
+        .is_err());
+    let mut wrong_selection = selected.clone();
+    wrong_selection.selection_digest = "e".repeat(64);
+    assert!(history
+        .require_original_worker(&start, &runtime, &wrong_selection)
+        .is_err());
+    let moved = launcher.join("held-original-history");
+    fs::rename(&history.path, &moved).unwrap();
+    fs::create_dir(&history.path).unwrap();
+    fs::set_permissions(&history.path, fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(history.revalidate().is_err());
+    assert!(history.descriptor_path().is_err());
+    assert_eq!(
+        fs::read_to_string(moved.join("history")).unwrap(),
+        "0\n1\n2\n"
+    );
+    assert_eq!(serde_json::to_vec(&history.start).unwrap(), original_start);
+    fs::remove_dir(&history.path).unwrap();
+    fs::rename(&moved, &history.path).unwrap();
+    history.revalidate().unwrap();
+    let moved_parent = temp.path().join("held-original-launcher");
+    fs::rename(&launcher, &moved_parent).unwrap();
+    fs::create_dir(&launcher).unwrap();
+    assert!(history.revalidate().is_err());
+    fs::remove_dir(&launcher).unwrap();
+    fs::rename(&moved_parent, &launcher).unwrap();
+    history.revalidate().unwrap();
+    let path = history.path.clone();
+    drop(history);
+    assert!(path.join("history").is_file());
+    let mut cleanup = Some(launcher.clone());
+    cleanup_prepared_ordinary_member_launcher(&mut cleanup, true);
+    assert!(cleanup.is_none());
+    assert!(path.join("history").is_file());
+}
+
+#[cfg(test)]
+#[test]
+fn test_ordinary_managed_origins_are_strict() {
+    assert_eq!(
+        ordinary_native_managed_origin("http://127.0.0.1:32123").unwrap(),
+        "http://127.0.0.1:32123"
+    );
+    for bad in [
+        "http://127.0.0.1:0",
+        "http://127.0.0.1:01",
+        "http://127.0.0.1:+1",
+        "http://127.0.0.1:65536",
+        "http://127.0.0.1:1/",
+        "http://127.0.0.1:1/v1",
+        "http://127.0.0.1:1?x=1",
+        "http://user@127.0.0.1:1",
+        "https://127.0.0.1:1",
+        "http://localhost:1",
+        "http://[::1]:1",
+    ] {
+        assert!(ordinary_native_managed_origin(bad).is_err(), "{bad}");
+    }
+}
+
+#[cfg(test)]
+#[tokio::test(flavor = "current_thread")]
+async fn test_ordinary_native_inherited_env_in_actual_codex_and_claude_children() {
+    const CHILD: &str = "SUBSTRATE_ORDINARY_ENV_COMPONENT_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        // Synthetic tokens exist only in this isolated libtest child environment.
+        let result = std::process::Command::new(std::env::current_exe().unwrap())
+            .arg("test_ordinary_native_inherited_env_in_actual_codex_and_claude_children")
+            .arg("--nocapture")
+            .arg("--test-threads=1")
+            .env(CHILD, "1")
+            .env("OPENAI_API_KEY", "component-inherited-provider-secret")
+            .env("ANTHROPIC_API_KEY", "component-inherited-provider-secret")
+            .env(
+                "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN",
+                "component-inherited-provider-secret",
+            )
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr)
+        );
+        return;
+    }
+    for harness in [
+        transport_api_types::AgentHarnessFamilyV1::Codex,
+        transport_api_types::AgentHarnessFamilyV1::ClaudeCode,
+    ] {
+        let temp = tempfile::tempdir().unwrap();
+        let launcher = temp.path().join("launcher");
+        fs::create_dir(&launcher).unwrap();
+        fs::set_permissions(&launcher, fs::Permissions::from_mode(0o700)).unwrap();
+        let (selected, start, runtime) = ordinary_worker_component_fixture(harness);
+        let history =
+            OrdinaryNativeWorkerHistoryV1::create(&launcher, &start, &runtime, &selected).unwrap();
+        let wiring = transport_api_types::GatewayClientWiringV1 {
+            openai_base_url: "http://127.0.0.1:32123".into(),
+            anthropic_base_url: "http://127.0.0.1:32123".into(),
+        };
+        let (name, content) = ordinary_native_config(temp.path(), &selected, &wiring).unwrap();
+        history.write_config(name, &content).unwrap();
+        let binary = temp.path().join("fixture-native.sh");
+        fs::write(&binary, r##"#!/bin/sh
+set -eu
+for value in "${OPENAI_API_KEY-}" "${ANTHROPIC_API_KEY-}" "${SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN-}"; do
+  if [ -n "$value" ]; then exit 88; fi
+done
+case "${1-}" in
+  --version) printf '%s\n' version >> "$FIXTURE_DIR/probes"; printf 'codex 1.2.3\n'; exit 0 ;;
+  --help) printf '%s\n' help >> "$FIXTURE_DIR/probes"; printf 'Usage: --add-dir --allow-dangerously-skip-permissions\n'; exit 0 ;;
+  features) printf '%s\n' features >> "$FIXTURE_DIR/probes"; printf '{"features":["add_dir"]}\n'; exit 0 ;;
+esac
+printf '%s\n' "$@" > "$FIXTURE_DIR/args"
+printf '%s\n%s\n%s\n' "$HOME" "${ANTHROPIC_BASE_URL-}" "${ANTHROPIC_MODEL-}" > "$FIXTURE_DIR/env"
+if [ "$FIXTURE_BACKEND" = codex ]; then
+  cat "$CODEX_HOME/config.toml" > "$FIXTURE_DIR/config"
+  cat > "$FIXTURE_DIR/stdin"
+  printf '{"type":"thread.started","thread_id":"thread-component"}\n'
+  printf '{"type":"turn.completed","thread_id":"thread-component"}\n'
+else
+  cat "$CLAUDE_CONFIG_DIR/settings.json" > "$FIXTURE_DIR/config"
+  test "$ANTHROPIC_AUTH_TOKEN" = substrate-managed-gateway
+  printf '{"type":"system","subtype":"init","session_id":"thread-component"}\n'
+  printf '{"type":"result","subtype":"success","is_error":false,"result":"component","session_id":"thread-component","duration_ms":1,"duration_api_ms":1,"num_turns":1,"total_cost_usd":0}\n'
+fi
+"##).unwrap();
+        fs::set_permissions(&binary, fs::Permissions::from_mode(0o755)).unwrap();
+        let mut env = BTreeMap::from([
+            ("FIXTURE_DIR".into(), temp.path().display().to_string()),
+            (
+                "FIXTURE_BACKEND".into(),
+                if harness == transport_api_types::AgentHarnessFamilyV1::Codex {
+                    "codex"
+                } else {
+                    "claude"
+                }
+                .into(),
+            ),
+        ]);
+        configure_ordinary_native_env(
+            &mut env,
+            &selected,
+            &history.descriptor_path().unwrap(),
+            &wiring,
+        )
+        .unwrap();
+        assert_eq!(env.get("OPENAI_API_KEY").map(String::as_str), Some(""));
+        assert_eq!(env.get("ANTHROPIC_API_KEY").map(String::as_str), Some(""));
+        let backend = if harness == transport_api_types::AgentHarnessFamilyV1::Codex {
+            MemberRuntimeBackendKindV1::Codex
+        } else {
+            MemberRuntimeBackendKindV1::ClaudeCode
+        };
+        let bridge = PromptFulfillmentBridge::for_member_backend(&backend, binary).unwrap();
+        let mut extensions = member_runtime_workspace_access_extensions(backend, temp.path());
+        extensions.insert(
+            "agent_api.config.model.v1".into(),
+            json!(selected.routed_model_id),
+        );
+        let control = bridge
+            .run_control(AgentWrapperRunRequest {
+                prompt: "component".into(),
+                working_dir: Some(temp.path().to_path_buf()),
+                timeout: None,
+                env,
+                extensions,
+            })
+            .await
+            .unwrap();
+        let mut events = control.handle.events;
+        while events.next().await.is_some() {}
+        let result = control.handle.completion.await.unwrap();
+        assert!(result.status.success());
+        let observed = fs::read_to_string(temp.path().join("env")).unwrap();
+        assert!(observed.starts_with(&history.descriptor_path().unwrap().display().to_string()));
+        let args = fs::read_to_string(temp.path().join("args")).unwrap();
+        assert!(args.lines().any(|value| value == selected.routed_model_id));
+        if harness == transport_api_types::AgentHarnessFamilyV1::Codex {
+            assert!(args.lines().any(|value| value == "--add-dir"));
+            assert!(!fs::read_to_string(temp.path().join("probes"))
+                .unwrap()
+                .is_empty());
+            let config: toml::Value = fs::read_to_string(temp.path().join("config"))
+                .unwrap()
+                .parse()
+                .unwrap();
+            assert_eq!(
+                config["model"].as_str(),
+                Some(selected.routed_model_id.as_str())
+            );
+            assert_eq!(
+                config["model_providers"]["substrate-managed-gateway"]["base_url"].as_str(),
+                Some("http://127.0.0.1:32123/v1")
+            );
+        } else {
+            assert!(observed.contains("\nhttp://127.0.0.1:32123\nclaude-sonnet-4.5\n"));
+            assert_eq!(
+                fs::read_to_string(temp.path().join("config")).unwrap(),
+                "{}\n"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+#[tokio::test(flavor = "current_thread")]
+async fn test_ordinary_world_completion_retains_started_child_custody() {
+    use std::time::Duration;
+    for mode in [
+        "normal",
+        "drop-after-returned-control-error",
+        "explicit-cancel",
+    ] {
+        let temp = tempfile::tempdir().unwrap();
+        let launcher = temp.path().join("launcher");
+        fs::create_dir(&launcher).unwrap();
+        fs::set_permissions(&launcher, fs::Permissions::from_mode(0o700)).unwrap();
+        let (selected, start, runtime) =
+            ordinary_worker_component_fixture(transport_api_types::AgentHarnessFamilyV1::Codex);
+        let history = Arc::new(
+            OrdinaryNativeWorkerHistoryV1::create(&launcher, &start, &runtime, &selected).unwrap(),
+        );
+        fs::write(history.path.join("history"), "retained").unwrap();
+        let history_path = history.path.clone();
+        let weak = Arc::downgrade(&history);
+        let policy_path = launcher.join("turn-policy.sh");
+        fs::write(&policy_path, "component policy launcher").unwrap();
+        let policy = PreparedSubmittedTurnPolicyLauncher {
+            path: policy_path.clone(),
+        };
+        let exclusion = E3PrivilegedChildExclusionV1::new_recovering().unwrap();
+        exclusion.finish_recovery().unwrap();
+        let lease = Arc::new(exclusion.acquire_non_e3_child().unwrap());
+        let mut child = tokio::process::Command::new("/bin/sleep")
+            .arg(if mode == "normal" { "0.08" } else { "30" })
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
+        let pid = child.id().unwrap();
+        assert_eq!(unsafe { libc::kill(pid as i32, 0) }, 0);
+        let completion: agent_api::DynAgentWrapperCompletion = Box::pin(async move {
+            let status = child
+                .wait()
+                .await
+                .map_err(|error| AgentWrapperError::Backend {
+                    message: error.to_string(),
+                })?;
+            Ok(AgentWrapperCompletion {
+                status,
+                final_text: None,
+                data: None,
+            })
+        });
+        let completion = retain_ordinary_world_completion(
+            completion,
+            (history, lease, Some(policy)),
+            move || unsafe {
+                libc::kill(pid as i32, libc::SIGTERM);
+            },
+        );
+        assert!(weak.upgrade().is_some());
+        assert!(policy_path.is_file());
+        assert!(exclusion
+            .acquire_e3_exclusive("component-world", 7)
+            .is_err());
+        let mut cleanup = Some(launcher.clone());
+        cleanup_prepared_ordinary_member_launcher(&mut cleanup, true);
+        assert!(history_path.is_dir());
+        if mode == "drop-after-returned-control-error" {
+            drop(completion);
+            tokio::time::timeout(Duration::from_secs(3), async {
+                while weak.upgrade().is_some() {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+            })
+            .await
+            .unwrap();
+        } else {
+            if mode == "explicit-cancel" {
+                unsafe {
+                    libc::kill(pid as i32, libc::SIGTERM);
+                }
+            }
+            let result = tokio::time::timeout(Duration::from_secs(3), completion)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(result.status.success(), mode == "normal");
+        }
+        assert!(weak.upgrade().is_none());
+        assert!(!policy_path.exists());
+        assert_ne!(unsafe { libc::kill(pid as i32, 0) }, 0);
+        assert!(history_path.join("history").is_file());
+        let mut e3 = exclusion
+            .acquire_e3_exclusive("component-world", 7)
+            .unwrap();
+        e3.release_after_cleanup_v1().unwrap();
+    }
+}
+
+#[cfg(test)]
+#[tokio::test]
+async fn test_ordinary_home_handoff_supervisor_joins_after_owner_drop() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let terminal = Arc::new(OrdinaryHomeHandoffTerminalV1::default());
+    *terminal.latest.lock().unwrap() = Some(("dropped-startup".into(), None));
+    let joined = Arc::new(AtomicBool::new(false));
+    let observed = Arc::clone(&joined);
+    let (stop_tx, stop_rx) = tokio::sync::oneshot::channel();
+    let task = tokio::spawn(async move {
+        let _ = stop_rx.await;
+        observed.store(true, Ordering::SeqCst);
+        Ok(false)
+    });
+    let owner = supervise_ordinary_home_handoff(
+        task,
+        stop_tx,
+        Arc::clone(&terminal),
+        "dropped-startup".into(),
+    );
+    drop(owner);
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        loop {
+            let notified = terminal.changed.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if terminal
+                .latest
+                .lock()
+                .unwrap()
+                .as_ref()
+                .is_some_and(|(_, v)| v.is_some())
+            {
+                break;
+            }
+            notified.await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(
+        joined.load(Ordering::SeqCst),
+        "terminal record requires actual listener completion"
+    );
+    assert_eq!(
+        *terminal.latest.lock().unwrap(),
+        Some(("dropped-startup".into(), Some("joined_stopped")))
+    );
+}
+
+#[cfg(test)]
+#[test]
+fn test_ordinary_home_handoff_codex_argv_is_closed() {
+    let temp = tempfile::Builder::new()
+        .prefix("ordinary-sdk-argv-")
+        .tempdir_in("/tmp")
+        .unwrap();
+    let workspace = Path::new("/fixture/exact-workspace");
+    let model = "held-model";
+    for (index, args) in [
+        vec!["--version"],
+        vec!["features", "list", "--json"],
+        vec!["features", "list"],
+        vec!["--help"],
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let args = args.into_iter().map(str::to_owned).collect::<Vec<_>>();
+        assert_eq!(
+            classify_ordinary_codex_args(&args, None, temp.path(), model, workspace).unwrap(),
+            Some(index)
+        );
+        let mut injected = args;
+        injected.push("exec".into());
+        assert!(
+            classify_ordinary_codex_args(&injected, None, temp.path(), model, workspace).is_err()
+        );
+    }
+    let path = temp
+        .path()
+        .join(format!("codex_last_message_123_{}.txt", std::process::id()));
+    let start: Vec<String> = vec![
+        "--dangerously-bypass-approvals-and-sandbox",
+        "exec",
+        "--color",
+        "never",
+        "--skip-git-repo-check",
+        "--json",
+        "--model",
+        model,
+        "--add-dir",
+        workspace.to_str().unwrap(),
+        "--output-last-message",
+        path.to_str().unwrap(),
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect();
+    assert_eq!(
+        classify_ordinary_codex_args(&start, None, temp.path(), model, workspace).unwrap(),
+        None
+    );
+    let mut resume = start.clone();
+    resume.extend(["resume".into(), "held-thread".into(), "-".into()]);
+    assert_eq!(
+        classify_ordinary_codex_args(&resume, Some("held-thread"), temp.path(), model, workspace)
+            .unwrap(),
+        None
+    );
+    assert!(classify_ordinary_codex_args(
+        &resume,
+        Some("other-thread"),
+        temp.path(),
+        model,
+        workspace
+    )
+    .is_err());
+    let mut cases = Vec::new();
+    let mut duplicate_exec = resume.clone();
+    duplicate_exec.insert(2, "exec".into());
+    cases.push(duplicate_exec);
+    let mut earlier_resume = resume.clone();
+    earlier_resume.splice(2..2, ["resume".into(), "other-thread".into()]);
+    cases.push(earlier_resume);
+    let mut output_alias = resume.clone();
+    output_alias.insert(2, "--output-last-message=/tmp/arbitrary".into());
+    cases.push(output_alias);
+    let mut wrong_model = resume.clone();
+    wrong_model[7] = "substituted-model".into();
+    cases.push(wrong_model);
+    let mut wrong_workspace = resume.clone();
+    wrong_workspace[9] = "/other/workspace".into();
+    cases.push(wrong_workspace);
+    for extra in [
+        vec!["--profile", "ambient"],
+        vec!["--cd", "/other"],
+        vec!["--config", "model=other"],
+        vec!["--model=other"],
+        vec!["--last"],
+        vec!["--fork-session"],
+    ] {
+        let mut args = resume.clone();
+        args.splice(2..2, extra.into_iter().map(str::to_owned));
+        cases.push(args);
+    }
+    for args in cases {
+        assert!(
+            classify_ordinary_codex_args(&args, Some("held-thread"), temp.path(), model, workspace)
+                .is_err(),
+            "injected argv passed: {args:?}"
+        );
+    }
+    let mut wrong_output = start.clone();
+    wrong_output[11] = "/tmp/arbitrary".into();
+    assert!(
+        classify_ordinary_codex_args(&wrong_output, None, temp.path(), model, workspace).is_err()
+    );
+    fs::write(path, b"preexisting output").unwrap();
+    assert!(classify_ordinary_codex_args(&start, None, temp.path(), model, workspace).is_err());
+}
+
+#[cfg(test)]
+#[test]
+fn test_ordinary_home_handoff_claude_argv_is_closed() {
+    let model = "claude-sonnet-4.5";
+    let prompt = "exact ordinary Claude prompt";
+    let start = [
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--model",
+        model,
+        "--permission-mode",
+        "bypassPermissions",
+        "--include-partial-messages",
+        "--verbose",
+        prompt,
+    ]
+    .map(str::to_owned)
+    .to_vec();
+    classify_ordinary_claude_args(&start, None, model, prompt).unwrap();
+    let mut resume = start.clone();
+    resume.splice(8..8, ["--resume".into(), "held-session".into()]);
+    classify_ordinary_claude_args(&resume, Some("held-session"), model, prompt).unwrap();
+    assert!(classify_ordinary_claude_args(&resume, None, model, prompt).is_err());
+    assert!(classify_ordinary_claude_args(&resume, Some("other-session"), model, prompt).is_err());
+    assert!(classify_ordinary_claude_args(&start, None, "other-model", prompt).is_err());
+    assert!(classify_ordinary_claude_args(&start, None, model, "other-prompt").is_err());
+    for injection in [
+        vec!["--continue"],
+        vec!["--fork-session"],
+        vec!["--resume", "other-session"],
+        vec!["--model", "other-model"],
+        vec!["--add-dir", "/other"],
+        vec!["--settings", "/other"],
+        vec!["--system-prompt", "other"],
+        vec!["--dangerously-skip-permissions"],
+        vec!["--help"],
+    ] {
+        let mut bad = start.clone();
+        bad.splice(8..8, injection.into_iter().map(str::to_owned));
+        assert!(classify_ordinary_claude_args(&bad, None, model, prompt).is_err());
+    }
+    for omitted in 0..start.len() {
+        let mut bad = start.clone();
+        bad.remove(omitted);
+        assert!(classify_ordinary_claude_args(&bad, None, model, prompt).is_err());
+    }
+    for probe in [["--help"], ["--version"]] {
+        let probe = probe.map(str::to_owned).to_vec();
+        assert!(classify_ordinary_claude_args(&probe, None, model, prompt).is_err());
+    }
+}
+
+#[cfg(test)]
+mod initial_fork_join_tests {
+    use super::*;
+
+    #[test]
+    fn test_fork_app_server_shape_does_not_expand_exec_admission() {
+        assert_eq!(
+            classify_ordinary_fork_codex_args(&["app-server".into()]).unwrap(),
+            None
+        );
+        for args in [
+            vec!["app-server", "--analytics-default-enabled"],
+            vec!["app-server", "--model", "other"],
+            vec!["--config", "model=other", "app-server"],
+            vec!["exec"],
+            vec!["mcp-server"],
+            vec!["app-server", "--add-dir", "/other"],
+        ] {
+            let args = args.into_iter().map(str::to_owned).collect::<Vec<_>>();
+            assert!(classify_ordinary_fork_codex_args(&args).is_err());
+        }
+        let temp = tempfile::tempdir().unwrap();
+        assert!(
+            classify_ordinary_codex_args(
+                &["app-server".into()],
+                None,
+                temp.path(),
+                "model",
+                temp.path(),
+            )
+            .is_err(),
+            "ordinary Start/Resume must retain their closed exec classifier"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_history_use_survives_abandoned_completion_until_native_ack() {
+        use std::sync::atomic::Ordering;
+        let in_use = Arc::new(OrdinaryNativeHistoryStateV1::default());
+        let custody = OrdinaryNativeHistoryUseV1::acquire(Arc::clone(&in_use)).unwrap();
+        let (ack_tx, ack_rx) = tokio::sync::oneshot::channel();
+        let completion = retain_ordinary_world_completion(
+            Box::pin(async move {
+                let _ = ack_rx.await;
+                Err(AgentWrapperError::Backend {
+                    message: "native acknowledgment error".into(),
+                })
+            }),
+            custody,
+            || {},
+        );
+        drop(completion);
+        tokio::task::yield_now().await;
+        assert_eq!(in_use.0.load(Ordering::Acquire), 1);
+        assert!(OrdinaryNativeHistoryUseV1::acquire(Arc::clone(&in_use)).is_err());
+        ack_tx.send(()).unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(3), async {
+            while in_use.0.load(Ordering::Acquire) == 1 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        drop(OrdinaryNativeHistoryUseV1::acquire(in_use).unwrap());
     }
 }

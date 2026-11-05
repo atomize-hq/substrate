@@ -1,5 +1,32 @@
 //! Shared request/response models and error types for the Agent API.
 
+mod ordinary_initial_control;
+pub use ordinary_initial_control::{
+    OrdinaryInitialBootstrapControlDeliveryV1, OrdinaryInitialBootstrapControlOperationV1,
+    OrdinaryInitialBootstrapControlRequestV1, OrdinaryInitialBootstrapControlResponseV1,
+    OrdinaryInitialBootstrapProcessCloseoutV1, OrdinaryInitialBootstrapRetirementObservationV1,
+    OrdinaryInitialBootstrapRetirementV1,
+};
+
+mod ordinary_work_cancel;
+pub use ordinary_work_cancel::{
+    OrdinaryAcceptedWorkCancelControlV1, OrdinaryAcceptedWorkCancelRequestV1,
+    OrdinaryAcceptedWorkCancelResponseV1,
+};
+
+mod ordinary_retained_stop;
+pub use ordinary_retained_stop::{
+    OrdinaryRetainedWorkerStopAcknowledgmentV1, OrdinaryRetainedWorkerStopBusyReasonV1,
+    OrdinaryRetainedWorkerStopRequestV1, OrdinaryRetainedWorkerStopResponseV1,
+};
+
+mod retained_bootstrap_completion;
+pub use retained_bootstrap_completion::{
+    NativeProcessTerminationV1, NativeProcessWaitObservationV1, NativeSettlementAcknowledgmentV1,
+    OrdinaryForkBootstrapProvenanceV1, OrdinaryGatewayDisposalV1, RetainedBootstrapCompletionV1,
+    RetainedBootstrapObservationV1, RetainedForkBootstrapCompletionV1,
+};
+
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -21,7 +48,718 @@ pub use world_api::{
     SharedWorldOwnerSpec, WorldReuseMode,
 };
 
+/// Harness identity selected by configuration, independently of an agent's ID.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentHarnessFamilyV1 {
+    Codex,
+    ClaudeCode,
+}
+
+/// The four inseparable configured selection fields.
+///
+/// ```
+/// use transport_api_types::AgentSelectionTupleV1;
+/// let tuple: AgentSelectionTupleV1 = serde_json::from_str(r#"{
+///   "harness":"codex", "provider":"openai",
+///   "connection_profile":"global:subscription", "model":"gpt-6-astra"
+/// }"#).unwrap();
+/// tuple.validate().unwrap();
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentSelectionTupleV1 {
+    pub harness: AgentHarnessFamilyV1,
+    pub provider: String,
+    pub connection_profile: String,
+    /// Exact upstream request ID, never a catalogue-derived suggestion.
+    pub model: String,
+}
+
+impl AgentSelectionTupleV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        selection_identifier(&self.provider, "provider")?;
+        selection_profile_id(&self.connection_profile)?;
+        selection_text(&self.model, "model", 256)
+    }
+}
+
+/// Inventory placement; execution roles are validated separately by callers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentSelectionPlacementV1 {
+    Host,
+    World,
+}
+
+impl AgentSelectionPlacementV1 {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Host => "host",
+            Self::World => "world",
+        }
+    }
+}
+
+/// Source namespace. Its order is also the canonical configuration layer order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentSelectionSourceScopeV1 {
+    BuiltIn,
+    Global,
+    Workspace,
+}
+
+impl AgentSelectionSourceScopeV1 {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::BuiltIn => "built_in",
+            Self::Global => "global",
+            Self::Workspace => "workspace",
+        }
+    }
+}
+
+/// Nonsecret provenance captured from the source owner.
+///
+/// A root identity records the publisher's accepted physical identity; this
+/// value neither opens that root nor establishes authority over it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentSelectionSourceV1 {
+    pub scope: AgentSelectionSourceScopeV1,
+    pub root_identity: String,
+    pub relative_path: String,
+    pub revision: String,
+    pub sha256: String,
+}
+
+impl AgentSelectionSourceV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        selection_text(&self.root_identity, "source root identity", 8192)?;
+        selection_text(&self.relative_path, "source relative path", 2048)?;
+        if self.relative_path.starts_with('/')
+            || self.relative_path.contains('\\')
+            || self
+                .relative_path
+                .split('/')
+                .any(|part| part.is_empty() || matches!(part, "." | ".."))
+        {
+            return Err("selection source path must be a confined relative path".into());
+        }
+        selection_text(&self.revision, "source revision", 256)?;
+        selection_sha256(&self.sha256, "source hash")
+    }
+}
+
+/// Nonsecret reference to an existing credential owner; never credential bytes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "auth_kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum AgentConnectionAuthV1 {
+    CodexAccount { reference: String },
+    ApiKeyEnvironment { name: String },
+}
+
+/// Billing semantics committed with the selected connection profile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentConnectionBillingV1 {
+    Subscription,
+    Api,
+}
+
+/// Source-qualified connection configuration, containing references only.
+/// The upstream URL is distinct from the native client's managed local URL.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentConnectionProfileV1 {
+    pub id: String,
+    pub revision: String,
+    pub provider: String,
+    pub billing: AgentConnectionBillingV1,
+    pub endpoint_identity: String,
+    pub upstream_base_url: String,
+    pub auth: AgentConnectionAuthV1,
+    pub source: AgentSelectionSourceV1,
+}
+
+impl AgentConnectionProfileV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        let scope = selection_profile_id(&self.id)?;
+        self.source.validate()?;
+        if scope != self.source.scope.as_str() {
+            return Err("connection profile namespace does not match its source".into());
+        }
+        Self::validate_fields(
+            &self.id,
+            &self.revision,
+            &self.provider,
+            self.billing,
+            &self.endpoint_identity,
+            &self.upstream_base_url,
+            &self.auth,
+        )
+    }
+
+    /// Validate profile values without source acquisition or permission checks.
+    /// This does not validate physical provenance or authorize execution.
+    ///
+    /// ```
+    /// use transport_api_types::{AgentConnectionAuthV1, AgentConnectionBillingV1, AgentConnectionProfileV1};
+    /// let auth = AgentConnectionAuthV1::CodexAccount { reference: "configured-account".into() };
+    /// AgentConnectionProfileV1::validate_fields(
+    ///     "global:subscription", "1", "openai", AgentConnectionBillingV1::Subscription,
+    ///     "openai-subscription", "https://chatgpt.com/backend-api", &auth,
+    /// ).unwrap();
+    /// ```
+    pub fn validate_fields(
+        id: &str,
+        revision: &str,
+        provider: &str,
+        _billing: AgentConnectionBillingV1,
+        endpoint_identity: &str,
+        upstream_base_url: &str,
+        auth: &AgentConnectionAuthV1,
+    ) -> Result<(), String> {
+        // Billing is a closed enum; supported route/billing permission is a
+        // separate admission check, unchanged by structural value validation.
+        selection_profile_id(id)?;
+        selection_text(revision, "connection profile revision", 256)?;
+        selection_identifier(provider, "connection profile provider")?;
+        selection_identifier(endpoint_identity, "endpoint identity")?;
+        selection_upstream_url(upstream_base_url)?;
+        match auth {
+            AgentConnectionAuthV1::CodexAccount { reference } => {
+                selection_identifier(reference, "account reference")
+            }
+            AgentConnectionAuthV1::ApiKeyEnvironment { name } => {
+                if name.is_empty()
+                    || name.len() > 128
+                    || name.bytes().enumerate().any(|(index, byte)| {
+                        !(byte.is_ascii_alphabetic()
+                            || byte == b'_'
+                            || (index > 0 && byte.is_ascii_digit()))
+                    })
+                {
+                    Err("invalid connection profile environment reference".into())
+                } else {
+                    Ok(())
+                }
+            }
+        }
+    }
+}
+
+/// The original selection decision, retained unchanged on Resume/recovery.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentSelectionOriginV1 {
+    ExplicitAgent,
+    ExplicitBackend,
+    ConfiguredDefault,
+}
+
+/// Complete configuration-derived selection shared by ordinary and later
+/// protected consumers. Call `validate` after decoding an untrusted value.
+///
+/// Validation establishes structural support and commitment equality only.
+/// Production must separately authenticate Start/current authority and check
+/// policy, credential ownership, endpoint support and native capabilities.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ResolvedAgentSelectionV1 {
+    pub version: u32,
+    pub logical_agent_id: String,
+    pub realized_agent_id: String,
+    pub backend_id: String,
+    pub placement: AgentSelectionPlacementV1,
+    pub harness_contract_revision: String,
+    pub selection: AgentSelectionTupleV1,
+    pub connection_profile: AgentConnectionProfileV1,
+    pub routed_model_id: String,
+    pub upstream_model_id: String,
+    pub route_revision: String,
+    pub selection_origin: AgentSelectionOriginV1,
+    pub inventory_source: AgentSelectionSourceV1,
+    pub config_sources: Vec<AgentSelectionSourceV1>,
+    pub preference_source: Option<AgentSelectionSourceV1>,
+    pub selection_digest: String,
+}
+
+impl ResolvedAgentSelectionV1 {
+    /// Validate structure and the original selection commitment, not permission.
+    pub fn validate(&self) -> Result<(), String> {
+        self.validate_content()?;
+        selection_sha256(&self.selection_digest, "selection digest")?;
+        if self.compute_digest()? != self.selection_digest {
+            return Err("selection digest does not match committed content".into());
+        }
+        Ok(())
+    }
+
+    /// Seal a new complete selection. This does not authorize execution.
+    pub fn seal(mut self) -> Result<Self, String> {
+        self.validate_content()?;
+        self.selection_digest = self.compute_digest()?;
+        Ok(self)
+    }
+
+    /// Domain-separated canonical digest with only `selection_digest` omitted.
+    pub fn compute_digest(&self) -> Result<String, String> {
+        let mut value = serde_json::to_value(self).map_err(|error| error.to_string())?;
+        value
+            .as_object_mut()
+            .ok_or("invalid selection representation")?
+            .remove("selection_digest");
+        let mut canonical = Vec::new();
+        selection_canonical_json(&value, &mut canonical)?;
+        let mut hash = Sha256::new();
+        hash.update(b"substrate.resolved-agent-selection.v1\0");
+        hash.update(canonical);
+        Ok(format!("{:x}", hash.finalize()))
+    }
+
+    fn validate_content(&self) -> Result<(), String> {
+        if self.version != 1 {
+            return Err("unsupported resolved agent selection version".into());
+        }
+        selection_identifier(&self.logical_agent_id, "logical agent id")?;
+        let realized = format!("{}-{}", self.logical_agent_id, self.placement.as_str());
+        if self.realized_agent_id != realized || self.backend_id != format!("cli:{realized}") {
+            return Err("selection backend does not match logical identity and placement".into());
+        }
+        self.selection.validate()?;
+        self.connection_profile.validate()?;
+        if self.selection.connection_profile != self.connection_profile.id
+            || self.selection.provider != self.connection_profile.provider
+            || self.selection.model != self.upstream_model_id
+        {
+            return Err("selection tuple conflicts with the connection profile or route".into());
+        }
+        let profile = &self.connection_profile;
+        let supported = match self.selection.harness {
+            AgentHarnessFamilyV1::Codex => {
+                self.harness_contract_revision == "codex-cli.v1"
+                    && self.route_revision == "codex-subscription.v1"
+                    && self.selection.provider == "openai"
+                    && self.routed_model_id == self.upstream_model_id
+                    && profile.billing == AgentConnectionBillingV1::Subscription
+                    && matches!(profile.auth, AgentConnectionAuthV1::CodexAccount { .. })
+            }
+            AgentHarnessFamilyV1::ClaudeCode => {
+                self.harness_contract_revision == "claude-code-cli.v1"
+                    && self.route_revision == "claude-code-existing.v1"
+                    && self.selection.provider == "anthropic"
+                    && self.routed_model_id == "claude-sonnet-4.5"
+                    && self.upstream_model_id == "claude-sonnet-4-5-20250929"
+                    && profile.billing == AgentConnectionBillingV1::Api
+                    && matches!(
+                        profile.auth,
+                        AgentConnectionAuthV1::ApiKeyEnvironment { .. }
+                    )
+            }
+        };
+        if !supported {
+            return Err("unsupported harness, provider, profile or route combination".into());
+        }
+        self.inventory_source.validate()?;
+        if self.config_sources.is_empty() || self.config_sources.len() > 3 {
+            return Err("selection requires a bounded captured configuration source set".into());
+        }
+        let mut previous = None;
+        for source in &self.config_sources {
+            source.validate()?;
+            if previous.is_some_and(|scope| scope >= source.scope) {
+                return Err("configuration sources must have unique ordered scopes".into());
+            }
+            previous = Some(source.scope);
+        }
+        if !self.config_sources.contains(&profile.source) {
+            return Err(
+                "selected profile is not bound to its captured configuration source".into(),
+            );
+        }
+        match (self.selection_origin, &self.preference_source) {
+            (AgentSelectionOriginV1::ConfiguredDefault, Some(source))
+                if self.config_sources.contains(source) => {}
+            (
+                AgentSelectionOriginV1::ExplicitAgent | AgentSelectionOriginV1::ExplicitBackend,
+                None,
+            ) => {}
+            _ => {
+                return Err("selection origin does not match default preference provenance".into())
+            }
+        }
+        Ok(())
+    }
+}
+
+fn selection_text(value: &str, field: &str, maximum: usize) -> Result<(), String> {
+    if value.is_empty()
+        || value.len() > maximum
+        || value.trim() != value
+        || value.chars().any(char::is_control)
+    {
+        Err(format!("invalid selection {field}"))
+    } else {
+        Ok(())
+    }
+}
+
+fn selection_identifier(value: &str, field: &str) -> Result<(), String> {
+    selection_text(value, field, 128)?;
+    if value
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
+    {
+        Ok(())
+    } else {
+        Err(format!("invalid selection {field}"))
+    }
+}
+
+fn selection_profile_id(value: &str) -> Result<&str, String> {
+    let (scope, id) = value
+        .split_once(':')
+        .ok_or("connection profile id must be source-qualified")?;
+    if !matches!(scope, "built_in" | "global" | "workspace") {
+        return Err("unsupported connection profile source namespace".into());
+    }
+    selection_identifier(id, "connection profile id")?;
+    Ok(scope)
+}
+
+fn selection_sha256(value: &str, field: &str) -> Result<(), String> {
+    if value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        Ok(())
+    } else {
+        Err(format!("invalid selection {field}"))
+    }
+}
+
+fn selection_upstream_url(value: &str) -> Result<(), String> {
+    selection_text(value, "upstream URL", 2048)?;
+    let rest = value
+        .strip_prefix("https://")
+        .ok_or("selected upstream URL requires HTTPS")?;
+    if value.bytes().any(|byte| byte.is_ascii_whitespace()) || value.contains(['@', '?', '#', '\\'])
+    {
+        return Err("selected upstream URL may not contain credentials, query or fragment".into());
+    }
+    let authority = rest.split('/').next().unwrap_or_default();
+    let (host, port) = authority
+        .split_once(':')
+        .map_or((authority, None), |(host, port)| (host, Some(port)));
+    if host.is_empty()
+        || !host
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-'))
+        || port.is_some_and(|port| port.parse::<u16>().ok().is_none_or(|port| port == 0))
+    {
+        return Err("unsupported selected upstream URL authority".into());
+    }
+    Ok(())
+}
+
+fn selection_canonical_json(value: &serde_json::Value, out: &mut Vec<u8>) -> Result<(), String> {
+    match value {
+        serde_json::Value::Object(object) => {
+            out.push(b'{');
+            let mut entries = object.iter().collect::<Vec<_>>();
+            entries.sort_by(|(left, _), (right, _)| left.as_bytes().cmp(right.as_bytes()));
+            for (index, (key, value)) in entries.into_iter().enumerate() {
+                if index != 0 {
+                    out.push(b',');
+                }
+                serde_json::to_writer(&mut *out, key).map_err(|error| error.to_string())?;
+                out.push(b':');
+                selection_canonical_json(value, out)?;
+            }
+            out.push(b'}');
+        }
+        serde_json::Value::Array(values) => {
+            out.push(b'[');
+            for (index, value) in values.iter().enumerate() {
+                if index != 0 {
+                    out.push(b',');
+                }
+                selection_canonical_json(value, out)?;
+            }
+            out.push(b']');
+        }
+        _ => serde_json::to_writer(out, value).map_err(|error| error.to_string())?,
+    }
+    Ok(())
+}
+
 const INSTALL_BOOTSTRAP_CONTEXT_DOMAIN_V1: &str = "substrate.install_bootstrap_context";
+
+#[cfg(test)]
+mod agent_selection_contract_tests {
+    use super::*;
+
+    fn source(scope: AgentSelectionSourceScopeV1, path: &str) -> AgentSelectionSourceV1 {
+        AgentSelectionSourceV1 {
+            scope,
+            root_identity: "accepted-root-identity".into(),
+            relative_path: path.into(),
+            revision: "revision-1".into(),
+            sha256: "a".repeat(64),
+        }
+    }
+
+    fn selection() -> ResolvedAgentSelectionV1 {
+        let config = source(AgentSelectionSourceScopeV1::Global, "config.yaml");
+        ResolvedAgentSelectionV1 {
+            version: 1,
+            logical_agent_id: "custom".into(),
+            realized_agent_id: "custom-host".into(),
+            backend_id: "cli:custom-host".into(),
+            placement: AgentSelectionPlacementV1::Host,
+            harness_contract_revision: "codex-cli.v1".into(),
+            selection: AgentSelectionTupleV1 {
+                harness: AgentHarnessFamilyV1::Codex,
+                provider: "openai".into(),
+                connection_profile: "global:subscription".into(),
+                model: "gpt-6-astra".into(),
+            },
+            connection_profile: AgentConnectionProfileV1 {
+                id: "global:subscription".into(),
+                revision: "profile-1".into(),
+                provider: "openai".into(),
+                billing: AgentConnectionBillingV1::Subscription,
+                endpoint_identity: "openai-subscription".into(),
+                upstream_base_url: "https://chatgpt.com/backend-api".into(),
+                auth: AgentConnectionAuthV1::CodexAccount {
+                    reference: "configured-account".into(),
+                },
+                source: config.clone(),
+            },
+            routed_model_id: "gpt-6-astra".into(),
+            upstream_model_id: "gpt-6-astra".into(),
+            route_revision: "codex-subscription.v1".into(),
+            selection_origin: AgentSelectionOriginV1::ConfiguredDefault,
+            inventory_source: source(AgentSelectionSourceScopeV1::Global, "agents/custom.yaml"),
+            config_sources: vec![config.clone()],
+            preference_source: Some(config),
+            selection_digest: String::new(),
+        }
+        .seal()
+        .unwrap()
+    }
+
+    #[test]
+    fn test_profile_fields_validate_without_source_and_full_profiles_keep_source_checks() {
+        let auth = AgentConnectionAuthV1::CodexAccount {
+            reference: "configured-account".into(),
+        };
+        AgentConnectionProfileV1::validate_fields(
+            "global:subscription",
+            "1",
+            "openai",
+            AgentConnectionBillingV1::Subscription,
+            "openai-subscription",
+            "https://chatgpt.com/backend-api",
+            &auth,
+        )
+        .unwrap();
+        for (revision, provider, endpoint, url, auth) in [
+            (
+                "",
+                "openai",
+                "endpoint",
+                "https://example.test/v1",
+                auth.clone(),
+            ),
+            ("1", "", "endpoint", "https://example.test/v1", auth.clone()),
+            ("1", "openai", "", "https://example.test/v1", auth.clone()),
+            ("1", "openai", "endpoint", "", auth.clone()),
+            (
+                "1",
+                "openai",
+                "endpoint",
+                "http://example.test/v1",
+                auth.clone(),
+            ),
+            (
+                "1",
+                "openai",
+                "endpoint",
+                "https://secret@example.test/v1",
+                auth.clone(),
+            ),
+            (
+                "1",
+                "openai",
+                "endpoint",
+                "https://example.test/v1",
+                AgentConnectionAuthV1::CodexAccount {
+                    reference: String::new(),
+                },
+            ),
+            (
+                "1",
+                "openai",
+                "endpoint",
+                "https://example.test/v1",
+                AgentConnectionAuthV1::ApiKeyEnvironment {
+                    name: String::new(),
+                },
+            ),
+            (
+                "1",
+                "openai",
+                "endpoint",
+                "https://example.test/v1",
+                AgentConnectionAuthV1::ApiKeyEnvironment {
+                    name: "9BAD".into(),
+                },
+            ),
+        ] {
+            assert!(AgentConnectionProfileV1::validate_fields(
+                "global:subscription",
+                revision,
+                provider,
+                AgentConnectionBillingV1::Subscription,
+                endpoint,
+                url,
+                &auth
+            )
+            .is_err());
+        }
+        assert!(AgentConnectionProfileV1::validate_fields(
+            "global:",
+            "1",
+            "openai",
+            AgentConnectionBillingV1::Subscription,
+            "endpoint",
+            "https://example.test/v1",
+            &auth
+        )
+        .is_err());
+        let original = selection().connection_profile;
+        original.validate().unwrap();
+        let mut wrong_source = original.clone();
+        wrong_source.source.sha256.clear();
+        assert!(wrong_source.validate().is_err());
+        wrong_source = original;
+        wrong_source.source.scope = AgentSelectionSourceScopeV1::Workspace;
+        assert!(wrong_source.validate().is_err());
+    }
+
+    #[test]
+    fn test_selection_contract_roundtrip_and_canonical_digest() {
+        let selected = selection();
+        selected.validate().unwrap();
+        let value = serde_json::to_value(&selected).unwrap();
+        let decoded: ResolvedAgentSelectionV1 = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(decoded, selected);
+        assert_eq!(decoded.compute_digest().unwrap(), selected.selection_digest);
+        let mut object = value.as_object().unwrap().clone();
+        object.insert("unknown".into(), serde_json::json!(true));
+        assert!(serde_json::from_value::<ResolvedAgentSelectionV1>(object.into()).is_err());
+    }
+
+    #[test]
+    fn test_selection_contract_rejects_tuple_route_profile_and_origin_conflicts() {
+        let selected = selection();
+        let mut changed = selected.clone();
+        changed.selection.model = "different".into();
+        assert!(changed.seal().is_err());
+        changed = selected.clone();
+        changed.connection_profile.provider = "other".into();
+        assert!(changed.seal().is_err());
+        changed = selected.clone();
+        changed.connection_profile.id = "workspace:subscription".into();
+        assert!(changed.seal().is_err());
+        changed = selected.clone();
+        changed.preference_source = None;
+        assert!(changed.seal().is_err());
+        changed = selected.clone();
+        changed.selection_origin = AgentSelectionOriginV1::ExplicitAgent;
+        assert!(changed.seal().is_err());
+        changed = selected.clone();
+        changed.realized_agent_id = "other-host".into();
+        assert!(changed.seal().is_err());
+    }
+
+    #[test]
+    fn test_selection_digest_binds_sources_profile_revision_model_and_origin() {
+        let selected = selection();
+        let mut variants = Vec::new();
+        let mut changed = selected.clone();
+        changed.inventory_source.sha256 = "b".repeat(64);
+        variants.push(changed);
+        changed = selected.clone();
+        changed.connection_profile.revision = "profile-2".into();
+        variants.push(changed);
+        changed = selected.clone();
+        changed.selection.model = "configured-model-absent-from-catalog".into();
+        changed.upstream_model_id = changed.selection.model.clone();
+        changed.routed_model_id = changed.selection.model.clone();
+        variants.push(changed);
+        changed = selected.clone();
+        changed.selection_origin = AgentSelectionOriginV1::ExplicitBackend;
+        changed.preference_source = None;
+        variants.push(changed);
+        for changed in variants {
+            assert!(
+                changed.validate().is_err(),
+                "changed input must invalidate commitment"
+            );
+            let sealed = changed.seal().unwrap();
+            assert_ne!(sealed.selection_digest, selected.selection_digest);
+            sealed.validate().unwrap();
+        }
+    }
+
+    #[test]
+    fn test_selection_profiles_reject_secret_endpoint_and_source_substitution() {
+        let selected = selection();
+        for endpoint in [
+            "http://example.test/v1",
+            "https://secret@example.test/v1",
+            "https://example.test/v1?key=secret",
+            "https://example.test/v1#secret",
+            "https:///missing-host",
+            "https://example.test:0/v1",
+        ] {
+            let mut changed = selected.clone();
+            changed.connection_profile.upstream_base_url = endpoint.into();
+            assert!(changed.seal().is_err(), "{endpoint}");
+        }
+        let mut changed = selected;
+        changed.connection_profile.source.sha256 = "b".repeat(64);
+        assert!(changed.seal().is_err());
+    }
+
+    #[test]
+    fn test_selection_claude_preserves_exact_existing_route() {
+        let mut selected = selection();
+        selected.selection.harness = AgentHarnessFamilyV1::ClaudeCode;
+        selected.selection.provider = "anthropic".into();
+        selected.selection.model = "claude-sonnet-4-5-20250929".into();
+        selected.connection_profile.provider = "anthropic".into();
+        selected.connection_profile.billing = AgentConnectionBillingV1::Api;
+        selected.connection_profile.auth = AgentConnectionAuthV1::ApiKeyEnvironment {
+            name: "ANTHROPIC_API_KEY".into(),
+        };
+        selected.harness_contract_revision = "claude-code-cli.v1".into();
+        selected.route_revision = "claude-code-existing.v1".into();
+        selected.routed_model_id = "claude-sonnet-4.5".into();
+        selected.upstream_model_id = selected.selection.model.clone();
+        let selected = selected.seal().unwrap();
+        selected.validate().unwrap();
+        let mut unsupported = selected;
+        unsupported.selection.model = "new-claude-adapter".into();
+        unsupported.upstream_model_id = unsupported.selection.model.clone();
+        assert!(unsupported.seal().is_err());
+    }
+}
 const PLATFORM_BOOTSTRAP_MAPPING_DOMAIN_V1: &str = "substrate.platform_bootstrap_mapping";
 const WINDOWS_FORWARDER_SCOPE_DOMAIN_V1: &str = "substrate.windows_forwarder_scope";
 
@@ -1910,6 +2648,16 @@ struct DispatchPolicySnapshotCarrierV1Def {
 
 impl DispatchPolicySnapshotCarrierV1 {
     pub fn validate(&self) -> Result<(), String> {
+        self.validate_representation(true)
+    }
+
+    /// Validate ordinary wire representation only. The executing service must
+    /// independently authenticate configured B1/E2 authority before any effect.
+    pub fn validate_ordinary_representation(&self) -> Result<(), String> {
+        self.validate_representation(false)
+    }
+
+    fn validate_representation(&self, require_positive_generation: bool) -> Result<(), String> {
         if self.schema_version != 1 {
             return Err(format!(
                 "unsupported policy_snapshot_carrier.schema_version: {} (expected 1)",
@@ -1950,7 +2698,7 @@ impl DispatchPolicySnapshotCarrierV1 {
             "policy_snapshot_carrier.target_backend_id must be an exact <kind>:<name> selector"
                 .to_string()
         })?;
-        if self.target_world.world_generation == 0 {
+        if require_positive_generation && self.target_world.world_generation == 0 {
             return Err(
                 "policy_snapshot_carrier.target_world.world_generation must be positive"
                     .to_string(),
@@ -2059,6 +2807,45 @@ impl<'de> Deserialize<'de> for DispatchPolicySnapshotCarrierV1 {
         };
         carrier.validate().map_err(serde::de::Error::custom)?;
         Ok(carrier)
+    }
+}
+
+/// Ordinary intake representation, never an admission or capability. Its wire
+/// fields are exactly the protected carrier's fields; only generation zero is
+/// additionally representable. Default protected decoding remains positive-only.
+#[derive(Debug, Clone, Serialize)]
+#[serde(transparent)]
+struct OrdinaryDispatchPolicySnapshotCarrierV1(DispatchPolicySnapshotCarrierV1);
+
+impl<'de> Deserialize<'de> for OrdinaryDispatchPolicySnapshotCarrierV1 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = DispatchPolicySnapshotCarrierV1Def::deserialize(deserializer)?;
+        let carrier = DispatchPolicySnapshotCarrierV1 {
+            schema_version: value.schema_version,
+            immutable_worker_cap_ref: value.immutable_worker_cap_ref,
+            immutable_worker_cap_created_revision: value.immutable_worker_cap_created_revision,
+            immutable_worker_cap_application_revision: value
+                .immutable_worker_cap_application_revision,
+            subject: value.subject,
+            orchestration_session_id: value.orchestration_session_id,
+            caller_participant_id: value.caller_participant_id,
+            caller_backend_id: value.caller_backend_id,
+            target_backend_id: value.target_backend_id,
+            target_world: value.target_world,
+            policy_snapshot_bytes_base64: value.policy_snapshot_bytes_base64,
+            policy_snapshot_byte_length: value.policy_snapshot_byte_length,
+            policy_snapshot_ref: value.policy_snapshot_ref,
+            policy_snapshot_hash: value.policy_snapshot_hash,
+            policy_snapshot_revision: value.policy_snapshot_revision,
+            reason: value.reason,
+        };
+        carrier
+            .validate_ordinary_representation()
+            .map_err(serde::de::Error::custom)?;
+        Ok(Self(carrier))
     }
 }
 
@@ -4773,12 +5560,106 @@ struct MemberTurnSubmitRequestDef {
     acceptance_context: Option<WorldWorkAcceptanceContextV1>,
 }
 
+/// Strict representation for the dedicated ordinary retained-turn endpoint.
+///
+/// Serialization is identical to `MemberTurnSubmitRequestV1`. This DTO grants
+/// no authority: the service must join its actual held ordinary member and
+/// independently authenticate configured current B1/E2 authority before effects.
+///
+/// ```
+/// use transport_api_types::OrdinaryMemberTurnSubmitRequestV1;
+/// assert!(serde_json::from_str::<OrdinaryMemberTurnSubmitRequestV1>("{}").is_err());
+/// ```
+#[derive(Debug, Clone, Serialize)]
+#[serde(transparent)]
+pub struct OrdinaryMemberTurnSubmitRequestV1(MemberTurnSubmitRequestV1);
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OrdinaryMemberTurnSubmitRequestDef {
+    schema_version: u32,
+    orchestration_session_id: String,
+    participant_id: String,
+    orchestrator_participant_id: String,
+    backend_id: String,
+    run_id: String,
+    world_id: String,
+    world_generation: u64,
+    prompt: String,
+    policy_snapshot_carrier: OrdinaryDispatchPolicySnapshotCarrierV1,
+    acceptance_context: WorldWorkAcceptanceContextV1,
+}
+
+impl OrdinaryMemberTurnSubmitRequestV1 {
+    /// Validate representation without claiming configured admission.
+    ///
+    /// ```no_run
+    /// # fn wrap(request: transport_api_types::MemberTurnSubmitRequestV1) -> Result<(), String> {
+    /// let ordinary = transport_api_types::OrdinaryMemberTurnSubmitRequestV1::from_request(request)?;
+    /// let _borrowed = ordinary.as_request();
+    /// let _original = ordinary.into_request();
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn from_request(request: MemberTurnSubmitRequestV1) -> Result<Self, String> {
+        request.validate_ordinary_representation()?;
+        Ok(Self(request))
+    }
+
+    pub fn as_request(&self) -> &MemberTurnSubmitRequestV1 {
+        &self.0
+    }
+
+    pub fn into_request(self) -> MemberTurnSubmitRequestV1 {
+        self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for OrdinaryMemberTurnSubmitRequestV1 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = OrdinaryMemberTurnSubmitRequestDef::deserialize(deserializer)?;
+        Self::from_request(MemberTurnSubmitRequestV1 {
+            schema_version: value.schema_version,
+            orchestration_session_id: value.orchestration_session_id,
+            participant_id: value.participant_id,
+            orchestrator_participant_id: value.orchestrator_participant_id,
+            backend_id: value.backend_id,
+            run_id: value.run_id,
+            world_id: value.world_id,
+            world_generation: value.world_generation,
+            prompt: value.prompt,
+            policy_snapshot_carrier: Some(value.policy_snapshot_carrier.0),
+            acceptance_context: Some(value.acceptance_context),
+        })
+        .map_err(serde::de::Error::custom)
+    }
+}
+
 fn member_turn_submit_request_v1_default_schema_version() -> u32 {
     1
 }
 
 impl MemberTurnSubmitRequestV1 {
     pub fn validate(&self) -> Result<(), String> {
+        self.validate_representation(false)
+    }
+
+    /// Ordinary wire validation grants no permission. A genuine configured
+    /// admission must authenticate the exact received request before effects.
+    pub fn validate_ordinary_representation(&self) -> Result<(), String> {
+        self.validate_representation(true)?;
+        if self.policy_snapshot_carrier.is_none() || self.acceptance_context.is_none() {
+            return Err(
+                "ordinary retained turn requires its exact E2 carrier and B1 context".into(),
+            );
+        }
+        Ok(())
+    }
+
+    fn validate_representation(&self, ordinary: bool) -> Result<(), String> {
         if self.schema_version != 1 {
             return Err(format!(
                 "unsupported member_turn_submit.schema_version: {} (expected 1)",
@@ -4810,7 +5691,11 @@ impl MemberTurnSubmitRequestV1 {
         validate_non_empty_request_field("member_turn_submit.prompt", &self.prompt)?;
 
         if let Some(carrier) = self.policy_snapshot_carrier.as_ref() {
-            carrier.validate()?;
+            if ordinary {
+                carrier.validate_ordinary_representation()?;
+            } else {
+                carrier.validate()?;
+            }
             if carrier.orchestration_session_id != self.orchestration_session_id
                 || carrier.subject.retained_participant_id != self.participant_id
                 || carrier.subject.active_run_id != self.run_id
@@ -4906,9 +5791,233 @@ impl TryFrom<MemberTurnSubmitRequestDef> for MemberTurnSubmitRequestV1 {
     }
 }
 
+/// Reference to the immutable, nonsecret record bound by genuine original Start.
+///
+/// This is untrusted transport data. Neither structural validation nor matching
+/// digests authenticate an issuer, configured home, current caller or permission.
+/// A service must authenticate it using its independently configured authority.
+/// Mutable current revisions are deliberately absent so retries reproduce bytes.
+///
+/// ```
+/// use transport_api_types::OrdinaryStartSelectionCarrierV1;
+/// assert!(serde_json::from_str::<OrdinaryStartSelectionCarrierV1>("{}").is_err());
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "OrdinaryStartSelectionCarrierDef")]
+pub struct OrdinaryStartSelectionCarrierV1 {
+    pub schema_version: u32,
+    pub authority_store_id: String,
+    pub original_start_intent_id: String,
+    pub original_start_issuer_request_id: String,
+    pub original_session_id: String,
+    pub context_sha256: String,
+    pub native_selection_sha256: String,
+    pub requested_selection_sha256: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OrdinaryStartSelectionCarrierDef {
+    schema_version: u32,
+    authority_store_id: String,
+    original_start_intent_id: String,
+    original_start_issuer_request_id: String,
+    original_session_id: String,
+    context_sha256: String,
+    native_selection_sha256: String,
+    requested_selection_sha256: String,
+}
+
+impl OrdinaryStartSelectionCarrierV1 {
+    /// Validate only the closed transport representation, never authority.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 1 {
+            return Err("unsupported ordinary Start selection carrier version".into());
+        }
+        selection_identifier(&self.authority_store_id, "authority store id")?;
+        selection_identifier(&self.original_start_intent_id, "original Start intent id")?;
+        selection_identifier(&self.original_session_id, "original session id")?;
+        let issuer = self
+            .original_start_issuer_request_id
+            .strip_prefix("req_")
+            .ok_or("invalid original Start issuer request id")?;
+        selection_sha256(issuer, "original Start issuer request digest")?;
+        selection_sha256(&self.context_sha256, "original Start context digest")?;
+        selection_sha256(&self.native_selection_sha256, "native selection digest")?;
+        selection_sha256(
+            &self.requested_selection_sha256,
+            "requested selection digest",
+        )
+    }
+}
+
+impl TryFrom<OrdinaryStartSelectionCarrierDef> for OrdinaryStartSelectionCarrierV1 {
+    type Error = String;
+
+    fn try_from(value: OrdinaryStartSelectionCarrierDef) -> Result<Self, Self::Error> {
+        let carrier = Self {
+            schema_version: value.schema_version,
+            authority_store_id: value.authority_store_id,
+            original_start_intent_id: value.original_start_intent_id,
+            original_start_issuer_request_id: value.original_start_issuer_request_id,
+            original_session_id: value.original_session_id,
+            context_sha256: value.context_sha256,
+            native_selection_sha256: value.native_selection_sha256,
+            requested_selection_sha256: value.requested_selection_sha256,
+        };
+        carrier.validate()?;
+        Ok(carrier)
+    }
+}
+
+/// Actual selected native actor whose gateway route is being requested.
+///
+/// Actor placement is distinct from where the managed gateway executes. A Host
+/// actor has no World member binding; a World worker must name its exact binding.
+/// The service authenticates these identifiers against original/current authority.
+///
+/// ```
+/// use transport_api_types::OrdinaryGatewayRuntimeIdentityV1;
+/// assert!(serde_json::from_str::<OrdinaryGatewayRuntimeIdentityV1>("{}").is_err());
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "selection_role", rename_all = "snake_case", deny_unknown_fields)]
+pub enum OrdinaryGatewayRuntimeIdentityV1 {
+    HostActor {
+        orchestration_session_id: String,
+        participant_id: String,
+        backend_id: String,
+        run_id: String,
+    },
+    WorldWorker {
+        orchestration_session_id: String,
+        caller_participant_id: String,
+        participant_id: String,
+        backend_id: String,
+        run_id: String,
+        world_id: String,
+        world_generation: u64,
+    },
+}
+
+impl OrdinaryGatewayRuntimeIdentityV1 {
+    /// Exact backend named by this role, checked against the authenticated selection.
+    pub fn backend_id(&self) -> &str {
+        match self {
+            Self::HostActor { backend_id, .. } | Self::WorldWorker { backend_id, .. } => backend_id,
+        }
+    }
+
+    /// Validate representation only; the service must authenticate the role.
+    pub fn validate(&self) -> Result<(), String> {
+        let (session, participant, run) = match self {
+            Self::HostActor {
+                orchestration_session_id,
+                participant_id,
+                run_id,
+                ..
+            }
+            | Self::WorldWorker {
+                orchestration_session_id,
+                participant_id,
+                run_id,
+                ..
+            } => (orchestration_session_id, participant_id, run_id),
+        };
+        for (name, value) in [
+            ("orchestration session id", session),
+            ("participant id", participant),
+            ("run id", run),
+        ] {
+            selection_identifier(value, name)?;
+        }
+        let backend = self.backend_id();
+        validate_gateway_backend_id_selector(backend)?;
+        if backend.trim() != backend {
+            return Err("ordinary gateway backend id must be exact".into());
+        }
+        if let Self::WorldWorker {
+            caller_participant_id,
+            world_id,
+            ..
+        } = self
+        {
+            selection_identifier(caller_participant_id, "caller participant id")?;
+            selection_identifier(world_id, "world id")?;
+            // Zero is an authentic initial backend generation. This ordinary
+            // DTO validates representation; service admission authenticates it.
+        }
+        Ok(())
+    }
+}
+
+/// Selected gateway join for the explicit Host-actor or World-worker role.
+/// The service authenticates Start, the actual runtime and current permission;
+/// this representation alone grants no gateway or credential access.
+///
+/// ```
+/// use transport_api_types::OrdinaryGatewaySelectionContextV1;
+/// assert!(serde_json::from_str::<OrdinaryGatewaySelectionContextV1>("{}").is_err());
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "OrdinaryGatewaySelectionContextDef")]
+pub struct OrdinaryGatewaySelectionContextV1 {
+    pub schema_version: u32,
+    pub start: OrdinaryStartSelectionCarrierV1,
+    pub runtime: OrdinaryGatewayRuntimeIdentityV1,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OrdinaryGatewaySelectionContextDef {
+    schema_version: u32,
+    start: OrdinaryStartSelectionCarrierV1,
+    runtime: OrdinaryGatewayRuntimeIdentityV1,
+}
+
+impl OrdinaryGatewaySelectionContextV1 {
+    /// Validate representation and explicit runtime role, not permission.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 1 {
+            return Err("unsupported ordinary gateway selection context version".into());
+        }
+        self.start.validate()?;
+        self.runtime.validate()
+    }
+}
+
+impl TryFrom<OrdinaryGatewaySelectionContextDef> for OrdinaryGatewaySelectionContextV1 {
+    type Error = String;
+
+    fn try_from(value: OrdinaryGatewaySelectionContextDef) -> Result<Self, Self::Error> {
+        let context = Self {
+            schema_version: value.schema_version,
+            start: value.start,
+            runtime: value.runtime,
+        };
+        context.validate()?;
+        Ok(context)
+    }
+}
+
+fn legacy_request_schema_version() -> u32 {
+    1
+}
+
+fn is_legacy_request_schema_version(version: &u32) -> bool {
+    *version == 1
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(try_from = "ExecuteRequestDef")]
 pub struct ExecuteRequest {
+    /// Version 1 is the unchanged unselected format; version 2 requires the
+    /// ordinary Start carrier and MemberDispatch V1. This version grants no authority.
+    #[serde(
+        default = "legacy_request_schema_version",
+        skip_serializing_if = "is_legacy_request_schema_version"
+    )]
+    pub schema_version: u32,
     pub profile: Option<String>,
     pub cmd: String,
     pub cwd: Option<String>,
@@ -4927,11 +6036,15 @@ pub struct ExecuteRequest {
     pub member_dispatch: Option<MemberDispatchRequest>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub acceptance_context: Option<WorldWorkAcceptanceContextV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ordinary_start_selection: Option<OrdinaryStartSelectionCarrierV1>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ExecuteRequestDef {
+    #[serde(default = "legacy_request_schema_version")]
+    schema_version: u32,
     profile: Option<String>,
     cmd: String,
     cwd: Option<String>,
@@ -4950,10 +6063,31 @@ struct ExecuteRequestDef {
     member_dispatch: Option<MemberDispatchRequest>,
     #[serde(default)]
     acceptance_context: Option<WorldWorkAcceptanceContextV1>,
+    #[serde(default)]
+    ordinary_start_selection: Option<OrdinaryStartSelectionCarrierV1>,
 }
 
 impl ExecuteRequest {
     pub fn validate(&self) -> Result<(), String> {
+        match (self.schema_version, self.ordinary_start_selection.as_ref()) {
+            (1, None) => {}
+            (2, Some(selection)) => {
+                selection.validate()?;
+                if !matches!(
+                    self.member_dispatch.as_ref(),
+                    Some(MemberDispatchRequest::V1(_))
+                ) {
+                    return Err(
+                        "selected execute request requires ordinary MemberDispatch V1".into(),
+                    );
+                }
+            }
+            _ => {
+                return Err(
+                    "unsupported execute request version or ordinary selection context".into(),
+                );
+            }
+        }
         let cmd_is_empty = self.cmd.trim().is_empty();
 
         match self.member_dispatch.as_ref() {
@@ -5009,6 +6143,8 @@ impl TryFrom<ExecuteRequestDef> for ExecuteRequest {
 
     fn try_from(value: ExecuteRequestDef) -> Result<Self, Self::Error> {
         let request = Self {
+            schema_version: value.schema_version,
+            ordinary_start_selection: value.ordinary_start_selection,
             profile: value.profile,
             cmd: value.cmd,
             cwd: value.cwd,
@@ -5299,6 +6435,15 @@ pub fn validate_gateway_backend_id_selector(value: &str) -> Result<(), String> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(try_from = "GatewayLifecycleRequestDef")]
 pub struct GatewayLifecycleRequestV1 {
+    /// Version 2 selects the explicit ordinary gateway context; version 1 keeps
+    /// the existing unselected lifecycle representation.
+    #[serde(
+        default = "legacy_request_schema_version",
+        skip_serializing_if = "is_legacy_request_schema_version"
+    )]
+    pub schema_version: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ordinary_selection: Option<OrdinaryGatewaySelectionContextV1>,
     pub profile: Option<String>,
     pub cwd: Option<String>,
     pub env: Option<HashMap<String, String>>,
@@ -5317,6 +6462,10 @@ pub struct GatewayLifecycleRequestV1 {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct GatewayLifecycleRequestDef {
+    #[serde(default = "legacy_request_schema_version")]
+    schema_version: u32,
+    #[serde(default)]
+    ordinary_selection: Option<OrdinaryGatewaySelectionContextV1>,
     profile: Option<String>,
     cwd: Option<String>,
     env: Option<HashMap<String, String>>,
@@ -5334,6 +6483,24 @@ struct GatewayLifecycleRequestDef {
 
 impl GatewayLifecycleRequestV1 {
     pub fn validate_identity_contract(&self) -> Result<(), String> {
+        match (self.schema_version, self.ordinary_selection.as_ref()) {
+            (1, None) => {}
+            (2, Some(context)) => {
+                context.validate()?;
+                if self
+                    .integrated_auth
+                    .as_ref()
+                    .is_some_and(|auth| auth.backend_id != context.runtime.backend_id())
+                {
+                    return Err("selected gateway auth backend differs from runtime context".into());
+                }
+            }
+            _ => {
+                return Err(
+                    "unsupported gateway request version or ordinary selection context".into(),
+                );
+            }
+        }
         validate_identity_tuple_and_placement_posture(
             self.identity_tuple.as_ref(),
             self.placement_posture.as_ref(),
@@ -5346,6 +6513,8 @@ impl TryFrom<GatewayLifecycleRequestDef> for GatewayLifecycleRequestV1 {
 
     fn try_from(value: GatewayLifecycleRequestDef) -> Result<Self, Self::Error> {
         let request = Self {
+            schema_version: value.schema_version,
+            ordinary_selection: value.ordinary_selection,
             profile: value.profile,
             cwd: value.cwd,
             env: value.env,
@@ -5555,6 +6724,344 @@ impl TryFrom<GatewayLifecycleResponseDef> for GatewayLifecycleResponseV1 {
             placement_posture: value.placement_posture,
         };
         response.validate_identity_contract()?;
+        Ok(response)
+    }
+}
+
+/// Closed, untrusted Host gateway turn request. This representation grants no
+/// placement, current-run authority or credential access. Cleanup secrets must
+/// be retained before sending and must never enter native configuration or logs.
+///
+/// ```
+/// use transport_api_types::HostGatewayTurnRequestV1;
+/// assert!(serde_json::from_str::<HostGatewayTurnRequestV1>("{}").is_err());
+/// ```
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "HostGatewayTurnRequestDef")]
+pub struct HostGatewayTurnRequestV1 {
+    pub schema_version: u32,
+    pub operation: HostGatewayTurnOperationV1,
+}
+
+/// One Host turn operation. Acquire is restricted to the HostActor wire role;
+/// the service must independently authenticate that role and its actual placement.
+/// No Debug implementation is provided for secret-bearing operations.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum HostGatewayTurnOperationV1 {
+    Acquire {
+        acquire_id: String,
+        selection: Box<OrdinaryGatewaySelectionContextV1>,
+        cleanup_token: String,
+    },
+    Revalidate {
+        acquire_id: String,
+        lease_handle: String,
+    },
+    Release {
+        acquire_id: String,
+        #[serde(deserialize_with = "host_gateway_turn_release_handle")]
+        lease_handle: Option<String>,
+        cleanup_token: String,
+    },
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HostGatewayTurnRequestDef {
+    schema_version: u32,
+    operation: HostGatewayTurnOperationV1,
+}
+
+// A custom deserializer makes a missing key an error while allowing explicit null.
+fn host_gateway_turn_release_handle<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<String>::deserialize(deserializer)
+}
+
+impl HostGatewayTurnRequestV1 {
+    /// Derive the stable public acquisition key from an already generated and
+    /// retained 32-byte secret encoded as canonical unpadded base64url. This is
+    /// only a cleanup commitment, never authenticated execution authority.
+    ///
+    /// This all-zero token is a synthetic derivation fixture, not a production secret.
+    /// ```
+    /// use transport_api_types::HostGatewayTurnRequestV1;
+    /// let fixture = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    /// assert_eq!(HostGatewayTurnRequestV1::acquire_id_from_cleanup_token(fixture).unwrap(),
+    ///     "hgt_2166971add18dd42267a763b95a2ccb412255f8c5d0c8d4614ada8d065b4811a");
+    /// ```
+    pub fn acquire_id_from_cleanup_token(cleanup_token: &str) -> Result<String, String> {
+        host_gateway_turn_acquire_id(cleanup_token)
+    }
+
+    /// Validate the closed representation, including the cleanup commitment.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 1 {
+            return Err("host_gateway_turn_invalid_request".into());
+        }
+        let (acquire_id, cleanup_token, handle) = match &self.operation {
+            HostGatewayTurnOperationV1::Acquire {
+                acquire_id,
+                selection,
+                cleanup_token,
+            } => {
+                selection
+                    .validate()
+                    .map_err(|_| "host_gateway_turn_invalid_request")?;
+                if !matches!(
+                    selection.runtime,
+                    OrdinaryGatewayRuntimeIdentityV1::HostActor { .. }
+                ) {
+                    return Err("host_gateway_turn_invalid_request".into());
+                }
+                (acquire_id, Some(cleanup_token), None)
+            }
+            HostGatewayTurnOperationV1::Revalidate {
+                acquire_id,
+                lease_handle,
+            } => (acquire_id, None, Some(lease_handle)),
+            HostGatewayTurnOperationV1::Release {
+                acquire_id,
+                lease_handle,
+                cleanup_token,
+            } => (acquire_id, Some(cleanup_token), lease_handle.as_ref()),
+        };
+        let digest = acquire_id
+            .strip_prefix("hgt_")
+            .ok_or("host_gateway_turn_invalid_request")?;
+        selection_sha256(digest, "host gateway acquisition")
+            .map_err(|_| "host_gateway_turn_invalid_request")?;
+        if let Some(token) = cleanup_token {
+            if host_gateway_turn_acquire_id(token)? != *acquire_id {
+                return Err("host_gateway_turn_invalid_request".into());
+            }
+        }
+        if let Some(handle) = handle {
+            host_gateway_turn_handle(handle)?;
+        }
+        Ok(())
+    }
+}
+
+impl TryFrom<HostGatewayTurnRequestDef> for HostGatewayTurnRequestV1 {
+    type Error = String;
+
+    fn try_from(value: HostGatewayTurnRequestDef) -> Result<Self, Self::Error> {
+        let request = Self {
+            schema_version: value.schema_version,
+            operation: value.operation,
+        };
+        request.validate()?;
+        Ok(request)
+    }
+}
+
+fn host_gateway_turn_acquire_id(cleanup_token: &str) -> Result<String, String> {
+    use base64::Engine as _;
+    use sha2::{Digest as _, Sha256};
+    if cleanup_token.len() != 43 {
+        return Err("host_gateway_turn_invalid_request".into());
+    }
+    let engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    let token = engine
+        .decode(cleanup_token)
+        .map_err(|_| "host_gateway_turn_invalid_request")?;
+    if token.len() != 32 || engine.encode(&token) != cleanup_token {
+        return Err("host_gateway_turn_invalid_request".into());
+    }
+    let mut digest = Sha256::new();
+    digest.update(b"substrate.host-gateway-turn.cleanup.v1\0");
+    digest.update(&token);
+    Ok(format!("hgt_{:x}", digest.finalize()))
+}
+
+// Opaque locator encoding: independently generated 128-bit service and route IDs.
+// Syntax validation does not authenticate issuance or the selected service instance.
+fn host_gateway_turn_handle(handle: &str) -> Result<(), String> {
+    let (service, route) = handle
+        .strip_prefix("hgl_")
+        .and_then(|suffix| suffix.split_once('_'))
+        .ok_or("host_gateway_turn_invalid_handle")?;
+    if ![service, route].iter().all(|part| {
+        part.len() == 32
+            && part
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    }) {
+        return Err("host_gateway_turn_invalid_handle".into());
+    }
+    Ok(())
+}
+
+/// Closed Host gateway turn reply. Unknown denotes unresolved identity and never
+/// proves cleanup. Released is reserved for service-owned terminal cleanup.
+///
+/// ```
+/// use transport_api_types::HostGatewayTurnResponseV1;
+/// assert!(serde_json::from_str::<HostGatewayTurnResponseV1>("{}").is_err());
+/// ```
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "HostGatewayTurnResponseDef")]
+pub struct HostGatewayTurnResponseV1 {
+    pub schema_version: u32,
+    pub result: HostGatewayTurnResultV1,
+}
+
+/// A result carries no cleanup secret. Handles are opaque service locators and
+/// must not be included in diagnostics. Match the result against the sent request.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum HostGatewayTurnResultV1 {
+    Acquired {
+        acquire_id: String,
+        lease_handle: String,
+        #[serde(deserialize_with = "host_gateway_turn_wiring")]
+        client_wiring: GatewayClientWiringV1,
+    },
+    Revalidated {
+        acquire_id: String,
+        lease_handle: String,
+    },
+    Released {
+        acquire_id: String,
+    },
+    Unknown {
+        acquire_id: String,
+    },
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HostGatewayTurnResponseDef {
+    schema_version: u32,
+    result: HostGatewayTurnResultV1,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HostGatewayTurnWiringDef {
+    openai_base_url: String,
+    anthropic_base_url: String,
+}
+
+fn host_gateway_turn_wiring<'de, D>(deserializer: D) -> Result<GatewayClientWiringV1, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let wiring = HostGatewayTurnWiringDef::deserialize(deserializer)?;
+    Ok(GatewayClientWiringV1 {
+        openai_base_url: wiring.openai_base_url,
+        anthropic_base_url: wiring.anthropic_base_url,
+    })
+}
+
+fn host_gateway_turn_endpoint(endpoint: &str) -> Result<(), String> {
+    let port = endpoint
+        .strip_prefix("http://127.0.0.1:")
+        .and_then(|value| value.parse::<u16>().ok())
+        .filter(|port| *port != 0)
+        .ok_or("host_gateway_turn_invalid_wiring")?;
+    if endpoint != format!("http://127.0.0.1:{port}") {
+        return Err("host_gateway_turn_invalid_wiring".into());
+    }
+    Ok(())
+}
+
+impl HostGatewayTurnResponseV1 {
+    /// Validate representation only; a decoded response is not admission proof.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 1 {
+            return Err("host_gateway_turn_invalid_response".into());
+        }
+        let acquire_id = match &self.result {
+            HostGatewayTurnResultV1::Acquired {
+                acquire_id,
+                lease_handle,
+                client_wiring,
+            } => {
+                host_gateway_turn_handle(lease_handle)?;
+                host_gateway_turn_endpoint(&client_wiring.openai_base_url)?;
+                host_gateway_turn_endpoint(&client_wiring.anthropic_base_url)?;
+                acquire_id
+            }
+            HostGatewayTurnResultV1::Revalidated {
+                acquire_id,
+                lease_handle,
+            } => {
+                host_gateway_turn_handle(lease_handle)?;
+                acquire_id
+            }
+            HostGatewayTurnResultV1::Released { acquire_id }
+            | HostGatewayTurnResultV1::Unknown { acquire_id } => acquire_id,
+        };
+        let digest = acquire_id
+            .strip_prefix("hgt_")
+            .ok_or("host_gateway_turn_invalid_response")?;
+        selection_sha256(digest, "host gateway acquisition")
+            .map_err(|_| "host_gateway_turn_invalid_response".to_owned())
+    }
+
+    /// Check operation/result, exact echoed acquisition key and any known handle.
+    /// A successful Unknown match still leaves cleanup unresolved.
+    pub fn validate_for_request(&self, request: &HostGatewayTurnRequestV1) -> Result<(), String> {
+        request.validate()?;
+        self.validate()?;
+        let matches = match (&request.operation, &self.result) {
+            (
+                HostGatewayTurnOperationV1::Acquire {
+                    acquire_id: sent, ..
+                }
+                | HostGatewayTurnOperationV1::Revalidate {
+                    acquire_id: sent, ..
+                }
+                | HostGatewayTurnOperationV1::Release {
+                    acquire_id: sent, ..
+                },
+                HostGatewayTurnResultV1::Unknown { acquire_id },
+            ) => sent == acquire_id,
+            (
+                HostGatewayTurnOperationV1::Acquire {
+                    acquire_id: sent, ..
+                },
+                HostGatewayTurnResultV1::Acquired { acquire_id, .. },
+            ) => sent == acquire_id,
+            (
+                HostGatewayTurnOperationV1::Revalidate {
+                    acquire_id: sent,
+                    lease_handle: held,
+                },
+                HostGatewayTurnResultV1::Revalidated {
+                    acquire_id,
+                    lease_handle,
+                },
+            ) => sent == acquire_id && held == lease_handle,
+            (
+                HostGatewayTurnOperationV1::Release {
+                    acquire_id: sent, ..
+                },
+                HostGatewayTurnResultV1::Released { acquire_id },
+            ) => sent == acquire_id,
+            _ => false,
+        };
+        if !matches {
+            return Err("host_gateway_turn_wrong_binding".into());
+        }
+        Ok(())
+    }
+}
+
+impl TryFrom<HostGatewayTurnResponseDef> for HostGatewayTurnResponseV1 {
+    type Error = String;
+
+    fn try_from(value: HostGatewayTurnResponseDef) -> Result<Self, Self::Error> {
+        let response = Self {
+            schema_version: value.schema_version,
+            result: value.result,
+        };
+        response.validate()?;
         Ok(response)
     }
 }
@@ -7214,6 +8721,8 @@ pipe_path=XFwuXHBpcGVcc3Vic3RyYXRlLWFnZW50\n";
         };
 
         let req = ExecuteRequest {
+            schema_version: 1,
+            ordinary_start_selection: None,
             profile: None,
             cmd: "echo hi".into(),
             cwd: Some("/tmp".into()),
@@ -7294,6 +8803,8 @@ pipe_path=XFwuXHBpcGVcc3Vic3RyYXRlLWFnZW50\n";
         };
 
         let req = ExecuteRequest {
+            schema_version: 1,
+            ordinary_start_selection: None,
             profile: None,
             cmd: "echo hi".into(),
             cwd: Some("/tmp".into()),
@@ -7486,6 +8997,8 @@ pipe_path=XFwuXHBpcGVcc3Vic3RyYXRlLWFnZW50\n";
         };
 
         let req = ExecuteRequest {
+            schema_version: 1,
+            ordinary_start_selection: None,
             profile: None,
             cmd: String::new(),
             cwd: Some("/tmp".into()),
@@ -7823,6 +9336,122 @@ pipe_path=XFwuXHBpcGVcc3Vic3RyYXRlLWFnZW50\n";
         );
     }
 
+    #[test]
+    fn test_ordinary_zero_turn_codec_is_strict_and_transparent() {
+        let mut carrier = e2_sample_policy_snapshot_carrier();
+        carrier.target_world.world_generation = 0;
+        let mut acceptance = sample_world_work_acceptance_context();
+        acceptance.request_id = carrier.subject.active_run_id.clone();
+        let request = MemberTurnSubmitRequestV1 {
+            schema_version: 1,
+            orchestration_session_id: carrier.orchestration_session_id.clone(),
+            participant_id: carrier.subject.retained_participant_id.clone(),
+            orchestrator_participant_id: carrier.caller_participant_id.clone(),
+            backend_id: carrier.target_backend_id.clone(),
+            run_id: carrier.subject.active_run_id.clone(),
+            world_id: carrier.target_world.world_id.clone(),
+            world_generation: 0,
+            prompt: "ordinary zero turn".into(),
+            policy_snapshot_carrier: Some(carrier.clone()),
+            acceptance_context: Some(acceptance),
+        };
+        let ordinary = OrdinaryMemberTurnSubmitRequestV1::from_request(request.clone()).unwrap();
+        let bytes = serde_json::to_vec(&ordinary).unwrap();
+        assert_eq!(bytes, serde_json::to_vec(&request).unwrap());
+        let decoded: OrdinaryMemberTurnSubmitRequestV1 = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(decoded.as_request(), &request);
+        assert!(request.validate().is_err());
+        assert!(carrier.validate().is_err());
+        assert!(carrier.validate_exact_authenticated_copy(&carrier).is_err());
+        assert!(serde_json::from_slice::<MemberTurnSubmitRequestV1>(&bytes).is_err());
+        assert!(serde_json::from_slice::<DispatchPolicySnapshotCarrierV1>(
+            &serde_json::to_vec(&carrier).unwrap(),
+        )
+        .is_err());
+        let raw = String::from_utf8(bytes.clone()).unwrap();
+        for needle in [
+            "\"schema_version\":1",
+            "\"policy_snapshot_hash\":",
+            "\"world_generation\":0",
+        ] {
+            let duplicate = if needle.ends_with(':') {
+                raw.replacen(
+                    needle,
+                    &format!("{needle}\"{}\",{needle}", "a".repeat(64)),
+                    1,
+                )
+            } else {
+                raw.replacen(needle, &format!("{needle},{needle}"), 1)
+            };
+            assert!(serde_json::from_str::<OrdinaryMemberTurnSubmitRequestV1>(&duplicate).is_err());
+        }
+        let original: Value = serde_json::from_slice(&bytes).unwrap();
+        for pointer in [
+            "/schema_version",
+            "/world_generation",
+            "/policy_snapshot_carrier",
+            "/acceptance_context",
+            "/policy_snapshot_carrier/immutable_worker_cap_application_revision",
+        ] {
+            let mut value = original.clone();
+            let (parent, key) = pointer.rsplit_once('/').unwrap();
+            value
+                .pointer_mut(parent)
+                .unwrap()
+                .as_object_mut()
+                .unwrap()
+                .remove(key);
+            assert!(
+                serde_json::from_value::<OrdinaryMemberTurnSubmitRequestV1>(value).is_err(),
+                "missing {pointer}"
+            );
+        }
+        for (pointer, replacement) in [
+            ("/schema_version", json!(2)),
+            ("/unexpected", json!(true)),
+            ("/policy_snapshot_carrier/schema_version", json!(2)),
+            ("/policy_snapshot_carrier/unexpected", json!(true)),
+            ("/policy_snapshot_carrier/subject/unexpected", json!(true)),
+            (
+                "/policy_snapshot_carrier/immutable_worker_cap_application_revision",
+                json!(0),
+            ),
+            (
+                "/policy_snapshot_carrier/policy_snapshot_hash",
+                json!("f".repeat(64)),
+            ),
+            (
+                "/policy_snapshot_carrier/policy_snapshot_ref/commitment/kind",
+                json!("Unknown"),
+            ),
+            ("/world_generation", json!(1)),
+            ("/policy_snapshot_carrier", Value::Null),
+        ] {
+            let mut value = original.clone();
+            let (parent, key) = pointer.rsplit_once('/').unwrap();
+            value
+                .pointer_mut(parent)
+                .unwrap()
+                .as_object_mut()
+                .unwrap()
+                .insert(key.into(), replacement);
+            assert!(
+                serde_json::from_value::<OrdinaryMemberTurnSubmitRequestV1>(value).is_err(),
+                "bad {pointer}"
+            );
+        }
+        let runtime = OrdinaryGatewayRuntimeIdentityV1::WorldWorker {
+            orchestration_session_id: request.orchestration_session_id,
+            caller_participant_id: request.orchestrator_participant_id,
+            participant_id: request.participant_id,
+            backend_id: request.backend_id,
+            run_id: request.run_id,
+            world_id: request.world_id,
+            world_generation: 0,
+        };
+        runtime.validate().unwrap(); // Representation only, no service capability.
+    }
+
     fn e2_sample_policy_snapshot_carrier() -> DispatchPolicySnapshotCarrierV1 {
         let snapshot = e2_sample_policy_snapshot();
         let bytes = serde_json::to_vec(&snapshot).expect("serialize E1 fixture snapshot");
@@ -7960,6 +9589,506 @@ pipe_path=XFwuXHBpcGVcc3Vic3RyYXRlLWFnZW50\n";
         wrong_revision.runtime_artifact_manifest_revision = 2;
         wrong_revision.input_ref_hash = wrong_revision.canonical_hash().unwrap();
         assert!(wrong_revision.validate().is_err());
+    }
+
+    // Codec data only: these identities do not mint HSA, backend or permission evidence.
+    fn retained_bootstrap_observation_fixture() -> RetainedBootstrapObservationV1 {
+        let activation = e3a_sample_fresh_spawn_activation();
+        let event_identity = RuntimeEventIdentityV1 {
+            event_id: "native-bootstrap-event".into(),
+            event_sequence: 3,
+        };
+        RetainedBootstrapObservationV1 {
+            source_start: OrdinaryStartSelectionCarrierV1 {
+                schema_version: 1,
+                authority_store_id: activation.commitment_ref.authority_store_id.clone(),
+                original_start_intent_id: "original-start-intent".into(),
+                original_start_issuer_request_id: format!("req_{}", "d".repeat(64)),
+                original_session_id: activation.orchestration_session_id.clone(),
+                context_sha256: "a".repeat(64),
+                native_selection_sha256: "b".repeat(64),
+                requested_selection_sha256: "c".repeat(64),
+            },
+            runtime: OrdinaryGatewayRuntimeIdentityV1::WorldWorker {
+                orchestration_session_id: activation.orchestration_session_id.clone(),
+                caller_participant_id: activation.caller_participant_id.clone(),
+                participant_id: activation.retained_participant_id.clone(),
+                backend_id: activation.target_backend_id.clone(),
+                run_id: activation.bootstrap_run_id.clone(),
+                world_id: activation.target_world.world_id.clone(),
+                world_generation: activation.target_world.world_generation,
+            },
+            activation,
+            native_session_id: "actual-native-session-locator".into(),
+            span_id: "native-bootstrap-span".into(),
+            frame_identity: RuntimeFrameIdentityV1 {
+                schema_version: 1,
+                stream_id: "rts_bootstrap".into(),
+                frame_sequence: 5,
+            },
+            terminal_identity: RuntimeTerminalIdentityV1::from(&event_identity),
+            event_identity,
+            native_settlement: NativeSettlementAcknowledgmentV1::SdkChecked,
+            native_termination: NativeProcessTerminationV1::Exited { exit_code: 0 },
+            gateway_disposal: OrdinaryGatewayDisposalV1::ProcessWaited {
+                runtime_id: "issued-gateway-instance".into(),
+                pid: 12345,
+                termination: NativeProcessTerminationV1::Signaled { signal: 15 },
+            },
+        }
+    }
+
+    #[test]
+    fn test_retained_bootstrap_completion_round_trip_and_exact_exit_join() {
+        let observed = retained_bootstrap_observation_fixture();
+        let receipt = RetainedBootstrapCompletionV1::from_observation(observed.clone()).unwrap();
+        receipt
+            .validate_for_exit(
+                &observed.frame_identity,
+                &observed.event_identity,
+                &observed.terminal_identity,
+                &observed.span_id,
+                0,
+            )
+            .unwrap();
+        let encoded = serde_json::to_vec(&receipt).unwrap();
+        let round_trip: RetainedBootstrapCompletionV1 = serde_json::from_slice(&encoded).unwrap();
+        assert_eq!(round_trip, receipt);
+        assert_eq!(receipt.observation(), &observed);
+        let value = serde_json::to_value(&receipt).unwrap();
+        assert_eq!(value["schema_version"], 1);
+        assert_eq!(value["domain"], RetainedBootstrapCompletionV1::DOMAIN);
+        assert_eq!(value["sha256"].as_str().unwrap().len(), 64);
+        let mut wrong_frame = observed.frame_identity.clone();
+        wrong_frame.frame_sequence += 1;
+        assert!(receipt
+            .validate_for_exit(
+                &wrong_frame,
+                &observed.event_identity,
+                &observed.terminal_identity,
+                &observed.span_id,
+                0
+            )
+            .is_err());
+        assert!(receipt
+            .validate_for_exit(
+                &observed.frame_identity,
+                &observed.event_identity,
+                &observed.terminal_identity,
+                "other-span",
+                0
+            )
+            .is_err());
+        assert!(receipt
+            .validate_for_exit(
+                &observed.frame_identity,
+                &observed.event_identity,
+                &observed.terminal_identity,
+                &observed.span_id,
+                1
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn test_retained_bootstrap_completion_refuses_tampering_and_cross_source() {
+        let observed = retained_bootstrap_observation_fixture();
+        let receipt = RetainedBootstrapCompletionV1::from_observation(observed.clone()).unwrap();
+        let original = serde_json::to_value(&receipt).unwrap();
+        for defect in [
+            "version", "domain", "digest", "missing", "unknown", "nested",
+        ] {
+            let mut value = original.clone();
+            match defect {
+                "version" => value["schema_version"] = 2.into(),
+                "domain" => value["domain"] = "other-domain".into(),
+                "digest" => value["sha256"] = "0".repeat(64).into(),
+                "missing" => {
+                    value.as_object_mut().unwrap().remove("sha256");
+                }
+                "unknown" => value["extra"] = true.into(),
+                "nested" => value["observation"]["extra"] = true.into(),
+                _ => unreachable!(),
+            }
+            assert!(
+                serde_json::from_value::<RetainedBootstrapCompletionV1>(value).is_err(),
+                "{defect}"
+            );
+        }
+        let mut wrong = observed.clone();
+        wrong.source_start.original_session_id = "other-session".into();
+        assert!(RetainedBootstrapCompletionV1::from_observation(wrong).is_err());
+        let mut wrong = observed.clone();
+        if let OrdinaryGatewayRuntimeIdentityV1::WorldWorker { participant_id, .. } =
+            &mut wrong.runtime
+        {
+            *participant_id = "other-worker".into();
+        }
+        assert!(RetainedBootstrapCompletionV1::from_observation(wrong).is_err());
+        let mut wrong = observed.clone();
+        wrong.native_session_id.clear();
+        assert!(RetainedBootstrapCompletionV1::from_observation(wrong).is_err());
+        let mut wrong = observed;
+        wrong.native_termination = NativeProcessTerminationV1::Exited { exit_code: 1 };
+        assert!(RetainedBootstrapCompletionV1::from_observation(wrong).is_err());
+    }
+
+    #[test]
+    fn test_retained_bootstrap_service_event_boundary() {
+        let observed = retained_bootstrap_observation_fixture();
+        let report = RetainedBootstrapCompletionV1::from_observation(observed.clone()).unwrap();
+        let mut event = AgentEvent::message(
+            "telemetry-producer",
+            observed.activation.orchestration_session_id.clone(),
+            observed.activation.bootstrap_run_id.clone(),
+            substrate_common::agent_events::MessageEventKind::Status,
+            "completed",
+        );
+        event.participant_id = Some(observed.activation.retained_participant_id.clone());
+        event.backend_id = Some(observed.activation.target_backend_id.clone());
+        event.world_id = Some(observed.activation.target_world.world_id.clone());
+        event.world_generation = Some(observed.activation.target_world.world_generation);
+        event.role = Some("member".into());
+        event.span_id = Some(observed.span_id.clone());
+        event.event_identity = Some(RuntimeEventIdentityV1 {
+            event_id: "announcement".into(),
+            event_sequence: 2,
+        });
+        let frame = RuntimeFrameIdentityV1 {
+            schema_version: 1,
+            stream_id: observed.frame_identity.stream_id.clone(),
+            frame_sequence: 4,
+        };
+        assert_eq!(
+            RetainedBootstrapCompletionV1::from_service_event(&frame, &event).unwrap(),
+            None
+        );
+        event.data = serde_json::json!({(RetainedBootstrapCompletionV1::EVENT_DATA_KEY): report});
+        assert!(
+            RetainedBootstrapCompletionV1::from_service_event(&frame, &event)
+                .unwrap()
+                .is_some()
+        );
+        for defect in [
+            "unknown",
+            "kind",
+            "worker",
+            "world",
+            "span",
+            "sequence",
+            "parent",
+            "malformed",
+        ] {
+            let mut wrong = event.clone();
+            match defect {
+                "unknown" => wrong.data["extra"] = true.into(),
+                "kind" => wrong.kind = substrate_common::agent_events::AgentEventKind::Registered,
+                "worker" => wrong.participant_id = Some("other-worker".into()),
+                "world" => {
+                    wrong.world_generation =
+                        Some(observed.activation.target_world.world_generation + 1)
+                }
+                "span" => wrong.span_id = Some("other-span".into()),
+                "sequence" => {
+                    wrong.event_identity.as_mut().unwrap().event_sequence =
+                        observed.event_identity.event_sequence
+                }
+                "parent" => wrong.parent_participant_id = Some("other-worker".into()),
+                "malformed" => {
+                    wrong.data[RetainedBootstrapCompletionV1::EVENT_DATA_KEY]["schema_version"] =
+                        2.into()
+                }
+                _ => unreachable!(),
+            }
+            assert!(
+                RetainedBootstrapCompletionV1::from_service_event(&frame, &wrong).is_err(),
+                "{defect}"
+            );
+        }
+    }
+
+    // Codec-only Fork provenance; no issued runtime or custody claim.
+    fn fork_bootstrap_codec_fixture() -> (
+        RetainedBootstrapCompletionV1,
+        OrdinaryForkBootstrapProvenanceV1,
+    ) {
+        let source = retained_bootstrap_observation_fixture();
+        let mut child = source.clone();
+        child.activation.launch_kind = E2MemberLaunchKindV1::Fork;
+        child.activation.reservation_ref = None;
+        child.activation.request_commitment = E2LaunchRequestCommitmentV1::CanonicalSha256 {
+            domain: "substrate.test.fork.request.v1".into(),
+            digest_hex: "f".repeat(64),
+        };
+        child.activation.source_participant_id =
+            Some(source.activation.retained_participant_id.clone());
+        child.activation.retained_participant_id = "rwp_child".into();
+        child.activation.bootstrap_run_id = "rwr_child".into();
+        child.activation.activation_id = format!("e2a_{}", "e".repeat(32));
+        child.activation.commitment_ref.commitment_id =
+            "dpc_018f0f2e-7b4c-7aa1-8c22-123456789ab8".into();
+        child.activation.immutable_worker_cap_ref = child.activation.commitment_ref.clone();
+        // E2 revisions belong to each immutable object, not a global sequence.
+        assert_eq!(
+            child.activation.immutable_worker_cap_created_revision,
+            source.activation.immutable_worker_cap_created_revision
+        );
+        child.runtime = OrdinaryGatewayRuntimeIdentityV1::WorldWorker {
+            orchestration_session_id: child.activation.orchestration_session_id.clone(),
+            caller_participant_id: child.activation.caller_participant_id.clone(),
+            participant_id: child.activation.retained_participant_id.clone(),
+            backend_id: child.activation.target_backend_id.clone(),
+            run_id: child.activation.bootstrap_run_id.clone(),
+            world_id: child.activation.target_world.world_id.clone(),
+            world_generation: child.activation.target_world.world_generation,
+        };
+        child.native_session_id = "actual-native-child".into();
+        let provenance = OrdinaryForkBootstrapProvenanceV1 {
+            source_runtime: source.runtime,
+            source_activation: source.activation,
+            source_native_session_id: source.native_session_id,
+            transferred_child_native_session_id: child.native_session_id.clone(),
+        };
+        (
+            RetainedBootstrapCompletionV1::from_observation(child).unwrap(),
+            provenance,
+        )
+    }
+
+    #[test]
+    fn test_fork_protocol_success_preserves_actual_signaled_process_wait() {
+        let (child, provenance) = fork_bootstrap_codec_fixture();
+        let mut observed = child.observation().clone();
+        observed.native_termination = NativeProcessTerminationV1::Signaled { signal: 9 };
+        // Synthetic codec data only, not a native service or custody proof.
+        let waits = vec![NativeProcessWaitObservationV1 {
+            pid: 123,
+            termination: observed.native_termination.clone(),
+            recovery_termination: None,
+        }];
+        assert!(RetainedBootstrapCompletionV1::from_observation(observed.clone()).is_err());
+        let report = RetainedForkBootstrapCompletionV1::from_observation(
+            observed.clone(),
+            provenance.clone(),
+            waits.clone(),
+        )
+        .unwrap();
+        report
+            .validate_for_exit(
+                &observed.frame_identity,
+                &observed.event_identity,
+                &observed.terminal_identity,
+                &observed.span_id,
+                0,
+            )
+            .unwrap();
+        assert_eq!(
+            report.observation().native_termination,
+            observed.native_termination
+        );
+        assert_eq!(report.native_processes(), waits);
+        let encoded = serde_json::to_value(&report).unwrap();
+        assert_eq!(
+            serde_json::from_value::<RetainedForkBootstrapCompletionV1>(encoded).unwrap(),
+            report
+        );
+        assert!(RetainedForkBootstrapCompletionV1::from_observation(
+            observed.clone(),
+            provenance.clone(),
+            Vec::new()
+        )
+        .is_err());
+        let mut wrong = waits;
+        wrong[0].termination = NativeProcessTerminationV1::Exited { exit_code: 0 };
+        assert!(
+            RetainedForkBootstrapCompletionV1::from_observation(observed, provenance, wrong)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn test_fork_bootstrap_provenance_closed_codec_and_native_join() {
+        let (child, provenance) = fork_bootstrap_codec_fixture();
+        let observed = child.observation().clone();
+        let waits = vec![NativeProcessWaitObservationV1 {
+            pid: 123,
+            termination: observed.native_termination.clone(),
+            recovery_termination: None,
+        }];
+        let report = RetainedForkBootstrapCompletionV1::from_observation(
+            observed.clone(),
+            provenance.clone(),
+            waits.clone(),
+        )
+        .unwrap();
+        let encoded = serde_json::to_value(&report).unwrap();
+        assert_eq!(
+            serde_json::from_value::<RetainedForkBootstrapCompletionV1>(encoded.clone()).unwrap(),
+            report
+        );
+        for pointer in [
+            "/schema_version",
+            "/domain",
+            "/sha256",
+            "/provenance/source_native_session_id",
+            "/provenance/transferred_child_native_session_id",
+        ] {
+            let mut wrong = encoded.clone();
+            *wrong.pointer_mut(pointer).unwrap() = serde_json::json!("changed");
+            assert!(
+                serde_json::from_value::<RetainedForkBootstrapCompletionV1>(wrong).is_err(),
+                "{pointer}"
+            );
+        }
+        let mut unknown = encoded.clone();
+        unknown["extra"] = true.into();
+        assert!(serde_json::from_value::<RetainedForkBootstrapCompletionV1>(unknown).is_err());
+        let mut unknown = encoded;
+        unknown["provenance"]["extra"] = true.into();
+        assert!(serde_json::from_value::<RetainedForkBootstrapCompletionV1>(unknown).is_err());
+        let mut wrong = provenance.clone();
+        wrong.transferred_child_native_session_id = wrong.source_native_session_id.clone();
+        assert!(RetainedForkBootstrapCompletionV1::from_observation(
+            observed.clone(),
+            wrong,
+            waits.clone()
+        )
+        .is_err());
+        let mut wrong = provenance.clone();
+        wrong.source_activation.retained_participant_id = "other-source".into();
+        assert!(RetainedForkBootstrapCompletionV1::from_observation(
+            observed.clone(),
+            wrong,
+            waits.clone()
+        )
+        .is_err());
+        let mut wrong = provenance;
+        wrong.source_native_session_id.clear();
+        assert!(RetainedForkBootstrapCompletionV1::from_observation(
+            observed,
+            wrong,
+            waits.clone()
+        )
+        .is_err());
+        assert!(RetainedForkBootstrapCompletionV1::from_observation(
+            retained_bootstrap_observation_fixture(),
+            fork_bootstrap_codec_fixture().1,
+            waits
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn test_fork_bootstrap_service_event_preserves_parent_and_exit() {
+        let (child, provenance) = fork_bootstrap_codec_fixture();
+        let report = RetainedForkBootstrapCompletionV1::from_observation(
+            child.observation().clone(),
+            provenance,
+            vec![NativeProcessWaitObservationV1 {
+                pid: 123,
+                termination: child.observation().native_termination.clone(),
+                recovery_termination: None,
+            }],
+        )
+        .unwrap();
+        let observed = child.observation();
+        let mut event = AgentEvent::message(
+            "producer",
+            observed.activation.orchestration_session_id.clone(),
+            observed.activation.bootstrap_run_id.clone(),
+            substrate_common::agent_events::MessageEventKind::Status,
+            "completed",
+        );
+        event.participant_id = Some(observed.activation.retained_participant_id.clone());
+        event.backend_id = Some(observed.activation.target_backend_id.clone());
+        event.world_id = Some(observed.activation.target_world.world_id.clone());
+        event.world_generation = Some(observed.activation.target_world.world_generation);
+        event.role = Some("member".into());
+        event.parent_participant_id = observed.activation.source_participant_id.clone();
+        event.span_id = Some(observed.span_id.clone());
+        event.event_identity = Some(RuntimeEventIdentityV1 {
+            event_id: "announcement".into(),
+            event_sequence: 2,
+        });
+        let frame = RuntimeFrameIdentityV1 {
+            schema_version: 1,
+            stream_id: observed.frame_identity.stream_id.clone(),
+            frame_sequence: 4,
+        };
+        event.data =
+            serde_json::json!({(RetainedForkBootstrapCompletionV1::EVENT_DATA_KEY): report});
+        assert_eq!(
+            RetainedForkBootstrapCompletionV1::from_service_event(&frame, &event).unwrap(),
+            Some(report.clone())
+        );
+        assert!(
+            RetainedBootstrapCompletionV1::from_service_event(&frame, &event)
+                .unwrap()
+                .is_none()
+        );
+        report
+            .completion()
+            .validate_for_exit(
+                &observed.frame_identity,
+                &observed.event_identity,
+                &observed.terminal_identity,
+                &observed.span_id,
+                0,
+            )
+            .unwrap();
+        assert!(report
+            .completion()
+            .validate_for_exit(
+                &observed.frame_identity,
+                &observed.event_identity,
+                &observed.terminal_identity,
+                &observed.span_id,
+                1
+            )
+            .is_err());
+        for defect in [
+            "parent",
+            "span",
+            "worker",
+            "sequence",
+            "extra",
+            "dual_marker",
+        ] {
+            let mut wrong = event.clone();
+            match defect {
+                "parent" => wrong.parent_participant_id = None,
+                "span" => wrong.span_id = Some("other-span".into()),
+                "worker" => wrong.participant_id = Some("other-worker".into()),
+                "sequence" => {
+                    wrong.event_identity.as_mut().unwrap().event_sequence =
+                        observed.event_identity.event_sequence
+                }
+                "extra" => wrong.data["extra"] = true.into(),
+                "dual_marker" => {
+                    wrong.data[RetainedBootstrapCompletionV1::EVENT_DATA_KEY] =
+                        serde_json::to_value(&child).unwrap()
+                }
+                _ => unreachable!(),
+            }
+            assert!(
+                RetainedForkBootstrapCompletionV1::from_service_event(&frame, &wrong).is_err(),
+                "{defect}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_unannotated_exit_keeps_original_wire_form() {
+        let frame: ExecuteStreamFrame = serde_json::from_value(serde_json::json!({
+            "type":"exit", "frame_identity":{"schema_version":1,"stream_id":"rts_old","frame_sequence":2},
+            "event_identity":{"event_id":"old-event","event_sequence":1},
+            "terminal_identity":{"terminal_event_id":"old-event","terminal_event_sequence":1},
+            "exit":0,"span_id":"old-span","scopes_used":[],
+            "process_events_status":"unavailable", "process_events":[]
+        })).unwrap();
+        frame.validate_identity_contract().unwrap();
+        let value = serde_json::to_value(&frame).unwrap();
+        assert!(value.get("retained_bootstrap_completion").is_none());
     }
 
     fn e3a_sample_fresh_spawn_activation() -> E2MemberLaunchActivationCarrierV1 {
@@ -9183,5 +11312,1557 @@ pipe_path=XFwuXHBpcGVcc3Vic3RyYXRlLWFnZW50\n";
                 .unwrap()
                 .0
         );
+    }
+}
+
+#[cfg(test)]
+mod ordinary_selected_transport_tests {
+    use super::*;
+    use serde_json::{json, Value};
+
+    fn start_reference() -> Value {
+        json!({
+            "schema_version": 1,
+            "authority_store_id": "store_original",
+            "original_start_intent_id": "intent_original",
+            "original_start_issuer_request_id": format!("req_{}", "a".repeat(64)),
+            "original_session_id": "session_original",
+            "context_sha256": "b".repeat(64),
+            "native_selection_sha256": "c".repeat(64),
+            "requested_selection_sha256": "d".repeat(64)
+        })
+    }
+
+    fn snapshot() -> Value {
+        json!({
+            "schema_version": 3,
+            "net_allowed": [],
+            "world_fs": {
+                "host_visible": true,
+                "fail_closed": { "routing": false },
+                "caged_required": false,
+                "write": { "enabled": true, "allow_list": ["."], "deny_list": [] }
+            }
+        })
+    }
+
+    fn execute_request() -> Value {
+        let binary = if cfg!(windows) {
+            r"C:\Windows\System32\cmd.exe"
+        } else {
+            "/usr/bin/codex"
+        };
+        json!({
+            "schema_version": 2,
+            "ordinary_start_selection": start_reference(),
+            "profile": null,
+            "cmd": "",
+            "cwd": "/project",
+            "env": null,
+            "pty": false,
+            "agent_id": "host_actor",
+            "budget": null,
+            "policy_snapshot": snapshot(),
+            "member_dispatch": {
+                "schema_version": 1,
+                "orchestration_session_id": "session_original",
+                "participant_id": "world_worker",
+                "orchestrator_participant_id": "host_actor",
+                "backend_id": "cli:worker-world",
+                "protocol": "substrate.agent.session",
+                "run_id": "run_original",
+                "world_id": "world_original",
+                "world_generation": 7,
+                "initial_prompt": "hello",
+                "resolved_runtime": { "backend_kind": "codex", "binary_path": binary }
+            }
+        })
+    }
+
+    fn gateway_request() -> Value {
+        json!({
+            "schema_version": 2,
+            "ordinary_selection": {
+                "schema_version": 1,
+                "start": start_reference(),
+                "runtime": {
+                    "selection_role": "world_worker",
+                    "orchestration_session_id": "session_original",
+                    "caller_participant_id": "host_actor",
+                    "participant_id": "world_worker",
+                    "backend_id": "cli:worker-world",
+                    "run_id": "run_original",
+                    "world_id": "world_original",
+                    "world_generation": 7
+                }
+            },
+            "profile": null,
+            "cwd": "/project",
+            "env": null,
+            "agent_id": "host_actor",
+            "policy_snapshot": snapshot(),
+            "identity_tuple": {
+                "client": "codex",
+                "router": "gateway",
+                "protocol": "openai.responses",
+                "provider": "openai",
+                "auth_authority": "subscription"
+            },
+            "placement_posture": { "execution": "in_world" }
+        })
+    }
+
+    fn host_gateway_request() -> Value {
+        let mut request = gateway_request();
+        request["ordinary_selection"]["runtime"] = json!({
+            "selection_role": "host_actor",
+            "orchestration_session_id": "session_original",
+            "participant_id": "host_actor",
+            "backend_id": "cli:orchestrator-host",
+            "run_id": "host_run_original"
+        });
+        request
+    }
+
+    #[test]
+    fn test_selected_gateway_represents_actual_host_and_world_roles_separately() {
+        let host: GatewayLifecycleRequestV1 =
+            serde_json::from_value(host_gateway_request()).unwrap();
+        let context = host.ordinary_selection.as_ref().unwrap();
+        assert!(matches!(
+            &context.runtime,
+            OrdinaryGatewayRuntimeIdentityV1::HostActor {
+                orchestration_session_id,
+                participant_id,
+                backend_id,
+                run_id,
+            } if orchestration_session_id == "session_original"
+                && participant_id == "host_actor"
+                && backend_id == "cli:orchestrator-host"
+                && run_id == "host_run_original"
+        ));
+        let bytes = serde_json::to_vec(&host).unwrap();
+        let recovered: GatewayLifecycleRequestV1 = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(host.ordinary_selection, recovered.ordinary_selection);
+        let host_shape = serde_json::to_value(&context.runtime).unwrap();
+        assert!(host_shape.get("world_id").is_none());
+        assert!(host_shape.get("world_generation").is_none());
+        let worker: GatewayLifecycleRequestV1 = serde_json::from_value(gateway_request()).unwrap();
+        assert!(matches!(
+            worker.ordinary_selection.unwrap().runtime,
+            OrdinaryGatewayRuntimeIdentityV1::WorldWorker {
+                world_generation: 7,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_gateway_role_shape_rejects_missing_unknown_duplicate_and_cross_role_fields() {
+        for fixture in [host_gateway_request(), gateway_request()] {
+            let runtime = fixture["ordinary_selection"]["runtime"].clone();
+            for key in runtime.as_object().unwrap().keys() {
+                let mut missing = fixture.clone();
+                missing["ordinary_selection"]["runtime"]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove(key);
+                assert!(serde_json::from_value::<GatewayLifecycleRequestV1>(missing).is_err());
+            }
+            let mut unknown = fixture.clone();
+            unknown["ordinary_selection"]["runtime"]["selection_role"] = json!("future_role");
+            assert!(serde_json::from_value::<GatewayLifecycleRequestV1>(unknown).is_err());
+            let encoded = serde_json::to_string(&runtime).unwrap();
+            let duplicate = format!(
+                "{{\"selection_role\":{},{}",
+                serde_json::to_string(&runtime["selection_role"]).unwrap(),
+                &encoded[1..]
+            );
+            assert!(serde_json::from_str::<OrdinaryGatewayRuntimeIdentityV1>(&duplicate).is_err());
+        }
+        let mut invented_host_world = host_gateway_request();
+        invented_host_world["ordinary_selection"]["runtime"]["world_id"] = json!("fake_world");
+        assert!(serde_json::from_value::<GatewayLifecycleRequestV1>(invented_host_world).is_err());
+        let mut relabelled_worker = gateway_request();
+        relabelled_worker["ordinary_selection"]["runtime"]["selection_role"] = json!("host_actor");
+        assert!(serde_json::from_value::<GatewayLifecycleRequestV1>(relabelled_worker).is_err());
+        for version in [1, 3] {
+            let mut wrong_version = host_gateway_request();
+            wrong_version["schema_version"] = json!(version);
+            assert!(serde_json::from_value::<GatewayLifecycleRequestV1>(wrong_version).is_err());
+        }
+        let mut missing_host_selection = host_gateway_request();
+        missing_host_selection
+            .as_object_mut()
+            .unwrap()
+            .remove("ordinary_selection");
+        assert!(
+            serde_json::from_value::<GatewayLifecycleRequestV1>(missing_host_selection).is_err()
+        );
+    }
+
+    #[test]
+    fn test_selected_execute_codec_preserves_both_roles_and_frozen_member_bytes() {
+        let input = execute_request();
+        let frozen_member =
+            serde_json::from_value::<MemberDispatchRequest>(input["member_dispatch"].clone())
+                .expect("ordinary V1 member fixture");
+        let frozen_bytes = serde_json::to_vec(&frozen_member).unwrap();
+        let request: ExecuteRequest = serde_json::from_value(input).unwrap();
+        let first = serde_json::to_vec(&request).unwrap();
+        let decoded: ExecuteRequest = serde_json::from_slice(&first).unwrap();
+        assert_eq!(first, serde_json::to_vec(&decoded).unwrap());
+        assert_eq!(
+            request.ordinary_start_selection,
+            decoded.ordinary_start_selection
+        );
+        let reference = decoded.ordinary_start_selection.as_ref().unwrap();
+        assert_eq!(reference.native_selection_sha256, "c".repeat(64));
+        assert_eq!(reference.requested_selection_sha256, "d".repeat(64));
+        assert_eq!(
+            frozen_bytes,
+            serde_json::to_vec(decoded.member_dispatch.as_ref().unwrap()).unwrap()
+        );
+        assert!(decoded.member_dispatch.unwrap().as_v1().is_some());
+    }
+
+    #[test]
+    fn test_start_reference_rejects_missing_unknown_duplicate_and_future_fields() {
+        let valid = start_reference();
+        for key in valid.as_object().unwrap().keys() {
+            let mut missing = valid.clone();
+            missing.as_object_mut().unwrap().remove(key);
+            assert!(serde_json::from_value::<OrdinaryStartSelectionCarrierV1>(missing).is_err());
+        }
+        let mut unknown = valid.clone();
+        unknown["accepted_home"] = json!("/request-chosen-home");
+        assert!(serde_json::from_value::<OrdinaryStartSelectionCarrierV1>(unknown).is_err());
+        let mut future = valid.clone();
+        future["schema_version"] = json!(2);
+        assert!(serde_json::from_value::<OrdinaryStartSelectionCarrierV1>(future).is_err());
+        let encoded = serde_json::to_string(&valid).unwrap();
+        let duplicate = format!("{{\"schema_version\":1,{}", &encoded[1..]);
+        assert!(serde_json::from_str::<OrdinaryStartSelectionCarrierV1>(&duplicate).is_err());
+    }
+
+    #[test]
+    fn test_start_reference_rejects_malformed_issuer_and_role_digests() {
+        for key in [
+            "original_start_issuer_request_id",
+            "context_sha256",
+            "native_selection_sha256",
+            "requested_selection_sha256",
+        ] {
+            for invalid in ["", "a", &"A".repeat(64), &"g".repeat(64)] {
+                let mut input = start_reference();
+                input[key] = json!(invalid);
+                assert!(serde_json::from_value::<OrdinaryStartSelectionCarrierV1>(input).is_err());
+            }
+        }
+    }
+
+    #[test]
+    fn test_execute_request_version_and_selected_context_are_inseparable() {
+        for version in [0, 1, 3] {
+            let mut input = execute_request();
+            input["schema_version"] = json!(version);
+            assert!(serde_json::from_value::<ExecuteRequest>(input).is_err());
+        }
+        for key in ["ordinary_start_selection", "member_dispatch"] {
+            let mut input = execute_request();
+            input.as_object_mut().unwrap().remove(key);
+            assert!(serde_json::from_value::<ExecuteRequest>(input).is_err());
+        }
+        let mut process = execute_request();
+        process["cmd"] = json!("true");
+        assert!(serde_json::from_value::<ExecuteRequest>(process).is_err());
+        let mut pty = execute_request();
+        pty["pty"] = json!(true);
+        assert!(serde_json::from_value::<ExecuteRequest>(pty).is_err());
+        let encoded = serde_json::to_string(&execute_request()).unwrap();
+        let duplicate = format!("{{\"schema_version\":2,{}", &encoded[1..]);
+        assert!(serde_json::from_str::<ExecuteRequest>(&duplicate).is_err());
+    }
+
+    #[test]
+    fn test_unselected_execute_keeps_absent_version_and_carrier_wire_fields() {
+        let mut input = execute_request();
+        input.as_object_mut().unwrap().remove("schema_version");
+        input
+            .as_object_mut()
+            .unwrap()
+            .remove("ordinary_start_selection");
+        let request: ExecuteRequest = serde_json::from_value(input).unwrap();
+        assert_eq!(request.schema_version, 1);
+        let encoded = serde_json::to_value(request).unwrap();
+        assert!(encoded.get("schema_version").is_none());
+        assert!(encoded.get("ordinary_start_selection").is_none());
+        assert_eq!(encoded["member_dispatch"]["schema_version"], 1);
+    }
+
+    #[test]
+    fn test_selected_gateway_codec_preserves_runtime_join_and_rejects_downgrade() {
+        let request: GatewayLifecycleRequestV1 = serde_json::from_value(gateway_request()).unwrap();
+        let first = serde_json::to_vec(&request).unwrap();
+        let decoded: GatewayLifecycleRequestV1 = serde_json::from_slice(&first).unwrap();
+        assert_eq!(first, serde_json::to_vec(&decoded).unwrap());
+        assert_eq!(request.ordinary_selection, decoded.ordinary_selection);
+        for version in [0, 1, 3] {
+            let mut input = gateway_request();
+            input["schema_version"] = json!(version);
+            assert!(serde_json::from_value::<GatewayLifecycleRequestV1>(input).is_err());
+        }
+        let mut missing = gateway_request();
+        missing
+            .as_object_mut()
+            .unwrap()
+            .remove("ordinary_selection");
+        assert!(serde_json::from_value::<GatewayLifecycleRequestV1>(missing).is_err());
+        let mut future = gateway_request();
+        future["ordinary_selection"]["schema_version"] = json!(2);
+        assert!(serde_json::from_value::<GatewayLifecycleRequestV1>(future).is_err());
+        let mut unknown = gateway_request();
+        unknown["ordinary_selection"]["current_root_revision"] = json!(99);
+        assert!(serde_json::from_value::<GatewayLifecycleRequestV1>(unknown).is_err());
+        let encoded = serde_json::to_string(&gateway_request()).unwrap();
+        let duplicate = format!("{{\"schema_version\":2,{}", &encoded[1..]);
+        assert!(serde_json::from_str::<GatewayLifecycleRequestV1>(&duplicate).is_err());
+        let context = gateway_request()["ordinary_selection"].clone();
+        let encoded = serde_json::to_string(&context).unwrap();
+        let duplicate = format!("{{\"schema_version\":1,{}", &encoded[1..]);
+        assert!(serde_json::from_str::<OrdinaryGatewaySelectionContextV1>(&duplicate).is_err());
+        for key in context.as_object().unwrap().keys() {
+            let mut missing = context.clone();
+            missing.as_object_mut().unwrap().remove(key);
+            assert!(serde_json::from_value::<OrdinaryGatewaySelectionContextV1>(missing).is_err());
+        }
+        let mut wrong_auth = gateway_request();
+        wrong_auth["integrated_auth"] = json!({
+            "backend_id": "cli:other-world",
+            "cli_codex": { "access_token": "synthetic-test-token" }
+        });
+        assert!(serde_json::from_value::<GatewayLifecycleRequestV1>(wrong_auth).is_err());
+    }
+
+    #[test]
+    fn test_unselected_gateway_keeps_absent_version_and_context_wire_fields() {
+        let mut input = gateway_request();
+        input.as_object_mut().unwrap().remove("schema_version");
+        input.as_object_mut().unwrap().remove("ordinary_selection");
+        let request: GatewayLifecycleRequestV1 = serde_json::from_value(input).unwrap();
+        assert_eq!(request.schema_version, 1);
+        let encoded = serde_json::to_value(request).unwrap();
+        assert!(encoded.get("schema_version").is_none());
+        assert!(encoded.get("ordinary_selection").is_none());
+    }
+}
+
+#[cfg(test)]
+mod host_gateway_turn_tests {
+    use super::*;
+    use serde_json::{json, Value};
+
+    fn request() -> Value {
+        let cleanup_token = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        let acquire_id =
+            HostGatewayTurnRequestV1::acquire_id_from_cleanup_token(cleanup_token).unwrap();
+        json!({"schema_version": 1, "operation": {
+            "kind": "acquire", "acquire_id": acquire_id, "cleanup_token": cleanup_token,
+            "selection": {"schema_version": 1, "start": {
+                "schema_version": 1, "authority_store_id": "store_original",
+                "original_start_intent_id": "intent_original",
+                "original_start_issuer_request_id": format!("req_{}", "a".repeat(64)),
+                "original_session_id": "session_original", "context_sha256": "b".repeat(64),
+                "native_selection_sha256": "c".repeat(64), "requested_selection_sha256": "d".repeat(64)
+            }, "runtime": {"selection_role": "host_actor", "orchestration_session_id": "session_original",
+                "participant_id": "host_actor", "backend_id": "cli:codex-host", "run_id": "run_current"}}
+        }})
+    }
+
+    fn handle() -> String {
+        format!("hgl_{}_{}", "1".repeat(32), "2".repeat(32))
+    }
+
+    fn reply() -> Value {
+        json!({"schema_version": 1, "result": {"kind": "acquired",
+            "acquire_id": request()["operation"]["acquire_id"], "lease_handle": handle(),
+            "client_wiring": {"openai_base_url": "http://127.0.0.1:1234", "anthropic_base_url": "http://127.0.0.1:5678"}}})
+    }
+
+    #[test]
+    fn test_host_gateway_turn_cleanup_commitment_and_required_null() {
+        let mut value = request();
+        let expected = format!(
+            "hgt_{}",
+            "2166971add18dd42267a763b95a2ccb412255f8c5d0c8d4614ada8d065b4811a"
+        );
+        assert_eq!(value["operation"]["acquire_id"], expected);
+        let original: HostGatewayTurnRequestV1 = serde_json::from_value(value.clone()).unwrap();
+        assert!(serde_json::from_slice::<HostGatewayTurnRequestV1>(
+            &serde_json::to_vec(&original).unwrap()
+        )
+        .is_ok());
+        for token in [
+            "",
+            "A",
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB",
+        ] {
+            value["operation"]["cleanup_token"] = json!(token);
+            assert!(serde_json::from_value::<HostGatewayTurnRequestV1>(value.clone()).is_err());
+        }
+        value = request();
+        value["operation"] = json!({"kind": "release", "acquire_id": expected,
+            "cleanup_token": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "lease_handle": null});
+        let release: HostGatewayTurnRequestV1 = serde_json::from_value(value.clone()).unwrap();
+        assert!(serde_json::to_value(release).unwrap()["operation"]
+            .get("lease_handle")
+            .unwrap()
+            .is_null());
+        value["operation"]
+            .as_object_mut()
+            .unwrap()
+            .remove("lease_handle");
+        assert!(serde_json::from_value::<HostGatewayTurnRequestV1>(value).is_err());
+    }
+
+    #[test]
+    fn test_host_gateway_turn_nested_request_refusals() {
+        let baseline = request();
+        for path in [
+            "",
+            "/operation",
+            "/operation/selection",
+            "/operation/selection/start",
+            "/operation/selection/runtime",
+        ] {
+            let object = baseline.pointer(path).unwrap().as_object().unwrap();
+            for key in object.keys() {
+                let mut missing = baseline.clone();
+                missing
+                    .pointer_mut(path)
+                    .unwrap()
+                    .as_object_mut()
+                    .unwrap()
+                    .remove(key);
+                assert!(
+                    serde_json::from_value::<HostGatewayTurnRequestV1>(missing).is_err(),
+                    "missing {path}/{key}"
+                );
+            }
+            let mut unknown = baseline.clone();
+            unknown
+                .pointer_mut(path)
+                .unwrap()
+                .as_object_mut()
+                .unwrap()
+                .insert("untrusted_principal".into(), json!(0));
+            assert!(
+                serde_json::from_value::<HostGatewayTurnRequestV1>(unknown).is_err(),
+                "unknown {path}"
+            );
+            let needle = serde_json::to_string(object).unwrap();
+            let duplicate = format!(
+                "{{\"{}\":{},{}",
+                object.keys().next().unwrap(),
+                serde_json::to_string(object.values().next().unwrap()).unwrap(),
+                &needle[1..]
+            );
+            let raw = serde_json::to_string(&baseline)
+                .unwrap()
+                .replacen(&needle, &duplicate, 1);
+            assert!(
+                serde_json::from_str::<HostGatewayTurnRequestV1>(&raw).is_err(),
+                "duplicate {path}"
+            );
+        }
+        for path in [
+            "/schema_version",
+            "/operation/selection/schema_version",
+            "/operation/selection/start/schema_version",
+        ] {
+            let mut wrong = baseline.clone();
+            *wrong.pointer_mut(path).unwrap() = json!(2);
+            assert!(serde_json::from_value::<HostGatewayTurnRequestV1>(wrong).is_err());
+        }
+        for (path, invalid) in [
+            ("/operation/kind", json!("restart")),
+            (
+                "/operation/acquire_id",
+                json!(format!("hgt_{}", "f".repeat(64))),
+            ),
+            (
+                "/operation/selection/runtime/selection_role",
+                json!("world_worker"),
+            ),
+            ("/operation/selection/runtime/run_id", Value::Null),
+        ] {
+            let mut wrong = baseline.clone();
+            *wrong.pointer_mut(path).unwrap() = invalid;
+            assert!(serde_json::from_value::<HostGatewayTurnRequestV1>(wrong).is_err());
+        }
+        let mut world = baseline;
+        world["operation"]["selection"]["runtime"]["selection_role"] = json!("world_worker");
+        world["operation"]["selection"]["runtime"]["caller_participant_id"] = json!("host_actor");
+        world["operation"]["selection"]["runtime"]["world_id"] = json!("world_original");
+        world["operation"]["selection"]["runtime"]["world_generation"] = json!(1);
+        assert!(serde_json::from_value::<HostGatewayTurnRequestV1>(world).is_err());
+    }
+
+    #[test]
+    fn test_host_gateway_turn_nested_response_and_loopback_refusals() {
+        let baseline = reply();
+        assert!(serde_json::from_value::<HostGatewayTurnResponseV1>(baseline.clone()).is_ok());
+        for path in ["", "/result", "/result/client_wiring"] {
+            let object = baseline.pointer(path).unwrap().as_object().unwrap();
+            for key in object.keys() {
+                let mut missing = baseline.clone();
+                missing
+                    .pointer_mut(path)
+                    .unwrap()
+                    .as_object_mut()
+                    .unwrap()
+                    .remove(key);
+                assert!(serde_json::from_value::<HostGatewayTurnResponseV1>(missing).is_err());
+            }
+            let mut unknown = baseline.clone();
+            unknown
+                .pointer_mut(path)
+                .unwrap()
+                .as_object_mut()
+                .unwrap()
+                .insert("extra".into(), json!(true));
+            assert!(serde_json::from_value::<HostGatewayTurnResponseV1>(unknown).is_err());
+            let needle = serde_json::to_string(object).unwrap();
+            let duplicate = format!(
+                "{{\"{}\":{},{}",
+                object.keys().next().unwrap(),
+                serde_json::to_string(object.values().next().unwrap()).unwrap(),
+                &needle[1..]
+            );
+            assert!(serde_json::from_str::<HostGatewayTurnResponseV1>(
+                &serde_json::to_string(&baseline)
+                    .unwrap()
+                    .replacen(&needle, &duplicate, 1)
+            )
+            .is_err());
+        }
+        for bad in [
+            "http://localhost:1234",
+            "http://127.0.0.1:0",
+            "http://127.0.0.1:01234",
+            "http://127.0.0.1:1234/",
+            "https://127.0.0.1:1234",
+            "http://127.0.0.1:65536",
+            "http://127.0.0.1:+1234",
+        ] {
+            for field in ["openai_base_url", "anthropic_base_url"] {
+                let mut wrong = baseline.clone();
+                wrong["result"]["client_wiring"][field] = json!(bad);
+                assert!(serde_json::from_value::<HostGatewayTurnResponseV1>(wrong).is_err());
+            }
+        }
+        for (path, invalid) in [
+            ("/schema_version", json!(0)),
+            ("/result/kind", json!("available")),
+            ("/result/acquire_id", json!("hgt_BAD")),
+            ("/result/lease_handle", json!("/tmp/not-a-ticket")),
+        ] {
+            let mut wrong = baseline.clone();
+            *wrong.pointer_mut(path).unwrap() = invalid;
+            assert!(serde_json::from_value::<HostGatewayTurnResponseV1>(wrong).is_err());
+        }
+    }
+
+    #[test]
+    fn test_host_gateway_turn_operation_result_binding() {
+        let acquire: HostGatewayTurnRequestV1 = serde_json::from_value(request()).unwrap();
+        let acquired: HostGatewayTurnResponseV1 = serde_json::from_value(reply()).unwrap();
+        assert!(acquired.validate_for_request(&acquire).is_ok());
+        let id = request()["operation"]["acquire_id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let revalidate = HostGatewayTurnRequestV1 {
+            schema_version: 1,
+            operation: HostGatewayTurnOperationV1::Revalidate {
+                acquire_id: id.clone(),
+                lease_handle: handle(),
+            },
+        };
+        let release = HostGatewayTurnRequestV1 {
+            schema_version: 1,
+            operation: HostGatewayTurnOperationV1::Release {
+                acquire_id: id.clone(),
+                lease_handle: None,
+                cleanup_token: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".into(),
+            },
+        };
+        for (kind, valid) in [
+            ("revalidated", &revalidate),
+            ("released", &release),
+            ("unknown", &release),
+        ] {
+            let mut value =
+                json!({"schema_version": 1, "result": {"kind": kind, "acquire_id": id}});
+            if kind == "revalidated" {
+                value["result"]["lease_handle"] = json!(handle());
+            }
+            let response: HostGatewayTurnResponseV1 =
+                serde_json::from_value(value.clone()).unwrap();
+            assert!(response.validate_for_request(valid).is_ok());
+            assert_eq!(
+                response.validate_for_request(&acquire).is_ok(),
+                kind == "unknown"
+            );
+            assert_eq!(
+                response.validate_for_request(&revalidate).is_ok(),
+                kind == "unknown" || kind == "revalidated"
+            );
+            assert_eq!(
+                response.validate_for_request(&release).is_ok(),
+                kind == "unknown" || kind == "released"
+            );
+            value["result"]["acquire_id"] = json!(format!("hgt_{}", "f".repeat(64)));
+            assert!(serde_json::from_value::<HostGatewayTurnResponseV1>(value)
+                .unwrap()
+                .validate_for_request(valid)
+                .is_err());
+        }
+        let mut wrong = reply();
+        wrong["result"]["acquire_id"] = json!(format!("hgt_{}", "f".repeat(64)));
+        assert!(serde_json::from_value::<HostGatewayTurnResponseV1>(wrong)
+            .unwrap()
+            .validate_for_request(&acquire)
+            .is_err());
+        assert!(acquired.validate_for_request(&release).is_err());
+        let swapped = HostGatewayTurnResponseV1 {
+            schema_version: 1,
+            result: HostGatewayTurnResultV1::Revalidated {
+                acquire_id: id,
+                lease_handle: format!("hgl_{}_{}", "1".repeat(32), "3".repeat(32)),
+            },
+        };
+        assert!(swapped.validate_for_request(&revalidate).is_err());
+    }
+}
+
+// Host-only V3 epoch envelope. Frozen V1 and World codecs remain unchanged.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "HostGatewayInstanceRequestDef")]
+/// Strict instance-bound Host request. Observation conveys no execution authority.
+///
+/// ```
+/// use transport_api_types::HostGatewayInstanceRequestV3;
+/// assert!(serde_json::from_str::<HostGatewayInstanceRequestV3>("{}").is_err());
+/// ```
+pub struct HostGatewayInstanceRequestV3 {
+    pub schema_version: u32,
+    pub operation: HostGatewayInstanceOperationV3,
+}
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+/// Observation or one operation bound to the originally observed service epoch.
+pub enum HostGatewayInstanceOperationV3 {
+    Observe {},
+    Bound {
+        service_instance_id: String,
+        operation: HostGatewayTurnOperationV1,
+        #[serde(deserialize_with = "host_gateway_route_verifier_field_v3")]
+        route_verifier: Option<String>,
+    },
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HostGatewayInstanceRequestDef {
+    schema_version: u32,
+    operation: HostGatewayInstanceOperationV3,
+}
+impl HostGatewayInstanceRequestV3 {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 3 {
+            return Err("host_gateway_instance_invalid_request".into());
+        }
+        if let HostGatewayInstanceOperationV3::Bound {
+            service_instance_id,
+            operation,
+            route_verifier,
+        } = &self.operation
+        {
+            validate_host_gateway_instance_v3(service_instance_id)?;
+            match (operation, route_verifier) {
+                (HostGatewayTurnOperationV1::Acquire { .. }, Some(verifier))
+                    if verifier.len() == 64
+                        && verifier
+                            .bytes()
+                            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) => {}
+                (
+                    HostGatewayTurnOperationV1::Revalidate { .. }
+                    | HostGatewayTurnOperationV1::Release { .. },
+                    None,
+                ) => {}
+                _ => return Err("host_gateway_route_verifier_invalid".into()),
+            }
+            HostGatewayTurnRequestV1 {
+                schema_version: 1,
+                operation: operation.clone(),
+            }
+            .validate()?;
+            // Request locators cannot be rebound to another service instance.
+            match operation {
+                HostGatewayTurnOperationV1::Revalidate { lease_handle, .. }
+                | HostGatewayTurnOperationV1::Release {
+                    lease_handle: Some(lease_handle),
+                    ..
+                } => {
+                    if !lease_handle.starts_with(&format!("hgl_{service_instance_id}_")) {
+                        return Err("host_gateway_instance_wrong_binding".into());
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+}
+impl TryFrom<HostGatewayInstanceRequestDef> for HostGatewayInstanceRequestV3 {
+    type Error = String;
+    fn try_from(value: HostGatewayInstanceRequestDef) -> Result<Self, Self::Error> {
+        let request = Self {
+            schema_version: value.schema_version,
+            operation: value.operation,
+        };
+        request.validate()?;
+        Ok(request)
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "HostGatewayInstanceResponseDef")]
+/// Strict Host instance reply. Match every bound reply against its original request.
+///
+/// ```
+/// use transport_api_types::HostGatewayInstanceResponseV3;
+/// assert!(serde_json::from_str::<HostGatewayInstanceResponseV3>("{}").is_err());
+/// ```
+pub struct HostGatewayInstanceResponseV3 {
+    pub schema_version: u32,
+    pub result: HostGatewayInstanceResultV3,
+}
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+/// Actual observed epoch or the epoch-bound strict Host-turn result.
+pub enum HostGatewayInstanceResultV3 {
+    Observed {
+        service_instance_id: String,
+    },
+    Bound {
+        service_instance_id: String,
+        result: HostGatewayTurnResultV1,
+    },
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HostGatewayInstanceResponseDef {
+    schema_version: u32,
+    result: HostGatewayInstanceResultV3,
+}
+impl HostGatewayInstanceResponseV3 {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 3 {
+            return Err("host_gateway_instance_invalid_response".into());
+        }
+        let instance = match &self.result {
+            HostGatewayInstanceResultV3::Observed {
+                service_instance_id,
+            } => service_instance_id,
+            HostGatewayInstanceResultV3::Bound {
+                service_instance_id,
+                result,
+            } => {
+                HostGatewayTurnResponseV1 {
+                    schema_version: 1,
+                    result: result.clone(),
+                }
+                .validate()?;
+                match result {
+                    HostGatewayTurnResultV1::Acquired { lease_handle, .. }
+                    | HostGatewayTurnResultV1::Revalidated { lease_handle, .. } => {
+                        if !lease_handle.starts_with(&format!("hgl_{service_instance_id}_")) {
+                            return Err("host_gateway_instance_wrong_binding".into());
+                        }
+                    }
+                    _ => {}
+                }
+                service_instance_id
+            }
+        };
+        validate_host_gateway_instance_v3(instance)
+    }
+    pub fn validate_for_request(
+        &self,
+        request: &HostGatewayInstanceRequestV3,
+    ) -> Result<(), String> {
+        self.validate()?;
+        request.validate()?;
+        match (&request.operation, &self.result) {
+            (
+                HostGatewayInstanceOperationV3::Observe {},
+                HostGatewayInstanceResultV3::Observed { .. },
+            ) => Ok(()),
+            (
+                HostGatewayInstanceOperationV3::Bound {
+                    service_instance_id: expected,
+                    operation,
+                    ..
+                },
+                HostGatewayInstanceResultV3::Bound {
+                    service_instance_id: actual,
+                    result,
+                },
+            ) if expected == actual => HostGatewayTurnResponseV1 {
+                schema_version: 1,
+                result: result.clone(),
+            }
+            .validate_for_request(&HostGatewayTurnRequestV1 {
+                schema_version: 1,
+                operation: operation.clone(),
+            }),
+            _ => Err("host_gateway_instance_wrong_binding".into()),
+        }
+    }
+}
+impl TryFrom<HostGatewayInstanceResponseDef> for HostGatewayInstanceResponseV3 {
+    type Error = String;
+    fn try_from(value: HostGatewayInstanceResponseDef) -> Result<Self, Self::Error> {
+        let response = Self {
+            schema_version: value.schema_version,
+            result: value.result,
+        };
+        response.validate()?;
+        Ok(response)
+    }
+}
+fn validate_host_gateway_instance_v3(value: &str) -> Result<(), String> {
+    if value.len() != 32
+        || !value
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    {
+        return Err("host_gateway_instance_invalid_identity".into());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod host_gateway_instance_v3_tests {
+    use super::*;
+    #[test]
+    fn test_observation_is_closed_and_non_admitting() {
+        let observe: HostGatewayInstanceRequestV3 =
+            serde_json::from_str(r#"{"schema_version":3,"operation":{"kind":"observe"}}"#).unwrap();
+        let response: HostGatewayInstanceResponseV3 = serde_json::from_str(
+            r#"{"schema_version":3,"result":{"kind":"observed","service_instance_id":"11111111111111111111111111111111"}}"#
+        ).unwrap();
+        response.validate_for_request(&observe).unwrap();
+        for invalid in [
+            r#"{"schema_version":1,"operation":{"kind":"observe"}}"#,
+            r#"{"schema_version":3,"operation":{"kind":"observe","unexpected":0}}"#,
+            r#"{"schema_version":3,"schema_version":3,"operation":{"kind":"observe"}}"#,
+            r#"{"schema_version":3,"operation":{"kind":"bound","operation":{"kind":"release"}}}"#,
+        ] {
+            assert!(serde_json::from_str::<HostGatewayInstanceRequestV3>(invalid).is_err());
+        }
+    }
+}
+
+#[cfg(test)]
+mod host_gateway_instance_v3_ingress_tests {
+    use super::*;
+    use serde_json::{json, Value};
+    fn release() -> Value {
+        let token = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        json!({"schema_version":3,"operation":{"kind":"bound","service_instance_id":"1".repeat(32),"route_verifier":null,"operation":{
+            "kind":"release","acquire_id":HostGatewayTurnRequestV1::acquire_id_from_cleanup_token(token).unwrap(),
+            "cleanup_token":token,"lease_handle":null
+        }}})
+    }
+    #[test]
+    fn test_instance_bound_request_keeps_strict_nested_v1_ingress() {
+        let valid: HostGatewayInstanceRequestV3 = serde_json::from_value(release()).unwrap();
+        valid.validate().unwrap();
+        for path in ["", "/operation", "/operation/operation"] {
+            let mut unknown = release();
+            unknown
+                .pointer_mut(path)
+                .unwrap()
+                .as_object_mut()
+                .unwrap()
+                .insert("unknown".into(), json!(true));
+            assert!(serde_json::from_value::<HostGatewayInstanceRequestV3>(unknown).is_err());
+        }
+        for (path, field) in [
+            ("", "schema_version"),
+            ("", "operation"),
+            ("/operation", "kind"),
+            ("/operation", "service_instance_id"),
+            ("/operation", "operation"),
+            ("/operation", "route_verifier"),
+            ("/operation/operation", "kind"),
+            ("/operation/operation", "acquire_id"),
+            ("/operation/operation", "cleanup_token"),
+            ("/operation/operation", "lease_handle"),
+        ] {
+            let mut missing = release();
+            missing
+                .pointer_mut(path)
+                .unwrap()
+                .as_object_mut()
+                .unwrap()
+                .remove(field);
+            assert!(
+                serde_json::from_value::<HostGatewayInstanceRequestV3>(missing).is_err(),
+                "{path}/{field}"
+            );
+        }
+        let raw = serde_json::to_string(&release()).unwrap();
+        for (needle, duplicate) in [
+            (
+                "\"schema_version\":3",
+                "\"schema_version\":3,\"schema_version\":3",
+            ),
+            (
+                "\"kind\":\"bound\"",
+                "\"kind\":\"bound\",\"kind\":\"bound\"",
+            ),
+            (
+                "\"kind\":\"release\"",
+                "\"kind\":\"release\",\"kind\":\"release\"",
+            ),
+            (
+                "\"lease_handle\":null",
+                "\"lease_handle\":null,\"lease_handle\":null",
+            ),
+        ] {
+            assert!(serde_json::from_str::<HostGatewayInstanceRequestV3>(
+                &raw.replacen(needle, duplicate, 1)
+            )
+            .is_err());
+        }
+        for version in [0, 1, 2, 4] {
+            let mut invalid = release();
+            invalid["schema_version"] = json!(version);
+            assert!(serde_json::from_value::<HostGatewayInstanceRequestV3>(invalid).is_err());
+        }
+        let mut changed = release();
+        changed["operation"]["operation"]["lease_handle"] =
+            json!(format!("hgl_{}_{}", "2".repeat(32), "3".repeat(32)));
+        assert!(serde_json::from_value::<HostGatewayInstanceRequestV3>(changed).is_err());
+    }
+    #[test]
+    fn test_instance_response_echo_and_operation_matching() {
+        let request: HostGatewayInstanceRequestV3 = serde_json::from_value(release()).unwrap();
+        let response = json!({"schema_version":3,"result":{"kind":"bound","service_instance_id":"1".repeat(32),
+            "result":{"kind":"unknown","acquire_id":release()["operation"]["operation"]["acquire_id"]}}});
+        let valid: HostGatewayInstanceResponseV3 =
+            serde_json::from_value(response.clone()).unwrap();
+        valid.validate_for_request(&request).unwrap();
+        for path in ["", "/result", "/result/result"] {
+            let mut unknown = response.clone();
+            unknown
+                .pointer_mut(path)
+                .unwrap()
+                .as_object_mut()
+                .unwrap()
+                .insert("unknown".into(), json!(0));
+            assert!(serde_json::from_value::<HostGatewayInstanceResponseV3>(unknown).is_err());
+        }
+        for (path, field) in [
+            ("", "schema_version"),
+            ("", "result"),
+            ("/result", "kind"),
+            ("/result", "service_instance_id"),
+            ("/result", "result"),
+            ("/result/result", "kind"),
+            ("/result/result", "acquire_id"),
+        ] {
+            let mut missing = response.clone();
+            missing
+                .pointer_mut(path)
+                .unwrap()
+                .as_object_mut()
+                .unwrap()
+                .remove(field);
+            assert!(serde_json::from_value::<HostGatewayInstanceResponseV3>(missing).is_err());
+        }
+        let mut wrong_epoch = response.clone();
+        wrong_epoch["result"]["service_instance_id"] = json!("2".repeat(32));
+        let wrong: HostGatewayInstanceResponseV3 = serde_json::from_value(wrong_epoch).unwrap();
+        assert!(wrong.validate_for_request(&request).is_err());
+        let observed: HostGatewayInstanceResponseV3 =
+            serde_json::from_value(json!({"schema_version":3,"result":{
+            "kind":"observed","service_instance_id":"1".repeat(32)}}))
+            .unwrap();
+        assert!(observed.validate_for_request(&request).is_err());
+    }
+}
+
+fn host_gateway_route_verifier_field_v3<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<String>, D::Error> {
+    Option::<String>::deserialize(deserializer)
+}
+impl HostGatewayInstanceRequestV3 {
+    /// Produce a public route verifier from a distinct local capability and its
+    /// original epoch/key. This never authenticates a caller or grants permission.
+    pub fn route_verifier_from_capability(
+        epoch: &str,
+        acquisition: &str,
+        capability: &str,
+    ) -> Result<String, String> {
+        use base64::Engine;
+        use sha2::{Digest, Sha256};
+        validate_host_gateway_instance_v3(epoch)?;
+        let acquisition = acquisition
+            .strip_prefix("hgt_")
+            .ok_or("host_gateway_route_verifier_invalid")?;
+        if acquisition.len() != 64
+            || !acquisition
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
+            return Err("host_gateway_route_verifier_invalid".into());
+        }
+        if capability.len() != 43 {
+            return Err("host_gateway_route_verifier_invalid".into());
+        }
+        let decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(capability)
+            .map_err(|_| "host_gateway_route_verifier_invalid")?;
+        if decoded.len() != 32
+            || base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&decoded) != capability
+        {
+            return Err("host_gateway_route_verifier_invalid".into());
+        }
+        let mut hash = Sha256::new();
+        hash.update(b"substrate.host-gateway.local-route.v1\0");
+        for value in [epoch, acquisition] {
+            for pair in value.as_bytes().chunks_exact(2) {
+                let byte = u8::from_str_radix(
+                    std::str::from_utf8(pair).map_err(|_| "host_gateway_route_verifier_invalid")?,
+                    16,
+                )
+                .map_err(|_| "host_gateway_route_verifier_invalid")?;
+                hash.update([byte]);
+            }
+        }
+        hash.update(decoded);
+        Ok(format!("{:x}", hash.finalize()))
+    }
+}
+
+#[cfg(test)]
+mod host_route_verifier_v3_tests {
+    use super::*;
+    #[test]
+    fn test_route_verifier_independent_vector_and_cross_turn_binding() {
+        let capability = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        let epoch = "1".repeat(32);
+        let key = format!("hgt_{}", "2".repeat(64));
+        let value =
+            HostGatewayInstanceRequestV3::route_verifier_from_capability(&epoch, &key, capability)
+                .unwrap();
+        assert_eq!(
+            value,
+            "a2abb73c94f9c5b5947c2014495f424bcc6b026927dcb35048780fad3dc535c2"
+        );
+        assert_ne!(
+            value,
+            HostGatewayInstanceRequestV3::route_verifier_from_capability(
+                &"4".repeat(32),
+                &key,
+                capability
+            )
+            .unwrap()
+        );
+        assert_ne!(
+            value,
+            HostGatewayInstanceRequestV3::route_verifier_from_capability(
+                &epoch,
+                &format!("hgt_{}", "5".repeat(64)),
+                capability
+            )
+            .unwrap()
+        );
+    }
+}
+
+#[cfg(test)]
+mod host_acquire_route_verifier_v3_tests {
+    use super::*;
+    use serde_json::json;
+    #[test]
+    fn test_acquire_requires_verifier_other_operations_require_explicit_null() {
+        let cleanup = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        let acquisition = HostGatewayTurnRequestV1::acquire_id_from_cleanup_token(cleanup).unwrap();
+        let mut body = json!({"schema_version":3,"operation":{"kind":"bound","service_instance_id":"1".repeat(32),
+            "route_verifier":"a".repeat(64),"operation":{"kind":"acquire","acquire_id":acquisition,"cleanup_token":cleanup,
+            "selection":{"schema_version":1,"start":{"schema_version":1,"authority_store_id":"store_original",
+                "original_start_intent_id":"intent_original","original_start_issuer_request_id":format!("req_{}","a".repeat(64)),
+                "original_session_id":"session_original","context_sha256":"b".repeat(64),"native_selection_sha256":"c".repeat(64),"requested_selection_sha256":"d".repeat(64)},
+                "runtime":{"selection_role":"host_actor","orchestration_session_id":"session_original","participant_id":"host_actor","backend_id":"cli:codex-host","run_id":"run_current"}}}}});
+        assert!(serde_json::from_value::<HostGatewayInstanceRequestV3>(body.clone()).is_ok());
+        body["operation"]["route_verifier"] = json!(null);
+        assert!(serde_json::from_value::<HostGatewayInstanceRequestV3>(body.clone()).is_err());
+        body["operation"]
+            .as_object_mut()
+            .unwrap()
+            .remove("route_verifier");
+        assert!(serde_json::from_value::<HostGatewayInstanceRequestV3>(body.clone()).is_err());
+        body["operation"]["route_verifier"] = json!("a".repeat(64));
+        body["operation"]["operation"] = json!({"kind":"release","acquire_id":acquisition,"cleanup_token":cleanup,"lease_handle":null});
+        assert!(serde_json::from_value::<HostGatewayInstanceRequestV3>(body.clone()).is_err());
+        body["operation"]["route_verifier"] = json!(null);
+        assert!(serde_json::from_value::<HostGatewayInstanceRequestV3>(body).is_ok());
+    }
+}
+
+/// Exact selectors for the Linux native owner operation. None is an authority claim.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceCurrentResourceV1 {
+    pub workspace_path: String,
+    pub workspace_ref: String,
+    pub workspace_incarnation: String,
+    pub orchestration_session_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub backend_id: String,
+}
+
+/// Mandatory held HSA observation, distinct from native principal and read permission.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceHeldAuthorityObservationV1 {
+    pub authority_store_id: String,
+    pub home_path: String,
+    pub home_device: u64,
+    pub home_inode: u64,
+    pub root_revision: u64,
+    pub authority_revision: u64,
+    pub authority_record_sha256: String,
+    pub authoritative_lineage_sha256: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "operation", deny_unknown_fields)]
+pub enum WorkspaceCurrentOperationV1 {
+    CurrentActorRead {
+        lane_ref: String,
+        association_incarnation: String,
+        association_revision: u64,
+        backend_custody_ref: String,
+        expected_actor: String,
+    },
+    /// Calls the actual source-owner publisher; it cannot request a validation grant.
+    PublishAssociation,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceCurrentRequestV1 {
+    pub schema_version: u32,
+    pub native_context: InstallBootstrapContextCarrierV1,
+    pub resource: WorkspaceCurrentResourceV1,
+    pub observation: WorkspaceHeldAuthorityObservationV1,
+    pub operation: WorkspaceCurrentOperationV1,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum WorkspaceCurrentRefusalV1 {
+    Denied,
+    Unsupported,
+    Ineligible,
+    Changed,
+    Integrity,
+}
+
+/// Revision observation only; never a send or execution capability.
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceSettingsRevisionV1 {
+    pub incarnation: String,
+    pub revision: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceReadRevisionVectorV1 {
+    pub settings: Vec<Option<WorkspaceSettingsRevisionV1>>,
+    pub workspace_revision: u64,
+    pub association_incarnation: String,
+    pub association_revision: u64,
+    pub authority_store_id: String,
+    pub root_revision: u64,
+    pub authority_revision: u64,
+    pub custody_incarnation: String,
+    pub custody_revision: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceEligibleObservationV1 {
+    pub workspace_ref: String,
+    pub workspace_incarnation: String,
+    pub lane_ref: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub backend_id: String,
+    pub actor_id: String,
+    pub revisions: WorkspaceReadRevisionVectorV1,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(tag = "state", deny_unknown_fields)]
+pub enum WorkspacePreflightResponseV1 {
+    Refused { reason: WorkspaceCurrentRefusalV1 },
+    EligibleObservation(Box<WorkspaceEligibleObservationV1>),
+}
+
+/// Exact independent source-owner association update; not executed by a read.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceAssociationUpdateV1 {
+    pub current: WorkspaceCurrentRequestV1,
+    pub active: bool,
+}
+
+/// Exact approved YAML patches, parsed by the existing strict owner parsers.
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceInitialSettingsV1 {
+    pub config_yaml: String,
+    pub policy_yaml: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceInitializationOfferV1 {
+    pub schema_version: u32,
+    pub native_context: InstallBootstrapContextCarrierV1,
+    pub home_device: u64,
+    pub home_inode: u64,
+    pub selected_location: String,
+    pub root_device: u64,
+    pub root_inode: u64,
+    pub settings: WorkspaceInitialSettingsV1,
+    pub effects: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "decision", deny_unknown_fields)]
+pub enum WorkspaceInitializationDecisionV1 {
+    Approved {
+        offer: Box<WorkspaceInitializationOfferV1>,
+    },
+    Denied,
+    Cancelled,
+}
+
+/// Bounded nonsecret projection carried by the current-actor reply.
+/// Boxing this new reply payload keeps the enum small without changing its JSON map.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceCurrentActorV1 {
+    pub workspace_ref: String,
+    pub workspace_incarnation: String,
+    pub orchestration_session_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub backend_id: String,
+    pub authority_store_id: String,
+    pub root_revision: u64,
+    pub authority_revision: u64,
+    pub authority_record_sha256: String,
+    pub authoritative_lineage_sha256: String,
+    pub lane_ref: String,
+    pub association_incarnation: String,
+    pub association_revision: u64,
+    pub backend_custody_ref: String,
+    pub actor_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "state", deny_unknown_fields)]
+pub enum WorkspaceCurrentResponseV1 {
+    Refused {
+        reason: WorkspaceCurrentRefusalV1,
+    },
+    CurrentActor(Box<WorkspaceCurrentActorV1>),
+    AssociationPublished {
+        lane_ref: String,
+        association_incarnation: String,
+        association_revision: u64,
+        backend_custody_ref: String,
+        effects: WorkspaceAssociationEffectsV1,
+    },
+    AssociationPublicationFailed {
+        reason: WorkspaceCurrentRefusalV1,
+        effects: WorkspaceAssociationEffectsV1,
+    },
+}
+
+/// Effects of the new selected-World publication, reported independently per source.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceAssociationUpdateEffectsV1 {
+    pub association: WorkspaceAssociationEffectsV1,
+    pub receipt: WorkspaceAssociationEffectsV1,
+}
+impl WorkspaceAssociationUpdateEffectsV1 {
+    /// Loss after submission leaves both source publications unknown.
+    ///
+    /// ```
+    /// let effects = transport_api_types::WorkspaceAssociationUpdateEffectsV1::unknown();
+    /// assert_eq!(effects.receipt.published_visible, None);
+    /// ```
+    pub fn unknown() -> Self {
+        Self {
+            association: WorkspaceAssociationEffectsV1::unknown(),
+            receipt: WorkspaceAssociationEffectsV1::unknown(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(tag = "state", deny_unknown_fields)]
+pub enum WorkspaceAssociationUpdateResponseV1 {
+    Refused {
+        reason: WorkspaceCurrentRefusalV1,
+    },
+    AssociationPublished {
+        lane_ref: String,
+        association_incarnation: String,
+        association_revision: u64,
+        backend_custody_ref: String,
+        effects: WorkspaceAssociationUpdateEffectsV1,
+    },
+    AssociationPublicationFailed {
+        reason: WorkspaceCurrentRefusalV1,
+        effects: WorkspaceAssociationUpdateEffectsV1,
+    },
+}
+
+/// Publication effects only. Reads have no effect-bearing operation.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceAssociationEffectsV1 {
+    pub staging_created: Option<bool>,
+    pub published_visible: Option<bool>,
+    pub directory_sync_confirmed: Option<bool>,
+}
+
+impl WorkspaceCurrentRequestV1 {
+    /// Validate syntax and bounds; callers must separately authenticate all selectors.
+    pub fn validate(&self) -> Result<(), &'static str> {
+        fn text(value: &str, limit: usize) -> bool {
+            !value.is_empty()
+                && value.len() <= limit
+                && !value.bytes().any(|b| b == 0 || b.is_ascii_control())
+        }
+        fn path(value: &str) -> bool {
+            text(value, 4096)
+                && std::path::Path::new(value).is_absolute()
+                && std::path::Path::new(value).components().all(|part| {
+                    matches!(
+                        part,
+                        std::path::Component::RootDir | std::path::Component::Normal(_)
+                    )
+                })
+        }
+        fn sha(value: &str) -> bool {
+            value.len() == 64
+                && value
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        }
+        let r = &self.resource;
+        let o = &self.observation;
+        if self.schema_version != 1
+            || self.native_context.validate().is_err()
+            || !path(&r.workspace_path)
+            || !path(&o.home_path)
+            || ![
+                &r.workspace_ref,
+                &r.workspace_incarnation,
+                &r.orchestration_session_id,
+                &r.world_id,
+                &r.backend_id,
+                &o.authority_store_id,
+            ]
+            .into_iter()
+            .all(|v| text(v, 256))
+            || std::path::Path::new(&r.world_id).components().count() != 1
+            || !matches!(
+                std::path::Path::new(&r.world_id).components().next(),
+                Some(std::path::Component::Normal(_))
+            )
+            || o.home_inode == 0
+            || o.root_revision == 0
+            || o.authority_revision == 0
+            || !sha(&o.authority_record_sha256)
+            || !sha(&o.authoritative_lineage_sha256)
+        {
+            return Err("Malformed");
+        }
+        if let WorkspaceCurrentOperationV1::CurrentActorRead {
+            lane_ref,
+            association_incarnation,
+            association_revision,
+            backend_custody_ref,
+            expected_actor,
+        } = &self.operation
+        {
+            if !text(lane_ref, 256)
+                || !text(association_incarnation, 256)
+                || *association_revision == 0
+                || !sha(backend_custody_ref)
+                || !text(expected_actor, 256)
+            {
+                return Err("Malformed");
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Default for WorkspaceAssociationEffectsV1 {
+    fn default() -> Self {
+        Self {
+            staging_created: Some(false),
+            published_visible: Some(false),
+            directory_sync_confirmed: Some(false),
+        }
+    }
+}
+impl WorkspaceAssociationEffectsV1 {
+    /// Transport loss after submission cannot establish absence of publication effects.
+    ///
+    /// ```
+    /// let effects = transport_api_types::WorkspaceAssociationEffectsV1::unknown();
+    /// assert_eq!(effects.published_visible, None);
+    /// ```
+    pub fn unknown() -> Self {
+        Self {
+            staging_created: None,
+            published_visible: None,
+            directory_sync_confirmed: None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod workspace_current_wire_tests {
+    use super::*;
+    fn request() -> WorkspaceCurrentRequestV1 {
+        WorkspaceCurrentRequestV1 {
+            schema_version: 1,
+            native_context: InstallBootstrapContextCarrierV1::from_context(
+                InstallBootstrapContextV1::new_unix("/private/home", "fixture", 1001).unwrap(),
+            )
+            .unwrap(),
+            resource: WorkspaceCurrentResourceV1 {
+                workspace_path: "/private/work".into(),
+                workspace_ref: "ws_exact".into(),
+                workspace_incarnation: "wsi_exact".into(),
+                orchestration_session_id: "session".into(),
+                world_id: "wld_exact".into(),
+                world_generation: 0,
+                backend_id: "cli:codex".into(),
+            },
+            observation: WorkspaceHeldAuthorityObservationV1 {
+                authority_store_id: "store".into(),
+                home_path: "/private/home".into(),
+                home_device: 1,
+                home_inode: 1,
+                root_revision: 1,
+                authority_revision: 1,
+                authority_record_sha256: "a".repeat(64),
+                authoritative_lineage_sha256: "b".repeat(64),
+            },
+            operation: WorkspaceCurrentOperationV1::PublishAssociation,
+        }
+    }
+    #[test]
+    fn test_workspace_current_wire_strict_bounds_and_genuine_generation_zero() {
+        let base = request();
+        assert!(base.validate().is_ok());
+        for mutate in 0..7 {
+            let mut wrong = base.clone();
+            match mutate {
+                0 => wrong.schema_version = 2,
+                1 => wrong.resource.world_id = "../other".into(),
+                2 => wrong.resource.workspace_path = "/private/../work".into(),
+                3 => wrong.observation.root_revision = 0,
+                4 => wrong.observation.home_inode = 0,
+                5 => wrong.observation.authority_record_sha256 = "z".repeat(64),
+                _ => wrong.resource.orchestration_session_id = "s".repeat(257),
+            }
+            assert!(wrong.validate().is_err(), "mutation {mutate}");
+        }
+        let mut value = serde_json::to_value(&base).unwrap();
+        value
+            .as_object_mut()
+            .unwrap()
+            .insert("authorized".into(), true.into());
+        assert!(serde_json::from_value::<WorkspaceCurrentRequestV1>(value).is_err());
+        let raw = serde_json::to_string(&base).unwrap().replacen(
+            "\"schema_version\":1",
+            "\"schema_version\":1,\"schema_version\":1",
+            1,
+        );
+        assert!(serde_json::from_str::<WorkspaceCurrentRequestV1>(&raw).is_err());
+        assert_ne!(
+            WorkspaceAssociationEffectsV1::unknown(),
+            WorkspaceAssociationEffectsV1::default()
+        );
+    }
+}
+
+#[cfg(test)]
+mod workspace_current_response_wire_tests {
+    use super::*;
+
+    #[test]
+    fn test_workspace_current_response_boxing_preserves_strict_flat_wire() {
+        let expected = serde_json::json!({
+            "state": "CurrentActor", "workspace_ref": "ws", "workspace_incarnation": "wsi",
+            "orchestration_session_id": "session", "world_id": "wld", "world_generation": 0,
+            "backend_id": "cli:codex", "authority_store_id": "store", "root_revision": 1,
+            "authority_revision": 2, "authority_record_sha256": "a".repeat(64),
+            "authoritative_lineage_sha256": "b".repeat(64), "lane_ref": "lane",
+            "association_incarnation": "association", "association_revision": 1,
+            "backend_custody_ref": "c".repeat(64), "actor_id": "actor"
+        });
+        let reply: WorkspaceCurrentResponseV1 = serde_json::from_value(expected.clone()).unwrap();
+        assert!(
+            matches!(&reply, WorkspaceCurrentResponseV1::CurrentActor(current) if current.world_generation == 0)
+        );
+        assert_eq!(serde_json::to_value(&reply).unwrap(), expected);
+        let mut unknown = expected.clone();
+        unknown
+            .as_object_mut()
+            .unwrap()
+            .insert("authorized".into(), true.into());
+        assert!(serde_json::from_value::<WorkspaceCurrentResponseV1>(unknown).is_err());
+        let mut missing = expected.clone();
+        missing.as_object_mut().unwrap().remove("actor_id");
+        assert!(serde_json::from_value::<WorkspaceCurrentResponseV1>(missing).is_err());
+        let raw = serde_json::to_string(&expected).unwrap().replacen(
+            "\"actor_id\":\"actor\"",
+            "\"actor_id\":\"actor\",\"actor_id\":\"actor\"",
+            1,
+        );
+        assert!(serde_json::from_str::<WorkspaceCurrentResponseV1>(&raw).is_err());
     }
 }

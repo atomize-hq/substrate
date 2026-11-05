@@ -12,6 +12,60 @@
 
 > **Authority boundary:** This file owns only the extracted `RuntimeEventTransport`, `WorldWorkReceiptRegistry`, `WorldWorkExecutionSupervisor`, and `RetainedWorkerRuntime` seam rows. It does not promote any seam, move the A0 authority-leak inventory, reopen D5/D6/D7 or already-extracted D8 family owners, rewrite `b1-b2-1/` or `b3-1-c1/`, extract the remaining C/D seam families, or authorize B0/B1/B2.1/B3.1/B3.2/B4/C implementation work.
 
+## World-bound local controller settlement sources
+
+A configured local controller can execute a native Host selection while its requested selection
+is World-scoped. Its source classification joins the original configured selection, the issued
+helper and actual Applied HSA run through
+[`AuthenticatedWorldBoundControllerRunV1`](../../../crates/shell/src/execution/agent_runtime/host_session_authority/world_bound_controller.rs).
+A World binding or a missing protected owner alone supplies none of that authority. Current
+account/policy and operation-specific effect admission remain separate.
+
+The controller's native terminal closes its own turn. The independent World work/attention cut
+reads the complete enrolled B1 session, including pending proposals, E2 reservations and
+commitments, admission records, HSA retained registrations, supervisor observations and the
+closed canonical attention subtree. Missing, pending, interrupted or unclassified coverage
+remains unresolved. In particular, an R0 registration is not admission or execution evidence;
+Routable/Terminal admission state alone does not close bootstrap attention. The World source
+interpreter carries unmatched HSA registrations explicitly as unclassified participants while
+the admission owner's original codec remains strict.
+
+World controller settlement uses separate immutable artifacts:
+
+| Artifact | Binding |
+|---|---|
+| Start continuation schema 3 | Original native/requested selections, exact World identity/generation and independent work/attention cut |
+| Post-turn completion schema 4 | Exact current issued run/claim/attempt, Accepted input, consumed handle, native sequence/terminal, work/attention cut and current-target-produced continuation |
+
+The continuation produced by Resume remains a schema-1 handle owned by that Resume's current
+target; the next Resume consumes it. Structural World history preserves handles through
+interleaved R0 edges and checks exact registration/application/completion commitments. Typed
+object-aware history independently authenticates the actual artifacts and their ordering.
+Historical direct-Host None records and validators retain their own schemas and meaning.
+Successful resumable completion with unresolved World coverage yields `AwaitingAttention`;
+complete clean coverage permits `ParkedResumable`. A local terminal never certifies separate
+World work or manufactures a B1 acceptance.
+
+The settlement cut retains the actual physical source guards through its final exact HSA
+commit. It performs no IPC or nested HSA read inside that commit callback. Canonical retained
+attention publication uses the same Root lock and exact persisted B1 plan. New ordinary B1
+proposals and E2 Spawn/Fork population publish only after a genuine current issued run and
+`ActiveAttached` observation is checked again against the locked HSA preimage, before
+reconciliation, initialization or writes. Exact joins and progress of already-captured work
+retain their independent owner contracts; an idempotent join grants no new World send.
+
+The helper owns its actual issued observer tasks, including detached task producers and member
+observers. After closing local ingress and accepted handlers, it joins that finite population
+and one-off observer descendants before its runtime exits. Public response delivery and the
+per-intent successor launch guard are independent of this process wait. Observer lifetime does
+not itself prove native terminality, attention closure, fresh admission, or a backend lease.
+Separate World physical-closeout proofs bind the real launch/settlement/runtime/native wait;
+checked SDK, task, stdio, child, gateway and transport cleanup remain required.
+
+This source contract does not promote the historical seam rows below or establish public,
+installed, initial Spawn/Fork, later-child-R0Routable or protected qualification. Those require
+their attributable executing-population and cleanup evidence.
+
 ## Proposed B01/B03 composition boundary — 2026-10-21
 
 The [joint consumer contract](../../../docs/contracts/draft/collider-b01-b05-handoff.md#32-immutable-request-identity-and-the-admission-boundary) and [B03 protocol](../../../docs/contracts/draft/lane-world-binding.md#47-associationadmission-consistency-and-recovery) propose an authenticated consumer ingress, original-request/material correlation, exact association reservation and runtime consume/fence extension. These are target responsibilities, not present exported APIs, implementation admission, component-owner signoff or a change to the historical seam classifications below.
@@ -53,9 +107,17 @@ commitment with no prompt/payload preimage, and stable worker/bootstrap identity
 completes publication and `fsync`, privately recomputes/equality-checks the request commitment, then
 supplies only an opaque authenticated reservation capability/ref plus the identities through the
 bounded B3.2a reservation input. B3.2a consumes the preallocated identities in its
-unchanged fingerprint. Only the existing `allow_capability_narrowing == true` rejection may admit an
-authenticated E2 narrowing attestation so a nonempty `RestrictedWorldFs` E1 patch can pass;
-`UnchangedParent` and empty patches cannot obtain that attestation. The opaque proof is threaded
+unchanged fingerprint. Protected/default `allow_capability_narrowing == true` admission still
+requires the authenticated E2 narrowing attestation for an actually applied nonempty
+`RestrictedWorldFs` E1 patch; `UnchangedParent` and empty patches cannot obtain it. Genuine ordinary
+configured unchanged-parent admission has a separate private typed opaque condition preserving
+original configured custody/Start/selection/account and the exact reservation, E1 and subject.
+E2 recomputes the complete B3-supplied request before the shared-root B3 lock and returns only an
+opaque check. B3's private factory binds that check to a local borrow of the same already-owned
+plan; it cannot pair check A with plan B. No E2 preimage, MAC/key or snapshot bytes are exported,
+no durable ordinary flag is added, and immutable cleanup truth adds no new current-permission
+reauthorization. Parent permission remains exact and distinct from applied narrowing; future turns
+still intersect current parent with the immutable launch cap and turn patch. The opaque proof is threaded
 through all seven validator call sites and only their minimum wrappers, including
 `mark_admission_routable`, `mark_admission_terminal`, and `mark_admission_interrupted`, without entering B3.2a
 plan/fingerprint/record bytes. After the first

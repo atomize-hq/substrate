@@ -269,6 +269,14 @@ pub(crate) fn resolve_world_network_policy_for_snapshot(
     resolve_world_network_policy(snapshot, config.world.net.filter)
 }
 
+#[cfg(target_os = "linux")]
+pub(crate) fn resolve_ordinary_world_network_policy_for_snapshot(
+    snapshot: PolicySnapshotV3,
+    captured_config: &crate::execution::config_model::SubstrateConfig,
+) -> Result<ResolvedWorldNetworkPolicy> {
+    resolve_world_network_policy(snapshot, captured_config.world.net.filter)
+}
+
 pub(crate) fn bootstrap_world_spec(project_dir: PathBuf, fs_mode: WorldFsMode) -> WorldSpec {
     match resolve_world_network_policy_for_cwd(&project_dir) {
         Ok(network_policy) => world_spec_for_network_policy(project_dir, fs_mode, &network_policy),
@@ -793,6 +801,87 @@ fn compute_snapshot_hash(snapshot: &PolicySnapshotV3) -> Result<String> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
+#[cfg(target_os = "linux")]
+pub(crate) fn resolve_ordinary_dispatch_narrowed_policy_snapshot(
+    selection: &crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    parent: &substrate_broker::Policy,
+    carrier: &transport_api_types::DispatchPolicyNarrowingPatchV1,
+    authenticated: &AuthenticatedDispatchPolicyNarrowingContextV1,
+    world_root: &Path,
+) -> Result<ResolvedDispatchPolicySnapshotV1> {
+    selection.require_ordinary_configured_authority()?;
+    selection.revalidate()?;
+    crate::execution::agent_runtime::dispatch_contract::OrdinaryDispatchPolicyNarrowingPatchV2::from_patch(carrier)?;
+    let current = selection
+        .held_authority()
+        .resolve_current_exact(selection.original_session_id(), None)
+        .map_err(|error| anyhow!(error.to_string()))?;
+    let scope = &authenticated.authority;
+    if scope.orchestration_session_id != selection.original_session_id()
+        || scope.caller_participant_id != selection.current_participant_id()
+        || scope.target_backend_id != selection.requested_selection().backend_id
+        || selection.current_world_binding()
+            != Some((
+                scope.target_world.world_id.as_str(),
+                scope.target_world.world_generation,
+            ))
+        || current
+            .authority
+            .current_policy_ref
+            .as_ref()
+            .map(crate::execution::agent_runtime::dispatch_policy_commitment::transport_policy_ref)
+            .as_ref()
+            != Some(&scope.parent_policy_ref)
+        || current.current_policy != scope.parent_policy
+    {
+        anyhow::bail!("ordinary narrowing lost held original selection or exact current policy");
+    }
+    authenticate_parent_policy(parent, authenticated)?;
+    let request = substrate_broker::DispatchWorldFsNarrowingRequestV1 {
+        bindings: broker_bindings_from_carrier(carrier)?,
+        world_fs: carrier
+            .restricted_policy_patch
+            .world_fs
+            .as_ref()
+            .map(broker_world_fs_patch_from_transport),
+        reason: carrier.reason.clone(),
+    };
+    let authenticated = substrate_broker::AuthenticatedDispatchPolicyNarrowingContextV1 {
+        bindings: broker_bindings_from_authenticated(authenticated)?,
+    };
+    let resolved =
+        substrate_broker::EffectivePolicyResolver::resolve_ordinary_dispatch_world_fs_narrowing(
+            parent,
+            &request,
+            &authenticated,
+            world_root,
+        )?;
+    let mut snapshot = snapshot_from_policy(&resolved.policy)?;
+    if request
+        .world_fs
+        .as_ref()
+        .is_some_and(|patch| !patch.is_empty())
+        && !snapshot.world_fs.write.enabled
+    {
+        let read = snapshot
+            .world_fs
+            .read
+            .as_ref()
+            .ok_or_else(|| anyhow!("narrowed PolicySnapshotV3 is missing world_fs.read"))?;
+        snapshot.world_fs.write.allow_list = read.allow_list.clone();
+        snapshot = snapshot.canonicalize().map_err(|error| {
+            anyhow!("invalid PolicySnapshotV3 after restricted write/read alignment: {error}")
+        })?;
+    }
+    let snapshot_hash = compute_snapshot_hash(&snapshot)?;
+    Ok(ResolvedDispatchPolicySnapshotV1 {
+        snapshot,
+        snapshot_hash,
+        bindings: resolved.bindings,
+        reason: resolved.reason,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1148,6 +1237,8 @@ mod tests {
             env.insert("SUBSTRATE_WORLD_REQUIRE_WORLD".to_string(), "1".to_string());
             runtime
                 .block_on(service.execute(ExecuteRequest {
+                    schema_version: 1,
+                    ordinary_start_selection: None,
                     profile: None,
                     cmd: format!("sh -lc 'cat {command}'"),
                     cwd: Some(root.path().display().to_string()),

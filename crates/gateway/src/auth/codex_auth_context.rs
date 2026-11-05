@@ -73,6 +73,26 @@ impl CodexIntegratedAuthHandoff {
         Ok(Self::new(account_id, SecretString::new(access_token)))
     }
 
+    /// Resolve this exact handoff without installing or reading process-global
+    /// auth state. Uses the same explicit-account/JWT precedence as the gateway.
+    ///
+    /// ```
+    /// use substrate_gateway::auth::codex_auth_context::CodexIntegratedAuthHandoff;
+    /// use secrecy::SecretString;
+    /// let handoff = CodexIntegratedAuthHandoff::new(
+    ///     Some("synthetic-account".into()), SecretString::new("synthetic-token".into()),
+    /// );
+    /// assert_eq!(handoff.resolve()?.account_id, "synthetic-account");
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn resolve(self) -> Result<ResolvedCodexAuthContext> {
+        resolve_selected_mode(
+            CodexAuthMode::Integrated,
+            self.account_id,
+            self.access_token,
+        )
+    }
+
     pub fn from_env() -> Result<Option<Self>> {
         let access_token = read_env_trimmed(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN)?;
         let Some(access_token) = access_token else {
@@ -494,5 +514,36 @@ mod tests {
         assert_eq!(resolved.mode, CodexAuthMode::Standalone);
         assert_eq!(resolved.account_id, "acct_local");
         assert_eq!(resolved.account_id_source, CodexAccountIdSource::Explicit);
+    }
+
+    #[test]
+    fn direct_handoff_resolution_retains_existing_explicit_account_precedence() {
+        let handoff = CodexIntegratedAuthHandoff::new(
+            Some("acct-pinned-explicit".into()),
+            codex_access_token("acct-jwt-other"),
+        );
+        let resolved = handoff.resolve().unwrap();
+        assert_eq!(resolved.mode, CodexAuthMode::Integrated);
+        assert_eq!(resolved.account_id, "acct-pinned-explicit");
+        assert_eq!(resolved.account_id_source, CodexAccountIdSource::Explicit);
+    }
+
+    #[test]
+    fn direct_handoff_resolution_uses_existing_jwt_fallback_and_refuses_missing_identity() {
+        let resolved = CodexIntegratedAuthHandoff::new(None, codex_access_token("acct-pinned-jwt"))
+            .resolve()
+            .unwrap();
+        assert_eq!(resolved.mode, CodexAuthMode::Integrated);
+        assert_eq!(resolved.account_id, "acct-pinned-jwt");
+        assert_eq!(
+            resolved.account_id_source,
+            CodexAccountIdSource::JwtFallback
+        );
+        let error =
+            CodexIntegratedAuthHandoff::new(None, SecretString::new("synthetic-not-a-jwt".into()))
+                .resolve()
+                .unwrap_err();
+        assert!(error.to_string().contains("could not resolve account_id"));
+        assert!(!error.to_string().contains("synthetic-not-a-jwt"));
     }
 }

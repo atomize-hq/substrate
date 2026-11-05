@@ -256,7 +256,7 @@ pub fn run_shim() -> Result<i32> {
     let outcome = match execute_command(&real_binary, &args, &ctx.command_name, capture_stderr) {
         Ok(outcome) => outcome,
         Err(err) => {
-            log_spawn_failure(&ctx, &real_binary, timestamp, &err);
+            log_spawn_failure(&trace_context, &ctx, &real_binary, timestamp, &err);
             return Err(err);
         }
     };

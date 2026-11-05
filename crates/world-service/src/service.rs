@@ -242,6 +242,11 @@ fn resolve_landlock_helper_src() -> Option<String> {
 #[derive(Clone)]
 pub struct WorldService {
     #[cfg(target_os = "linux")]
+    host_gateway_turns: Arc<crate::gateway_runtime::HostGatewayTurnOwnerV1>,
+    // Keep ordinary configured custody independent of protected E3 setup.
+    #[cfg(target_os = "linux")]
+    ordinary_selection_authority: Option<Arc<substrate_shell::OrdinarySelectionAuthorityV1>>,
+    #[cfg(target_os = "linux")]
     pub(crate) accepted_home_authority:
         Option<Arc<config_projection::ConfiguredAcceptedHomeAuthorityV1>>,
     #[cfg(target_os = "linux")]
@@ -271,6 +276,547 @@ pub struct WorldService {
     last_policy_resolution_mode: Arc<AtomicU8>,
     last_netfilter_requested: Arc<AtomicU8>,
     last_netfilter_failure_reason: Arc<RwLock<Option<String>>>,
+}
+
+/// Owned ordinary effect context. It retains no credential, request-selected
+/// home or serialized capability. Permission and exact producer custody are
+/// independent and both are revalidated before effects.
+#[cfg(target_os = "linux")]
+pub(crate) struct OrdinaryWorldEffectContextV1 {
+    bootstrap: Arc<substrate_shell::OrdinaryWorldExecuteAdmissionV1>,
+    turn: Option<Arc<substrate_shell::OrdinaryWorldTurnAdmissionV1>>,
+    live_bootstrap: Option<Arc<substrate_shell::OrdinaryWorldBootstrapEffectAdmissionV1>>,
+    start: transport_api_types::OrdinaryStartSelectionCarrierV1,
+    enforced_policy_snapshot: transport_api_types::PolicySnapshotV3,
+    backend: Arc<world::LinuxLocalBackend>,
+    parent_spec: WorldSpec,
+    custody_binding_ref: String,
+    spec: WorldSpec,
+    binding: SharedWorldBindingSnapshot,
+    cgroup_path: PathBuf,
+    cgroup: Arc<std::fs::File>,
+    gateway_runtime: Arc<GatewayRuntimeManager>,
+    pub(crate) native_open: Arc<std::sync::atomic::AtomicBool>,
+}
+
+/// Lifetime custody only. It cannot validate/issue an effect and has no manager backreference.
+#[cfg(target_os = "linux")]
+pub(crate) struct OrdinaryGatewayCleanupCustodyV1 {
+    _bootstrap: Arc<substrate_shell::OrdinaryWorldExecuteAdmissionV1>,
+    _turn: Option<Arc<substrate_shell::OrdinaryWorldTurnAdmissionV1>>,
+    _live: Option<Arc<substrate_shell::OrdinaryWorldBootstrapEffectAdmissionV1>>,
+    _cgroup: Arc<std::fs::File>,
+    _backend: Arc<world::LinuxLocalBackend>,
+}
+
+#[cfg(target_os = "linux")]
+impl std::fmt::Debug for OrdinaryWorldEffectContextV1 {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("OrdinaryWorldEffectContextV1([redacted])")
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl OrdinaryWorldEffectContextV1 {
+    pub(crate) fn adopt_stored_initial_bootstrap_controls(
+        &self,
+        span_id: &str,
+        latch: impl FnMut(&transport_api_types::OrdinaryInitialBootstrapControlRequestV1) -> Result<()>,
+    ) -> Result<()> {
+        anyhow::ensure!(
+            self.turn.is_none(),
+            "initial control adoption cannot target accepted work"
+        );
+        self.bootstrap
+            .with_stored_initial_bootstrap_controls(span_id, latch)
+    }
+
+    pub(crate) fn initial_bootstrap_closeout_reader(
+        &self,
+        span_id: &str,
+    ) -> Result<substrate_shell::OrdinaryInitialBootstrapCloseoutReaderV1> {
+        anyhow::ensure!(
+            self.turn.is_none(),
+            "initial closeout cannot target accepted work"
+        );
+        self.bootstrap.initial_bootstrap_closeout_reader(span_id)
+    }
+
+    pub(crate) fn with_initial_bootstrap_control(
+        &self,
+        request: &transport_api_types::OrdinaryInitialBootstrapControlRequestV1,
+        peer_uid: u32,
+        cancel: impl FnOnce() -> Result<bool>,
+    ) -> Result<bool> {
+        anyhow::ensure!(
+            self.turn.is_none(),
+            "initial control cannot target an accepted turn"
+        );
+        self.bootstrap
+            .with_initial_bootstrap_control(request, peer_uid, cancel)
+    }
+
+    pub(crate) fn claim_initial_bootstrap_receiver(&self, span_id: &str) -> Result<()> {
+        self.revalidate_for_effect()?;
+        anyhow::ensure!(
+            self.turn.is_none() && self.live_bootstrap.is_none(),
+            "receiver claim requires initial owner"
+        );
+        self.bootstrap.claim_initial_bootstrap_receiver(span_id)?;
+        Ok(())
+    }
+
+    /// Source history use is authorized by the child's current admission. A
+    /// retired source native owner is never reopened or granted another route.
+    pub(crate) fn validate_initial_fork_source(
+        &self,
+        source: &Self,
+    ) -> Result<transport_api_types::E2MemberLaunchActivationCarrierV1> {
+        self.revalidate_for_effect()?;
+        if self.turn.is_some()
+            || self.live_bootstrap.is_some()
+            || self.start != source.start
+            || self.binding != source.binding
+            || serde_json::to_vec(&self.spec)? != serde_json::to_vec(&source.spec)?
+        {
+            anyhow::bail!("ordinary initial Fork changed source workspace/World/selection");
+        }
+        let activation = self
+            .bootstrap
+            .validate_initial_fork_source(&source.bootstrap)?;
+        self.revalidate_for_effect()?;
+        Ok(activation)
+    }
+
+    /// Retain existing root/cgroup owners for cleanup without cloning the manager.
+    pub(crate) fn hold_gateway_cleanup_custody(&self) -> Arc<OrdinaryGatewayCleanupCustodyV1> {
+        Arc::new(OrdinaryGatewayCleanupCustodyV1 {
+            _bootstrap: Arc::clone(&self.bootstrap),
+            _turn: self.turn.clone(),
+            _live: self.live_bootstrap.clone(),
+            _cgroup: Arc::clone(&self.cgroup),
+            _backend: Arc::clone(&self.backend),
+        })
+    }
+
+    fn bind_bootstrap(
+        bootstrap: Arc<substrate_shell::OrdinaryWorldExecuteAdmissionV1>,
+        start: transport_api_types::OrdinaryStartSelectionCarrierV1,
+        enforced_policy_snapshot: transport_api_types::PolicySnapshotV3,
+        gateway_runtime: Arc<GatewayRuntimeManager>,
+        backend: Arc<world::LinuxLocalBackend>,
+    ) -> Result<(Arc<Self>, Arc<world::LinuxLocalBackend>, WorldHandle)> {
+        bootstrap.revalidate_before_world_effect()?;
+        let parent = bootstrap.current_world_parent_policy()?;
+        let transport_api_types::OrdinaryGatewayRuntimeIdentityV1::WorldWorker {
+            orchestration_session_id,
+            world_id,
+            world_generation,
+            ..
+        } = bootstrap.authenticated_runtime()
+        else {
+            anyhow::bail!("ordinary effect requires authenticated World-worker runtime");
+        };
+        let owner = SharedWorldOwnerSpec {
+            orchestration_session_id: orchestration_session_id.clone(),
+            action: world_api::SharedWorldOwnerAction::AttachOrCreate,
+        };
+        let mut parent_spec = parent.world_spec().clone();
+        parent_spec.reuse_mode = WorldReuseMode::SharedOrchestration(owner.clone());
+        // The persistent-session producer deliberately has a different physical
+        // recipe from the shell parent. Keep the complete parent policy fence,
+        // then require positive exact custody for one complete producer recipe.
+        let persistent_spec = build_world_spec(
+            parent_spec.project_dir.clone(),
+            true,
+            parent_spec.fs_mode,
+            parent_spec.isolate_network,
+            parent_spec.allowed_domains.clone(),
+            Some(&owner),
+        );
+        bootstrap.revalidate_before_world_effect()?;
+        let (spec, world, cgroup_path, cgroup, custody_binding_ref) = backend
+            .with_existing_custody_nonreconciling_v1(
+                &orchestration_session_id,
+                &world_id,
+                world_generation,
+                &parent_spec.project_dir,
+                |held| {
+                    let (spec, world, path, cgroup) =
+                        held.world_placement_for_specs_v1(&[parent_spec.clone(), persistent_spec])?;
+                    Ok((spec, world, path, cgroup, held.binding_ref().to_string()))
+                },
+            )?;
+        let binding = world
+            .shared_binding
+            .clone()
+            .ok_or_else(|| anyhow!("ordinary backend omitted actual shared binding"))?;
+        bootstrap.revalidate_for_effect(&binding)?;
+        let context = Arc::new(Self {
+            bootstrap,
+            turn: None,
+            live_bootstrap: None,
+            start,
+            enforced_policy_snapshot,
+            backend: Arc::clone(&backend),
+            parent_spec,
+            custody_binding_ref,
+            spec,
+            binding,
+            cgroup_path,
+            cgroup: Arc::new(cgroup),
+            gateway_runtime,
+            native_open: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        });
+        context.revalidate_for_effect()?;
+        Ok((context, backend, world))
+    }
+
+    pub(crate) fn bind_live_bootstrap_effect(
+        self: &Arc<Self>,
+        actual_runtime: &transport_api_types::OrdinaryGatewayRuntimeIdentityV1,
+        actual_binding: &SharedWorldBindingSnapshot,
+    ) -> Result<Arc<Self>> {
+        if self.turn.is_some()
+            || self.live_bootstrap.is_some()
+            || !self.native_open.load(Ordering::Acquire)
+        {
+            anyhow::bail!("ordinary live bootstrap can bind only its newly owned native control");
+        }
+        // This authenticates current permission without backend recovery. The
+        // launch observation is an identity join; freshness follows below.
+        let live = Arc::new(
+            self.bootstrap
+                .bind_live_bootstrap_effect(actual_runtime, actual_binding)?,
+        );
+        let context = Arc::new(Self {
+            bootstrap: Arc::clone(&self.bootstrap),
+            turn: None,
+            live_bootstrap: Some(live),
+            start: self.start.clone(),
+            enforced_policy_snapshot: self.enforced_policy_snapshot.clone(),
+            backend: Arc::clone(&self.backend),
+            parent_spec: self.parent_spec.clone(),
+            custody_binding_ref: self.custody_binding_ref.clone(),
+            spec: self.spec.clone(),
+            binding: self.binding.clone(),
+            cgroup_path: self.cgroup_path.clone(),
+            cgroup: Arc::clone(&self.cgroup),
+            gateway_runtime: Arc::clone(&self.gateway_runtime),
+            native_open: Arc::clone(&self.native_open),
+        });
+        context.revalidate_for_effect()?;
+        Ok(context)
+    }
+
+    pub(crate) fn turn_admission(&self) -> Result<&substrate_shell::OrdinaryWorldTurnAdmissionV1> {
+        self.turn
+            .as_deref()
+            .ok_or_else(|| anyhow!("ordinary registry operation requires genuine turn admission"))
+    }
+
+    pub(crate) fn prepare_turn(
+        self: &Arc<Self>,
+        request: &MemberTurnSubmitRequestV1,
+    ) -> Result<Arc<Self>> {
+        let admitted = Arc::new(self.bootstrap.prepare_turn(request)?);
+        let snapshot = request
+            .policy_snapshot_carrier
+            .as_ref()
+            .ok_or_else(|| anyhow!("ordinary turn omitted authenticated E2 snapshot"))?
+            .policy_snapshot()
+            .map_err(anyhow::Error::msg)?;
+        let context = Arc::new(Self {
+            bootstrap: Arc::clone(&self.bootstrap),
+            turn: Some(admitted),
+            live_bootstrap: None,
+            start: self.start.clone(),
+            enforced_policy_snapshot: snapshot,
+            backend: Arc::clone(&self.backend),
+            parent_spec: self.parent_spec.clone(),
+            custody_binding_ref: self.custody_binding_ref.clone(),
+            spec: self.spec.clone(),
+            binding: self.binding.clone(),
+            cgroup_path: self.cgroup_path.clone(),
+            cgroup: Arc::clone(&self.cgroup),
+            gateway_runtime: Arc::clone(&self.gateway_runtime),
+            native_open: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        });
+        context.revalidate_for_effect()?;
+        Ok(context)
+    }
+
+    /// Original immutable identity data, never current permission or a capability.
+    pub(crate) fn ordinary_start_selection(
+        &self,
+    ) -> &transport_api_types::OrdinaryStartSelectionCarrierV1 {
+        &self.start
+    }
+
+    pub(crate) fn requested_selection(&self) -> &transport_api_types::ResolvedAgentSelectionV1 {
+        match &self.turn {
+            Some(turn) => turn.requested_selection(),
+            None => self.live_bootstrap.as_ref().map_or_else(
+                || self.bootstrap.requested_selection(),
+                |live| live.requested_selection(),
+            ),
+        }
+    }
+
+    pub(crate) fn authenticated_runtime(
+        &self,
+    ) -> transport_api_types::OrdinaryGatewayRuntimeIdentityV1 {
+        match &self.turn {
+            Some(turn) => turn.authenticated_runtime(),
+            None => self.live_bootstrap.as_ref().map_or_else(
+                || self.bootstrap.authenticated_runtime(),
+                |live| live.authenticated_runtime(),
+            ),
+        }
+    }
+
+    pub(crate) fn with_ordinary_accepted_cancellation(
+        &self,
+        request: &transport_api_types::OrdinaryAcceptedWorkCancelRequestV1,
+        peer_uid: u32,
+        cancel: impl FnOnce() -> Result<bool>,
+    ) -> Result<bool> {
+        match &self.turn {
+            Some(turn) => turn.with_ordinary_accepted_cancellation(request, peer_uid, cancel),
+            None => self
+                .bootstrap
+                .with_ordinary_accepted_cancellation(request, peer_uid, cancel),
+        }
+    }
+
+    pub(crate) fn retained_stop_control_reader(
+        &self,
+    ) -> Result<substrate_shell::OrdinaryRetainedStopControlReaderV1> {
+        self.bootstrap.ordinary_retained_stop_control_reader()
+    }
+
+    /// Existing placement custody for cleanup only. The original bootstrap's
+    /// native effect is closed; Stop source permission is checked separately.
+    pub(crate) fn revalidate_original_stop_world_placement(
+        &self,
+        request: &transport_api_types::OrdinaryRetainedWorkerStopRequestV1,
+    ) -> Result<()> {
+        anyhow::ensure!(
+            !self.native_open.load(Ordering::Acquire)
+                && self.start.authority_store_id == request.authority_store_id
+                && self.binding.orchestration_session_id == request.orchestration_session_id
+                && self.binding.world_id == request.world_id
+                && self.binding.world_generation == request.world_generation,
+            "ordinary Stop original native/World scope remains open or changed"
+        );
+        self.revalidate_sealed_world_placement()
+    }
+
+    /// Keep the actual already-owned control when disposal wins the race with
+    /// live binding. This creates no live admission and never reopens effects.
+    pub(crate) fn retain_sealed_bootstrap_owner(
+        self: &Arc<Self>,
+        actual_runtime: &transport_api_types::OrdinaryGatewayRuntimeIdentityV1,
+        actual_binding: &SharedWorldBindingSnapshot,
+    ) -> Result<Arc<Self>> {
+        self.revalidate_sealed_bootstrap_world_placement(actual_runtime, actual_binding)?;
+        Ok(Arc::clone(self))
+    }
+
+    pub(crate) fn revalidate_sealed_bootstrap_world_placement(
+        &self,
+        actual_runtime: &transport_api_types::OrdinaryGatewayRuntimeIdentityV1,
+        actual_binding: &SharedWorldBindingSnapshot,
+    ) -> Result<()> {
+        anyhow::ensure!(
+            self.turn.is_none()
+                && &self.authenticated_runtime() == actual_runtime
+                && actual_binding == &self.binding,
+            "sealed bootstrap changed actual original runtime or World"
+        );
+        self.revalidate_sealed_world_placement()
+    }
+
+    fn revalidate_sealed_world_placement(&self) -> Result<()> {
+        use std::os::unix::fs::MetadataExt;
+        anyhow::ensure!(
+            !self.native_open.load(Ordering::Acquire),
+            "ordinary native effect remains open"
+        );
+        let (actual, path, current) = self.backend.with_existing_custody_nonreconciling_v1(
+            &self.binding.orchestration_session_id,
+            &self.binding.world_id,
+            self.binding.world_generation,
+            &self.spec.project_dir,
+            |held| {
+                anyhow::ensure!(
+                    held.binding_ref() == self.custody_binding_ref,
+                    "ordinary Stop original World producer custody changed"
+                );
+                let (_, world, path, cgroup) =
+                    held.world_placement_for_specs_v1(std::slice::from_ref(&self.spec))?;
+                Ok((world, path, cgroup))
+            },
+        )?;
+        let binding = actual
+            .shared_binding
+            .as_ref()
+            .ok_or_else(|| anyhow!("ordinary Stop existing World omitted binding"))?;
+        anyhow::ensure!(
+            binding == &self.binding
+                && binding.binding_state == SharedWorldBindingState::Active
+                && path == self.cgroup_path,
+            "ordinary Stop existing World generation/placement changed"
+        );
+        let original = self.cgroup.metadata()?;
+        let now = current.metadata()?;
+        anyhow::ensure!(
+            now.is_dir() && (original.dev(), original.ino()) == (now.dev(), now.ino()),
+            "ordinary Stop original cgroup physical identity changed"
+        );
+        Ok(())
+    }
+
+    pub(crate) fn revalidate_before_world_effect(&self) -> Result<()> {
+        if !self.native_open.load(Ordering::Acquire) {
+            anyhow::bail!("ordinary native effect owner has closed");
+        }
+        let parent = match &self.turn {
+            Some(turn) => {
+                // Parent construction validates this exact turn before and
+                // after reading current policy. Reuse that check here; the
+                // effect path still validates again after backend observation.
+                turn.current_world_parent_policy()?
+            }
+            None => match &self.live_bootstrap {
+                Some(live) => {
+                    live.revalidate_before_world_effect()?;
+                    live.current_world_parent_policy()?
+                }
+                None => {
+                    self.bootstrap.revalidate_before_world_effect()?;
+                    self.bootstrap.current_world_parent_policy()?
+                }
+            },
+        };
+        let mut current = parent.world_spec().clone();
+        current.reuse_mode = self.parent_spec.reuse_mode.clone();
+        if serde_json::to_vec(&current)? != serde_json::to_vec(&self.parent_spec)? {
+            anyhow::bail!("ordinary current parent is incompatible with held World realization");
+        }
+        Ok(())
+    }
+
+    pub(crate) fn revalidate_for_effect(&self) -> Result<()> {
+        use std::os::unix::fs::MetadataExt;
+        self.revalidate_before_world_effect()?;
+        let (actual, path, current) = self.backend.with_existing_custody_nonreconciling_v1(
+            &self.binding.orchestration_session_id,
+            &self.binding.world_id,
+            self.binding.world_generation,
+            &self.spec.project_dir,
+            |held| {
+                if held.binding_ref() != self.custody_binding_ref {
+                    anyhow::bail!("ordinary original World producer custody changed");
+                }
+                let (_, world, path, cgroup) =
+                    held.world_placement_for_specs_v1(std::slice::from_ref(&self.spec))?;
+                Ok((world, path, cgroup))
+            },
+        )?;
+        let binding = actual
+            .shared_binding
+            .as_ref()
+            .ok_or_else(|| anyhow!("ordinary actual World omitted binding"))?;
+        if binding != &self.binding || binding.binding_state != SharedWorldBindingState::Active {
+            anyhow::bail!("ordinary actual World generation/binding changed");
+        }
+        if path != self.cgroup_path {
+            anyhow::bail!("ordinary actual cgroup placement changed");
+        }
+        let held = self.cgroup.metadata()?;
+        let now = current.metadata()?;
+        if !now.is_dir() || (held.dev(), held.ino()) != (now.dev(), now.ino()) {
+            anyhow::bail!("ordinary held cgroup physical identity changed");
+        }
+        match &self.turn {
+            Some(turn) => turn.revalidate_for_effect(binding),
+            None => match &self.live_bootstrap {
+                Some(live) => live.revalidate_for_effect(binding),
+                None => self.bootstrap.revalidate_for_effect(binding),
+            },
+        }
+    }
+
+    pub(crate) fn resolve_current_gateway_handoff(
+        &self,
+    ) -> Result<transport_api_types::GatewayIntegratedAuthPayloadV1> {
+        self.revalidate_for_effect()?;
+        match &self.turn {
+            Some(turn) => turn.resolve_current_gateway_handoff(),
+            None => match &self.live_bootstrap {
+                Some(live) => live.resolve_current_gateway_handoff(),
+                None => self.bootstrap.resolve_current_gateway_handoff(),
+            },
+        }
+    }
+
+    pub(crate) async fn prepare_ordinary_native_gateway(
+        self: &Arc<Self>,
+        owned: Option<Arc<crate::gateway_runtime::OrdinaryGatewayRuntimeLeaseV1>>,
+    ) -> Result<(
+        transport_api_types::GatewayClientWiringV1,
+        Arc<crate::gateway_runtime::OrdinaryGatewayRuntimeLeaseV1>,
+    )> {
+        self.revalidate_for_effect()?;
+        let runtime = self.authenticated_runtime();
+        let runtime_id = format!(
+            "ordinary_{:x}",
+            Sha256::digest(serde_json::to_vec(&runtime)?)
+        );
+        let fresh_preparation = owned.is_none();
+        let lease = match owned {
+            Some(lease) => {
+                if lease.runtime_id != runtime_id {
+                    anyhow::bail!("ordinary owned gateway runtime changed");
+                }
+                lease
+            }
+            None => self
+                .gateway_runtime
+                .lease_ordinary_runtime(Arc::clone(self), runtime_id.clone())?,
+        };
+        let binding = crate::gateway_runtime::ordinary_gateway_adapter(self.requested_selection())?;
+        let response = self
+            .gateway_runtime
+            .restart_ordinary_owned(
+                GatewayRuntimeStartContext {
+                    world_id: runtime_id,
+                    project_dir: self.spec.project_dir.clone(),
+                    cgroup_path: self.cgroup_path.clone(),
+                    require_cgroup_attach: true,
+                    binding,
+                    ordinary_effect: Some(Arc::clone(self)),
+                    integrated_auth: None,
+                },
+                Arc::clone(&lease),
+                fresh_preparation,
+            )
+            .await
+            .map_err(gateway_runtime_error)?;
+        if let Err(error) = self.revalidate_for_effect() {
+            self.native_open.store(false, Ordering::Release);
+            if let Err(cleanup) = lease.finish_owned().await {
+                anyhow::bail!("ordinary gateway post-ready admission failed: {error:#}; terminal cleanup unresolved: {cleanup:#}");
+            }
+            return Err(error);
+        }
+        let wiring = response
+            .client_wiring
+            .filter(|_| response.status == transport_api_types::GatewayStatusV1::Available)
+            .ok_or_else(|| anyhow!("ordinary managed gateway is unavailable"))?;
+        Ok((wiring, lease))
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -395,12 +941,27 @@ impl WorldService {
         let linux_backend = Arc::new(world::LinuxLocalBackend::new());
         let backend: Arc<dyn WorldBackend> = linux_backend.clone();
         let runtime_replay = RuntimeReplayRegistry::with_durable_e2(member_turn_join.clone());
+        // Installed home custody is independent of whether protected projection
+        // recovery can open an already-activated HSA. Ordinary first Start must
+        // be able to activate HSA after this service has begun accepting peers.
+        let accepted_home_authority =
+            config_projection::ConfiguredAcceptedHomeAuthorityV1::from_installed_bootstrap_authority()
+                .ok()
+                .map(Arc::new);
+        let ordinary_selection_authority =
+            accepted_home_authority.as_ref().and_then(|configured| {
+                substrate_shell::OrdinarySelectionAuthorityV1::from_configured_accepted_home(
+                    Arc::clone(configured),
+                )
+                .ok()
+                .map(Arc::new)
+            });
         let e3_authority = (|| -> Result<_> {
-            let configured = Arc::new(
-                config_projection::ConfiguredAcceptedHomeAuthorityV1::from_installed_bootstrap_authority()?,
-            );
+            let configured = accepted_home_authority
+                .as_ref()
+                .context("configured accepted home is unavailable")?;
             let parent = Arc::new(
-                substrate_shell::OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home(&configured)?,
+                substrate_shell::OpenedConfigProjectionHsaAuthorityV1::from_configured_accepted_home(configured)?,
             );
             let registry = Arc::new(config_projection::ConfigProjectionRegistryV1::open(
                 parent.clone(),
@@ -408,7 +969,7 @@ impl WorldService {
             let projection_service =
                 Arc::new(config_projection::AgentConfigProjectionServiceV1::new(
                     Arc::clone(&registry),
-                    Arc::clone(&configured),
+                    Arc::clone(configured),
                 )?);
             let preparations = Arc::new(
                 crate::e3_config_projection_prepare::E3ConfigProjectionPreparationManagerV1::new(
@@ -418,22 +979,21 @@ impl WorldService {
                     Arc::clone(&privileged_child_exclusion),
                 ),
             );
-            Ok((configured, projection_service, preparations))
+            Ok((projection_service, preparations))
         })();
-        let (accepted_home_authority, config_projection_service, e3_projection_preparations) =
-            match e3_authority {
-                Ok((configured, projection_service, preparations)) => (
-                    Some(configured),
-                    Some(projection_service),
-                    Some(preparations),
-                ),
-                Err(_) => {
-                    tracing::warn!("E3 configured projection authority unavailable; E3 preparation remains unsupported");
-                    (None, None, None)
-                }
-            };
+        let (config_projection_service, e3_projection_preparations) = match e3_authority {
+            Ok((projection_service, preparations)) => {
+                (Some(projection_service), Some(preparations))
+            }
+            Err(_) => {
+                tracing::warn!("E3 configured projection authority unavailable; E3 preparation remains unsupported");
+                (None, None)
+            }
+        };
 
         Ok(Self {
+            host_gateway_turns: Arc::new(crate::gateway_runtime::HostGatewayTurnOwnerV1::new()),
+            ordinary_selection_authority,
             accepted_home_authority,
             config_projection_service,
             e3_projection_preparations,
@@ -1329,6 +1889,19 @@ impl WorldService {
     ) -> Result<GatewayLifecycleResponseV1> {
         #[cfg(target_os = "linux")]
         {
+            if req.schema_version != 1 || req.ordinary_selection.is_some() {
+                let (effect, owned_gateway) = self.prepare_ordinary_gateway_request(&req)?;
+                effect.revalidate_for_effect()?;
+                let response = self
+                    .gateway_runtime
+                    .status(
+                        &owned_gateway.runtime_id,
+                        &effect.requested_selection().backend_id,
+                    )
+                    .await
+                    .map_err(gateway_runtime_error)?;
+                return Self::attach_gateway_request_metadata(response, &req);
+            }
             let prepared = self.prepare_gateway_runtime_request(&req)?;
             let Some(binding) = self
                 .resolve_gateway_runtime_binding(
@@ -1368,6 +1941,21 @@ impl WorldService {
     ) -> Result<GatewayLifecycleResponseV1> {
         #[cfg(target_os = "linux")]
         {
+            if req.schema_version != 1 || req.ordinary_selection.is_some() {
+                let (effect, owned_gateway) = self.prepare_ordinary_gateway_request(&req)?;
+                let (wiring, _owned_gateway) = effect
+                    .prepare_ordinary_native_gateway(Some(owned_gateway))
+                    .await?;
+                return Self::attach_gateway_request_metadata(
+                    GatewayLifecycleResponseV1 {
+                        status: transport_api_types::GatewayStatusV1::Available,
+                        client_wiring: Some(wiring),
+                        identity_tuple: None,
+                        placement_posture: None,
+                    },
+                    &req,
+                );
+            }
             let prepared = self.prepare_gateway_runtime_request(&req)?;
             let Some(binding) = self
                 .resolve_gateway_runtime_binding(prepared, GatewayRuntimeBindingMode::EnsureSession)
@@ -1401,6 +1989,21 @@ impl WorldService {
     ) -> Result<GatewayLifecycleResponseV1> {
         #[cfg(target_os = "linux")]
         {
+            if req.schema_version != 1 || req.ordinary_selection.is_some() {
+                let (effect, owned_gateway) = self.prepare_ordinary_gateway_request(&req)?;
+                let (wiring, _owned_gateway) = effect
+                    .prepare_ordinary_native_gateway(Some(owned_gateway))
+                    .await?;
+                return Self::attach_gateway_request_metadata(
+                    GatewayLifecycleResponseV1 {
+                        status: transport_api_types::GatewayStatusV1::Available,
+                        client_wiring: Some(wiring),
+                        identity_tuple: None,
+                        placement_posture: None,
+                    },
+                    &req,
+                );
+            }
             let prepared = self.prepare_gateway_runtime_request(&req)?;
             let Some(binding) = self
                 .resolve_gateway_runtime_binding(
@@ -1433,6 +2036,9 @@ impl WorldService {
     /// Execute a command and stream incremental output frames via NDJSON.
     #[cfg(target_os = "linux")]
     pub async fn execute_stream(&self, req: ExecuteRequest) -> Result<Response> {
+        if req.schema_version != 1 || req.ordinary_start_selection.is_some() {
+            return self.execute_ordinary_member(req).await;
+        }
         if req
             .member_dispatch
             .as_ref()
@@ -1571,6 +2177,7 @@ impl WorldService {
                         dispatch,
                         acceptance_context,
                         policy_snapshot: req.policy_snapshot.clone(),
+                        ordinary_effect: None,
                     },
                     placement.binding,
                     launch_placement,
@@ -1846,6 +2453,53 @@ impl WorldService {
     }
 
     #[cfg(target_os = "linux")]
+    pub(crate) fn control_ordinary_initial_bootstrap(
+        &self,
+        request: &transport_api_types::OrdinaryInitialBootstrapControlRequestV1,
+        peer_uid: u32,
+    ) -> Result<transport_api_types::OrdinaryInitialBootstrapControlDeliveryV1> {
+        self.member_runtime
+            .control_ordinary_initial_bootstrap(request, peer_uid)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn cancel_ordinary_accepted_work(
+        &self,
+        request: &transport_api_types::OrdinaryAcceptedWorkCancelRequestV1,
+        peer_uid: u32,
+    ) -> Result<bool> {
+        self.member_runtime
+            .cancel_ordinary_accepted_work(request, peer_uid)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn retire_ordinary_retained_worker(
+        &self,
+        request: &transport_api_types::OrdinaryRetainedWorkerStopRequestV1,
+        peer_uid: u32,
+    ) -> Result<transport_api_types::OrdinaryRetainedWorkerStopResponseV1> {
+        self.member_runtime
+            .retire_ordinary_member(request, peer_uid)
+    }
+
+    /// Dedicated ordinary intake. Neither endpoint choice nor a DTO confers
+    /// permission; the manager must authenticate its actual held ordinary member.
+    pub(crate) async fn submit_ordinary_member_turn_stream(
+        &self,
+        req: transport_api_types::OrdinaryMemberTurnSubmitRequestV1,
+    ) -> Result<Response> {
+        #[cfg(target_os = "linux")]
+        {
+            self.member_runtime.submit_ordinary_turn(req).await
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = req;
+            anyhow::bail!("ordinary World member turn submission is only supported on Linux")
+        }
+    }
+
+    #[cfg(target_os = "linux")]
     pub async fn replay_execute_stream(
         &self,
         req: transport_api_types::ExecuteStreamReplayRequestV1,
@@ -1912,7 +2566,7 @@ impl WorldService {
 
         let delivered = self
             .member_runtime
-            .cancel(&req.span_id, &req.sig)
+            .cancel_for_legacy_http(&req.span_id, &req.sig)
             .with_context(|| format!("failed to cancel member runtime span {}", req.span_id))?;
         if delivered {
             return Ok(ExecuteCancelResponseV1 {
@@ -1964,6 +2618,203 @@ impl WorldService {
         }))
     }
 
+    /// Immutable carrier joins do not grant permission. The executing HSA reader
+    /// may reconcile temporary material; its separate reads are not atomic.
+    #[cfg(target_os = "linux")]
+    fn authenticate_ordinary_start_selection(
+        &self,
+        carrier: &transport_api_types::OrdinaryStartSelectionCarrierV1,
+    ) -> Result<substrate_shell::AuthenticatedOrdinarySelectionV1> {
+        carrier.validate().map_err(BadRequestError::new)?;
+        let authority = self
+            .ordinary_selection_authority
+            .as_ref()
+            .ok_or_else(|| anyhow!("ordinary installed selection authority is unavailable"))?;
+        let selected = authority.authenticate(&carrier.original_session_id)?;
+        if carrier.authority_store_id != selected.authority_store_id()
+            || carrier.original_session_id != selected.original_session_id()
+            || carrier.original_start_intent_id != selected.original_start_intent_id()
+            || carrier.original_start_issuer_request_id
+                != selected.original_start_issuer_request_id()?
+            || carrier.context_sha256 != selected.context_sha256()?
+            || carrier.native_selection_sha256 != selected.native_selection().selection_digest
+            || carrier.requested_selection_sha256 != selected.requested_selection().selection_digest
+        {
+            anyhow::bail!("ordinary Start carrier conflicts with authenticated origin");
+        }
+        selected.revalidate()?;
+        Ok(selected)
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn execute_ordinary_member(&self, req: ExecuteRequest) -> Result<Response> {
+        req.validate().map_err(BadRequestError::new)?;
+        if req.agent_id.is_empty() || req.pty {
+            anyhow::bail!("ordinary member requires agent_id and non-PTY streaming");
+        }
+        let start = req
+            .ordinary_start_selection
+            .as_ref()
+            .ok_or_else(|| anyhow!("ordinary member omitted immutable Start selection"))?;
+        let selected = Arc::new(self.authenticate_ordinary_start_selection(start)?);
+        let admitted = Arc::new(selected.prepare_world_execute(&req)?);
+        // This authenticates the member/run/current policy/account independently
+        // of the still-unimplemented current Host-native-run verifier.
+        admitted.revalidate_before_world_effect()?;
+        let (effect, actual_backend, world) = OrdinaryWorldEffectContextV1::bind_bootstrap(
+            admitted,
+            start.clone(),
+            req.policy_snapshot.clone(),
+            Arc::clone(&self.gateway_runtime),
+            Arc::clone(&self.linux_backend),
+        )?;
+        let dispatch = req
+            .member_dispatch
+            .as_ref()
+            .and_then(transport_api_types::MemberDispatchRequest::as_v1)
+            .ok_or_else(|| anyhow!("ordinary member omitted MemberDispatch V1"))?;
+        let project_dir = effect.spec.project_dir.clone();
+        let (_, inputs) = resolve_policy_inputs(
+            &req.policy_snapshot,
+            req.world_network.as_ref(),
+            &project_dir,
+            &project_dir,
+        )?;
+        effect.revalidate_for_effect()?;
+        let placement_root = if inputs.isolation_full {
+            actual_backend.ensure_overlay_root(&world)?
+        } else {
+            project_dir.clone()
+        };
+        let effective_cwd =
+            resolve_member_runtime_effective_cwd(&project_dir, &placement_root, &project_dir)?;
+        let env = build_member_runtime_launch_env(
+            req.env.clone().unwrap_or_default(),
+            MemberRuntimeLaunchEnvContext {
+                placement_root: &placement_root,
+                isolation_full: inputs.isolation_full,
+                write_allowlist_prefixes: &inputs.write_allowlist_prefixes,
+                landlock_discover_paths: &inputs.landlock_discover_paths,
+                landlock_read_paths: &inputs.landlock_read_paths,
+                landlock_write_paths: &inputs.landlock_write_paths,
+                enforcement_plan_b64: inputs.enforcement_plan_b64.as_deref(),
+            },
+        );
+        effect.revalidate_for_effect()?;
+        self.member_runtime
+            .launch(
+                req.agent_id,
+                env,
+                format!("spn_{}", uuid::Uuid::now_v7()),
+                MemberRuntimeLaunchAdmissionV1 {
+                    dispatch: dispatch.clone(),
+                    acceptance_context: req.acceptance_context,
+                    policy_snapshot: req.policy_snapshot,
+                    ordinary_effect: Some(Arc::clone(&effect)),
+                },
+                effect.binding.clone(),
+                LinuxWorldPlacementContext {
+                    working_dir: effective_cwd,
+                    cgroup_path: effect.cgroup_path.clone(),
+                    require_cgroup_attach: true,
+                },
+            )
+            .await
+    }
+
+    #[cfg(target_os = "linux")]
+    fn prepare_ordinary_gateway_request(
+        &self,
+        req: &GatewayLifecycleRequestV1,
+    ) -> Result<(
+        Arc<OrdinaryWorldEffectContextV1>,
+        Arc<crate::gateway_runtime::OrdinaryGatewayRuntimeLeaseV1>,
+    )> {
+        req.validate_identity_contract()
+            .map_err(anyhow::Error::msg)?;
+        let context = req
+            .ordinary_selection
+            .as_ref()
+            .ok_or_else(|| anyhow!("selected gateway omitted ordinary context"))?;
+        let selected = self.authenticate_ordinary_start_selection(&context.start)?;
+        if matches!(
+            &context.runtime,
+            transport_api_types::OrdinaryGatewayRuntimeIdentityV1::HostActor { .. }
+        ) {
+            // No original run, metadata sidecar or request claim substitutes for
+            // a genuine current Applied-Start/successor Host-run observation.
+            anyhow::bail!(
+                "gateway_invalid_integration: current Host run verifier is not implemented"
+            );
+        }
+        let (effect, owned_gateway) = self
+            .member_runtime
+            .ordinary_gateway_effect(&context.runtime)?;
+        if effect.start != context.start
+            || effect.requested_selection() != selected.requested_selection()
+            || req
+                .cwd
+                .as_deref()
+                .is_some_and(|cwd| Path::new(cwd) != effect.spec.project_dir.as_path())
+            || serde_json::to_vec(
+                &req.policy_snapshot
+                    .canonicalize()
+                    .map_err(anyhow::Error::msg)?,
+            )? != serde_json::to_vec(
+                &effect
+                    .enforced_policy_snapshot
+                    .canonicalize()
+                    .map_err(anyhow::Error::msg)?,
+            )?
+        {
+            anyhow::bail!("selected gateway request conflicts with its actual ordinary runtime");
+        }
+        effect.revalidate_for_effect()?;
+        // Request credentials are never used as trusted current custody.
+        if let Some(supplied) = req.integrated_auth.as_ref() {
+            let current = effect.resolve_current_gateway_handoff()?;
+            if supplied.backend_id != current.backend_id
+                || supplied.cli_codex.is_some() != current.cli_codex.is_some()
+                || supplied.api_env.is_some() != current.api_env.is_some()
+            {
+                anyhow::bail!("selected gateway auth facets conflict with pinned profile");
+            }
+            if let (Some(supplied), Some(current)) = (&supplied.cli_codex, &current.cli_codex) {
+                let resolve = |auth: &transport_api_types::GatewayCliCodexIntegratedAuthV1| {
+                    let mut fields = HashMap::from([(
+                        "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN".to_string(),
+                        auth.access_token.clone(),
+                    )]);
+                    if let Some(id) = &auth.account_id {
+                        fields.insert(
+                            "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID".into(),
+                            id.clone(),
+                        );
+                    }
+                    substrate_gateway::auth::codex_auth_context::CodexIntegratedAuthHandoff::from_fields(&fields)
+                        .and_then(|handoff| handoff.resolve())
+                };
+                if resolve(supplied)?.account_id != resolve(current)?.account_id {
+                    anyhow::bail!(
+                        "selected gateway auth account differs from current trusted custody"
+                    );
+                }
+            }
+            if let Some(api) = &supplied.api_env {
+                if api.env.len() != 1
+                    || api
+                        .env
+                        .get("ANTHROPIC_API_KEY")
+                        .is_none_or(|value| value.trim().is_empty())
+                {
+                    anyhow::bail!("selected Claude gateway auth facet is unsupported");
+                }
+            }
+        }
+        effect.revalidate_for_effect()?;
+        Ok((effect, owned_gateway))
+    }
+
     #[cfg(target_os = "linux")]
     fn prepare_gateway_runtime_request(
         &self,
@@ -1971,6 +2822,9 @@ impl WorldService {
     ) -> Result<PreparedGatewayRuntimeRequest> {
         req.validate_identity_contract()
             .map_err(|err| anyhow!("gateway_invalid_integration: {err}"))?;
+        if req.schema_version != 1 || req.ordinary_selection.is_some() {
+            anyhow::bail!("gateway_invalid_integration: selected gateway requires its active ordinary runtime context");
+        }
         let cwd = req
             .cwd
             .as_ref()
@@ -2103,6 +2957,7 @@ impl WorldService {
                 cgroup_path,
                 require_cgroup_attach: true,
                 binding,
+                ordinary_effect: None,
                 integrated_auth: prepared.integrated_auth,
             },
         }))
@@ -2239,6 +3094,7 @@ impl ResolvedGatewayRuntimeBinding {
                 cgroup_path: PathBuf::from("/nonexistent"),
                 require_cgroup_attach: false,
                 binding,
+                ordinary_effect: None,
                 integrated_auth: prepared.integrated_auth,
             },
         }
@@ -2603,6 +3459,8 @@ mod gateway_runtime_binding_tests {
 
     fn gateway_request(cwd: &Path) -> GatewayLifecycleRequestV1 {
         GatewayLifecycleRequestV1 {
+            schema_version: 1,
+            ordinary_selection: None,
             profile: None,
             cwd: Some(cwd.display().to_string()),
             env: None,
@@ -4029,6 +4887,484 @@ mod tests {
     use super::*;
     use world_api::{SharedWorldOwnerAction, WorldHandle};
 
+    /// Untrusted structural World/Spawn/Fork carriers traverse the real client,
+    /// strict HTTP handler and independent service. None is authenticated birth.
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_ordinary_selected_agent_client_refuses_unheld_authority_before_effects() {
+        use axum::{
+            body::Body,
+            http::Request,
+            middleware::{self, Next},
+            routing::post,
+            Router,
+        };
+        use base64::Engine as _;
+        use serde_json::json;
+        use std::sync::{atomic::AtomicUsize, Mutex};
+        struct SelectedTransportEffectTrapV1 {
+            calls: AtomicUsize,
+        }
+
+        impl WorldBackend for SelectedTransportEffectTrapV1 {
+            fn ensure_session(&self, _spec: &WorldSpec) -> Result<WorldHandle> {
+                self.calls.fetch_add(1, Ordering::SeqCst);
+                anyhow::bail!("selected transport test reached ensure_session")
+            }
+
+            fn exec(
+                &self,
+                _world: &WorldHandle,
+                _request: world_api::ExecRequest,
+            ) -> Result<world_api::ExecResult> {
+                self.calls.fetch_add(1, Ordering::SeqCst);
+                anyhow::bail!("selected transport test reached exec")
+            }
+
+            fn fs_diff(&self, _world: &WorldHandle, _span_id: &str) -> Result<world_api::FsDiff> {
+                self.calls.fetch_add(1, Ordering::SeqCst);
+                anyhow::bail!("selected transport test reached fs_diff")
+            }
+
+            fn apply_policy(&self, _world: &WorldHandle, _spec: &WorldSpec) -> Result<()> {
+                self.calls.fetch_add(1, Ordering::SeqCst);
+                anyhow::bail!("selected transport test reached apply_policy")
+            }
+        }
+
+        let exclusion =
+            E3PrivilegedChildExclusionV1::new_recovering().expect("hold test service namespace");
+        exclusion.finish_recovery().expect("finish test recovery");
+        let backend = Arc::new(SelectedTransportEffectTrapV1 {
+            calls: AtomicUsize::new(0),
+        });
+        let replay = RuntimeReplayRegistry::with_durable_e2(None);
+        let service = WorldService {
+            host_gateway_turns: Arc::new(crate::gateway_runtime::HostGatewayTurnOwnerV1::new()),
+            ordinary_selection_authority: None,
+            accepted_home_authority: None,
+            config_projection_service: None,
+            e3_projection_preparations: None,
+            backend: backend.clone(),
+            linux_backend: Arc::new(world::LinuxLocalBackend::new()),
+            gateway_runtime: Arc::new(GatewayRuntimeManager::new(Arc::clone(&exclusion))),
+            member_runtime: Arc::new(MemberRuntimeManager::with_replay_and_e3_projection_service(
+                replay.clone(),
+                None,
+                Arc::clone(&exclusion),
+            )),
+            runtime_replay: replay,
+            member_turn_join: None,
+            pending_diff_origin: Arc::new(RwLock::new(HashMap::new())),
+            privileged_child_exclusion: exclusion,
+            worlds: Arc::new(RwLock::new(HashMap::new())),
+            budgets: Arc::new(RwLock::new(HashMap::new())),
+            last_policy_resolution_mode: Arc::new(AtomicU8::new(0)),
+            last_netfilter_requested: Arc::new(AtomicU8::new(0)),
+            last_netfilter_failure_reason: Arc::new(RwLock::new(None)),
+        };
+
+        let received = Arc::new(Mutex::new(Vec::<Vec<u8>>::new()));
+        let capture = Arc::clone(&received);
+        let app = Router::new()
+            .route("/v1/execute/stream", post(crate::handlers::execute_stream))
+            .layer(middleware::from_fn(
+                move |request: Request<Body>, next: Next<Body>| {
+                    let capture = Arc::clone(&capture);
+                    async move {
+                        assert_eq!(request.uri().path(), "/v1/execute/stream");
+                        let (parts, body) = request.into_parts();
+                        let bytes = hyper::body::to_bytes(body).await.unwrap();
+                        capture.lock().unwrap().push(bytes.to_vec());
+                        next.run(Request::from_parts(parts, Body::from(bytes)))
+                            .await
+                    }
+                },
+            ))
+            .with_state(service.clone());
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+        let server = tokio::spawn(
+            axum::Server::from_tcp(listener)
+                .unwrap()
+                .serve(app.into_make_service())
+                .with_graceful_shutdown(async {
+                    let _ = stopped.await;
+                }),
+        );
+        let client = transport_api_client::AgentClient::tcp("127.0.0.1", port).unwrap();
+        let snapshot: transport_api_types::PolicySnapshotV3 = serde_json::from_value(json!({
+            "schema_version":3,"net_allowed":[],"world_fs":{
+                "host_visible":true,"fail_closed":{"routing":false},"caged_required":false,
+                "write":{"enabled":true,"allow_list":[],"deny_list":[]}
+            }
+        }))
+        .unwrap();
+        let snapshot = snapshot.canonicalize().unwrap();
+        let snapshot_bytes = serde_json::to_vec(&snapshot).unwrap();
+        let policy_ref = json!({"ref_id":"ao_0123456789abcdef0123456789abcdef",
+            "object_kind":"policy","schema_version":1,
+            "commitment":{"kind":"CanonicalSha256","value":{"digest_hex":"b".repeat(64)}}});
+        let commitment_ref = json!({"authority_store_id":"unheld_store",
+            "commitment_id":"dpc_018f0f3a-9b2c-7def-8abc-0123456789ad","exact_linkage_hash":"a".repeat(64)});
+        let start = json!({"schema_version":1,"authority_store_id":"unheld_store",
+            "original_start_intent_id":"unheld_start",
+            "original_start_issuer_request_id":format!("req_{}","a".repeat(64)),
+            "original_session_id":"unheld_session","context_sha256":"b".repeat(64),
+            "native_selection_sha256":"c".repeat(64),"requested_selection_sha256":"d".repeat(64)});
+        for kind in ["world", "fresh_spawn", "fork"] {
+            let mut member = json!({"schema_version":1,"orchestration_session_id":"unheld_session",
+                "participant_id":"ash_unheld_member","orchestrator_participant_id":"ash_unheld_caller",
+                "backend_id":"cli:codex-world","protocol":"substrate.agent.session",
+                "run_id":"unheld_run","world_id":"unheld_world","world_generation":1,
+                "initial_prompt":"synthetic boundary request",
+                "resolved_runtime":{"backend_kind":"codex","binary_path":"/synthetic/never-spawn"}});
+            if kind != "world" {
+                member["e2_launch_activation"] = json!({
+                    "schema_version":1,"activation_id":format!("e2a_{}","a".repeat(32)),
+                    "launch_kind":kind,"commitment_ref":commitment_ref,
+                    "immutable_worker_cap_ref":commitment_ref,"immutable_worker_cap_created_revision":1,
+                    "immutable_worker_cap_application_revision":2,"registry_publication_revision":2,
+                    "policy_snapshot_bytes_base64":base64::engine::general_purpose::STANDARD.encode(&snapshot_bytes),
+                    "policy_snapshot_byte_length":snapshot_bytes.len(),"policy_snapshot_ref":policy_ref,
+                    "policy_snapshot_hash":format!("{:x}",Sha256::digest(&snapshot_bytes)),
+                    "policy_snapshot_revision":"synthetic_revision","request_id":"unheld_request",
+                    "idempotency_key":"unheld_idempotency","orchestration_session_id":"unheld_session",
+                    "caller_participant_id":"ash_unheld_caller","caller_backend_id":"cli:codex-host",
+                    "target_backend_id":"cli:codex-world","retained_participant_id":"ash_unheld_member",
+                    "bootstrap_run_id":"unheld_run","target_world":{"world_id":"unheld_world","world_generation":1},
+                    "parent_policy_ref":policy_ref,"parent_policy_revision":"synthetic_revision"
+                });
+                if kind == "fresh_spawn" {
+                    member["e2_launch_activation"]["reservation_ref"] = json!({
+                        "authority_store_id":"unheld_store","reservation_id":"unheld_reservation",
+                        "reservation_hash":"e".repeat(64)});
+                    member["e2_launch_activation"]["request_commitment"] = json!({"hmac_sha256":{
+                        "key_id":"unheld_key","domain":"synthetic_spawn","digest_hex":"f".repeat(64)}});
+                } else {
+                    member["parent_participant_id"] = json!("ash_unheld_source");
+                    member["e2_launch_activation"]["source_participant_id"] =
+                        json!("ash_unheld_source");
+                    member["e2_launch_activation"]["request_commitment"] = json!({"canonical_sha256":{
+                        "domain":"synthetic_fork","digest_hex":"f".repeat(64)}});
+                }
+            }
+            let request: ExecuteRequest = serde_json::from_value(json!({
+                "schema_version":2,"ordinary_start_selection":start,"cmd":"","pty":false,
+                "cwd":"/synthetic/unheld-boundary","agent_id":"synthetic_actor",
+                "policy_snapshot":snapshot,"member_dispatch":member
+            }))
+            .expect("structurally valid untrusted selected request");
+            request.validate().unwrap();
+            let expected_bytes = serde_json::to_vec(&request).unwrap();
+            let result = tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                client.execute_stream(request),
+            )
+            .await
+            .unwrap();
+            let error = match result {
+                Ok(_) => panic!("unheld authority admitted {kind}"),
+                Err(error) => error,
+            };
+            assert!(
+                error
+                    .to_string()
+                    .contains("ordinary initial input requires authenticated ordinary route"),
+                "{kind}: {error}"
+            );
+            assert_eq!(received.lock().unwrap().last().unwrap(), &expected_bytes);
+            assert_eq!(backend.calls.load(Ordering::SeqCst), 0, "{kind}");
+            assert!(service.worlds.read().unwrap().is_empty(), "{kind}");
+            assert!(service.budgets.read().unwrap().is_empty(), "{kind}");
+            assert_eq!(
+                service.last_policy_resolution_mode.load(Ordering::SeqCst),
+                0,
+                "{kind}"
+            );
+            assert_eq!(
+                service.last_netfilter_requested.load(Ordering::SeqCst),
+                0,
+                "{kind}"
+            );
+            assert!(
+                service
+                    .last_netfilter_failure_reason
+                    .read()
+                    .unwrap()
+                    .is_none(),
+                "{kind}"
+            );
+            eprintln!("real AgentClient/strict handler/service refusal before effects: {kind}");
+        }
+        assert_eq!(received.lock().unwrap().len(), 3);
+        stop.send(()).unwrap();
+        drop(client);
+        tokio::time::timeout(std::time::Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        let mut exclusive = service
+            .privileged_child_exclusion
+            .acquire_e3_exclusive("transport-boundary", 1)
+            .unwrap();
+        exclusive.release_after_cleanup_v1().unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    async fn ordinary_selected_http_intakes_reject_raw_duplicates_before_effects() {
+        use axum::{body::Body, http::Request, routing::post, Router};
+        use std::sync::atomic::AtomicUsize;
+        use tower::ServiceExt;
+
+        struct RawIntakeEffectTrapV1 {
+            calls: AtomicUsize,
+        }
+
+        impl WorldBackend for RawIntakeEffectTrapV1 {
+            fn ensure_session(&self, _spec: &WorldSpec) -> Result<WorldHandle> {
+                self.calls.fetch_add(1, Ordering::SeqCst);
+                anyhow::bail!("raw intake test reached ensure_session")
+            }
+
+            fn exec(
+                &self,
+                _world: &WorldHandle,
+                _request: world_api::ExecRequest,
+            ) -> Result<world_api::ExecResult> {
+                self.calls.fetch_add(1, Ordering::SeqCst);
+                anyhow::bail!("raw intake test reached exec")
+            }
+
+            fn fs_diff(&self, _world: &WorldHandle, _span_id: &str) -> Result<world_api::FsDiff> {
+                self.calls.fetch_add(1, Ordering::SeqCst);
+                anyhow::bail!("raw intake test reached fs_diff")
+            }
+
+            fn apply_policy(&self, _world: &WorldHandle, _spec: &WorldSpec) -> Result<()> {
+                self.calls.fetch_add(1, Ordering::SeqCst);
+                anyhow::bail!("raw intake test reached apply_policy")
+            }
+        }
+
+        let exclusion =
+            E3PrivilegedChildExclusionV1::new_recovering().expect("hold test service namespace");
+        exclusion.finish_recovery().expect("finish test recovery");
+        let backend = Arc::new(RawIntakeEffectTrapV1 {
+            calls: AtomicUsize::new(0),
+        });
+        let replay = RuntimeReplayRegistry::with_durable_e2(None);
+        let service = WorldService {
+            host_gateway_turns: Arc::new(crate::gateway_runtime::HostGatewayTurnOwnerV1::new()),
+            ordinary_selection_authority: None,
+            accepted_home_authority: None,
+            config_projection_service: None,
+            e3_projection_preparations: None,
+            backend: backend.clone(),
+            linux_backend: Arc::new(world::LinuxLocalBackend::new()),
+            gateway_runtime: Arc::new(GatewayRuntimeManager::new(Arc::clone(&exclusion))),
+            member_runtime: Arc::new(MemberRuntimeManager::with_replay_and_e3_projection_service(
+                replay.clone(),
+                None,
+                Arc::clone(&exclusion),
+            )),
+            runtime_replay: replay,
+            member_turn_join: None,
+            pending_diff_origin: Arc::new(RwLock::new(HashMap::new())),
+            privileged_child_exclusion: exclusion,
+            worlds: Arc::new(RwLock::new(HashMap::new())),
+            budgets: Arc::new(RwLock::new(HashMap::new())),
+            last_policy_resolution_mode: Arc::new(AtomicU8::new(0)),
+            last_netfilter_requested: Arc::new(AtomicU8::new(0)),
+            last_netfilter_failure_reason: Arc::new(RwLock::new(None)),
+        };
+        let app = Router::new()
+            .route("/v1/execute", post(crate::handlers::execute))
+            .route("/v1/execute/stream", post(crate::handlers::execute_stream))
+            .route("/v1/gateway/status", post(crate::handlers::gateway_status))
+            .route("/v1/gateway/sync", post(crate::handlers::gateway_sync))
+            .route(
+                "/v1/gateway/restart",
+                post(crate::handlers::gateway_restart),
+            )
+            .with_state(service.clone());
+        let start = serde_json::json!({
+            "schema_version": 1,
+            "authority_store_id": "http_store",
+            "original_start_intent_id": "http_start",
+            "original_start_issuer_request_id": format!("req_{}", "a".repeat(64)),
+            "original_session_id": "http_session",
+            "context_sha256": "b".repeat(64),
+            "native_selection_sha256": "c".repeat(64),
+            "requested_selection_sha256": "d".repeat(64)
+        });
+        let snapshot = serde_json::json!({
+            "schema_version": 3,
+            "net_allowed": [],
+            "world_fs": {
+                "host_visible": true,
+                "fail_closed": {"routing": false},
+                "caged_required": false,
+                "write": {"enabled": true, "allow_list": [], "deny_list": []}
+            }
+        });
+        // These are untrusted structural carriers, with no configured authority.
+        // The sentinels keep an old duplicate-erasing intake from starting effects.
+        let execute = serde_json::json!({
+            "schema_version": 2,
+            "cmd": "",
+            "cwd": "/synthetic/raw-intake",
+            "pty": false,
+            "agent_id": "",
+            "budget": {"max_execs": 1},
+            "policy_snapshot": snapshot,
+            "ordinary_start_selection": start,
+            "member_dispatch": {
+                "schema_version": 1,
+                "orchestration_session_id": "http_session",
+                "participant_id": "http_member",
+                "orchestrator_participant_id": "http_caller",
+                "backend_id": "cli:codex-world",
+                "protocol": "substrate.agent.session",
+                "run_id": "http_run",
+                "world_id": "http_world",
+                "world_generation": 1,
+                "initial_prompt": "synthetic",
+                "resolved_runtime": {
+                    "backend_kind": "codex",
+                    "binary_path": "/synthetic/missing"
+                }
+            }
+        });
+        let gateway = serde_json::json!({
+            "schema_version": 2,
+            "cwd": "/synthetic/raw-intake",
+            "env": {"SUBSTRATE_LLM_GATEWAY_ENABLED": "false"},
+            "agent_id": "http_agent",
+            "policy_snapshot": snapshot,
+            "ordinary_selection": {
+                "schema_version": 1,
+                "start": start,
+                "runtime": {
+                    "selection_role": "host_actor",
+                    "orchestration_session_id": "http_session",
+                    "participant_id": "http_caller",
+                    "backend_id": "cli:codex-host",
+                    "run_id": "http_run"
+                }
+            }
+        });
+        let start_raw = serde_json::to_string(&start).unwrap();
+        let execute_raw = serde_json::to_string(&execute).unwrap();
+        let gateway_raw = serde_json::to_string(&gateway).unwrap();
+        serde_json::from_str::<ExecuteRequest>(&execute_raw)
+            .expect("valid untrusted execute shape");
+        serde_json::from_str::<GatewayLifecycleRequestV1>(&gateway_raw)
+            .expect("valid untrusted gateway shape");
+
+        for (path, raw) in [
+            ("/v1/execute", &execute_raw),
+            ("/v1/execute/stream", &execute_raw),
+            ("/v1/gateway/status", &gateway_raw),
+            ("/v1/gateway/sync", &gateway_raw),
+            ("/v1/gateway/restart", &gateway_raw),
+        ] {
+            let digest_field = format!("\"native_selection_sha256\":\"{}\"", "c".repeat(64));
+            let duplicated_digest =
+                start_raw.replacen(&digest_field, &format!("{digest_field},{digest_field}"), 1);
+            let duplicated_start_version = start_raw.replacen(
+                "\"schema_version\":1",
+                "\"schema_version\":1,\"schema_version\":1",
+                1,
+            );
+            for (case, body, expected) in [
+                (
+                    "outer duplicate version",
+                    raw.replacen(
+                        "\"schema_version\":2",
+                        "\"schema_version\":2,\"schema_version\":2",
+                        1,
+                    ),
+                    "duplicate field",
+                ),
+                (
+                    "nested duplicate selection digest",
+                    raw.replacen(&start_raw, &duplicated_digest, 1),
+                    "duplicate field",
+                ),
+                (
+                    "nested duplicate Start version",
+                    raw.replacen(&start_raw, &duplicated_start_version, 1),
+                    "duplicate field",
+                ),
+                (
+                    "nested duplicate runtime run",
+                    raw.replacen(
+                        "\"run_id\":\"http_run\"",
+                        "\"run_id\":\"http_run\",\"run_id\":\"http_run\"",
+                        1,
+                    ),
+                    if matches!(path, "/v1/execute" | "/v1/execute/stream") {
+                        "duplicate member_dispatch field `run_id`"
+                    } else {
+                        "duplicate field `run_id`"
+                    },
+                ),
+                (
+                    "unknown outer version",
+                    raw.replacen("\"schema_version\":2", "\"schema_version\":3", 1),
+                    "unsupported",
+                ),
+            ] {
+                assert_ne!(&body, raw, "{path}: {case} must change the raw body");
+                let response = app
+                    .clone()
+                    .oneshot(
+                        Request::builder()
+                            .method("POST")
+                            .uri(path)
+                            .header("content-type", "application/json")
+                            .body(Body::from(body))
+                            .unwrap(),
+                    )
+                    .await
+                    .expect("in-process handler response");
+                assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{path}: {case}");
+                let bytes = hyper::body::to_bytes(response.into_body()).await.unwrap();
+                let error: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                let object = error.as_object().expect("error object");
+                assert_eq!(object.len(), 1, "{path}: {case}: {error}");
+                let message = object["error"].as_str().expect("error message");
+                assert!(
+                    message.starts_with("Invalid JSON: ") && message.contains(expected),
+                    "{path}: {case}: {message}"
+                );
+                assert_eq!(backend.calls.load(Ordering::SeqCst), 0, "{path}: {case}");
+                assert!(service.budgets.read().unwrap().is_empty(), "{path}: {case}");
+                assert!(service.worlds.read().unwrap().is_empty(), "{path}: {case}");
+                assert_eq!(
+                    service.last_policy_resolution_mode.load(Ordering::SeqCst),
+                    0,
+                    "{path}: {case}"
+                );
+                assert_eq!(
+                    service.last_netfilter_requested.load(Ordering::SeqCst),
+                    0,
+                    "{path}: {case}"
+                );
+                assert!(service
+                    .last_netfilter_failure_reason
+                    .read()
+                    .unwrap()
+                    .is_none());
+            }
+        }
+    }
+
     #[cfg(target_os = "linux")]
     fn exact_bound_world_policy_snapshot() -> transport_api_types::PolicySnapshotV3 {
         transport_api_types::PolicySnapshotV3 {
@@ -4168,6 +5504,8 @@ mod tests {
         dispatch.validate().expect("well-formed injected E3-A V2");
 
         transport_api_types::ExecuteRequest {
+            schema_version: 1,
+            ordinary_start_selection: None,
             profile: None,
             cmd: String::new(),
             cwd: Some("/tmp/e3a-must-not-resolve".to_string()),
@@ -5018,5 +6356,1526 @@ mod tests {
     fn test_service_creation_fails_on_non_linux() {
         let result = WorldService::new();
         assert!(result.is_err());
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+#[path = "ordinary_world_integration_tests.rs"]
+mod ordinary_world_integration_tests;
+
+#[cfg(target_os = "linux")]
+impl WorldService {
+    // Called only after the inherited-listener/peer extension has authenticated
+    // the configured nonroot principal. The detached operation, rather than the
+    // HTTP waiter, retains table ownership through startup and checked disposal.
+    pub(crate) async fn host_gateway_turn(
+        &self,
+        principal_uid: u32,
+        request: transport_api_types::HostGatewayInstanceRequestV3,
+    ) -> Result<transport_api_types::HostGatewayInstanceResponseV3> {
+        request
+            .validate()
+            .map_err(|_| anyhow!("host_gateway_turn_invalid_request"))?;
+        let owner = Arc::clone(&self.host_gateway_turns);
+        let authority = self.ordinary_selection_authority.clone();
+        let exclusion = Arc::clone(&self.privileged_child_exclusion);
+        tokio::spawn(async move {
+            owner
+                .execute(principal_uid, request, authority, exclusion)
+                .await
+        })
+        .await
+        .map_err(|_| anyhow!("host_gateway_turn_outcome_unknown"))?
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl WorldService {
+    pub(crate) fn workspace_current_v1(
+        &self,
+        peer: &substrate_shell::WorkspaceNativePeerV1,
+        request: &transport_api_types::WorkspaceCurrentRequestV1,
+    ) -> transport_api_types::WorkspaceCurrentResponseV1 {
+        // This is the actual service-owned backend. No substitute is constructed.
+        substrate_shell::workspace_current_for_peer_v1(peer, request, &self.linux_backend)
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod workspace_current_joined_private_tests {
+    use super::*;
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    use std::path::{Path, PathBuf};
+    use transport_api_types::{
+        WorkspaceCurrentOperationV1 as O, WorkspaceCurrentRequestV1 as Q,
+        WorkspaceCurrentResponseV1 as R,
+    };
+
+    fn root() -> PathBuf {
+        let root = PathBuf::from(
+            std::env::var_os("TASK22_PRIVATE_ROOT").expect("exact released fixture root"),
+        );
+        let product = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(2)
+            .expect("compiled source checkout");
+        let private_parent = product.join(".codex/task20-workspace-proof/joined");
+        assert_eq!(
+            root.parent(),
+            Some(private_parent.as_path()),
+            "exact owned private source-proof case"
+        );
+        assert_eq!(unsafe { libc::geteuid() }, 0);
+        assert_eq!(
+            std::env::var("TASK22_PRIVATE_NAMESPACE").unwrap(),
+            "joined-v1"
+        );
+        root
+    }
+    // Fixture processes must never inherit Root's real HOME, provider/shim settings,
+    // or one identity's home/user environment after setpriv selects the other identity.
+    fn configure_private_environment(command: &mut std::process::Command, root: &Path, uid: u32) {
+        let (home, account, runtime, temporary) = match uid {
+            0 => (
+                PathBuf::from("/run/task22-root/home"),
+                "root",
+                PathBuf::from("/run/task22-service-runtime"),
+                PathBuf::from("/run/task22-root/tmp"),
+            ),
+            1000 => (
+                PathBuf::from("/run/task22-owner/home"),
+                "task22-owner",
+                PathBuf::from("/run/task22-owner/unit-runtime"),
+                PathBuf::from("/run/task22-owner/tmp"),
+            ),
+            _ => panic!("fixture supports exactly Root and its native owner"),
+        };
+        command
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .env("HOME", &home)
+            .env("USER", account)
+            .env("LOGNAME", account)
+            .env("XDG_CONFIG_HOME", home.join(".config"))
+            .env("XDG_CACHE_HOME", home.join(".cache"))
+            .env("XDG_DATA_HOME", home.join(".local/share"))
+            .env("XDG_RUNTIME_DIR", runtime)
+            .env("TMPDIR", temporary)
+            .env("LANG", "C")
+            .env("LC_ALL", "C")
+            .env("PYTHONDONTWRITEBYTECODE", "1")
+            .env("PYTHONNOUSERSITE", "1")
+            .env(
+                "TASK22_PRODUCT",
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .ancestors()
+                    .nth(2)
+                    .expect("compiled source checkout"),
+            )
+            .env("TASK22_PRIVATE_ROOT", root)
+            .env("TASK22_PRIVATE_NAMESPACE", "joined-v1");
+        for key in [
+            "TASK22_PRIVATE_CASE",
+            "TASK22_SHELL_TEST_BINARY",
+            "TASK22_SERVICE_TEST_BINARY",
+            "TASK22_SUBSTRATE_BINARY",
+        ] {
+            command.env(
+                key,
+                std::env::var_os(key).expect("released task-local artifact/input"),
+            );
+        }
+    }
+    fn shell_driver(
+        root: &Path,
+        mode: &str,
+        world: &world_api::WorldHandle,
+        uid: u32,
+    ) -> std::process::Output {
+        let mut command = std::process::Command::new("/usr/bin/setpriv");
+        configure_private_environment(&mut command, root, uid);
+        command
+            .arg(format!("--reuid={uid}"))
+            .arg(format!("--regid={uid}"))
+            .arg("--clear-groups")
+            .arg(
+                std::env::var_os("TASK22_SHELL_TEST_BINARY")
+                    .expect("built private shell unit binary"),
+            );
+        command.args(["execution::agent_runtime::host_session_authority::facade::workspace_current_private_driver_v1::test_workspace_current_private_producer_driver", "--ignored", "--exact", "--nocapture"])
+            .current_dir(root).env("TASK22_DRIVER_MODE", mode).env("TASK22_WORLD_ID", &world.id)
+            .env("TASK22_WORLD_GENERATION", world.shared_binding.as_ref().unwrap().world_generation.to_string());
+        command
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        let child = command.spawn().unwrap();
+        if mode == "transport-held" {
+            // Actual Child handle is the witness; do not infer a PID from set differences.
+            let witness = root.join("control/transport-caller.pid");
+            assert!(!witness.exists());
+            std::fs::write(&witness, child.id().to_string()).unwrap();
+        }
+        let output = child.wait_with_output().unwrap();
+        assert!(
+            output.status.success(),
+            "driver {mode}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        output
+    }
+    fn native(root: &Path, operation: &str, request: &Q) -> (bool, R) {
+        let file = root.join("control/native-request.json");
+        std::fs::write(&file, serde_json::to_vec(request).unwrap()).unwrap();
+        // Harness input only; the UID-1000-owned control directory remains 0700.
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let mut command = std::process::Command::new("/usr/bin/setpriv");
+        configure_private_environment(&mut command, root, 1000);
+        let output = command
+            .args(["--reuid=1000", "--regid=1000", "--clear-groups"])
+            .arg(std::env::var_os("TASK22_SUBSTRATE_BINARY").expect("built actual native binary"))
+            .args(["--install-prefix"])
+            .arg(PathBuf::from("/run/task22-owner/home"))
+            .args(["workspace", operation, "--request"])
+            .arg(&file)
+            .current_dir(PathBuf::from("/run/task22-owner/workspace"))
+            .env(
+                "SUBSTRATE_WORLD_SOCKET",
+                PathBuf::from("/run/task22-current.sock"),
+            )
+            .output()
+            .unwrap();
+        let value = serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
+            panic!(
+                "native response {error}; stdout={} stderr={}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            )
+        });
+        (output.status.success(), value)
+    }
+    fn direct(root: &Path, world: &world_api::WorldHandle, request: &Q, uid: u32) -> R {
+        direct_mode(root, world, request, uid, "transport")
+    }
+    fn direct_mode(
+        root: &Path,
+        world: &world_api::WorldHandle,
+        request: &Q,
+        uid: u32,
+        mode: &str,
+    ) -> R {
+        std::fs::write(
+            root.join("control/transport-request.json"),
+            serde_json::to_vec(request).unwrap(),
+        )
+        .unwrap();
+        std::fs::set_permissions(
+            root.join("control/transport-request.json"),
+            std::fs::Permissions::from_mode(0o644),
+        )
+        .unwrap();
+        let output = shell_driver(root, mode, world, uid);
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        let line = stdout
+            .lines()
+            .find_map(|line| line.strip_prefix("TASK22_RESPONSE="))
+            .expect("typed direct response");
+        serde_json::from_str(line).unwrap()
+    }
+    #[derive(PartialEq, Eq)]
+    struct State {
+        metadata: (u64, u64, u32, u32, u32, u64, u64, i64, i64, i64, i64),
+        bytes: Vec<u8>,
+    }
+    impl std::fmt::Debug for State {
+        fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter
+                .debug_struct("State")
+                .field("metadata", &self.metadata)
+                .field("content_byte_count", &self.bytes.len())
+                .finish()
+        }
+    }
+    #[derive(Debug, PartialEq, Eq)]
+    struct ObservedState {
+        files: std::collections::BTreeMap<PathBuf, State>,
+        namespaces: Vec<PathBuf>,
+        mountinfo: String,
+        cgroup_membership: String,
+        children: std::collections::BTreeSet<u32>,
+    }
+    fn snapshot(root: &Path) -> ObservedState {
+        fn visit(root: &Path, path: &Path, out: &mut std::collections::BTreeMap<PathBuf, State>) {
+            let m = std::fs::symlink_metadata(path).unwrap();
+            // This exact directory contains only harness inputs/negative preimages. It is
+            // never an owner authority, backend root, runtime, socket or cgroup directory.
+            if path == root.join("control") {
+                return;
+            }
+            // Socket entries are measured by identity/mode/ownership like other entries.
+            out.insert(
+                path.strip_prefix(root).unwrap().to_path_buf(),
+                State {
+                    metadata: (
+                        m.dev(),
+                        m.ino(),
+                        m.mode(),
+                        m.uid(),
+                        m.gid(),
+                        m.nlink(),
+                        m.len(),
+                        m.mtime(),
+                        m.mtime_nsec(),
+                        m.ctime(),
+                        m.ctime_nsec(),
+                    ),
+                    bytes: if m.is_file() {
+                        std::fs::read(path).unwrap()
+                    } else {
+                        Vec::new()
+                    },
+                },
+            );
+            if m.is_dir() {
+                for child in std::fs::read_dir(path).unwrap() {
+                    visit(root, &child.unwrap().path(), out);
+                }
+            }
+        }
+        let mut files = std::collections::BTreeMap::new();
+        visit(root, root, &mut files);
+        let mut children = std::collections::BTreeSet::new();
+        for task in std::fs::read_dir("/proc/self/task").unwrap() {
+            if let Ok(bytes) = std::fs::read_to_string(task.unwrap().path().join("children")) {
+                for pid in bytes.split_whitespace() {
+                    children.insert(pid.parse().unwrap());
+                }
+            }
+        }
+        ObservedState {
+            files,
+            namespaces: ["mnt", "net", "pid", "user", "cgroup"]
+                .into_iter()
+                .map(|name| std::fs::read_link(format!("/proc/self/ns/{name}")).unwrap())
+                .collect(),
+            mountinfo: std::fs::read_to_string("/proc/self/mountinfo").unwrap(),
+            cgroup_membership: std::fs::read_to_string("/proc/self/cgroup").unwrap(),
+            children,
+        }
+    }
+    fn read_request(root: &Path, publication: &R) -> Q {
+        let mut request: Q =
+            serde_json::from_slice(&std::fs::read(root.join("control/request.json")).unwrap())
+                .unwrap();
+        let R::AssociationPublished {
+            lane_ref,
+            association_incarnation,
+            association_revision,
+            backend_custody_ref,
+            ..
+        } = publication
+        else {
+            panic!("genuine publisher result");
+        };
+        request.operation = O::CurrentActorRead {
+            lane_ref: lane_ref.clone(),
+            association_incarnation: association_incarnation.clone(),
+            association_revision: *association_revision,
+            backend_custody_ref: backend_custody_ref.clone(),
+            expected_actor: std::fs::read_to_string(root.join("control/expected-actor.txt"))
+                .unwrap(),
+        };
+        request
+    }
+
+    fn selected_read_request_v1(
+        root: &Path,
+        publication: &transport_api_types::WorkspaceAssociationUpdateResponseV1,
+    ) -> Q {
+        let transport_api_types::WorkspaceAssociationUpdateResponseV1::AssociationPublished {
+            lane_ref,
+            association_incarnation,
+            association_revision,
+            backend_custody_ref,
+            ..
+        } = publication
+        else {
+            panic!("actual selected association publisher");
+        };
+        let mut request: Q =
+            serde_json::from_slice(&std::fs::read(root.join("control/request.json")).unwrap())
+                .unwrap();
+        request.operation = O::CurrentActorRead {
+            lane_ref: lane_ref.clone(),
+            association_incarnation: association_incarnation.clone(),
+            association_revision: *association_revision,
+            backend_custody_ref: backend_custody_ref.clone(),
+            expected_actor: std::fs::read_to_string(root.join("control/expected-actor.txt"))
+                .unwrap(),
+        };
+        request
+    }
+
+    async fn preflight_gate_v1(
+        axum::extract::State(root): axum::extract::State<PathBuf>,
+        request: hyper::Request<hyper::Body>,
+        next: axum::middleware::Next<hyper::Body>,
+    ) -> axum::response::Response {
+        if request.uri().path() == "/v1/workspace/preflight"
+            && root.join("control/preflight-gate").exists()
+        {
+            std::fs::write(
+                root.join("control/preflight-gate-arrived"),
+                b"native C1 completed; service before C1",
+            )
+            .unwrap();
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+            while !root.join("control/preflight-gate-release").exists()
+                && std::time::Instant::now() < deadline
+            {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+            assert!(
+                root.join("control/preflight-gate-release").exists(),
+                "bounded source proof gate"
+            );
+        }
+        next.run(request).await
+    }
+
+    fn native_adapter_v1(
+        root: &Path,
+        operation: &str,
+        body: Option<&serde_json::Value>,
+        path: Option<&Path>,
+    ) -> serde_json::Value {
+        let request_file = root.join("control/preflight-setup-request.json");
+        if let Some(body) = body {
+            std::fs::write(&request_file, serde_json::to_vec(body).unwrap()).unwrap();
+            std::fs::set_permissions(&request_file, std::fs::Permissions::from_mode(0o600))
+                .unwrap();
+            use std::os::unix::ffi::OsStrExt;
+            let name = std::ffi::CString::new(request_file.as_os_str().as_bytes()).unwrap();
+            assert_eq!(unsafe { libc::chown(name.as_ptr(), 1000, 1000) }, 0);
+        }
+        let mut command = std::process::Command::new("/usr/bin/setpriv");
+        configure_private_environment(&mut command, root, 1000);
+        command
+            .args(["--reuid=1000", "--regid=1000", "--clear-groups"])
+            .arg(std::env::var_os("TASK22_SUBSTRATE_BINARY").unwrap())
+            .args([
+                "--install-prefix",
+                "/run/task22-owner/home",
+                "workspace",
+                operation,
+            ])
+            .env("SUBSTRATE_WORLD_SOCKET", "/run/task22-current.sock")
+            .current_dir("/run/task22-owner/workspace");
+        if body.is_some() {
+            command.arg("--request").arg(&request_file);
+        } else if let Some(path) = path {
+            command.arg(path);
+        }
+        let output = command.output().unwrap();
+        serde_json::from_slice(&output.stdout).unwrap_or_else(|e| {
+            panic!(
+                "native {operation}: {e}: stdout={} stderr={}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            )
+        })
+    }
+
+    fn run_preflight_profile_v1(
+        service: &WorldService,
+        root: &Path,
+        world: &world_api::WorldHandle,
+        spec: &world_api::WorldSpec,
+    ) {
+        use sha2::{Digest, Sha256};
+        use world_api::WorldBackend;
+        shell_driver(root, "revision-settings", world, 1000);
+        let mut sibling_spec = spec.clone();
+        sibling_spec.reuse_mode =
+            world_api::WorldReuseMode::SharedOrchestration(world_api::SharedWorldOwnerSpec {
+                orchestration_session_id: "session-sibling".into(),
+                action: world_api::SharedWorldOwnerAction::AttachOrCreate,
+            });
+        let sibling_world = service.linux_backend.ensure_session(&sibling_spec).unwrap();
+        shell_driver(root, "setup-sibling", &sibling_world, 1000);
+        let mut sibling: Q =
+            serde_json::from_slice(&std::fs::read(root.join("control/request.json")).unwrap())
+                .unwrap();
+        let sibling_actor =
+            std::fs::read_to_string(root.join("control/expected-actor.txt")).unwrap();
+        shell_driver(root, "observe", world, 1000);
+        let publish: Q =
+            serde_json::from_slice(&std::fs::read(root.join("control/request.json")).unwrap())
+                .unwrap();
+        let publication = native_adapter_v1(
+            root,
+            "publish-world-association",
+            Some(&serde_json::json!({"current":publish,"active":true})),
+            None,
+        );
+        assert_eq!(
+            publication["state"], "AssociationPublished",
+            "{publication}"
+        );
+        let publication: transport_api_types::WorkspaceAssociationUpdateResponseV1 =
+            serde_json::from_value(publication).unwrap();
+        let current = selected_read_request_v1(root, &publication);
+        let sibling_publication = native_adapter_v1(
+            root,
+            "publish-world-association",
+            Some(&serde_json::json!({"current":sibling,"active":true})),
+            None,
+        );
+        assert_eq!(
+            sibling_publication["state"], "AssociationPublished",
+            "{sibling_publication}"
+        );
+        let transport_api_types::WorkspaceAssociationUpdateResponseV1::AssociationPublished {
+            lane_ref,
+            association_incarnation,
+            association_revision,
+            backend_custody_ref,
+            ..
+        } = serde_json::from_value(sibling_publication).unwrap()
+        else {
+            panic!("genuine sibling publisher");
+        };
+        sibling.operation = O::CurrentActorRead {
+            lane_ref,
+            association_incarnation,
+            association_revision,
+            backend_custody_ref,
+            expected_actor: sibling_actor,
+        };
+        let initial = PathBuf::from("/run/task22-owner/initial-integration");
+        std::fs::create_dir(&initial).unwrap();
+        std::fs::set_permissions(&initial, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let name = std::ffi::CString::new(initial.to_str().unwrap()).unwrap();
+        assert_eq!(unsafe { libc::chown(name.as_ptr(), 1000, 1000) }, 0);
+        let offered = native_adapter_v1(root, "open", None, Some(&initial));
+        assert_eq!(offered["state"], "InitializationOffered", "{offered}");
+        let native = PathBuf::from(std::env::var_os("TASK22_SUBSTRATE_BINARY").unwrap());
+        let writer = PathBuf::from(std::env::var_os("TASK22_SHELL_TEST_BINARY").unwrap());
+        if std::env::var("TASK22_PRIVATE_CASE").as_deref() == Ok("preflight-custody") {
+            let mut selected = current.clone();
+            let metadata = PathBuf::from("/run/task22-service-runtime/substrate/worlds")
+                .join(&world.id)
+                .join("session.json");
+            let original = std::fs::read(&metadata).unwrap();
+            for defect in ["pending", "corrupt", "same-byte-restore"] {
+                let before = snapshot(root);
+                let reply =
+                    native_adapter_v1(root, "preflight", Some(&serde_json::json!(selected)), None);
+                assert_eq!(reply["state"], "EligibleObservation", "{reply}");
+                assert_eq!(snapshot(root), before, "positive custody preflight PF-ZERO");
+                let pending = metadata.with_file_name(".session.json.preflight-pending.tmp");
+                match defect {
+                    "pending" => std::fs::write(&pending, b"incomplete").unwrap(),
+                    "corrupt" => std::fs::write(&metadata, b"{invalid").unwrap(),
+                    _ => {
+                        std::fs::write(&metadata, b"changed").unwrap();
+                        std::fs::write(&metadata, &original).unwrap();
+                    }
+                }
+                let before = snapshot(root);
+                let reply =
+                    native_adapter_v1(root, "preflight", Some(&serde_json::json!(selected)), None);
+                assert_ne!(reply["state"], "EligibleObservation", "custody {defect}");
+                assert_eq!(
+                    snapshot(root),
+                    before,
+                    "failed custody preflight PF-ZERO {defect}"
+                );
+                if defect == "pending" {
+                    std::fs::remove_file(pending).unwrap();
+                } else if defect == "corrupt" {
+                    std::fs::write(&metadata, &original).unwrap();
+                }
+                let publication = native_adapter_v1(
+                    root,
+                    "publish-world-association",
+                    Some(&serde_json::json!({"current":publish,"active":true})),
+                    None,
+                );
+                assert_eq!(
+                    publication["state"], "AssociationPublished",
+                    "{publication}"
+                );
+                selected =
+                    selected_read_request_v1(root, &serde_json::from_value(publication).unwrap());
+                println!("PF-REV/PF-ZERO native custody {defect} refusal");
+            }
+            let before = snapshot(root);
+            let reply =
+                native_adapter_v1(root, "preflight", Some(&serde_json::json!(selected)), None);
+            assert_eq!(reply["state"], "EligibleObservation", "{reply}");
+            assert_eq!(snapshot(root), before);
+            let replacement = world_api::WorldSpec {
+                reuse_mode: world_api::WorldReuseMode::SharedOrchestration(
+                    world_api::SharedWorldOwnerSpec {
+                        orchestration_session_id: "session-start-1".into(),
+                        action: world_api::SharedWorldOwnerAction::ReplaceExpectedGeneration {
+                            expected_generation: 0,
+                            reason: "explicit private preflight owner invalidation".into(),
+                        },
+                    },
+                ),
+                ..spec.clone()
+            };
+            let produced = service.linux_backend.ensure_session(&replacement).unwrap();
+            assert_eq!(
+                produced.shared_binding.as_ref().unwrap().world_generation,
+                1
+            );
+            let before = snapshot(root);
+            let reply =
+                native_adapter_v1(root, "preflight", Some(&serde_json::json!(selected)), None);
+            assert_ne!(
+                reply["state"], "EligibleObservation",
+                "genuine backend owner World generation invalidation"
+            );
+            assert_eq!(
+                snapshot(root),
+                before,
+                "World invalidated failed read zero effects"
+            );
+            println!("PF-REV/PF-LATER/PF-ZERO actual backend owner replacement refused stale no-send observation");
+            return;
+        }
+        let profile = serde_json::json!({"schema_version":1,"qualification":"private-source","native_binary":native,
+            "native_sha256":format!("{:x}",Sha256::digest(std::fs::read(&native).unwrap())),"writer_binary":writer,
+            "writer_sha256":format!("{:x}",Sha256::digest(std::fs::read(&writer).unwrap())),"native_home":"/run/task22-owner/home","native_runtime":"/run/task22-owner/unit-runtime","native_tmp":"/run/task22-owner/tmp","initialization_effect_path":root.join("run/task22-owner/initial-integration"),
+            "socket":"/run/task22-current.sock","selected_location":"/run/task22-owner/workspace","effect_root":root,"control":root.join("control"),
+            "native_context":current.native_context,"current":current,"sibling":sibling,"initialization":offered["offer"],
+            "continuation":match std::env::var("TASK22_PRIVATE_CASE").as_deref(){Ok("preflight-resume")=>"resume",Ok("preflight-owner")=>"owner",Ok("preflight-legacy")=>"legacy",_=>"attach"}});
+        let profile_path = root.join("control/genuine-no-send-profile.json");
+        std::fs::write(&profile_path, serde_json::to_vec(&profile).unwrap()).unwrap();
+        std::fs::set_permissions(&profile_path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let mut command = std::process::Command::new(
+            std::env::var_os("TASK22_INTEGRATION_TEST_BINARY")
+                .expect("exact Cargo integration executable"),
+        );
+        configure_private_environment(&mut command, root, 0);
+        command
+            .args([
+                "test_real_workspace_open_init_and_existing_world_no_send",
+                "--ignored",
+                "--exact",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env("SUBSTRATE_PREFLIGHT_PROOF_PROFILE", &profile_path);
+        let output = command.output().unwrap();
+        println!("{}", String::from_utf8_lossy(&output.stdout));
+        assert!(
+            output.status.success(),
+            "genuine full native integration: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        println!("PF_PROFILE_ACTUAL_NATIVE_SOURCE_COMPLETE=private-source; installed qualification remains R17");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "requires the explicitly released private two-identity mount namespace"]
+    async fn test_workspace_current_joined_private_native_service_publisher_and_lineage() {
+        use world_api::WorldBackend;
+        let root = root();
+        let case = std::env::var("TASK22_PRIVATE_CASE").expect("explicit fixture population");
+        let service = WorldService::new().unwrap();
+        assert!(
+            service.accepted_home_authority.is_none()
+                && service.config_projection_service.is_none()
+                && service.e3_projection_preparations.is_none(),
+            "the new read must succeed later without E3 initialization/preparation readiness"
+        );
+        let spec = world_api::WorldSpec {
+            project_dir: PathBuf::from("/run/task22-owner/workspace"),
+            isolate_network: false,
+            reuse_mode: world_api::WorldReuseMode::SharedOrchestration(
+                world_api::SharedWorldOwnerSpec {
+                    orchestration_session_id: "session-start-1".into(),
+                    action: world_api::SharedWorldOwnerAction::AttachOrCreate,
+                },
+            ),
+            ..world_api::WorldSpec::default()
+        };
+        // The fixture prepares only the empty directory selected by the existing
+        // SessionWorld::default_shared_root_dir_for(XDG_RUNTIME_DIR) rule. Shared
+        // ensure_session takes this existing root's ownership lock before allocation.
+        let backend_root =
+            PathBuf::from(std::env::var_os("XDG_RUNTIME_DIR").unwrap()).join("substrate/worlds");
+        assert_eq!(
+            backend_root,
+            PathBuf::from("/run/task22-service-runtime/substrate/worlds")
+        );
+        let metadata_root = std::fs::metadata(&backend_root).unwrap();
+        assert_eq!(metadata_root.uid(), 0);
+        assert_eq!(metadata_root.mode() & 0o777, 0o700);
+        assert!(
+            std::fs::read_dir(&backend_root).unwrap().next().is_none(),
+            "no handwritten custody/cache/World metadata"
+        );
+        // The real existing service backend invokes its real producer, before read measurement.
+        let world = service.linux_backend.ensure_session(&spec).unwrap();
+        assert_eq!(world.shared_binding.as_ref().unwrap().world_generation, 0);
+        shell_driver(&root, "setup", &world, 1000);
+        // Invoke only the existing genuine installed-home publisher function, in the private
+        // namespace. No installer/provision/service action and no test record constructor.
+        let mut producer_command = std::process::Command::new("/usr/bin/bash");
+        configure_private_environment(&mut producer_command, &root, 0);
+        let producer = producer_command
+            .args([
+                "--noprofile",
+                "--norc",
+                "-c",
+                r#"
+            set -euo pipefail
+            source "$TASK22_PRODUCT/scripts/linux/world-lifecycle.sh"
+            sudo_cmd() { "$@"; }
+            INSTALL_BOOTSTRAP_CONTEXT_V1=$(cat "$TASK22_PRIVATE_ROOT/control/carrier.txt")
+            INSTALL_BOOTSTRAP_COMMITMENT="$TASK22_CARRIER_COMMITMENT"
+            INSTALL_BOOTSTRAP_ACCOUNT=task22-owner
+            INSTALL_BOOTSTRAP_UID=1000
+            INSTALL_BOOTSTRAP_PRIMARY_GID=1000
+            INSTALL_PREFIX=/run/task22-owner/home
+            unset FAKE_ROOT
+            publish_installed_home_bootstrap_v1
+        "#,
+            ])
+            .env("TASK22_CARRIER_COMMITMENT", {
+                let request: Q = serde_json::from_slice(
+                    &std::fs::read(root.join("control/request.json")).unwrap(),
+                )
+                .unwrap();
+                request.native_context.host_context_commitment
+            })
+            .output()
+            .unwrap();
+        assert!(
+            producer.status.success(),
+            "genuine bootstrap publisher: {}",
+            String::from_utf8_lossy(&producer.stderr)
+        );
+        if case.starts_with("preflight") {
+            let mut proof =
+                std::process::Command::new(std::env::var_os("TASK22_SHELL_TEST_BINARY").unwrap());
+            configure_private_environment(&mut proof, &root, 0);
+            let proof = proof.args([
+                "execution::workspace_open::installed_authority_cut_private_tests::workspace_open_installed_authority_watch_genuine_publisher_and_restoration",
+                "--ignored", "--exact", "--nocapture",
+            ]).output().unwrap();
+            println!("{}", String::from_utf8_lossy(&proof.stdout));
+            assert!(
+                proof.status.success(),
+                "installed registry proof: {}",
+                String::from_utf8_lossy(&proof.stderr)
+            );
+        }
+        {
+            use std::sync::atomic::{AtomicBool, Ordering};
+            use tower::ServiceExt;
+            let polled = Arc::new(AtomicBool::new(false));
+            let observed = polled.clone();
+            let body = futures_util::stream::once(async move {
+                observed.store(true, Ordering::SeqCst);
+                Ok::<_, std::io::Error>(hyper::body::Bytes::from_static(b"private-body"))
+            });
+            let response = crate::build_router(service.clone())
+                .oneshot(
+                    hyper::Request::post("/v1/workspace/current")
+                        .body(hyper::Body::wrap_stream(body))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert!(
+                !polled.load(Ordering::SeqCst),
+                "unauthenticated/TCP route read the body"
+            );
+            let value: R =
+                serde_json::from_slice(&hyper::body::to_bytes(response.into_body()).await.unwrap())
+                    .unwrap();
+            assert!(matches!(
+                value,
+                R::Refused {
+                    reason: transport_api_types::WorkspaceCurrentRefusalV1::Denied
+                }
+            ));
+        }
+        let shutdown = tokio_util::sync::CancellationToken::new();
+        let proof_router = crate::build_router(service.clone()).layer(
+            axum::middleware::from_fn_with_state(root.clone(), preflight_gate_v1),
+        );
+        let server = tokio::spawn(crate::run_uds_server(
+            proof_router,
+            PathBuf::from("/run/task22-current.sock"),
+            None,
+            None,
+            shutdown.clone(),
+        ));
+        for _ in 0..100 {
+            if PathBuf::from("/run/task22-current.sock").exists() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert!(
+            PathBuf::from("/run/task22-current.sock").exists(),
+            "bounded fixture listener setup"
+        );
+        let publish: Q =
+            serde_json::from_slice(&std::fs::read(root.join("control/request.json")).unwrap())
+                .unwrap();
+        std::fs::write(root.join("control/transport-request.json"), b"{}").unwrap();
+        std::fs::set_permissions(
+            root.join("control/transport-request.json"),
+            std::fs::Permissions::from_mode(0o644),
+        )
+        .unwrap();
+        if case == "publisher-failure" {
+            use std::io::Write;
+            let mut fill = std::fs::File::create(PathBuf::from(
+                "/run/task22-owner/workspace/.substrate/.task22-capacity-fill",
+            ))
+            .unwrap();
+            loop {
+                if fill.write_all(&[0u8; 4096]).is_err() {
+                    break;
+                }
+            }
+            drop(fill);
+            let before = snapshot(&root);
+            let (success, response) = native(&root, "publish-association", &publish);
+            assert!(!success);
+            assert!(
+                matches!(
+                    response,
+                    R::AssociationPublicationFailed {
+                        effects: transport_api_types::WorkspaceAssociationEffectsV1 {
+                            staging_created: Some(true),
+                            published_visible: Some(false),
+                            directory_sync_confirmed: Some(false)
+                        },
+                        ..
+                    }
+                ),
+                "{response:?}"
+            );
+            assert_ne!(
+                snapshot(&root),
+                before,
+                "failed publisher staging must remain visible"
+            );
+            let pending = PathBuf::from(
+                "/run/task22-owner/workspace/.substrate/.workspace-association.v1.pending",
+            );
+            assert!(pending.exists());
+            assert!(!PathBuf::from(
+                "/run/task22-owner/workspace/.substrate/workspace-association.v1.json"
+            )
+            .exists());
+            let mut read = publish.clone();
+            read.operation = O::CurrentActorRead {
+                lane_ref: "unpublished-negative-selector".into(),
+                association_incarnation: "unpublished-negative-selector".into(),
+                association_revision: 1,
+                backend_custody_ref: "a".repeat(64),
+                expected_actor: "participant-start-1".into(),
+            };
+            let before = snapshot(&root);
+            assert!(!native(&root, "current-actor", &read).0);
+            assert!(matches!(
+                direct(&root, &world, &read, 1000),
+                R::Refused { .. }
+            ));
+            assert!(!native(&root, "publish-association", &publish).0);
+            assert_eq!(
+                snapshot(&root),
+                before,
+                "pending state was cleaned/repaired"
+            );
+            shutdown.cancel();
+            server.await.unwrap().unwrap();
+            return;
+        }
+        let before_publish = snapshot(&root);
+        let (success, publication) = native(&root, "publish-association", &publish);
+        assert!(success, "publisher {publication:?}");
+        assert_ne!(
+            snapshot(&root),
+            before_publish,
+            "publication writes must be measured separately"
+        );
+        let assoc = std::fs::metadata(PathBuf::from(
+            "/run/task22-owner/workspace/.substrate/workspace-association.v1.json",
+        ))
+        .unwrap();
+        assert_eq!(assoc.uid(), 1000);
+        assert_eq!(assoc.gid(), 0);
+        assert_eq!(assoc.mode() & 0o7777, 0o600);
+        let identity_bytes = std::fs::read(PathBuf::from(
+            "/run/task22-owner/workspace/.substrate/workspace-state.v1.json",
+        ))
+        .unwrap();
+        let mut request = read_request(&root, &publication);
+        if case == "preflight"
+            || case == "preflight-resume"
+            || case == "preflight-owner"
+            || case == "preflight-legacy"
+            || case == "preflight-custody"
+        {
+            run_preflight_profile_v1(&service, &root, &world, &spec);
+            shutdown.cancel();
+            server.await.unwrap().unwrap();
+            return;
+        }
+        let modes: &[&str] = match case.as_str() {
+            "attach" => &[
+                "initial",
+                "registered",
+                "retained",
+                "settled",
+                "attach",
+                "detach",
+                "attach",
+                "retained",
+            ],
+            "resume" => &[
+                "initial",
+                "registered",
+                "retained",
+                "settled",
+                "resume",
+                "retained",
+            ],
+            // Genuine registered Start promotes to V3, preserves an active lineage
+            // leaf and has no trailing retained participant: supported Stop input.
+            "stop" => &["initial", "registered"],
+            "custody-pending" | "custody-corrupt" | "custody-substituted" | "custody-revision" => {
+                &["initial"]
+            }
+            _ => panic!("unsupported fixture population"),
+        };
+        for &mode in modes {
+            if mode != "initial" {
+                shell_driver(&root, mode, &world, 1000);
+                request = read_request(&root, &publication);
+            }
+            if mode == "detach" {
+                // Startup reconciliation preserves an active authoritative member;
+                // current-actor disclosure does not assert runtime liveness.
+                let before = snapshot(&root);
+                let parity = shell_driver(&root, "parity-detached", &world, 1000);
+                let output = String::from_utf8(parity.stdout).unwrap();
+                let witness = output
+                    .lines()
+                    .find(|line| line.starts_with("TASK22_DETACHED_PARITY="))
+                    .expect("actual detached default/new-reader parity witness");
+                println!("{witness}");
+                assert_eq!(snapshot(&root), before, "detached reader parity effects");
+            }
+            let before = snapshot(&root);
+            let (success, response) = native(&root, "current-actor", &request);
+            assert!(
+                success && matches!(response, R::CurrentActor(..)),
+                "mode {mode}: {response:?}"
+            );
+            assert_eq!(snapshot(&root), before, "mode {mode}: read effects");
+            assert_eq!(
+                std::fs::read(PathBuf::from(
+                    "/run/task22-owner/workspace/.substrate/workspace-state.v1.json"
+                ))
+                .unwrap(),
+                identity_bytes
+            );
+        }
+        // Exact selectors are expectations, never fallback selectors or authority.
+        for mutation in 0..16 {
+            let mut wrong = request.clone();
+            match mutation {
+                0 => wrong.resource.world_generation += 1,
+                1 => wrong.resource.world_id.push('x'),
+                2 => wrong.resource.orchestration_session_id.push('x'),
+                3 => wrong.resource.backend_id.push('x'),
+                4 => wrong.resource.workspace_ref.push('x'),
+                5 => wrong.resource.workspace_incarnation.push('x'),
+                6 => wrong.observation.authority_store_id.push('x'),
+                7 => wrong.observation.home_inode += 1,
+                8 => wrong.observation.root_revision += 1,
+                9 => {
+                    if let O::CurrentActorRead { expected_actor, .. } = &mut wrong.operation {
+                        expected_actor.push('x');
+                    }
+                }
+                10 => {
+                    if let O::CurrentActorRead {
+                        association_revision,
+                        ..
+                    } = &mut wrong.operation
+                    {
+                        *association_revision += 1;
+                    }
+                }
+                11 => {
+                    if let O::CurrentActorRead {
+                        backend_custody_ref,
+                        ..
+                    } = &mut wrong.operation
+                    {
+                        *backend_custody_ref = "f".repeat(64);
+                    }
+                }
+                12 => wrong.observation.home_path.push('x'),
+                13 => wrong.resource.workspace_path.push('x'),
+                14 => {
+                    if let O::CurrentActorRead { lane_ref, .. } = &mut wrong.operation {
+                        lane_ref.push('x');
+                    }
+                }
+                _ => {
+                    if let O::CurrentActorRead {
+                        association_incarnation,
+                        ..
+                    } = &mut wrong.operation
+                    {
+                        association_incarnation.push('x');
+                    }
+                }
+            }
+            let before = snapshot(&root);
+            assert!(
+                !native(&root, "current-actor", &wrong).0,
+                "wrong selector {mutation}"
+            );
+            assert!(
+                matches!(direct(&root, &world, &wrong, 1000), R::Refused { .. }),
+                "independent service wrong selector {mutation}"
+            );
+            assert_eq!(
+                snapshot(&root),
+                before,
+                "wrong selector {mutation}: read effects"
+            );
+        }
+
+        {
+            // These are negative target fixtures, not claimed positive authority records.
+            let foreign = PathBuf::from("/run/task22-foreign-owner-workspace");
+            std::fs::create_dir_all(foreign.join(".substrate")).unwrap();
+            std::fs::write(foreign.join(".substrate/workspace.yaml"), b"{}\n").unwrap();
+            std::fs::write(
+                foreign.join(".substrate/workspace-state.v1.json"),
+                b"negative wrong-owner record",
+            )
+            .unwrap();
+            let missing_owner = PathBuf::from("/run/task22-missing-owner-workspace");
+            std::fs::create_dir_all(missing_owner.join(".substrate")).unwrap();
+            std::fs::write(missing_owner.join(".substrate/workspace.yaml"), b"{}\n").unwrap();
+            for path in [&missing_owner, &missing_owner.join(".substrate")] {
+                let name = std::ffi::CString::new(path.to_str().unwrap()).unwrap();
+                assert_eq!(unsafe { libc::chown(name.as_ptr(), 1000, 1000) }, 0);
+                std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+            }
+            let mut responses = Vec::new();
+            for path in [
+                foreign,
+                missing_owner,
+                PathBuf::from("/run/task22-nonexistent-workspace"),
+            ] {
+                let mut wrong = request.clone();
+                wrong.resource.workspace_path = path.to_str().unwrap().into();
+                let before = snapshot(&root);
+                responses.push(direct(&root, &world, &wrong, 1000));
+                assert_eq!(
+                    snapshot(&root),
+                    before,
+                    "unestablished target denial effects"
+                );
+            }
+            assert!(
+                responses.iter().all(|reply| reply
+                    == &R::Refused {
+                        reason: transport_api_types::WorkspaceCurrentRefusalV1::Denied
+                    }),
+                "global allow disclosed owner/target existence: {responses:?}"
+            );
+        }
+        let policy = PathBuf::from("/run/task22-owner/home/policy.yaml");
+        let saved_policy = std::fs::read(&policy).unwrap();
+        // Current permission, independent mutation permission and existing Workspace precedence.
+        let workspace_policy = PathBuf::from("/run/task22-owner/workspace/.substrate/policy.yaml");
+        // This new policy source must be genuinely created by its native owner before
+        // either boundary reads it; Root-only0600 input would only test unreadability.
+        let mut policy_writer = std::process::Command::new("/usr/bin/setpriv");
+        configure_private_environment(&mut policy_writer, &root, 1000);
+        let created_policy = policy_writer
+            .args(["--reuid=1000", "--regid=1000", "--clear-groups", "/usr/bin/python3", "-I", "-B", "-c",
+                "import pathlib,sys\nwith pathlib.Path(sys.argv[1]).open('x', encoding='utf-8') as output:\n    output.write(sys.argv[2])"])
+            .arg(&workspace_policy)
+            .arg("workspace_authority: {current_actor_read: deny, association_publish: deny}\n")
+            .output()
+            .unwrap();
+        assert!(
+            created_policy.status.success(),
+            "private native policy producer: {}",
+            String::from_utf8_lossy(&created_policy.stderr)
+        );
+        let policy_metadata = std::fs::metadata(&workspace_policy).unwrap();
+        assert_eq!(policy_metadata.uid(), 1000);
+        assert_eq!(policy_metadata.gid(), 1000);
+        assert_eq!(policy_metadata.mode() & 0o777, 0o600);
+        let before = snapshot(&root);
+        assert!(!native(&root, "current-actor", &request).0);
+        assert!(matches!(
+            direct(&root, &world, &request, 1000),
+            R::Refused { .. }
+        ));
+        assert!(!native(&root, "publish-association", &publish).0);
+        assert_eq!(snapshot(&root), before, "Workspace deny precedence effects");
+        std::fs::write(
+            &policy,
+            "workspace_authority: {current_actor_read: deny, association_publish: deny}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            &workspace_policy,
+            "workspace_authority: {current_actor_read: allow}\n",
+        )
+        .unwrap();
+        assert!(
+            native(&root, "current-actor", &request).0,
+            "Workspace read allow replaces global deny"
+        );
+        assert!(
+            !native(&root, "publish-association", &publish).0,
+            "read allow is not mutation permission"
+        );
+        std::fs::remove_file(&workspace_policy).unwrap();
+        assert!(
+            !native(&root, "current-actor", &request).0,
+            "removing effective Workspace allow revokes"
+        );
+        std::fs::write(&policy, &saved_policy).unwrap();
+        for bytes in [
+            b"{}\n".as_slice(),
+            b"workspace_authority: {current_actor_read: deny, association_publish: deny}\n",
+        ] {
+            std::fs::write(&policy, bytes).unwrap();
+            let before = snapshot(&root);
+            let native_denied = native(&root, "current-actor", &request).1;
+            assert!(matches!(
+                native_denied,
+                R::Refused {
+                    reason: transport_api_types::WorkspaceCurrentRefusalV1::Denied
+                }
+            ));
+            assert!(
+                !native(&root, "publish-association", &publish).0,
+                "mutation absence/deny"
+            );
+            assert!(matches!(
+                direct(&root, &world, &publish, 1000),
+                R::Refused {
+                    reason: transport_api_types::WorkspaceCurrentRefusalV1::Denied
+                }
+            ));
+            let service_denied = direct(&root, &world, &request, 1000);
+            assert_eq!(
+                service_denied, native_denied,
+                "independent service policy decision"
+            );
+            assert_eq!(snapshot(&root), before, "permission denial read effects");
+        }
+        std::fs::write(&policy, &saved_policy).unwrap();
+        assert!(
+            native(&root, "current-actor", &request).0,
+            "freshly restored private policy only"
+        );
+        let before = snapshot(&root);
+        assert!(matches!(
+            direct(&root, &world, &request, 0),
+            R::Refused {
+                reason: transport_api_types::WorkspaceCurrentRefusalV1::Denied
+            }
+        ));
+        assert_eq!(snapshot(&root), before, "wrong peer read effects");
+
+        {
+            let backend = service.linux_backend.clone();
+            let resource = request.resource.clone();
+            let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+            let (release_tx, release_rx) = std::sync::mpsc::channel();
+            let holder = std::thread::spawn(move || {
+                backend
+                    .with_existing_custody_nonreconciling_v1(
+                        &resource.orchestration_session_id,
+                        &resource.world_id,
+                        resource.world_generation,
+                        Path::new(&resource.workspace_path),
+                        |_| {
+                            entered_tx.send(()).unwrap();
+                            release_rx.recv().unwrap();
+                            Ok(())
+                        },
+                    )
+                    .unwrap()
+            });
+            entered_rx
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .unwrap();
+            let fd = unsafe { libc::inotify_init1(libc::IN_CLOEXEC | libc::IN_NONBLOCK) };
+            assert!(fd >= 0);
+            let name = std::ffi::CString::new(policy.to_str().unwrap()).unwrap();
+            assert!(
+                unsafe {
+                    libc::inotify_add_watch(
+                        fd,
+                        name.as_ptr(),
+                        libc::IN_OPEN | libc::IN_CLOSE_NOWRITE,
+                    )
+                } >= 0
+            );
+            let direct_root = root.clone();
+            let direct_world = world.clone();
+            let direct_request = request.clone();
+            let call = tokio::task::spawn_blocking(move || {
+                direct_mode(
+                    &direct_root,
+                    &direct_world,
+                    &direct_request,
+                    1000,
+                    "transport-held",
+                )
+            });
+            let witness = root.join("control/transport-caller.pid");
+            for _ in 0..200 {
+                if witness.exists() {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+            assert!(witness.exists(), "actual Child handle PID witness required");
+            let mut opened = 0;
+            for _ in 0..200 {
+                let mut buffer = [0u8; 4096];
+                let count = unsafe { libc::read(fd, buffer.as_mut_ptr().cast(), buffer.len()) };
+                if count > 0 {
+                    let mut cursor = 0;
+                    while cursor + std::mem::size_of::<libc::inotify_event>() <= count as usize {
+                        let event = unsafe {
+                            std::ptr::read_unaligned(
+                                buffer.as_ptr().add(cursor).cast::<libc::inotify_event>(),
+                            )
+                        };
+                        if event.mask & libc::IN_OPEN != 0 {
+                            opened += 1;
+                        }
+                        cursor += std::mem::size_of::<libc::inotify_event>() + event.len as usize;
+                    }
+                }
+                if opened >= 3 {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+            assert!(opened >= 3, "service did not reach held policy capture");
+            std::fs::write(
+                &policy,
+                "workspace_authority: {current_actor_read: deny, association_publish: allow}\n",
+            )
+            .unwrap();
+            let caller_pid: u32 =
+                std::fs::read_to_string(root.join("control/transport-caller.pid"))
+                    .unwrap()
+                    .parse()
+                    .unwrap();
+            let before = snapshot(&root);
+            release_tx.send(()).unwrap();
+            holder.join().unwrap();
+            let completed = root.join("control/transport-completed");
+            for _ in 0..200 {
+                if completed.exists() {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+            let returned = completed.exists();
+            let after = snapshot(&root);
+            // Teardown follows the after-snapshot, even when an assertion will fail.
+            std::fs::write(root.join("control/transport-release"), b"release").unwrap();
+            let response = call.await.unwrap();
+            assert!(
+                returned,
+                "actual client method did not return before measurement"
+            );
+            assert!(
+                before.children.contains(&caller_pid) && after.children.contains(&caller_pid),
+                "witnessed actual harness caller must remain alive in both snapshots"
+            );
+            assert!(
+                matches!(response, R::Refused { .. }),
+                "policy changed within read interval yielded actor"
+            );
+            assert_eq!(after, before, "interval refusal effects");
+            assert_eq!(unsafe { libc::close(fd) }, 0);
+            std::fs::write(&policy, &saved_policy).unwrap();
+        }
+        let association_path =
+            PathBuf::from("/run/task22-owner/workspace/.substrate/workspace-association.v1.json");
+        let association_bytes = std::fs::read(&association_path).unwrap();
+        let pending_path = PathBuf::from(
+            "/run/task22-owner/workspace/.substrate/.workspace-association.v1.pending",
+        );
+        std::fs::write(&pending_path, b"partial-negative-fixture").unwrap();
+        let before = snapshot(&root);
+        assert!(!native(&root, "current-actor", &request).0);
+        assert!(matches!(
+            direct(&root, &world, &request, 1000),
+            R::Refused { .. }
+        ));
+        assert_eq!(
+            snapshot(&root),
+            before,
+            "pending association repaired during read"
+        );
+        std::fs::remove_file(&pending_path).unwrap();
+        std::fs::write(&association_path, b"{corrupt-negative-fixture").unwrap();
+        let before = snapshot(&root);
+        assert!(!native(&root, "current-actor", &request).0);
+        assert!(matches!(
+            direct(&root, &world, &request, 1000),
+            R::Refused { .. }
+        ));
+        assert_eq!(
+            snapshot(&root),
+            before,
+            "corrupt association repaired during read"
+        );
+        std::fs::write(&association_path, &association_bytes).unwrap();
+        let held_association = association_path.with_extension("retained-negative-fixture");
+        std::fs::rename(&association_path, &held_association).unwrap();
+        let original_association = std::fs::symlink_metadata(&held_association).unwrap();
+        {
+            use std::io::Write;
+            use std::os::fd::AsRawFd;
+            use std::os::unix::fs::OpenOptionsExt;
+            // Only this newly created negative replacement changes ownership.
+            let mut replacement = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .open(&association_path)
+                .unwrap();
+            assert_eq!(unsafe { libc::fchown(replacement.as_raw_fd(), 1000, 0) }, 0);
+            replacement.write_all(&association_bytes).unwrap();
+        }
+        let substituted_association = std::fs::symlink_metadata(&association_path).unwrap();
+        assert!(original_association.is_file() && substituted_association.is_file());
+        assert_eq!(
+            (
+                original_association.uid(),
+                original_association.gid(),
+                original_association.mode() & 0o7777
+            ),
+            (1000, 0, 0o600)
+        );
+        assert_eq!(substituted_association.dev(), original_association.dev());
+        assert_ne!(substituted_association.ino(), original_association.ino());
+        assert_eq!(
+            (
+                substituted_association.uid(),
+                substituted_association.gid(),
+                substituted_association.mode() & 0o7777
+            ),
+            (1000, 0, 0o600)
+        );
+        assert_eq!(
+            (
+                original_association.nlink(),
+                substituted_association.nlink()
+            ),
+            (1, 1)
+        );
+        assert_eq!(substituted_association.len(), original_association.len());
+        // Every serialized identity/binding selector is still byte-for-byte genuine.
+        assert_eq!(std::fs::read(&association_path).unwrap(), association_bytes);
+        let unchanged_record: serde_json::Value =
+            serde_json::from_slice(&association_bytes).unwrap();
+        assert_eq!(
+            unchanged_record["record_identity"]["device_id"].as_u64(),
+            Some(original_association.dev())
+        );
+        assert_eq!(
+            unchanged_record["record_identity"]["inode"].as_u64(),
+            Some(original_association.ino())
+        );
+        assert_ne!(
+            unchanged_record["record_identity"]["inode"].as_u64(),
+            Some(substituted_association.ino())
+        );
+        let before = snapshot(&root);
+        assert!(!native(&root, "current-actor", &request).0);
+        assert!(matches!(
+            direct(&root, &world, &request, 1000),
+            R::Refused { .. }
+        ));
+        assert_eq!(
+            snapshot(&root),
+            before,
+            "substituted association adopted/repaired"
+        );
+        std::fs::remove_file(&association_path).unwrap();
+        std::fs::rename(&held_association, &association_path).unwrap();
+
+        if case.starts_with("custody-") {
+            let metadata = PathBuf::from(std::env::var_os("XDG_RUNTIME_DIR").unwrap())
+                .join("substrate/worlds")
+                .join(&world.id)
+                .join("session.json");
+            match case.as_str() {
+                "custody-pending" => {
+                    std::fs::write(
+                        metadata.with_file_name(".session.json.pending-negative.tmp"),
+                        b"partial",
+                    )
+                    .unwrap();
+                }
+                "custody-corrupt" => {
+                    std::fs::write(&metadata, b"{corrupt-custody").unwrap();
+                }
+                "custody-substituted" => {
+                    let bytes = std::fs::read(&metadata).unwrap();
+                    let original = std::fs::symlink_metadata(&metadata).unwrap();
+                    // Same private /run mount, OUTSIDE the target World directory:
+                    // an extra entry there would mask the inode-binding check.
+                    let preserved = metadata
+                        .parent()
+                        .unwrap()
+                        .parent()
+                        .unwrap()
+                        .join(format!(".task22-custody-negative-preimage-{}", world.id));
+                    assert!(!preserved.exists());
+                    std::fs::rename(&metadata, &preserved).unwrap();
+                    std::fs::write(&metadata, &bytes).unwrap();
+                    let substituted = std::fs::symlink_metadata(&metadata).unwrap();
+                    assert_eq!(substituted.dev(), original.dev());
+                    assert_ne!(substituted.ino(), original.ino());
+                    assert_eq!(
+                        (
+                            substituted.uid(),
+                            substituted.gid(),
+                            substituted.mode() & 0o7777
+                        ),
+                        (original.uid(), original.gid(), original.mode() & 0o7777)
+                    );
+                    assert_eq!((original.nlink(), substituted.nlink()), (1, 1));
+                    assert_eq!(std::fs::read(&metadata).unwrap(), bytes);
+                    let target_entries: Vec<_> = std::fs::read_dir(metadata.parent().unwrap())
+                        .unwrap()
+                        .map(|entry| entry.unwrap().file_name())
+                        .collect();
+                    assert_eq!(
+                        target_entries,
+                        vec![std::ffi::OsString::from("session.json")]
+                    );
+                }
+                "custody-revision" => {
+                    let next = world_api::WorldSpec {
+                        reuse_mode: world_api::WorldReuseMode::SharedOrchestration(
+                            world_api::SharedWorldOwnerSpec {
+                                orchestration_session_id: "session-start-1".into(),
+                                action:
+                                    world_api::SharedWorldOwnerAction::ReplaceExpectedGeneration {
+                                        expected_generation: 0,
+                                        reason: "explicit private producer invalidation".into(),
+                                    },
+                            },
+                        ),
+                        ..spec.clone()
+                    };
+                    let produced = service.linux_backend.ensure_session(&next).unwrap();
+                    assert_eq!(
+                        produced.shared_binding.as_ref().unwrap().world_generation,
+                        1
+                    );
+                }
+                _ => unreachable!(),
+            }
+            let before = snapshot(&root);
+            assert!(!native(&root, "current-actor", &request).0);
+            assert!(matches!(
+                direct(&root, &world, &request, 1000),
+                R::Refused { .. }
+            ));
+            assert_eq!(
+                snapshot(&root),
+                before,
+                "stale/pending/corrupt/substituted custody repaired or executed"
+            );
+            shutdown.cancel();
+            server.await.unwrap().unwrap();
+            return;
+        }
+        if case == "attach" || case == "resume" {
+            // This genuine state has a trailing retained participant, so the existing
+            // Stop producer refuses it. Keep that support ceiling and every read.
+            let before = snapshot(&root);
+            let refusal = shell_driver(&root, "stop-retained-refusal", &world, 1000);
+            let refusal_output = String::from_utf8(refusal.stdout).unwrap();
+            let ceiling = refusal_output
+                .lines()
+                .find(|line| line.starts_with("TASK22_STOP_SUPPORT_CEILING="))
+                .expect("exact genuine unsupported Stop refusal witness");
+            println!("{ceiling}");
+            assert_eq!(snapshot(&root), before, "unsupported Stop issuance effects");
+            shutdown.cancel();
+            server.await.unwrap().unwrap();
+            return;
+        }
+        assert_eq!(
+            case, "stop",
+            "supported active-leaf Stop is a separate fixture"
+        );
+        shell_driver(&root, "stop", &world, 1000);
+        let stopped = read_request(&root, &publication);
+        let before = snapshot(&root);
+        assert!(
+            !native(&root, "current-actor", &stopped).0,
+            "Stop must never revive a prior actor"
+        );
+        assert!(
+            matches!(direct(&root, &world, &stopped, 1000), R::Refused { .. }),
+            "direct service Stop must never revive a prior actor"
+        );
+        assert_eq!(snapshot(&root), before, "Stop refusal effects");
+        shutdown.cancel();
+        server.await.unwrap().unwrap();
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl WorldService {
+    pub(crate) fn workspace_preflight_v1(
+        &self,
+        peer: &substrate_shell::WorkspaceNativePeerV1,
+        request: &transport_api_types::WorkspaceCurrentRequestV1,
+    ) -> transport_api_types::WorkspacePreflightResponseV1 {
+        substrate_shell::workspace_preflight_for_peer_v1(peer, request, &self.linux_backend)
+    }
+    pub(crate) fn workspace_association_update_v1(
+        &self,
+        peer: &substrate_shell::WorkspaceNativePeerV1,
+        request: &transport_api_types::WorkspaceAssociationUpdateV1,
+    ) -> transport_api_types::WorkspaceAssociationUpdateResponseV1 {
+        substrate_shell::workspace_association_update_for_peer_v1(
+            peer,
+            request,
+            &self.linux_backend,
+        )
     }
 }

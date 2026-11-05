@@ -308,6 +308,8 @@ async fn launch_harness() -> Option<Harness> {
         root.path().display().to_string(),
     );
     let mut request = ExecuteRequest {
+        schema_version: 1,
+        ordinary_start_selection: None,
         profile: None,
         cmd: String::new(),
         cwd: Some(root.path().display().to_string()),

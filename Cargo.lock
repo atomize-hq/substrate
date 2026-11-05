@@ -5543,6 +5543,7 @@ dependencies = [
  "world-mac-lima",
  "world-service",
  "world-windows-wsl",
+ "yaml-rust2",
 ]
 
 [[package]]
@@ -6587,6 +6588,7 @@ dependencies = [
  "http-body-util",
  "hyper 1.9.0",
  "hyper-util",
+ "libc",
  "serde",
  "serde_json",
  "tempfile",
@@ -7761,6 +7763,7 @@ dependencies = [
  "tower 0.4.13",
  "tracing",
  "tracing-subscriber",
+ "transport-api-client",
  "transport-api-core",
  "transport-api-types",
  "unified-agent-api",

@@ -1358,6 +1358,11 @@ mod tests {
             "world:\n  enabled: true\n  deps:\n    builtins: disabled\n    inventory_mode: merged\n    enabled: []\n",
         )
         .expect("write Route D report config");
+        fs::set_permissions(
+            prefix.join("config.yaml"),
+            fs::Permissions::from_mode(0o600),
+        )
+        .expect("secure Route D report config");
         let package_dir = prefix.join("deps/packages");
         fs::create_dir_all(&package_dir).expect("create Route D report inventory");
         for package in packages {
@@ -1437,8 +1442,9 @@ mod tests {
         let snapshot = section.report.expect("typed Route D report snapshot");
 
         assert_eq!(section.source.as_deref(), Some("command"));
-        assert_eq!(snapshot.inventory_packages, 1);
-        assert_eq!(snapshot.inventory_bundles, 0);
+        // Shipped definitions remain visible alongside the selected custom package.
+        assert_eq!(snapshot.inventory_packages, 4);
+        assert_eq!(snapshot.inventory_bundles, 1);
         assert_eq!(snapshot.builtins, "disabled");
     }
 
@@ -1489,7 +1495,7 @@ mod tests {
             carrier.host_context_commitment
         );
         assert_eq!(
-            report.inventory_packages, 0,
+            report.inventory_packages, 3,
             "fixture inventory claims must not become production truth"
         );
         assert_eq!(

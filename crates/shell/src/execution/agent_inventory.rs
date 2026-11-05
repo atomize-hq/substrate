@@ -1,7 +1,7 @@
 use crate::execution::config_model;
 use crate::execution::workspace;
 use anyhow::Result;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsStr;
@@ -11,7 +11,7 @@ use substrate_broker::{validate_backend_id, validate_dotted_id, Policy};
 use substrate_common::derive_agent_backend_id;
 use substrate_common::paths as substrate_paths;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct AgentFileV1 {
     pub version: u32,
@@ -21,7 +21,7 @@ pub(crate) struct AgentFileV1 {
     pub policy_overlay: Option<crate::execution::policy_model::PolicyPatch>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct AgentConfigV1 {
     #[serde(default = "default_true")]
@@ -39,7 +39,7 @@ pub(crate) struct AgentConfigV1 {
     pub capabilities: AgentCapabilitiesV1,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum AgentConfigKind {
     Cli,
@@ -55,21 +55,21 @@ impl AgentConfigKind {
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct AgentExecutionConfigV1 {
     #[serde(default)]
     pub scope: Option<crate::execution::config_model::AgentExecutionScope>,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum AgentCliRuntimeFamily {
     Codex,
     ClaudeCode,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct AgentCliConfigV1 {
     #[serde(default)]
@@ -80,14 +80,14 @@ pub(crate) struct AgentCliConfigV1 {
     pub runtime_family: Option<AgentCliRuntimeFamily>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct AgentApiConfigV1 {
     pub base_url: String,
     pub auth: AgentApiAuthConfigV1,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct AgentApiAuthConfigV1 {
     pub env: Vec<String>,
@@ -100,48 +100,9 @@ struct AgentFileVersionProbe {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct AgentFileV2 {
-    pub version: u32,
-    pub id: String,
-    pub config: AgentConfigV2,
-    #[serde(default)]
-    pub policy_overlay: Option<crate::execution::policy_model::PolicyPatch>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct AgentConfigV2 {
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-    pub kind: AgentConfigKind,
-    #[serde(default)]
-    pub protocol: Option<String>,
-    pub placements: AgentPlacementsV2,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub(crate) struct AgentPlacementsV2 {
-    pub host: Option<AgentPlacementConfigV2>,
-    pub world: Option<AgentPlacementConfigV2>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct AgentPlacementConfigV2 {
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-    #[serde(default)]
-    pub cli: Option<AgentCliConfigV1>,
-    #[serde(default)]
-    pub api: Option<AgentApiConfigV1>,
-    #[serde(default)]
-    pub capabilities: AgentCapabilitiesV1,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub(crate) struct AgentFileV3 {
+    #[serde(skip)]
+    pub source: Option<transport_api_types::AgentSelectionSourceV1>,
     pub version: u32,
     pub id: String,
     pub config: AgentConfigV3,
@@ -173,19 +134,19 @@ pub(crate) struct AgentPlacementConfigV3 {
     pub api: Option<AgentApiConfigV1>,
     pub capabilities: AgentCapabilitiesV1,
     pub runtime_projection: Option<AgentRuntimeProjectionInputV1>,
+    pub selection: Option<transport_api_types::AgentSelectionTupleV1>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct AgentRuntimeProjectionInputV1 {
-    pub model: String,
     pub mcp_servers: Vec<config_projection::LogicalMcpServerV1>,
     pub features: Vec<config_projection::LogicalFeatureV1>,
 }
 
 pub(crate) type AgentInventorySourceMaterialV1 = config_projection::AgentInventorySourceMaterialV1;
 
-#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct AgentCapabilitiesV1 {
     pub session_start: bool,
@@ -198,10 +159,286 @@ pub(crate) struct AgentCapabilitiesV1 {
     pub mcp_client: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct AgentInventoryEntryV1 {
     pub path: PathBuf,
     pub file: AgentFileV1,
+}
+
+/// The V1-named entry is an internal flattened runtime descriptor. Inventory
+/// wire decoding is V3-only; complete selection lives in this captured snapshot.
+#[derive(Clone, Debug)]
+pub(crate) struct AgentInventorySnapshotV3 {
+    pub entries: BTreeMap<String, AgentInventoryEntryV1>,
+    pub definitions: Vec<crate::execution::agent_selection::ConfiguredAgentDefinitionV3>,
+}
+
+impl AgentInventorySnapshotV3 {
+    pub(crate) fn resolve_selection(
+        &self,
+        config: &config_model::SubstrateConfig,
+        agent: Option<&str>,
+        backend: Option<&str>,
+        scope: config_model::AgentExecutionScope,
+    ) -> Result<transport_api_types::ResolvedAgentSelectionV1> {
+        use crate::execution::agent_selection::{
+            resolve_agent_selection_v1, AgentSelectionConfigV1, AgentSelectionRequestV1,
+        };
+        resolve_agent_selection_v1(
+            &self.definitions,
+            &AgentSelectionConfigV1 {
+                preference: Some(&config.agents.defaults.selection),
+                preference_source: config.selection_preference_source.as_ref(),
+                profiles: &config.selection_profiles,
+                sources: &config.selection_sources,
+            },
+            &AgentSelectionRequestV1 {
+                agent_id: agent,
+                backend_id: backend,
+                placement: match scope {
+                    config_model::AgentExecutionScope::Host => {
+                        transport_api_types::AgentSelectionPlacementV1::Host
+                    }
+                    config_model::AgentExecutionScope::World => {
+                        transport_api_types::AgentSelectionPlacementV1::World
+                    }
+                },
+            },
+        )
+        .map_err(config_model::user_error)
+    }
+}
+
+fn ordinary_inventory_source(
+    path: &Path,
+    raw: &str,
+    scope: &str,
+    root: &Path,
+) -> Result<transport_api_types::AgentSelectionSourceV1> {
+    let relative = path
+        .strip_prefix(root)
+        .map_err(|_| config_model::user_error("inventory source is outside its declared root"))?
+        .to_str()
+        .ok_or_else(|| config_model::user_error("inventory source path requires UTF-8"))?;
+    config_model::selection_source_from_bytes(
+        root,
+        relative,
+        match scope {
+            "global" => transport_api_types::AgentSelectionSourceScopeV1::Global,
+            "workspace" => transport_api_types::AgentSelectionSourceScopeV1::Workspace,
+            _ => {
+                return Err(config_model::user_error(
+                    "unsupported inventory source scope",
+                ))
+            }
+        },
+        raw.as_bytes(),
+    )
+}
+
+fn assemble_inventory_snapshot_v3(
+    files: Vec<(PathBuf, ParsedAgentInventoryFile)>,
+) -> Result<AgentInventorySnapshotV3> {
+    use crate::execution::agent_selection::{
+        visible_agent_definitions_v3, ConfiguredAgentDefinitionV3, ConfiguredAgentPlacementV3,
+    };
+    use transport_api_types::{AgentHarnessFamilyV1, AgentSelectionPlacementV1};
+    let mut definitions = Vec::new();
+    for (_, parsed) in &files {
+        let ParsedAgentInventoryFile::V3(file, _) = parsed;
+        let mut placements = BTreeMap::new();
+        for (placement, config) in [
+            (
+                AgentSelectionPlacementV1::Host,
+                file.config.placements.host.as_ref(),
+            ),
+            (
+                AgentSelectionPlacementV1::World,
+                file.config.placements.world.as_ref(),
+            ),
+        ] {
+            let Some(config) = config else { continue };
+            let Some(selection) = &config.selection else {
+                continue;
+            };
+            let family = config
+                .cli
+                .as_ref()
+                .and_then(|cli| cli.runtime_family)
+                .ok_or_else(|| {
+                    config_model::user_error(
+                        "selected CLI placement has no explicit runtime_family",
+                    )
+                })?;
+            placements.insert(
+                placement,
+                ConfiguredAgentPlacementV3 {
+                    enabled: config.enabled,
+                    runtime_family: match family {
+                        AgentCliRuntimeFamily::Codex => AgentHarnessFamilyV1::Codex,
+                        AgentCliRuntimeFamily::ClaudeCode => AgentHarnessFamilyV1::ClaudeCode,
+                    },
+                    selection: selection.clone(),
+                },
+            );
+        }
+        definitions.push(ConfiguredAgentDefinitionV3 {
+            logical_agent_id: file.id.clone(),
+            enabled: file.config.enabled,
+            source: file
+                .source
+                .clone()
+                .ok_or_else(|| config_model::user_error("inventory source provenance missing"))?,
+            placements,
+        });
+    }
+    let visible = visible_agent_definitions_v3(&definitions).map_err(config_model::user_error)?;
+    let mut entries = BTreeMap::new();
+    for (path, parsed) in &files {
+        let ParsedAgentInventoryFile::V3(file, _) = parsed;
+        let selected = visible
+            .get(file.id.as_str())
+            .ok_or_else(|| config_model::user_error("visible logical agent missing"))?;
+        if !file.config.enabled || file.source.as_ref() != Some(&selected.source) {
+            continue;
+        }
+        for (placement, config) in [
+            (AgentPlacement::Host, file.config.placements.host.as_ref()),
+            (AgentPlacement::World, file.config.placements.world.as_ref()),
+        ] {
+            let Some(config) = config.filter(|placement| placement.enabled) else {
+                continue;
+            };
+            let mut cli = config.cli.clone();
+            if let Some(cli) = &mut cli {
+                if cli.binary.trim().is_empty() {
+                    cli.binary = file.id.clone();
+                }
+            }
+            let id = format!("{}-{}", file.id, placement.as_str());
+            entries.insert(
+                id.clone(),
+                AgentInventoryEntryV1 {
+                    path: path.clone(),
+                    file: AgentFileV1 {
+                        version: 3,
+                        id,
+                        config: AgentConfigV1 {
+                            enabled: true,
+                            kind: file.config.kind,
+                            protocol: file.config.protocol.clone(),
+                            execution: AgentExecutionConfigV1 {
+                                scope: Some(placement.execution_scope()),
+                            },
+                            cli,
+                            api: config.api.clone(),
+                            capabilities: config.capabilities.clone(),
+                        },
+                        policy_overlay: file.policy_overlay.clone(),
+                    },
+                },
+            );
+        }
+    }
+    Ok(AgentInventorySnapshotV3 {
+        entries,
+        definitions,
+    })
+}
+
+pub(crate) fn load_agent_inventory_snapshot_v3(
+    cwd: &Path,
+    policy: &Policy,
+) -> Result<AgentInventorySnapshotV3> {
+    let world = authoritative_inventory_world_root(cwd);
+    let mut files = Vec::new();
+    for root in discover_agent_inventory_roots(cwd)? {
+        if !root.exists() {
+            continue;
+        }
+        if !root.is_dir() {
+            return Err(config_model::user_error(format!(
+                "invalid agent inventory directory {}",
+                root.display()
+            )));
+        }
+        let workspace =
+            inventory_path_origin(cwd, &root) == AgentInventoryBaselineOrigin::WorkspaceInventory;
+        let accepted = if workspace {
+            root.parent().and_then(Path::parent)
+        } else {
+            root.parent()
+        }
+        .ok_or_else(|| config_model::user_error("inventory root has no accepted parent"))?;
+        for path in collect_agent_files_in_root(&root)? {
+            let parsed = parse_and_validate_agent_file(
+                &path,
+                policy,
+                Some(&world),
+                if workspace { "workspace" } else { "global" },
+                accepted,
+            )?;
+            files.push((path, parsed));
+        }
+    }
+    assemble_inventory_snapshot_v3(files)
+}
+
+pub(crate) fn load_agent_inventory_snapshot_for_bootstrap_home_v3(
+    cwd: &Path,
+    policy: &Policy,
+    bootstrap: &crate::execution::agent_runtime::OpenedBootstrapHomeV1<'_>,
+) -> Result<AgentInventorySnapshotV3> {
+    bootstrap
+        .revalidate()
+        .map_err(|error| config_model::user_error(error.to_string()))?;
+    let identity = bootstrap
+        .identity()
+        .map_err(|error| config_model::user_error(error.to_string()))?;
+    let accepted = Path::new(&identity.physical_path);
+    let world = authoritative_inventory_world_root(cwd);
+    let mut files = Vec::new();
+    for (name, bytes) in bootstrap
+        .read_agent_inventory_yaml()
+        .map_err(|error| config_model::user_error(error.to_string()))?
+    {
+        let path = accepted.join("agents").join(name);
+        let raw = std::str::from_utf8(&bytes).map_err(|_| {
+            config_model::user_error(format!("invalid UTF-8 in {}", path.display()))
+        })?;
+        let parsed = parse_and_validate_agent_file_raw(
+            &path,
+            raw,
+            policy,
+            Some(&world),
+            "global",
+            accepted,
+            None,
+        )?;
+        files.push((path, parsed));
+    }
+    if let Some(workspace) = workspace::find_workspace_root(cwd) {
+        let workspace_agents = workspace.join(".substrate/agents");
+        for path in if workspace_agents.exists() {
+            collect_agent_files_in_root(&workspace_agents)?
+        } else {
+            Vec::new()
+        } {
+            let parsed = parse_and_validate_agent_file(
+                &path,
+                policy,
+                Some(&world),
+                "workspace",
+                &workspace,
+            )?;
+            files.push((path, parsed));
+        }
+    }
+    bootstrap
+        .revalidate()
+        .map_err(|error| config_model::user_error(error.to_string()))?;
+    assemble_inventory_snapshot_v3(files)
 }
 
 #[derive(Debug, Clone)]
@@ -211,9 +448,6 @@ pub(crate) struct AgentInventoryEntryV1 {
     reason = "E3-C validates and retains complete V3 source material before E3-D consumes it"
 )]
 enum ParsedAgentInventoryFile {
-    V1(AgentFileV1),
-    V2(AgentFileV2),
-    // Legacy consumers validate V3 schema and reject it at their existing boundary.
     // Only the held-descriptor path can attach authenticated source material.
     V3(AgentFileV3, Option<AgentInventorySourceMaterialV1>),
 }
@@ -274,28 +508,6 @@ pub(crate) struct ProjectedInventoryEntryV1 {
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
-pub(crate) struct PlacementProjectedInventoryEntryV2 {
-    pub origin: AgentInventoryBaselineOrigin,
-    pub path: PathBuf,
-    pub logical_agent_id: String,
-    pub placement: AgentPlacement,
-    pub realized_agent_id: String,
-    pub backend_id: String,
-    pub display_label: String,
-    pub kind: AgentConfigKind,
-    pub protocol: Option<String>,
-    pub execution_scope: crate::execution::config_model::AgentExecutionScope,
-    pub execution_scope_origin: ProjectedInventoryValueOrigin,
-    pub cli_mode: crate::execution::config_model::AgentCliMode,
-    pub cli_mode_origin: ProjectedInventoryValueOrigin,
-    pub cli_binary: Option<String>,
-    pub cli_runtime_family: Option<AgentCliRuntimeFamily>,
-    pub capabilities: AgentCapabilitiesV1,
-    pub policy_overlay: Option<crate::execution::policy_model::PolicyPatch>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Clone)]
 pub(crate) struct PlacementProjectedInventoryEntryV3 {
     pub origin: AgentInventoryBaselineOrigin,
     pub path: PathBuf,
@@ -316,6 +528,7 @@ pub(crate) struct PlacementProjectedInventoryEntryV3 {
     pub policy_overlay: Option<crate::execution::policy_model::PolicyPatch>,
     pub runtime_projection: Option<AgentRuntimeProjectionInputV1>,
     pub source: AgentInventorySourceMaterialV1,
+    pub selection: Option<transport_api_types::AgentSelectionTupleV1>,
 }
 
 impl AgentFileV1 {
@@ -479,82 +692,6 @@ pub(crate) fn project_inventory_entry(
 }
 
 #[allow(dead_code)]
-pub(crate) fn project_inventory_v2_entry(
-    cwd: &Path,
-    path: &Path,
-    file: &AgentFileV2,
-    effective_config: &crate::execution::config_model::SubstrateConfig,
-) -> Vec<PlacementProjectedInventoryEntryV2> {
-    if !file.config.enabled {
-        return Vec::new();
-    }
-
-    let origin = inventory_path_origin(cwd, path);
-    let mut projected = Vec::new();
-    for (placement, placement_config) in [
-        (AgentPlacement::Host, file.config.placements.host.as_ref()),
-        (AgentPlacement::World, file.config.placements.world.as_ref()),
-    ] {
-        let Some(placement_config) = placement_config else {
-            continue;
-        };
-        if !placement_config.enabled {
-            continue;
-        }
-
-        let cli_mode_origin = if placement_config
-            .cli
-            .as_ref()
-            .and_then(|cli| cli.mode)
-            .is_some()
-        {
-            ProjectedInventoryValueOrigin::InventoryExplicit
-        } else {
-            ProjectedInventoryValueOrigin::EffectiveConfigDefault
-        };
-        let cli_mode = placement_config
-            .cli
-            .as_ref()
-            .and_then(|cli| cli.mode)
-            .unwrap_or(effective_config.agents.defaults.cli.mode);
-        let cli_binary = placement_config.cli.as_ref().map(|cli| {
-            let trimmed = cli.binary.trim();
-            if trimmed.is_empty() {
-                file.id.clone()
-            } else {
-                trimmed.to_string()
-            }
-        });
-        let realized_agent_id = format!("{}-{}", file.id, placement.as_str());
-
-        projected.push(PlacementProjectedInventoryEntryV2 {
-            origin,
-            path: path.to_path_buf(),
-            logical_agent_id: file.id.clone(),
-            placement,
-            realized_agent_id: realized_agent_id.clone(),
-            backend_id: derive_agent_backend_id(file.config.kind.as_str(), &realized_agent_id),
-            display_label: format!("{} ({})", file.id, placement.as_str()),
-            kind: file.config.kind,
-            protocol: file.config.protocol.clone(),
-            execution_scope: placement.execution_scope(),
-            execution_scope_origin: ProjectedInventoryValueOrigin::InventoryExplicit,
-            cli_mode,
-            cli_mode_origin,
-            cli_binary,
-            cli_runtime_family: placement_config
-                .cli
-                .as_ref()
-                .and_then(|cli| cli.runtime_family),
-            capabilities: placement_config.capabilities.clone(),
-            policy_overlay: file.policy_overlay.clone(),
-        });
-    }
-
-    projected
-}
-
-#[allow(dead_code)]
 pub(crate) fn project_inventory_v3_entry(
     cwd: &Path,
     path: &Path,
@@ -623,6 +760,7 @@ pub(crate) fn project_inventory_v3_entry(
             capabilities: placement_config.capabilities.clone(),
             policy_overlay: file.policy_overlay.clone(),
             runtime_projection: placement_config.runtime_projection.clone(),
+            selection: placement_config.selection.clone(),
             source: source.clone(),
         });
     }
@@ -784,6 +922,11 @@ pub(crate) fn hold_e3_selected_inventory_projection_v1<'r>(
                 Some((held.source_bytes(), source)),
             )
             .map_err(|_| Malformed)?;
+            if matches!(parsed, ParsedAgentInventoryFile::V3(..)) {
+                // R05 introduces complete ordinary selection. Legacy protected
+                // records cannot authenticate that tuple; R11-R13 own adoption.
+                return Err(UnsupportedConfiguration);
+            }
             effective.insert(id.to_string(), (path, parsed));
             held_sources.push(held);
         }
@@ -901,7 +1044,12 @@ pub(crate) fn hold_e3_selected_inventory_projection_v1<'r>(
         .into(),
         runtime_family: runtime_family.into(),
         capabilities,
-        requested_model: runtime.model.clone(),
+        requested_model: selected
+            .selection
+            .as_ref()
+            .ok_or(UnsupportedConfiguration)?
+            .model
+            .clone(),
         requested_mcp_servers: runtime.mcp_servers.clone(),
         requested_features: runtime.features.clone(),
     };
@@ -972,65 +1120,7 @@ pub(crate) fn load_effective_agent_inventory(
     cwd: &Path,
     base_policy: &Policy,
 ) -> Result<BTreeMap<String, AgentInventoryEntryV1>> {
-    let world_root = authoritative_inventory_world_root(cwd);
-    let mut effective = BTreeMap::new();
-    for root in discover_agent_inventory_roots(cwd)? {
-        if !root.exists() {
-            continue;
-        }
-        if !root.is_dir() {
-            return Err(config_model::user_error(format!(
-                "invalid agent inventory directory {}: expected a directory",
-                root.display()
-            )));
-        }
-        let workspace_inventory =
-            inventory_path_origin(cwd, &root) == AgentInventoryBaselineOrigin::WorkspaceInventory;
-        let (source_scope, accepted_root) = if workspace_inventory {
-            (
-                "workspace",
-                root.parent()
-                    .and_then(Path::parent)
-                    .ok_or_else(|| config_model::user_error("invalid workspace inventory root"))?,
-            )
-        } else {
-            (
-                "global",
-                root.parent()
-                    .ok_or_else(|| config_model::user_error("invalid global inventory root"))?,
-            )
-        };
-        let mut validated_files = Vec::new();
-        let mut root_shadowed_agent_ids = BTreeSet::new();
-        for path in collect_agent_files_in_root(&root)? {
-            let file = parse_and_validate_agent_file(
-                &path,
-                base_policy,
-                Some(&world_root),
-                source_scope,
-                accepted_root,
-            )?;
-            if let ParsedAgentInventoryFile::V2(parsed) = &file {
-                root_shadowed_agent_ids.extend(legacy_shadowed_agent_ids_from_v2(parsed));
-            }
-            if let ParsedAgentInventoryFile::V3(parsed, _) = &file {
-                root_shadowed_agent_ids.extend([
-                    parsed.id.clone(),
-                    format!("{}-host", parsed.id),
-                    format!("{}-world", parsed.id),
-                ]);
-            }
-            validated_files.push((path, file));
-        }
-        merge_inventory_root(
-            &mut effective,
-            workspace_inventory,
-            root_shadowed_agent_ids,
-            validated_files,
-        )?;
-    }
-
-    Ok(effective)
+    Ok(load_agent_inventory_snapshot_v3(cwd, base_policy)?.entries)
 }
 
 #[allow(
@@ -1042,222 +1132,10 @@ pub(crate) fn load_effective_agent_inventory_for_bootstrap_home(
     base_policy: &Policy,
     bootstrap_home: &crate::execution::agent_runtime::OpenedBootstrapHomeV1<'_>,
 ) -> Result<BTreeMap<String, AgentInventoryEntryV1>> {
-    let world_root = authoritative_inventory_world_root(cwd);
-    let mut effective = BTreeMap::new();
-    let mut global_files = Vec::new();
-    let mut global_shadowed = BTreeSet::new();
-    let bootstrap_identity = bootstrap_home
-        .identity()
-        .map_err(|error| config_model::user_error(error.to_string()))?
-        .clone();
-    let global_agents_root = PathBuf::from(&bootstrap_identity.physical_path).join("agents");
-    for (name, bytes) in bootstrap_home
-        .read_agent_inventory_yaml()
-        .map_err(|error| config_model::user_error(error.to_string()))?
-    {
-        let path = global_agents_root.join(name);
-        let raw = std::str::from_utf8(&bytes).map_err(|_| {
-            config_model::user_error(format!("invalid UTF-8 in {}", path.display()))
-        })?;
-        let file = parse_and_validate_agent_file_raw(
-            &path,
-            raw,
-            base_policy,
-            Some(&world_root),
-            "global",
-            Path::new(&bootstrap_identity.physical_path),
-            None,
-        )?;
-        if let ParsedAgentInventoryFile::V2(parsed) = &file {
-            global_shadowed.extend(legacy_shadowed_agent_ids_from_v2(parsed));
-        }
-        if let ParsedAgentInventoryFile::V3(parsed, source) = &file {
-            if let Some(source) = source {
-                let root_matches = source.accepted_root.physical_path
-                    == bootstrap_identity.physical_path
-                    && matches!(
-                        (
-                            &source.accepted_root.physical_identity,
-                            &bootstrap_identity.physical_identity,
-                        ),
-                        (
-                            config_projection::DirectoryPhysicalIdentityV1::Linux {
-                                device_id: source_device,
-                                inode: source_inode,
-                            },
-                            crate::execution::agent_runtime::host_session_authority::schema::DirectoryPhysicalIdentityV1::Linux {
-                                device_id: bootstrap_device,
-                                inode: bootstrap_inode,
-                            },
-                        ) if source_device == bootstrap_device && source_inode == bootstrap_inode
-                    );
-                if !root_matches {
-                    return Err(config_model::user_error(
-                        "authenticated bootstrap inventory root identity changed",
-                    ));
-                }
-            }
-            global_shadowed.extend([
-                parsed.id.clone(),
-                format!("{}-host", parsed.id),
-                format!("{}-world", parsed.id),
-            ]);
-        }
-        global_files.push((path, file));
-    }
-    merge_inventory_root(&mut effective, false, global_shadowed, global_files)?;
-
-    if let Some(workspace_root) = workspace::find_workspace_root(cwd) {
-        let root = workspace_root
-            .join(workspace::SUBSTRATE_DIR_NAME)
-            .join("agents");
-        if root.exists() {
-            if !root.is_dir() {
-                return Err(config_model::user_error(format!(
-                    "invalid agent inventory directory {}: expected a directory",
-                    root.display()
-                )));
-            }
-            let mut workspace_files = Vec::new();
-            let mut workspace_shadowed = BTreeSet::new();
-            for path in collect_agent_files_in_root(&root)? {
-                let file = parse_and_validate_agent_file(
-                    &path,
-                    base_policy,
-                    Some(&world_root),
-                    "workspace",
-                    &workspace_root,
-                )?;
-                if let ParsedAgentInventoryFile::V2(parsed) = &file {
-                    workspace_shadowed.extend(legacy_shadowed_agent_ids_from_v2(parsed));
-                }
-                if let ParsedAgentInventoryFile::V3(parsed, _) = &file {
-                    workspace_shadowed.extend([
-                        parsed.id.clone(),
-                        format!("{}-host", parsed.id),
-                        format!("{}-world", parsed.id),
-                    ]);
-                }
-                workspace_files.push((path, file));
-            }
-            merge_inventory_root(&mut effective, true, workspace_shadowed, workspace_files)?;
-        }
-    }
-    Ok(effective)
-}
-
-fn merge_inventory_root(
-    effective: &mut BTreeMap<String, AgentInventoryEntryV1>,
-    workspace: bool,
-    root_shadowed_agent_ids: BTreeSet<String>,
-    validated_files: Vec<(PathBuf, ParsedAgentInventoryFile)>,
-) -> Result<()> {
-    let mut v3_logical_ids = BTreeSet::new();
-    for (_, file) in &validated_files {
-        if let ParsedAgentInventoryFile::V3(file, _) = file {
-            if !v3_logical_ids.insert(file.id.as_str()) {
-                return Err(config_model::user_error(format!(
-                    "ambiguous agent inventory id '{}' appears more than once in one inventory root",
-                    file.id
-                )));
-            }
-        }
-    }
-    if workspace {
-        // Packet 1.5 keeps workspace-local version-2 compatibility rows from leaving
-        // stale global split-entry truth live. A workspace v2 override replaces the
-        // whole pre-cutover logical-agent view, so it must suppress both legacy
-        // compatibility ids (`logical` and `logical_world`) regardless of which
-        // single placement the bridge materialized.
-        for shadowed_agent_id in &root_shadowed_agent_ids {
-            effective.remove(shadowed_agent_id);
-        }
-    }
-    for (path, file) in validated_files {
-        match file {
-            ParsedAgentInventoryFile::V1(file) => {
-                if root_shadowed_agent_ids.contains(&file.id) {
-                    continue;
-                }
-                effective.insert(file.id.clone(), AgentInventoryEntryV1 { path, file });
-            }
-            ParsedAgentInventoryFile::V2(file) => {
-                for entry in materialize_effective_inventory_entries_from_v2(&path, &file) {
-                    effective.insert(entry.file.id.clone(), entry);
-                }
-            }
-            ParsedAgentInventoryFile::V3(_, _) => {
-                return Err(config_model::user_error(
-                    "unsupported agent schema_version 3 in legacy inventory loader",
-                ));
-            }
-        }
-    }
-    Ok(())
-}
-
-fn materialize_effective_inventory_entries_from_v2(
-    path: &Path,
-    file: &AgentFileV2,
-) -> Vec<AgentInventoryEntryV1> {
-    if !file.config.enabled {
-        return Vec::new();
-    }
-
-    let mut entries = Vec::new();
-    for (placement, placement_config) in [
-        (AgentPlacement::Host, file.config.placements.host.as_ref()),
-        (AgentPlacement::World, file.config.placements.world.as_ref()),
-    ] {
-        let Some(placement_config) = placement_config else {
-            continue;
-        };
-        if !placement_config.enabled {
-            continue;
-        }
-
-        entries.push(AgentInventoryEntryV1 {
-            path: path.to_path_buf(),
-            file: AgentFileV1 {
-                version: file.version,
-                id: format!("{}-{}", file.id, placement.as_str()),
-                config: AgentConfigV1 {
-                    enabled: true,
-                    kind: file.config.kind,
-                    protocol: file.config.protocol.clone(),
-                    execution: AgentExecutionConfigV1 {
-                        scope: Some(placement.execution_scope()),
-                    },
-                    cli: materialized_cli_config_from_v2(&file.id, placement_config.cli.as_ref()),
-                    api: placement_config.api.clone(),
-                    capabilities: placement_config.capabilities.clone(),
-                },
-                policy_overlay: file.policy_overlay.clone(),
-            },
-        });
-    }
-
-    entries
-}
-
-fn materialized_cli_config_from_v2(
-    logical_agent_id: &str,
-    cli: Option<&AgentCliConfigV1>,
-) -> Option<AgentCliConfigV1> {
-    let mut cli = cli.cloned()?;
-    if cli.binary.trim().is_empty() {
-        cli.binary = logical_agent_id.to_string();
-    }
-    Some(cli)
-}
-
-fn legacy_shadowed_agent_ids_from_v2(file: &AgentFileV2) -> Vec<String> {
-    vec![
-        file.id.clone(),
-        format!("{}_world", file.id),
-        format!("{}-host", file.id),
-        format!("{}-world", file.id),
-    ]
+    Ok(
+        load_agent_inventory_snapshot_for_bootstrap_home_v3(cwd, base_policy, bootstrap_home)?
+            .entries,
+    )
 }
 
 #[allow(
@@ -1351,30 +1229,25 @@ pub(crate) fn resolve_gateway_backend_inventory_entry_for_bootstrap_home(
     Ok(entry.clone())
 }
 
-pub(crate) fn validate_agent_file(path: &Path, base_policy: &Policy) -> Result<AgentFileV1> {
+pub(crate) fn validate_agent_file(path: &Path, base_policy: &Policy) -> Result<AgentFileV3> {
     let world_root = inventory_workspace_root_from_path(path);
     let accepted_root = world_root.as_deref().unwrap_or_else(|| {
         path.parent()
             .and_then(Path::parent)
             .unwrap_or_else(|| Path::new("/"))
     });
-    let source_scope = if world_root.is_some() {
-        "workspace"
-    } else {
-        "global"
-    };
     match parse_and_validate_agent_file(
         path,
         base_policy,
         world_root.as_deref(),
-        source_scope,
+        if world_root.is_some() {
+            "workspace"
+        } else {
+            "global"
+        },
         accepted_root,
     )? {
-        ParsedAgentInventoryFile::V1(parsed) => Ok(parsed),
-        ParsedAgentInventoryFile::V2(parsed) => Ok(compatibility_inventory_file_from_v2(&parsed)),
-        ParsedAgentInventoryFile::V3(_, _) => Err(config_model::user_error(
-            "unsupported agent schema_version 3 in legacy validate_agent_file",
-        )),
+        ParsedAgentInventoryFile::V3(file, _) => Ok(file),
     }
 }
 
@@ -1385,9 +1258,7 @@ fn parse_and_validate_agent_file(
     source_scope: &str,
     accepted_root: &Path,
 ) -> Result<ParsedAgentInventoryFile> {
-    let raw = fs::read_to_string(path).map_err(|err| {
-        config_model::user_error(format!("failed to read {}: {err}", path.display()))
-    })?;
+    let raw = read_inventory_source(path, accepted_root)?;
     parse_and_validate_agent_file_raw(
         path,
         &raw,
@@ -1397,6 +1268,243 @@ fn parse_and_validate_agent_file(
         accepted_root,
         None,
     )
+}
+
+/// Read from the named source with stable directory/file identity. Source hashes
+/// describe these bytes; they do not confer authority to launch an agent.
+fn read_inventory_source(path: &Path, accepted_root: &Path) -> Result<String> {
+    use std::io::Read;
+    let relative = path.strip_prefix(accepted_root).map_err(|_| {
+        config_model::user_error(format!(
+            "inventory source {} escapes its root",
+            path.display()
+        ))
+    })?;
+    let mut names = relative.components().peekable();
+    let mut parent_path = accepted_root.to_path_buf();
+    let mut directories = Vec::new();
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_DIRECTORY);
+    }
+    let mut directory = options.open(accepted_root).map_err(|error| {
+        config_model::user_error(format!(
+            "invalid inventory root {}: {error}",
+            accepted_root.display()
+        ))
+    })?;
+    directories.push((parent_path.clone(), directory.metadata()?));
+    let mut source = None;
+    while let Some(component) = names.next() {
+        let std::path::Component::Normal(name) = component else {
+            return Err(config_model::user_error(
+                "inventory source requires a confined relative path",
+            ));
+        };
+        parent_path.push(name);
+        let is_directory = names.peek().is_some();
+        #[cfg(unix)]
+        let opened = {
+            use std::os::{
+                fd::{AsRawFd, FromRawFd},
+                unix::ffi::OsStrExt,
+            };
+            let name = std::ffi::CString::new(name.as_bytes())?;
+            let flags = libc::O_RDONLY
+                | libc::O_CLOEXEC
+                | libc::O_NOFOLLOW
+                | if is_directory { libc::O_DIRECTORY } else { 0 };
+            // SAFETY: directory is held, name is NUL-terminated, and a successful
+            // new fd is transferred exactly once to File.
+            let fd = unsafe { libc::openat(directory.as_raw_fd(), name.as_ptr(), flags) };
+            if fd < 0 {
+                return Err(config_model::user_error(format!(
+                    "failed to read inventory source {}: {}",
+                    path.display(),
+                    std::io::Error::last_os_error()
+                )));
+            }
+            unsafe { fs::File::from_raw_fd(fd) }
+        };
+        #[cfg(not(unix))]
+        let opened = {
+            if fs::symlink_metadata(&parent_path)?.file_type().is_symlink() {
+                return Err(config_model::user_error("inventory symlink is unsupported"));
+            }
+            fs::File::open(&parent_path)?
+        };
+        if is_directory {
+            directories.push((parent_path.clone(), opened.metadata()?));
+            directory = opened;
+        } else {
+            source = Some(opened);
+        }
+    }
+    let file =
+        source.ok_or_else(|| config_model::user_error("inventory source filename missing"))?;
+    let before = file.metadata()?;
+    if !before.is_file() || before.len() > 1024 * 1024 {
+        return Err(config_model::user_error(format!(
+            "inventory source {} must be a regular file at most 1MiB",
+            path.display()
+        )));
+    }
+    let mut bytes = Vec::new();
+    (&file).take(1024 * 1024 + 1).read_to_end(&mut bytes)?;
+    let after = file.metadata()?;
+    let stable = |left: &fs::Metadata, right: &fs::Metadata| {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            left.dev() == right.dev()
+                && left.ino() == right.ino()
+                && left.mode() == right.mode()
+                && left.len() == right.len()
+                && left.mtime() == right.mtime()
+                && left.mtime_nsec() == right.mtime_nsec()
+                && left.ctime() == right.ctime()
+                && left.ctime_nsec() == right.ctime_nsec()
+        }
+        #[cfg(not(unix))]
+        {
+            left.len() == right.len()
+                && left.modified().ok() == right.modified().ok()
+                && left.file_type() == right.file_type()
+        }
+    };
+    if bytes.len() > 1024 * 1024
+        || !stable(&before, &after)
+        || !stable(&after, &fs::symlink_metadata(path)?)
+    {
+        return Err(config_model::user_error(format!(
+            "inventory source changed while reading {}",
+            path.display()
+        )));
+    }
+    for (name, accepted) in directories {
+        if !stable(&accepted, &fs::symlink_metadata(&name)?) {
+            return Err(config_model::user_error(format!(
+                "inventory source directory changed: {}",
+                name.display()
+            )));
+        }
+    }
+    String::from_utf8(bytes).map_err(|error| {
+        config_model::user_error(format!("invalid UTF-8 in {}: {error}", path.display()))
+    })
+}
+
+pub(crate) fn validate_strict_v3_yaml(path: &Path, raw: &str) -> Result<()> {
+    let mut document_markers = 0usize;
+    for line in raw.lines() {
+        let trimmed = line.trim_start();
+        if trimmed == "---" {
+            document_markers += 1;
+            if document_markers > 1 {
+                return Err(config_model::user_error(format!(
+                    "invalid strict V3 YAML in {}: multiple documents are forbidden",
+                    path.display()
+                )));
+            }
+        }
+        if trimmed == "..." {
+            return Err(config_model::user_error(format!(
+                "invalid strict V3 YAML in {}: document terminators are forbidden",
+                path.display()
+            )));
+        }
+        let mut single = false;
+        let mut double = false;
+        let mut escaped = false;
+        let bytes = line.as_bytes();
+        for (index, byte) in bytes.iter().copied().enumerate() {
+            if double && escaped {
+                escaped = false;
+                continue;
+            }
+            if double && byte == b'\\' {
+                escaped = true;
+                continue;
+            }
+            if !double && byte == b'\'' {
+                single = !single;
+                continue;
+            }
+            if !single && byte == b'"' {
+                double = !double;
+                continue;
+            }
+            if !single && !double {
+                if byte == b'#' {
+                    break;
+                }
+                if byte == b'!' {
+                    return Err(config_model::user_error(format!(
+                        "invalid strict V3 YAML in {}: tags are forbidden",
+                        path.display()
+                    )));
+                }
+                if matches!(byte, b'&' | b'*')
+                    && (index == 0
+                        || bytes[index - 1].is_ascii_whitespace()
+                        || matches!(bytes[index - 1], b':' | b'[' | b'{' | b','))
+                {
+                    return Err(config_model::user_error(format!(
+                        "invalid strict V3 YAML in {}: anchors and aliases are forbidden",
+                        path.display()
+                    )));
+                }
+            }
+        }
+        if !single && !double {
+            let key = trimmed.split_once(':').map(|(key, _)| key.trim());
+            if key == Some("<<") || trimmed.starts_with('?') {
+                return Err(config_model::user_error(format!(
+                    "invalid strict V3 YAML in {}: merge and non-string keys are forbidden",
+                    path.display()
+                )));
+            }
+        }
+    }
+    let value: serde_yaml::Value = serde_yaml::from_str(raw).map_err(|err| {
+        config_model::user_error(format!(
+            "invalid strict V3 YAML in {}: {}",
+            path.display(),
+            err.to_string().trim()
+        ))
+    })?;
+    fn validate_value(path: &Path, value: &serde_yaml::Value) -> Result<()> {
+        match value {
+            serde_yaml::Value::Mapping(mapping) => {
+                for (key, value) in mapping {
+                    if !matches!(key, serde_yaml::Value::String(_)) {
+                        return Err(config_model::user_error(format!(
+                            "invalid strict V3 YAML in {}: mapping keys must be strings",
+                            path.display()
+                        )));
+                    }
+                    validate_value(path, value)?;
+                }
+            }
+            serde_yaml::Value::Sequence(values) => {
+                for value in values {
+                    validate_value(path, value)?;
+                }
+            }
+            serde_yaml::Value::Tagged(_) => {
+                return Err(config_model::user_error(format!(
+                    "invalid strict V3 YAML in {}: tags are forbidden",
+                    path.display()
+                )))
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+    validate_value(path, &value)
 }
 
 fn parse_and_validate_agent_file_raw(
@@ -1409,155 +1517,22 @@ fn parse_and_validate_agent_file_raw(
     held_source: Option<(&[u8], &AgentInventorySourceMaterialV1)>,
 ) -> Result<ParsedAgentInventoryFile> {
     match detect_agent_inventory_version(path, raw)? {
-        1 => {
-            let parsed: AgentFileV1 = serde_yaml::from_str(raw).map_err(|err| {
-                config_model::user_error(format!(
-                    "invalid YAML in {}: {}",
-                    path.display(),
-                    err.to_string().trim()
-                ))
-            })?;
-
-            validate_agent_schema(path, &parsed, base_policy, world_root)?;
-            Ok(ParsedAgentInventoryFile::V1(parsed))
-        }
-        2 => {
-            let parsed: AgentFileV2 = serde_yaml::from_str(raw).map_err(|err| {
-                config_model::user_error(format!(
-                    "invalid YAML in {}: {}",
-                    path.display(),
-                    err.to_string().trim()
-                ))
-            })?;
-
-            validate_agent_schema_v2(path, &parsed, base_policy, world_root)?;
-            Ok(ParsedAgentInventoryFile::V2(parsed))
-        }
         3 => {
-            fn validate_strict_v3_yaml(path: &Path, raw: &str) -> Result<()> {
-                let mut document_markers = 0usize;
-                for line in raw.lines() {
-                    let trimmed = line.trim_start();
-                    if trimmed == "---" {
-                        document_markers += 1;
-                        if document_markers > 1 {
-                            return Err(config_model::user_error(format!(
-                                "invalid strict V3 YAML in {}: multiple documents are forbidden",
-                                path.display()
-                            )));
-                        }
-                    }
-                    if trimmed == "..." {
-                        return Err(config_model::user_error(format!(
-                            "invalid strict V3 YAML in {}: document terminators are forbidden",
-                            path.display()
-                        )));
-                    }
-                    let mut single = false;
-                    let mut double = false;
-                    let mut escaped = false;
-                    let bytes = line.as_bytes();
-                    for (index, byte) in bytes.iter().copied().enumerate() {
-                        if double && escaped {
-                            escaped = false;
-                            continue;
-                        }
-                        if double && byte == b'\\' {
-                            escaped = true;
-                            continue;
-                        }
-                        if !double && byte == b'\'' {
-                            single = !single;
-                            continue;
-                        }
-                        if !single && byte == b'"' {
-                            double = !double;
-                            continue;
-                        }
-                        if !single && !double {
-                            if byte == b'#' {
-                                break;
-                            }
-                            if byte == b'!' {
-                                return Err(config_model::user_error(format!(
-                                    "invalid strict V3 YAML in {}: tags are forbidden",
-                                    path.display()
-                                )));
-                            }
-                            if matches!(byte, b'&' | b'*')
-                                && (index == 0
-                                    || bytes[index - 1].is_ascii_whitespace()
-                                    || matches!(bytes[index - 1], b':' | b'[' | b'{' | b','))
-                            {
-                                return Err(config_model::user_error(format!(
-                                    "invalid strict V3 YAML in {}: anchors and aliases are forbidden",
-                                    path.display()
-                                )));
-                            }
-                        }
-                    }
-                    if !single && !double {
-                        let key = trimmed.split_once(':').map(|(key, _)| key.trim());
-                        if key == Some("<<") || trimmed.starts_with('?') {
-                            return Err(config_model::user_error(format!(
-                                "invalid strict V3 YAML in {}: merge and non-string keys are forbidden",
-                                path.display()
-                            )));
-                        }
-                    }
-                }
-                let value: serde_yaml::Value = serde_yaml::from_str(raw).map_err(|err| {
-                    config_model::user_error(format!(
-                        "invalid strict V3 YAML in {}: {}",
-                        path.display(),
-                        err.to_string().trim()
-                    ))
-                })?;
-                fn validate_value(path: &Path, value: &serde_yaml::Value) -> Result<()> {
-                    match value {
-                        serde_yaml::Value::Mapping(mapping) => {
-                            for (key, value) in mapping {
-                                if !matches!(key, serde_yaml::Value::String(_)) {
-                                    return Err(config_model::user_error(format!(
-                                        "invalid strict V3 YAML in {}: mapping keys must be strings",
-                                        path.display()
-                                    )));
-                                }
-                                validate_value(path, value)?;
-                            }
-                        }
-                        serde_yaml::Value::Sequence(values) => {
-                            for value in values {
-                                validate_value(path, value)?;
-                            }
-                        }
-                        serde_yaml::Value::Tagged(_) => {
-                            return Err(config_model::user_error(format!(
-                                "invalid strict V3 YAML in {}: tags are forbidden",
-                                path.display()
-                            )))
-                        }
-                        _ => {}
-                    }
-                    Ok(())
-                }
-                validate_value(path, &value)
-            }
-
             validate_strict_v3_yaml(path, raw)?;
-            let parsed: AgentFileV3 = serde_yaml::from_str(raw).map_err(|err| {
+            let mut parsed: AgentFileV3 = serde_yaml::from_str(raw).map_err(|err| {
                 config_model::user_error(format!(
                     "invalid YAML in {}: {}",
                     path.display(),
                     err.to_string().trim()
                 ))
             })?;
+            parsed.source = Some(ordinary_inventory_source(
+                path,
+                raw,
+                _source_scope,
+                _accepted_root,
+            )?);
             validate_agent_schema_v3(path, &parsed, base_policy, world_root)?;
-            #[cfg(not(target_os = "linux"))]
-            return Err(config_model::user_error(
-                "agent inventory schema_version 3 is unsupported on this platform",
-            ));
-            #[cfg(target_os = "linux")]
             Ok(ParsedAgentInventoryFile::V3(
                 parsed,
                 held_source
@@ -1575,7 +1550,7 @@ fn parse_and_validate_agent_file_raw(
             ))
         }
         version => Err(config_model::user_error(format!(
-            "invalid agent file in {}: version must be 1, 2, or 3 (got {})",
+            "invalid agent file in {}: version must be 3 (got {})",
             path.display(),
             version
         ))),
@@ -1607,7 +1582,13 @@ fn collect_agent_files_in_root(dir: &Path) -> Result<Vec<PathBuf>> {
             config_model::user_error(format!("failed to read {}: {err}", dir.display()))
         })?;
         let path = entry.path();
-        if is_yaml_file(&path) && path.is_file() {
+        if is_yaml_file(&path) {
+            if !entry.file_type()?.is_file() {
+                return Err(config_model::user_error(format!(
+                    "inventory source {} must be a regular file",
+                    path.display()
+                )));
+            }
             entries.push(path);
         }
     }
@@ -1625,43 +1606,6 @@ fn is_yaml_file(path: &Path) -> bool {
     matches!(path.extension().and_then(OsStr::to_str), Some("yaml"))
 }
 
-fn validate_agent_schema(
-    path: &Path,
-    parsed: &AgentFileV1,
-    base_policy: &Policy,
-    world_root: Option<&Path>,
-) -> Result<()> {
-    if parsed.version != 1 {
-        return Err(config_model::user_error(format!(
-            "invalid agent file in {}: version must be 1 (got {})",
-            path.display(),
-            parsed.version
-        )));
-    }
-
-    let expected_id = path.file_stem().and_then(OsStr::to_str).ok_or_else(|| {
-        config_model::user_error(format!(
-            "invalid agent filename in {}: expected a .yaml filename",
-            path.display()
-        ))
-    })?;
-    if parsed.id != expected_id {
-        return Err(config_model::user_error(format!(
-            "invalid agent file in {}: id '{}' must match filename '{}.yaml'",
-            path.display(),
-            parsed.id,
-            expected_id
-        )));
-    }
-
-    validate_agent_config(path, &parsed.config)?;
-    if let Some(overlay) = &parsed.policy_overlay {
-        validate_policy_overlay(path, overlay, base_policy, world_root)?;
-    }
-
-    Ok(())
-}
-
 fn detect_agent_inventory_version(path: &Path, raw: &str) -> Result<u32> {
     let version_probe: AgentFileVersionProbe = serde_yaml::from_str(raw).map_err(|err| {
         config_model::user_error(format!(
@@ -1671,82 +1615,6 @@ fn detect_agent_inventory_version(path: &Path, raw: &str) -> Result<u32> {
         ))
     })?;
     Ok(version_probe.version)
-}
-
-fn validate_agent_schema_v2(
-    path: &Path,
-    parsed: &AgentFileV2,
-    base_policy: &Policy,
-    world_root: Option<&Path>,
-) -> Result<()> {
-    if parsed.version != 2 {
-        return Err(config_model::user_error(format!(
-            "invalid agent file in {}: version must be 2 (got {})",
-            path.display(),
-            parsed.version
-        )));
-    }
-
-    let expected_id = path.file_stem().and_then(OsStr::to_str).ok_or_else(|| {
-        config_model::user_error(format!(
-            "invalid agent filename in {}: expected a .yaml filename",
-            path.display()
-        ))
-    })?;
-    if parsed.id != expected_id {
-        return Err(config_model::user_error(format!(
-            "invalid agent file in {}: id '{}' must match filename '{}.yaml'",
-            path.display(),
-            parsed.id,
-            expected_id
-        )));
-    }
-
-    if parsed.config.placements.host.is_none() && parsed.config.placements.world.is_none() {
-        return Err(config_model::user_error(format!(
-            "invalid agent file in {}: config.placements must define at least one placement",
-            path.display()
-        )));
-    }
-    let enabled_placements = count_enabled_v2_placements(parsed);
-    if parsed.config.enabled && enabled_placements == 0 {
-        return Err(config_model::user_error(format!(
-            "invalid agent file in {}: config.placements must enable at least one placement",
-            path.display(),
-        )));
-    }
-
-    for (placement, placement_config) in [
-        (AgentPlacement::Host, parsed.config.placements.host.as_ref()),
-        (
-            AgentPlacement::World,
-            parsed.config.placements.world.as_ref(),
-        ),
-    ] {
-        let Some(placement_config) = placement_config else {
-            continue;
-        };
-        validate_agent_config(
-            path,
-            &AgentConfigV1 {
-                enabled: placement_config.enabled,
-                kind: parsed.config.kind,
-                protocol: parsed.config.protocol.clone(),
-                execution: AgentExecutionConfigV1 {
-                    scope: Some(placement.execution_scope()),
-                },
-                cli: placement_config.cli.clone(),
-                api: placement_config.api.clone(),
-                capabilities: placement_config.capabilities.clone(),
-            },
-        )?;
-    }
-
-    if let Some(overlay) = &parsed.policy_overlay {
-        validate_policy_overlay(path, overlay, base_policy, world_root)?;
-    }
-
-    Ok(())
 }
 
 fn validate_agent_schema_v3(
@@ -1759,12 +1627,6 @@ fn validate_agent_schema_v3(
         path: &Path,
         runtime: &AgentRuntimeProjectionInputV1,
     ) -> Result<()> {
-        if runtime.model.is_empty() || runtime.model.trim() != runtime.model {
-            return Err(config_model::user_error(format!(
-                "invalid agent file in {}: runtime_projection.model must be nonempty and trimmed",
-                path.display()
-            )));
-        }
         let mut previous_server: Option<&[u8]> = None;
         for server in &runtime.mcp_servers {
             if server.server_id.is_empty()
@@ -1892,116 +1754,44 @@ fn validate_agent_schema_v3(
                 capabilities: placement_config.capabilities.clone(),
             },
         )?;
+        if parsed.config.enabled
+            && placement_config.enabled
+            && parsed.config.kind == AgentConfigKind::Cli
+        {
+            let selection = placement_config.selection.as_ref().ok_or_else(|| {
+                config_model::user_error(format!(
+                    "invalid agent file in {}: enabled model placement requires complete selection",
+                    path.display()
+                ))
+            })?;
+            selection.validate().map_err(|error| {
+                config_model::user_error(format!(
+                    "invalid agent file in {}: {error}",
+                    path.display()
+                ))
+            })?;
+            let family = placement_config
+                .cli
+                .as_ref()
+                .and_then(|cli| cli.runtime_family);
+            let expected = match selection.harness {
+                transport_api_types::AgentHarnessFamilyV1::Codex => AgentCliRuntimeFamily::Codex,
+                transport_api_types::AgentHarnessFamilyV1::ClaudeCode => {
+                    AgentCliRuntimeFamily::ClaudeCode
+                }
+            };
+            if family != Some(expected) {
+                return Err(config_model::user_error(format!("invalid agent file in {}: selection.harness must equal explicit cli.runtime_family", path.display())));
+            }
+        }
         if let Some(runtime) = &placement_config.runtime_projection {
             validate_runtime_projection(path, runtime)?;
-        }
-    }
-    if parsed.config.enabled
-        && parsed.config.kind == AgentConfigKind::Cli
-        && parsed
-            .config
-            .placements
-            .world
-            .as_ref()
-            .is_some_and(|placement| {
-                placement.enabled
-                    && placement
-                        .cli
-                        .as_ref()
-                        .is_some_and(|cli| cli.runtime_family == Some(AgentCliRuntimeFamily::Codex))
-            })
-    {
-        let world = parsed.config.placements.world.as_ref().unwrap();
-        let cli = world.cli.as_ref().ok_or_else(|| {
-            config_model::user_error(format!(
-                "invalid agent file in {}: E3 Codex world placement requires explicit cli",
-                path.display()
-            ))
-        })?;
-        let runtime = world.runtime_projection.as_ref().ok_or_else(|| {
-            config_model::user_error(format!(
-                "invalid agent file in {}: E3 Codex world placement requires runtime_projection",
-                path.display()
-            ))
-        })?;
-        if cli.binary != "/var/lib/substrate/world-deps/codex-runtime/bin/codex"
-            || cli.mode != Some(config_model::AgentCliMode::Persistent)
-            || runtime.model != "codex"
-            || !runtime.mcp_servers.is_empty()
-            || !runtime.features.is_empty()
-        {
-            return Err(config_model::user_error(format!(
-                "invalid agent file in {}: E3 Codex world placement does not match the admitted V1 descriptor",
-                path.display()
-            )));
         }
     }
     if let Some(overlay) = &parsed.policy_overlay {
         validate_policy_overlay(path, overlay, base_policy, world_root)?;
     }
     Ok(())
-}
-
-fn count_enabled_v2_placements(parsed: &AgentFileV2) -> usize {
-    [
-        parsed.config.placements.host.as_ref(),
-        parsed.config.placements.world.as_ref(),
-    ]
-    .into_iter()
-    .flatten()
-    .filter(|placement| placement.enabled)
-    .count()
-}
-
-fn compatibility_source_from_v2(
-    parsed: &AgentFileV2,
-) -> Option<(AgentPlacement, &AgentPlacementConfigV2)> {
-    let mut enabled = [
-        (AgentPlacement::Host, parsed.config.placements.host.as_ref()),
-        (
-            AgentPlacement::World,
-            parsed.config.placements.world.as_ref(),
-        ),
-    ]
-    .into_iter()
-    .filter_map(|(placement, config)| config.map(|config| (placement, config)))
-    .filter(|(_, placement)| placement.enabled);
-    let first = enabled.next()?;
-    if enabled.next().is_some() {
-        return None;
-    }
-    Some(first)
-}
-
-fn compatibility_inventory_file_from_v2(parsed: &AgentFileV2) -> AgentFileV1 {
-    // Packet 1 validates the version-2 schema and exposes placement-aware projection helpers
-    // without cutting legacy selector/runtime consumers over to multi-row inventory yet.
-    let compatibility_source = compatibility_source_from_v2(parsed);
-    let compatibility_id = compatibility_source
-        .map(|(placement, _)| match placement {
-            AgentPlacement::Host => parsed.id.clone(),
-            AgentPlacement::World => format!("{}_world", parsed.id),
-        })
-        .unwrap_or_else(|| parsed.id.clone());
-
-    AgentFileV1 {
-        version: parsed.version,
-        id: compatibility_id,
-        config: AgentConfigV1 {
-            enabled: parsed.config.enabled && compatibility_source.is_some(),
-            kind: parsed.config.kind,
-            protocol: parsed.config.protocol.clone(),
-            execution: AgentExecutionConfigV1 {
-                scope: compatibility_source.map(|(placement, _)| placement.execution_scope()),
-            },
-            cli: compatibility_source.and_then(|(_, placement)| placement.cli.clone()),
-            api: compatibility_source.and_then(|(_, placement)| placement.api.clone()),
-            capabilities: compatibility_source
-                .map(|(_, placement)| placement.capabilities.clone())
-                .unwrap_or_default(),
-        },
-        policy_overlay: parsed.policy_overlay.clone(),
-    }
 }
 
 fn validate_agent_config(path: &Path, config: &AgentConfigV1) -> Result<()> {
@@ -2338,29 +2128,16 @@ fn validate_overlay_subset(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        compatibility_inventory_file_from_v2, inventory_entry_origin,
-        load_effective_agent_inventory, load_effective_agent_inventory_for_bootstrap_home,
-        materialize_effective_inventory_entries_from_v2, merge_inventory_root,
-        normalize_inventory_origin_path, parse_and_validate_agent_file,
-        parse_and_validate_agent_file_raw, project_inventory_entry, project_inventory_v2_entry,
-        project_inventory_v3_entry, validate_agent_file, validate_agent_schema_v2,
-        validate_world_fs_overlay, AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily,
-        AgentConfigKind, AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentFileV2,
-        AgentInventoryBaselineOrigin, AgentInventoryEntryV1, AgentPlacement,
-        ParsedAgentInventoryFile,
-    };
+    use super::*;
     use crate::execution::config_model::{AgentCliMode, SubstrateConfig};
     use crate::execution::workspace::{workspace_marker_path, SUBSTRATE_DIR_NAME};
-    use std::collections::{BTreeMap, BTreeSet};
     use std::path::{Path, PathBuf};
 
     #[cfg(target_os = "linux")]
     mod e3f_held_selection_tests {
         use super::*;
         use crate::execution::agent_inventory::{
-            hold_e3_selected_inventory_projection_v1, resolve_e3_selected_inventory_projection_v1,
-            with_e3_selected_inventory_projection_v1,
+            hold_e3_selected_inventory_projection_v1, with_e3_selected_inventory_projection_v1,
         };
         use crate::execution::agent_runtime::host_session_authority::{
             facade::HostSessionAuthority,
@@ -2391,6 +2168,11 @@ mod tests {
                 fs::set_permissions(root, fs::Permissions::from_mode(0o700)).unwrap();
             }
             fs::create_dir(home.path().join("agents")).unwrap();
+            fs::set_permissions(
+                home.path().join("agents"),
+                fs::Permissions::from_mode(0o700),
+            )
+            .unwrap();
             fs::create_dir_all(workspace.path().join(".substrate/agents")).unwrap();
             for (path, bytes) in [
                 (home.path().join("config.yaml"), "llm: {enabled: true, gateway: {enabled: true, mode: in_world}, routing: {default_backend: 'cli:codex-world'}}\nagents: {enabled: true, defaults: {execution: {scope: world}, cli: {mode: persistent}}}\nworld: {enabled: true}\n"),
@@ -2440,160 +2222,43 @@ mod tests {
 
         #[test]
         #[serial_test::serial]
-        fn test_e3f_held_selection_global_and_workspace_shadow() {
+        fn test_v3_ordinary_world_passes_and_held_ingress_refuses_before_callback() {
             for workspace_yaml in [None, Some(e3c_v3_codex_yaml())] {
                 with_inventory(
                     workspace_yaml,
-                    |bootstrap, global, local, effective, _, _| {
-                        let held = hold_e3_selected_inventory_projection_v1(
-                            bootstrap, global, local, effective, None,
+                    |bootstrap, global, local, effective, _, workspace| {
+                        let ordinary = load_agent_inventory_snapshot_for_bootstrap_home_v3(
+                            workspace,
+                            &Policy::default(),
+                            bootstrap,
                         )
                         .unwrap();
-                        assert_eq!(held.logical().backend_id, "cli:codex-world");
+                        assert!(ordinary.entries.contains_key("codex-world"));
+                        let config = crate::execution::config_model::resolve_effective_config_for_bootstrap_home(workspace, &Default::default(), bootstrap).unwrap();
+                        let selected = ordinary
+                            .resolve_selection(
+                                &config,
+                                None,
+                                Some("cli:codex-world"),
+                                crate::execution::config_model::AgentExecutionScope::World,
+                            )
+                            .unwrap();
+                        assert_eq!(selected.upstream_model_id, "codex-mini-latest");
                         assert_eq!(
-                            held.selected().source.inventory_scope,
+                            selected.inventory_source.scope,
                             if workspace_yaml.is_some() {
-                                "workspace"
+                                transport_api_types::AgentSelectionSourceScopeV1::Workspace
                             } else {
-                                "global"
+                                transport_api_types::AgentSelectionSourceScopeV1::Global
                             }
                         );
-                        let expected = held.selected_source().unwrap().source_material();
-                        assert_eq!(&held.selected().source, expected);
-                        let strict = resolve_e3_selected_inventory_projection_v1(
-                            bootstrap, global, local, effective, expected,
-                        )
-                        .unwrap();
-                        assert_eq!(&strict, held.logical());
-                        held.revalidate().unwrap();
-                        let mut wrong = expected.clone();
-                        wrong.file_inode += 1;
-                        assert_eq!(
-                            resolve_e3_selected_inventory_projection_v1(
-                                bootstrap, global, local, effective, &wrong,
+                        assert!(matches!(
+                            hold_e3_selected_inventory_projection_v1(
+                                bootstrap, global, local, effective, None
                             ),
-                            Err(ConfigProjectionFailureV1::WrongBinding)
-                        );
-                        let mut wrong = expected.clone();
-                        wrong.raw_bytes_sha256 = "0".repeat(64);
-                        assert_eq!(
-                            resolve_e3_selected_inventory_projection_v1(
-                                bootstrap, global, local, effective, &wrong,
-                            ),
-                            Err(ConfigProjectionFailureV1::HashInvalid)
-                        );
-                    },
-                );
-            }
-            for shadow in [
-                e3c_v3_codex_yaml().replacen("enabled: true", "enabled: false", 1),
-                "version: 1\nid: codex\nconfig:\n  enabled: false\n  kind: cli\n  cli: {binary: codex}\n".into(),
-            ] {
-                with_inventory(Some(&shadow), |bootstrap, global, local, effective, _, _| {
-                    assert!(matches!(hold_e3_selected_inventory_projection_v1(
-                        bootstrap, global, local, effective, None,
-                    ), Err(ConfigProjectionFailureV1::UnsupportedConfiguration)));
-                });
-            }
-        }
-
-        #[test]
-        #[serial_test::serial]
-        fn test_e3f_e2_policy_input_parity_selected_contract() {
-            use crate::execution::agent_runtime::dispatch_contract::*;
-            use crate::execution::config_model::AgentExecutionScope;
-            with_inventory(None, |bootstrap, global, local, effective, _, _| {
-                let held = hold_e3_selected_inventory_projection_v1(
-                    bootstrap, global, local, effective, None,
-                )
-                .unwrap();
-                let selected = held.selected();
-                let policy = Policy {
-                    agents_allowed_backends: vec![selected.backend_id.clone()],
-                    ..held.policy().clone()
-                };
-                let envelope = DispatchRequestEnvelope {
-                    caller_kind: DispatchCallerKind::OrchestratorMemberStart,
-                    baseline_kind: DispatchBaselineKind::InventoryLaunch,
-                    backend_id: Some(selected.backend_id.clone()),
-                    orchestration_session_id: Some("session".into()),
-                    requested_execution_scope_override: Some(AgentExecutionScope::World),
-                    capability_overrides: DispatchCapabilityOverrideSet::default(),
-                    attach_launch_knobs: AttachLaunchKnobs {
-                        requested_execution_scope: AgentExecutionScope::World,
-                        host_execution_client_start: HostExecutionClientStart::Defer,
-                        attach_mode_preference: AttachModePreference::FreshAllowed,
-                    },
-                    has_prompt_payload: true,
-                };
-                let resolved =
-                    resolve_e3_selected_inventory_contract(&policy, &envelope, selected).unwrap();
-                assert_eq!(resolved.agent_id, selected.realized_agent_id);
-                assert_eq!(resolved.runtime.cli_binary, selected.cli_binary);
-                assert_eq!(
-                    resolved.baseline_source.inventory_path.as_ref(),
-                    Some(&selected.path)
-                );
-                let mut other = envelope.clone();
-                other.backend_id = Some("cli:other-world".into());
-                assert!(resolve_e3_selected_inventory_contract(&policy, &other, selected).is_err());
-                other = envelope.clone();
-                other.requested_execution_scope_override = Some(AgentExecutionScope::Host);
-                assert!(resolve_e3_selected_inventory_contract(&policy, &other, selected).is_err());
-                let denied = Policy {
-                    agents_allowed_backends: vec![],
-                    ..policy.clone()
-                };
-                assert_eq!(
-                    resolve_e3_selected_inventory_contract(&denied, &envelope, selected)
-                        .unwrap_err()
-                        .kind,
-                    DispatchResolutionErrorKind::OverrideDeniedByPolicy
-                );
-                let mut missing = selected.clone();
-                missing.capabilities.session_fork = false;
-                assert_eq!(
-                    resolve_e3_selected_inventory_contract(&policy, &envelope, &missing)
-                        .unwrap_err()
-                        .field,
-                    "session_fork"
-                );
-                missing = selected.clone();
-                missing.protocol = None;
-                assert_eq!(
-                    resolve_e3_selected_inventory_contract(&policy, &envelope, &missing)
-                        .unwrap_err()
-                        .field,
-                    "protocol"
-                );
-                missing = selected.clone();
-                missing.cli_runtime_family = None;
-                missing.realized_agent_id = "unknown-world".into();
-                assert_eq!(
-                    resolve_e3_selected_inventory_contract(&policy, &envelope, &missing)
-                        .unwrap_err()
-                        .kind,
-                    DispatchResolutionErrorKind::RuntimeUnrealizableAfterResolution
-                );
-                held.revalidate().unwrap();
-            });
-        }
-
-        #[test]
-        #[serial_test::serial]
-        fn test_e3f_held_source_substitution() {
-            for mutation in [
-                "selected",
-                "unselected",
-                "duplicate",
-                "root",
-                "bytes",
-                "callback-error",
-            ] {
-                with_inventory(
-                    Some(e3c_v3_codex_yaml()),
-                    |bootstrap, global, local, effective, home, workspace| {
-                        let mut entered = false;
+                            Err(ConfigProjectionFailureV1::UnsupportedConfiguration)
+                        ));
+                        let mut callback_entered = false;
                         let result: Result<(), ConfigProjectionFailureV1> =
                             with_e3_selected_inventory_projection_v1(
                                 bootstrap,
@@ -2601,58 +2266,18 @@ mod tests {
                                 local,
                                 effective,
                                 None,
-                                |_, logical, selected, source| {
-                                    entered = true;
-                                    assert_eq!(logical.backend_id, selected.backend_id);
-                                    assert_eq!(source.source_material(), &selected.source);
-                                    let selected = workspace.join(".substrate/agents/codex.yaml");
-                                    match mutation {
-                                        "selected" | "callback-error" | "unselected" => {
-                                            let path = if mutation == "unselected" {
-                                                home.join("agents/codex.yaml")
-                                            } else {
-                                                selected
-                                            };
-                                            let replacement = path.with_extension("replacement");
-                                            fs::write(&replacement, fs::read(&path).unwrap())
-                                                .unwrap();
-                                            fs::rename(replacement, path).unwrap();
-                                        }
-                                        "duplicate" => fs::write(
-                                            workspace.join(".substrate/agents/duplicate.yaml"),
-                                            e3c_v3_codex_yaml(),
-                                        )
-                                        .unwrap(),
-                                        "root" => {
-                                            fs::rename(
-                                                workspace.join(".substrate/agents"),
-                                                workspace.join(".substrate/old"),
-                                            )
-                                            .unwrap();
-                                            fs::create_dir(workspace.join(".substrate/agents"))
-                                                .unwrap();
-                                        }
-                                        "bytes" => fs::write(
-                                            selected,
-                                            e3c_v3_codex_yaml()
-                                                .replace("model: codex", "model: other"),
-                                        )
-                                        .unwrap(),
-                                        _ => unreachable!(),
-                                    }
-                                    if mutation == "callback-error" {
-                                        Err(ConfigProjectionFailureV1::Conflict)
-                                    } else {
-                                        Ok(())
-                                    }
+                                |_, _, _, _| {
+                                    callback_entered = true;
+                                    Ok(())
                                 },
                             );
-                        assert!(entered, "mutation callback must be reached: {mutation}");
-                        assert!(result.is_err(), "{mutation}");
-                        assert_ne!(
+                        assert_eq!(
                             result,
-                            Err(ConfigProjectionFailureV1::Conflict),
-                            "guard failure takes precedence even when callback fails"
+                            Err(ConfigProjectionFailureV1::UnsupportedConfiguration)
+                        );
+                        assert!(
+                            !callback_entered,
+                            "refusal must precede projection/preparation/transfer callback"
                         );
                     },
                 );
@@ -2677,6 +2302,7 @@ config:
       api: null
       capabilities:
         session_start: true
+      selection: {harness: codex, provider: openai, connection_profile: "built_in:codex-subscription", model: codex-mini-latest}
       runtime_projection: null
     world:
       enabled: true
@@ -2694,8 +2320,8 @@ config:
         event_stream: true
         llm: true
         mcp_client: false
+      selection: {harness: codex, provider: openai, connection_profile: "built_in:codex-subscription", model: codex-mini-latest}
       runtime_projection:
-        model: codex
         mcp_servers: []
         features: []
 "#
@@ -2781,21 +2407,10 @@ config:
         fs::create_dir_all(substrate_home.join("agents")).unwrap();
         fs::write(
             substrate_home.join("agents/e1.yaml"),
-            r#"
-version: 1
-id: e1
-config:
-  kind: cli
-  enabled: true
-  protocol: transport.iframe.v1
-  cli:
-    binary: e1
-policy_overlay:
-  world_fs:
-    read:
-      allow_list:
-        - src/lib.rs
-"#,
+            format!(
+                "{}\npolicy_overlay:\n  world_fs:\n    read:\n      allow_list: [src/lib.rs]\n",
+                e3c_v3_codex_yaml().replace("id: codex", "id: e1")
+            ),
         )
         .unwrap();
 
@@ -2807,7 +2422,7 @@ policy_overlay:
 
         let inventory = load_effective_agent_inventory(&project, &parent)
             .expect("global inventory must bind containment to the requested project root");
-        assert!(inventory.contains_key("e1"));
+        assert!(inventory.contains_key("e1-world"));
     }
     use std::fs;
     use substrate_broker::Policy;
@@ -2888,823 +2503,6 @@ policy_overlay:
         );
     }
 
-    #[test]
-    fn project_inventory_v2_entry_emits_realized_rows_for_enabled_placements() {
-        let cwd = tempdir().expect("tempdir");
-        let mut effective_config = SubstrateConfig::default();
-        effective_config.agents.defaults.cli.mode = AgentCliMode::Persistent;
-
-        let raw = r#"
-version: 2
-id: codex
-config:
-  kind: cli
-  enabled: true
-  protocol: substrate.agent.session
-  placements:
-    host:
-      enabled: true
-      cli:
-        binary: codex
-        mode: persistent
-        runtime_family: codex
-      capabilities:
-        session_start: true
-        llm: true
-    world:
-      enabled: true
-      cli:
-        binary: codex
-        runtime_family: codex
-      capabilities:
-        session_resume: true
-        llm: true
-"#;
-        let file: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
-
-        let projected = project_inventory_v2_entry(
-            cwd.path(),
-            &cwd.path().join("codex.yaml"),
-            &file,
-            &effective_config,
-        );
-
-        assert_eq!(projected.len(), 2);
-
-        let host = &projected[0];
-        assert_eq!(host.logical_agent_id, "codex");
-        assert_eq!(host.placement, AgentPlacement::Host);
-        assert_eq!(host.realized_agent_id, "codex-host");
-        assert_eq!(host.backend_id, "cli:codex-host");
-        assert_eq!(host.display_label, "codex (host)");
-        assert_eq!(
-            host.execution_scope,
-            crate::execution::config_model::AgentExecutionScope::Host
-        );
-        assert_eq!(host.cli_runtime_family, Some(AgentCliRuntimeFamily::Codex));
-        assert_eq!(host.cli_binary.as_deref(), Some("codex"));
-        assert!(host.capabilities.session_start);
-        assert!(host.capabilities.llm);
-
-        let world = &projected[1];
-        assert_eq!(world.logical_agent_id, "codex");
-        assert_eq!(world.placement, AgentPlacement::World);
-        assert_eq!(world.realized_agent_id, "codex-world");
-        assert_eq!(world.backend_id, "cli:codex-world");
-        assert_eq!(world.display_label, "codex (world)");
-        assert_eq!(
-            world.execution_scope,
-            crate::execution::config_model::AgentExecutionScope::World
-        );
-        assert_eq!(world.cli_runtime_family, Some(AgentCliRuntimeFamily::Codex));
-        assert_eq!(world.cli_binary.as_deref(), Some("codex"));
-        assert!(world.capabilities.session_resume);
-        assert!(world.capabilities.llm);
-    }
-
-    #[test]
-    fn project_inventory_v2_entry_skips_disabled_placements() {
-        let cwd = tempdir().expect("tempdir");
-        let effective_config = SubstrateConfig::default();
-        let raw = r#"
-version: 2
-id: codex
-config:
-  kind: cli
-  enabled: true
-  protocol: substrate.agent.session
-  placements:
-    host:
-      enabled: false
-      cli:
-        binary: codex
-        runtime_family: codex
-      capabilities:
-        llm: true
-    world:
-      enabled: true
-      cli:
-        binary: codex
-        runtime_family: codex
-      capabilities:
-        llm: true
-"#;
-        let file: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
-
-        let projected = project_inventory_v2_entry(
-            cwd.path(),
-            &cwd.path().join("codex.yaml"),
-            &file,
-            &effective_config,
-        );
-
-        assert_eq!(projected.len(), 1);
-        assert_eq!(projected[0].placement, AgentPlacement::World);
-        assert_eq!(projected[0].realized_agent_id, "codex-world");
-    }
-
-    #[test]
-    fn validate_agent_schema_v2_rejects_enabled_inventory_without_enabled_placements() {
-        let temp = tempdir().expect("tempdir");
-        let path = temp.path().join("codex.yaml");
-        let base_policy = Policy::default();
-
-        let raw = r#"
-version: 2
-id: codex
-config:
-  kind: cli
-  enabled: true
-  protocol: substrate.agent.session
-  placements:
-    host:
-      enabled: false
-      cli:
-        binary: codex
-        runtime_family: codex
-    world:
-      enabled: false
-      cli:
-        binary: codex
-        runtime_family: codex
-"#;
-        let parsed: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
-        let err = validate_agent_schema_v2(&path, &parsed, &base_policy, None)
-            .expect_err("inventory without enabled placements should fail validation");
-        assert!(
-            err.to_string()
-                .contains("config.placements must enable at least one placement"),
-            "unexpected validation error: {err:?}"
-        );
-    }
-
-    #[test]
-    fn validate_agent_schema_v2_accepts_top_level_disabled_inventory_without_enabled_placements() {
-        let temp = tempdir().expect("tempdir");
-        let path = temp.path().join("codex.yaml");
-        let base_policy = Policy::default();
-
-        let raw = r#"
-version: 2
-id: codex
-config:
-  kind: cli
-  enabled: false
-  protocol: substrate.agent.session
-  placements:
-    host:
-      enabled: false
-      cli:
-        binary: codex
-        runtime_family: codex
-    world:
-      enabled: false
-      cli:
-        binary: codex
-        runtime_family: codex
-"#;
-        let parsed: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
-        validate_agent_schema_v2(&path, &parsed, &base_policy, None)
-            .expect("top-level disabled inventory should preserve disabled semantics");
-    }
-
-    #[test]
-    fn validate_agent_schema_v2_accepts_multi_enabled_inventory_after_packet_2_cutover() {
-        let temp = tempdir().expect("tempdir");
-        let path = temp.path().join("codex.yaml");
-        let base_policy = Policy::default();
-        let raw = r#"
-version: 2
-id: codex
-config:
-  kind: cli
-  enabled: true
-  protocol: substrate.agent.session
-  placements:
-    host:
-      enabled: true
-      cli:
-        binary: codex
-        runtime_family: codex
-    world:
-      enabled: true
-      cli:
-        binary: codex
-        runtime_family: codex
-        "#;
-        let parsed: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
-        validate_agent_schema_v2(&path, &parsed, &base_policy, None)
-            .expect("Packet 2 should accept multi-enabled placement-aware inventory");
-    }
-
-    #[test]
-    fn compatibility_inventory_file_from_v2_fails_closed_for_ambiguous_or_disabled_placements() {
-        for raw in [
-            r#"
-version: 2
-id: codex
-config:
-  kind: cli
-  enabled: true
-  protocol: substrate.agent.session
-  placements:
-    host:
-      enabled: false
-      cli:
-        binary: codex-host
-        runtime_family: codex
-      capabilities:
-        session_start: true
-        llm: true
-    world:
-      enabled: false
-      cli:
-        binary: codex-world
-        runtime_family: codex
-      capabilities:
-        session_resume: true
-        llm: true
-"#,
-            r#"
-version: 2
-id: codex
-config:
-  kind: cli
-  enabled: true
-  protocol: substrate.agent.session
-  placements:
-    host:
-      enabled: true
-      cli:
-        binary: codex-host
-        runtime_family: codex
-      capabilities:
-        session_start: true
-        llm: true
-    world:
-      enabled: true
-      cli:
-        binary: codex-world
-        runtime_family: codex
-      capabilities:
-        session_resume: true
-        llm: true
-"#,
-        ] {
-            let parsed: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
-            let compatibility = compatibility_inventory_file_from_v2(&parsed);
-
-            assert!(
-                !compatibility.config.enabled,
-                "ambiguous compatibility projection must fail closed"
-            );
-            assert!(compatibility.config.cli.is_none());
-            assert!(compatibility.config.api.is_none());
-            assert_eq!(
-                compatibility.config.capabilities,
-                AgentCapabilitiesV1::default()
-            );
-        }
-    }
-
-    #[test]
-    fn effective_inventory_materialization_accepts_single_placement_version_2_inventory() {
-        let raw = r#"
-version: 2
-id: codex
-config:
-  kind: cli
-  enabled: true
-  protocol: substrate.agent.session
-  placements:
-    world:
-      enabled: true
-      cli:
-        binary: codex
-        runtime_family: codex
-      capabilities:
-        session_resume: true
-        llm: true
-"#;
-        let parsed: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
-        let path = tempdir().expect("tempdir").path().join("codex.yaml");
-
-        let materialized = materialize_effective_inventory_entries_from_v2(&path, &parsed);
-
-        assert_eq!(materialized.len(), 1);
-        let materialized = &materialized[0].file;
-        assert!(materialized.config.enabled);
-        assert_eq!(materialized.id, "codex-world");
-        assert_eq!(materialized.derived_backend_id(), "cli:codex-world");
-        assert_eq!(
-            materialized.config.execution.scope,
-            Some(crate::execution::config_model::AgentExecutionScope::World)
-        );
-    }
-
-    #[test]
-    fn effective_inventory_materialization_realizes_multi_placement_version_2_inventory() {
-        let raw = r#"
-version: 2
-id: codex
-config:
-  kind: cli
-  enabled: true
-  protocol: substrate.agent.session
-  placements:
-    host:
-      enabled: true
-      cli:
-        binary: codex
-        runtime_family: codex
-      capabilities:
-        llm: true
-    world:
-      enabled: true
-      cli:
-        binary: /var/lib/substrate/world-deps/bin/codex
-        runtime_family: codex
-      capabilities:
-        llm: true
-"#;
-        let parsed: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
-        let path = tempdir().expect("tempdir").path().join("codex.yaml");
-
-        let materialized = materialize_effective_inventory_entries_from_v2(&path, &parsed);
-
-        assert_eq!(materialized.len(), 2);
-        assert_eq!(materialized[0].file.id, "codex-host");
-        assert_eq!(materialized[0].file.derived_backend_id(), "cli:codex-host");
-        assert_eq!(materialized[1].file.id, "codex-world");
-        assert_eq!(materialized[1].file.derived_backend_id(), "cli:codex-world");
-    }
-
-    #[test]
-    fn effective_inventory_materialization_preserves_logical_binary_shorthand_for_realized_v2_rows()
-    {
-        let raw = r#"
-version: 2
-id: codex
-config:
-  kind: cli
-  enabled: true
-  protocol: substrate.agent.session
-  placements:
-    host:
-      enabled: true
-      cli:
-        runtime_family: codex
-      capabilities:
-        llm: true
-    world:
-      enabled: true
-      cli:
-        runtime_family: codex
-      capabilities:
-        llm: true
-"#;
-        let parsed: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
-        let path = tempdir().expect("tempdir").path().join("codex.yaml");
-
-        let materialized = materialize_effective_inventory_entries_from_v2(&path, &parsed);
-
-        assert_eq!(materialized.len(), 2);
-        assert_eq!(materialized[0].file.id, "codex-host");
-        assert_eq!(materialized[0].file.effective_cli_binary(), Some("codex"));
-        assert_eq!(materialized[1].file.id, "codex-world");
-        assert_eq!(materialized[1].file.effective_cli_binary(), Some("codex"));
-    }
-
-    #[test]
-    #[serial_test::serial]
-    fn load_effective_agent_inventory_materializes_single_placement_version_2_files() {
-        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
-        let temp = tempdir().expect("tempdir");
-        let substrate_home = temp.path().join("substrate-home");
-        let agents_dir = substrate_home.join("agents");
-        fs::create_dir_all(&agents_dir).expect("create agents directory");
-        fs::write(
-            agents_dir.join("claude_code.yaml"),
-            r#"
-version: 1
-id: claude_code
-config:
-  kind: cli
-  enabled: true
-  protocol: substrate.agent.session
-  execution:
-    scope: host
-  cli:
-    binary: claude
-    runtime_family: claude_code
-  capabilities:
-    llm: true
-"#,
-        )
-        .expect("write v1 inventory");
-        fs::write(
-            agents_dir.join("codex.yaml"),
-            r#"
-version: 2
-id: codex
-config:
-  kind: cli
-  enabled: true
-  protocol: substrate.agent.session
-  placements:
-    world:
-      enabled: true
-      cli:
-        binary: codex
-        runtime_family: codex
-      capabilities:
-        llm: true
-"#,
-        )
-        .expect("write v2 inventory");
-
-        let inventory_result = {
-            _authority_env.install_home(&substrate_home);
-            load_effective_agent_inventory(temp.path(), &Policy::default())
-        };
-        let inventory = inventory_result
-            .expect("effective inventory should materialize single-placement version 2 files");
-
-        assert_eq!(
-            inventory.len(),
-            2,
-            "legacy v1 plus single-placement v2 entries should materialize"
-        );
-        assert!(inventory.contains_key("claude_code"));
-        let codex = inventory
-            .get("codex-world")
-            .expect("single-placement version 2 entry should be present");
-        assert_eq!(
-            codex.file.config.execution.scope,
-            Some(crate::execution::config_model::AgentExecutionScope::World),
-            "materialized compatibility entry must preserve the selected placement scope"
-        );
-        assert_eq!(codex.file.derived_backend_id(), "cli:codex-world");
-    }
-
-    #[test]
-    #[serial_test::serial]
-    fn load_effective_agent_inventory_workspace_v2_shadow_materializes_single_placement_entry() {
-        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
-        let temp = tempdir().expect("tempdir");
-        let substrate_home = temp.path().join("substrate-home");
-        let global_agents_dir = substrate_home.join("agents");
-        fs::create_dir_all(&global_agents_dir).expect("create global agents directory");
-        fs::write(
-            global_agents_dir.join("codex.yaml"),
-            r#"
-version: 1
-id: codex
-config:
-  kind: cli
-  enabled: true
-  protocol: substrate.agent.session
-  execution:
-    scope: host
-  cli:
-    binary: codex
-    runtime_family: codex
-  capabilities:
-    llm: true
-"#,
-        )
-        .expect("write global v1 inventory");
-
-        let workspace_root = temp.path().join("workspace");
-        let workspace_agents_dir = workspace_root.join(SUBSTRATE_DIR_NAME).join("agents");
-        fs::create_dir_all(&workspace_agents_dir).expect("create workspace agents directory");
-        fs::write(workspace_marker_path(&workspace_root), "version: 1\n")
-            .expect("write workspace marker");
-        fs::write(
-            workspace_agents_dir.join("codex.yaml"),
-            r#"
-version: 2
-id: codex
-config:
-  kind: cli
-  enabled: true
-  protocol: substrate.agent.session
-  placements:
-    world:
-      enabled: true
-      cli:
-        binary: codex
-        runtime_family: codex
-      capabilities:
-        llm: true
-"#,
-        )
-        .expect("write workspace v2 inventory");
-
-        let inventory_result = {
-            _authority_env.install_home(&substrate_home);
-            load_effective_agent_inventory(&workspace_root, &Policy::default())
-        };
-        let inventory = inventory_result
-            .expect("effective inventory should materialize the workspace version 2 shadow entry");
-
-        assert!(
-            !inventory.contains_key("codex"),
-            "workspace version 2 world truth must suppress the stale global host row"
-        );
-        let codex = inventory.get("codex-world").expect(
-            "workspace version 2 inventory should materialize through the realized world id",
-        );
-        assert_eq!(
-            normalize_inventory_origin_path(&codex.path),
-            normalize_inventory_origin_path(&workspace_agents_dir.join("codex.yaml")),
-            "workspace version 2 inventory must win the shadowing boundary"
-        );
-        assert_eq!(
-            codex.file.config.execution.scope,
-            Some(crate::execution::config_model::AgentExecutionScope::World)
-        );
-        assert_eq!(codex.file.derived_backend_id(), "cli:codex-world");
-    }
-
-    #[test]
-    #[serial_test::serial]
-    fn load_effective_agent_inventory_workspace_host_v2_shadow_suppresses_stale_global_world_sibling(
-    ) {
-        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
-        let temp = tempdir().expect("tempdir");
-        let substrate_home = temp.path().join("substrate-home");
-        let global_agents_dir = substrate_home.join("agents");
-        fs::create_dir_all(&global_agents_dir).expect("create global agents directory");
-        fs::write(
-            global_agents_dir.join("codex.yaml"),
-            r#"
-version: 1
-id: codex
-config:
-  kind: cli
-  enabled: true
-  protocol: substrate.agent.session
-  execution:
-    scope: host
-  cli:
-    binary: codex
-    runtime_family: codex
-  capabilities:
-    llm: true
-"#,
-        )
-        .expect("write global host v1 inventory");
-        fs::write(
-            global_agents_dir.join("codex_world.yaml"),
-            r#"
-version: 1
-id: codex_world
-config:
-  kind: cli
-  enabled: true
-  protocol: substrate.agent.session
-  execution:
-    scope: world
-  cli:
-    binary: codex
-    runtime_family: codex
-  capabilities:
-    llm: true
-"#,
-        )
-        .expect("write global world v1 inventory");
-
-        let workspace_root = temp.path().join("workspace");
-        let workspace_agents_dir = workspace_root.join(SUBSTRATE_DIR_NAME).join("agents");
-        fs::create_dir_all(&workspace_agents_dir).expect("create workspace agents directory");
-        fs::write(workspace_marker_path(&workspace_root), "version: 1\n")
-            .expect("write workspace marker");
-        fs::write(
-            workspace_agents_dir.join("codex.yaml"),
-            r#"
-version: 2
-id: codex
-config:
-  kind: cli
-  enabled: true
-  protocol: substrate.agent.session
-  placements:
-    host:
-      enabled: true
-      cli:
-        binary: codex
-        runtime_family: codex
-      capabilities:
-        llm: true
-"#,
-        )
-        .expect("write workspace host-only v2 inventory");
-
-        let inventory_result = {
-            _authority_env.install_home(&substrate_home);
-            load_effective_agent_inventory(&workspace_root, &Policy::default())
-        };
-        let inventory = inventory_result.expect(
-            "effective inventory should materialize the workspace host-only version 2 shadow entry",
-        );
-
-        assert!(
-            !inventory.contains_key("codex"),
-            "workspace version 2 host truth must replace the stale legacy host id"
-        );
-        let codex = inventory.get("codex-host").expect(
-            "workspace version 2 inventory should materialize through the realized host id",
-        );
-        assert_eq!(
-            normalize_inventory_origin_path(&codex.path),
-            normalize_inventory_origin_path(&workspace_agents_dir.join("codex.yaml")),
-            "workspace version 2 inventory must win the shadowing boundary"
-        );
-        assert_eq!(
-            codex.file.config.execution.scope,
-            Some(crate::execution::config_model::AgentExecutionScope::Host)
-        );
-        assert_eq!(codex.file.derived_backend_id(), "cli:codex-host");
-        assert!(
-            !inventory.contains_key("codex_world"),
-            "workspace host-only version 2 truth must suppress the stale global world row"
-        );
-    }
-
-    #[test]
-    #[serial_test::serial]
-    fn load_effective_agent_inventory_workspace_host_v2_shadow_suppresses_lower_root_v2_realized_world_row(
-    ) {
-        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
-        let temp = tempdir().expect("tempdir");
-        let substrate_home = temp.path().join("substrate-home");
-        let global_agents_dir = substrate_home.join("agents");
-        fs::create_dir_all(&global_agents_dir).expect("create global agents directory");
-        fs::write(
-            global_agents_dir.join("codex.yaml"),
-            r#"
-version: 2
-id: codex
-config:
-  kind: cli
-  enabled: true
-  protocol: substrate.agent.session
-  placements:
-    host:
-      enabled: true
-      cli:
-        binary: codex
-        runtime_family: codex
-      capabilities:
-        llm: true
-    world:
-      enabled: true
-      cli:
-        binary: /var/lib/substrate/world-deps/bin/codex
-        runtime_family: codex
-      capabilities:
-        llm: true
-"#,
-        )
-        .expect("write global multi-placement v2 inventory");
-
-        let workspace_root = temp.path().join("workspace");
-        let workspace_agents_dir = workspace_root.join(SUBSTRATE_DIR_NAME).join("agents");
-        fs::create_dir_all(&workspace_agents_dir).expect("create workspace agents directory");
-        fs::write(workspace_marker_path(&workspace_root), "version: 1\n")
-            .expect("write workspace marker");
-        fs::write(
-            workspace_agents_dir.join("codex.yaml"),
-            r#"
-version: 2
-id: codex
-config:
-  kind: cli
-  enabled: true
-  protocol: substrate.agent.session
-  placements:
-    host:
-      enabled: true
-      cli:
-        binary: codex
-        runtime_family: codex
-      capabilities:
-        llm: true
-"#,
-        )
-        .expect("write workspace host-only v2 inventory");
-
-        let inventory_result = {
-            _authority_env.install_home(&substrate_home);
-            load_effective_agent_inventory(&workspace_root, &Policy::default())
-        };
-        let inventory = inventory_result.expect(
-            "effective inventory should materialize the workspace host-only version 2 shadow",
-        );
-
-        assert_eq!(
-            inventory.len(),
-            1,
-            "workspace host-only version 2 shadow should replace the full lower-root logical agent view"
-        );
-        let codex = inventory.get("codex-host").expect(
-            "workspace version 2 inventory should materialize through the realized host id",
-        );
-        assert_eq!(
-            normalize_inventory_origin_path(&codex.path),
-            normalize_inventory_origin_path(&workspace_agents_dir.join("codex.yaml")),
-            "workspace version 2 inventory must win the shadowing boundary"
-        );
-        assert!(
-            !inventory.contains_key("codex-world"),
-            "workspace host-only version 2 truth must suppress the stale lower-root realized world row"
-        );
-        assert!(
-            !inventory.contains_key("codex"),
-            "workspace host-only version 2 truth must suppress the stale lower-root legacy host row"
-        );
-        assert!(
-            !inventory.contains_key("codex_world"),
-            "workspace host-only version 2 truth must suppress the stale lower-root legacy world row"
-        );
-    }
-
-    #[test]
-    #[serial_test::serial]
-    fn load_effective_agent_inventory_same_root_v2_suppresses_stale_legacy_world_sibling() {
-        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
-        let temp = tempdir().expect("tempdir");
-        let substrate_home = temp.path().join("substrate-home");
-        let agents_dir = substrate_home.join("agents");
-        fs::create_dir_all(&agents_dir).expect("create agents directory");
-        fs::write(
-            agents_dir.join("codex.yaml"),
-            r#"
-version: 2
-id: codex
-config:
-  kind: cli
-  enabled: true
-  protocol: substrate.agent.session
-  placements:
-    host:
-      enabled: true
-      cli:
-        binary: codex
-        runtime_family: codex
-      capabilities:
-        llm: true
-"#,
-        )
-        .expect("write host-only v2 inventory");
-        fs::write(
-            agents_dir.join("codex_world.yaml"),
-            r#"
-version: 1
-id: codex_world
-config:
-  kind: cli
-  enabled: true
-  protocol: substrate.agent.session
-  execution:
-    scope: world
-  cli:
-    binary: codex
-    runtime_family: codex
-  capabilities:
-    llm: true
-"#,
-        )
-        .expect("write stale legacy world inventory");
-
-        let inventory_result = {
-            _authority_env.install_home(&substrate_home);
-            load_effective_agent_inventory(temp.path(), &Policy::default())
-        };
-        let inventory = inventory_result.expect(
-            "effective inventory should keep the realized single-placement version 2 truth",
-        );
-
-        assert!(
-            !inventory.contains_key("codex"),
-            "effective inventory should no longer retain the legacy host compatibility id"
-        );
-        let codex = inventory.get("codex-host").expect(
-            "host-only version 2 inventory should materialize through the realized host id",
-        );
-        assert_eq!(codex.path, agents_dir.join("codex.yaml"));
-        assert_eq!(
-            codex.file.config.execution.scope,
-            Some(crate::execution::config_model::AgentExecutionScope::Host)
-        );
-        assert_eq!(codex.file.derived_backend_id(), "cli:codex-host");
-        assert!(
-            !inventory.contains_key("codex_world"),
-            "single-placement version 2 truth must suppress the stale same-root legacy world sibling"
-        );
-    }
-
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
     #[serial_test::serial]
@@ -3732,19 +2530,7 @@ config:
         let selected_agent = agents.join("selected.yaml");
         fs::write(
             &selected_agent,
-            r#"version: 1
-id: selected
-config:
-  kind: cli
-  enabled: true
-  protocol: substrate.agent.session
-  execution:
-    scope: world
-  cli:
-    binary: selected
-  capabilities:
-    llm: true
-"#,
+            e3c_v3_codex_yaml().replace("id: codex", "id: selected"),
         )
         .expect("write selected inventory");
         fs::set_permissions(&selected_agent, fs::Permissions::from_mode(0o600))
@@ -3759,7 +2545,7 @@ config:
                     .expect("open selected authority");
             super::resolve_gateway_backend_inventory_entry_for_bootstrap_home(
                 parent.path(),
-                "cli:selected",
+                "cli:selected-world",
                 &Policy::default(),
                 &authority.bootstrap_home(),
             )
@@ -3767,7 +2553,7 @@ config:
 
         let entry = result.expect("resolve selected inventory");
         assert_eq!(entry.path, selected_agent);
-        assert_eq!(entry.derived_backend_id(), "cli:selected");
+        assert_eq!(entry.derived_backend_id(), "cli:selected-world");
     }
 
     #[cfg(target_os = "linux")]
@@ -3848,7 +2634,10 @@ config:
             format!("{valid}version: 3\n"),
             valid.replace("id: codex", "id: &agent codex\nalias: *agent"),
             valid.replace("  enabled: true", "  <<: { enabled: true }"),
-            valid.replace("model: codex", "model: !custom codex"),
+            valid.replace(
+                "model: codex-mini-latest",
+                "model: !custom codex-mini-latest",
+            ),
             format!("{valid}---\nversion: 3\n"),
             valid.replace("  protocol:", "  7: rejected\n  protocol:"),
         ] {
@@ -3874,11 +2663,18 @@ config:
         fs::create_dir_all(&agents).unwrap();
         let path = agents.join("codex.yaml");
         fs::write(&path, e3c_v3_codex_yaml()).unwrap();
-        let legacy = validate_agent_file(&path, &Policy::default())
-            .expect_err("legacy entry point must reject V3");
-        assert!(legacy
-            .to_string()
-            .contains("unsupported agent schema_version 3"));
+        validate_agent_file(&path, &Policy::default()).expect("ordinary V3 validator");
+        for version in [1, 2, 4] {
+            fs::write(
+                &path,
+                e3c_v3_codex_yaml().replacen("version: 3", &format!("version: {version}"), 1),
+            )
+            .unwrap();
+            assert!(validate_agent_file(&path, &Policy::default())
+                .unwrap_err()
+                .to_string()
+                .contains("version must be 3"));
+        }
 
         fs::write(&path, [0xff, 0xfe, 0xfd]).unwrap();
         assert!(parse_and_validate_agent_file(
@@ -3947,18 +2743,12 @@ config:
         };
         assert_ne!(global_source_hash, workspace_source.source_hash);
 
-        let mut compatibility = BTreeMap::new();
-        let error = merge_inventory_root(
-            &mut compatibility,
-            false,
-            BTreeSet::new(),
-            vec![
-                (workspace_path.clone(), workspace.clone()),
-                (workspace_path, workspace),
-            ],
-        )
+        let error = assemble_inventory_snapshot_v3(vec![
+            (workspace_path.clone(), workspace.clone()),
+            (workspace_path, workspace),
+        ])
         .expect_err("duplicate logical IDs must fail before selection");
-        assert!(error.to_string().contains("ambiguous agent inventory id"));
+        assert!(error.to_string().contains("duplicate agent"));
     }
 
     #[cfg(target_os = "linux")]
@@ -3991,18 +2781,16 @@ config:
 
         let authority = crate::execution::agent_runtime::HostSessionAuthority::open(&accepted_home)
             .expect("open authenticated accepted home");
-        let error = load_effective_agent_inventory_for_bootstrap_home(
+        let inventory = load_effective_agent_inventory_for_bootstrap_home(
             parent.path(),
             &Policy::default(),
             &authority.bootstrap_home(),
         )
-        .expect_err("the legacy loader must reject, not misclassify, authenticated V3");
-
-        assert!(
-            error
-                .to_string()
-                .contains("unsupported agent schema_version 3 in legacy inventory loader"),
-            "unexpected authenticated global V3 failure: {error}"
+        .expect("authenticated ordinary V3");
+        assert_eq!(inventory["codex-world"].path, inventory_path);
+        assert_eq!(
+            inventory["codex-world"].cli_runtime_family(),
+            Some(AgentCliRuntimeFamily::Codex)
         );
     }
 

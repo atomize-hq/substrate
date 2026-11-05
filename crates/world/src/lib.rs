@@ -695,6 +695,50 @@ impl WorldBackend for LinuxLocalBackend {
     }
 }
 
+#[cfg(target_os = "linux")]
+impl LinuxLocalBackend {
+    /// Read only an already cached genuine producer under this actual backend's locks/root.
+    /// A miss never recovers, ensures, adopts, attaches or repairs a World.
+    ///
+    /// ```no_run
+    /// # fn read(backend: &world::LinuxLocalBackend, project: &std::path::Path) -> anyhow::Result<()> {
+    /// backend.with_existing_custody_nonreconciling_v1("exact-session", "exact-world", 0, project,
+    ///     |held| { held.revalidate()?; Ok(()) })?;
+    /// # Ok(()) }
+    /// ```
+    pub fn with_existing_custody_nonreconciling_v1<T>(
+        &self,
+        session: &str,
+        world_id: &str,
+        generation: u64,
+        project: &std::path::Path,
+        operation: impl FnOnce(&session::ExistingWorldCustodyV1<'_>) -> Result<T>,
+    ) -> Result<T> {
+        let _ownership = self
+            .shared_owner_mutex
+            .lock()
+            .map_err(|_| anyhow::anyhow!("custody owner busy"))?;
+        let cache = self
+            .session_cache
+            .read()
+            .map_err(|_| anyhow::anyhow!("custody cache busy"))?;
+        let world = cache
+            .get(world_id)
+            .context("custody producer unsupported")?;
+        let custody = world.read_existing_custody_nonreconciling(
+            &SessionWorld::shared_root_dir(),
+            session,
+            world_id,
+            generation,
+            project,
+        )?;
+        let result = operation(&custody);
+        // Integrity overrides semantic failure as well as success. No Drop cleanup runs here.
+        custody.revalidate()?;
+        result
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

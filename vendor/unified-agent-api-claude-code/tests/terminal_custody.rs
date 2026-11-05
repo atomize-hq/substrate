@@ -40,6 +40,25 @@ fn client(dir: &Path, marker: &Path) -> ClaudeClient {
 }
 
 #[tokio::test]
+async fn test_closed_before_any_spawn_is_observation_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let marker = dir.path().join("must-not-run");
+    let client = client(dir.path(), &marker);
+    let custody = ClaudeProcessCustody::new();
+    assert!(custody.observed_process_terminations().is_empty());
+    assert!(!custody.observed_closed_before_any_spawn());
+    custody.request_termination();
+    assert!(client
+        .print_stream_json_control_with_custody(ClaudePrintRequest::new("closed"), &custody)
+        .await
+        .is_err());
+    custody.settle().await.unwrap();
+    assert!(custody.observed_closed_before_any_spawn());
+    assert!(custody.observed_process_terminations().is_empty());
+    assert!(!marker.exists());
+}
+
+#[tokio::test]
 async fn test_argv_prompt_completion_drop_retains_checked_cleanup() {
     let dir = tempfile::tempdir().unwrap();
     let marker = dir.path().join("argv");
@@ -142,4 +161,32 @@ async fn test_idle_event_receiver_drop_terminates_child_while_completion_is_reta
         .expect("every real stdio owner must acknowledge cleanup")
         .expect("checked settlement must succeed");
     drop(termination);
+}
+
+#[tokio::test]
+async fn test_claude_observed_child_wait_retains_actual_signal() {
+    use std::os::unix::process::ExitStatusExt;
+    let dir = tempfile::tempdir().unwrap();
+    let marker = dir.path().join("observed-signal");
+    let client = client(dir.path(), &marker);
+    let custody = ClaudeProcessCustody::new();
+    assert!(custody.observed_process_terminations().is_empty());
+    let mut startup = Box::pin(client.print_stream_json_control_with_custody(
+        ClaudePrintRequest::new("stdin-observed-signal").stdin_bytes(vec![b'x'; 4 * 1024 * 1024]),
+        &custody,
+    ));
+    tokio::select! {
+        result = &mut startup => panic!("stdin fixture must block startup: {}", result.is_ok()),
+        _ = admitted(&marker) => {},
+    }
+    drop(startup);
+    tokio::time::timeout(Duration::from_secs(3), custody.settle())
+        .await
+        .unwrap()
+        .unwrap();
+    let observations = custody.observed_process_terminations();
+    assert_eq!(observations.len(), 1);
+    assert!(observations[0].process_id.is_some());
+    assert_eq!(observations[0].status.unwrap().signal(), Some(9));
+    assert!(observations[0].recovery_status.is_none());
 }

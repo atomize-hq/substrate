@@ -123,7 +123,7 @@ pub fn write_log_entry(_log_path: &Path, entry: &Value) -> Result<()> {
     append_to_trace(entry)
 }
 
-fn write_log_entry_with_context(
+pub(crate) fn write_log_entry_with_context(
     trace_context: &TraceContext,
     _log_path: &Path,
     entry: &Value,

@@ -2750,7 +2750,7 @@ for candidate, message in ((gateway, "extra symbols"), (os.environ["MALFORMED_EL
         assert!(provision.contains("rustup run 1.89.0 cargo build --locked --release"));
         assert!(provision.contains("--bin substrate-world-entry"));
         assert!(lifecycle.contains("if build_performed != \"1\""));
-        assert!(provision.contains("SecureBits=noroot-locked"));
+        assert!(provision.contains("SecureBits=noroot noroot-locked"));
         assert!(provision.contains("CAP_SETUID CAP_SETGID CAP_SETPCAP"));
     }
 

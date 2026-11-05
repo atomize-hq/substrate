@@ -6817,7 +6817,215 @@ pub(crate) struct GatewayRuntimeStartContext {
     pub cgroup_path: PathBuf,
     pub require_cgroup_attach: bool,
     pub binding: &'static GatewayBackendBinding,
+    pub ordinary_effect: Option<Arc<crate::service::OrdinaryWorldEffectContextV1>>,
     pub integrated_auth: Option<GatewayIntegratedAuthPayloadV1>,
+}
+
+impl GatewayRuntimeStartContext {
+    fn runtime_backend_id(&self) -> &str {
+        self.ordinary_effect
+            .as_ref()
+            .map_or(self.binding.backend_id, |effect| {
+                effect.requested_selection().backend_id.as_str()
+            })
+    }
+
+    fn revalidate_ordinary_effect(&self) -> Result<(), GatewayRuntimeFailure> {
+        if let Some(effect) = &self.ordinary_effect {
+            effect
+                .revalidate_for_effect()
+                .map_err(|error| GatewayRuntimeFailure::policy(error.to_string()))?;
+        }
+        Ok(())
+    }
+}
+
+/// Owned ordinary route cleanup remains available after permission revocation.
+pub(crate) struct OrdinaryGatewayRuntimeLeaseV1 {
+    pub(crate) runtime_id: String,
+    backend_id: String,
+    manager: Arc<GatewayRuntimeManager>,
+    owner: Arc<OrdinaryGatewayLeaseOwnerV1>,
+}
+
+// Private ordinary resource ownership. None/test-only branches never mint admission.
+enum OrdinaryGatewayCustodyV1 {
+    Admitted(#[allow(dead_code)] Arc<crate::service::OrdinaryGatewayCleanupCustodyV1>),
+    #[cfg(test)]
+    StructuralFixture,
+}
+
+struct OrdinaryGatewayInstanceV1 {
+    runtime_id: String,
+    backend_id: String,
+    manifest_path: PathBuf,
+    process: Arc<Mutex<ManagedGatewayProcess>>,
+    // Explicitly released on known terminal disposal even while metadata clones live.
+    resources: Mutex<
+        Option<(
+            OrdinaryGatewayCustodyV1,
+            Arc<HeldNonE3PrivilegedChildLeaseV1>,
+        )>,
+    >,
+    registered: std::sync::atomic::AtomicBool,
+    closing: std::sync::atomic::AtomicBool,
+    settlement: Mutex<Option<std::result::Result<(u32, std::process::ExitStatus), String>>>,
+}
+
+struct OrdinaryGatewayLeaseOwnerV1 {
+    runtime_id: String,
+    backend_id: String,
+    closing: std::sync::atomic::AtomicBool,
+    instance: Mutex<Option<Arc<OrdinaryGatewayInstanceV1>>>,
+}
+
+impl OrdinaryGatewayRuntimeLeaseV1 {
+    /// Observe disposal of the current exact instance after admitted operations join.
+    pub(crate) async fn finish_owned(&self) -> Result<(u32, std::process::ExitStatus)> {
+        if self.owner.runtime_id != self.runtime_id || self.owner.backend_id != self.backend_id {
+            anyhow::bail!("ordinary lease does not own this issued instance");
+        }
+        // Close new admission before waiting. A previously admitted operation may
+        // already be starting; settlement resolves its current instance AFTER the lock.
+        self.owner
+            .closing
+            .store(true, std::sync::atomic::Ordering::Release);
+        supervise_ordinary_gateway_settlement(Arc::clone(&self.manager), Arc::clone(&self.owner))
+            .await
+            .map_err(|_| anyhow!("ordinary gateway settlement supervisor ended"))?
+    }
+}
+
+impl Drop for OrdinaryGatewayRuntimeLeaseV1 {
+    fn drop(&mut self) {
+        if self.owner.runtime_id != self.runtime_id || self.owner.backend_id != self.backend_id {
+            return;
+        }
+        self.owner
+            .closing
+            .store(true, std::sync::atomic::Ordering::Release);
+        let instance = match self.owner.instance.lock() {
+            Ok(owner) => owner.clone(),
+            Err(_) => None,
+        };
+        let Some(instance) = instance else {
+            return;
+        };
+        if instance
+            .settlement
+            .lock()
+            .ok()
+            .is_some_and(|result| result.is_some())
+        {
+            return;
+        }
+        // Fallback only, never a caller's terminal acknowledgment. A busy owner
+        // retains actual Child/custody in the lifecycle slot, explicitly unresolved.
+        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+            let _runtime = runtime.enter();
+            drop(supervise_ordinary_gateway_settlement(
+                Arc::clone(&self.manager),
+                Arc::clone(&self.owner),
+            ));
+        } else if let Ok(lifecycle) = self.manager.ordinary_lifecycle_for_owner(&self.runtime_id) {
+            let operation = lifecycle.op_lock.try_lock();
+            if let Ok(_operation) = operation {
+                let current = self
+                    .owner
+                    .instance
+                    .lock()
+                    .ok()
+                    .and_then(|owner| owner.clone());
+                if let Some(current) = current {
+                    current
+                        .closing
+                        .store(true, std::sync::atomic::Ordering::Release);
+                    let slot = lifecycle.ordinary.lock().ok().and_then(|slot| slot.clone());
+                    if slot
+                        .as_ref()
+                        .is_some_and(|slot| Arc::ptr_eq(slot, &current))
+                    {
+                        let result =
+                            self.manager
+                                .dispose_ordinary_instance(&current)
+                                .and_then(|terminal| {
+                                    complete_ordinary_gateway_settlement(
+                                        &current, &lifecycle, terminal,
+                                    )
+                                });
+                        if let Ok(mut settlement) = current.settlement.lock() {
+                            *settlement = Some(
+                                result
+                                    .as_ref()
+                                    .copied()
+                                    .map_err(|error| format!("{error:#}")),
+                            );
+                        }
+                    }
+                }
+            } else if let Ok(mut settlement) = instance.settlement.lock() {
+                *settlement = Some(Err(
+                    "ordinary Drop fallback could not acquire lifecycle owner; unresolved".into(),
+                ));
+            }
+        }
+    }
+}
+
+fn complete_ordinary_gateway_settlement(
+    instance: &Arc<OrdinaryGatewayInstanceV1>,
+    lifecycle: &Arc<GatewayLifecycleWorldState>,
+    terminal: (u32, std::process::ExitStatus),
+) -> Result<(u32, std::process::ExitStatus)> {
+    let mut slot = lifecycle
+        .ordinary
+        .lock()
+        .map_err(|_| anyhow!("ordinary lifecycle custody release poisoned"))?;
+    if slot
+        .as_ref()
+        .is_none_or(|current| !Arc::ptr_eq(current, instance))
+    {
+        anyhow::bail!("ordinary lifecycle custody changed before disposal acknowledgment");
+    }
+    let mut resources = instance
+        .resources
+        .lock()
+        .map_err(|_| anyhow!("ordinary cleanup resource release poisoned"))?;
+    // Known Child terminal + exact manifest/table disposal precede explicit release.
+    resources.take();
+    slot.take();
+    Ok(terminal)
+}
+
+fn supervise_ordinary_gateway_settlement(
+    manager: Arc<GatewayRuntimeManager>,
+    owner: Arc<OrdinaryGatewayLeaseOwnerV1>,
+) -> tokio::sync::oneshot::Receiver<Result<(u32, std::process::ExitStatus)>> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    tokio::spawn(async move {
+        let operation_manager = Arc::clone(&manager);
+        let operation_owner = Arc::clone(&owner);
+        let operation = tokio::spawn(async move {
+            operation_manager
+                .settle_ordinary_lease(operation_owner)
+                .await
+        });
+        let terminal = operation
+            .await
+            .map_err(|error| anyhow!("ordinary settlement owner failed: {error}"))
+            .and_then(|result| result);
+        if let Err(error) = &terminal {
+            if let Ok(instance) = owner.instance.lock() {
+                if let Some(instance) = instance.as_ref() {
+                    if let Ok(mut settlement) = instance.settlement.lock() {
+                        *settlement = Some(Err(format!("{error:#}")));
+                    }
+                }
+            }
+        }
+        let _ = sender.send(terminal);
+    });
+    receiver
 }
 
 #[derive(Debug, Clone)]
@@ -6927,6 +7135,7 @@ impl ManagedGatewayRuntime {
 struct GatewayLifecycleWorldState {
     op_lock: AsyncMutex<()>,
     state: RwLock<Option<GatewayRuntimeState>>,
+    ordinary: Mutex<Option<Arc<OrdinaryGatewayInstanceV1>>>,
 }
 
 impl GatewayLifecycleWorldState {
@@ -6968,6 +7177,525 @@ pub(crate) struct GatewayRuntimeManager {
 }
 
 impl GatewayRuntimeManager {
+    pub(crate) fn lease_ordinary_runtime(
+        self: &Arc<Self>,
+        effect: Arc<crate::service::OrdinaryWorldEffectContextV1>,
+        runtime_id: String,
+    ) -> Result<Arc<OrdinaryGatewayRuntimeLeaseV1>> {
+        use sha2::{Digest, Sha256};
+        effect.revalidate_for_effect()?;
+        let expected = format!(
+            "ordinary_{:x}",
+            Sha256::digest(serde_json::to_vec(&effect.authenticated_runtime())?)
+        );
+        if runtime_id != expected {
+            anyhow::bail!("ordinary gateway runtime key conflicts with authenticated native run");
+        }
+        ordinary_gateway_adapter(effect.requested_selection())?;
+        let backend_id = effect.requested_selection().backend_id.clone();
+        Ok(Arc::new(OrdinaryGatewayRuntimeLeaseV1 {
+            runtime_id: runtime_id.clone(),
+            backend_id: backend_id.clone(),
+            manager: Arc::clone(self),
+            owner: Arc::new(OrdinaryGatewayLeaseOwnerV1 {
+                runtime_id: runtime_id.clone(),
+                backend_id: backend_id.clone(),
+                closing: std::sync::atomic::AtomicBool::new(false),
+                instance: Mutex::new(None),
+            }),
+        }))
+    }
+
+    fn ordinary_lifecycle_for_owner(
+        &self,
+        runtime_id: &str,
+    ) -> Result<Arc<GatewayLifecycleWorldState>> {
+        let mut lifecycle = self
+            .lifecycle
+            .lock()
+            .map_err(|_| anyhow!("ordinary gateway lifecycle registry poisoned"))?;
+        Ok(Arc::clone(
+            lifecycle.entry(runtime_id.to_string()).or_default(),
+        ))
+    }
+
+    /// Resume only an already-closed actual Child retained in this service's
+    /// existing lifecycle slot. The selector never grants execution authority.
+    #[allow(dead_code)] // Explicit owner recovery surface; no public RPC/fresh-start use.
+    pub(crate) async fn settle_pending_ordinary_gateway(
+        self: &Arc<Self>,
+        runtime_id: &str,
+    ) -> Result<(u32, std::process::ExitStatus)> {
+        let lifecycle = self.ordinary_lifecycle_for_owner(runtime_id)?;
+        let instance = lifecycle
+            .ordinary
+            .lock()
+            .map_err(|_| anyhow!("ordinary lifecycle owner slot poisoned"))?
+            .clone()
+            .ok_or_else(|| anyhow!("no retained ordinary Child cleanup"))?;
+        if !instance.closing.load(std::sync::atomic::Ordering::Acquire) {
+            anyhow::bail!("active ordinary gateway is not pending cleanup");
+        }
+        supervise_ordinary_gateway_settlement(
+            Arc::clone(self),
+            Arc::new(OrdinaryGatewayLeaseOwnerV1 {
+                runtime_id: instance.runtime_id.clone(),
+                backend_id: instance.backend_id.clone(),
+                closing: std::sync::atomic::AtomicBool::new(true),
+                instance: Mutex::new(Some(instance)),
+            }),
+        )
+        .await
+        .map_err(|_| anyhow!("ordinary pending cleanup supervisor ended"))?
+    }
+
+    async fn settle_ordinary_lease(
+        self: &Arc<Self>,
+        owner: Arc<OrdinaryGatewayLeaseOwnerV1>,
+    ) -> Result<(u32, std::process::ExitStatus)> {
+        if !owner.closing.load(std::sync::atomic::Ordering::Acquire) {
+            anyhow::bail!("ordinary lease remains open");
+        }
+        let lifecycle = self.ordinary_lifecycle_for_owner(&owner.runtime_id)?;
+        let _operation = lifecycle.op_lock.lock().await;
+        let instance = owner
+            .instance
+            .lock()
+            .map_err(|_| anyhow!("ordinary lease owner poisoned"))?
+            .clone()
+            .ok_or_else(|| anyhow!("ordinary lease has no issued Child"))?;
+        if instance.runtime_id != owner.runtime_id || instance.backend_id != owner.backend_id {
+            anyhow::bail!("ordinary current lease instance mismatch");
+        }
+        instance
+            .closing
+            .store(true, std::sync::atomic::Ordering::Release);
+        self.settle_ordinary_instance_locked(instance, &lifecycle)
+            .await
+    }
+
+    #[cfg(test)]
+    async fn settle_closed_ordinary_gateway(
+        self: &Arc<Self>,
+        instance: Arc<OrdinaryGatewayInstanceV1>,
+    ) -> Result<(u32, std::process::ExitStatus)> {
+        if !instance.closing.load(std::sync::atomic::Ordering::Acquire) {
+            anyhow::bail!("ordinary gateway instance has not closed");
+        }
+        let lifecycle = self.ordinary_lifecycle_for_owner(&instance.runtime_id)?;
+        let _operation = lifecycle.op_lock.lock().await;
+        self.settle_ordinary_instance_locked(instance, &lifecycle)
+            .await
+    }
+
+    async fn settle_ordinary_instance_locked(
+        self: &Arc<Self>,
+        instance: Arc<OrdinaryGatewayInstanceV1>,
+        lifecycle: &Arc<GatewayLifecycleWorldState>,
+    ) -> Result<(u32, std::process::ExitStatus)> {
+        let actual = lifecycle
+            .ordinary
+            .lock()
+            .map_err(|_| anyhow!("ordinary lifecycle owner slot poisoned"))?
+            .clone();
+        if actual.is_none() {
+            // Cached instance metadata is enough only after the serialized current
+            // lifecycle and table are empty. The lease closing latch denies new starts.
+            if self
+                .runtimes
+                .lock()
+                .map_err(|_| anyhow!("ordinary gateway table poisoned"))?
+                .contains_key(&instance.runtime_id)
+            {
+                anyhow::bail!("ordinary cleanup has a different current runtime");
+            }
+            let cached = instance
+                .settlement
+                .lock()
+                .map_err(|_| anyhow!("ordinary settlement poisoned"))?
+                .clone();
+            if let Some(Ok(terminal)) = cached {
+                if instance
+                    .resources
+                    .lock()
+                    .map_err(|_| anyhow!("ordinary resources poisoned"))?
+                    .is_none()
+                {
+                    return Ok(terminal);
+                }
+            }
+            anyhow::bail!("ordinary cleanup has no current issued lifecycle instance");
+        }
+        if actual
+            .as_ref()
+            .is_none_or(|actual| !Arc::ptr_eq(actual, &instance))
+        {
+            anyhow::bail!("ordinary cleanup owner is not the issued lifecycle instance");
+        }
+        let manager = Arc::clone(self);
+        let held = Arc::clone(&instance);
+        // The caller is the independent native completion or gateway startup owner.
+        // It retains this exact blocking JoinHandle through its actual result.
+        let mut terminal =
+            tokio::task::spawn_blocking(move || manager.dispose_ordinary_instance(&held))
+                .await
+                .map_err(|error| anyhow!("ordinary gateway blocking owner failed: {error}"))
+                .and_then(|result| result);
+        if let Ok(observed) = terminal {
+            terminal = complete_ordinary_gateway_settlement(&instance, lifecycle, observed);
+        }
+        *instance
+            .settlement
+            .lock()
+            .map_err(|_| anyhow!("ordinary settlement lock poisoned"))? = Some(
+            terminal
+                .as_ref()
+                .copied()
+                .map_err(|error| format!("{error:#}")),
+        );
+        terminal
+    }
+
+    fn dispose_ordinary_instance(
+        &self,
+        instance: &Arc<OrdinaryGatewayInstanceV1>,
+    ) -> Result<(u32, std::process::ExitStatus)> {
+        let matches = |runtime: &ManagedGatewayRuntime| {
+            runtime.world_id == instance.runtime_id
+                && runtime.backend_id == instance.backend_id
+                && runtime.manifest_path == instance.manifest_path
+                && Arc::ptr_eq(&runtime.process, &instance.process)
+        };
+        {
+            let runtimes = self
+                .runtimes
+                .lock()
+                .map_err(|_| anyhow!("ordinary gateway table poisoned"))?;
+            match runtimes.get(&instance.runtime_id) {
+                Some(runtime) if !matches(runtime) => {
+                    anyhow::bail!("ordinary gateway instance was replaced")
+                }
+                None if instance
+                    .registered
+                    .load(std::sync::atomic::Ordering::Acquire) =>
+                {
+                    anyhow::bail!("ordinary registered gateway entry is unavailable")
+                }
+                _ => {}
+            }
+        }
+        // No global table lock is held across the actual potentially blocking wait.
+        let terminal = {
+            let mut process = instance
+                .process
+                .lock()
+                .map_err(|_| anyhow!("ordinary Child lock poisoned"))?;
+            let ManagedGatewayProcess::Child(child) = &mut *process else {
+                anyhow::bail!("ordinary disposal requires actual Child custody");
+            };
+            let pid = child.id();
+            let status = match child.try_wait().context("inspect owned ordinary gateway")? {
+                Some(status) => status,
+                None => {
+                    child.kill().context("stop owned ordinary gateway")?;
+                    child.wait().context("wait owned ordinary gateway")?
+                }
+            };
+            (pid, status)
+        };
+        let mut runtimes = self
+            .runtimes
+            .lock()
+            .map_err(|_| anyhow!("ordinary gateway table poisoned"))?;
+        match runtimes.get(&instance.runtime_id) {
+            Some(runtime) if !matches(runtime) => {
+                anyhow::bail!("ordinary gateway entry changed during terminal wait")
+            }
+            None if instance
+                .registered
+                .load(std::sync::atomic::Ordering::Acquire) =>
+            {
+                anyhow::bail!("ordinary gateway entry disappeared during terminal wait")
+            }
+            _ => {}
+        }
+        match fs::remove_file(&instance.manifest_path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error).context("dispose exact ordinary gateway manifest"),
+        }
+        runtimes.remove(&instance.runtime_id);
+        Ok(terminal)
+    }
+
+    pub(crate) async fn restart_ordinary_owned(
+        self: &Arc<Self>,
+        ctx: GatewayRuntimeStartContext,
+        lease: Arc<OrdinaryGatewayRuntimeLeaseV1>,
+        fresh_preparation: bool,
+    ) -> Result<GatewayLifecycleResponseV1, GatewayRuntimeFailure> {
+        if !Arc::ptr_eq(self, &lease.manager)
+            || ctx.world_id != lease.runtime_id
+            || ctx.runtime_backend_id() != lease.backend_id
+            || ctx.ordinary_effect.is_none()
+        {
+            return Err(GatewayRuntimeFailure::invalid_integration(
+                "ordinary gateway owner mismatch",
+            ));
+        }
+        let cancel = tokio_util::sync::CancellationToken::new();
+        let awaiter = cancel.clone().drop_guard();
+        let manager = Arc::clone(self);
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        tokio::spawn(async move {
+            let operation_manager = Arc::clone(&manager);
+            let operation_lease = Arc::clone(&lease);
+            let operation_ctx = ctx.clone();
+            let operation = tokio::spawn(async move {
+                operation_manager
+                    .run_ordinary_gateway_start(
+                        operation_ctx,
+                        operation_lease,
+                        fresh_preparation,
+                        cancel,
+                    )
+                    .await
+            });
+            let result = match operation.await {
+                Ok(result) => result,
+                Err(error) => {
+                    if fresh_preparation {
+                        if let Some(effect) = &ctx.ordinary_effect {
+                            effect
+                                .native_open
+                                .store(false, std::sync::atomic::Ordering::Release);
+                        }
+                    }
+                    let cleanup = lease.finish_owned().await;
+                    Err(GatewayRuntimeFailure::transient(format!(
+                        "ordinary gateway operation owner failed: {error}; cleanup={cleanup:?}"
+                    )))
+                }
+            };
+            let ready_response_lost_requires_cleanup = fresh_preparation && result.is_ok();
+            if sender.send(result).is_err() && ready_response_lost_requires_cleanup {
+                if let Some(effect) = &ctx.ordinary_effect {
+                    effect
+                        .native_open
+                        .store(false, std::sync::atomic::Ordering::Release);
+                }
+                // Covers a dropped response immediately after actual ready return.
+                let _ = lease.finish_owned().await;
+            }
+        });
+        let result = receiver.await.map_err(|_| {
+            GatewayRuntimeFailure::transient("ordinary gateway operation supervisor ended")
+        })?;
+        let _ = awaiter.disarm();
+        result
+    }
+
+    async fn run_ordinary_gateway_start(
+        self: &Arc<Self>,
+        ctx: GatewayRuntimeStartContext,
+        lease: Arc<OrdinaryGatewayRuntimeLeaseV1>,
+        fresh: bool,
+        cancel: tokio_util::sync::CancellationToken,
+    ) -> Result<GatewayLifecycleResponseV1, GatewayRuntimeFailure> {
+        let lifecycle = self
+            .ordinary_lifecycle_for_owner(&ctx.world_id)
+            .map_err(|error| GatewayRuntimeFailure::transient(error.to_string()))?;
+        let _operation = lifecycle.op_lock.lock().await;
+        let effect =
+            ctx.ordinary_effect.as_ref().cloned().ok_or_else(|| {
+                GatewayRuntimeFailure::invalid_integration("ordinary effect missing")
+            })?;
+        let result = async {
+            if lease
+                .owner
+                .closing
+                .load(std::sync::atomic::Ordering::Acquire)
+            {
+                return Err(GatewayRuntimeFailure::policy("ordinary lease is closing"));
+            }
+            ctx.revalidate_ordinary_effect()?;
+            if lease
+                .owner
+                .closing
+                .load(std::sync::atomic::Ordering::Acquire)
+            {
+                return Err(GatewayRuntimeFailure::policy(
+                    "ordinary lease closed before new gateway effect",
+                ));
+            }
+            if fresh && cancel.is_cancelled() {
+                return Err(GatewayRuntimeFailure::transient(
+                    "ordinary native preparation canceled before gateway start",
+                ));
+            }
+            let previous = lifecycle
+                .ordinary
+                .lock()
+                .map_err(|_| {
+                    GatewayRuntimeFailure::transient("ordinary lifecycle owner slot poisoned")
+                })?
+                .clone();
+            if let Some(previous) = previous {
+                let pinned = lease
+                    .owner
+                    .instance
+                    .lock()
+                    .map_err(|_| {
+                        GatewayRuntimeFailure::transient("ordinary lease owner lock poisoned")
+                    })?
+                    .clone();
+                if pinned
+                    .as_ref()
+                    .is_none_or(|pinned| !Arc::ptr_eq(pinned, &previous))
+                {
+                    return Err(GatewayRuntimeFailure::policy(
+                        "ordinary gateway instance is owned by another lease",
+                    ));
+                }
+                previous
+                    .closing
+                    .store(true, std::sync::atomic::Ordering::Release);
+                self.settle_ordinary_instance_locked(previous, &lifecycle)
+                    .await
+                    .map_err(|error| GatewayRuntimeFailure::transient(error.to_string()))?;
+            }
+            ctx.revalidate_ordinary_effect()?;
+            if lease
+                .owner
+                .closing
+                .load(std::sync::atomic::Ordering::Acquire)
+            {
+                return Err(GatewayRuntimeFailure::policy(
+                    "ordinary lease closed before new gateway effect",
+                ));
+            }
+            if fresh && cancel.is_cancelled() {
+                return Err(GatewayRuntimeFailure::transient(
+                    "ordinary native preparation canceled before new gateway effect",
+                ));
+            }
+            if self
+                .runtimes
+                .lock()
+                .map_err(|_| GatewayRuntimeFailure::transient("ordinary gateway table poisoned"))?
+                .contains_key(&ctx.world_id)
+                || manifest_path_for_world(&ctx.world_id, ctx.runtime_backend_id()).exists()
+            {
+                return Err(GatewayRuntimeFailure::policy(
+                    "ordinary gateway has unheld existing state",
+                ));
+            }
+            let Some(binary) = resolve_gateway_binary()? else {
+                return Ok(unavailable_response());
+            };
+            let exclusion = Arc::new(
+                self.privileged_child_exclusion
+                    .acquire_non_e3_child()
+                    .map_err(|error| GatewayRuntimeFailure::policy(error.to_string()))?,
+            );
+            let runtime = start_runtime_with_ordinary_owner(
+                binary,
+                ctx.clone(),
+                exclusion,
+                Some((&lease, &lifecycle)),
+            )?;
+            {
+                let mut runtimes = self.runtimes.lock().map_err(|_| {
+                    GatewayRuntimeFailure::transient("ordinary gateway table poisoned")
+                })?;
+                if runtimes.contains_key(&ctx.world_id) {
+                    return Err(GatewayRuntimeFailure::policy(
+                        "ordinary gateway entry was replaced before publication",
+                    ));
+                }
+                runtimes.insert(ctx.world_id.clone(), runtime.clone());
+            }
+            let instance = lease
+                .owner
+                .instance
+                .lock()
+                .map_err(|_| {
+                    GatewayRuntimeFailure::transient("ordinary lease owner lock poisoned")
+                })?
+                .clone()
+                .ok_or_else(|| {
+                    GatewayRuntimeFailure::transient("ordinary gateway Child owner missing")
+                })?;
+            instance
+                .registered
+                .store(true, std::sync::atomic::Ordering::Release);
+            self.wait_ordinary_gateway_ready_for_owner(
+                runtime,
+                fresh,
+                cancel,
+                DEFAULT_READY_TIMEOUT,
+            )
+            .await
+        }
+        .await;
+        if result.is_err() {
+            if fresh {
+                effect
+                    .native_open
+                    .store(false, std::sync::atomic::Ordering::Release);
+            }
+            let instance = lease
+                .owner
+                .instance
+                .lock()
+                .map_err(|_| {
+                    GatewayRuntimeFailure::transient("ordinary lease owner slot poisoned")
+                })?
+                .clone();
+            let slot = lifecycle
+                .ordinary
+                .lock()
+                .map_err(|_| {
+                    GatewayRuntimeFailure::transient("ordinary lifecycle owner slot poisoned")
+                })?
+                .clone();
+            if let Some(instance) = instance.filter(|owned| {
+                slot.as_ref()
+                    .is_some_and(|current| Arc::ptr_eq(owned, current))
+            }) {
+                instance
+                    .closing
+                    .store(true, std::sync::atomic::Ordering::Release);
+                if let Err(cleanup) = self
+                    .settle_ordinary_instance_locked(instance, &lifecycle)
+                    .await
+                {
+                    return Err(GatewayRuntimeFailure::transient(format!(
+                        "ordinary gateway startup failed: {result:?}; terminal cleanup unresolved: {cleanup:#}")));
+                }
+            }
+        }
+        result
+    }
+
+    async fn wait_ordinary_gateway_ready_for_owner(
+        &self,
+        runtime: ManagedGatewayRuntime,
+        fresh: bool,
+        cancel: tokio_util::sync::CancellationToken,
+        ready_timeout: Duration,
+    ) -> Result<GatewayLifecycleResponseV1, GatewayRuntimeFailure> {
+        if fresh {
+            tokio::select! {
+                result = self.wait_until_ready(runtime, ready_timeout) => result,
+                _ = cancel.cancelled() => Err(GatewayRuntimeFailure::transient("ordinary native preparation canceled during gateway readiness")),
+            }
+        } else {
+            // An active native/run owns this gateway, not its HTTP response awaiter.
+            self.wait_until_ready(runtime, ready_timeout).await
+        }
+    }
+
     pub(crate) fn new(privileged_child_exclusion: Arc<E3PrivilegedChildExclusionV1>) -> Self {
         Self {
             runtimes: Mutex::default(),
@@ -7110,8 +7838,9 @@ impl GatewayRuntimeManager {
         ready_timeout: Duration,
         lifecycle: Option<&Arc<GatewayLifecycleWorldState>>,
     ) -> Result<GatewayLifecycleResponseV1, GatewayRuntimeFailure> {
+        ctx.revalidate_ordinary_effect()?;
         if let Some(runtime) =
-            self.runtime_for_world_or_manifest(&ctx.world_id, ctx.binding.backend_id)?
+            self.runtime_for_world_or_manifest(&ctx.world_id, ctx.runtime_backend_id())?
         {
             match self.observe_runtime_state(&runtime).await? {
                 GatewayRuntimeState::Ready => return Ok(available_response(runtime.port)),
@@ -7119,7 +7848,7 @@ impl GatewayRuntimeManager {
                     return self.wait_until_ready(runtime, ready_timeout).await;
                 }
                 GatewayRuntimeState::ProvisionedStopped | GatewayRuntimeState::AbsentComponent => {
-                    self.remove_runtime(&ctx.world_id, ctx.binding.backend_id);
+                    self.remove_runtime(&ctx.world_id, ctx.runtime_backend_id());
                 }
             }
         }
@@ -7129,7 +7858,7 @@ impl GatewayRuntimeManager {
             return Ok(unavailable_response());
         };
 
-        let backend_id = ctx.binding.backend_id;
+        let backend_id = ctx.runtime_backend_id().to_owned();
         let privileged_child_exclusion_lease = Arc::new(
             self.privileged_child_exclusion
                 .acquire_non_e3_child()
@@ -7144,7 +7873,7 @@ impl GatewayRuntimeManager {
                 if let Some(runtime) = self.take_runtime(&world_id) {
                     let _ = stop_runtime(runtime);
                 }
-                delete_runtime_manifest(&manifest_path_for_world(&world_id, backend_id));
+                delete_runtime_manifest(&manifest_path_for_world(&world_id, &backend_id));
                 Err(err)
             }
         }
@@ -7154,18 +7883,19 @@ impl GatewayRuntimeManager {
         &self,
         ctx: GatewayRuntimeStartContext,
     ) -> Result<GatewayLifecycleResponseV1, GatewayRuntimeFailure> {
+        ctx.revalidate_ordinary_effect()?;
         let lifecycle = self.lifecycle_for_world(&ctx.world_id);
         let _world_guard = lifecycle.op_lock.lock().await;
         let _restart_state = lifecycle.scoped_state(GatewayRuntimeState::RestartInProgress);
 
         if let Some(existing) =
-            self.runtime_for_world_or_manifest(&ctx.world_id, ctx.binding.backend_id)?
+            self.runtime_for_world_or_manifest(&ctx.world_id, ctx.runtime_backend_id())?
         {
             existing.set_state(GatewayRuntimeState::RestartInProgress);
             self.take_runtime(&ctx.world_id);
             delete_runtime_manifest(&manifest_path_for_world(
                 &ctx.world_id,
-                ctx.binding.backend_id,
+                ctx.runtime_backend_id(),
             ));
             stop_runtime(existing)
                 .with_context(|| format!("failed to stop gateway runtime for {}", ctx.world_id))
@@ -7394,11 +8124,25 @@ fn start_runtime(
     ctx: GatewayRuntimeStartContext,
     privileged_child_exclusion_lease: Arc<HeldNonE3PrivilegedChildLeaseV1>,
 ) -> Result<ManagedGatewayRuntime, GatewayRuntimeFailure> {
+    start_runtime_with_ordinary_owner(binary_path, ctx, privileged_child_exclusion_lease, None)
+}
+
+fn start_runtime_with_ordinary_owner(
+    binary_path: PathBuf,
+    ctx: GatewayRuntimeStartContext,
+    privileged_child_exclusion_lease: Arc<HeldNonE3PrivilegedChildLeaseV1>,
+    ordinary_owner: Option<(
+        &Arc<OrdinaryGatewayRuntimeLeaseV1>,
+        &Arc<GatewayLifecycleWorldState>,
+    )>,
+) -> Result<ManagedGatewayRuntime, GatewayRuntimeFailure> {
+    ctx.revalidate_ordinary_effect()?;
+    let backend_id = ctx.runtime_backend_id().to_owned();
     validate_binding_capabilities(ctx.binding)?;
     let placement = LinuxWorldPlacementContext::from(&ctx);
     validate_linux_world_placement_context(&placement)?;
     let port = pick_free_port().map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
-    let runtime_dir = runtime_dir_for_world(&ctx.world_id, ctx.binding.backend_id);
+    let runtime_dir = runtime_dir_for_world(&ctx.world_id, &backend_id);
     let home_dir = runtime_dir.join("home");
     ensure_directory_with_mode(&runtime_dir, GATEWAY_RUNTIME_DIR_MODE)
         .with_context(|| {
@@ -7418,7 +8162,12 @@ fn start_runtime(
         .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
 
     let config_path = runtime_dir.join("config.toml");
-    let config = render_integrated_config(port, ctx.binding);
+    let config = match &ctx.ordinary_effect {
+        Some(effect) => {
+            render_ordinary_integrated_config(port, ctx.binding, effect.requested_selection())?
+        }
+        None => render_integrated_config(port, ctx.binding),
+    };
     write_file_with_mode(&config_path, config.as_bytes(), GATEWAY_RUNTIME_FILE_MODE)
         .with_context(|| format!("failed to write {}", config_path.display()))
         .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
@@ -7432,8 +8181,11 @@ fn start_runtime(
         .with_context(|| format!("failed to create {}", stderr_log.display()))
         .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
 
-    let auth_bundle_handoff =
-        prepare_gateway_auth_bundle_handoff(ctx.binding, ctx.integrated_auth)?;
+    ctx.revalidate_ordinary_effect()?;
+    let auth_bundle_handoff = match &ctx.ordinary_effect {
+        Some(effect) => prepare_ordinary_gateway_auth_bundle_handoff(ctx.binding, effect)?,
+        None => prepare_gateway_auth_bundle_handoff(ctx.binding, ctx.integrated_auth.clone())?,
+    };
 
     let mut command = Command::new(&binary_path);
     command
@@ -7456,12 +8208,122 @@ fn start_runtime(
     }
     append_gateway_start_args(&mut command, &config_path);
 
+    // Acquire owner slots before the child-producing effect. A poisoned or
+    // occupied slot refuses without creating a process. Protected None is inert.
+    let mut ordinary_slots = match ordinary_owner {
+        Some((lease, lifecycle)) => {
+            if lease
+                .owner
+                .closing
+                .load(std::sync::atomic::Ordering::Acquire)
+            {
+                return Err(GatewayRuntimeFailure::policy(
+                    "ordinary lease closed before spawn",
+                ));
+            }
+            if ctx.world_id != lease.runtime_id || ctx.runtime_backend_id() != lease.backend_id {
+                return Err(GatewayRuntimeFailure::policy(
+                    "ordinary spawn owner mismatch",
+                ));
+            }
+            let effect = ctx
+                .ordinary_effect
+                .as_ref()
+                .ok_or_else(|| GatewayRuntimeFailure::policy("ordinary spawn effect missing"))?;
+            let pinned = lease.owner.instance.lock().map_err(|_| {
+                GatewayRuntimeFailure::transient("ordinary lease owner slot poisoned")
+            })?;
+            if let Some(previous) = pinned.as_ref() {
+                if !previous
+                    .settlement
+                    .lock()
+                    .map_err(|_| GatewayRuntimeFailure::transient("ordinary settlement poisoned"))?
+                    .as_ref()
+                    .is_some_and(|result| result.is_ok())
+                {
+                    return Err(GatewayRuntimeFailure::policy(
+                        "previous ordinary Child is unsettled",
+                    ));
+                }
+            }
+            let slot = lifecycle.ordinary.lock().map_err(|_| {
+                GatewayRuntimeFailure::transient("ordinary lifecycle owner slot poisoned")
+            })?;
+            if slot.is_some() {
+                return Err(GatewayRuntimeFailure::policy(
+                    "ordinary lifecycle already owns a Child",
+                ));
+            }
+            Some((pinned, slot, effect.hold_gateway_cleanup_custody()))
+        }
+        None => None,
+    };
+    ctx.revalidate_ordinary_effect()?;
     let mut child = command
         .spawn()
         .with_context(|| format!("failed to spawn {}", binary_path.display()))
         .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
     drop(auth_bundle_handoff);
 
+    if let Some((mut pinned, mut slot, custody)) = ordinary_slots.take() {
+        // Actual Child custody exists before ANY fallible post-spawn check.
+        // Partial startup never invents PID/ticks or a ready ManagedRuntime.
+        let process = Arc::new(Mutex::new(ManagedGatewayProcess::Child(child)));
+        let instance = Arc::new(OrdinaryGatewayInstanceV1 {
+            runtime_id: ctx.world_id.clone(),
+            backend_id: backend_id.clone(),
+            manifest_path: manifest_path_for_world(&ctx.world_id, &backend_id),
+            process: Arc::clone(&process),
+            resources: Mutex::new(Some((
+                OrdinaryGatewayCustodyV1::Admitted(custody),
+                Arc::clone(&privileged_child_exclusion_lease),
+            ))),
+            registered: std::sync::atomic::AtomicBool::new(false),
+            closing: std::sync::atomic::AtomicBool::new(false),
+            settlement: Mutex::new(None),
+        });
+        *pinned = Some(Arc::clone(&instance));
+        *slot = Some(instance);
+        drop(pinned);
+        drop(slot);
+        ctx.revalidate_ordinary_effect()?;
+        let pid = {
+            let process = process
+                .lock()
+                .map_err(|_| GatewayRuntimeFailure::transient("ordinary Child lock poisoned"))?;
+            let ManagedGatewayProcess::Child(child) = &*process else {
+                return Err(GatewayRuntimeFailure::policy(
+                    "ordinary issued Child changed",
+                ));
+            };
+            child.id()
+        };
+        attach_pid_to_linux_world_cgroup(pid, &placement)?;
+        let pid_start_time_ticks = read_pid_start_time_ticks(pid)
+            .map_err(|error| GatewayRuntimeFailure::transient(error.to_string()))?;
+        let world_id = ctx.world_id;
+        let runtime = ManagedGatewayRuntime {
+            world_id: world_id.clone(),
+            backend_id: backend_id.clone(),
+            port,
+            runtime_dir,
+            config_path,
+            manifest_path: manifest_path_for_world(&world_id, &backend_id),
+            pid_start_time_ticks,
+            process,
+            state: Arc::new(RwLock::new(GatewayRuntimeState::Starting)),
+            privileged_child_exclusion_lease,
+        };
+        runtime
+            .persist_manifest()
+            .map_err(|error| GatewayRuntimeFailure::transient(error.to_string()))?;
+        return Ok(runtime);
+    }
+
+    if let Err(err) = ctx.revalidate_ordinary_effect() {
+        let _ = kill_child_process(&mut child);
+        return Err(err);
+    }
     if let Err(err) = attach_pid_to_linux_world_cgroup(child.id(), &placement) {
         let _ = kill_child_process(&mut child);
         return Err(err);
@@ -7474,11 +8336,11 @@ fn start_runtime(
     let world_id = ctx.world_id;
     let runtime = ManagedGatewayRuntime {
         world_id: world_id.clone(),
-        backend_id: ctx.binding.backend_id.to_string(),
+        backend_id: backend_id.clone(),
         port,
         runtime_dir,
         config_path,
-        manifest_path: manifest_path_for_world(&world_id, ctx.binding.backend_id),
+        manifest_path: manifest_path_for_world(&world_id, &backend_id),
         pid_start_time_ticks,
         process: Arc::new(Mutex::new(ManagedGatewayProcess::Child(child))),
         state: Arc::new(RwLock::new(GatewayRuntimeState::Starting)),
@@ -7781,6 +8643,88 @@ fn delete_runtime_manifest(path: &Path) {
             tracing::warn!(error = %err, manifest = %path.display(), "failed to remove gateway runtime manifest");
         }
     }
+}
+
+pub(crate) fn ordinary_gateway_adapter(
+    selected: &transport_api_types::ResolvedAgentSelectionV1,
+) -> Result<&'static GatewayBackendBinding> {
+    selected.validate().map_err(anyhow::Error::msg)?;
+    // Logical backend identity remains in the runtime/manifest. These unchanged
+    // fixed bundles select only the authenticated supported provider adapter.
+    Ok(match selected.selection.harness {
+        transport_api_types::AgentHarnessFamilyV1::Codex => &CLI_CODEX_BACKEND_BINDING,
+        transport_api_types::AgentHarnessFamilyV1::ClaudeCode => &CLI_CLAUDE_CODE_BACKEND_BINDING,
+    })
+}
+
+fn render_ordinary_integrated_config(
+    port: u16,
+    binding: &GatewayBackendBinding,
+    selected: &transport_api_types::ResolvedAgentSelectionV1,
+) -> Result<String, GatewayRuntimeFailure> {
+    ordinary_gateway_adapter(selected)
+        .map_err(|error| GatewayRuntimeFailure::invalid_integration(error.to_string()))?;
+    let mut config: toml::Value = render_integrated_config(port, binding)
+        .parse()
+        .map_err(|error: toml::de::Error| GatewayRuntimeFailure::transient(error.to_string()))?;
+    config["router"]["default"] = selected.routed_model_id.clone().into();
+    config["providers"][0]["models"] =
+        toml::Value::Array(vec![selected.upstream_model_id.clone().into()]);
+    config["models"][0]["name"] = selected.routed_model_id.clone().into();
+    config["models"][0]["mappings"][0]["actual_model"] = selected.upstream_model_id.clone().into();
+    toml::to_string(&config).map_err(|error| GatewayRuntimeFailure::transient(error.to_string()))
+}
+
+fn prepare_ordinary_gateway_auth_bundle_handoff(
+    binding: &GatewayBackendBinding,
+    effect: &Arc<crate::service::OrdinaryWorldEffectContextV1>,
+) -> Result<GatewayAuthBundleHandoff, GatewayRuntimeFailure> {
+    let auth = effect
+        .resolve_current_gateway_handoff()
+        .map_err(|error| GatewayRuntimeFailure::policy(error.to_string()))?;
+    if auth.backend_id != effect.requested_selection().backend_id {
+        return Err(GatewayRuntimeFailure::invalid_integration(
+            "trusted ordinary auth differs from authenticated logical backend",
+        ));
+    }
+    let bundle = match binding.auth_kind {
+        GatewayIntegratedAuthKind::CliCodex => {
+            if auth.api_env.is_some() || auth.cli_codex.is_none() {
+                return Err(GatewayRuntimeFailure::invalid_integration(
+                    "ordinary Codex auth facets changed",
+                ));
+            }
+            resolve_codex_auth_handoff(auth.cli_codex)?.bundle
+        }
+        GatewayIntegratedAuthKind::ApiEnv => {
+            if auth.cli_codex.is_some()
+                || auth.api_env.as_ref().is_none_or(|api| api.env.len() != 1)
+            {
+                return Err(GatewayRuntimeFailure::invalid_integration(
+                    "ordinary Claude auth facets changed",
+                ));
+            }
+            resolve_api_env_auth_handoff(binding, &auth)?.bundle
+        }
+    };
+    bundle
+        .validate()
+        .map_err(|error| GatewayRuntimeFailure::invalid_integration(error.to_string()))?;
+    effect
+        .revalidate_for_effect()
+        .map_err(|error| GatewayRuntimeFailure::policy(error.to_string()))?;
+    let encoded = serde_json::to_vec(&bundle)
+        .map_err(|error| GatewayRuntimeFailure::transient(error.to_string()))?;
+    let (read_fd, mut write_file) = create_inherited_auth_bundle_pipe()
+        .map_err(|error| GatewayRuntimeFailure::transient(error.to_string()))?;
+    write_file
+        .write_all(&encoded)
+        .map_err(|error| GatewayRuntimeFailure::transient(error.to_string()))?;
+    drop(write_file);
+    Ok(GatewayAuthBundleHandoff {
+        fd_env_value: read_fd.as_raw_fd().to_string(),
+        _read_fd: read_fd,
+    })
 }
 
 fn render_integrated_config(port: u16, binding: &GatewayBackendBinding) -> String {
@@ -10351,6 +11295,7 @@ mod tests {
             cgroup_path: project_dir.join("missing-cgroup"),
             require_cgroup_attach: false,
             binding,
+            ordinary_effect: None,
             integrated_auth: Some(GatewayIntegratedAuthPayloadV1 {
                 backend_id: binding.backend_id.to_string(),
                 cli_codex: Some(GatewayCliCodexIntegratedAuthV1 {
@@ -10373,6 +11318,7 @@ mod tests {
             cgroup_path: project_dir.join("missing-cgroup"),
             require_cgroup_attach: false,
             binding,
+            ordinary_effect: None,
             integrated_auth: integrated_auth_for_binding(binding),
         }
     }
@@ -12707,6 +13653,1648 @@ pub(crate) mod canary_observation {
         assert_eq!(
             report["difference"]["forbidden_channel_matches"][0]["fd"],
             secret_reader.as_raw_fd()
+        );
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn test_ordinary_gateway_lease_stops_owned_child_after_last_owner() {
+    const CHILD: &str = "SUBSTRATE_ORDINARY_LEASE_COMPONENT_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = Command::new(std::env::current_exe().unwrap())
+            .arg("test_ordinary_gateway_lease_stops_owned_child_after_last_owner")
+            .arg("--nocapture")
+            .arg("--test-threads=1")
+            .env(CHILD, "1")
+            .env("SUBSTRATE_GATEWAY_RUNTIME_ROOT", temp.path())
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr)
+        );
+        return;
+    }
+    // Direct private cleanup fixture, not ordinary admission or gateway startup.
+    let exclusion = E3PrivilegedChildExclusionV1::new_recovering().unwrap();
+    exclusion.finish_recovery().unwrap();
+    let manager = Arc::new(GatewayRuntimeManager::new(Arc::clone(&exclusion)));
+    let native_lease = Arc::new(exclusion.acquire_non_e3_child().unwrap());
+    let child = Command::new("/bin/sleep").arg("30").spawn().unwrap();
+    let pid = child.id();
+    let process = Arc::new(Mutex::new(ManagedGatewayProcess::Child(child)));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let runtime_id = format!("ordinary_component_{}", uuid::Uuid::now_v7());
+        let backend_id = "cli:codex".to_string();
+        let runtime_dir = runtime_dir_for_world(&runtime_id, &backend_id);
+        fs::create_dir_all(&runtime_dir).unwrap();
+        let config_path = runtime_dir.join("nonsecret-config.toml");
+        fs::write(&config_path, "component = true\n").unwrap();
+        let manifest_path = manifest_path_for_world(&runtime_id, &backend_id);
+        let runtime = ManagedGatewayRuntime {
+            world_id: runtime_id.clone(),
+            backend_id: backend_id.clone(),
+            port: 32123,
+            runtime_dir,
+            config_path,
+            manifest_path: manifest_path.clone(),
+            pid_start_time_ticks: read_pid_start_time_ticks(pid).unwrap(),
+            process: Arc::clone(&process),
+            state: Arc::new(RwLock::new(GatewayRuntimeState::Ready)),
+            privileged_child_exclusion_lease: native_lease,
+        };
+        runtime.persist_manifest().unwrap();
+        manager.insert_runtime(runtime);
+        let instance = bind_ordinary_gateway_fixture_owner_for_test(&manager, &runtime_id);
+        let lease = Arc::new(OrdinaryGatewayRuntimeLeaseV1 {
+            runtime_id: runtime_id.clone(),
+            backend_id: backend_id.clone(),
+            manager: Arc::clone(&manager),
+            owner: Arc::new(OrdinaryGatewayLeaseOwnerV1 {
+                runtime_id: runtime_id.clone(),
+                backend_id: backend_id.clone(),
+                closing: std::sync::atomic::AtomicBool::new(false),
+                instance: Mutex::new(Some(instance)),
+            }),
+        });
+        let retained = Arc::clone(&lease);
+        drop(lease);
+        assert_eq!(unsafe { libc::kill(pid as i32, 0) }, 0);
+        assert!(manifest_path.is_file());
+        assert!(manager.runtimes.lock().unwrap().contains_key(&runtime_id));
+        drop(retained);
+        assert!(!manifest_path.exists());
+        assert!(manager.runtimes.lock().unwrap().is_empty());
+        let mut process = process.lock().unwrap();
+        let ManagedGatewayProcess::Child(child) = &mut *process else {
+            panic!("owned child fixture changed");
+        };
+        assert!(child.try_wait().unwrap().is_some());
+    }));
+    // Reap the fixture even if an assertion detects a cleanup regression.
+    if let Ok(mut process) = process.lock() {
+        if let ManagedGatewayProcess::Child(child) = &mut *process {
+            if child.try_wait().ok().flatten().is_none() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+    }
+    result.unwrap();
+}
+
+#[cfg(test)]
+fn bind_ordinary_gateway_fixture_owner_for_test(
+    manager: &Arc<GatewayRuntimeManager>,
+    runtime_id: &str,
+) -> Arc<OrdinaryGatewayInstanceV1> {
+    // Pure process/resource owner fixture, never ordinary execution admission.
+    let runtime = manager.runtime_for_world(runtime_id).unwrap();
+    let instance = Arc::new(OrdinaryGatewayInstanceV1 {
+        runtime_id: runtime.world_id.clone(),
+        backend_id: runtime.backend_id.clone(),
+        manifest_path: runtime.manifest_path.clone(),
+        process: Arc::clone(&runtime.process),
+        resources: Mutex::new(Some((
+            OrdinaryGatewayCustodyV1::StructuralFixture,
+            Arc::clone(&runtime.privileged_child_exclusion_lease),
+        ))),
+        registered: std::sync::atomic::AtomicBool::new(true),
+        closing: std::sync::atomic::AtomicBool::new(false),
+        settlement: Mutex::new(None),
+    });
+    let lifecycle = manager.ordinary_lifecycle_for_owner(runtime_id).unwrap();
+    *lifecycle.ordinary.lock().unwrap() = Some(Arc::clone(&instance));
+    instance
+}
+#[cfg(test)]
+#[test]
+fn test_ordinary_gateway_terminal_disposal() {
+    const CHILD: &str = "SUBSTRATE_ORDINARY_TERMINAL_COMPONENT_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::set_permissions(temp.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "gateway_runtime::test_ordinary_gateway_terminal_disposal",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(CHILD, "1")
+            .env("SUBSTRATE_GATEWAY_RUNTIME_ROOT", temp.path())
+            .output()
+            .unwrap();
+        // Keep the separately invoked child harness and actual owned wait visible.
+        print!("{}", String::from_utf8_lossy(&output.stdout));
+        eprint!("{}", String::from_utf8_lossy(&output.stderr));
+        assert!(output.status.success());
+        return;
+    }
+    use std::os::unix::process::ExitStatusExt as _;
+    struct OwnedProcess(Arc<Mutex<ManagedGatewayProcess>>);
+    impl Drop for OwnedProcess {
+        fn drop(&mut self) {
+            let mut process = self.0.lock().unwrap_or_else(|error| error.into_inner());
+            if let ManagedGatewayProcess::Child(child) = &mut *process {
+                if child.try_wait().ok().flatten().is_none() {
+                    let _ = child.kill();
+                }
+                let _ = child.wait();
+            }
+        }
+    }
+    // Structural owner-operation fixture only: no admission is fabricated here.
+    fn fixture() -> (Arc<OrdinaryGatewayRuntimeLeaseV1>, OwnedProcess, PathBuf) {
+        let exclusion = E3PrivilegedChildExclusionV1::new_recovering().unwrap();
+        exclusion.finish_recovery().unwrap();
+        let manager = Arc::new(GatewayRuntimeManager::new(Arc::clone(&exclusion)));
+        let child = Command::new("/bin/sleep").arg("30").spawn().unwrap();
+        let pid = child.id();
+        let process = Arc::new(Mutex::new(ManagedGatewayProcess::Child(child)));
+        let owned_process = OwnedProcess(Arc::clone(&process));
+        let runtime_id = format!("ordinary_terminal_component_{}", uuid::Uuid::now_v7());
+        let backend_id = "cli:codex".to_string();
+        let runtime_dir = runtime_dir_for_world(&runtime_id, &backend_id);
+        fs::create_dir_all(&runtime_dir).unwrap();
+        let config_path = runtime_dir.join("nonsecret-config.toml");
+        fs::write(&config_path, "component = true\n").unwrap();
+        let manifest_path = manifest_path_for_world(&runtime_id, &backend_id);
+        let runtime = ManagedGatewayRuntime {
+            world_id: runtime_id.clone(),
+            backend_id: backend_id.clone(),
+            port: 32123,
+            runtime_dir,
+            config_path,
+            manifest_path: manifest_path.clone(),
+            pid_start_time_ticks: read_pid_start_time_ticks(pid).unwrap(),
+            process: Arc::clone(&process),
+            state: Arc::new(RwLock::new(GatewayRuntimeState::Ready)),
+            privileged_child_exclusion_lease: Arc::new(exclusion.acquire_non_e3_child().unwrap()),
+        };
+        runtime.persist_manifest().unwrap();
+        manager.insert_runtime(runtime);
+        let instance = bind_ordinary_gateway_fixture_owner_for_test(&manager, &runtime_id);
+        (
+            Arc::new(OrdinaryGatewayRuntimeLeaseV1 {
+                runtime_id: runtime_id.clone(),
+                backend_id: backend_id.clone(),
+                manager,
+                owner: Arc::new(OrdinaryGatewayLeaseOwnerV1 {
+                    runtime_id: runtime_id.clone(),
+                    backend_id: backend_id.clone(),
+                    closing: std::sync::atomic::AtomicBool::new(false),
+                    instance: Mutex::new(Some(instance)),
+                }),
+            }),
+            owned_process,
+            manifest_path,
+        )
+    }
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let (lease, process, manifest) = fixture();
+        let retained = Arc::clone(&lease);
+        let metadata = lease
+            .owner
+            .instance
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .clone();
+        let exclusion = Arc::downgrade(&metadata.resources.lock().unwrap().as_ref().unwrap().1);
+        let (pid, status) = lease.finish_owned().await.unwrap();
+        assert!(metadata.resources.lock().unwrap().is_none());
+        assert!(
+            exclusion.upgrade().is_none(),
+            "terminal disposal must not await last metadata/lease drop"
+        );
+        assert_eq!(status.signal(), Some(libc::SIGKILL));
+        assert!(!manifest.exists());
+        assert!(lease.manager.runtimes.lock().unwrap().is_empty());
+        {
+            let mut guard = process.0.lock().unwrap();
+            let ManagedGatewayProcess::Child(child) = &mut *guard else {
+                panic!("held child changed")
+            };
+            assert_eq!(child.id(), pid);
+            assert_eq!(child.try_wait().unwrap(), Some(status));
+        }
+        assert_eq!(retained.finish_owned().await.unwrap(), (pid, status));
+        assert!(retained.manager.runtimes.lock().unwrap().is_empty());
+        drop(retained);
+        drop(lease);
+
+        let (lease, process, manifest) = fixture();
+        let wrong = OrdinaryGatewayRuntimeLeaseV1 {
+            runtime_id: lease.runtime_id.clone(),
+            backend_id: "cli:claude-code".into(),
+            manager: Arc::clone(&lease.manager),
+            owner: Arc::clone(&lease.owner),
+        };
+        assert!(wrong.finish_owned().await.is_err());
+        assert!(manifest.is_file());
+        {
+            let mut guard = process.0.lock().unwrap();
+            let ManagedGatewayProcess::Child(child) = &mut *guard else {
+                panic!("held child changed")
+            };
+            assert!(child.try_wait().unwrap().is_none());
+        }
+        drop(wrong);
+        assert!(lease
+            .manager
+            .runtimes
+            .lock()
+            .unwrap()
+            .contains_key(&lease.runtime_id));
+        lease.finish_owned().await.unwrap();
+
+        let (lease, process, manifest) = fixture();
+        let original = lease.manager.runtime_for_world(&lease.runtime_id).unwrap();
+        let replacement_child = Command::new("/bin/sleep").arg("30").spawn().unwrap();
+        let replacement_process =
+            Arc::new(Mutex::new(ManagedGatewayProcess::Child(replacement_child)));
+        let replacement_owner = OwnedProcess(Arc::clone(&replacement_process));
+        let mut replacement = original.clone();
+        replacement.process = Arc::clone(&replacement_process);
+        lease.manager.insert_runtime(replacement);
+        assert!(
+            lease.finish_owned().await.is_err(),
+            "same key/backend/path must not authorize a replacement Child"
+        );
+        for held in [&process.0, &replacement_owner.0] {
+            let mut guard = held.lock().unwrap();
+            let ManagedGatewayProcess::Child(child) = &mut *guard else {
+                unreachable!()
+            };
+            assert!(child.try_wait().unwrap().is_none());
+        }
+        assert!(manifest.is_file());
+        lease.manager.insert_runtime(original);
+        lease.finish_owned().await.unwrap();
+        drop(replacement_owner);
+
+        let (lease, process, manifest) = fixture();
+        let owned = {
+            let mut guard = process.0.lock().unwrap();
+            let pid = match &*guard {
+                ManagedGatewayProcess::Child(child) => child.id(),
+                _ => unreachable!(),
+            };
+            std::mem::replace(&mut *guard, ManagedGatewayProcess::RediscoveredPid(pid))
+        };
+        assert!(lease.finish_owned().await.is_err());
+        assert!(manifest.is_file());
+        let actual_owner = OwnedProcess(Arc::new(Mutex::new(owned)));
+        {
+            let mut held = actual_owner.0.lock().unwrap();
+            let ManagedGatewayProcess::Child(child) = &mut *held else {
+                unreachable!()
+            };
+            assert!(
+                child.try_wait().unwrap().is_none(),
+                "PID metadata must not authorize termination"
+            );
+            *process.0.lock().unwrap() =
+                std::mem::replace(&mut *held, ManagedGatewayProcess::RediscoveredPid(0));
+        }
+        lease.finish_owned().await.unwrap();
+
+        let (lease, _old_process, manifest) = fixture();
+        let lifecycle = lease
+            .manager
+            .ordinary_lifecycle_for_owner(&lease.runtime_id)
+            .unwrap();
+        let operation = lifecycle.op_lock.lock().await;
+        let old = lease
+            .owner
+            .instance
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .clone();
+        let old_exclusion = Arc::downgrade(&old.resources.lock().unwrap().as_ref().unwrap().1);
+        let original = lease.manager.runtime_for_world(&lease.runtime_id).unwrap();
+        // Actual new Child was issued by the simulated already-admitted operation;
+        // no key/metadata can make it ordinary-authorized outside this cfg(test) fixture.
+        let replacement_child = Command::new("/bin/sleep").arg("30").spawn().unwrap();
+        let replacement_pid = replacement_child.id();
+        let replacement_process =
+            Arc::new(Mutex::new(ManagedGatewayProcess::Child(replacement_child)));
+        let replacement_guard = OwnedProcess(Arc::clone(&replacement_process));
+        let fresh_exclusion = Arc::new(
+            lease
+                .manager
+                .privileged_child_exclusion
+                .acquire_non_e3_child()
+                .unwrap(),
+        );
+        let mut replacement = original.clone();
+        replacement.process = Arc::clone(&replacement_process);
+        replacement.pid_start_time_ticks = read_pid_start_time_ticks(replacement_pid).unwrap();
+        replacement.privileged_child_exclusion_lease = fresh_exclusion;
+        drop(original);
+        let finishing_lease = Arc::clone(&lease);
+        let finishing = tokio::spawn(async move { finishing_lease.finish_owned().await });
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while !lease
+                .owner
+                .closing
+                .load(std::sync::atomic::Ordering::Acquire)
+            {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        old.closing
+            .store(true, std::sync::atomic::Ordering::Release);
+        lease
+            .manager
+            .settle_ordinary_instance_locked(Arc::clone(&old), &lifecycle)
+            .await
+            .unwrap();
+        assert!(old.resources.lock().unwrap().is_none());
+        assert!(old_exclusion.upgrade().is_none());
+        replacement.persist_manifest().unwrap();
+        lease.manager.insert_runtime(replacement);
+        let current =
+            bind_ordinary_gateway_fixture_owner_for_test(&lease.manager, &lease.runtime_id);
+        *lease.owner.instance.lock().unwrap() = Some(Arc::clone(&current));
+        fs::remove_file(&manifest).unwrap();
+        fs::create_dir(&manifest).unwrap();
+        drop(operation);
+        assert!(
+            tokio::time::timeout(Duration::from_secs(5), finishing)
+                .await
+                .unwrap()
+                .unwrap()
+                .is_err(),
+            "queued finish must join new current owner; old cached success is insufficient"
+        );
+        assert!(current.resources.lock().unwrap().is_some());
+        assert!(lifecycle
+            .ordinary
+            .lock()
+            .unwrap()
+            .as_ref()
+            .is_some_and(|slot| Arc::ptr_eq(slot, &current)));
+        assert!(old.settlement.lock().unwrap().as_ref().unwrap().is_ok());
+        fs::remove_dir(&manifest).unwrap();
+        fs::write(&manifest, "owned fixture\n").unwrap();
+        let terminal = lease.finish_owned().await.unwrap();
+        assert_eq!(terminal.0, replacement_pid);
+        assert_eq!(terminal.1.signal(), Some(libc::SIGKILL));
+        assert!(current.resources.lock().unwrap().is_none());
+        assert!(lifecycle.ordinary.lock().unwrap().is_none());
+        drop(replacement_guard);
+
+        let (lease, process, manifest) = fixture();
+        fs::remove_file(&manifest).unwrap();
+        fs::create_dir(&manifest).unwrap();
+        assert!(lease.finish_owned().await.is_err());
+        assert!(lease
+            .manager
+            .runtimes
+            .lock()
+            .unwrap()
+            .contains_key(&lease.runtime_id));
+        {
+            let mut guard = process.0.lock().unwrap();
+            let ManagedGatewayProcess::Child(child) = &mut *guard else {
+                panic!("held child changed")
+            };
+            assert!(
+                child.try_wait().unwrap().is_some(),
+                "terminal child remains held on disposal failure"
+            );
+        }
+        fs::remove_dir(&manifest).unwrap();
+        fs::write(&manifest, "owned fixture\n").unwrap();
+        let (_, status) = lease.finish_owned().await.unwrap();
+        assert_eq!(status.signal(), Some(libc::SIGKILL));
+        assert!(!manifest.exists());
+        assert!(lease.manager.runtimes.lock().unwrap().is_empty());
+    });
+}
+
+#[cfg(test)]
+#[test]
+fn test_ordinary_gateway_startup_owner_settles_cancellation() {
+    const CHILD: &str = "SUBSTRATE_ORDINARY_STARTUP_OWNER_COMPONENT_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::set_permissions(temp.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "gateway_runtime::test_ordinary_gateway_startup_owner_settles_cancellation",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(CHILD, "1")
+            .env("SUBSTRATE_GATEWAY_RUNTIME_ROOT", temp.path())
+            .output()
+            .unwrap();
+        print!("{}", String::from_utf8_lossy(&output.stdout));
+        eprint!("{}", String::from_utf8_lossy(&output.stderr));
+        assert!(output.status.success());
+        return;
+    }
+    use std::os::unix::process::ExitStatusExt as _;
+    struct OwnedProcess(Arc<Mutex<ManagedGatewayProcess>>);
+    impl Drop for OwnedProcess {
+        fn drop(&mut self) {
+            let mut process = self.0.lock().unwrap_or_else(|error| error.into_inner());
+            if let ManagedGatewayProcess::Child(child) = &mut *process {
+                if child.try_wait().ok().flatten().is_none() {
+                    let _ = child.kill();
+                }
+                let _ = child.wait();
+            }
+        }
+    }
+    // Structural lifetime fixture only, without sealed execution admission.
+    fn fixture(
+        registered: bool,
+    ) -> (
+        Arc<GatewayRuntimeManager>,
+        Arc<OrdinaryGatewayLeaseOwnerV1>,
+        Option<ManagedGatewayRuntime>,
+        OwnedProcess,
+    ) {
+        let exclusion = E3PrivilegedChildExclusionV1::new_recovering().unwrap();
+        exclusion.finish_recovery().unwrap();
+        let manager = Arc::new(GatewayRuntimeManager::new(Arc::clone(&exclusion)));
+        let child = Command::new("/bin/sleep").arg("30").spawn().unwrap();
+        let pid = child.id();
+        let process = Arc::new(Mutex::new(ManagedGatewayProcess::Child(child)));
+        let guard = OwnedProcess(Arc::clone(&process));
+        let runtime_id = format!("ordinary_startup_component_{}", uuid::Uuid::now_v7());
+        let backend_id = "cli:codex".to_string();
+        let exclusion = Arc::new(exclusion.acquire_non_e3_child().unwrap());
+        let instance = Arc::new(OrdinaryGatewayInstanceV1 {
+            runtime_id: runtime_id.clone(),
+            backend_id: backend_id.clone(),
+            manifest_path: manifest_path_for_world(&runtime_id, &backend_id),
+            process: Arc::clone(&process),
+            resources: Mutex::new(Some((
+                OrdinaryGatewayCustodyV1::StructuralFixture,
+                Arc::clone(&exclusion),
+            ))),
+            registered: std::sync::atomic::AtomicBool::new(registered),
+            closing: std::sync::atomic::AtomicBool::new(false),
+            settlement: Mutex::new(None),
+        });
+        let lifecycle = manager.ordinary_lifecycle_for_owner(&runtime_id).unwrap();
+        *lifecycle.ordinary.lock().unwrap() = Some(Arc::clone(&instance));
+        let owner = Arc::new(OrdinaryGatewayLeaseOwnerV1 {
+            runtime_id: runtime_id.clone(),
+            backend_id: backend_id.clone(),
+            closing: std::sync::atomic::AtomicBool::new(false),
+            instance: Mutex::new(Some(Arc::clone(&instance))),
+        });
+        let runtime = if registered {
+            let runtime_dir = runtime_dir_for_world(&runtime_id, &backend_id);
+            fs::create_dir_all(&runtime_dir).unwrap();
+            let config_path = runtime_dir.join("nonsecret-config.toml");
+            fs::write(&config_path, "component=true\n").unwrap();
+            let runtime = ManagedGatewayRuntime {
+                world_id: runtime_id,
+                backend_id,
+                port: 1,
+                runtime_dir,
+                config_path,
+                manifest_path: instance.manifest_path.clone(),
+                pid_start_time_ticks: read_pid_start_time_ticks(pid).unwrap(),
+                process,
+                state: Arc::new(RwLock::new(GatewayRuntimeState::Starting)),
+                privileged_child_exclusion_lease: exclusion,
+            };
+            runtime.persist_manifest().unwrap();
+            manager.insert_runtime(runtime.clone());
+            Some(runtime)
+        } else {
+            None
+        };
+        (manager, owner, runtime, guard)
+    }
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        // Partial Child has custody before a full ManagedRuntime/PID-ticks record exists.
+        let (manager, owner, incomplete, _guard) = fixture(false);
+        let instance = owner.instance.lock().unwrap().as_ref().unwrap().clone();
+        assert!(incomplete.is_none());
+        assert!(manager.runtimes.lock().unwrap().is_empty());
+        owner
+            .closing
+            .store(true, std::sync::atomic::Ordering::Release);
+        let canceled_awaiter =
+            supervise_ordinary_gateway_settlement(Arc::clone(&manager), Arc::clone(&owner));
+        drop(canceled_awaiter);
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if instance
+                    .settlement
+                    .lock()
+                    .unwrap()
+                    .as_ref()
+                    .is_some_and(|result| result.is_ok())
+                {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let terminal = *instance
+            .settlement
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .as_ref()
+            .unwrap();
+        assert_eq!(terminal.1.signal(), Some(libc::SIGKILL));
+        assert!(instance.resources.lock().unwrap().is_none());
+        assert!(manager
+            .ordinary_lifecycle_for_owner(&instance.runtime_id)
+            .unwrap()
+            .ordinary
+            .lock()
+            .unwrap()
+            .is_none());
+        {
+            let mut process = instance.process.lock().unwrap();
+            let ManagedGatewayProcess::Child(child) = &mut *process else {
+                unreachable!()
+            };
+            assert_eq!(child.try_wait().unwrap(), Some(terminal.1));
+        }
+        for fresh in [true, false] {
+            let (manager, owner, formed, _guard) = fixture(true);
+            let instance = owner.instance.lock().unwrap().as_ref().unwrap().clone();
+            let mut formed = formed.unwrap();
+            // Only this unit's owned loopback listener can receive the request.
+            let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+                .await
+                .unwrap();
+            formed.port = listener.local_addr().unwrap().port();
+            let cancel = tokio_util::sync::CancellationToken::new();
+            let canceled_request = cancel.clone().drop_guard();
+            let (started, entered) = tokio::sync::oneshot::channel();
+            let owner_manager = Arc::clone(&manager);
+            let owner_instance = Arc::clone(&instance);
+            let operation = tokio::spawn(async move {
+                let _ = started.send(());
+                let ready = owner_manager
+                    .wait_ordinary_gateway_ready_for_owner(
+                        formed,
+                        fresh,
+                        cancel,
+                        Duration::from_millis(75),
+                    )
+                    .await;
+                assert!(ready.is_err());
+                owner_instance
+                    .closing
+                    .store(true, std::sync::atomic::Ordering::Release);
+                owner_manager
+                    .settle_closed_ordinary_gateway(owner_instance)
+                    .await
+                    .unwrap()
+            });
+            entered.await.unwrap();
+            drop(canceled_request);
+            if !fresh {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+                assert!(
+                    !operation.is_finished(),
+                    "active run must outlive HTTP response awaiter"
+                );
+                let mut process = instance.process.lock().unwrap();
+                let ManagedGatewayProcess::Child(child) = &mut *process else {
+                    unreachable!()
+                };
+                assert!(child.try_wait().unwrap().is_none());
+            }
+            drop(listener);
+            let terminal = tokio::time::timeout(Duration::from_secs(5), operation)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(terminal.1.signal(), Some(libc::SIGKILL));
+            assert!(manager.runtimes.lock().unwrap().is_empty());
+            assert!(instance.resources.lock().unwrap().is_none());
+            assert!(manager
+                .ordinary_lifecycle_for_owner(&instance.runtime_id)
+                .unwrap()
+                .ordinary
+                .lock()
+                .unwrap()
+                .is_none());
+        }
+    });
+}
+
+#[cfg(test)]
+#[path = "member_runtime_route_disposal_tests.rs"]
+pub(crate) mod member_runtime_route_disposal_tests;
+
+// Dedicated Host ownership. It neither constructs World placement nor enters
+// GatewayLifecycleV1's World runtime/manifest tables.
+pub(crate) struct HostGatewayTurnOwnerV1 {
+    instance: String,
+    entries: AsyncMutex<HashMap<(u32, String), Arc<HostGatewayTurnEntryV1>>>,
+}
+struct HostGatewayTurnEntryV1 {
+    claim: Option<transport_api_types::OrdinaryGatewaySelectionContextV1>,
+    handle: String,
+    route_verifier: Option<[u8; 32]>,
+    closing: std::sync::atomic::AtomicBool,
+    state: AsyncMutex<HostGatewayTurnStateV1>,
+}
+enum HostGatewayTurnStateV1 {
+    Reserved,
+    Running {
+        admission: Arc<substrate_shell::OrdinaryHostGatewayAdmissionV1>,
+        runtime: HostGatewayRuntimeV1,
+    },
+    Closed {
+        cleanup_known: bool,
+    },
+}
+struct HostGatewayRuntimeV1 {
+    child: tokio::process::Child,
+    port: u16,
+    // Held until successful terminal wait, including cleanup failures.
+    _exclusion: Option<Arc<HeldNonE3PrivilegedChildLeaseV1>>,
+}
+
+impl HostGatewayTurnOwnerV1 {
+    pub(crate) fn new() -> Self {
+        Self {
+            instance: host_gateway_random_id_v1(),
+            entries: AsyncMutex::new(HashMap::new()),
+        }
+    }
+
+    fn new_entry(
+        &self,
+        claim: Option<transport_api_types::OrdinaryGatewaySelectionContextV1>,
+        route_verifier: Option<[u8; 32]>,
+    ) -> Arc<HostGatewayTurnEntryV1> {
+        Arc::new(HostGatewayTurnEntryV1 {
+            claim,
+            route_verifier,
+            handle: format!("hgl_{}_{}", self.instance, host_gateway_random_id_v1()),
+            closing: std::sync::atomic::AtomicBool::new(false),
+            state: AsyncMutex::new(HostGatewayTurnStateV1::Reserved),
+        })
+    }
+
+    pub(crate) async fn execute(
+        self: Arc<Self>,
+        principal: u32,
+        request: transport_api_types::HostGatewayInstanceRequestV3,
+        authority: Option<Arc<substrate_shell::OrdinarySelectionAuthorityV1>>,
+        exclusion: Arc<E3PrivilegedChildExclusionV1>,
+    ) -> Result<transport_api_types::HostGatewayInstanceResponseV3> {
+        use transport_api_types::{
+            HostGatewayInstanceOperationV3 as Op, HostGatewayInstanceResultV3 as Reply,
+        };
+        request
+            .validate()
+            .map_err(|_| anyhow!("host_gateway_instance_invalid_request"))?;
+        anyhow::ensure!(principal != 0, "host_gateway_instance_wrong_binding");
+        let result = match &request.operation {
+            Op::Observe {} => Reply::Observed {
+                service_instance_id: self.instance.clone(),
+            },
+            Op::Bound {
+                service_instance_id,
+                operation,
+                route_verifier,
+            } => {
+                // Before table lookup/reservation, credential reads or any child/file
+                // effect. Epoch and table are one immutable, non-resettable Arc owner.
+                anyhow::ensure!(
+                    service_instance_id == &self.instance,
+                    "host_gateway_instance_changed"
+                );
+                let result = self
+                    .clone()
+                    .execute_turn(
+                        principal,
+                        transport_api_types::HostGatewayTurnRequestV1 {
+                            schema_version: 1,
+                            operation: operation.clone(),
+                        },
+                        route_verifier
+                            .as_deref()
+                            .map(host_gateway_route_verifier_v1)
+                            .transpose()?,
+                        authority,
+                        exclusion,
+                    )
+                    .await?;
+                Reply::Bound {
+                    service_instance_id: self.instance.clone(),
+                    result: result.result,
+                }
+            }
+        };
+        let response = transport_api_types::HostGatewayInstanceResponseV3 {
+            schema_version: 3,
+            result,
+        };
+        response
+            .validate_for_request(&request)
+            .map_err(|_| anyhow!("host_gateway_instance_invalid_response"))?;
+        Ok(response)
+    }
+
+    async fn execute_turn(
+        self: Arc<Self>,
+        principal: u32,
+        request: transport_api_types::HostGatewayTurnRequestV1,
+        route_verifier: Option<[u8; 32]>,
+        authority: Option<Arc<substrate_shell::OrdinarySelectionAuthorityV1>>,
+        exclusion: Arc<E3PrivilegedChildExclusionV1>,
+    ) -> Result<transport_api_types::HostGatewayTurnResponseV1> {
+        use transport_api_types::{
+            HostGatewayTurnOperationV1 as Op, HostGatewayTurnResultV1 as Reply,
+        };
+        request
+            .validate()
+            .map_err(|_| anyhow!("host_gateway_turn_invalid_request"))?;
+        anyhow::ensure!(principal != 0, "host_gateway_turn_wrong_binding");
+        let result = match &request.operation {
+            Op::Acquire {
+                acquire_id,
+                selection,
+                ..
+            } => {
+                let entry = {
+                    let mut entries = self.entries.lock().await;
+                    Arc::clone(
+                        entries
+                            .entry((principal, acquire_id.clone()))
+                            .or_insert_with(|| {
+                                self.new_entry(Some(selection.as_ref().clone()), route_verifier)
+                            }),
+                    )
+                };
+                if entry.claim.is_none() {
+                    Reply::Unknown {
+                        acquire_id: acquire_id.clone(),
+                    }
+                } else {
+                    anyhow::ensure!(
+                        entry.claim.as_ref() == Some(selection.as_ref())
+                            && entry.route_verifier == route_verifier,
+                        "host_gateway_turn_changed_claim"
+                    );
+                    let mut state = entry.state.lock().await;
+                    if entry.closing.load(std::sync::atomic::Ordering::Acquire)
+                        || matches!(&*state, HostGatewayTurnStateV1::Closed { .. })
+                    {
+                        Reply::Unknown {
+                            acquire_id: acquire_id.clone(),
+                        }
+                    } else {
+                        if matches!(&*state, HostGatewayTurnStateV1::Reserved) {
+                            let started = (|| -> Result<_> {
+                                let authority = authority
+                                    .as_ref()
+                                    .context("host_gateway_turn_authority_unavailable")?;
+                                let admission =
+                                    Arc::new(authority.authenticate_host_gateway_v1(selection)?);
+                                anyhow::ensure!(
+                                    matches!(admission.principal(), transport_api_types::PlatformPrincipalV1::Unix { uid, .. } if *uid == principal),
+                                    "host_gateway_turn_wrong_binding"
+                                );
+                                admission.revalidate_before_effect()?;
+                                // Only the authenticated selection's supported local bearer
+                                // mechanism may proceed. Other native harnesses remain refused.
+                                // Provider sends use bounded supervision, not a per-send grant.
+                                admit_host_gateway_native_caller_v1(&admission)?;
+                                anyhow::ensure!(
+                                    !entry.closing.load(std::sync::atomic::Ordering::Acquire),
+                                    "host_gateway_turn_closed"
+                                );
+                                let route_binding = substrate_gateway::managed_host_admission::HostRouteBindingV1::from_route(&self.instance, acquire_id, &entry.handle)?;
+                                let route_verifier = entry
+                                    .route_verifier
+                                    .as_ref()
+                                    .context("host_gateway_turn_route_verifier_missing")?;
+                                let runtime = HostGatewayRuntimeV1::start(
+                                    &admission,
+                                    &exclusion,
+                                    route_binding,
+                                    route_verifier,
+                                )?;
+                                Ok((admission, runtime))
+                            })();
+                            let (admission, runtime) = match started {
+                                Ok(started) => started,
+                                Err(error) => {
+                                    // Changed claims/invalid credentials were rejected before
+                                    // this owned reservation. A denied or failed start cannot
+                                    // later resurrect this exact key. No cleanup is asserted.
+                                    entry
+                                        .closing
+                                        .store(true, std::sync::atomic::Ordering::Release);
+                                    *state = HostGatewayTurnStateV1::Closed {
+                                        cleanup_known: false,
+                                    };
+                                    return Err(error);
+                                }
+                            };
+                            // Custody enters the table synchronously after actual spawn,
+                            // before readiness or any other fallible asynchronous operation.
+                            *state = HostGatewayTurnStateV1::Running { admission, runtime };
+                            let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+                            loop {
+                                let HostGatewayTurnStateV1::Running { admission, runtime } =
+                                    &mut *state
+                                else {
+                                    unreachable!()
+                                };
+                                if entry.closing.load(std::sync::atomic::Ordering::Acquire)
+                                    || admission.revalidate_before_effect().is_err()
+                                    || !matches!(runtime.child.try_wait(), Ok(None))
+                                    || tokio::time::Instant::now() >= deadline
+                                {
+                                    entry
+                                        .closing
+                                        .store(true, std::sync::atomic::Ordering::Release);
+                                    close_host_gateway_state(&mut state).await?;
+                                    anyhow::bail!("host_gateway_turn_start_refused");
+                                }
+                                if gateway_health_ready(runtime.port).await {
+                                    break;
+                                }
+                                tokio::time::sleep(Duration::from_millis(25)).await;
+                            }
+                            let observed = Arc::clone(&entry);
+                            tokio::spawn(async move {
+                                supervise_host_gateway_turn(observed).await;
+                            });
+                        }
+                        let HostGatewayTurnStateV1::Running { admission, runtime } = &mut *state
+                        else {
+                            unreachable!()
+                        };
+                        if entry.closing.load(std::sync::atomic::Ordering::Acquire)
+                            || admission.revalidate_before_effect().is_err()
+                            || !matches!(runtime.child.try_wait(), Ok(None))
+                        {
+                            entry
+                                .closing
+                                .store(true, std::sync::atomic::Ordering::Release);
+                            close_host_gateway_state(&mut state).await?;
+                            Reply::Unknown {
+                                acquire_id: acquire_id.clone(),
+                            }
+                        } else {
+                            let endpoint = format!("http://127.0.0.1:{}", runtime.port);
+                            Reply::Acquired {
+                                acquire_id: acquire_id.clone(),
+                                lease_handle: entry.handle.clone(),
+                                client_wiring: GatewayClientWiringV1 {
+                                    openai_base_url: endpoint.clone(),
+                                    anthropic_base_url: endpoint,
+                                },
+                            }
+                        }
+                    }
+                }
+            }
+            Op::Revalidate {
+                acquire_id,
+                lease_handle,
+            } => {
+                let entry = self
+                    .entries
+                    .lock()
+                    .await
+                    .get(&(principal, acquire_id.clone()))
+                    .cloned();
+                match entry.filter(|entry| entry.handle == *lease_handle) {
+                    Some(entry) if !entry.closing.load(std::sync::atomic::Ordering::Acquire) => {
+                        let mut state = entry.state.lock().await;
+                        let permitted = match &mut *state {
+                            HostGatewayTurnStateV1::Running { admission, runtime } => {
+                                admission.revalidate_before_effect().is_ok()
+                                    && matches!(runtime.child.try_wait(), Ok(None))
+                            }
+                            _ => false,
+                        };
+                        if permitted && !entry.closing.load(std::sync::atomic::Ordering::Acquire) {
+                            Reply::Revalidated {
+                                acquire_id: acquire_id.clone(),
+                                lease_handle: lease_handle.clone(),
+                            }
+                        } else {
+                            entry
+                                .closing
+                                .store(true, std::sync::atomic::Ordering::Release);
+                            close_host_gateway_state(&mut state).await?;
+                            Reply::Unknown {
+                                acquire_id: acquire_id.clone(),
+                            }
+                        }
+                    }
+                    _ => Reply::Unknown {
+                        acquire_id: acquire_id.clone(),
+                    },
+                }
+            }
+            Op::Release {
+                acquire_id,
+                lease_handle,
+                ..
+            } => {
+                // validate() has already authenticated the pre-generated cleanup
+                // secret's domain-separated commitment to acquire_id. The kernel
+                // peer principal, never execution policy, owns this cleanup lookup.
+                let entry = {
+                    let mut entries = self.entries.lock().await;
+                    Arc::clone(
+                        entries
+                            .entry((principal, acquire_id.clone()))
+                            .or_insert_with(|| self.new_entry(None, None)),
+                    )
+                };
+                if lease_handle
+                    .as_ref()
+                    .is_some_and(|handle| *handle != entry.handle)
+                {
+                    Reply::Unknown {
+                        acquire_id: acquire_id.clone(),
+                    }
+                } else {
+                    // Close admission before waiting for any in-progress startup.
+                    entry
+                        .closing
+                        .store(true, std::sync::atomic::Ordering::Release);
+                    let mut state = entry.state.lock().await;
+                    close_host_gateway_state(&mut state).await?;
+                    match &*state {
+                        HostGatewayTurnStateV1::Closed {
+                            cleanup_known: true,
+                        } => Reply::Released {
+                            acquire_id: acquire_id.clone(),
+                        },
+                        _ => Reply::Unknown {
+                            acquire_id: acquire_id.clone(),
+                        },
+                    }
+                }
+            }
+        };
+        let response = transport_api_types::HostGatewayTurnResponseV1 {
+            schema_version: 1,
+            result,
+        };
+        response
+            .validate_for_request(&request)
+            .map_err(|_| anyhow!("host_gateway_turn_invalid_response"))?;
+        Ok(response)
+    }
+}
+
+// This mechanism check consumes an already authenticated original/current Host
+// admission. Codex uses the held per-turn capability through the pinned provider's
+// env_key; Claude uses its existing native auth-token environment slot. This does not prove composed
+// Host execution or replace the caller's authority and effect revalidation.
+fn admit_host_gateway_native_caller_v1(
+    admission: &substrate_shell::OrdinaryHostGatewayAdmissionV1,
+) -> Result<()> {
+    admission.revalidate_before_effect()?;
+    let selected = admission.native_selection();
+    let binding = ordinary_gateway_adapter(selected)?;
+    let mechanism_matches = match selected.selection.harness {
+        transport_api_types::AgentHarnessFamilyV1::Codex => {
+            binding.auth_kind == GatewayIntegratedAuthKind::CliCodex
+                && binding.provider_type == "openai"
+        }
+        transport_api_types::AgentHarnessFamilyV1::ClaudeCode => {
+            // The ordinary Host caller carries this turn's local bearer through
+            // the pinned Claude builder's ANTHROPIC_AUTH_TOKEN environment slot.
+            // Existing canonical bearer middleware authenticates/removes it;
+            // the gateway alone receives the upstream API-key bundle.
+            binding.auth_kind == GatewayIntegratedAuthKind::ApiEnv
+                && binding.provider_type == "anthropic"
+                && selected.connection_profile.billing
+                    == transport_api_types::AgentConnectionBillingV1::Api
+                && matches!(&selected.connection_profile.auth,
+                    transport_api_types::AgentConnectionAuthV1::ApiKeyEnvironment { name }
+                    if name == "ANTHROPIC_API_KEY")
+        }
+    };
+    anyhow::ensure!(
+        selected.placement == transport_api_types::AgentSelectionPlacementV1::Host
+            && mechanism_matches,
+        "host_gateway_turn_native_caller_mechanism_conflict"
+    );
+    admission.revalidate_before_effect()
+}
+
+async fn close_host_gateway_state(state: &mut HostGatewayTurnStateV1) -> Result<()> {
+    match state {
+        HostGatewayTurnStateV1::Running { runtime, .. } => {
+            // On error the actual Child/exclusion stay in Running, with admission
+            // closed, so failed wait/kill cannot become a Released acknowledgment.
+            runtime.terminate_and_wait().await?;
+            *state = HostGatewayTurnStateV1::Closed {
+                cleanup_known: true,
+            };
+        }
+        HostGatewayTurnStateV1::Reserved => {
+            // Early release closes the key but cannot assert unknown prior cleanup.
+            *state = HostGatewayTurnStateV1::Closed {
+                cleanup_known: false,
+            };
+        }
+        HostGatewayTurnStateV1::Closed { .. } => {}
+    }
+    Ok(())
+}
+
+async fn supervise_host_gateway_turn(entry: Arc<HostGatewayTurnEntryV1>) {
+    loop {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let mut state = entry.state.lock().await;
+        let revoked = match &mut *state {
+            HostGatewayTurnStateV1::Running { admission, runtime } => {
+                entry.closing.load(std::sync::atomic::Ordering::Acquire)
+                    || admission.revalidate_before_effect().is_err()
+                    || !matches!(runtime.child.try_wait(), Ok(None))
+            }
+            _ => return,
+        };
+        if revoked {
+            entry
+                .closing
+                .store(true, std::sync::atomic::Ordering::Release);
+            // A failure retains the exact owner, closed. Later authenticated
+            // Release can retry cleanup without reacquiring execution permission.
+            if close_host_gateway_state(&mut state).await.is_ok() {
+                return;
+            }
+        }
+    }
+}
+
+impl HostGatewayRuntimeV1 {
+    fn start(
+        admission: &substrate_shell::OrdinaryHostGatewayAdmissionV1,
+        exclusion: &Arc<E3PrivilegedChildExclusionV1>,
+        route_binding: substrate_gateway::managed_host_admission::HostRouteBindingV1,
+        route_verifier: &[u8; 32],
+    ) -> Result<Self> {
+        use std::os::unix::fs::MetadataExt;
+        use std::os::unix::process::CommandExt;
+        // This private starter is reached only behind the explicit instance
+        // refusal above. It does not itself mint configured or World authority.
+        admission.revalidate_before_effect()?;
+        let selected = admission.native_selection();
+        let binding = ordinary_gateway_adapter(selected)?;
+        let binary = resolve_gateway_binary()?.context("host_gateway_turn_binary_unavailable")?;
+        let executable = fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(binary)?;
+        let metadata = executable.metadata()?;
+        anyhow::ensure!(
+            metadata.is_file()
+                && metadata.uid() == 0
+                && metadata.mode() & 0o022 == 0
+                && metadata.mode() & 0o111 != 0,
+            "host_gateway_turn_untrusted_executable"
+        );
+        let lease = Arc::new(exclusion.acquire_non_e3_child()?);
+        admission.revalidate_before_effect()?;
+        let listener = StdTcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))?;
+        listener.set_nonblocking(true)?;
+        let port = listener.local_addr()?.port();
+        let config = render_ordinary_integrated_config(port, binding, selected)?;
+        let config = host_gateway_sealed_input_v1(config.as_bytes())?;
+        let handoff = admission.resolve_managed_host_auth_v1()?;
+        anyhow::ensure!(
+            handoff.backend_id == selected.backend_id,
+            "host_gateway_turn_auth_binding_changed"
+        );
+        let bundle = match binding.auth_kind {
+            GatewayIntegratedAuthKind::CliCodex => {
+                anyhow::ensure!(
+                    handoff.api_env.is_none(),
+                    "host_gateway_turn_auth_facets_changed"
+                );
+                resolve_codex_auth_handoff(handoff.cli_codex)?.bundle
+            }
+            GatewayIntegratedAuthKind::ApiEnv => {
+                anyhow::ensure!(
+                    handoff.cli_codex.is_none(),
+                    "host_gateway_turn_auth_facets_changed"
+                );
+                resolve_api_env_auth_handoff(binding, &handoff)?.bundle
+            }
+        };
+        bundle.validate().map_err(anyhow::Error::msg)?;
+        let auth = serde_json::to_vec(&bundle)?;
+        anyhow::ensure!(auth.len() <= 65_536, "host_gateway_turn_auth_bound");
+        let auth = host_gateway_sealed_input_v1(&auth)?;
+        let route_input =
+            host_gateway_sealed_input_v1(&route_binding.startup_input(route_verifier))?;
+        let mut command =
+            tokio::process::Command::new(format!("/proc/self/fd/{}", executable.as_raw_fd()));
+        command
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .env(
+                substrate_gateway::launch::SUBSTRATE_LLM_GATEWAY_MODE,
+                "managed_host",
+            )
+            .env(
+                substrate_gateway::launch::SUBSTRATE_LLM_GATEWAY_DISABLE_TOKEN_PERSISTENCE,
+                "1",
+            )
+            .env(
+                "SUBSTRATE_HOST_GATEWAY_LISTENER_FD",
+                listener.as_raw_fd().to_string(),
+            )
+            .env(SUBSTRATE_LLM_AUTH_BUNDLE_FD, auth.as_raw_fd().to_string())
+            .env(
+                substrate_gateway::managed_host_admission::ROUTE_FD_ENV,
+                route_input.as_raw_fd().to_string(),
+            )
+            .arg("--config")
+            .arg(format!("/proc/self/fd/{}", config.as_raw_fd()))
+            .arg("start")
+            .current_dir("/")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .kill_on_drop(true);
+        let descriptors = [
+            executable.as_raw_fd(),
+            config.as_raw_fd(),
+            auth.as_raw_fd(),
+            listener.as_raw_fd(),
+            route_input.as_raw_fd(),
+        ];
+        // Only the child changes CLOEXEC. Parent descriptors never become
+        // globally inheritable by concurrent service children.
+        unsafe {
+            command.as_std_mut().pre_exec(move || {
+                for fd in descriptors {
+                    let flags = libc::fcntl(fd, libc::F_GETFD);
+                    if flags < 0 || libc::fcntl(fd, libc::F_SETFD, flags & !libc::FD_CLOEXEC) < 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                }
+                Ok(())
+            });
+        }
+        admission.revalidate_before_effect()?;
+        let child = command.spawn()?;
+        Ok(Self {
+            child,
+            port,
+            _exclusion: Some(lease),
+        })
+    }
+
+    async fn terminate_and_wait(&mut self) -> Result<()> {
+        if self.child.try_wait()?.is_none() {
+            self.child.start_kill()?;
+        }
+        self.child.wait().await?;
+        self._exclusion.take();
+        Ok(())
+    }
+}
+
+fn host_gateway_sealed_input_v1(bytes: &[u8]) -> Result<fs::File> {
+    use std::io::{Seek, SeekFrom};
+    let fd = unsafe {
+        libc::memfd_create(
+            c"substrate-host-startup".as_ptr(),
+            libc::MFD_CLOEXEC | libc::MFD_ALLOW_SEALING,
+        )
+    };
+    anyhow::ensure!(fd >= 0, "host_gateway_turn_input_creation_failed");
+    let mut file = unsafe { fs::File::from_raw_fd(fd) };
+    file.write_all(bytes)?;
+    file.seek(SeekFrom::Start(0))?;
+    anyhow::ensure!(
+        unsafe { libc::fchmod(fd, 0o600) } == 0
+            && unsafe {
+                libc::fcntl(
+                    fd,
+                    libc::F_ADD_SEALS,
+                    libc::F_SEAL_WRITE
+                        | libc::F_SEAL_GROW
+                        | libc::F_SEAL_SHRINK
+                        | libc::F_SEAL_SEAL,
+                )
+            } == 0,
+        "host_gateway_turn_input_seal_failed"
+    );
+    Ok(file)
+}
+
+fn host_gateway_route_verifier_v1(value: &str) -> Result<[u8; 32]> {
+    anyhow::ensure!(
+        value.len() == 64
+            && value
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
+        "host_gateway_turn_route_verifier_invalid"
+    );
+    let mut verifier = [0; 32];
+    for (index, byte) in verifier.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16)
+            .map_err(|_| anyhow!("host_gateway_turn_route_verifier_invalid"))?;
+    }
+    Ok(verifier)
+}
+
+fn host_gateway_random_id_v1() -> String {
+    let bytes: [u8; 16] = rand::random();
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+#[cfg(test)]
+mod host_turn_owner_tests {
+    use super::*;
+    use transport_api_types::{
+        HostGatewayTurnOperationV1 as Op, HostGatewayTurnRequestV1 as Request,
+        HostGatewayTurnResultV1 as Reply,
+    };
+
+    // Syntax-only public claims; no fixture constructs an HSA/current-run admission.
+    pub(super) fn acquire() -> Request {
+        let token = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        serde_json::from_value(serde_json::json!({"schema_version":1,"operation":{
+            "kind":"acquire","cleanup_token":token,"acquire_id":Request::acquire_id_from_cleanup_token(token).unwrap(),
+            "selection":{"schema_version":1,"start":{
+                "schema_version":1,"authority_store_id":"store_original","original_start_intent_id":"intent_original",
+                "original_start_issuer_request_id":format!("req_{}","a".repeat(64)),"original_session_id":"session_original",
+                "context_sha256":"b".repeat(64),"native_selection_sha256":"c".repeat(64),"requested_selection_sha256":"d".repeat(64)
+            },"runtime":{"selection_role":"host_actor","orchestration_session_id":"session_original",
+                "participant_id":"host_actor","backend_id":"cli:codex-host","run_id":"run_current"}}
+        }})).unwrap()
+    }
+
+    pub(super) fn release(handle: Option<String>) -> Request {
+        let Op::Acquire {
+            acquire_id,
+            cleanup_token,
+            ..
+        } = acquire().operation
+        else {
+            unreachable!()
+        };
+        Request {
+            schema_version: 1,
+            operation: Op::Release {
+                acquire_id,
+                cleanup_token,
+                lease_handle: handle,
+            },
+        }
+    }
+
+    #[tokio::test]
+    async fn test_early_release_keeps_unknown_and_prevents_delayed_acquire() {
+        let exclusion = E3PrivilegedChildExclusionV1::new_recovering().unwrap();
+        let owner = Arc::new(HostGatewayTurnOwnerV1::new());
+        let response = owner
+            .clone()
+            .execute_turn(1234, release(None), None, None, exclusion.clone())
+            .await
+            .unwrap();
+        assert!(matches!(response.result, Reply::Unknown { .. }));
+        let response = owner
+            .clone()
+            .execute_turn(1234, acquire(), None, None, exclusion.clone())
+            .await
+            .unwrap();
+        assert!(matches!(response.result, Reply::Unknown { .. }));
+        let response = owner
+            .execute_turn(1234, release(None), None, None, exclusion)
+            .await
+            .unwrap();
+        assert!(matches!(response.result, Reply::Unknown { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_wrong_handle_and_principal_cannot_close_reserved_victim() {
+        let exclusion = E3PrivilegedChildExclusionV1::new_recovering().unwrap();
+        let owner = Arc::new(HostGatewayTurnOwnerV1::new());
+        let Op::Acquire {
+            acquire_id,
+            selection,
+            ..
+        } = acquire().operation
+        else {
+            unreachable!()
+        };
+        let victim = owner.new_entry(Some(*selection), None);
+        owner
+            .entries
+            .lock()
+            .await
+            .insert((1234, acquire_id.clone()), victim.clone());
+        let wrong = format!("hgl_{}_{}", "0".repeat(32), "0".repeat(32));
+        let response = owner
+            .clone()
+            .execute_turn(1234, release(Some(wrong)), None, None, exclusion.clone())
+            .await
+            .unwrap();
+        assert!(matches!(response.result, Reply::Unknown { .. }));
+        assert!(!victim.closing.load(std::sync::atomic::Ordering::Acquire));
+        owner
+            .clone()
+            .execute_turn(5678, release(None), None, None, exclusion)
+            .await
+            .unwrap();
+        assert!(!victim.closing.load(std::sync::atomic::Ordering::Acquire));
+        assert!(matches!(
+            *victim.state.lock().await,
+            HostGatewayTurnStateV1::Reserved
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_changed_claim_refused_and_instance_admission_stays_closed() {
+        let exclusion = E3PrivilegedChildExclusionV1::new_recovering().unwrap();
+        let owner = Arc::new(HostGatewayTurnOwnerV1::new());
+        let Op::Acquire {
+            acquire_id,
+            selection,
+            ..
+        } = acquire().operation
+        else {
+            unreachable!()
+        };
+        let victim = owner.new_entry(Some(*selection), None);
+        owner
+            .entries
+            .lock()
+            .await
+            .insert((1234, acquire_id), victim);
+        let mut changed = acquire();
+        let Op::Acquire { selection, .. } = &mut changed.operation else {
+            unreachable!()
+        };
+        let transport_api_types::OrdinaryGatewayRuntimeIdentityV1::HostActor { run_id, .. } =
+            &mut selection.runtime
+        else {
+            unreachable!()
+        };
+        *run_id = "different_current_run".into();
+        assert!(owner
+            .clone()
+            .execute_turn(1234, changed, None, None, Arc::clone(&exclusion))
+            .await
+            .is_err());
+        // A supported harness in a syntax-only claim cannot supply the opaque
+        // admission required by the caller mechanism check or reach effects.
+        let error = owner
+            .execute_turn(1234, acquire(), None, None, exclusion)
+            .await
+            .err()
+            .expect("configured authority remains mandatory");
+        assert_eq!(error.to_string(), "host_gateway_turn_authority_unavailable");
+    }
+
+    #[tokio::test]
+    async fn test_failed_reservation_closes_without_claiming_cleanup() {
+        let exclusion = E3PrivilegedChildExclusionV1::new_recovering().unwrap();
+        let owner = Arc::new(HostGatewayTurnOwnerV1::new());
+        let request = acquire();
+        let Op::Acquire {
+            acquire_id,
+            selection,
+            ..
+        } = &request.operation
+        else {
+            unreachable!()
+        };
+        let entry = owner.new_entry(Some(selection.as_ref().clone()), None);
+        owner
+            .entries
+            .lock()
+            .await
+            .insert((1234, acquire_id.clone()), Arc::clone(&entry));
+        let mut wrong_credential = request.clone();
+        let Op::Acquire { cleanup_token, .. } = &mut wrong_credential.operation else {
+            unreachable!()
+        };
+        *cleanup_token = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE".into();
+        assert!(owner
+            .clone()
+            .execute_turn(1234, wrong_credential, None, None, Arc::clone(&exclusion))
+            .await
+            .is_err());
+        assert!(!entry.closing.load(std::sync::atomic::Ordering::Acquire));
+        assert!(matches!(
+            &*entry.state.lock().await,
+            HostGatewayTurnStateV1::Reserved
+        ));
+        // An actual missing-authority denial takes the production failed-start
+        // branch. No synthetic HSA witness, gateway or native child is constructed.
+        assert!(owner
+            .clone()
+            .execute_turn(1234, request.clone(), None, None, Arc::clone(&exclusion))
+            .await
+            .is_err());
+        assert!(entry.closing.load(std::sync::atomic::Ordering::Acquire));
+        assert!(matches!(
+            &*entry.state.lock().await,
+            HostGatewayTurnStateV1::Closed {
+                cleanup_known: false
+            }
+        ));
+        let retry = owner
+            .clone()
+            .execute_turn(1234, request, None, None, Arc::clone(&exclusion))
+            .await
+            .unwrap();
+        assert!(
+            matches!(retry.result, Reply::Unknown { .. }),
+            "closed key cannot retry authority/startup"
+        );
+        let cleanup = owner
+            .execute_turn(1234, release(None), None, None, exclusion)
+            .await
+            .unwrap();
+        assert!(
+            matches!(cleanup.result, Reply::Unknown { .. }),
+            "failed start cannot fabricate Released"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_actual_owned_child_disposal_does_not_wait_for_independent_native_ack() {
+        use tokio::io::AsyncReadExt;
+        let mut child = tokio::process::Command::new("/bin/sh")
+            .args(["-c", "printf r; exec sleep 60"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
+        let mut output = child.stdout.take().unwrap();
+        let mut ready = [0];
+        output.read_exact(&mut ready).await.unwrap();
+        assert_eq!(ready, [b'r']);
+        let mut runtime = HostGatewayRuntimeV1 {
+            child,
+            port: 1,
+            _exclusion: None,
+        };
+        let (release_native, native_ack) = tokio::sync::oneshot::channel::<()>();
+        let (disposed, disposal) = tokio::sync::oneshot::channel();
+        let retained = tokio::spawn(async move {
+            let native = async {
+                native_ack.await.unwrap();
+                Err::<(), _>("injected native wait failure")
+            };
+            let gateway = async {
+                runtime.terminate_and_wait().await.unwrap();
+                // This is an actual Child::wait acknowledgment, not process absence.
+                assert!(runtime.child.try_wait().unwrap().is_some());
+                disposed.send(()).unwrap();
+            };
+            let (native, ()) = tokio::join!(native, gateway);
+            native
+        });
+        tokio::time::timeout(Duration::from_secs(5), disposal)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            !retained.is_finished(),
+            "native acknowledgment must remain pending"
+        );
+        release_native.send(()).unwrap();
+        assert_eq!(retained.await.unwrap(), Err("injected native wait failure"));
+    }
+}
+
+#[cfg(test)]
+mod host_epoch_owner_tests {
+    use super::*;
+    use transport_api_types::{
+        HostGatewayInstanceOperationV3 as Op, HostGatewayInstanceRequestV3 as Request,
+        HostGatewayInstanceResultV3 as Reply,
+    };
+    fn bound(
+        owner: &HostGatewayTurnOwnerV1,
+        operation: transport_api_types::HostGatewayTurnOperationV1,
+    ) -> Request {
+        Request {
+            schema_version: 3,
+            operation: Op::Bound {
+                service_instance_id: owner.instance.clone(),
+                route_verifier: if matches!(
+                    &operation,
+                    transport_api_types::HostGatewayTurnOperationV1::Acquire { .. }
+                ) {
+                    Some("a".repeat(64))
+                } else {
+                    None
+                },
+                operation,
+            },
+        }
+    }
+    #[tokio::test]
+    async fn test_observe_creates_no_reservation_and_clone_retains_exact_epoch_and_table() {
+        let exclusion = E3PrivilegedChildExclusionV1::new_recovering().unwrap();
+        let owner = Arc::new(HostGatewayTurnOwnerV1::new());
+        let same = owner.clone();
+        let reply = owner
+            .clone()
+            .execute(
+                1234,
+                Request {
+                    schema_version: 3,
+                    operation: Op::Observe {},
+                },
+                None,
+                exclusion.clone(),
+            )
+            .await
+            .unwrap();
+        assert!(
+            matches!(reply.result, Reply::Observed { service_instance_id } if service_instance_id == owner.instance)
+        );
+        assert!(owner.entries.lock().await.is_empty());
+        let release = super::host_turn_owner_tests::release(None);
+        owner
+            .clone()
+            .execute(1234, bound(&owner, release.operation), None, exclusion)
+            .await
+            .unwrap();
+        assert_eq!(same.instance, owner.instance);
+        assert_eq!(same.entries.lock().await.len(), 1);
+        // Continuity cannot be reset through any production API. A replacement
+        // owner is a new epoch; old in-flight Arcs retain their original markers.
+        let replacement = HostGatewayTurnOwnerV1::new();
+        assert_ne!(replacement.instance, owner.instance);
+        assert_eq!(same.entries.lock().await.len(), 1);
+        assert!(replacement.entries.lock().await.is_empty());
+    }
+    #[tokio::test]
+    async fn test_delayed_old_acquire_and_null_release_refuse_before_new_table_lookup() {
+        let exclusion = E3PrivilegedChildExclusionV1::new_recovering().unwrap();
+        let old = HostGatewayTurnOwnerV1::new();
+        let current = Arc::new(HostGatewayTurnOwnerV1::new());
+        let acquire = super::host_turn_owner_tests::acquire();
+        let request = bound(&old, acquire.operation);
+        let (allow, delayed) = tokio::sync::oneshot::channel();
+        let target = current.clone();
+        let held_exclusion = exclusion.clone();
+        let in_flight = tokio::spawn(async move {
+            delayed.await.unwrap();
+            target.execute(1234, request, None, held_exclusion).await
+        });
+        allow.send(()).unwrap();
+        let error = in_flight.await.unwrap().err().unwrap();
+        assert_eq!(error.to_string(), "host_gateway_instance_changed");
+        assert!(current.entries.lock().await.is_empty());
+        let release = bound(&old, super::host_turn_owner_tests::release(None).operation);
+        let error = current
+            .clone()
+            .execute(1234, release, None, exclusion)
+            .await
+            .err()
+            .unwrap();
+        assert_eq!(error.to_string(), "host_gateway_instance_changed");
+        assert!(
+            current.entries.lock().await.is_empty(),
+            "old null release must not tombstone the new epoch"
         );
     }
 }

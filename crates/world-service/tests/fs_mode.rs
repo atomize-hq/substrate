@@ -82,6 +82,8 @@ fn non_pty_read_only_mode_blocks_writes() {
     let cwd = tmp.path().to_path_buf();
 
     let req = ExecuteRequest {
+        schema_version: 1,
+        ordinary_start_selection: None,
         profile: None,
         cmd: "sh -lc 'echo denied > ro-deny.txt'".to_string(),
         cwd: Some(cwd.display().to_string()),
@@ -149,6 +151,8 @@ fn non_pty_read_only_mode_blocks_absolute_project_writes() {
     );
 
     let req = ExecuteRequest {
+        schema_version: 1,
+        ordinary_start_selection: None,
         profile: None,
         cmd: r#"sh -lc 'echo denied > "$SUBSTRATE_TEST_ABS_TARGET"'"#.to_string(),
         cwd: Some(cwd.display().to_string()),
@@ -206,6 +210,8 @@ fn non_pty_writable_mode_records_diffs_for_writes() {
     let cwd = tmp.path().to_path_buf();
 
     let req = ExecuteRequest {
+        schema_version: 1,
+        ordinary_start_selection: None,
         profile: None,
         cmd: "sh -lc 'echo ok > writable.txt'".to_string(),
         cwd: Some(cwd.display().to_string()),
@@ -457,6 +463,8 @@ async fn pty_writable_mode_keeps_writes_in_overlay() {
         );
 
         let verify_req = ExecuteRequest {
+            schema_version: 1,
+            ordinary_start_selection: None,
             profile: None,
             cmd: "sh -lc 'cat pty-writable.txt'".to_string(),
             cwd: Some(cwd.display().to_string()),
@@ -518,6 +526,8 @@ async fn pty_and_non_pty_share_overlay_state_across_mode_switch() {
     let ro_target = cwd.join("ro-deny.txt");
 
     let write_non_pty = ExecuteRequest {
+        schema_version: 1,
+        ordinary_start_selection: None,
         profile: None,
         cmd: "sh -lc 'echo nonpty-write > nonpty.txt'".to_string(),
         cwd: Some(cwd.display().to_string()),
@@ -622,6 +632,8 @@ async fn pty_and_non_pty_share_overlay_state_across_mode_switch() {
     );
 
     let verify_ro = ExecuteRequest {
+        schema_version: 1,
+        ordinary_start_selection: None,
         profile: None,
         cmd: "sh -lc 'cat nonpty.txt && cat pty.txt && touch ro-deny.txt'".to_string(),
         cwd: Some(cwd.display().to_string()),

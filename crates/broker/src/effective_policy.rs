@@ -20,6 +20,8 @@ const WORKSPACE_POLICY_FILENAME: &str = "policy.yaml";
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub struct PolicyPatch {
+    #[serde(skip_serializing_if = "crate::policy::WorkspaceAuthorityPolicyV1::is_empty")]
+    pub workspace_authority: crate::policy::WorkspaceAuthorityPolicyV1,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -53,7 +55,8 @@ pub struct PolicyPatch {
 impl PolicyPatch {
     #[allow(dead_code)]
     pub(crate) fn is_empty(&self) -> bool {
-        self.id.is_none()
+        self.workspace_authority.is_empty()
+            && self.id.is_none()
             && self.name.is_none()
             && self.world_fs.is_empty()
             && self.llm.is_empty()
@@ -527,6 +530,59 @@ impl EffectivePolicyResolver {
     ) -> Result<ResolvedDispatchWorldFsNarrowingV1> {
         validate_dispatch_narrowing_bindings(&request.bindings)?;
         validate_dispatch_narrowing_bindings(&authenticated.bindings)?;
+        if request.bindings != authenticated.bindings {
+            return Err(anyhow!(
+                "dispatch narrowing identity does not match authenticated request context"
+            ));
+        }
+        if request.reason.as_ref().is_some_and(|reason| {
+            reason.is_empty() || reason.trim() != reason || reason.contains('\0')
+        }) {
+            return Err(anyhow!("dispatch narrowing reason is not canonical"));
+        }
+
+        let policy = match request.world_fs.as_ref() {
+            None => parent.clone(),
+            Some(patch) if patch.is_empty() => parent.clone(),
+            Some(patch) => {
+                if !parent.agents_world_dispatch_allow_capability_narrowing {
+                    return Err(anyhow!(
+                        "agents.world_dispatch.allow_capability_narrowing is disabled"
+                    ));
+                }
+                resolve_restricted_world_fs_narrowing(parent, patch, world_root)?
+            }
+        };
+
+        Ok(ResolvedDispatchWorldFsNarrowingV1 {
+            policy,
+            bindings: request.bindings.clone(),
+            reason: request.reason.clone(),
+        })
+    }
+    /// Resolve ordinary Task/turn representation after the caller authenticates
+    /// its configured issuer, held selection and current policy. No authority is
+    /// inferred from generation zero or from this entrypoint's name.
+    ///
+    /// ```
+    /// use substrate_broker::{EffectivePolicyResolver, Policy,
+    ///     DispatchWorldFsNarrowingRequestV1, AuthenticatedDispatchPolicyNarrowingContextV1};
+    /// fn resolve(parent: &Policy, request: &DispatchWorldFsNarrowingRequestV1,
+    ///     authenticated: &AuthenticatedDispatchPolicyNarrowingContextV1,
+    ///     root: &std::path::Path) -> anyhow::Result<()> {
+    ///     EffectivePolicyResolver::resolve_ordinary_dispatch_world_fs_narrowing(
+    ///         parent, request, authenticated, root)?;
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn resolve_ordinary_dispatch_world_fs_narrowing(
+        parent: &Policy,
+        request: &DispatchWorldFsNarrowingRequestV1,
+        authenticated: &AuthenticatedDispatchPolicyNarrowingContextV1,
+        world_root: &Path,
+    ) -> Result<ResolvedDispatchWorldFsNarrowingV1> {
+        validate_ordinary_dispatch_narrowing_bindings(&request.bindings)?;
+        validate_ordinary_dispatch_narrowing_bindings(&authenticated.bindings)?;
         if request.bindings != authenticated.bindings {
             return Err(anyhow!(
                 "dispatch narrowing identity does not match authenticated request context"
@@ -1088,15 +1144,16 @@ fn compose_effective_policy(
         workspace: Option<T>,
         workspace_enabled: bool,
     ) -> (T, ReplaceSource) {
-        if workspace_enabled {
-            if let Some(v) = workspace {
-                return (v, ReplaceSource::WorkspacePatch);
-            }
-        }
-        if let Some(v) = global {
-            return (v, ReplaceSource::GlobalPatch);
-        }
-        (default, ReplaceSource::Default)
+        let (value, source) =
+            resolve_policy_replacement_v1(default, global, workspace, workspace_enabled);
+        (
+            value,
+            match source {
+                2 => ReplaceSource::WorkspacePatch,
+                1 => ReplaceSource::GlobalPatch,
+                _ => ReplaceSource::Default,
+            },
+        )
     }
 
     fn resolve_replace_opt<T: Clone>(
@@ -3459,6 +3516,85 @@ fn hashmap_to_btree(map: &HashMap<String, String>) -> BTreeMap<String, String> {
     map.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
 }
 
+fn validate_ordinary_dispatch_narrowing_bindings(
+    bindings: &DispatchPolicyNarrowingBindingsV1,
+) -> Result<()> {
+    if bindings.schema_version != 1 {
+        return Err(anyhow!(
+            "unsupported dispatch narrowing schema_version {}",
+            bindings.schema_version
+        ));
+    }
+    for (name, value) in [
+        ("request_id", bindings.request_id.as_str()),
+        (
+            "orchestration_session_id",
+            bindings.orchestration_session_id.as_str(),
+        ),
+        (
+            "caller_participant_id",
+            bindings.caller_participant_id.as_str(),
+        ),
+        ("target_backend_id", bindings.target_backend_id.as_str()),
+        (
+            "target_world.world_id",
+            bindings.target_world.world_id.as_str(),
+        ),
+        (
+            "parent_policy_ref.ref_id",
+            bindings.parent_policy_ref.ref_id.as_str(),
+        ),
+        (
+            "parent_policy_ref.commitment",
+            bindings.parent_policy_ref.commitment.as_str(),
+        ),
+        (
+            "parent_policy_revision",
+            bindings.parent_policy_revision.as_str(),
+        ),
+    ] {
+        if value.is_empty()
+            || value.trim() != value
+            || value.contains('\0')
+            || value.chars().any(char::is_control)
+        {
+            return Err(anyhow!("{name} is not a canonical identity"));
+        }
+    }
+    if bindings.parent_policy_ref.object_kind != "policy"
+        || bindings.parent_policy_ref.schema_version == 0
+    {
+        return Err(anyhow!(
+            "parent_policy_ref is not an exact policy reference"
+        ));
+    }
+    if !matches!(
+        &bindings.applies_to,
+        DispatchCapabilitySubjectV1::EphemeralTask
+            | DispatchCapabilitySubjectV1::RetainedWorkerTurn { .. }
+    ) {
+        return Err(anyhow!("ordinary narrowing requires Task or retained turn"));
+    }
+    match &bindings.applies_to {
+        DispatchCapabilitySubjectV1::RetainedWorkerTurn {
+            retained_participant_id,
+        } if retained_participant_id.is_empty()
+            || retained_participant_id.trim() != retained_participant_id =>
+        {
+            return Err(anyhow!("retained participant identity is not canonical"));
+        }
+        DispatchCapabilitySubjectV1::RetainedWorkerFork {
+            source_participant_id,
+        } if source_participant_id.is_empty()
+            || source_participant_id.trim() != source_participant_id =>
+        {
+            return Err(anyhow!("source participant identity is not canonical"));
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4078,5 +4214,320 @@ workflow:
         assert!(effective.agents_world_dispatch_obligations_approval_allowed);
         assert!(!effective.agents_world_dispatch_obligations_follow_up_allowed);
         assert!(effective.agents_world_dispatch_obligations_blocked_allowed);
+    }
+
+    #[test]
+    fn test_ordinary_zero_narrowing_never_opens_default_broker_admission() {
+        let root = tempfile::tempdir().unwrap();
+        let mut parent = restricted_parent(root.path());
+        let mut scope = bindings();
+        scope.target_world.world_generation = 0;
+        let request = DispatchWorldFsNarrowingRequestV1 {
+            bindings: scope.clone(),
+            world_fs: Some(RestrictedWorldFsPatchV1 {
+                host_visible: Some(false),
+                ..Default::default()
+            }),
+            reason: None,
+        };
+        let authenticated = AuthenticatedDispatchPolicyNarrowingContextV1 { bindings: scope };
+        assert!(
+            EffectivePolicyResolver::resolve_dispatch_world_fs_narrowing(
+                &parent,
+                &request,
+                &authenticated,
+                root.path()
+            )
+            .is_err()
+        );
+        let resolved = EffectivePolicyResolver::resolve_ordinary_dispatch_world_fs_narrowing(
+            &parent,
+            &request,
+            &authenticated,
+            root.path(),
+        )
+        .unwrap();
+        assert_eq!(resolved.bindings.target_world.world_generation, 0);
+        let mut forged = authenticated.clone();
+        forged.bindings.caller_participant_id = "forged".into();
+        assert!(
+            EffectivePolicyResolver::resolve_ordinary_dispatch_world_fs_narrowing(
+                &parent,
+                &request,
+                &forged,
+                root.path()
+            )
+            .is_err()
+        );
+        parent.agents_world_dispatch_allow_capability_narrowing = false;
+        assert!(
+            EffectivePolicyResolver::resolve_ordinary_dispatch_world_fs_narrowing(
+                &parent,
+                &request,
+                &authenticated,
+                root.path()
+            )
+            .is_err()
+        );
+    }
+}
+
+fn resolve_policy_replacement_v1<T>(
+    default: T,
+    global: Option<T>,
+    workspace: Option<T>,
+    enabled: bool,
+) -> (T, u8) {
+    if enabled {
+        if let Some(value) = workspace {
+            return (value, 2);
+        }
+    }
+    if let Some(value) = global {
+        return (value, 1);
+    }
+    (default, 0)
+}
+
+/// Source-bound decisions and provenance for the two native Workspace operations.
+/// Kept outside `Policy` so existing execution snapshots and serialization stay unchanged.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WorkspaceAuthorityEffectiveV1 {
+    pub decisions: crate::policy::WorkspaceAuthorityPolicyV1,
+    pub read_source: Option<PathBuf>,
+    pub publish_source: Option<PathBuf>,
+    pub initialize_source: Option<PathBuf>,
+    pub load_source: Option<PathBuf>,
+}
+
+/// Resolve only supplied bytes; no profile is opened or permission activated.
+///
+/// ```
+/// let value = substrate_broker::resolve_workspace_authority_from_sources_v1(
+///     std::path::Path::new("/private/policy.yaml"), None, None).unwrap();
+/// assert_eq!(value.decisions.current_actor_read, None);
+/// assert_eq!(value.decisions.association_publish, None);
+/// ```
+pub fn resolve_workspace_authority_from_sources_v1(
+    global_path: &Path,
+    global_bytes: Option<&[u8]>,
+    workspace_source: Option<(&Path, &[u8])>,
+) -> Result<WorkspaceAuthorityEffectiveV1> {
+    // Same strict full-source validation and precedence as ordinary policy resolution.
+    resolve_effective_policy_with_explain_from_sources(
+        global_path,
+        global_bytes,
+        workspace_source,
+        false,
+    )?;
+    let parse = |path: &Path, bytes: &[u8]| -> Result<PolicyPatch> {
+        parse_policy_patch_yaml(path, std::str::from_utf8(bytes)?)
+    };
+    let global = global_bytes
+        .map(|bytes| parse(global_path, bytes))
+        .transpose()?
+        .unwrap_or_default();
+    let workspace = workspace_source
+        .map(|(path, bytes)| parse(path, bytes))
+        .transpose()?;
+    let (workspace_load, load_source) = resolve_policy_replacement_v1(
+        None,
+        global.workspace_authority.workspace_load.map(Some),
+        workspace
+            .as_ref()
+            .and_then(|p| p.workspace_authority.workspace_load)
+            .map(Some),
+        workspace.is_some(),
+    );
+    let (read, read_source) = resolve_policy_replacement_v1(
+        None,
+        global.workspace_authority.current_actor_read.map(Some),
+        workspace
+            .as_ref()
+            .and_then(|p| p.workspace_authority.current_actor_read)
+            .map(Some),
+        workspace.is_some(),
+    );
+    let (publish, publish_source) = resolve_policy_replacement_v1(
+        None,
+        global.workspace_authority.association_publish.map(Some),
+        workspace
+            .as_ref()
+            .and_then(|p| p.workspace_authority.association_publish)
+            .map(Some),
+        workspace.is_some(),
+    );
+    let (initialize, initialize_source) = resolve_policy_replacement_v1(
+        None,
+        global.workspace_authority.initialize.map(Some),
+        workspace
+            .as_ref()
+            .and_then(|p| p.workspace_authority.initialize)
+            .map(Some),
+        workspace.is_some(),
+    );
+    let source = |value| match value {
+        1 => Some(global_path.to_path_buf()),
+        2 => workspace_source.map(|(path, _)| path.to_path_buf()),
+        _ => None,
+    };
+    Ok(WorkspaceAuthorityEffectiveV1 {
+        decisions: crate::policy::WorkspaceAuthorityPolicyV1 {
+            workspace_load,
+            current_actor_read: read,
+            association_publish: publish,
+            initialize,
+        },
+        load_source: source(load_source),
+        read_source: source(read_source),
+        publish_source: source(publish_source),
+        initialize_source: source(initialize_source),
+    })
+}
+
+#[cfg(test)]
+mod workspace_authority_operation_tests {
+    use super::*;
+    use crate::policy::WorkspaceAuthorityDecisionV1::{Allow, Deny};
+    #[test]
+    fn test_workspace_authority_defaults_precedence_removal_and_execution_bytes() {
+        let global = Path::new("/private/home/policy.yaml");
+        let workspace = Path::new("/private/work/.substrate/policy.yaml");
+        let base = resolve_effective_policy_with_explain_from_sources(global, None, None, false)
+            .unwrap()
+            .0;
+        let baseline = serde_json::to_vec(&base).unwrap();
+        for operation in [
+            "current_actor_read",
+            "workspace_load",
+            "association_publish",
+            "initialize",
+        ] {
+            let allow = format!("workspace_authority:\n  {operation}: allow\n");
+            let deny = format!("workspace_authority:\n  {operation}: deny\n");
+            let decisions = |g: Option<&[u8]>, w: Option<&[u8]>| {
+                resolve_workspace_authority_from_sources_v1(
+                    global,
+                    g,
+                    w.map(|bytes| (workspace, bytes)),
+                )
+                .unwrap()
+            };
+            let select = |p: WorkspaceAuthorityEffectiveV1| match operation {
+                "current_actor_read" => p.decisions.current_actor_read,
+                "workspace_load" => p.decisions.workspace_load,
+                "initialize" => p.decisions.initialize,
+                _ => p.decisions.association_publish,
+            };
+            assert_eq!(select(decisions(None, None)), None);
+            assert_eq!(select(decisions(Some(allow.as_bytes()), None)), Some(Allow));
+            assert_eq!(
+                select(decisions(Some(allow.as_bytes()), Some(deny.as_bytes()))),
+                Some(Deny)
+            );
+            assert_eq!(
+                select(decisions(Some(deny.as_bytes()), Some(allow.as_bytes()))),
+                Some(Allow)
+            );
+            assert_eq!(
+                select(decisions(Some(allow.as_bytes()), Some(b"{}\n"))),
+                Some(Allow)
+            );
+            assert_eq!(select(decisions(None, Some(b"{}\n"))), None);
+            let parsed = resolve_effective_policy_with_explain_from_sources(
+                global,
+                Some(allow.as_bytes()),
+                None,
+                false,
+            )
+            .unwrap()
+            .0;
+            assert_eq!(
+                serde_json::to_vec(&parsed).unwrap(),
+                baseline,
+                "independent operation changed execution bytes"
+            );
+        }
+        assert!(resolve_workspace_authority_from_sources_v1(
+            global,
+            Some(b"workspace_authority: { current_actor_read: unknown }"),
+            None
+        )
+        .is_err());
+    }
+}
+
+#[cfg(test)]
+mod workspace_initialize_authority_tests {
+    use super::*;
+    #[test]
+    fn test_workspace_authority_load_and_actor_read_are_independent() {
+        use crate::policy::WorkspaceAuthorityDecisionV1::Allow;
+        let global = Path::new("/private/policy.yaml");
+        let base = serde_json::to_vec(
+            &resolve_effective_policy_with_explain_from_sources(global, None, None, false)
+                .unwrap()
+                .0,
+        )
+        .unwrap();
+        for operation in ["workspace_load", "current_actor_read"] {
+            let bytes = format!("workspace_authority: {{{operation}: allow}}\n");
+            let current =
+                resolve_workspace_authority_from_sources_v1(global, Some(bytes.as_bytes()), None)
+                    .unwrap();
+            assert_eq!(
+                current.decisions.workspace_load,
+                (operation == "workspace_load").then_some(Allow)
+            );
+            assert_eq!(
+                current.decisions.current_actor_read,
+                (operation == "current_actor_read").then_some(Allow)
+            );
+            assert_eq!(current.decisions.initialize, None);
+            assert_eq!(current.decisions.association_publish, None);
+            assert_eq!(
+                serde_json::to_vec(
+                    &resolve_effective_policy_with_explain_from_sources(
+                        global,
+                        Some(bytes.as_bytes()),
+                        None,
+                        false
+                    )
+                    .unwrap()
+                    .0
+                )
+                .unwrap(),
+                base
+            );
+        }
+    }
+
+    #[test]
+    fn test_workspace_authority_initialize_is_independent_and_execution_schema_unchanged() {
+        use crate::policy::WorkspaceAuthorityDecisionV1::{Allow, Deny};
+        let path = Path::new("/private/policy.yaml");
+        let bytes=b"workspace_authority: {initialize: allow, current_actor_read: deny, association_publish: deny}\n";
+        let value = resolve_workspace_authority_from_sources_v1(path, Some(bytes), None).unwrap();
+        assert_eq!(value.decisions.initialize, Some(Allow));
+        assert_eq!(value.decisions.current_actor_read, Some(Deny));
+        assert_eq!(value.decisions.association_publish, Some(Deny));
+        let baseline = resolve_effective_policy_with_explain_from_sources(path, None, None, false)
+            .unwrap()
+            .0;
+        let current =
+            resolve_effective_policy_with_explain_from_sources(path, Some(bytes), None, false)
+                .unwrap()
+                .0;
+        assert_eq!(
+            serde_json::to_vec(&baseline).unwrap(),
+            serde_json::to_vec(&current).unwrap()
+        );
+        assert_eq!(
+            resolve_workspace_authority_from_sources_v1(path, None, None)
+                .unwrap()
+                .decisions
+                .initialize,
+            None
+        );
     }
 }

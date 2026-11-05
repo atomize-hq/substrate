@@ -1,3 +1,7 @@
+#[cfg(target_os = "linux")]
+#[path = "ordinary_home_handoff.rs"]
+pub(crate) mod ordinary_home_handoff;
+
 use crate::enforcement_plan;
 use anyhow::{Context, Result};
 #[cfg(target_os = "linux")]
@@ -16,6 +20,8 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 pub const LANDLOCK_EXEC_ARG: &str = "__substrate_world_landlock_exec";
+#[cfg(target_os = "linux")]
+pub const ORDINARY_HOME_EXEC_ARG: &str = "__substrate_ordinary_world_home_exec";
 
 const INNER_CMD_ENV: &str = "SUBSTRATE_INNER_CMD";
 const INNER_LOGIN_SHELL_ENV: &str = "SUBSTRATE_INNER_LOGIN_SHELL";
@@ -428,6 +434,34 @@ fn normalize_trusted_system_roots_for_landlock(
 }
 
 pub fn run_landlock_exec() -> Result<()> {
+    run_landlock_exec_inner(false)
+}
+
+/// Execute the genuinely issued ordinary child with its own held home before
+/// applying the existing workload policy. Missing custody never falls back.
+///
+/// ```no_run
+/// # fn main() -> anyhow::Result<()> {
+/// world_service::internal_exec::run_ordinary_home_exec()?;
+/// # Ok(()) }
+/// ```
+#[cfg(target_os = "linux")]
+pub fn run_ordinary_home_exec() -> Result<()> {
+    run_landlock_exec_inner(true)
+}
+
+fn run_landlock_exec_inner(ordinary_required: bool) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    let ordinary_child = if ordinary_required {
+        Some(
+            ordinary_home_handoff::consume_ordinary_home_handoff()
+                .context("ordinary child-home handoff refused before native execution")?,
+        )
+    } else {
+        None
+    };
+    #[cfg(not(target_os = "linux"))]
+    let _ = ordinary_required;
     let enforcement_plan = match enforcement_plan::read_from_env_and_validate() {
         Ok(v) => v,
         Err(err) => {
@@ -546,7 +580,11 @@ pub fn run_landlock_exec() -> Result<()> {
             .is_some_and(|r| !r.cleanup_created_dirs.is_empty());
 
         let cwd = std::env::var(MOUNT_CWD_ENV).unwrap_or_else(|_| "/".to_string());
-        let cmd = std::env::var(INNER_CMD_ENV).context("missing SUBSTRATE_INNER_CMD")?;
+        let cmd = if ordinary_child.is_some() {
+            String::new()
+        } else {
+            std::env::var(INNER_CMD_ENV).context("missing SUBSTRATE_INNER_CMD")?
+        };
         let login_shell = std::env::var(INNER_LOGIN_SHELL_ENV)
             .ok()
             .is_some_and(|raw| raw.trim() == "1");
@@ -705,13 +743,22 @@ pub fn run_landlock_exec() -> Result<()> {
             std::env::set_current_dir(&cwd)
                 .with_context(|| format!("failed to set cwd to {cwd:?}"))?;
 
-            let mut command = std::process::Command::new("sh");
-            if login_shell {
-                command.arg("-lc");
+            let mut command = if let Some(child) = ordinary_child.as_ref() {
+                // The live parent checked this process's exact kernel argv.
+                // Never interpret an env/FD3 command claimed to be a probe.
+                let mut command = std::process::Command::new(&child.binary);
+                command.args(&child.args);
+                command
             } else {
-                command.arg("-c");
-            }
-            command.arg(&cmd);
+                let mut command = std::process::Command::new("sh");
+                if login_shell {
+                    command.arg("-lc");
+                } else {
+                    command.arg("-c");
+                }
+                command.arg(&cmd);
+                command
+            };
 
             #[cfg(unix)]
             {

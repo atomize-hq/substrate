@@ -7,6 +7,8 @@ mod auth;
 mod cli;
 mod core;
 mod launch;
+#[cfg(target_os = "linux")]
+mod managed_host_admission;
 mod message_tracing;
 mod models;
 mod pid;
@@ -57,9 +59,12 @@ async fn start_foreground(
 
     let integrated_auth = server::IntegratedGatewayAuthContext::from_launch_mode(launch.mode)?;
 
-    // Write PID file
-    if let Err(e) = pid::write_pid() {
-        eprintln!("Warning: Failed to write PID file: {}", e);
+    let owns_standalone_pid = launch.mode != launch::GatewayMode::ManagedHost;
+    // Managed Host lifetime belongs to the service's exact Child, not this singleton.
+    if owns_standalone_pid {
+        if let Err(e) = pid::write_pid() {
+            eprintln!("Warning: Failed to write PID file: {}", e);
+        }
     }
 
     tracing::info!("Starting Substrate Gateway on port {}", config.server.port);
@@ -86,7 +91,9 @@ async fn start_foreground(
     println!("Press Ctrl+C to stop");
 
     let result = server::start_server(config, launch, integrated_auth).await;
-    let _ = pid::cleanup_pid();
+    if owns_standalone_pid {
+        let _ = pid::cleanup_pid();
+    }
     result
 }
 

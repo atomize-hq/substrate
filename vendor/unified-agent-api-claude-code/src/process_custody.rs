@@ -40,6 +40,15 @@ impl std::fmt::Display for ClaudeSettlementError {
 }
 impl std::error::Error for ClaudeSettlementError {}
 
+/// Actual child-owner wait data, independent from logical completion. Missing
+/// values are unknown, not proof of process absence or successful settlement.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProcessTerminationObservation {
+    pub process_id: Option<u32>,
+    pub status: Option<ExitStatus>,
+    pub recovery_status: Option<ExitStatus>,
+}
+
 #[derive(Debug, Default)]
 struct State {
     sealed: bool,
@@ -48,6 +57,7 @@ struct State {
     cancelled: bool,
     active: usize,
     failures: u8,
+    terminations: Vec<ProcessTerminationObservation>,
 }
 #[derive(Debug, Default)]
 struct Inner {
@@ -99,6 +109,46 @@ impl ClaudeProcessCustody {
     pub fn new() -> Self {
         Self::default()
     }
+    /// Copy known actual wait results without sealing, cancelling, waiting or
+    /// launching. Check `settle()` separately before treating this as the settled
+    /// attempt's snapshot. A recovery wait does not replace a failed primary wait.
+    /// ```no_run
+    /// # async fn inspect(custody: &claude_code::ClaudeProcessCustody) -> Result<(), Box<dyn std::error::Error>> {
+    /// custody.settle().await?;
+    /// let observations = custody.observed_process_terminations();
+    /// # let _ = observations; Ok(()) }
+    /// ```
+    pub fn observed_process_terminations(&self) -> Vec<ProcessTerminationObservation> {
+        self.inner
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .terminations
+            .clone()
+    }
+
+    /// Observe admission closed before any spawn attempt began. Open empty
+    /// custody and failed/abandoned attempts return false. This does not seal,
+    /// cancel or wait; check `settle()` and enclosing cleanup separately.
+    /// ```
+    /// let custody = claude_code::ClaudeProcessCustody::new();
+    /// assert!(!custody.observed_closed_before_any_spawn());
+    /// custody.request_termination();
+    /// assert!(custody.observed_closed_before_any_spawn());
+    /// ```
+    pub fn observed_closed_before_any_spawn(&self) -> bool {
+        let state = self
+            .inner
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        state.sealed
+            && !state.started
+            && state.active == 0
+            && state.failures == 0
+            && state.terminations.is_empty()
+    }
+
     /// Creates custody with a fallible check before every actual spawn, including
     /// capability/help preflights and executable-busy retries. The callback runs
     /// outside the custody lock. Cancellation/sealing is checked again under the
@@ -159,6 +209,12 @@ impl ClaudeProcessCustody {
             self.ensure_open()?;
             let admission = {
                 let mut state = self.inner.state.lock().unwrap_or_else(|e| e.into_inner());
+                if state.sealed || state.cancelled {
+                    return Err(crate::ClaudeCodeError::StdoutRead(io::Error::new(
+                        io::ErrorKind::Interrupted,
+                        "process attempt sealed",
+                    )));
+                }
                 // Freeze callback installation before leaving the lock, even when no
                 // callback is configured. A concurrent installer cannot be skipped.
                 state.started = true;
@@ -214,9 +270,12 @@ impl ClaudeProcessCustody {
         // Register actual child ownership before the syscall, without any intervening await.
         state.started = true;
         state.active += 1;
-        let owner = ChildOwner {
+        let mut owner = ChildOwner {
             custody: self.clone(),
             acknowledged: false,
+            process_id: None,
+            status: None,
+            recovery_status: None,
         };
         let child = command
             .spawn()
@@ -226,7 +285,10 @@ impl ClaudeProcessCustody {
             });
         drop(state);
         match child {
-            Ok(child) => Ok((child, owner)),
+            Ok(child) => {
+                owner.process_id = child.id();
+                Ok((child, owner))
+            }
             Err(error) => {
                 owner.finish(0);
                 Err(error)
@@ -309,14 +371,20 @@ impl ClaudeProcessCustody {
         }
         state.started = true;
         state.active += 1;
-        let owner = ChildOwner {
+        let mut owner = ChildOwner {
             custody: self.clone(),
             acknowledged: false,
+            process_id: None,
+            status: None,
+            recovery_status: None,
         };
         let child = crate::process::spawn_with_retry(command, binary);
         drop(state);
         match child {
-            Ok(child) => Ok((child, owner)),
+            Ok(child) => {
+                owner.process_id = child.id();
+                Ok((child, owner))
+            }
             Err(error) => {
                 owner.finish(0);
                 Err(error)
@@ -345,9 +413,22 @@ impl Drop for CancelOnDrop {
 pub(crate) struct ChildOwner {
     custody: ClaudeProcessCustody,
     acknowledged: bool,
+    process_id: Option<u32>,
+    status: Option<ExitStatus>,
+    recovery_status: Option<ExitStatus>,
 }
 impl ChildOwner {
     fn finish(mut self, failures: u8) {
+        self.complete(failures);
+    }
+    fn finish_with_observation(
+        mut self,
+        failures: u8,
+        status: Option<ExitStatus>,
+        recovery_status: Option<ExitStatus>,
+    ) {
+        self.status = status;
+        self.recovery_status = recovery_status;
         self.complete(failures);
     }
     fn complete(&mut self, failures: u8) {
@@ -357,6 +438,11 @@ impl ChildOwner {
             .state
             .lock()
             .unwrap_or_else(|e| e.into_inner());
+        state.terminations.push(ProcessTerminationObservation {
+            process_id: self.process_id,
+            status: self.status,
+            recovery_status: self.recovery_status,
+        });
         state.failures |= failures;
         if failures != 0 {
             // A failed owner cannot authorize fallback probes or other later child effects.
@@ -554,6 +640,7 @@ where
     let mut stdout_outcome = None;
     let mut stderr_outcome = None;
     let mut status = None;
+    let mut recovery_status = None;
     let mut failures = setup_failures;
     let mut stopping = setup_failures != 0;
     if stopping {
@@ -626,7 +713,10 @@ where
                         failures |= WAIT_FAILED; stopping = true; stop.stop();
                         if child.start_kill().is_err() { failures |= KILL_FAILED; }
                         // Keep the original failed wait visible even if this cleanup wait succeeds.
-                        let _cleanup_wait = child.wait().await.map_err(|_| { failures |= WAIT_FAILED; });
+                        match child.wait().await {
+                            Ok(exit) => recovery_status = Some(exit),
+                            Err(_) => failures |= WAIT_FAILED,
+                        }
                         Err(error)
                     }
                 };
@@ -659,7 +749,7 @@ where
     let stdout = stdout_outcome.expect("stdout owner joined");
     let stderr = stderr_outcome.expect("stderr owner joined");
     // All awaitable owners have been checked before releasing this registration or any error.
-    owner.finish(failures);
+    owner.finish_with_observation(failures, status.as_ref().ok().copied(), recovery_status);
     if let Some(tx) = ready {
         let error = match &stdin {
             Err(error) => copy_error(error),

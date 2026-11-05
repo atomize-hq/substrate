@@ -29,7 +29,184 @@ pub struct AgentClient {
     connector: Arc<dyn Connector>,
 }
 
+// Each Host operation owns its own HTTP client and opens its own Unix stream.
+// The generic transport connector remains pooled for all existing APIs.
+#[cfg(target_os = "linux")]
+#[derive(Clone)]
+struct HostGatewayTurnConnectorV1 {
+    socket: std::path::PathBuf,
+}
+
+#[cfg(target_os = "linux")]
+impl tower_service::Service<hyper::Uri> for HostGatewayTurnConnectorV1 {
+    type Response = hyper_util::rt::TokioIo<tokio::net::UnixStream>;
+    type Error = std::io::Error;
+    type Future = std::pin::Pin<
+        Box<dyn std::future::Future<Output = std::io::Result<Self::Response>> + Send>,
+    >;
+
+    fn poll_ready(
+        &mut self,
+        _context: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::task::Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, _uri: hyper::Uri) -> Self::Future {
+        let socket = self.socket.clone();
+        Box::pin(async move {
+            tokio::net::UnixStream::connect(socket)
+                .await
+                .map(hyper_util::rt::TokioIo::new)
+        })
+    }
+}
+
+async fn host_gateway_turn_once(connector: &dyn Connector, bytes: Vec<u8>) -> Result<Bytes> {
+    #[cfg(target_os = "linux")]
+    {
+        // AgentClient constructors bind transport metadata and this private
+        // connector to the same socket. Only tests can inject a fixture pair.
+        if connector.mode() != TransportMode::Unix {
+            return Err(anyhow!("host_gateway_turn_unsupported_configuration"));
+        }
+        let socket = connector
+            .endpoint()
+            .ok_or_else(|| anyhow!("host_gateway_turn_unsupported_configuration"))?;
+        let mut builder =
+            hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new());
+        builder
+            .pool_max_idle_per_host(0)
+            .retry_canceled_requests(false);
+        let client = builder.build(HostGatewayTurnConnectorV1 {
+            socket: socket.into(),
+        });
+        let http_request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/v1/gateway/host-turn")
+            .header("content-type", "application/json")
+            .body(Full::new(Bytes::from(bytes)))
+            .map_err(|_| anyhow!("host_gateway_turn_invalid_request"))?;
+        let response = client
+            .request(http_request)
+            .await
+            .map_err(|_| anyhow!("host_gateway_turn_transport_failed"))?;
+        if response.status() == StatusCode::NOT_FOUND {
+            return Err(anyhow!("host_gateway_turn_unsupported_configuration"));
+        }
+        if !response.status().is_success() {
+            return Err(anyhow!("host_gateway_turn_rejected"));
+        }
+        // Keep this dedicated client alive until the bounded reply is drained.
+        http_body_util::Limited::new(response.into_body(), 64 * 1024)
+            .collect()
+            .await
+            .map(|body| body.to_bytes())
+            .map_err(|_| anyhow!("host_gateway_turn_invalid_response"))
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (connector, bytes);
+        Err(anyhow!("host_gateway_turn_unsupported_configuration"))
+    }
+}
+
 impl AgentClient {
+    /// Observe one exact existing destination over the authenticated native UDS.
+    /// No execution or later-use authority is returned.
+    ///
+    /// ```no_run
+    /// # async fn observe(client:&transport_api_client::AgentClient, request:&transport_api_types::WorkspaceCurrentRequestV1)->anyhow::Result<()> {
+    /// let observation=client.workspace_preflight_v1(request).await?;
+    /// # let _=observation; Ok(()) }
+    /// ```
+    #[cfg(target_os = "linux")]
+    pub async fn workspace_preflight_v1(
+        &self,
+        request: &transport_api_types::WorkspaceCurrentRequestV1,
+    ) -> Result<transport_api_types::WorkspacePreflightResponseV1> {
+        request.validate().map_err(anyhow::Error::msg)?;
+        anyhow::ensure!(
+            matches!(
+                request.operation,
+                transport_api_types::WorkspaceCurrentOperationV1::CurrentActorRead { .. }
+            ),
+            "Denied"
+        );
+        let Transport::UnixSocket { path } = &self.transport else {
+            anyhow::bail!("Unsupported");
+        };
+        let bytes = transport::workspace_owner_on_authenticated_uds_v1(
+            path,
+            serde_json::to_vec(request)?,
+            "/v1/workspace/preflight",
+        )
+        .await?;
+        let response: transport_api_types::WorkspacePreflightResponseV1 =
+            serde_json::from_slice(&bytes)?;
+        if let transport_api_types::WorkspacePreflightResponseV1::EligibleObservation(value) =
+            &response
+        {
+            let transport_api_types::WorkspaceCurrentOperationV1::CurrentActorRead {
+                lane_ref,
+                association_incarnation,
+                association_revision,
+                expected_actor,
+                ..
+            } = &request.operation
+            else {
+                anyhow::bail!("WrongBinding");
+            };
+            anyhow::ensure!(
+                value.workspace_ref == request.resource.workspace_ref
+                    && value.workspace_incarnation == request.resource.workspace_incarnation
+                    && &value.lane_ref == lane_ref
+                    && &value.actor_id == expected_actor
+                    && value.world_id == request.resource.world_id
+                    && value.world_generation == request.resource.world_generation
+                    && value.backend_id == request.resource.backend_id
+                    && &value.revisions.association_incarnation == association_incarnation
+                    && &value.revisions.association_revision == association_revision
+                    && value.revisions.authority_store_id == request.observation.authority_store_id
+                    && value.revisions.root_revision == request.observation.root_revision
+                    && value.revisions.authority_revision == request.observation.authority_revision,
+                "WrongBinding"
+            );
+        }
+        Ok(response)
+    }
+
+    /// Publish only the exact source-owner association selected by an authorized request.
+    ///
+    /// ```no_run
+    /// # async fn publish(client:&transport_api_client::AgentClient, update:&transport_api_types::WorkspaceAssociationUpdateV1)->anyhow::Result<()> {
+    /// let result=client.workspace_association_update_v1(update).await?;
+    /// # let _=result; Ok(()) }
+    /// ```
+    #[cfg(target_os = "linux")]
+    pub async fn workspace_association_update_v1(
+        &self,
+        request: &transport_api_types::WorkspaceAssociationUpdateV1,
+    ) -> Result<transport_api_types::WorkspaceAssociationUpdateResponseV1> {
+        request.current.validate().map_err(anyhow::Error::msg)?;
+        anyhow::ensure!(
+            matches!(
+                request.current.operation,
+                transport_api_types::WorkspaceCurrentOperationV1::PublishAssociation
+            ),
+            "Denied"
+        );
+        let Transport::UnixSocket { path } = &self.transport else {
+            anyhow::bail!("Unsupported");
+        };
+        let bytes = transport::workspace_owner_on_authenticated_uds_v1(
+            path,
+            serde_json::to_vec(request)?,
+            "/v1/workspace/association",
+        )
+        .await?;
+        Ok(serde_json::from_slice(&bytes)?)
+    }
     /// Prepare one E3 gateway attempt on the authenticated inherited Linux socket.
     pub async fn e3_config_projection_prepare(
         &self,
@@ -200,6 +377,7 @@ impl AgentClient {
     }
 
     /// Execute a command and stream incremental output frames.
+    /// Ordinary initial member input uses its separately authenticated route.
     pub async fn execute_stream(
         &self,
         request: ExecuteRequest,
@@ -222,6 +400,74 @@ impl AgentClient {
             .to_bytes();
 
         Err(Self::map_http_error(status, &body_bytes))
+    }
+
+    /// Initial ordinary input over the official Root-owned service connection.
+    /// The carrying socket's ownership, peer PID/start identity and path are
+    /// checked by the existing connector. There is no pooling, retry or fallback.
+    /// The dedicated client remains alive until the returned body is dropped.
+    /// ```no_run
+    /// # async fn start(request: transport_api_types::ExecuteRequest) -> anyhow::Result<()> {
+    /// let client = transport_api_client::AgentClient::unix_socket("/run/substrate.sock")?;
+    /// let stream = client.execute_ordinary_member_stream(request).await?;
+    /// # let _ = stream; Ok(()) }
+    /// ```
+    pub async fn execute_ordinary_member_stream(
+        &self,
+        request: ExecuteRequest,
+    ) -> Result<Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>>> {
+        if !cfg!(target_os = "linux")
+            || !matches!(&self.transport,
+            Transport::UnixSocket { path } if path == Path::new("/run/substrate.sock"))
+        {
+            return Err(anyhow!(
+                "ordinary_initial_execute_unsupported_configuration"
+            ));
+        }
+        request
+            .validate()
+            .map_err(|_| anyhow!("ordinary_initial_execute_invalid_request"))?;
+        if request.schema_version != 2
+            || request.ordinary_start_selection.is_none()
+            || request.member_dispatch.is_none()
+        {
+            return Err(anyhow!("ordinary_initial_execute_invalid_request"));
+        }
+        #[cfg(target_os = "linux")]
+        {
+            let bytes = serde_json::to_vec(&request)
+                .map_err(|_| anyhow!("ordinary_initial_execute_invalid_request"))?;
+            let mut builder =
+                hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new());
+            builder
+                .pool_max_idle_per_host(0)
+                .retry_canceled_requests(false);
+            let client = builder.build(HostGatewayInstanceConnectorV3);
+            let request = Request::builder()
+                .method(Method::POST)
+                .uri("http://localhost/v1/ordinary/member/execute/stream")
+                .header("content-type", "application/json")
+                .body(Full::new(Bytes::from(bytes)))
+                .map_err(|_| anyhow!("ordinary_initial_execute_invalid_request"))?;
+            let response = client
+                .request(request)
+                .await
+                .map_err(|_| anyhow!("ordinary_initial_execute_transport_unknown"))?;
+            if !response.status().is_success() {
+                return Err(anyhow!("ordinary_initial_execute_refused_or_unknown"));
+            }
+            Ok(response.map(|body| {
+                body.map_frame(move |frame| {
+                    let _keep_client = &client;
+                    frame
+                })
+                .boxed_unsync()
+            }))
+        }
+        #[cfg(not(target_os = "linux"))]
+        Err(anyhow!(
+            "ordinary_initial_execute_unsupported_configuration"
+        ))
     }
 
     /// Replay one accepted execution from the exact durable host cursor and continue live frames.
@@ -267,6 +513,39 @@ impl AgentClient {
     ) -> Result<Response<hyper::body::Incoming>> {
         let response = self
             .post("/v1/member_turn/stream", &request)
+            .await
+            .context("Failed to initiate member turn submit stream")?;
+
+        if response.status().is_success() {
+            return Ok(response);
+        }
+
+        let status = response.status();
+        let body_bytes = response
+            .into_body()
+            .collect()
+            .await
+            .context("Failed to read error body")?
+            .to_bytes();
+
+        Err(Self::map_http_error(status, &body_bytes))
+    }
+
+    /// Submit an ordinary retained turn. The receiver independently authenticates the exact DTO.
+    ///
+    /// ```no_run
+    /// # async fn submit(client: &transport_api_client::AgentClient,
+    /// # request: transport_api_types::OrdinaryMemberTurnSubmitRequestV1) -> anyhow::Result<()> {
+    /// let _response = client.submit_ordinary_member_turn_stream(request).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn submit_ordinary_member_turn_stream(
+        &self,
+        request: transport_api_types::OrdinaryMemberTurnSubmitRequestV1,
+    ) -> Result<Response<hyper::body::Incoming>> {
+        let response = self
+            .post("/v1/ordinary/member_turn/stream", &request)
             .await
             .context("Failed to initiate member turn submit stream")?;
 
@@ -378,6 +657,46 @@ impl AgentClient {
             .context("Failed to sync gateway lifecycle")?;
 
         self.parse_response(response).await
+    }
+
+    /// Send one closed Host turn operation on the installed Linux UDS only.
+    /// No retry or alternate transport is attempted. Transport/decode errors and
+    /// Unknown never acknowledge cleanup; retain the same acquisition key/secret.
+    /// Server availability and independently held authority remain prerequisites.
+    ///
+    /// ```no_run
+    /// use transport_api_client::AgentClient;
+    /// use transport_api_types::{HostGatewayTurnRequestV1, HostGatewayTurnResponseV1};
+    /// # async fn example(request: HostGatewayTurnRequestV1) -> anyhow::Result<HostGatewayTurnResponseV1> {
+    /// let client = AgentClient::unix_socket("/run/substrate.sock")?;
+    /// client.gateway_host_turn(request).await
+    /// # }
+    /// ```
+    pub async fn gateway_host_turn(
+        &self,
+        request: transport_api_types::HostGatewayTurnRequestV1,
+    ) -> Result<transport_api_types::HostGatewayTurnResponseV1> {
+        if !cfg!(target_os = "linux")
+            || !matches!(&self.transport, Transport::UnixSocket { path } if path == Path::new("/run/substrate.sock"))
+        {
+            return Err(anyhow!("host_gateway_turn_unsupported_configuration"));
+        }
+        request
+            .validate()
+            .map_err(|_| anyhow!("host_gateway_turn_invalid_request"))?;
+        let bytes = serde_json::to_vec(&request)
+            .map_err(|_| anyhow!("host_gateway_turn_invalid_request"))?;
+        if bytes.len() > 64 * 1024 {
+            return Err(anyhow!("host_gateway_turn_invalid_request"));
+        }
+        let bytes = host_gateway_turn_once(self.connector.as_ref(), bytes).await?;
+        let response: transport_api_types::HostGatewayTurnResponseV1 =
+            serde_json::from_slice(&bytes)
+                .map_err(|_| anyhow!("host_gateway_turn_invalid_response"))?;
+        response
+            .validate_for_request(&request)
+            .map_err(|_| anyhow!("host_gateway_turn_wrong_binding"))?;
+        Ok(response)
     }
 
     /// Restart the gateway lifecycle path (`POST /v1/gateway/restart`).
@@ -501,9 +820,117 @@ impl AgentClient {
     }
 }
 
+#[cfg(target_os = "linux")]
+impl AgentClient {
+    /// Perform exactly one native-owner operation on its authenticated request connection.
+    /// This never uses generic retries, TCP, readiness or execute fallback.
+    ///
+    /// ```no_run
+    /// # async fn read(client: &transport_api_client::AgentClient, request: &transport_api_types::WorkspaceCurrentRequestV1) -> anyhow::Result<()> {
+    /// let response = client.workspace_current_v1(request).await?;
+    /// # let _ = response;
+    /// # Ok(()) }
+    /// ```
+    pub async fn workspace_current_v1(
+        &self,
+        request: &transport_api_types::WorkspaceCurrentRequestV1,
+    ) -> Result<transport_api_types::WorkspaceCurrentResponseV1> {
+        request.validate().map_err(anyhow::Error::msg)?;
+        let Transport::UnixSocket { path } = &self.transport else {
+            return Err(anyhow!("Unsupported"));
+        };
+        let bytes = serde_json::to_vec(request)?;
+        if bytes.len() > 32768 {
+            return Err(anyhow!("Malformed"));
+        }
+        let response = transport::workspace_current_on_authenticated_uds_v1(path, bytes).await?;
+        let response: transport_api_types::WorkspaceCurrentResponseV1 =
+            serde_json::from_slice(&response)?;
+        if let transport_api_types::WorkspaceCurrentResponseV1::CurrentActor(current) = &response {
+            let transport_api_types::WorkspaceCurrentActorV1 {
+                workspace_ref,
+                workspace_incarnation,
+                orchestration_session_id,
+                world_id,
+                world_generation,
+                backend_id,
+                authority_store_id,
+                root_revision,
+                authority_revision,
+                authority_record_sha256,
+                authoritative_lineage_sha256,
+                lane_ref,
+                association_incarnation,
+                association_revision,
+                backend_custody_ref,
+                actor_id,
+            } = current.as_ref();
+            let transport_api_types::WorkspaceCurrentOperationV1::CurrentActorRead {
+                lane_ref: lane,
+                association_incarnation: incarnation,
+                association_revision: revision,
+                backend_custody_ref: custody,
+                expected_actor,
+            } = &request.operation
+            else {
+                return Err(anyhow!("WrongBinding"));
+            };
+            let r = &request.resource;
+            let o = &request.observation;
+            if workspace_ref != &r.workspace_ref
+                || workspace_incarnation != &r.workspace_incarnation
+                || orchestration_session_id != &r.orchestration_session_id
+                || world_id != &r.world_id
+                || world_generation != &r.world_generation
+                || backend_id != &r.backend_id
+                || authority_store_id != &o.authority_store_id
+                || root_revision != &o.root_revision
+                || authority_revision != &o.authority_revision
+                || authority_record_sha256 != &o.authority_record_sha256
+                || authoritative_lineage_sha256 != &o.authoritative_lineage_sha256
+                || lane_ref != lane
+                || association_incarnation != incarnation
+                || association_revision != revision
+                || backend_custody_ref != custody
+                || actor_id != expected_actor
+            {
+                return Err(anyhow!("WrongBinding"));
+            }
+        }
+        Ok(response)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn test_ordinary_initial_stream_client_refuses_other_transports_before_connect() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("unqualified.sock");
+        let listener = std::os::unix::net::UnixListener::bind(&path).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        for client in [
+            AgentClient::unix_socket(&path).unwrap(),
+            AgentClient::tcp("127.0.0.1", 9).unwrap(),
+        ] {
+            assert_eq!(
+                client
+                    .execute_ordinary_member_stream(e3a_passthrough_request())
+                    .await
+                    .err()
+                    .unwrap()
+                    .to_string(),
+                "ordinary_initial_execute_unsupported_configuration"
+            );
+        }
+        assert_eq!(
+            listener.accept().err().unwrap().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+    }
 
     fn e3a_passthrough_request() -> transport_api_types::ExecuteRequest {
         use transport_api_types::{
@@ -547,6 +974,8 @@ mod tests {
             exact_linkage_hash: "a".repeat(64),
         };
         transport_api_types::ExecuteRequest {
+            schema_version: 1,
+            ordinary_start_selection: None,
             profile: None,
             cmd: String::new(),
             cwd: Some("/workspace".to_string()),
@@ -984,5 +1413,1036 @@ mod tests {
             .await
             .expect_err("inexact replay identity must fail before transport");
         assert!(error.to_string().contains("acceptance_record_id"));
+    }
+
+    /// Synthetic wire capture only: the server does not authenticate or execute.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn ordinary_selected_execute_stream_preserves_strict_request_body() {
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+
+        let directory = tempfile::tempdir().expect("capture socket directory");
+        let socket = directory.path().join("capture.sock");
+        let listener = tokio::net::UnixListener::bind(&socket).expect("bind capture socket");
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.expect("accept selected request");
+            let mut bytes = Vec::new();
+            let header_end = loop {
+                let mut chunk = [0u8; 4096];
+                let count = stream.read(&mut chunk).await.expect("read request headers");
+                assert!(count > 0, "client closed before headers");
+                bytes.extend_from_slice(&chunk[..count]);
+                assert!(
+                    bytes.len() <= 65536,
+                    "capture request exceeds fixture bound"
+                );
+                if let Some(index) = bytes.windows(4).position(|window| window == b"\r\n\r\n") {
+                    break index + 4;
+                }
+            };
+            let headers = std::str::from_utf8(&bytes[..header_end]).expect("UTF-8 headers");
+            assert!(headers.starts_with("POST /v1/execute/stream HTTP/1.1\r\n"));
+            let content_length = headers
+                .lines()
+                .find_map(|line| {
+                    line.to_ascii_lowercase()
+                        .strip_prefix("content-length: ")
+                        .and_then(|value| value.parse::<usize>().ok())
+                })
+                .expect("content length");
+            assert!(
+                header_end + content_length <= 65536,
+                "capture body exceeds fixture bound"
+            );
+            while bytes.len() - header_end < content_length {
+                let mut chunk = [0u8; 4096];
+                let count = stream.read(&mut chunk).await.expect("read selected body");
+                assert!(count > 0, "client closed before body");
+                bytes.extend_from_slice(&chunk[..count]);
+            }
+            let body = bytes[header_end..header_end + content_length].to_vec();
+            let decoded: transport_api_types::ExecuteRequest =
+                serde_json::from_slice(&body).expect("strict server-side selected request decode");
+            decoded
+                .validate()
+                .expect("validate captured selected request");
+            assert_eq!(decoded.schema_version, 2);
+            assert!(decoded.ordinary_start_selection.is_some());
+            assert!(decoded.member_dispatch.as_ref().unwrap().as_v1().is_some());
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
+                .await
+                .expect("write capture-only response");
+            body
+        });
+
+        let request: transport_api_types::ExecuteRequest =
+            serde_json::from_value(serde_json::json!({
+                "schema_version": 2,
+                "ordinary_start_selection": {
+                    "schema_version": 1,
+                    "authority_store_id": "store_original",
+                    "original_start_intent_id": "intent_original",
+                    "original_start_issuer_request_id": format!("req_{}", "a".repeat(64)),
+                    "original_session_id": "session_original",
+                    "context_sha256": "b".repeat(64),
+                    "native_selection_sha256": "c".repeat(64),
+                    "requested_selection_sha256": "d".repeat(64)
+                },
+                "profile": null,
+                "cmd": "",
+                "cwd": "/project",
+                "env": null,
+                "pty": false,
+                "agent_id": "host_actor",
+                "budget": null,
+                "policy_snapshot": {
+                    "schema_version": 3,
+                    "net_allowed": [],
+                    "world_fs": {
+                        "host_visible": true,
+                        "fail_closed": { "routing": false },
+                        "caged_required": false,
+                        "write": { "enabled": true, "allow_list": ["."], "deny_list": [] }
+                    }
+                },
+                "member_dispatch": {
+                    "schema_version": 1,
+                    "orchestration_session_id": "session_original",
+                    "participant_id": "world_worker",
+                    "orchestrator_participant_id": "host_actor",
+                    "backend_id": "cli:worker-world",
+                    "protocol": "substrate.agent.session",
+                    "run_id": "run_original",
+                    "world_id": "world_original",
+                    "world_generation": 7,
+                    "initial_prompt": "hello",
+                    "resolved_runtime": { "backend_kind": "codex", "binary_path": "/usr/bin/codex" }
+                }
+            }))
+            .expect("synthetic selected request fixture");
+        let expected = serde_json::to_vec(&request).expect("expected complete request bytes");
+        let client = AgentClient::unix_socket(&socket).expect("real Unix-socket AgentClient");
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            client.execute_stream(request),
+        )
+        .await
+        .expect("client capture timeout")
+        .expect("capture-only response");
+        let captured = tokio::time::timeout(std::time::Duration::from_secs(5), server)
+            .await
+            .expect("server capture timeout")
+            .expect("capture server task");
+        assert_eq!(
+            captured, expected,
+            "AgentClient must preserve the complete selected request bytes"
+        );
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod host_gateway_turn_client_tests {
+    use super::*;
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+    use transport_api_types::{
+        HostGatewayTurnOperationV1, HostGatewayTurnRequestV1, HostGatewayTurnResultV1,
+    };
+
+    fn release() -> HostGatewayTurnRequestV1 {
+        let token = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        HostGatewayTurnRequestV1 {
+            schema_version: 1,
+            operation: HostGatewayTurnOperationV1::Release {
+                acquire_id: HostGatewayTurnRequestV1::acquire_id_from_cleanup_token(token).unwrap(),
+                lease_handle: None,
+                cleanup_token: token.into(),
+            },
+        }
+    }
+
+    // Only the test connector uses a fixture socket. This does not establish
+    // inherited-listener, service authentication, authority or cleanup proof.
+    async fn exchange(
+        status: &str,
+        body: &str,
+        request: HostGatewayTurnRequestV1,
+    ) -> Result<transport_api_types::HostGatewayTurnResponseV1> {
+        let directory = tempfile::tempdir().unwrap();
+        let socket = directory.path().join("host-turn.sock");
+        let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+        let status = status.to_owned();
+        let body = body.to_owned();
+        let expected = serde_json::to_vec(&request).unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut bytes = Vec::new();
+            let (header_end, content_length) = loop {
+                let mut chunk = [0u8; 4096];
+                let count = stream.read(&mut chunk).await.unwrap();
+                assert!(count > 0);
+                bytes.extend_from_slice(&chunk[..count]);
+                assert!(bytes.len() <= 65536);
+                if let Some(end) = bytes.windows(4).position(|w| w == b"\r\n\r\n") {
+                    let end = end + 4;
+                    let headers = std::str::from_utf8(&bytes[..end]).unwrap();
+                    assert!(headers.starts_with("POST /v1/gateway/host-turn HTTP/1.1\r\n"));
+                    let length = headers
+                        .lines()
+                        .find_map(|line| {
+                            line.to_ascii_lowercase()
+                                .strip_prefix("content-length: ")
+                                .and_then(|value| value.parse::<usize>().ok())
+                        })
+                        .unwrap();
+                    break (end, length);
+                }
+            };
+            while bytes.len() < header_end + content_length {
+                let mut chunk = [0u8; 4096];
+                let count = stream.read(&mut chunk).await.unwrap();
+                assert!(count > 0);
+                bytes.extend_from_slice(&chunk[..count]);
+                assert!(bytes.len() <= 65536);
+            }
+            assert_eq!(&bytes[header_end..header_end + content_length], expected);
+            let decoded: HostGatewayTurnRequestV1 = serde_json::from_slice(&expected).unwrap();
+            assert!(matches!(
+                decoded.operation,
+                HostGatewayTurnOperationV1::Release {
+                    lease_handle: None,
+                    ..
+                }
+            ));
+            stream.write_all(format!("HTTP/1.1 {status}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+        });
+        let fixture_transport = Transport::UnixSocket { path: socket };
+        let client = AgentClient {
+            transport: Transport::UnixSocket {
+                path: "/run/substrate.sock".into(),
+            },
+            connector: Arc::from(build_connector(&fixture_transport).unwrap()),
+        };
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            client.gateway_host_turn(request),
+        )
+        .await
+        .expect("bounded client exchange");
+        tokio::time::timeout(std::time::Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap();
+        result
+    }
+
+    #[tokio::test]
+    async fn test_host_gateway_turn_client_release_unknown_and_safe_errors() {
+        let id = HostGatewayTurnRequestV1::acquire_id_from_cleanup_token(
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        )
+        .unwrap();
+        for kind in ["released", "unknown"] {
+            let body = serde_json::json!({"schema_version": 1, "result": {"kind": kind, "acquire_id": id}}).to_string();
+            let response = exchange("200 OK", &body, release()).await.unwrap();
+            assert!(
+                matches!(response.result, HostGatewayTurnResultV1::Released { .. })
+                    == (kind == "released")
+            );
+            assert!(
+                matches!(response.result, HostGatewayTurnResultV1::Unknown { .. })
+                    == (kind == "unknown")
+            );
+        }
+        let error = exchange("403 Forbidden", "reflected-secret-and-ticket", release())
+            .await
+            .err()
+            .unwrap();
+        assert_eq!(format!("{error:#}"), "host_gateway_turn_rejected");
+        let error = exchange("404 Not Found", "reflected-secret-and-ticket", release())
+            .await
+            .err()
+            .unwrap();
+        assert_eq!(
+            format!("{error:#}"),
+            "host_gateway_turn_unsupported_configuration"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_host_gateway_turn_client_strict_response_ingress() {
+        let id = HostGatewayTurnRequestV1::acquire_id_from_cleanup_token(
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        )
+        .unwrap();
+        let valid =
+            format!(r#"{{"schema_version":1,"result":{{"kind":"released","acquire_id":"{id}"}}}}"#);
+        let duplicate = valid.replace(
+            "\"schema_version\":1",
+            "\"schema_version\":1,\"schema_version\":1",
+        );
+        let wrong_id = valid.replace(&id, &format!("hgt_{}", "f".repeat(64)));
+        let wrong_kind = valid.replace("released", "revalidated");
+        for body in [
+            duplicate,
+            wrong_id,
+            wrong_kind,
+            valid.replace("\"schema_version\":1", "\"schema_version\":2"),
+            valid.replace(
+                "\"kind\":\"released\"",
+                "\"kind\":\"released\",\"principal\":0",
+            ),
+            "x".repeat(65537),
+        ] {
+            let error = exchange("200 OK", &body, release()).await.err().unwrap();
+            assert!(matches!(
+                error.to_string().as_str(),
+                "host_gateway_turn_invalid_response" | "host_gateway_turn_wrong_binding"
+            ));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_host_gateway_turn_client_rejects_other_transports_before_send() {
+        let directory = tempfile::tempdir().unwrap();
+        let socket = directory.path().join("unused.sock");
+        let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+        for client in [
+            AgentClient::unix_socket(&socket).unwrap(),
+            AgentClient::tcp("127.0.0.1", 9).unwrap(),
+        ] {
+            let error = client.gateway_host_turn(release()).await.err().unwrap();
+            assert_eq!(
+                error.to_string(),
+                "host_gateway_turn_unsupported_configuration"
+            );
+        }
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(20), listener.accept())
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_host_gateway_turn_client_uses_fresh_keep_alive_connections() {
+        use std::collections::HashSet;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let directory = tempfile::tempdir().unwrap();
+        let socket = directory.path().join("keep-alive.sock");
+        let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+        let (observed, mut observations) = tokio::sync::mpsc::unbounded_channel();
+        let (shutdown, mut stop) = tokio::sync::oneshot::channel::<()>();
+        let accepted = Arc::new(AtomicUsize::new(0));
+        let server = tokio::spawn(async move {
+            let mut connections = tokio::task::JoinSet::new();
+            loop {
+                tokio::select! {
+                    _ = &mut stop => break,
+                    incoming = listener.accept() => {
+                        let (mut stream, _) = incoming.unwrap();
+                        let connection = accepted.fetch_add(1, Ordering::SeqCst);
+                        let observed = observed.clone();
+                        connections.spawn(async move {
+                            let mut pending = Vec::new();
+                            loop {
+                                let (header_end, length) = loop {
+                                    if let Some(end) = pending.windows(4).position(|w| w == b"\r\n\r\n") {
+                                        let end = end + 4;
+                                        let headers = std::str::from_utf8(&pending[..end]).unwrap();
+                                        assert!(headers.starts_with("POST /v1/gateway/host-turn HTTP/1.1\r\n"));
+                                        let length = headers.lines().find_map(|line| line.to_ascii_lowercase().strip_prefix("content-length: ").and_then(|value| value.parse::<usize>().ok())).unwrap();
+                                        break (end, length);
+                                    }
+                                    let mut chunk = [0u8; 4096];
+                                    let count = stream.read(&mut chunk).await.unwrap();
+                                    if count == 0 { return; }
+                                    pending.extend_from_slice(&chunk[..count]);
+                                    assert!(pending.len() <= 65536);
+                                };
+                                while pending.len() < header_end + length {
+                                    let mut chunk = [0u8; 4096];
+                                    let count = stream.read(&mut chunk).await.unwrap();
+                                    assert!(count > 0);
+                                    pending.extend_from_slice(&chunk[..count]);
+                                    assert!(pending.len() <= 65536);
+                                }
+                                let body: serde_json::Value = serde_json::from_slice(&pending[header_end..header_end + length]).unwrap();
+                                let decoded: HostGatewayTurnRequestV1 = serde_json::from_slice(&pending[header_end..header_end + length]).unwrap();
+                                decoded.validate().unwrap();
+                                pending.drain(..header_end + length);
+                                let reply = serde_json::json!({"schema_version": 1, "result": {
+                                    "kind": "unknown", "acquire_id": body["operation"]["acquire_id"]
+                                }}).to_string();
+                                observed.send((connection, body["operation"]["kind"].as_str().unwrap().to_owned())).unwrap();
+                                // Deliberately keep the connection reusable. The old
+                                // connector must not be rescued by a close response.
+                                stream.write_all(format!("HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: keep-alive\r\n\r\n{reply}", reply.len()).as_bytes()).await.unwrap();
+                            }
+                        });
+                    }
+                }
+            }
+            connections.abort_all();
+            while connections.join_next().await.is_some() {}
+        });
+        let fixture_transport = Transport::UnixSocket { path: socket };
+        let client = AgentClient {
+            transport: Transport::UnixSocket {
+                path: "/run/substrate.sock".into(),
+            },
+            connector: Arc::from(build_connector(&fixture_transport).unwrap()),
+        };
+        let release = release();
+        let id = match &release.operation {
+            HostGatewayTurnOperationV1::Release { acquire_id, .. } => acquire_id.clone(),
+            _ => unreachable!(),
+        };
+        let revalidate = HostGatewayTurnRequestV1 {
+            schema_version: 1,
+            operation: HostGatewayTurnOperationV1::Revalidate {
+                acquire_id: id,
+                lease_handle: format!("hgl_{}_{}", "1".repeat(32), "2".repeat(32)),
+            },
+        };
+        let mut seen = Vec::new();
+        for request in [revalidate.clone(), release, revalidate] {
+            let response = tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                client.gateway_host_turn(request),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            assert!(matches!(
+                response.result,
+                HostGatewayTurnResultV1::Unknown { .. }
+            ));
+            seen.push(
+                tokio::time::timeout(std::time::Duration::from_secs(5), observations.recv())
+                    .await
+                    .unwrap()
+                    .unwrap(),
+            );
+            tokio::task::yield_now().await;
+        }
+        let _ = shutdown.send(());
+        tokio::time::timeout(std::time::Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            seen.iter()
+                .map(|(_, kind)| kind.as_str())
+                .collect::<Vec<_>>(),
+            ["revalidate", "release", "revalidate"]
+        );
+        assert_eq!(
+            seen.iter()
+                .map(|(connection, _)| *connection)
+                .collect::<HashSet<_>>()
+                .len(),
+            3,
+            "every Host operation needs a new Unix accept/peer authentication boundary"
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone)]
+struct HostGatewayInstanceConnectorV3;
+#[cfg(target_os = "linux")]
+impl tower_service::Service<hyper::Uri> for HostGatewayInstanceConnectorV3 {
+    type Response = hyper_util::rt::TokioIo<tokio::net::UnixStream>;
+    type Error = std::io::Error;
+    type Future = std::pin::Pin<
+        Box<dyn std::future::Future<Output = std::io::Result<Self::Response>> + Send>,
+    >;
+    fn poll_ready(
+        &mut self,
+        _: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::task::Poll::Ready(Ok(()))
+    }
+    fn call(&mut self, _: hyper::Uri) -> Self::Future {
+        Box::pin(async {
+            connect_host_gateway_instance_v3()
+                .await
+                .map(hyper_util::rt::TokioIo::new)
+        })
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn host_gateway_substrate_gid_v3() -> std::io::Result<u32> {
+    let refuse = || {
+        std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "Host service group unavailable",
+        )
+    };
+    let mut size = 1024usize;
+    loop {
+        let mut bytes = vec![0u8; size];
+        let mut group = std::mem::MaybeUninit::<libc::group>::uninit();
+        let mut result = std::ptr::null_mut();
+        let status = unsafe {
+            libc::getgrnam_r(
+                c"substrate".as_ptr(),
+                group.as_mut_ptr(),
+                bytes.as_mut_ptr().cast(),
+                bytes.len(),
+                &mut result,
+            )
+        };
+        if status == libc::ERANGE && size < 65_536 {
+            size = (size * 2).min(65_536);
+            continue;
+        }
+        if status != 0 || result.is_null() || result != group.as_mut_ptr() {
+            return Err(refuse());
+        }
+        let gid = unsafe { group.assume_init() }.gr_gid;
+        if gid == 0 {
+            return Err(refuse());
+        }
+        return Ok(gid);
+    }
+}
+
+#[cfg(target_os = "linux")]
+async fn connect_host_gateway_instance_v3() -> std::io::Result<tokio::net::UnixStream> {
+    use std::os::unix::fs::{FileTypeExt, MetadataExt};
+    let refuse = || {
+        std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "Host service endpoint unauthenticated",
+        )
+    };
+    let gid = host_gateway_substrate_gid_v3()?;
+    let directory = std::fs::symlink_metadata("/run")?;
+    if !directory.is_dir() || directory.uid() != 0 || directory.mode() & 0o022 != 0 {
+        return Err(refuse());
+    }
+    let before = std::fs::symlink_metadata("/run/substrate.sock")?;
+    if !before.file_type().is_socket()
+        || before.uid() != 0
+        || before.gid() != gid
+        || before.mode() & 0o7777 != 0o660
+    {
+        return Err(refuse());
+    }
+    let stream = tokio::net::UnixStream::connect("/run/substrate.sock").await?;
+    if stream.peer_cred()?.uid() != 0 {
+        return Err(refuse());
+    }
+    let after = std::fs::symlink_metadata("/run/substrate.sock")?;
+    let parent = std::fs::symlink_metadata("/run")?;
+    if after.dev() != before.dev()
+        || after.ino() != before.ino()
+        || after.uid() != before.uid()
+        || after.gid() != before.gid()
+        || after.mode() != before.mode()
+        || !after.file_type().is_socket()
+        || parent.dev() != directory.dev()
+        || parent.ino() != directory.ino()
+        || parent.uid() != directory.uid()
+        || parent.mode() != directory.mode()
+    {
+        return Err(refuse());
+    }
+    Ok(stream)
+}
+
+impl AgentClient {
+    /// Use the strict instance-bound Host API over a fresh, authenticated root
+    /// service connection. Observation grants no execution admission. Keep the
+    /// original epoch/key after any uncertainty; never reobserve to redeliver.
+    ///
+    /// ```no_run
+    /// # async fn example() -> anyhow::Result<()> {
+    /// let client = transport_api_client::AgentClient::unix_socket("/run/substrate.sock")?;
+    /// let request = transport_api_types::HostGatewayInstanceRequestV3 {
+    ///     schema_version: 3,
+    ///     operation: transport_api_types::HostGatewayInstanceOperationV3::Observe {},
+    /// };
+    /// let _ = client.gateway_host_instance(request).await?;
+    /// # Ok(()) }
+    /// ```
+    pub async fn gateway_host_instance(
+        &self,
+        request: transport_api_types::HostGatewayInstanceRequestV3,
+    ) -> Result<transport_api_types::HostGatewayInstanceResponseV3> {
+        if !cfg!(target_os = "linux")
+            || !matches!(&self.transport, Transport::UnixSocket { path } if path == Path::new("/run/substrate.sock"))
+        {
+            return Err(anyhow!("host_gateway_instance_unsupported_configuration"));
+        }
+        request
+            .validate()
+            .map_err(|_| anyhow!("host_gateway_instance_invalid_request"))?;
+        #[cfg(target_os = "linux")]
+        {
+            let bytes = serde_json::to_vec(&request)
+                .map_err(|_| anyhow!("host_gateway_instance_invalid_request"))?;
+            if bytes.len() > 64 * 1024 {
+                return Err(anyhow!("host_gateway_instance_invalid_request"));
+            }
+            let mut builder =
+                hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new());
+            builder
+                .pool_max_idle_per_host(0)
+                .retry_canceled_requests(false);
+            let client = builder.build(HostGatewayInstanceConnectorV3);
+            let http_request = Request::builder()
+                .method(Method::POST)
+                .uri("http://localhost/v1/gateway/host-turn")
+                .header("content-type", "application/json")
+                .body(Full::new(Bytes::from(bytes)))
+                .map_err(|_| anyhow!("host_gateway_instance_invalid_request"))?;
+            let response = client
+                .request(http_request)
+                .await
+                .map_err(|_| anyhow!("host_gateway_instance_transport_failed"))?;
+            if response.status() == StatusCode::NOT_FOUND {
+                return Err(anyhow!("host_gateway_instance_unsupported_configuration"));
+            }
+            if !response.status().is_success() {
+                return Err(anyhow!("host_gateway_instance_refused_or_unknown"));
+            }
+            let bytes = http_body_util::Limited::new(response.into_body(), 64 * 1024)
+                .collect()
+                .await
+                .map_err(|_| anyhow!("host_gateway_instance_invalid_response"))?
+                .to_bytes();
+            let response: transport_api_types::HostGatewayInstanceResponseV3 =
+                serde_json::from_slice(&bytes)
+                    .map_err(|_| anyhow!("host_gateway_instance_invalid_response"))?;
+            response
+                .validate_for_request(&request)
+                .map_err(|_| anyhow!("host_gateway_instance_wrong_binding"))?;
+            Ok(response)
+        }
+        #[cfg(not(target_os = "linux"))]
+        Err(anyhow!("host_gateway_instance_unsupported_configuration"))
+    }
+}
+
+#[cfg(test)]
+mod host_gateway_instance_v3_client_tests {
+    use super::*;
+    fn observe() -> transport_api_types::HostGatewayInstanceRequestV3 {
+        transport_api_types::HostGatewayInstanceRequestV3 {
+            schema_version: 3,
+            operation: transport_api_types::HostGatewayInstanceOperationV3::Observe {},
+        }
+    }
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn test_instance_client_refuses_other_transports_before_observation() {
+        for client in [
+            AgentClient::unix_socket("/tmp/unqualified-host.sock").unwrap(),
+            AgentClient::tcp("127.0.0.1", 1).unwrap(),
+        ] {
+            let error = client.gateway_host_instance(observe()).await.err().unwrap();
+            assert_eq!(
+                error.to_string(),
+                "host_gateway_instance_unsupported_configuration"
+            );
+        }
+    }
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn test_instance_client_refuses_bad_epoch_before_connecting() {
+        let token = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        let request = transport_api_types::HostGatewayInstanceRequestV3 {
+            schema_version: 3,
+            operation: transport_api_types::HostGatewayInstanceOperationV3::Bound {
+                service_instance_id: "caller-selected-invalid-epoch".into(),
+                route_verifier: None,
+                operation: transport_api_types::HostGatewayTurnOperationV1::Release {
+                    acquire_id: transport_api_types::HostGatewayTurnRequestV1::acquire_id_from_cleanup_token(token).unwrap(),
+                    lease_handle: None, cleanup_token: token.into(),
+                },
+            },
+        };
+        let client = AgentClient::unix_socket("/run/substrate.sock").unwrap();
+        let error = client.gateway_host_instance(request).await.err().unwrap();
+        assert_eq!(error.to_string(), "host_gateway_instance_invalid_request");
+    }
+}
+
+/// Response obtained over the actual authenticated installed root-service UDS.
+/// It is neither Clone nor deserializable. A decoded DTO alone cannot become
+/// this response provenance; only the connected service method constructs it.
+/// The runtime still authenticates its original intent and accepted-work cut.
+/// ```compile_fail
+/// use transport_api_client::OrdinaryRetainedStopServiceResponseV1;
+/// let _ = OrdinaryRetainedStopServiceResponseV1 {
+///     response: transport_api_types::OrdinaryRetainedWorkerStopResponseV1::UnknownOwner {},
+/// };
+/// ```
+pub struct OrdinaryRetainedStopServiceResponseV1 {
+    response: transport_api_types::OrdinaryRetainedWorkerStopResponseV1,
+}
+
+impl OrdinaryRetainedStopServiceResponseV1 {
+    /// Inspect response data. Only Retired contains an exact acknowledgment;
+    /// busy/unknown state never establishes worker retirement or cap release.
+    /// ```no_run
+    /// # fn inspect(reply: &transport_api_client::OrdinaryRetainedStopServiceResponseV1) {
+    /// let data = reply.response();
+    /// # let _ = data;
+    /// # }
+    /// ```
+    pub fn response(&self) -> &transport_api_types::OrdinaryRetainedWorkerStopResponseV1 {
+        &self.response
+    }
+}
+
+impl AgentClient {
+    /// Deliver an admitted initial control request to its exact installed Root
+    /// owner. A latched/delivered response is not settlement or retirement.
+    /// Only the authenticated official UDS is supported, without pooling,
+    /// request retry, TCP or pathname fallback.
+    /// ```no_run
+    /// # async fn control(request: &transport_api_types::OrdinaryInitialBootstrapControlRequestV1) -> anyhow::Result<()> {
+    /// let client = transport_api_client::AgentClient::unix_socket("/run/substrate.sock")?;
+    /// let delivery = client.control_ordinary_initial_bootstrap(request).await?;
+    /// # let _ = delivery; Ok(()) }
+    /// ```
+    pub async fn control_ordinary_initial_bootstrap(
+        &self,
+        request: &transport_api_types::OrdinaryInitialBootstrapControlRequestV1,
+    ) -> Result<transport_api_types::OrdinaryInitialBootstrapControlResponseV1> {
+        if !cfg!(target_os = "linux")
+            || !matches!(&self.transport,
+            Transport::UnixSocket { path } if path == Path::new("/run/substrate.sock"))
+        {
+            return Err(anyhow!(
+                "ordinary_initial_control_unsupported_configuration"
+            ));
+        }
+        request
+            .validate()
+            .map_err(|_| anyhow!("ordinary_initial_control_invalid_request"))?;
+        #[cfg(target_os = "linux")]
+        {
+            let bytes = serde_json::to_vec(request)
+                .map_err(|_| anyhow!("ordinary_initial_control_invalid_request"))?;
+            let mut builder =
+                hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new());
+            builder
+                .pool_max_idle_per_host(0)
+                .retry_canceled_requests(false);
+            let client = builder.build(HostGatewayInstanceConnectorV3);
+            let outgoing = Request::builder()
+                .method(Method::POST)
+                .uri("http://localhost/v1/ordinary/member/bootstrap/control")
+                .header("content-type", "application/json")
+                .body(Full::new(Bytes::from(bytes)))
+                .map_err(|_| anyhow!("ordinary_initial_control_invalid_request"))?;
+            let response = client
+                .request(outgoing)
+                .await
+                .map_err(|_| anyhow!("ordinary_initial_control_transport_unknown"))?;
+            if !response.status().is_success() {
+                return Err(anyhow!("ordinary_initial_control_refused_or_unknown"));
+            }
+            let bytes = http_body_util::Limited::new(response.into_body(), 32768)
+                .collect()
+                .await
+                .map_err(|_| anyhow!("ordinary_initial_control_invalid_response"))?
+                .to_bytes();
+            let response: transport_api_types::OrdinaryInitialBootstrapControlResponseV1 =
+                serde_json::from_slice(&bytes)
+                    .map_err(|_| anyhow!("ordinary_initial_control_invalid_response"))?;
+            if let transport_api_types::OrdinaryInitialBootstrapControlDeliveryV1::Retired {
+                report,
+            } = &response.delivery
+            {
+                anyhow::ensure!(
+                    report.matches_control(request),
+                    "ordinary_initial_control_invalid_response"
+                );
+            }
+            Ok(response)
+        }
+        #[cfg(not(target_os = "linux"))]
+        Err(anyhow!(
+            "ordinary_initial_control_unsupported_configuration"
+        ))
+    }
+
+    /// Submit one admitted ordinary Stop to the installed root-owned UDS. The
+    /// same connection authenticates SO_PEERCRED and socket identity before any
+    /// HTTP bytes are sent. No pooled connection, retry, TCP or path fallback.
+    /// ```no_run
+    /// # async fn stop(request: &transport_api_types::OrdinaryRetainedWorkerStopRequestV1) -> anyhow::Result<()> {
+    /// let client = transport_api_client::AgentClient::unix_socket("/run/substrate.sock")?;
+    /// let reply = client.retire_ordinary_retained_worker(request).await?;
+    /// # let _ = reply; Ok(())
+    /// # }
+    /// ```
+    pub async fn retire_ordinary_retained_worker(
+        &self,
+        request: &transport_api_types::OrdinaryRetainedWorkerStopRequestV1,
+    ) -> Result<OrdinaryRetainedStopServiceResponseV1> {
+        if !cfg!(target_os = "linux")
+            || !matches!(&self.transport, Transport::UnixSocket { path } if path == Path::new("/run/substrate.sock"))
+        {
+            return Err(anyhow!("ordinary_retained_stop_unsupported_configuration"));
+        }
+        request
+            .validate()
+            .map_err(|_| anyhow!("ordinary_retained_stop_invalid_request"))?;
+        #[cfg(target_os = "linux")]
+        {
+            let bytes = serde_json::to_vec(request)
+                .map_err(|_| anyhow!("ordinary_retained_stop_invalid_request"))?;
+            if bytes.len() > 32768 {
+                return Err(anyhow!("ordinary_retained_stop_invalid_request"));
+            }
+            // Reuse the established installed root-service connector. Its
+            // checks bind /run, exact root:substrate 0660 socket and peer UID on
+            // the stream carrying this request; no new authentication scheme.
+            let mut builder =
+                hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new());
+            builder
+                .pool_max_idle_per_host(0)
+                .retry_canceled_requests(false);
+            let client = builder.build(HostGatewayInstanceConnectorV3);
+            let http_request = Request::builder()
+                .method(Method::POST)
+                .uri("http://localhost/v1/ordinary/member/stop")
+                .header("content-type", "application/json")
+                .body(Full::new(Bytes::from(bytes)))
+                .map_err(|_| anyhow!("ordinary_retained_stop_invalid_request"))?;
+            let response = client
+                .request(http_request)
+                .await
+                .map_err(|_| anyhow!("ordinary_retained_stop_transport_unknown"))?;
+            if !response.status().is_success() {
+                return Err(anyhow!("ordinary_retained_stop_refused_or_unknown"));
+            }
+            let bytes = http_body_util::Limited::new(response.into_body(), 32768)
+                .collect()
+                .await
+                .map_err(|_| anyhow!("ordinary_retained_stop_invalid_response"))?
+                .to_bytes();
+            let response: transport_api_types::OrdinaryRetainedWorkerStopResponseV1 =
+                serde_json::from_slice(&bytes)
+                    .map_err(|_| anyhow!("ordinary_retained_stop_invalid_response"))?;
+            if let transport_api_types::OrdinaryRetainedWorkerStopResponseV1::Retired {
+                acknowledgment,
+            } = &response
+            {
+                acknowledgment
+                    .validate(request)
+                    .map_err(|_| anyhow!("ordinary_retained_stop_wrong_binding"))?;
+            }
+            Ok(OrdinaryRetainedStopServiceResponseV1 { response })
+        }
+        #[cfg(not(target_os = "linux"))]
+        Err(anyhow!("ordinary_retained_stop_unsupported_configuration"))
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod ordinary_retained_stop_client_tests {
+    use super::*;
+    fn ordinary_stop_request_data_for_client_test(
+    ) -> transport_api_types::OrdinaryRetainedWorkerStopRequestV1 {
+        transport_api_types::OrdinaryRetainedWorkerStopRequestV1 {
+            schema_version: 1,
+            stop_request_id: "request-codec-only".into(),
+            authority_store_id: "authority-codec-only".into(),
+            orchestration_session_id: "session-codec-only".into(),
+            caller_participant_id: "caller-codec-only".into(),
+            target_participant_id: "target-codec-only".into(),
+            target_backend_id: "cli:codex-world".into(),
+            world_id: "world-codec-only".into(),
+            world_generation: 0,
+            registration_id: "registration-codec-only".into(),
+            bootstrap_run_id: "bootstrap-codec-only".into(),
+            native_session_id: "native-codec-only".into(),
+            worker_cap_ref: transport_api_types::DispatchPolicyCommitmentRefCarrierV1 {
+                authority_store_id: "authority-codec-only".into(),
+                commitment_id: "dpc_019c1e90-7cb4-7aa0-8aaa-aaaaaaaaaaaa".into(),
+                exact_linkage_hash: "a".repeat(64),
+            },
+        }
+    }
+    #[tokio::test]
+    async fn test_ordinary_stop_client_refuses_other_transports_before_connect() {
+        let root = tempfile::tempdir().unwrap();
+        let socket = root.path().join("unqualified.sock");
+        let listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let request = ordinary_stop_request_data_for_client_test();
+        request.validate().unwrap();
+        for client in [
+            AgentClient::unix_socket(&socket).unwrap(),
+            AgentClient::tcp("127.0.0.1", 1).unwrap(),
+        ] {
+            assert_eq!(
+                client
+                    .retire_ordinary_retained_worker(&request)
+                    .await
+                    .err()
+                    .unwrap()
+                    .to_string(),
+                "ordinary_retained_stop_unsupported_configuration"
+            );
+        }
+        assert_eq!(
+            listener.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+    }
+    #[tokio::test]
+    async fn test_ordinary_stop_client_refuses_invalid_data_before_connect() {
+        let mut request = ordinary_stop_request_data_for_client_test();
+        request.native_session_id.clear();
+        let client = AgentClient::unix_socket("/run/substrate.sock").unwrap();
+        assert_eq!(
+            client
+                .retire_ordinary_retained_worker(&request)
+                .await
+                .err()
+                .unwrap()
+                .to_string(),
+            "ordinary_retained_stop_invalid_request"
+        );
+    }
+}
+
+impl AgentClient {
+    /// Deliver one source-authorized ordinary accepted cancellation over the
+    /// authenticated installed root UDS. Connection failure/response loss is
+    /// ambiguous to the existing Supervisor lease; this call never retries.
+    /// ```no_run
+    /// # async fn cancel(request: &transport_api_types::OrdinaryAcceptedWorkCancelRequestV1) -> anyhow::Result<()> {
+    /// let client = transport_api_client::AgentClient::unix_socket("/run/substrate.sock")?;
+    /// let reply = client.cancel_ordinary_accepted_work(request).await?;
+    /// # let _ = reply; Ok(())
+    /// # }
+    /// ```
+    pub async fn cancel_ordinary_accepted_work(
+        &self,
+        request: &transport_api_types::OrdinaryAcceptedWorkCancelRequestV1,
+    ) -> Result<transport_api_types::OrdinaryAcceptedWorkCancelResponseV1> {
+        if !cfg!(target_os = "linux")
+            || !matches!(&self.transport, Transport::UnixSocket { path } if path == Path::new("/run/substrate.sock"))
+        {
+            return Err(anyhow!(
+                "ordinary_accepted_cancel_unsupported_configuration"
+            ));
+        }
+        request
+            .validate()
+            .map_err(|_| anyhow!("ordinary_accepted_cancel_invalid_request"))?;
+        #[cfg(target_os = "linux")]
+        {
+            let bytes = serde_json::to_vec(request)
+                .map_err(|_| anyhow!("ordinary_accepted_cancel_invalid_request"))?;
+            if bytes.len() > 32768 {
+                return Err(anyhow!("ordinary_accepted_cancel_invalid_request"));
+            }
+            let mut builder =
+                hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new());
+            builder
+                .pool_max_idle_per_host(0)
+                .retry_canceled_requests(false);
+            let client = builder.build(HostGatewayInstanceConnectorV3);
+            let http_request = Request::builder()
+                .method(Method::POST)
+                .uri("http://localhost/v1/ordinary/work/cancel")
+                .header("content-type", "application/json")
+                .body(Full::new(Bytes::from(bytes)))
+                .map_err(|_| anyhow!("ordinary_accepted_cancel_invalid_request"))?;
+            let response = client
+                .request(http_request)
+                .await
+                .map_err(|_| anyhow!("ordinary_accepted_cancel_transport_unknown"))?;
+            if !response.status().is_success() {
+                return Err(anyhow!("ordinary_accepted_cancel_refused_or_unknown"));
+            }
+            let bytes = http_body_util::Limited::new(response.into_body(), 32768)
+                .collect()
+                .await
+                .map_err(|_| anyhow!("ordinary_accepted_cancel_invalid_response"))?
+                .to_bytes();
+            serde_json::from_slice(&bytes)
+                .map_err(|_| anyhow!("ordinary_accepted_cancel_invalid_response"))
+        }
+        #[cfg(not(target_os = "linux"))]
+        Err(anyhow!(
+            "ordinary_accepted_cancel_unsupported_configuration"
+        ))
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod ordinary_accepted_cancel_client_tests {
+    use super::*;
+    fn request_data() -> transport_api_types::OrdinaryAcceptedWorkCancelRequestV1 {
+        transport_api_types::OrdinaryAcceptedWorkCancelRequestV1 {
+            schema_version: 1,
+            authority_store_id: "authority-codec-only".into(),
+            orchestration_session_id: "session-codec-only".into(),
+            acceptance_record_id: "acceptance-codec-only".into(),
+            cancel_request_id: "cancel-codec-only".into(),
+            delivery_claim_id: "delivery-codec-only".into(),
+            runtime_submission_id: "span-codec-only".into(),
+            target_backend_id: "cli:codex-world".into(),
+            world_id: "world-codec-only".into(),
+            world_generation: 0,
+            signal: "INT".into(),
+            control: transport_api_types::OrdinaryAcceptedWorkCancelControlV1::CancelWork {},
+        }
+    }
+    #[tokio::test]
+    async fn test_ordinary_accepted_cancel_client_refuses_unqualified_transport() {
+        let fixture = tempfile::tempdir().unwrap();
+        let path = fixture.path().join("unqualified.sock");
+        let listener = std::os::unix::net::UnixListener::bind(&path).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let request = request_data();
+        request.validate().unwrap();
+        for client in [
+            AgentClient::unix_socket(&path).unwrap(),
+            AgentClient::tcp("127.0.0.1", 9).unwrap(),
+        ] {
+            assert_eq!(
+                client
+                    .cancel_ordinary_accepted_work(&request)
+                    .await
+                    .err()
+                    .unwrap()
+                    .to_string(),
+                "ordinary_accepted_cancel_unsupported_configuration"
+            );
+        }
+        assert_eq!(
+            listener.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+    }
+    #[tokio::test]
+    async fn test_ordinary_accepted_cancel_client_rejects_invalid_official_request() {
+        let mut request = request_data();
+        request.signal = "KILL".into();
+        let client = AgentClient::unix_socket("/run/substrate.sock").unwrap();
+        assert_eq!(
+            client
+                .cancel_ordinary_accepted_work(&request)
+                .await
+                .err()
+                .unwrap()
+                .to_string(),
+            "ordinary_accepted_cancel_invalid_request"
+        );
     }
 }

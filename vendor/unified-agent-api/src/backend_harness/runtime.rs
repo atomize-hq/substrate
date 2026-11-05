@@ -178,7 +178,7 @@ async fn drive_control_backend_startup<A: BackendHarnessAdapter>(
             drop(tx); // Stream closes promptly; terminal completion still waits for custody.
             if let Some(publisher) = &publisher { publisher.request_disposal(); }
             let settlement = settle_attempt(custody.as_ref()).await;
-            if let Some(publisher) = publisher { publisher.finish(&settlement); }
+            if let Some(publisher) = publisher { finish_attempt_settlement(publisher, &settlement, custody.as_ref()); }
             let _ = completion_tx.send(Err(cancelled_completion_error()));
         }
         spawn_outcome = async { spawn.as_mut().expect("startup future present").await } => {
@@ -190,7 +190,7 @@ async fn drive_control_backend_startup<A: BackendHarnessAdapter>(
                     let settlement = settle_attempt(custody.as_ref()).await;
                     let message = if settlement.is_err() { "backend process settlement failed".to_string() }
                         else { adapter.redact_error(BackendHarnessErrorPhase::Spawn, &err) };
-                    if let Some(publisher) = publisher { publisher.finish(&settlement); }
+                    if let Some(publisher) = publisher { finish_attempt_settlement(publisher, &settlement, custody.as_ref()); }
                     surface_control_startup_failure(agent_kind, message, cancel_signal,
                         request_termination, tx, completion_tx).await;
                     return;
@@ -418,7 +418,7 @@ async fn send_completion_with_custody<A: BackendHarnessAdapter>(
     }
     let settlement = settle_attempt(custody.as_ref()).await;
     if let Some(publisher) = publisher {
-        publisher.finish(&settlement);
+        finish_attempt_settlement(publisher, &settlement, custody.as_ref());
     }
     // Cancellation still selects its exact normative value; separate acknowledgment retains
     // cleanup failure. A successful non-cancel completion cannot hide that failure.
@@ -438,6 +438,24 @@ async fn send_completion_with_custody<A: BackendHarnessAdapter>(
     let _ = completion_tx.send(outcome);
 }
 
+fn finish_attempt_settlement(
+    publisher: SettlementPublisher,
+    result: &Result<(), AgentWrapperError>,
+    custody: Option<&BackendAttemptCustody>,
+) {
+    let closed_before_any_spawn = custody
+        .and_then(|custody| custody.observe_closed_before_any_spawn.as_ref())
+        .map(|observe| observe());
+    match custody.and_then(|custody| custody.observe_processes.as_ref()) {
+        Some(observe) => publisher.finish_with_process_observations(
+            result,
+            Some(observe()),
+            closed_before_any_spawn,
+        ),
+        None => publisher.finish(result),
+    }
+}
+
 #[allow(dead_code)]
 pub(crate) async fn run_harnessed_backend_control<A: BackendHarnessAdapter>(
     adapter: Arc<A>,
@@ -447,6 +465,9 @@ pub(crate) async fn run_harnessed_backend_control<A: BackendHarnessAdapter>(
 ) -> Result<AgentWrapperRunControl, AgentWrapperError> {
     let normalized = normalize_request(adapter.as_ref(), &defaults, request)?;
     let custody = adapter.attempt_custody(&normalized);
+    let supports_process_observation = custody
+        .as_ref()
+        .is_some_and(|custody| custody.observe_processes.is_some());
     let observation = custody.as_ref().map(|_| SettlementObservation::default());
     let publisher = observation.as_ref().map(SettlementObservation::publisher);
     let agent_kind = normalized.agent_kind.clone();
@@ -466,10 +487,11 @@ pub(crate) async fn run_harnessed_backend_control<A: BackendHarnessAdapter>(
         }
     };
     let cancel = match observation {
-        Some(observation) => AgentWrapperCancelHandle::new_with_settlement(
+        Some(observation) => AgentWrapperCancelHandle::new_with_settlement_and_process_observation(
             signal_cancel,
             observation.factory(),
             observation.disposal_factory(),
+            supports_process_observation.then(|| observation.process_factory()),
         ),
         None => AgentWrapperCancelHandle::new(signal_cancel),
     };

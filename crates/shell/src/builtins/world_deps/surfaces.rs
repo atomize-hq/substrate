@@ -1706,6 +1706,11 @@ exit {exit_code}{ending}"#
                 "world:\n  deps:\n    builtins: disabled\n    inventory_mode: merged\n    enabled: []\n",
             )
             .expect("write config");
+            fs::set_permissions(
+                prefix.join("config.yaml"),
+                fs::Permissions::from_mode(0o600),
+            )
+            .expect("secure authenticated fixture config");
         }
         let package = |name: &str| {
             format!(
@@ -2681,7 +2686,7 @@ os.listxattr=lambda path,*args,**kwargs:original_listxattr(observed_path(path),*
 "#;
         render_codex_runtime_install_script_v1(
             super::super::inventory::codex_runtime_install_script_template_v1(),
-            &spec,
+            spec,
         )
         .replace(
             "world_deps_root=\"/var/lib/substrate/world-deps\"",

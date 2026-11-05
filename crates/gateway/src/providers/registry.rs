@@ -25,6 +25,7 @@ fn codex_auth_source_for_openai_oauth(
 
     let source = match gateway_mode {
         GatewayMode::InWorld => CodexAuthSource::Integrated,
+        GatewayMode::ManagedHost => CodexAuthSource::Integrated,
         GatewayMode::HostOnly => CodexAuthSource::StandaloneLocal {
             path: CodexAuthState::default_path().map_err(|e| {
                 ProviderError::ConfigError(format!(
@@ -76,12 +77,49 @@ impl ProviderRegistry {
         Self::from_configs_with_models_and_mode(configs, token_store, models, gateway_mode)
     }
 
+    #[cfg(target_os = "linux")]
+    pub(crate) fn from_managed_host(
+        configs: &[ProviderConfig],
+        models: &[ModelConfig],
+    ) -> Result<Self, ProviderError> {
+        // This store is private to the selected provider, initially empty and
+        // has no alias in the managed HTTP state or OAuth/admin route.
+        Self::from_configs_with_models_and_mode(
+            configs,
+            Some(TokenStore::disabled()),
+            models,
+            GatewayMode::ManagedHost,
+        )
+    }
+
     pub(crate) fn from_configs_with_models_and_mode(
         configs: &[ProviderConfig],
         token_store: Option<TokenStore>,
         models: &[ModelConfig],
         gateway_mode: GatewayMode,
     ) -> Result<Self, ProviderError> {
+        if gateway_mode == GatewayMode::ManagedHost {
+            let enabled: Vec<_> = configs
+                .iter()
+                .filter(|config| config.is_enabled())
+                .collect();
+            if enabled.len() != 1 || models.len() != 1 || models[0].mappings.len() != 1 {
+                return Err(ProviderError::ConfigError(
+                    "managed Host requires its exact single selected mapping".into(),
+                ));
+            }
+            let provider = enabled[0];
+            if !((provider.provider_type == "openai"
+                && provider.auth_type == super::AuthType::OAuth)
+                || (provider.provider_type == "anthropic"
+                    && provider.auth_type == super::AuthType::ApiKey
+                    && provider.oauth_provider.is_none()))
+            {
+                return Err(ProviderError::ConfigError(
+                    "managed Host selected provider/auth tuple unsupported".into(),
+                ));
+            }
+        }
         let mut registry = Self::new();
 
         for config in configs {

@@ -2,8 +2,9 @@ use super::*;
 use crate::execution::agent_runtime::host_session_authority::schema::{
     DurableSessionAuthorityOriginV1, HostPostTurnProtocolActorV1,
     HostSessionAuthorityPreconditionV1, HostSessionPostureV1, HostSessionTransitionModeV1,
-    ObligationAttentionDispositionV1, StartContinuationHandleHashInputV2,
-    StartContinuationHandleStateV2, StartTurnCompletionKindV1, TerminalHandoffHashInputV2,
+    ObligationAttentionDispositionV1, PostTurnCompletionHashInputV3,
+    StartContinuationHandleHashInputV2, StartContinuationHandleStateV2, StartTurnCompletionKindV1,
+    TerminalHandoffHashInputV2,
 };
 use crate::execution::agent_runtime::host_session_authority::store_schema::StateRootV3;
 use crate::execution::agent_runtime::host_session_authority::store_schema::{
@@ -796,27 +797,18 @@ impl<'a> StoreLayout<'a> {
         &self,
         root: &StateRootV3,
     ) -> Result<(), StoreError> {
-        super::super::super::facade::validate_v3_schema_with_external_exact_authority_history(root)
-            .map_err(|_| StoreError("validate V3 state-root semantics"))?;
-        for (session_id, record) in &root.session_namespace_map {
-            if !matches!(record, SessionNamespaceRecordV1::Authority(_)) {
-                continue;
-            }
-            super::super::super::facade::exact_v3_authority_history_with_reader(
-                root,
-                session_id,
-                |reference| {
-                    let bytes = self
-                        .read_object_bytes(reference)
-                        .map_err(|error| error.to_string())?;
-                    verify_object_bytes(self, root, reference, &bytes, None, false)
-                        .map_err(|error| error.to_string())?;
-                    Ok(bytes)
-                },
-            )
-            .map_err(|_| StoreError("authenticate exact V3 authority history"))?;
-        }
-        Ok(())
+        super::super::super::facade::validate_v3_schema_and_exact_history_with_reader(
+            root,
+            |reference| {
+                let bytes = self
+                    .read_object_bytes(reference)
+                    .map_err(|error| error.to_string())?;
+                verify_object_bytes(self, root, reference, &bytes, None, false)
+                    .map_err(|error| error.to_string())?;
+                Ok(bytes)
+            },
+        )
+        .map_err(|_| StoreError("authenticate complete V3 schema and exact authority history"))
     }
 
     pub(super) fn validate_existing_keys(&self, root: &StateRootV1) -> Result<(), StoreError> {
@@ -990,9 +982,25 @@ impl<'a> StoreLayout<'a> {
                             kind,
                             AuthorityObjectKindV1::ResumeHandle
                                 | AuthorityObjectKindV1::TerminalHandoff
+                                | AuthorityObjectKindV1::PostTurnProtocolEvent
+                                | AuthorityObjectKindV1::PostTurnCompletion
                         ) =>
                     {
                         2
+                    }
+                    "v3" if allow_v3_schema_versions
+                        && matches!(
+                            kind,
+                            AuthorityObjectKindV1::PostTurnCompletion
+                                | AuthorityObjectKindV1::ResumeHandle
+                        ) =>
+                    {
+                        3
+                    }
+                    "v4" if allow_v3_schema_versions
+                        && kind == AuthorityObjectKindV1::PostTurnCompletion =>
+                    {
+                        4
                     }
                     _ => return Err(StoreError("object schema version directory is invalid")),
                 };
@@ -1607,6 +1615,11 @@ impl<'a> StoreLayout<'a> {
                             canonical_json::from_slice(&bytes).map_err(|_| {
                                 StoreError("decode V3 Start continuation handle graph")
                             })?;
+                        start_continuation_handles.insert(ref_id.clone(), crate::execution::agent_runtime::host_session_authority::start_continuity::DecodedStartContinuationHandleV1::V2(Box::new(value)));
+                    }
+                    3 => {
+                        let value = crate::execution::agent_runtime::host_session_authority::start_continuity::decode_start_continuation_handle(&object.reference, &bytes)
+                            .map_err(|_| StoreError("decode World Start continuation handle graph"))?;
                         start_continuation_handles.insert(ref_id.clone(), value);
                     }
                     _ => return Err(StoreError("decode V3 resume handle graph")),
@@ -1629,15 +1642,118 @@ impl<'a> StoreLayout<'a> {
                     }
                 }
                 AuthorityObjectKindV1::PostTurnCompletion => {
-                    let value: PostTurnCompletionHashInputV1 =
-                        canonical_json::from_slice(&bytes)
-                            .map_err(|_| StoreError("decode V3 post-turn completion graph"))?;
-                    add_expected_ref(
-                        &mut reachable,
-                        &value.protocol_event_ref,
-                        AuthorityObjectKindV1::PostTurnProtocolEvent,
-                        None,
-                    )?;
+                    let protocol_event_ref = match object.reference.schema_version {
+                        1 => {
+                            let value: PostTurnCompletionHashInputV1 =
+                                canonical_json::from_slice(&bytes).map_err(|_| {
+                                    StoreError("decode V3 post-turn completion graph")
+                                })?;
+                            // Generic canonical digest dispatch supports both
+                            // protocols. Preserve actual V1 event bytes as well
+                            // as the V1 reference at the world completion join.
+                            let event_bytes = self.read_object_bytes(&value.protocol_event_ref)?;
+                            decode_world_post_turn_event_v1(
+                                &value.protocol_event_ref,
+                                &event_bytes,
+                            )?;
+                            Some(value.protocol_event_ref)
+                        }
+                        2 | 3 => {
+                            #[cfg(target_os = "linux")]
+                            {
+                                let mut parents = root.successor_transition_intent_map.values().filter(|intent| {
+                                    matches!(&intent.state, HostSessionTransitionIntentStateV3::Applied { post_turn, .. }
+                                        if matches!(post_turn.as_ref(), HostSessionPostTurnApplicationV2::Applied { completion_ref, .. }
+                                            if completion_ref.as_ref() == &object.reference))
+                                });
+                                let parent = parents.next().ok_or(StoreError(
+                                    "V2 direct-host completion has no exact successor parent",
+                                ))?;
+                                if parents.next().is_some() {
+                                    return Err(StoreError(
+                                        "V2 direct-host completion has ambiguous successor parents",
+                                    ));
+                                }
+                                let value = crate::execution::agent_runtime::host_session_authority::direct_host_resume::verify_direct_host_completed_join(
+                                    root, parent, &object.reference,
+                                    &mut |reference| {
+                                        let bytes = self.read_object_bytes(reference)
+                                            .map_err(|_| BootstrapError("read V2 direct-host graph object"))?;
+                                        verify_object_bytes(self, root, reference, &bytes, None, true)?;
+                                        Ok(bytes)
+                                    },
+                                ).map_err(|_| StoreError("V2 direct-host completion/native/history/handoff graph disagrees"))?;
+                                if object.reference.schema_version == 3 {
+                                    let completion: PostTurnCompletionHashInputV3 =
+                                        canonical_json::from_slice(&bytes).map_err(|_| {
+                                            StoreError("decode V3 direct-host completion graph")
+                                        })?;
+                                    if let Some(reference) = &completion.produced_resume_handle_ref
+                                    {
+                                        add_expected_ref(
+                                            &mut reachable,
+                                            reference,
+                                            AuthorityObjectKindV1::ResumeHandle,
+                                            None,
+                                        )?;
+                                    }
+                                }
+                                Some(value.protocol_event_ref)
+                            }
+                            #[cfg(not(target_os = "linux"))]
+                            {
+                                return Err(StoreError(
+                                    "V2 direct-host Resume graph is unsupported on this platform",
+                                ));
+                            }
+                        }
+                        4 => {
+                            #[cfg(target_os = "linux")]
+                            {
+                                let parents = root.successor_transition_intent_map.values().filter(|intent|
+                                    matches!(&intent.state, HostSessionTransitionIntentStateV3::Applied { post_turn, .. }
+                                        if matches!(post_turn.as_ref(), HostSessionPostTurnApplicationV2::Applied { completion_ref, .. }
+                                            if completion_ref.as_ref() == &object.reference))).collect::<Vec<_>>();
+                                let [parent] = parents.as_slice() else {
+                                    return Err(StoreError(
+                                        "World completion has no unique exact successor parent",
+                                    ));
+                                };
+                                let completion = crate::execution::agent_runtime::host_session_authority::world_bound_controller::verify_world_controller_completed_join(
+                                    root, parent, &object.reference,
+                                    &mut |reference| {
+                                        let bytes = self.read_object_bytes(reference).map_err(|_| BootstrapError::world_controller_source_guard())?;
+                                        verify_object_bytes(self, root, reference, &bytes, None, true)?;
+                                        Ok(bytes)
+                                    },
+                                ).map_err(|_| StoreError("World completion/native/history/handoff graph differs"))?;
+                                if let Some(reference) = completion.produced_resume_handle_ref {
+                                    add_expected_ref(
+                                        &mut reachable,
+                                        &reference,
+                                        AuthorityObjectKindV1::ResumeHandle,
+                                        None,
+                                    )?;
+                                }
+                                None
+                            }
+                            #[cfg(not(target_os = "linux"))]
+                            {
+                                return Err(StoreError(
+                                    "World completion graph is unsupported on this platform",
+                                ));
+                            }
+                        }
+                        _ => return Err(StoreError("unsupported V3 post-turn completion version")),
+                    };
+                    if let Some(protocol_event_ref) = protocol_event_ref {
+                        add_expected_ref(
+                            &mut reachable,
+                            &protocol_event_ref,
+                            AuthorityObjectKindV1::PostTurnProtocolEvent,
+                            None,
+                        )?;
+                    }
                 }
                 _ => {}
             }
@@ -2042,7 +2158,7 @@ impl<'a> StoreLayout<'a> {
             })
         {
             for reference in &authority.internal_resume_handle_refs {
-                if reference.schema_version == 2 {
+                if matches!(reference.schema_version, 2 | 3) {
                     let start = graphs
                         .start_continuation_handles
                         .get(&reference.ref_id)
@@ -2054,6 +2170,9 @@ impl<'a> StoreLayout<'a> {
                             .authoritative_participant_lineage
                             .contains(&start.participant_id)
                         || start.authority_store_id != root.authority_store_id
+                        || start.world_controller().is_some_and(|world| {
+                            authority.world_binding.as_ref() != Some(&world.world_binding)
+                        })
                     {
                         return Err(StoreError(
                             "V3 Start continuation identity disagrees with authority",
@@ -2353,7 +2472,7 @@ struct DecodedObjectGraphsV3<'a> {
     policies: &'a std::collections::BTreeMap<String, PolicyObjectHashInputV1>,
     resume_handles: &'a std::collections::BTreeMap<String, ResumeHandleHashInputV1>,
     start_continuation_handles:
-        &'a std::collections::BTreeMap<String, StartContinuationHandleHashInputV2>,
+        &'a std::collections::BTreeMap<String, crate::execution::agent_runtime::host_session_authority::start_continuity::DecodedStartContinuationHandleV1>,
     retained_workers: &'a std::collections::BTreeMap<String, RetainedWorkerObjectHashInputV1>,
     terminal_handoffs_v1: &'a std::collections::BTreeMap<String, TerminalHandoffHashInputV1>,
     terminal_handoffs_v2: &'a std::collections::BTreeMap<String, TerminalHandoffHashInputV2>,
@@ -2364,7 +2483,7 @@ fn validate_resume_identity_v3(
     resume_handles: &std::collections::BTreeMap<String, ResumeHandleHashInputV1>,
     start_continuation_handles: &std::collections::BTreeMap<
         String,
-        StartContinuationHandleHashInputV2,
+        crate::execution::agent_runtime::host_session_authority::start_continuity::DecodedStartContinuationHandleV1,
     >,
     orchestration_session_id: &str,
     participant_id: &str,
@@ -2384,7 +2503,7 @@ fn validate_resume_identity_v3(
                 protocol,
             )
         }
-        2 => {
+        2 | 3 => {
             let resume = start_continuation_handles
                 .get(&reference.ref_id)
                 .ok_or(StoreError(
@@ -2421,7 +2540,7 @@ fn validate_start_continuation_graphs_v3(
         let start_refs = authority
             .internal_resume_handle_refs
             .iter()
-            .filter(|reference| reference.schema_version == 2)
+            .filter(|reference| matches!(reference.schema_version, 2 | 3))
             .collect::<Vec<_>>();
         if start_refs.is_empty() {
             continue;
@@ -2579,50 +2698,59 @@ fn validate_start_continuation_graphs_v3(
         if !actor_is_exact {
             return Err(StoreError("V3 Start settlement actor is not authoritative"));
         }
-        let settled_posture = match completion_kind {
-            StartTurnCompletionKindV1::TerminalClean
-            | StartTurnCompletionKindV1::TerminalFailure { .. } => {
-                if obligation_snapshot.is_some() {
-                    return Err(StoreError(
-                        "V3 terminal Start settlement carries obligation evidence",
-                    ));
-                }
-                HostSessionPostureV1::Terminal
+        let settled_posture = if let Some(world) = settled.world_controller() {
+            if intent.world_binding.as_ref() != Some(&world.world_binding) {
+                return Err(StoreError(
+                    "World Start source does not match applied placement",
+                ));
             }
-            StartTurnCompletionKindV1::ResumableClean => match obligation_snapshot.as_deref() {
-                None => HostSessionPostureV1::ParkedResumable,
-                Some(snapshot) => {
-                    if snapshot.authority_store_id != root.authority_store_id
-                        || snapshot.orchestration_session_id != intent.orchestration_session_id
-                        || snapshot.authoritative_participant_id
-                            != intent.target_authoritative_participant_id
-                        || snapshot.transition_intent_id != intent.intent_id
-                        || snapshot.transition_run_id != intent.run_id
-                        || snapshot.authority_revision_observed != 2
-                    {
+            world.resulting_posture()
+        } else {
+            match completion_kind {
+                StartTurnCompletionKindV1::TerminalClean
+                | StartTurnCompletionKindV1::TerminalFailure { .. } => {
+                    if obligation_snapshot.is_some() {
                         return Err(StoreError(
-                            "V3 Start settlement obligation evidence does not authenticate",
+                            "V3 terminal Start settlement carries obligation evidence",
                         ));
                     }
-                    match snapshot.attention_disposition {
-                        ObligationAttentionDispositionV1::HasUnresolvedAttention
-                            if !snapshot.unresolved_attention_obligations.is_empty() =>
+                    HostSessionPostureV1::Terminal
+                }
+                StartTurnCompletionKindV1::ResumableClean => match obligation_snapshot.as_deref() {
+                    None => HostSessionPostureV1::ParkedResumable,
+                    Some(snapshot) => {
+                        if snapshot.authority_store_id != root.authority_store_id
+                            || snapshot.orchestration_session_id != intent.orchestration_session_id
+                            || snapshot.authoritative_participant_id
+                                != intent.target_authoritative_participant_id
+                            || snapshot.transition_intent_id != intent.intent_id
+                            || snapshot.transition_run_id != intent.run_id
+                            || snapshot.authority_revision_observed != 2
                         {
-                            HostSessionPostureV1::AwaitingAttention
-                        }
-                        ObligationAttentionDispositionV1::NoUnresolvedAttention
-                            if snapshot.unresolved_attention_obligations.is_empty() =>
-                        {
-                            HostSessionPostureV1::ParkedResumable
-                        }
-                        _ => {
                             return Err(StoreError(
-                                "V3 Start settlement obligation disposition is inconsistent",
+                                "V3 Start settlement obligation evidence does not authenticate",
                             ));
                         }
+                        match snapshot.attention_disposition {
+                            ObligationAttentionDispositionV1::HasUnresolvedAttention
+                                if !snapshot.unresolved_attention_obligations.is_empty() =>
+                            {
+                                HostSessionPostureV1::AwaitingAttention
+                            }
+                            ObligationAttentionDispositionV1::NoUnresolvedAttention
+                                if snapshot.unresolved_attention_obligations.is_empty() =>
+                            {
+                                HostSessionPostureV1::ParkedResumable
+                            }
+                            _ => {
+                                return Err(StoreError(
+                                    "V3 Start settlement obligation disposition is inconsistent",
+                                ));
+                            }
+                        }
                     }
-                }
-            },
+                },
+            }
         };
         let settled_commitment = start_authority_commitment_v3(
             intent,
@@ -2683,9 +2811,12 @@ fn validate_start_handle_identity_v3(
     intent: &HostSessionTransitionIntentV2,
     application_result_ref: &AuthorityObjectRefV1,
     descriptor: &AgentDescriptorHashInputV1,
-    handle: &StartContinuationHandleHashInputV2,
+    handle: &crate::execution::agent_runtime::host_session_authority::start_continuity::DecodedStartContinuationHandleV1,
 ) -> Result<(), StoreError> {
-    if handle.authority_store_id != root.authority_store_id
+    if handle
+        .world_controller()
+        .is_some_and(|world| intent.world_binding.as_ref() != Some(&world.world_binding))
+        || handle.authority_store_id != root.authority_store_id
         || handle.orchestration_session_id != intent.orchestration_session_id
         || handle.participant_id != intent.target_authoritative_participant_id
         || handle.backend_id != descriptor.descriptor.backend_id
@@ -3181,4 +3312,153 @@ pub(super) struct LockedClassification {
     pub(super) authority_classification: BootstrapClassificationV1,
     pub(super) legacy: LegacyObservation,
     pub(super) root: Option<StateRootV1>,
+}
+fn decode_world_post_turn_event_v1(
+    reference: &AuthorityObjectRefV1,
+    bytes: &[u8],
+) -> Result<crate::execution::agent_runtime::host_session_authority::schema::PostTurnProtocolEventHashInputV1, StoreError>{
+    use crate::execution::agent_runtime::host_session_authority::{
+        schema::PostTurnProtocolEventHashInputV1, validation::ValidatedCanonicalV1 as _,
+    };
+    if reference.object_kind != AuthorityObjectKindV1::PostTurnProtocolEvent
+        || reference.schema_version != 1
+    {
+        return Err(StoreError(
+            "world V1 completion requires V1 protocol event reference",
+        ));
+    }
+    let event: PostTurnProtocolEventHashInputV1 = canonical_json::from_slice(bytes)
+        .map_err(|_| StoreError("world V1 completion requires actual V1 protocol event bytes"))?;
+    event
+        .validate()
+        .map_err(|_| StoreError("invalid world V1 protocol event bytes"))?;
+    Ok(event)
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod direct_host_world_version_tests {
+    use super::*;
+    use crate::execution::agent_runtime::host_session_authority::{
+        hash::{canonical_object_bytes, CanonicalObjectHashInputV1},
+        schema::*,
+    };
+    fn commitment() -> AuthorityObjectCommitmentV1 {
+        AuthorityObjectCommitmentV1::CanonicalSha256 {
+            digest_hex: "1".repeat(64),
+        }
+    }
+    fn reference(kind: AuthorityObjectKindV1) -> AuthorityObjectRefV1 {
+        AuthorityObjectRefV1 {
+            ref_id: format!("ao_{}", "1".repeat(32)),
+            object_kind: kind,
+            schema_version: 1,
+            commitment: if kind == AuthorityObjectKindV1::TransitionInput {
+                AuthorityObjectCommitmentV1::StoreHmacSha256 {
+                    key_id: format!("ak_{}", "1".repeat(32)),
+                    domain: "substrate.a1.transition-input.v1".into(),
+                    digest_hex: "1".repeat(64),
+                }
+            } else {
+                commitment()
+            },
+        }
+    }
+    fn binding() -> DirectHostResumeBindingV1 {
+        let home = CanonicalDirectoryV1 {
+            physical_path: "/test/home".into(),
+            physical_identity: DirectoryPhysicalIdentityV1::Linux {
+                device_id: 1,
+                inode: 2,
+            },
+        };
+        DirectHostResumeBindingV1 {
+            schema_version: 1,
+            authority_store_id: format!("as_{}", "1".repeat(32)),
+            bootstrap_home: home.clone(),
+            workspace_binding: WorkspaceBindingV1 {
+                workspace_root: CanonicalDirectoryV1 {
+                    physical_path: "/test/workspace".into(),
+                    ..home.clone()
+                },
+                authority_store_root: home,
+                authority_store_id: format!("as_{}", "1".repeat(32)),
+            },
+            orchestration_session_id: "session".into(),
+            shell_trace_session_id: "trace".into(),
+            authoritative_participant_id: "participant".into(),
+            authoritative_lineage: vec!["participant".into()],
+            authority_history_commitment: commitment(),
+            authority_revision_observed: 4,
+            authority_record_commitment: commitment(),
+            policy_ref: None,
+            policy_revision: None,
+            descriptor_ref: reference(AuthorityObjectKindV1::AgentDescriptor),
+            host_attach_contract_ref: reference(AuthorityObjectKindV1::HostAttachContract),
+            intent_id: "intent".into(),
+            issuer_request_id: "request".into(),
+            payload_commitment: commitment(),
+            intent_revision_observed: 3,
+            claim_id: "claim".into(),
+            claimant_attempt_id: "attempt".into(),
+            run_id: "run".into(),
+            initial_application_result_ref: reference(AuthorityObjectKindV1::ApplicationResult),
+            transition_input_ref: reference(AuthorityObjectKindV1::TransitionInput),
+            input_acceptance_ref: Some(reference(AuthorityObjectKindV1::InputAcceptance)),
+            consumed_resume_handle_ref: reference(AuthorityObjectKindV1::ResumeHandle),
+        }
+    }
+    fn native() -> DirectHostNativeTerminalEvidenceV1 {
+        DirectHostNativeTerminalEvidenceV1 {
+            schema_version: 1,
+            backend_id: "backend".into(),
+            protocol: "protocol".into(),
+            native_session_id: "thread".into(),
+            thread_id: "thread".into(),
+            turn_id: "turn".into(),
+            sequence: DirectHostNativeSequenceV1::Codex {
+                resumed_thread_id: "thread".into(),
+                started_turn_id: "turn".into(),
+            },
+            terminal_event_kind: "turn.completed".into(),
+            raw_event_sha256: "2".repeat(64),
+            terminal_ordinal: 1,
+        }
+    }
+    fn event() -> PostTurnProtocolEventHashInputV2 {
+        PostTurnProtocolEventHashInputV2 {
+            schema_version: 2,
+            binding: binding(),
+            protocol_actor: HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant {
+                participant_id: "participant".into(),
+            },
+            event_id: "run-terminal".into(),
+            kind: HostPostTurnProtocolEventKindV1::ResumableClean,
+            native_terminal: Some(native()),
+            emitted_at: TimestampV1::parse("2026-10-29T00:00:00.000000000Z").unwrap(),
+        }
+    }
+
+    #[test]
+    fn test_direct_host_resume_world_v1_graph_rejects_disguised_v2_event_bytes() {
+        let event = event();
+        let bytes = canonical_object_bytes(
+            AuthorityObjectKindV1::PostTurnProtocolEvent,
+            CanonicalObjectHashInputV1::PostTurnProtocolEventV2(&event),
+        )
+        .unwrap();
+        // These are independently valid V2 canonical bytes with their correct
+        // widened generic digest. Relabeling just the ref as V1 cannot admit
+        // them through the world completion's actual-version decoder.
+        let digest = super::super::object_persistence::canonical_digest(
+            AuthorityObjectKindV1::PostTurnProtocolEvent,
+            &bytes,
+        )
+        .unwrap();
+        let mut disguised = reference(AuthorityObjectKindV1::PostTurnProtocolEvent);
+        disguised.commitment = AuthorityObjectCommitmentV1::CanonicalSha256 { digest_hex: digest };
+        assert_eq!(disguised.schema_version, 1);
+        assert!(decode_world_post_turn_event_v1(&disguised, &bytes).is_err());
+        disguised.schema_version = 2;
+        assert!(decode_world_post_turn_event_v1(&disguised, &bytes).is_err());
+    }
 }

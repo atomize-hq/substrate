@@ -219,9 +219,7 @@ pub async fn execute(
     State(service): State<WorldService>,
     body: Bytes,
 ) -> Result<ResponseJson<ExecuteResponse>, ApiErrorResponse> {
-    let payload: Value = serde_json::from_slice(&body)
-        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
-    let req: ExecuteRequest = serde_json::from_value(payload)
+    let req: ExecuteRequest = serde_json::from_slice(&body)
         .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
     let response = service.execute(req).await.map_err(|e| {
         if let Some(bad) = e.downcast_ref::<crate::service::BadRequestError>() {
@@ -319,9 +317,7 @@ pub async fn gateway_status(
     State(service): State<WorldService>,
     body: Bytes,
 ) -> Result<ResponseJson<GatewayLifecycleResponseV1>, ApiErrorResponse> {
-    let payload: Value = serde_json::from_slice(&body)
-        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
-    let req: GatewayLifecycleRequestV1 = serde_json::from_value(payload)
+    let req: GatewayLifecycleRequestV1 = serde_json::from_slice(&body)
         .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
     let response = service
         .gateway_status(req)
@@ -336,9 +332,7 @@ pub async fn gateway_sync(
     State(service): State<WorldService>,
     body: Bytes,
 ) -> Result<ResponseJson<GatewayLifecycleResponseV1>, ApiErrorResponse> {
-    let payload: Value = serde_json::from_slice(&body)
-        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
-    let req: GatewayLifecycleRequestV1 = serde_json::from_value(payload)
+    let req: GatewayLifecycleRequestV1 = serde_json::from_slice(&body)
         .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
     let response = service
         .gateway_sync(req)
@@ -353,9 +347,7 @@ pub async fn gateway_restart(
     State(service): State<WorldService>,
     body: Bytes,
 ) -> Result<ResponseJson<GatewayLifecycleResponseV1>, ApiErrorResponse> {
-    let payload: Value = serde_json::from_slice(&body)
-        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
-    let req: GatewayLifecycleRequestV1 = serde_json::from_value(payload)
+    let req: GatewayLifecycleRequestV1 = serde_json::from_slice(&body)
         .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
     let response = service
         .gateway_restart(req)
@@ -370,10 +362,13 @@ pub async fn execute_stream(
     State(service): State<WorldService>,
     body: Bytes,
 ) -> Result<Response, ApiErrorResponse> {
-    let payload: Value = serde_json::from_slice(&body)
+    let req: ExecuteRequest = serde_json::from_slice(&body)
         .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
-    let req: ExecuteRequest = serde_json::from_value(payload)
-        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
+    if req.ordinary_start_selection.is_some() {
+        return Err(ApiErrorResponse(ApiError::BadRequest(
+            "ordinary initial input requires authenticated ordinary route".into(),
+        )));
+    }
     service.execute_stream(req).await.map_err(|e| {
         if let Some(bad) = e.downcast_ref::<crate::service::BadRequestError>() {
             ApiErrorResponse(ApiError::BadRequest(bad.message().to_string()))
@@ -454,6 +449,67 @@ pub async fn member_turn_stream(
             "member_turn_internal_error",
         )
     })
+}
+
+/// Submit an ordinary retained turn. Decoding grants no configured authority.
+pub(crate) async fn ordinary_member_turn_stream(
+    State(service): State<WorldService>,
+    body: Bytes,
+) -> Result<Response, MemberTurnSubmitErrorResponse> {
+    // Decode the received bytes directly: no Value roundtrip can erase duplicate
+    // fields in the request or nested carrier before its strict typed codec.
+    let req: transport_api_types::OrdinaryMemberTurnSubmitRequestV1 = serde_json::from_slice(&body)
+        .map_err(|_| MemberTurnSubmitErrorResponse::new(StatusCode::BAD_REQUEST, "invalid_json"))?;
+    service
+        .submit_ordinary_member_turn_stream(req)
+        .await
+        .map_err(|e| {
+            if let Some(bad) = e.downcast_ref::<crate::service::BadRequestError>() {
+                return MemberTurnSubmitErrorResponse::new(
+                    StatusCode::BAD_REQUEST,
+                    bad.message().to_string(),
+                );
+            }
+            #[cfg(target_os = "linux")]
+            if let Some(join) = e.downcast_ref::<MemberTurnJoinError>() {
+                return match join {
+                    MemberTurnJoinError::RequestConflict => MemberTurnSubmitErrorResponse::new(
+                        StatusCode::CONFLICT,
+                        "member_turn_request_conflict_v1",
+                    ),
+                    MemberTurnJoinError::LaunchIndeterminate => MemberTurnSubmitErrorResponse::new(
+                        StatusCode::CONFLICT,
+                        "member_turn_launch_indeterminate_v1",
+                    ),
+                    MemberTurnJoinError::UnsupportedLegacyState => {
+                        MemberTurnSubmitErrorResponse::new(
+                            StatusCode::CONFLICT,
+                            "unsupported_legacy_state",
+                        )
+                    }
+                    MemberTurnJoinError::CapacityExhausted => MemberTurnSubmitErrorResponse::new(
+                        StatusCode::TOO_MANY_REQUESTS,
+                        "member_turn_join_capacity_exhausted_v1",
+                    ),
+                    MemberTurnJoinError::FailedBeforeLaunch {
+                        error_code,
+                        http_status,
+                    } => MemberTurnSubmitErrorResponse::new(
+                        StatusCode::from_u16(*http_status)
+                            .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+                        error_code.clone(),
+                    ),
+                    MemberTurnJoinError::Unsafe(_) => MemberTurnSubmitErrorResponse::new(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "member_turn_join_unsafe_v1",
+                    ),
+                };
+            }
+            MemberTurnSubmitErrorResponse::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "member_turn_internal_error",
+            )
+        })
 }
 
 /// Send a signal to an active streamed execution.
@@ -835,5 +891,517 @@ mod e3_ingress_tests {
                 r#"{"error":"WrongBinding"}"#
             );
         }
+    }
+}
+
+/// Authenticate the inherited connection before polling the secret-bearing body.
+#[cfg(target_os = "linux")]
+pub(crate) async fn gateway_host_turn(
+    State(service): State<WorldService>,
+    request: axum::http::Request<hyper::Body>,
+) -> Response {
+    use crate::e3_local_transport::{
+        E3AuthenticatedLinuxUdsListenerV1, E3AuthenticatedLinuxUdsPeerV1,
+    };
+    use crate::socket_activation::InheritedUnixListener;
+    use hyper::body::HttpBody;
+    use std::sync::Arc;
+    let principal = (|| {
+        let peer = request
+            .extensions()
+            .get::<E3AuthenticatedLinuxUdsPeerV1>()?;
+        let inherited = request.extensions().get::<Arc<InheritedUnixListener>>()?;
+        let configured = service.accepted_home_authority.as_ref()?;
+        let listener =
+            E3AuthenticatedLinuxUdsListenerV1::from_inherited(inherited, 1, Arc::clone(configured))
+                .ok()?;
+        if peer.peer_uid != listener.expected_peer_uid
+            || peer.kernel_boot_id != listener.kernel_boot_id
+            || peer.listener_descriptor_device_id != listener.descriptor_device_id
+            || peer.listener_descriptor_inode != listener.descriptor_inode
+            || peer.peer_pid == 0
+            || peer.peer_pid_start_time_ticks == 0
+            || libc::gid_t::try_from(peer.peer_gid).is_err()
+        {
+            return None;
+        }
+        u32::try_from(peer.peer_uid).ok().filter(|uid| *uid != 0)
+    })();
+    let Some(principal) = principal else {
+        return (
+            StatusCode::FORBIDDEN,
+            ResponseJson(json!({"error":"host_gateway_turn_wrong_binding"})),
+        )
+            .into_response();
+    };
+    let mut body = request.into_body();
+    let mut bytes = Vec::new();
+    while let Some(chunk) = body.data().await {
+        let Ok(chunk) = chunk else {
+            return (
+                StatusCode::BAD_REQUEST,
+                ResponseJson(json!({"error":"host_gateway_turn_invalid_request"})),
+            )
+                .into_response();
+        };
+        if chunk.len() > (64 * 1024usize).saturating_sub(bytes.len()) {
+            return (
+                StatusCode::PAYLOAD_TOO_LARGE,
+                ResponseJson(json!({"error":"host_gateway_turn_invalid_request"})),
+            )
+                .into_response();
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    // Decode directly from raw bytes: no Value round trip can erase duplicates.
+    let request: transport_api_types::HostGatewayInstanceRequestV3 =
+        match serde_json::from_slice(&bytes) {
+            Ok(request) => request,
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    ResponseJson(json!({"error":"host_gateway_turn_invalid_request"})),
+                )
+                    .into_response()
+            }
+        };
+    match service.host_gateway_turn(principal, request).await {
+        Ok(response) => ResponseJson(response).into_response(),
+        // Never expose a cleanup credential, account, HSA detail or native error.
+        Err(_) => (
+            StatusCode::CONFLICT,
+            ResponseJson(json!({"error":"host_gateway_turn_refused_or_unknown"})),
+        )
+            .into_response(),
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) async fn workspace_current_v1(
+    State(service): State<WorldService>,
+    peer: Option<axum::Extension<substrate_shell::WorkspaceNativePeerV1>>,
+    request: axum::http::Request<hyper::Body>,
+) -> ResponseJson<transport_api_types::WorkspaceCurrentResponseV1> {
+    use hyper::body::HttpBody;
+    use transport_api_types::{WorkspaceCurrentRefusalV1 as F, WorkspaceCurrentResponseV1 as R};
+    let deny = || ResponseJson(R::Refused { reason: F::Denied });
+    let Some(axum::Extension(peer)) = peer else {
+        return deny();
+    };
+    let mut body = request.into_body();
+    let mut bytes = Vec::new();
+    while let Some(chunk) = body.data().await {
+        let Ok(chunk) = chunk else {
+            return deny();
+        };
+        if bytes.len() + chunk.len() > 32768 {
+            return deny();
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    let Ok(request) =
+        serde_json::from_slice::<transport_api_types::WorkspaceCurrentRequestV1>(&bytes)
+    else {
+        return deny();
+    };
+    if request.validate().is_err() {
+        return deny();
+    }
+    let publish = matches!(
+        request.operation,
+        transport_api_types::WorkspaceCurrentOperationV1::PublishAssociation
+    );
+    match tokio::task::spawn_blocking(move || service.workspace_current_v1(&peer, &request)).await {
+        Ok(value) => ResponseJson(value),
+        Err(_) if publish => ResponseJson(R::AssociationPublicationFailed {
+            reason: F::Changed,
+            effects: transport_api_types::WorkspaceAssociationEffectsV1::unknown(),
+        }),
+        Err(_) => deny(),
+    }
+}
+
+#[cfg(target_os = "linux")]
+async fn workspace_bounded_body_v1(mut body: hyper::Body) -> Option<Vec<u8>> {
+    use hyper::body::HttpBody;
+    let mut bytes = Vec::new();
+    while let Some(chunk) = body.data().await {
+        let chunk = chunk.ok()?;
+        if bytes.len() + chunk.len() > 32768 {
+            return None;
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Some(bytes)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) async fn workspace_preflight_v1(
+    State(service): State<WorldService>,
+    peer: Option<axum::Extension<substrate_shell::WorkspaceNativePeerV1>>,
+    request: axum::http::Request<hyper::Body>,
+) -> ResponseJson<transport_api_types::WorkspacePreflightResponseV1> {
+    use transport_api_types::{WorkspaceCurrentRefusalV1 as F, WorkspacePreflightResponseV1 as R};
+    let deny = || ResponseJson(R::Refused { reason: F::Denied });
+    let Some(axum::Extension(peer)) = peer else {
+        return deny();
+    };
+    let Some(bytes) = workspace_bounded_body_v1(request.into_body()).await else {
+        return deny();
+    };
+    let Ok(request) =
+        serde_json::from_slice::<transport_api_types::WorkspaceCurrentRequestV1>(&bytes)
+    else {
+        return deny();
+    };
+    if request.validate().is_err()
+        || !matches!(
+            request.operation,
+            transport_api_types::WorkspaceCurrentOperationV1::CurrentActorRead { .. }
+        )
+    {
+        return deny();
+    }
+    match tokio::task::spawn_blocking(move || service.workspace_preflight_v1(&peer, &request)).await
+    {
+        Ok(value) => ResponseJson(value),
+        Err(_) => deny(),
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) async fn workspace_association_update_v1(
+    State(service): State<WorldService>,
+    peer: Option<axum::Extension<substrate_shell::WorkspaceNativePeerV1>>,
+    request: axum::http::Request<hyper::Body>,
+) -> ResponseJson<transport_api_types::WorkspaceAssociationUpdateResponseV1> {
+    use transport_api_types::{
+        WorkspaceAssociationUpdateResponseV1 as R, WorkspaceCurrentRefusalV1 as F,
+    };
+    let deny = || ResponseJson(R::Refused { reason: F::Denied });
+    let Some(axum::Extension(peer)) = peer else {
+        return deny();
+    };
+    let Some(bytes) = workspace_bounded_body_v1(request.into_body()).await else {
+        return deny();
+    };
+    let Ok(request) =
+        serde_json::from_slice::<transport_api_types::WorkspaceAssociationUpdateV1>(&bytes)
+    else {
+        return deny();
+    };
+    if request.current.validate().is_err()
+        || !matches!(
+            request.current.operation,
+            transport_api_types::WorkspaceCurrentOperationV1::PublishAssociation
+        )
+    {
+        return deny();
+    }
+    match tokio::task::spawn_blocking(move || {
+        service.workspace_association_update_v1(&peer, &request)
+    })
+    .await
+    {
+        Ok(value) => ResponseJson(value),
+        Err(_) => ResponseJson(R::AssociationPublicationFailed {
+            reason: F::Changed,
+            effects: transport_api_types::WorkspaceAssociationUpdateEffectsV1::unknown(),
+        }),
+    }
+}
+
+/// Retire only through the original actual member and admitted Stop. The
+/// inherited acceptor authenticated this peer before HTTP/body polling.
+#[cfg(target_os = "linux")]
+pub(crate) async fn ordinary_retained_worker_stop(
+    State(service): State<WorldService>,
+    request: axum::http::Request<hyper::Body>,
+) -> Response {
+    use crate::e3_local_transport::{
+        E3AuthenticatedLinuxUdsListenerV1, E3AuthenticatedLinuxUdsPeerV1,
+    };
+    use crate::socket_activation::InheritedUnixListener;
+    use hyper::body::HttpBody;
+    use std::sync::Arc;
+    let principal = (|| {
+        let peer = request
+            .extensions()
+            .get::<E3AuthenticatedLinuxUdsPeerV1>()?;
+        let inherited = request.extensions().get::<Arc<InheritedUnixListener>>()?;
+        let configured = service.accepted_home_authority.as_ref()?;
+        let listener =
+            E3AuthenticatedLinuxUdsListenerV1::from_inherited(inherited, 1, Arc::clone(configured))
+                .ok()?;
+        if peer.peer_uid != listener.expected_peer_uid
+            || peer.kernel_boot_id != listener.kernel_boot_id
+            || peer.listener_descriptor_device_id != listener.descriptor_device_id
+            || peer.listener_descriptor_inode != listener.descriptor_inode
+            || peer.peer_pid == 0
+            || peer.peer_pid_start_time_ticks == 0
+            || libc::gid_t::try_from(peer.peer_gid).is_err()
+        {
+            return None;
+        }
+        u32::try_from(peer.peer_uid).ok().filter(|uid| *uid != 0)
+    })();
+    let Some(principal) = principal else {
+        return (
+            StatusCode::FORBIDDEN,
+            ResponseJson(json!({"error":"ordinary_retained_stop_wrong_binding"})),
+        )
+            .into_response();
+    };
+    let mut body = request.into_body();
+    let mut bytes = Vec::new();
+    while let Some(chunk) = body.data().await {
+        let Ok(chunk) = chunk else {
+            return StatusCode::BAD_REQUEST.into_response();
+        };
+        if bytes.len().saturating_add(chunk.len()) > 32768 {
+            return StatusCode::PAYLOAD_TOO_LARGE.into_response();
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    let Ok(request) =
+        serde_json::from_slice::<transport_api_types::OrdinaryRetainedWorkerStopRequestV1>(&bytes)
+    else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    match service.retire_ordinary_retained_worker(&request, principal) {
+        Ok(response) => ResponseJson(response).into_response(),
+        Err(_) => (
+            StatusCode::CONFLICT,
+            ResponseJson(json!({"error":"ordinary_retained_stop_unresolved"})),
+        )
+            .into_response(),
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) async fn ordinary_accepted_work_cancel(
+    State(service): State<WorldService>,
+    request: axum::http::Request<hyper::Body>,
+) -> Response {
+    use crate::e3_local_transport::{
+        E3AuthenticatedLinuxUdsListenerV1, E3AuthenticatedLinuxUdsPeerV1,
+    };
+    use crate::socket_activation::InheritedUnixListener;
+    use hyper::body::HttpBody;
+    use std::sync::Arc;
+    let principal = (|| {
+        let peer = request
+            .extensions()
+            .get::<E3AuthenticatedLinuxUdsPeerV1>()?;
+        let inherited = request.extensions().get::<Arc<InheritedUnixListener>>()?;
+        let configured = service.accepted_home_authority.as_ref()?;
+        let listener =
+            E3AuthenticatedLinuxUdsListenerV1::from_inherited(inherited, 1, Arc::clone(configured))
+                .ok()?;
+        if peer.peer_uid != listener.expected_peer_uid
+            || peer.kernel_boot_id != listener.kernel_boot_id
+            || peer.listener_descriptor_device_id != listener.descriptor_device_id
+            || peer.listener_descriptor_inode != listener.descriptor_inode
+            || peer.peer_pid == 0
+            || peer.peer_pid_start_time_ticks == 0
+            || libc::gid_t::try_from(peer.peer_gid).is_err()
+        {
+            return None;
+        }
+        u32::try_from(peer.peer_uid).ok().filter(|uid| *uid != 0)
+    })();
+    let Some(principal) = principal else {
+        return (
+            StatusCode::FORBIDDEN,
+            ResponseJson(json!({"error":"ordinary_accepted_cancel_wrong_binding"})),
+        )
+            .into_response();
+    };
+    let mut body = request.into_body();
+    let mut bytes = Vec::new();
+    while let Some(chunk) = body.data().await {
+        let Ok(chunk) = chunk else {
+            return StatusCode::BAD_REQUEST.into_response();
+        };
+        if bytes.len().saturating_add(chunk.len()) > 32768 {
+            return StatusCode::PAYLOAD_TOO_LARGE.into_response();
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    let Ok(request) =
+        serde_json::from_slice::<transport_api_types::OrdinaryAcceptedWorkCancelRequestV1>(&bytes)
+    else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    match service.cancel_ordinary_accepted_work(&request, principal) {
+        Ok(delivered) => ResponseJson(transport_api_types::OrdinaryAcceptedWorkCancelResponseV1 {
+            schema_version: 1,
+            delivered,
+        })
+        .into_response(),
+        Err(_) => (
+            StatusCode::CONFLICT,
+            ResponseJson(json!({"error":"ordinary_accepted_cancel_unresolved"})),
+        )
+            .into_response(),
+    }
+}
+
+/// Initial control uses the authenticated carrying connection and the actual
+/// reserved/bootstrap owner. A response is delivery data, never terminal proof.
+#[cfg(target_os = "linux")]
+pub(crate) async fn ordinary_initial_bootstrap_control(
+    State(service): State<WorldService>,
+    request: axum::http::Request<hyper::Body>,
+) -> Response {
+    use crate::e3_local_transport::{
+        E3AuthenticatedLinuxUdsListenerV1, E3AuthenticatedLinuxUdsPeerV1,
+    };
+    use crate::socket_activation::InheritedUnixListener;
+    use axum::extract::FromRequest;
+    use std::sync::Arc;
+    let Some(peer) = request
+        .extensions()
+        .get::<E3AuthenticatedLinuxUdsPeerV1>()
+        .cloned()
+    else {
+        return StatusCode::FORBIDDEN.into_response();
+    };
+    let Some(listener) = request
+        .extensions()
+        .get::<Arc<InheritedUnixListener>>()
+        .cloned()
+    else {
+        return StatusCode::FORBIDDEN.into_response();
+    };
+    let Some(configured) = service.accepted_home_authority.as_ref().cloned() else {
+        return StatusCode::FORBIDDEN.into_response();
+    };
+    let verify_peer = || {
+        let current = E3AuthenticatedLinuxUdsListenerV1::from_inherited(
+            &listener,
+            1,
+            Arc::clone(&configured),
+        )
+        .ok()?;
+        if peer.peer_uid != current.expected_peer_uid
+            || peer.kernel_boot_id != current.kernel_boot_id
+            || peer.listener_descriptor_device_id != current.descriptor_device_id
+            || peer.listener_descriptor_inode != current.descriptor_inode
+            || peer.peer_pid == 0
+            || peer.peer_pid_start_time_ticks == 0
+            || libc::gid_t::try_from(peer.peer_gid).is_err()
+        {
+            return None;
+        }
+        u32::try_from(peer.peer_uid).ok().filter(|uid| *uid != 0)
+    };
+    if verify_peer().is_none() {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let bytes = match Bytes::from_request(request, &service).await {
+        Ok(bytes) => bytes,
+        Err(error) => return error.into_response(),
+    };
+    let Some(uid) = verify_peer() else {
+        return StatusCode::FORBIDDEN.into_response();
+    };
+    let Ok(request) = serde_json::from_slice::<
+        transport_api_types::OrdinaryInitialBootstrapControlRequestV1,
+    >(&bytes) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    match service.control_ordinary_initial_bootstrap(&request, uid) {
+        Ok(delivery) => ResponseJson(
+            transport_api_types::OrdinaryInitialBootstrapControlResponseV1 {
+                schema_version: 1,
+                delivery,
+            },
+        )
+        .into_response(),
+        Err(_) => (
+            StatusCode::CONFLICT,
+            ResponseJson(json!({"error":"ordinary_initial_control_unresolved"})),
+        )
+            .into_response(),
+    }
+}
+
+/// Initial ordinary input requires the real authenticated carrying connection.
+/// Validate before polling any body and again after body collection. Parsing
+/// uses the existing Axum Bytes extractor's configured/default body limit.
+#[cfg(target_os = "linux")]
+pub(crate) async fn ordinary_initial_execute_stream(
+    State(service): State<WorldService>,
+    request: axum::http::Request<hyper::Body>,
+) -> Response {
+    use crate::e3_local_transport::{
+        E3AuthenticatedLinuxUdsListenerV1, E3AuthenticatedLinuxUdsPeerV1,
+    };
+    use crate::socket_activation::InheritedUnixListener;
+    use axum::extract::FromRequest;
+    use std::sync::Arc;
+    let Some(peer) = request
+        .extensions()
+        .get::<E3AuthenticatedLinuxUdsPeerV1>()
+        .cloned()
+    else {
+        return StatusCode::FORBIDDEN.into_response();
+    };
+    let Some(listener) = request
+        .extensions()
+        .get::<Arc<InheritedUnixListener>>()
+        .cloned()
+    else {
+        return StatusCode::FORBIDDEN.into_response();
+    };
+    let Some(configured) = service.accepted_home_authority.as_ref().cloned() else {
+        return StatusCode::FORBIDDEN.into_response();
+    };
+    let verify_peer = || {
+        let current = E3AuthenticatedLinuxUdsListenerV1::from_inherited(
+            &listener,
+            1,
+            Arc::clone(&configured),
+        )
+        .ok()?;
+        if peer.peer_uid != current.expected_peer_uid
+            || peer.kernel_boot_id != current.kernel_boot_id
+            || peer.listener_descriptor_device_id != current.descriptor_device_id
+            || peer.listener_descriptor_inode != current.descriptor_inode
+            || peer.peer_pid == 0
+            || peer.peer_pid_start_time_ticks == 0
+            || libc::gid_t::try_from(peer.peer_gid).is_err()
+        {
+            return None;
+        }
+        u32::try_from(peer.peer_uid).ok().filter(|uid| *uid != 0)
+    };
+    if verify_peer().is_none() {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let bytes = match Bytes::from_request(request, &service).await {
+        Ok(bytes) => bytes,
+        Err(error) => return error.into_response(),
+    };
+    if verify_peer().is_none() {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let Ok(request) = serde_json::from_slice::<ExecuteRequest>(&bytes) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    if request.schema_version != 2
+        || request.ordinary_start_selection.is_none()
+        || request.member_dispatch.is_none()
+    {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+    match service.execute_stream(request).await {
+        Ok(response) => response,
+        Err(_) => (
+            StatusCode::CONFLICT,
+            ResponseJson(json!({"error":"ordinary_initial_execute_refused_or_unknown"})),
+        )
+            .into_response(),
     }
 }

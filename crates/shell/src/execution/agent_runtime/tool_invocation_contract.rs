@@ -457,6 +457,10 @@ pub(crate) struct HostToolInspectWorldWorkerOutcomeV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_admission: Option<PendingAdmissionInspectProjectionV1>,
     pub summary: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bootstrap_snapshot: Option<super::dispatch_contract::RetainedBootstrapInspectSnapshotV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stop_snapshot: Option<Box<super::dispatch_contract::RetainedStopInspectSnapshotV1>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -1032,6 +1036,66 @@ pub(crate) fn normalize_continue_world_worker_outcome_v1(
 pub(crate) fn normalize_inspect_world_worker_outcome_v1(
     outcome: &InspectWorldWorkerOutcomeV1,
 ) -> anyhow::Result<HostToolInspectWorldWorkerOutcomeV1> {
+    if let Some(bootstrap) = &outcome.bootstrap_snapshot {
+        if bootstrap.schema_version != 1
+            || outcome.mode != WorldDispatchModeV1::Retained
+            || bootstrap
+                .registration_id
+                .as_ref()
+                .is_some_and(|id| id.trim().is_empty() || id.trim() != id)
+        {
+            bail!("invalid_inspect_world_worker_outcome: retained bootstrap source projection differs");
+        }
+    }
+    if let Some(stop) = &outcome.stop_snapshot {
+        let bootstrap = outcome.bootstrap_snapshot.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "invalid_inspect_world_worker_outcome: Stop source omitted bootstrap identity"
+            )
+        })?;
+        let target = match &outcome.exact_target {
+            Some(
+                WorldDispatchControlTargetV1::AcceptedRetainedTurn {
+                    target_participant_id,
+                    ..
+                }
+                | WorldDispatchControlTargetV1::PendingRetainedAdmission {
+                    target_participant_id,
+                    ..
+                },
+            ) => target_participant_id,
+            None => &outcome.target_participant_id,
+        };
+        stop.request.validate().map_err(|_| {
+            anyhow::anyhow!("invalid_inspect_world_worker_outcome: malformed Stop source")
+        })?;
+        if stop.schema_version != 1
+            || outcome.mode != WorldDispatchModeV1::Retained
+            || stop.request.orchestration_session_id != outcome.orchestration_session_id
+            || stop.request.target_participant_id != *target
+            || stop.request.target_backend_id != outcome.target_backend_id
+            || stop.request.world_id != outcome.world_id
+            || stop.request.world_generation != outcome.world_generation
+            || !bootstrap.native_bootstrap_completed
+            || bootstrap.registration_id.as_deref() != Some(stop.request.registration_id.as_str())
+            || stop.acknowledgment.is_some() != stop.completed_at.is_some()
+            || stop
+                .accepted_work_ids_at_admission
+                .iter()
+                .any(|id| id.trim().is_empty() || id.trim() != id)
+            || stop
+                .accepted_work_ids_at_admission
+                .windows(2)
+                .any(|ids| ids[0] >= ids[1])
+        {
+            bail!("invalid_inspect_world_worker_outcome: Stop source projection differs");
+        }
+        if let Some(acknowledgment) = &stop.acknowledgment {
+            acknowledgment.validate(&stop.request).map_err(|_| {
+                anyhow::anyhow!("invalid_inspect_world_worker_outcome: Stop acknowledgment differs")
+            })?;
+        }
+    }
     if outcome.terminal_ref.is_some() != outcome.terminal.is_some()
         || outcome.terminal_ref.is_some() != outcome.runtime_submission_id.is_some()
     {
@@ -1115,6 +1179,8 @@ pub(crate) fn normalize_inspect_world_worker_outcome_v1(
     )?;
 
     Ok(HostToolInspectWorldWorkerOutcomeV1 {
+        bootstrap_snapshot: outcome.bootstrap_snapshot.clone(),
+        stop_snapshot: outcome.stop_snapshot.clone(),
         request_id: outcome.request_id.clone(),
         orchestration_session_id: outcome.orchestration_session_id.clone(),
         action: outcome.action,
@@ -1647,7 +1713,12 @@ fn resolve_follow_up_dispatch_authority_with_hsa_continue_v1(
         }
         HostToolFollowUpHandleV1::RetainedWorker(retained_worker) => {
             #[cfg(any(target_os = "linux", test))]
-            if allow_hsa_retained_continue && tool_name == HostToolNameV1::ContinueWorldWorker {
+            if allow_hsa_retained_continue
+                && matches!(
+                    tool_name,
+                    HostToolNameV1::ContinueWorldWorker | HostToolNameV1::ForkWorldWorker
+                )
+            {
                 if let Some(authority) = store.resolve_hsa_retained_continue_translation_authority(
                     &metadata.orchestration_session_id,
                     &metadata.caller_participant_id,
@@ -1828,6 +1899,37 @@ fn resolve_exact_target_follow_up_dispatch_authority_v1(
                     metadata.orchestration_session_id,
                     target_participant_id
                 );
+            }
+            #[cfg(any(target_os = "linux", test))]
+            if tool_name == HostToolNameV1::CancelWorldWork {
+                if let Some(authority) = store.resolve_hsa_retained_cancel_translation_authority(
+                    &metadata.orchestration_session_id,
+                    &metadata.caller_participant_id,
+                    target_participant_id,
+                )? {
+                    let target = authority.retained_target.as_ref().ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "canonical accepted Cancel routing omitted exact retained target"
+                        )
+                    })?;
+                    if target.participant_id != *target_participant_id {
+                        bail!("stale_linkage: canonical accepted Cancel routing target changed");
+                    }
+                    // Preserve the caller-supplied exact accepted IDs as data.
+                    // Ordinary cancellation must still authenticate B1/E2 and
+                    // the current observer owner before any control delivery.
+                    return Ok(ResolvedFollowUpDispatchAuthorityV1 {
+                        mode: WorldDispatchModeV1::Retained,
+                        target_backend_id: target.backend_id.clone(),
+                        task_run_id: None,
+                        target_participant_id: None,
+                        exact_target: Some(exact_target.clone()),
+                        world_binding: HostToolRuntimeWorldBindingV1 {
+                            world_id: authority.world_id,
+                            world_generation: authority.world_generation,
+                        },
+                    });
+                }
             }
             let authority = store.resolve_internal_world_dispatch_caller(
                 &metadata.orchestration_session_id,
@@ -3148,6 +3250,8 @@ mod tests {
 
         let inspect_ephemeral =
             normalize_inspect_world_worker_outcome_v1(&InspectWorldWorkerOutcomeV1 {
+                bootstrap_snapshot: None,
+                stop_snapshot: None,
                 request_id: "req-packet3-inspect-e".to_string(),
                 orchestration_session_id: "sess_packet3".to_string(),
                 action: WorldDispatchActionV1::InspectWorldWorker,
@@ -3179,6 +3283,8 @@ mod tests {
 
         let inspect_retained =
             normalize_inspect_world_worker_outcome_v1(&InspectWorldWorkerOutcomeV1 {
+                bootstrap_snapshot: None,
+                stop_snapshot: None,
                 request_id: "req-packet3-inspect-r".to_string(),
                 orchestration_session_id: "sess_packet3".to_string(),
                 action: WorldDispatchActionV1::InspectWorldWorker,
@@ -3327,6 +3433,8 @@ mod tests {
             ),
         ] {
             let outcome = InspectWorldWorkerOutcomeV1 {
+                bootstrap_snapshot: None,
+                stop_snapshot: None,
                 request_id: "req-b4-terminal-normalization".to_string(),
                 orchestration_session_id: "sess-b4-terminal-normalization".to_string(),
                 action: WorldDispatchActionV1::InspectWorldWorker,
@@ -3366,6 +3474,8 @@ mod tests {
         }
 
         let contradictory = InspectWorldWorkerOutcomeV1 {
+            bootstrap_snapshot: None,
+            stop_snapshot: None,
             request_id: "req-b4-contradictory-terminal".to_string(),
             orchestration_session_id: "sess-b4-terminal-normalization".to_string(),
             action: WorldDispatchActionV1::InspectWorldWorker,
@@ -3520,6 +3630,8 @@ mod tests {
         };
 
         let inspect = normalize_inspect_world_worker_outcome_v1(&InspectWorldWorkerOutcomeV1 {
+            bootstrap_snapshot: None,
+            stop_snapshot: None,
             request_id: "req_exact_inspect".to_string(),
             orchestration_session_id: "sess_exact_round_trip".to_string(),
             action: WorldDispatchActionV1::InspectWorldWorker,
@@ -3593,6 +3705,8 @@ mod tests {
         );
 
         let pending = normalize_inspect_world_worker_outcome_v1(&InspectWorldWorkerOutcomeV1 {
+            bootstrap_snapshot: None,
+            stop_snapshot: None,
             request_id: "req_pending_inspect".to_string(),
             orchestration_session_id: "sess_exact_round_trip".to_string(),
             action: WorldDispatchActionV1::InspectWorldWorker,
@@ -4002,11 +4116,17 @@ mod tests {
         assert_eq!(outcome.target_backend_id, "cli:codex_world");
         assert_eq!(outcome.world_id, "world-17");
         assert_eq!(outcome.world_generation, 2);
+        assert!(
+            outcome.snapshot.is_none(),
+            "ephemeral inspect has no retained-worker projection"
+        );
         let snapshot = outcome
-            .snapshot
+            .ephemeral_snapshot
             .as_ref()
             .expect("active-task inspect snapshot");
+        assert_eq!(snapshot.state, ActiveTaskStateV1::Running);
         assert!(snapshot.authoritative_live);
+        assert!(snapshot.cancel_supported);
 
         assert!(!store
             .canonical_active_ephemeral_task_path("sess_packet2", "task-run-packet2")

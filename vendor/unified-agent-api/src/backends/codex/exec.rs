@@ -226,21 +226,25 @@ pub(super) async fn spawn_exec_or_resume_flow(
         run_start_cwd.as_deref(),
     )
     .ok_or(super::CodexBackendError::WorkingDirectoryUnresolved)?;
-    builder = builder.working_dir(working_dir);
+    builder = builder.working_dir(working_dir.clone());
 
     let has_add_dirs = !add_dirs.is_empty();
     if has_add_dirs {
         let probe_client = builder.clone().build();
         let capabilities = probe_client
-            .probe_capabilities_with_env_overrides_custody(&env, &custody)
+            .probe_capabilities_with_env_overrides_for_current_dir_with_custody(
+                &env,
+                &working_dir,
+                Some(&custody),
+            )
             .await;
         if !capabilities.guard_add_dir().is_supported() {
             return Err(super::CodexBackendError::AddDirsRejectedByRuntime);
         }
-        builder = builder.capability_feature_hints(codex::CodexFeatureFlags {
-            supports_add_dir: true,
-            ..Default::default()
-        });
+        // Streaming uses this same builder, cwd, environment and custody. Retain
+        // this attempt's actual probe result rather than launching a second pass.
+        // Native admission and executable custody remain independent checks.
+        builder = builder.capability_snapshot(capabilities);
     }
 
     // Codex crate treats `Duration::ZERO` as “no timeout”.

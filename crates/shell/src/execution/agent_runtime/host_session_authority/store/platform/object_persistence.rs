@@ -242,6 +242,34 @@ pub(super) fn verify_object_bytes<R: ObjectVerificationRootV1>(
     context: Option<&ObjectVerificationContextV1>,
     allow_verification_only: bool,
 ) -> Result<(), BootstrapError> {
+    verify_object_bytes_with_key_loader(
+        root,
+        reference,
+        bytes,
+        context,
+        allow_verification_only,
+        |record| {
+            let key_file = layout
+                .keys
+                .open_file(&format!("{}.key", record.key_id))
+                .map_err(|_| BootstrapError("open sensitive object key"))?;
+            key_file
+                .read_all()
+                .map_err(|_| BootstrapError("read sensitive object key"))
+        },
+    )
+}
+
+// Keep verification independent of filesystem access so a read-only transaction can
+// supply captured key bytes while existing callers retain their original loader.
+pub(super) fn verify_object_bytes_with_key_loader<R: ObjectVerificationRootV1>(
+    root: &R,
+    reference: &AuthorityObjectRefV1,
+    bytes: &[u8],
+    context: Option<&ObjectVerificationContextV1>,
+    allow_verification_only: bool,
+    load_key: impl FnOnce(&AuthorityStoreCommitmentKeyV1) -> Result<Vec<u8>, BootstrapError>,
+) -> Result<(), BootstrapError> {
     validate_ref_id(&reference.ref_id)
         .map_err(|_| BootstrapError("typed object ref ID is invalid"))?;
     validate_object_commitment_rule(
@@ -331,16 +359,8 @@ pub(super) fn verify_object_bytes<R: ObjectVerificationRootV1>(
                     }
                 })
                 .ok_or(BootstrapError("sensitive object key is unavailable"))?;
-            let key_file = layout
-                .keys
-                .open_file(&format!("{}.key", record.key_id))
-                .map_err(|_| BootstrapError("open sensitive object key"))?;
-            let envelope = AuthorityStoreCommitmentKeyFileV1::decode(
-                &key_file
-                    .read_all()
-                    .map_err(|_| BootstrapError("read sensitive object key"))?,
-            )
-            .map_err(|_| BootstrapError("decode sensitive object key"))?;
+            let envelope = AuthorityStoreCommitmentKeyFileV1::decode(&load_key(record)?)
+                .map_err(|_| BootstrapError("decode sensitive object key"))?;
             let actual = store_hmac_sha256(
                 &envelope.secret_key,
                 expected_domain,
@@ -483,6 +503,7 @@ pub(super) fn canonical_digest(
         AuthorityObjectKindV1::ResumeHandle => match canonical_schema_version(bytes)? {
             1 => canonical_digest_as::<ResumeHandleHashInputV1>(bytes),
             2 => canonical_digest_as::<StartContinuationHandleHashInputV2>(bytes),
+            3 => canonical_digest_as::<crate::execution::agent_runtime::host_session_authority::schema::StartContinuationHandleHashInputV3>(bytes),
             _ => Err(BootstrapError("resume handle schema version is unsupported")),
         },
         AuthorityObjectKindV1::Policy => canonical_digest_as::<PolicyObjectHashInputV1>(bytes),
@@ -501,12 +522,18 @@ pub(super) fn canonical_digest(
         AuthorityObjectKindV1::ObligationSnapshot => {
             canonical_digest_as::<crate::execution::agent_runtime::host_session_authority::schema::ObligationSnapshotHashInputV1>(bytes)
         }
-        AuthorityObjectKindV1::PostTurnProtocolEvent => {
-            canonical_digest_as::<crate::execution::agent_runtime::host_session_authority::schema::PostTurnProtocolEventHashInputV1>(bytes)
-        }
-        AuthorityObjectKindV1::PostTurnCompletion => {
-            canonical_digest_as::<PostTurnCompletionHashInputV1>(bytes)
-        }
+        AuthorityObjectKindV1::PostTurnProtocolEvent => match canonical_schema_version(bytes)? {
+            1 => canonical_digest_as::<crate::execution::agent_runtime::host_session_authority::schema::PostTurnProtocolEventHashInputV1>(bytes),
+            2 => canonical_digest_as::<crate::execution::agent_runtime::host_session_authority::schema::PostTurnProtocolEventHashInputV2>(bytes),
+            _ => Err(BootstrapError("post-turn event schema version is unsupported")),
+        },
+        AuthorityObjectKindV1::PostTurnCompletion => match canonical_schema_version(bytes)? {
+            1 => canonical_digest_as::<PostTurnCompletionHashInputV1>(bytes),
+            2 => canonical_digest_as::<crate::execution::agent_runtime::host_session_authority::schema::PostTurnCompletionHashInputV2>(bytes),
+            3 => canonical_digest_as::<crate::execution::agent_runtime::host_session_authority::schema::PostTurnCompletionHashInputV3>(bytes),
+            4 => canonical_digest_as::<crate::execution::agent_runtime::host_session_authority::schema::PostTurnCompletionHashInputV4>(bytes),
+            _ => Err(BootstrapError("post-turn completion schema version is unsupported")),
+        },
         AuthorityObjectKindV1::TerminalHandoff => canonical_digest_terminal_handoff(bytes),
         AuthorityObjectKindV1::TransitionTransportPayload
         | AuthorityObjectKindV1::TransitionInput
@@ -516,7 +543,7 @@ pub(super) fn canonical_digest(
     }
 }
 
-fn canonical_schema_version(bytes: &[u8]) -> Result<u32, BootstrapError> {
+pub(super) fn canonical_schema_version(bytes: &[u8]) -> Result<u32, BootstrapError> {
     let value = serde_json::from_slice::<serde_json::Value>(bytes)
         .map_err(|_| BootstrapError("canonical object bytes are invalid"))?;
     let version = value

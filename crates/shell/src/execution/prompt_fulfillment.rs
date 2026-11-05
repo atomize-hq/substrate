@@ -13,6 +13,15 @@ use futures::StreamExt;
 use sha2::{Digest, Sha256};
 use substrate_gateway::adapter_runtime::{GatewayAdapterBackendKind, GatewayAdapterRuntime};
 
+#[cfg(all(test, target_os = "linux"))]
+mod native_caller_identity_help_tests;
+mod native_terminal;
+pub(crate) use native_terminal::{
+    finish_after_native_ack, NativeAttemptCustody, NativeTerminalObservation,
+    PendingProviderTerminal,
+};
+use native_terminal::{retain_native_completion, retain_native_startup};
+
 use crate::execution::agent_runtime::{
     control::AGENT_API_SESSION_RESUME_V1, mapping::AgentRuntimeBackendKind,
     tool_invocation_contract::host_tool_contracts_v1, validator::RuntimeSelectionDescriptor,
@@ -32,10 +41,12 @@ pub(crate) enum PromptFulfillmentCancelHandle {
     },
     CodexNative {
         handle: codex::ExecTerminationHandle,
+        custody: NativeAttemptCustody,
         cancel_requested: Arc<AtomicBool>,
     },
     ClaudeNative {
         handle: claude_code::ClaudeTerminationHandle,
+        custody: NativeAttemptCustody,
         cancel_requested: Arc<AtomicBool>,
     },
 }
@@ -52,16 +63,20 @@ impl PromptFulfillmentCancelHandle {
             }
             Self::CodexNative {
                 handle,
+                custody,
                 cancel_requested,
             } => {
                 cancel_requested.store(true, std::sync::atomic::Ordering::SeqCst);
+                custody.request_termination();
                 handle.request_termination();
             }
             Self::ClaudeNative {
                 handle,
+                custody,
                 cancel_requested,
             } => {
                 cancel_requested.store(true, std::sync::atomic::Ordering::SeqCst);
+                custody.request_termination();
                 handle.request_termination();
             }
         }
@@ -112,15 +127,27 @@ User request:
 pub(crate) struct PromptFulfillmentRunControl {
     pub(crate) handle: AgentWrapperRunHandle,
     pub(crate) cancel: PromptFulfillmentCancelHandle,
+    pub(crate) terminal: NativeTerminalObservation,
 }
 
 pub(crate) struct PromptFulfillmentBridge {
     runtime: GatewayAdapterRuntime,
     backend_kind: AgentRuntimeBackendKind,
     binary_path: PathBuf,
+    #[cfg(target_os = "linux")]
+    ordinary: Option<
+        crate::execution::agent_runtime::native_launch_context::OrdinaryNativePromptContextV1,
+    >,
 }
 
 impl PromptFulfillmentBridge {
+    pub(crate) fn native_attempt(&self) -> NativeAttemptCustody {
+        match self.backend_kind {
+            AgentRuntimeBackendKind::Codex => NativeAttemptCustody::codex(),
+            AgentRuntimeBackendKind::ClaudeCode => NativeAttemptCustody::claude(),
+        }
+    }
+
     pub(crate) fn for_descriptor(descriptor: &RuntimeSelectionDescriptor) -> anyhow::Result<Self> {
         let backend_kind = match descriptor.backend_kind {
             AgentRuntimeBackendKind::Codex => GatewayAdapterBackendKind::Codex,
@@ -133,21 +160,100 @@ impl PromptFulfillmentBridge {
             )?,
             backend_kind: descriptor.backend_kind,
             binary_path: descriptor.binary_path.clone(),
+            #[cfg(target_os = "linux")]
+            ordinary: None,
         })
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn for_ordinary_descriptor(
+        descriptor: &RuntimeSelectionDescriptor,
+        selection: Arc<crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1>,
+        runtime: transport_api_types::OrdinaryGatewayRuntimeIdentityV1,
+    ) -> anyhow::Result<Self> {
+        let ordinary = crate::execution::agent_runtime::native_launch_context::OrdinaryNativePromptContextV1::new(selection, runtime, descriptor)?;
+        let mut bridge = Self::for_descriptor(descriptor)?;
+        bridge.ordinary = Some(ordinary);
+        Ok(bridge)
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn prepare_ordinary_native_launch(
+        &self,
+        request: &mut AgentWrapperRunRequest,
+        attempt: &NativeAttemptCustody,
+    ) -> Result<
+        Option<
+            crate::execution::agent_runtime::native_launch_context::PreparedOrdinaryNativePromptV1,
+        >,
+        AgentWrapperError,
+    > {
+        let Some(ordinary) = self.ordinary.as_ref() else {
+            return Ok(None);
+        };
+        let acquisition = attempt.begin_host_acquisition()?;
+        let prepared = tokio::select! {
+            biased;
+            _ = attempt.cancelled() => Err(AgentWrapperError::Backend {
+                message: "ordinary native Host preparation cancelled".into(),
+            }),
+            prepared = ordinary.prepare(Arc::clone(&acquisition)) => prepared.map_err(|error| AgentWrapperError::Backend {
+                message: format!("ordinary native managed route refused: {error}"),
+            }),
+        };
+        let prepared = finish_host_preparation_v1(
+            prepared.and_then(|prepared| {
+                prepared
+                    .revalidate()
+                    .map_err(|error| AgentWrapperError::Backend {
+                        message: error.to_string(),
+                    })?;
+                Ok(prepared)
+            }),
+            &acquisition,
+        )
+        .await?;
+        request.working_dir = Some(PathBuf::from(prepared.workspace_root()));
+        prepare_ordinary_native_env(
+            &mut request.env,
+            &prepared.home,
+            self.backend_kind,
+            &prepared.model,
+            &prepared.anthropic_base_url,
+            prepared.local_route_capability(),
+        );
+        Ok(Some(prepared))
     }
 
     pub(crate) async fn run_control(
         &self,
         request: AgentWrapperRunRequest,
     ) -> Result<PromptFulfillmentRunControl, AgentWrapperError> {
+        #[cfg(target_os = "linux")]
+        if self.ordinary.is_some() {
+            return Err(AgentWrapperError::InvalidRequest {
+                message: "ordinary selected native bridge requires explicit Start or exact ResumeOneTurn controls".into(),
+            });
+        }
         let cancel_requested = Arc::new(AtomicBool::new(false));
         let control = self.runtime.run_control(request).await?;
+        let mut handle = control.handle;
+        let terminate = control.cancel.clone();
+        let (completion, terminal) = retain_native_completion(
+            handle.completion,
+            control.cancel.settlement(),
+            (),
+            move || terminate.cancel(),
+            None,
+        );
+        handle.completion = completion;
         Ok(PromptFulfillmentRunControl {
-            handle: control.handle,
+            handle,
             cancel: PromptFulfillmentCancelHandle::Gateway {
                 handle: control.cancel,
                 cancel_requested,
             },
+            terminal,
         })
     }
 
@@ -157,10 +263,13 @@ impl PromptFulfillmentBridge {
     pub(crate) async fn run_durable_start_control(
         &self,
         request: AgentWrapperRunRequest,
+        attempt: &NativeAttemptCustody,
     ) -> Result<PromptFulfillmentRunControl, AgentWrapperError> {
         match self.backend_kind {
-            AgentRuntimeBackendKind::Codex => self.run_codex_durable_start(request).await,
-            AgentRuntimeBackendKind::ClaudeCode => self.run_claude_durable_start(request).await,
+            AgentRuntimeBackendKind::Codex => self.run_codex_durable_start(request, attempt).await,
+            AgentRuntimeBackendKind::ClaudeCode => {
+                self.run_claude_durable_start(request, attempt).await
+            }
         }
     }
 
@@ -171,15 +280,16 @@ impl PromptFulfillmentBridge {
         &self,
         expected_session_id: &str,
         request: AgentWrapperRunRequest,
+        attempt: &NativeAttemptCustody,
     ) -> Result<PromptFulfillmentRunControl, AgentWrapperError> {
         validate_exact_resume_extension(&request.extensions, expected_session_id)?;
         match self.backend_kind {
             AgentRuntimeBackendKind::Codex => {
-                self.run_codex_authority_managed_resume(expected_session_id, request)
+                self.run_codex_authority_managed_resume(expected_session_id, request, attempt)
                     .await
             }
             AgentRuntimeBackendKind::ClaudeCode => {
-                self.run_claude_authority_managed_resume(expected_session_id, request)
+                self.run_claude_authority_managed_resume(expected_session_id, request, attempt)
                     .await
             }
         }
@@ -188,12 +298,35 @@ impl PromptFulfillmentBridge {
     async fn run_codex_durable_start(
         &self,
         request: AgentWrapperRunRequest,
+        attempt: &NativeAttemptCustody,
     ) -> Result<PromptFulfillmentRunControl, AgentWrapperError> {
+        let NativeAttemptCustody::Codex {
+            process: process_custody,
+            ..
+        } = attempt
+        else {
+            return Err(AgentWrapperError::InvalidRequest {
+                message: "native custody backend mismatch".into(),
+            });
+        };
+        let process_custody = process_custody.clone();
         if !request.extensions.is_empty() {
             return Err(AgentWrapperError::InvalidRequest {
                 message: "durable Codex Start does not accept continuation extensions".to_string(),
             });
         }
+        #[cfg(target_os = "linux")]
+        let mut request = request;
+        #[cfg(target_os = "linux")]
+        let ordinary_native = self
+            .prepare_ordinary_native_launch(&mut request, attempt)
+            .await?;
+        #[cfg(target_os = "linux")]
+        if let Some(prepared) = ordinary_native.as_ref() {
+            attempt.bind_host_route(prepared.gateway_lease()).await?;
+        }
+        #[cfg(target_os = "linux")]
+        let ordinary_timeout = request.timeout;
         let mut builder = codex::CodexClient::builder()
             .binary(self.binary_path.clone())
             .json(true)
@@ -202,34 +335,60 @@ impl PromptFulfillmentBridge {
             .color_mode(codex::ColorMode::Never)
             .dangerously_bypass_approvals_and_sandbox(true)
             .timeout(request.timeout.unwrap_or(Duration::ZERO));
+        #[cfg(target_os = "linux")]
+        if let Some(prepared) = ordinary_native.as_ref() {
+            builder = configure_selected_codex_builder(
+                builder,
+                &prepared.model,
+                &prepared.home,
+                &prepared.openai_base_url,
+            )
+            .map_err(|error| AgentWrapperError::InvalidRequest {
+                message: error.to_string(),
+            })?
+            .timeout(Duration::ZERO);
+        }
         if let Some(working_dir) = request.working_dir {
             builder = builder.working_dir(working_dir);
         }
-        let control = builder
-            .build()
-            .stream_exec_with_env_overrides_control(
-                codex::ExecStreamRequest {
-                    prompt: request.prompt,
-                    ephemeral: false,
-                    ignore_rules: false,
-                    ignore_user_config: false,
-                    idle_timeout: None,
-                    output_last_message: None,
-                    output_schema: None,
-                    json_event_log: None,
-                },
-                &request.env,
-            )
-            .await
-            .map_err(|error| AgentWrapperError::Backend {
-                message: format!("Codex durable Start failed: {error}"),
-            })?;
+        let client = builder.build();
+        let native_request = codex::ExecStreamRequest {
+            prompt: request.prompt,
+            ephemeral: false,
+            ignore_rules: false,
+            ignore_user_config: false,
+            idle_timeout: None,
+            output_last_message: None,
+            output_schema: None,
+            json_event_log: None,
+        };
+        let env = request.env;
+        #[cfg(target_os = "linux")]
+        let resources = ordinary_native;
+        #[cfg(not(target_os = "linux"))]
+        let resources = ();
+        let (control, resources) = retain_native_startup(
+            async move {
+                client
+                    .stream_exec_with_env_overrides_custody(native_request, &env, &process_custody)
+                    .await
+                    .map_err(|error| AgentWrapperError::Backend {
+                        message: format!("Codex durable Start failed: {error}"),
+                    })
+            },
+            attempt.clone(),
+            resources,
+        )
+        .await?;
         let cancel_requested = Arc::new(AtomicBool::new(false));
         let events = Box::pin(control.events.map(|event| match event {
             Ok(event) => codex_start_event(event),
-            Err(error) => typed_adapter_error("codex", format!("Codex event error: {error}")),
+            Err(error) => {
+                observe_codex_native_stream_error("start", &error);
+                typed_adapter_error("codex", format!("Codex event error: {error}"))
+            }
         }));
-        let completion = Box::pin(async move {
+        let completion: agent_api::DynAgentWrapperCompletion = Box::pin(async move {
             control
                 .completion
                 .await
@@ -242,12 +401,29 @@ impl PromptFulfillmentBridge {
                     message: format!("Codex durable Start completion failed: {error}"),
                 })
         });
+        #[cfg(target_os = "linux")]
+        let timeout = resources.with_resource(|resources| resources.as_ref().and(ordinary_timeout));
+        #[cfg(not(target_os = "linux"))]
+        let timeout = None;
+        let termination = control.termination.clone();
+        let attempt_termination = attempt.clone();
+        let (completion, terminal) = resources.retain_completion(
+            completion,
+            Some(attempt.settlement()),
+            move || {
+                attempt_termination.request_termination();
+                termination.request_termination();
+            },
+            timeout,
+        );
         Ok(PromptFulfillmentRunControl {
             handle: AgentWrapperRunHandle { events, completion },
             cancel: PromptFulfillmentCancelHandle::CodexNative {
                 handle: control.termination,
+                custody: attempt.clone(),
                 cancel_requested,
             },
+            terminal,
         })
     }
 
@@ -255,7 +431,30 @@ impl PromptFulfillmentBridge {
         &self,
         expected_session_id: &str,
         request: AgentWrapperRunRequest,
+        attempt: &NativeAttemptCustody,
     ) -> Result<PromptFulfillmentRunControl, AgentWrapperError> {
+        let NativeAttemptCustody::Codex {
+            process: process_custody,
+            ..
+        } = attempt
+        else {
+            return Err(AgentWrapperError::InvalidRequest {
+                message: "native custody backend mismatch".into(),
+            });
+        };
+        let process_custody = process_custody.clone();
+        #[cfg(target_os = "linux")]
+        let mut request = request;
+        #[cfg(target_os = "linux")]
+        let ordinary_native = self
+            .prepare_ordinary_native_launch(&mut request, attempt)
+            .await?;
+        #[cfg(target_os = "linux")]
+        if let Some(prepared) = ordinary_native.as_ref() {
+            attempt.bind_host_route(prepared.gateway_lease()).await?;
+        }
+        #[cfg(target_os = "linux")]
+        let ordinary_timeout = request.timeout;
         let mut builder = codex::CodexClient::builder()
             .binary(self.binary_path.clone())
             .json(true)
@@ -264,27 +463,56 @@ impl PromptFulfillmentBridge {
             .color_mode(codex::ColorMode::Never)
             .dangerously_bypass_approvals_and_sandbox(true)
             .timeout(request.timeout.unwrap_or(Duration::ZERO));
+        #[cfg(target_os = "linux")]
+        if let Some(prepared) = ordinary_native.as_ref() {
+            builder = configure_selected_codex_builder(
+                builder,
+                &prepared.model,
+                &prepared.home,
+                &prepared.openai_base_url,
+            )
+            .map_err(|error| AgentWrapperError::InvalidRequest {
+                message: error.to_string(),
+            })?
+            .timeout(Duration::ZERO);
+        }
         if let Some(working_dir) = request.working_dir {
             builder = builder.working_dir(working_dir);
         }
-        let control = builder
-            .build()
-            .stream_resume_with_env_overrides_control(
-                codex::ResumeRequest::with_id(expected_session_id).prompt(request.prompt),
-                &request.env,
-            )
-            .await
-            .map_err(|error| AgentWrapperError::Backend {
-                message: format!("Codex authority-managed ResumeOneTurn failed: {error}"),
-            })?;
+        let client = builder.build();
+        let native_request =
+            codex::ResumeRequest::with_id(expected_session_id).prompt(request.prompt);
+        let env = request.env;
+        #[cfg(target_os = "linux")]
+        let resources = ordinary_native;
+        #[cfg(not(target_os = "linux"))]
+        let resources = ();
+        let (control, resources) = retain_native_startup(
+            async move {
+                client
+                    .stream_resume_with_env_overrides_custody(
+                        native_request,
+                        &env,
+                        &process_custody,
+                    )
+                    .await
+                    .map_err(|error| AgentWrapperError::Backend {
+                        message: format!("Codex authority-managed ResumeOneTurn failed: {error}"),
+                    })
+            },
+            attempt.clone(),
+            resources,
+        )
+        .await?;
         let cancel_requested = Arc::new(AtomicBool::new(false));
         let events = Box::pin(control.events.map(|event| match event {
             Ok(event) => codex_resume_event(event),
             Err(error) => {
+                observe_codex_native_stream_error("resume", &error);
                 typed_adapter_error("codex", format!("Codex ResumeOneTurn event error: {error}"))
             }
         }));
-        let completion = Box::pin(async move {
+        let completion: agent_api::DynAgentWrapperCompletion = Box::pin(async move {
             control
                 .completion
                 .await
@@ -299,48 +527,114 @@ impl PromptFulfillmentBridge {
                     ),
                 })
         });
+        #[cfg(target_os = "linux")]
+        let timeout = resources.with_resource(|resources| resources.as_ref().and(ordinary_timeout));
+        #[cfg(not(target_os = "linux"))]
+        let timeout = None;
+        let termination = control.termination.clone();
+        let attempt_termination = attempt.clone();
+        let (completion, terminal) = resources.retain_completion(
+            completion,
+            Some(attempt.settlement()),
+            move || {
+                attempt_termination.request_termination();
+                termination.request_termination();
+            },
+            timeout,
+        );
         Ok(PromptFulfillmentRunControl {
             handle: AgentWrapperRunHandle { events, completion },
             cancel: PromptFulfillmentCancelHandle::CodexNative {
                 handle: control.termination,
+                custody: attempt.clone(),
                 cancel_requested,
             },
+            terminal,
         })
     }
 
     async fn run_claude_durable_start(
         &self,
         request: AgentWrapperRunRequest,
+        attempt: &NativeAttemptCustody,
     ) -> Result<PromptFulfillmentRunControl, AgentWrapperError> {
+        let NativeAttemptCustody::Claude {
+            process: process_custody,
+            ..
+        } = attempt
+        else {
+            return Err(AgentWrapperError::InvalidRequest {
+                message: "native custody backend mismatch".into(),
+            });
+        };
+        let process_custody = process_custody.clone();
         if !request.extensions.is_empty() {
             return Err(AgentWrapperError::InvalidRequest {
                 message: "durable Claude Start does not accept continuation extensions".to_string(),
             });
         }
+        #[cfg(target_os = "linux")]
+        let mut request = request;
+        #[cfg(target_os = "linux")]
+        let ordinary_native = self
+            .prepare_ordinary_native_launch(&mut request, attempt)
+            .await?;
+        #[cfg(target_os = "linux")]
+        if let Some(prepared) = ordinary_native.as_ref() {
+            attempt.bind_host_route(prepared.gateway_lease()).await?;
+        }
+        #[cfg(target_os = "linux")]
+        let ordinary_timeout = request.timeout;
         let mut builder = claude_code::ClaudeClient::builder()
             .binary(self.binary_path.clone())
             .mirror_stdout(false)
             .mirror_stderr(false);
+        #[cfg(target_os = "linux")]
+        if ordinary_native.is_some() {
+            builder = builder.timeout(None);
+        }
         if let Some(working_dir) = request.working_dir {
             builder = builder.working_dir(working_dir);
         }
         if let Some(timeout) = request.timeout {
-            builder = builder.timeout(Some(timeout));
+            #[cfg(target_os = "linux")]
+            if ordinary_native.is_none() {
+                builder = builder.timeout(Some(timeout));
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                builder = builder.timeout(Some(timeout));
+            }
         }
         for (key, value) in request.env {
             builder = builder.env(key, value);
         }
-        let control = builder
-            .build()
-            .print_stream_json_control(
-                claude_code::ClaudePrintRequest::new(request.prompt)
-                    .output_format(claude_code::ClaudeOutputFormat::StreamJson)
-                    .permission_mode("bypassPermissions"),
-            )
-            .await
-            .map_err(|error| AgentWrapperError::Backend {
-                message: format!("Claude durable Start failed: {error}"),
-            })?;
+        let native_request = claude_code::ClaudePrintRequest::new(request.prompt)
+            .output_format(claude_code::ClaudeOutputFormat::StreamJson)
+            .permission_mode("bypassPermissions");
+        #[cfg(target_os = "linux")]
+        let native_request = match ordinary_native.as_ref() {
+            Some(prepared) => native_request.model(prepared.model.clone()),
+            None => native_request,
+        };
+        let client = builder.build();
+        #[cfg(target_os = "linux")]
+        let resources = ordinary_native;
+        #[cfg(not(target_os = "linux"))]
+        let resources = ();
+        let (control, resources) = retain_native_startup(
+            async move {
+                client
+                    .print_stream_json_control_with_custody(native_request, &process_custody)
+                    .await
+                    .map_err(|error| AgentWrapperError::Backend {
+                        message: format!("Claude durable Start failed: {error}"),
+                    })
+            },
+            attempt.clone(),
+            resources,
+        )
+        .await?;
         let cancel_requested = Arc::new(AtomicBool::new(false));
         let events = Box::pin(control.events.map(|event| match event {
             Ok(event) => claude_start_event(event),
@@ -348,7 +642,7 @@ impl PromptFulfillmentBridge {
                 typed_adapter_error("claude_code", format!("Claude event error: {error}"))
             }
         }));
-        let completion = Box::pin(async move {
+        let completion: agent_api::DynAgentWrapperCompletion = Box::pin(async move {
             control
                 .completion
                 .await
@@ -361,12 +655,29 @@ impl PromptFulfillmentBridge {
                     message: format!("Claude durable Start completion failed: {error}"),
                 })
         });
+        #[cfg(target_os = "linux")]
+        let timeout = resources.with_resource(|resources| resources.as_ref().and(ordinary_timeout));
+        #[cfg(not(target_os = "linux"))]
+        let timeout = None;
+        let termination = control.termination.clone();
+        let attempt_termination = attempt.clone();
+        let (completion, terminal) = resources.retain_completion(
+            completion,
+            Some(attempt.settlement()),
+            move || {
+                attempt_termination.request_termination();
+                termination.request_termination();
+            },
+            timeout,
+        );
         Ok(PromptFulfillmentRunControl {
             handle: AgentWrapperRunHandle { events, completion },
             cancel: PromptFulfillmentCancelHandle::ClaudeNative {
                 handle: control.termination,
+                custody: attempt.clone(),
                 cancel_requested,
             },
+            terminal,
         })
     }
 
@@ -374,32 +685,81 @@ impl PromptFulfillmentBridge {
         &self,
         expected_session_id: &str,
         request: AgentWrapperRunRequest,
+        attempt: &NativeAttemptCustody,
     ) -> Result<PromptFulfillmentRunControl, AgentWrapperError> {
+        let NativeAttemptCustody::Claude {
+            process: process_custody,
+            ..
+        } = attempt
+        else {
+            return Err(AgentWrapperError::InvalidRequest {
+                message: "native custody backend mismatch".into(),
+            });
+        };
+        let process_custody = process_custody.clone();
+        #[cfg(target_os = "linux")]
+        let mut request = request;
+        #[cfg(target_os = "linux")]
+        let ordinary_native = self
+            .prepare_ordinary_native_launch(&mut request, attempt)
+            .await?;
+        #[cfg(target_os = "linux")]
+        if let Some(prepared) = ordinary_native.as_ref() {
+            attempt.bind_host_route(prepared.gateway_lease()).await?;
+        }
+        #[cfg(target_os = "linux")]
+        let ordinary_timeout = request.timeout;
         let mut builder = claude_code::ClaudeClient::builder()
             .binary(self.binary_path.clone())
             .mirror_stdout(false)
             .mirror_stderr(false);
+        #[cfg(target_os = "linux")]
+        if ordinary_native.is_some() {
+            builder = builder.timeout(None);
+        }
         if let Some(working_dir) = request.working_dir {
             builder = builder.working_dir(working_dir);
         }
         if let Some(timeout) = request.timeout {
-            builder = builder.timeout(Some(timeout));
+            #[cfg(target_os = "linux")]
+            if ordinary_native.is_none() {
+                builder = builder.timeout(Some(timeout));
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                builder = builder.timeout(Some(timeout));
+            }
         }
         for (key, value) in request.env {
             builder = builder.env(key, value);
         }
-        let control = builder
-            .build()
-            .print_stream_json_control(
-                claude_code::ClaudePrintRequest::new(request.prompt)
-                    .output_format(claude_code::ClaudeOutputFormat::StreamJson)
-                    .permission_mode("bypassPermissions")
-                    .resume_value(expected_session_id),
-            )
-            .await
-            .map_err(|error| AgentWrapperError::Backend {
-                message: format!("Claude authority-managed ResumeOneTurn failed: {error}"),
-            })?;
+        let native_request = claude_code::ClaudePrintRequest::new(request.prompt)
+            .output_format(claude_code::ClaudeOutputFormat::StreamJson)
+            .permission_mode("bypassPermissions")
+            .resume_value(expected_session_id);
+        #[cfg(target_os = "linux")]
+        let native_request = match ordinary_native.as_ref() {
+            Some(prepared) => native_request.model(prepared.model.clone()),
+            None => native_request,
+        };
+        let client = builder.build();
+        #[cfg(target_os = "linux")]
+        let resources = ordinary_native;
+        #[cfg(not(target_os = "linux"))]
+        let resources = ();
+        let (control, resources) = retain_native_startup(
+            async move {
+                client
+                    .print_stream_json_control_with_custody(native_request, &process_custody)
+                    .await
+                    .map_err(|error| AgentWrapperError::Backend {
+                        message: format!("Claude authority-managed ResumeOneTurn failed: {error}"),
+                    })
+            },
+            attempt.clone(),
+            resources,
+        )
+        .await?;
         let cancel_requested = Arc::new(AtomicBool::new(false));
         let events = Box::pin(control.events.map(|event| match event {
             Ok(event) => claude_resume_event(event),
@@ -408,7 +768,7 @@ impl PromptFulfillmentBridge {
                 format!("Claude ResumeOneTurn event error: {error}"),
             ),
         }));
-        let completion = Box::pin(async move {
+        let completion: agent_api::DynAgentWrapperCompletion = Box::pin(async move {
             control
                 .completion
                 .await
@@ -423,13 +783,127 @@ impl PromptFulfillmentBridge {
                     ),
                 })
         });
+        #[cfg(target_os = "linux")]
+        let timeout = resources.with_resource(|resources| resources.as_ref().and(ordinary_timeout));
+        #[cfg(not(target_os = "linux"))]
+        let timeout = None;
+        let termination = control.termination.clone();
+        let attempt_termination = attempt.clone();
+        let (completion, terminal) = resources.retain_completion(
+            completion,
+            Some(attempt.settlement()),
+            move || {
+                attempt_termination.request_termination();
+                termination.request_termination();
+            },
+            timeout,
+        );
         Ok(PromptFulfillmentRunControl {
             handle: AgentWrapperRunHandle { events, completion },
             cancel: PromptFulfillmentCancelHandle::ClaudeNative {
                 handle: control.termination,
+                custody: attempt.clone(),
                 cancel_requested,
             },
+            terminal,
         })
+    }
+}
+
+// Private transient transport slot; the existing sensitive-prefix scrub clears
+// inherited/request values before the held turn capability is installed.
+#[cfg(target_os = "linux")]
+const ORDINARY_CODEX_LOCAL_ROUTE_CAP_ENV: &str = "SUBSTRATE_INTERNAL_CODEX_LOCAL_ROUTE_CAPABILITY";
+
+#[cfg(target_os = "linux")]
+fn configure_selected_codex_builder(
+    builder: codex::CodexClientBuilder,
+    model: &str,
+    home: &std::path::Path,
+    endpoint: &str,
+) -> anyhow::Result<codex::CodexClientBuilder> {
+    crate::execution::agent_runtime::native_launch_context::validate_native_loopback_endpoint(
+        endpoint,
+    )?;
+    let quote = |value: &str| toml::Value::String(value.into()).to_string();
+    let provider = format!("{{ substrate-managed-gateway = {{ name = \"Substrate managed gateway\", base_url = {}, wire_api = \"responses\", env_key = {}, requires_openai_auth = false, supports_websockets = false }} }}", quote(&format!("{endpoint}/v1")), quote(ORDINARY_CODEX_LOCAL_ROUTE_CAP_ENV));
+    Ok(builder
+        .model(model)
+        .codex_home(home)
+        .create_home_dirs(false)
+        .config_override("model_provider", quote("substrate-managed-gateway"))
+        .config_override("model_providers", provider)
+        .config_override("check_for_update_on_startup", "false")
+        .config_override("cli_auth_credentials_store", quote("ephemeral")))
+}
+
+#[cfg(target_os = "linux")]
+fn prepare_ordinary_native_env(
+    env: &mut BTreeMap<String, String>,
+    home: &std::path::Path,
+    backend: AgentRuntimeBackendKind,
+    model: &str,
+    anthropic_endpoint: &str,
+    local_route_capability: &str,
+) {
+    let sensitive = |key: &str| {
+        [
+            "OPENAI_",
+            "ANTHROPIC_",
+            "CODEX_",
+            "CLAUDE_",
+            "CHATGPT_",
+            "SUBSTRATE_LLM_",
+            "SUBSTRATE_INTERNAL_CODEX_",
+        ]
+        .iter()
+        .any(|prefix| key.starts_with(prefix))
+            || [
+                "HTTP_PROXY",
+                "HTTPS_PROXY",
+                "ALL_PROXY",
+                "NO_PROXY",
+                "http_proxy",
+                "https_proxy",
+                "all_proxy",
+                "no_proxy",
+            ]
+            .contains(&key)
+    };
+    env.retain(|key, _| !sensitive(key));
+    // The pinned SDK exposes string overrides, not env_remove. These empty
+    // inherited provider fields contain no credential or upstream route.
+    for (key, _) in std::env::vars_os() {
+        if let Some(key) = key.to_str().filter(|key| sensitive(key)) {
+            env.insert(key.into(), String::new());
+        }
+    }
+    for key in [
+        "HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_STATE_HOME",
+        "XDG_CACHE_HOME",
+    ] {
+        env.insert(key.into(), home.display().to_string());
+    }
+    env.insert("NO_PROXY".into(), "127.0.0.1,::1,localhost".into());
+    match backend {
+        AgentRuntimeBackendKind::Codex => {
+            env.insert("CODEX_HOME".into(), home.display().to_string());
+            env.insert(
+                ORDINARY_CODEX_LOCAL_ROUTE_CAP_ENV.into(),
+                local_route_capability.into(),
+            );
+        }
+        AgentRuntimeBackendKind::ClaudeCode => {
+            // This short-lived local capability authenticates the exact managed
+            // Host route. It is neither upstream auth nor original HSA authority.
+            env.insert("CLAUDE_CONFIG_DIR".into(), home.display().to_string());
+            env.insert("ANTHROPIC_BASE_URL".into(), anthropic_endpoint.into());
+            env.insert("ANTHROPIC_AUTH_TOKEN".into(), local_route_capability.into());
+            env.insert("ANTHROPIC_MODEL".into(), model.into());
+        }
     }
 }
 
@@ -652,6 +1126,54 @@ fn claude_lifecycle_event(
     }
 }
 
+fn observe_codex_native_stream_error(operation: &'static str, error: &codex::ExecStreamError) {
+    use codex::{CodexError as C, ExecStreamError as E};
+    let (stream_error_variant, codex_error_variant) = match error {
+        E::Codex(error) => (
+            "codex",
+            match error {
+                C::Spawn { .. } => "spawn",
+                C::Wait { .. } => "wait",
+                C::Timeout { .. } => "timeout",
+                C::NonZeroExit { .. } => "non_zero_exit",
+                C::InvalidUtf8(_) => "invalid_utf8",
+                C::JsonParse { .. } => "json_parse",
+                C::ExecPolicyParse { .. } => "exec_policy_parse",
+                C::FeatureListParse { .. } => "feature_list_parse",
+                C::ResponsesApiProxyInfoRead { .. } => "responses_api_proxy_info_read",
+                C::ResponsesApiProxyInfoParse { .. } => "responses_api_proxy_info_parse",
+                C::EmptyPrompt => "empty_prompt",
+                C::EmptySandboxCommand => "empty_sandbox_command",
+                C::EmptyExecPolicyCommand => "empty_exec_policy_command",
+                C::EmptyApiKey => "empty_api_key",
+                C::EmptyTaskId => "empty_task_id",
+                C::EmptyEnvId => "empty_env_id",
+                C::EmptyMcpServerName => "empty_mcp_server_name",
+                C::EmptyMcpCommand => "empty_mcp_command",
+                C::EmptyMcpUrl => "empty_mcp_url",
+                C::EmptySocketPath => "empty_socket_path",
+                C::TempDir(_) => "temp_dir",
+                C::WorkingDirectory { .. } => "working_directory",
+                C::PrepareOutputDirectory { .. } => "prepare_output_directory",
+                C::PrepareCodexHome { .. } => "prepare_codex_home",
+                C::StdoutUnavailable => "stdout_unavailable",
+                C::StderrUnavailable => "stderr_unavailable",
+                C::StdinUnavailable => "stdin_unavailable",
+                C::CaptureIo(_) => "capture_io",
+                C::StdinWrite(_) => "stdin_write",
+                C::Join(_) => "join",
+            },
+        ),
+        E::Parse { .. } => ("parse", "none"),
+        E::Normalize { .. } => ("normalize", "none"),
+        E::IdleTimeout { .. } => ("idle_timeout", "none"),
+        E::ChannelClosed => ("channel_closed", "none"),
+    };
+    tracing::debug!(target: "substrate::native_stream_error",
+        operation, stream_error_variant, codex_error_variant,
+        "native Codex stream failed");
+}
+
 fn typed_adapter_error(agent_kind: &str, message: String) -> AgentWrapperEvent {
     AgentWrapperEvent {
         agent_kind: AgentWrapperKind::new(agent_kind).expect("static agent kind"),
@@ -771,13 +1293,16 @@ mod tests {
             .unwrap();
         let (phases, completion_status) = runtime.block_on(async {
             let control = bridge
-                .run_durable_start_control(AgentWrapperRunRequest {
-                    prompt: "real Claude Start prompt".to_string(),
-                    working_dir: Some(temp.path().to_path_buf()),
-                    timeout: Some(Duration::from_secs(5)),
-                    env: BTreeMap::new(),
-                    extensions: BTreeMap::new(),
-                })
+                .run_durable_start_control(
+                    AgentWrapperRunRequest {
+                        prompt: "real Claude Start prompt".to_string(),
+                        working_dir: Some(temp.path().to_path_buf()),
+                        timeout: Some(Duration::from_secs(5)),
+                        env: BTreeMap::new(),
+                        extensions: BTreeMap::new(),
+                    },
+                    &bridge.native_attempt(),
+                )
                 .await
                 .expect("launch durable Claude Start");
             let mut events = control.handle.events;
@@ -857,6 +1382,7 @@ mod tests {
                         env: BTreeMap::from([("RESUME_TEST_ENV".to_string(), "exact".to_string())]),
                         extensions: exact_resume_extensions("codex-resume-session"),
                     },
+                    &bridge.native_attempt(),
                 )
                 .await
                 .expect("launch typed Codex ResumeOneTurn");
@@ -979,6 +1505,7 @@ mod tests {
                         env: BTreeMap::new(),
                         extensions: exact_resume_extensions("claude-resume-session"),
                     },
+                    &bridge.native_attempt(),
                 )
                 .await
                 .expect("launch typed Claude ResumeOneTurn");
@@ -1124,6 +1651,7 @@ mod tests {
                             env: BTreeMap::new(),
                             extensions,
                         },
+                        &bridge.native_attempt(),
                     )
                     .await
                 {
@@ -1137,5 +1665,423 @@ mod tests {
             !spawn_marker.exists(),
             "resume validation must complete before provider execution"
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_selected_native_env_excludes_inherited_provider_custody() {
+        let _env = crate::execution::AuthorityEnvTestGuard::preserve();
+        std::env::set_var("OPENAI_API_KEY", "synthetic-parent-provider-secret");
+        std::env::set_var(
+            "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN",
+            "synthetic-parent-account-secret",
+        );
+        let previous_cap = std::env::var_os(ORDINARY_CODEX_LOCAL_ROUTE_CAP_ENV);
+        std::env::set_var(
+            ORDINARY_CODEX_LOCAL_ROUTE_CAP_ENV,
+            "synthetic-parent-stale-cap",
+        );
+        let mut env = BTreeMap::from([
+            (
+                ORDINARY_CODEX_LOCAL_ROUTE_CAP_ENV.into(),
+                "synthetic-request-stale-cap".into(),
+            ),
+            (
+                "SUBSTRATE_LLM_HOST_CLEANUP_TOKEN".into(),
+                "synthetic-request-cleanup-secret".into(),
+            ),
+            (
+                "ANTHROPIC_API_KEY".into(),
+                "synthetic-request-secret".into(),
+            ),
+            ("CODEX_HOME".into(), "/untrusted/home".into()),
+            (
+                SUBSTRATE_AGENT_TOOLBOX_ENDPOINT_ENV.into(),
+                "unix:///synthetic/toolbox".into(),
+            ),
+        ]);
+        prepare_ordinary_native_env(
+            &mut env,
+            std::path::Path::new("/synthetic/held-home"),
+            AgentRuntimeBackendKind::Codex,
+            "synthetic-model",
+            "http://127.0.0.1:4123",
+            "synthetic-held-route-capability",
+        );
+        match previous_cap {
+            Some(value) => std::env::set_var(ORDINARY_CODEX_LOCAL_ROUTE_CAP_ENV, value),
+            None => std::env::remove_var(ORDINARY_CODEX_LOCAL_ROUTE_CAP_ENV),
+        }
+        assert_eq!(
+            env[ORDINARY_CODEX_LOCAL_ROUTE_CAP_ENV],
+            "synthetic-held-route-capability"
+        );
+        assert_eq!(
+            env.values()
+                .filter(|value| *value == "synthetic-held-route-capability")
+                .count(),
+            1
+        );
+        assert!(
+            !env.contains_key("SUBSTRATE_LLM_HOST_CLEANUP_TOKEN")
+                || env["SUBSTRATE_LLM_HOST_CLEANUP_TOKEN"].is_empty()
+        );
+        assert_eq!(env["OPENAI_API_KEY"], "");
+        assert_eq!(env["SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN"], "");
+        assert!(!env.contains_key("ANTHROPIC_API_KEY") || env["ANTHROPIC_API_KEY"].is_empty());
+        assert_eq!(env["CODEX_HOME"], "/synthetic/held-home");
+        assert_eq!(
+            env[SUBSTRATE_AGENT_TOOLBOX_ENDPOINT_ENV],
+            "unix:///synthetic/toolbox"
+        );
+        assert!(
+            !env.values()
+                .any(|value| value.contains("synthetic-parent")
+                    || value.contains("synthetic-request"))
+        );
+        prepare_ordinary_native_env(
+            &mut env,
+            std::path::Path::new("/synthetic/held-home"),
+            AgentRuntimeBackendKind::ClaudeCode,
+            "claude-sonnet-4.5",
+            "http://127.0.0.1:4123",
+            "synthetic-held-claude-capability",
+        );
+        assert!(
+            !env.contains_key(ORDINARY_CODEX_LOCAL_ROUTE_CAP_ENV)
+                || env[ORDINARY_CODEX_LOCAL_ROUTE_CAP_ENV].is_empty()
+        );
+        assert!(!env
+            .values()
+            .any(|value| value == "synthetic-held-route-capability"));
+        assert_eq!(
+            env.values()
+                .filter(|value| *value == "synthetic-held-claude-capability")
+                .count(),
+            1
+        );
+        assert_eq!(env["ANTHROPIC_BASE_URL"], "http://127.0.0.1:4123");
+        assert_eq!(
+            env["ANTHROPIC_AUTH_TOKEN"],
+            "synthetic-held-claude-capability"
+        );
+        assert_eq!(env["ANTHROPIC_MODEL"], "claude-sonnet-4.5");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_selected_codex_builder_pins_managed_route_and_model() {
+        use std::os::unix::fs::PermissionsExt;
+        let _env = crate::execution::AuthorityEnvTestGuard::preserve();
+        let temp = tempfile::tempdir().unwrap();
+        let script = temp.path().join("synthetic-codex");
+        let args = temp.path().join("args");
+        std::fs::write(&script, format!(
+            "#!/bin/sh\n[ \"$SUBSTRATE_INTERNAL_CODEX_LOCAL_ROUTE_CAPABILITY\" = synthetic-held-route-capability ] || exit 91\nprintf '%s\\n' \"$@\" >> '{}'\n/bin/cat >/dev/null\nprintf '{{\"type\":\"thread.started\",\"thread_id\":\"component-history\"}}\\n'\nprintf '{{\"type\":\"turn.completed\",\"thread_id\":\"component-history\",\"turn_id\":\"component-turn\"}}\\n'\n", args.display()
+        )).unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let mut native_env = BTreeMap::new();
+        prepare_ordinary_native_env(
+            &mut native_env,
+            temp.path(),
+            AgentRuntimeBackendKind::Codex,
+            "synthetic-pinned-model",
+            "http://127.0.0.1:4123",
+            "synthetic-held-route-capability",
+        );
+        runtime.block_on(async {
+            let builder = || {
+                configure_selected_codex_builder(
+                    codex::CodexClient::builder()
+                        .binary(&script)
+                        .json(true)
+                        .quiet(true)
+                        .mirror_stdout(false)
+                        .working_dir(temp.path()),
+                    "synthetic-pinned-model",
+                    temp.path(),
+                    "http://127.0.0.1:4123",
+                )
+                .unwrap()
+                .build()
+            };
+            let control = builder()
+                .stream_exec_with_env_overrides_control(
+                    codex::ExecStreamRequest {
+                        prompt: "component Start".into(),
+                        ephemeral: false,
+                        ignore_rules: false,
+                        ignore_user_config: false,
+                        idle_timeout: None,
+                        output_last_message: None,
+                        output_schema: None,
+                        json_event_log: None,
+                    },
+                    &native_env,
+                )
+                .await
+                .unwrap();
+            let mut events = control.events;
+            while events.next().await.is_some() {}
+            control.completion.await.unwrap();
+            for prompt in ["component Resume one", "component Resume two"] {
+                let control = builder()
+                    .stream_resume_with_env_overrides_control(
+                        codex::ResumeRequest::with_id("component-history").prompt(prompt),
+                        &native_env,
+                    )
+                    .await
+                    .unwrap();
+                let mut events = control.events;
+                while events.next().await.is_some() {}
+                control.completion.await.unwrap();
+            }
+        });
+        let args = std::fs::read_to_string(args).unwrap();
+        assert_eq!(
+            args.lines()
+                .filter(|line| *line == "synthetic-pinned-model")
+                .count(),
+            3
+        );
+        assert_eq!(
+            args.lines()
+                .filter(|line| *line == "component-history")
+                .count(),
+            2
+        );
+        assert_eq!(
+            args.lines()
+                .filter(|line| line.contains("base_url = \"http://127.0.0.1:4123/v1\""))
+                .count(),
+            3
+        );
+        assert!(!args.contains("access_token"));
+        assert!(!args.contains("synthetic-held-route-capability"));
+        let providers: Vec<_> = args
+            .lines()
+            .filter(|line| line.starts_with("model_providers="))
+            .map(|line| toml::from_str::<toml::Value>(line).unwrap())
+            .collect();
+        assert_eq!(
+            providers.len(),
+            3,
+            "Start and both exact Resumes pin the provider"
+        );
+        for config in providers {
+            let providers = config["model_providers"].as_table().unwrap();
+            assert_eq!(providers.len(), 1);
+            let provider = providers["substrate-managed-gateway"].as_table().unwrap();
+            assert_eq!(
+                provider["env_key"].as_str(),
+                Some(ORDINARY_CODEX_LOCAL_ROUTE_CAP_ENV)
+            );
+            let mut keys: Vec<_> = provider.keys().map(String::as_str).collect();
+            keys.sort_unstable();
+            assert_eq!(
+                keys,
+                vec![
+                    "base_url",
+                    "env_key",
+                    "name",
+                    "requires_openai_auth",
+                    "supports_websockets",
+                    "wire_api"
+                ]
+            );
+        }
+        for endpoint in [
+            "https://upstream.invalid",
+            "http://localhost:4123",
+            "http://127.0.0.1:0",
+            "http://127.0.0.1:4123/other",
+        ] {
+            assert!(configure_selected_codex_builder(
+                codex::CodexClient::builder(),
+                "synthetic-model",
+                temp.path(),
+                endpoint
+            )
+            .is_err());
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_selected_completion_drop_and_cancel_retains_home_until_child_terminal() {
+        use std::sync::atomic::Ordering;
+        struct Custody {
+            _home: std::fs::File,
+            terminal: Arc<AtomicBool>,
+            premature: Arc<AtomicBool>,
+            released: Arc<tokio::sync::Notify>,
+        }
+        impl Drop for Custody {
+            fn drop(&mut self) {
+                self.premature
+                    .store(!self.terminal.load(Ordering::SeqCst), Ordering::SeqCst);
+                self.released.notify_one();
+            }
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            for mode in ["drop", "cancel", "timeout", "normal"] {
+                let terminal = Arc::new(AtomicBool::new(false));
+                let premature = Arc::new(AtomicBool::new(false));
+                let released = Arc::new(tokio::sync::Notify::new());
+                let custody = Custody { _home: std::fs::File::open(temp.path()).unwrap(),
+                    terminal: Arc::clone(&terminal), premature: Arc::clone(&premature), released: Arc::clone(&released) };
+                let mut child = tokio::process::Command::new("/bin/sleep")
+                    .arg(if mode == "normal" { "0" } else { "10" }).kill_on_drop(true).spawn().unwrap();
+                let (stop, mut stopped) = tokio::sync::oneshot::channel::<()>();
+                let stop = Arc::new(std::sync::Mutex::new(Some(stop)));
+                let terminal_after_wait = Arc::clone(&terminal);
+                let completion: agent_api::DynAgentWrapperCompletion = Box::pin(async move {
+                    let status = tokio::select! {
+                        status = child.wait() => status.unwrap(),
+                        _ = &mut stopped => { let _ = child.start_kill(); child.wait().await.unwrap() },
+                    };
+                    terminal_after_wait.store(true, Ordering::SeqCst);
+                    Ok(AgentWrapperCompletion { status, final_text: None, data: None })
+                });
+                let private_stop = Arc::clone(&stop);
+                let (completion, terminal_observation) = retain_native_completion(completion, Some(Box::pin(async { Ok(()) })), custody,
+                    move || { if let Some(stop) = private_stop.lock().unwrap().take() { let _ = stop.send(()); } },
+                    (mode == "timeout").then_some(Duration::from_millis(10)));
+                if mode == "drop" { drop(completion); }
+                else {
+                    if mode == "cancel" { let _ = stop.lock().unwrap().take().unwrap().send(()); }
+                    completion.await.unwrap();
+                }
+                tokio::time::timeout(Duration::from_secs(5), released.notified()).await.unwrap();
+                assert!(terminal.load(Ordering::SeqCst), "{mode}");
+                assert!(!premature.load(Ordering::SeqCst), "{mode}");
+                assert!(terminal_observation.wait().await.require_checked().is_ok());
+            }
+        });
+    }
+}
+
+#[cfg(target_os = "linux")]
+async fn finish_host_preparation_v1<T>(
+    result: Result<T, AgentWrapperError>,
+    acquisition: &crate::execution::agent_runtime::native_launch_context::HostGatewayAcquisitionCustodyV1,
+) -> Result<T, AgentWrapperError> {
+    match result {
+        Ok(prepared) => Ok(prepared),
+        Err(error) => match acquisition.close_and_wait().await {
+            Ok(_) => Err(error),
+            Err(cleanup) => Err(AgentWrapperError::Backend {
+                message: format!("{error}; Host cleanup: {cleanup}"),
+            }),
+        },
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod pending_host_preparation_tests {
+    use super::*;
+    use crate::execution::agent_runtime::native_launch_context::HostGatewayCleanupOutcomeV1;
+    #[tokio::test]
+    async fn test_pending_host_preparation_joins_checked_cleanup() {
+        // Finite pending-owner fixtures, without a fabricated lease/admission,
+        // service exchange, native process or provider effect. Exercise the same
+        // production error join for cancellation, unknown delivery and an early
+        // post-acquisition validation failure before bind_host_route.
+        for error in [
+            "preparation cancelled",
+            "submission_outcome_unknown: response lost",
+            "post-acquisition revalidation failed",
+        ] {
+            for custody in [
+                NativeAttemptCustody::codex(),
+                NativeAttemptCustody::claude(),
+            ] {
+                let acquisition = custody.begin_host_acquisition().unwrap();
+                let completion = acquisition.begin().unwrap();
+                if error == "preparation cancelled" {
+                    custody.request_termination();
+                }
+                let terminal = finish_host_preparation_v1::<()>(
+                    Err(AgentWrapperError::Backend {
+                        message: error.into(),
+                    }),
+                    &acquisition,
+                );
+                tokio::pin!(terminal);
+                let settlement = custody.settlement();
+                tokio::pin!(settlement);
+                assert!(
+                    futures::poll!(&mut terminal).is_pending(),
+                    "public error cannot bypass cleanup"
+                );
+                assert!(
+                    futures::poll!(&mut settlement).is_pending(),
+                    "empty native custody cannot bypass pending Host ownership"
+                );
+                assert!(
+                    custody.clone().begin_host_acquisition().is_err(),
+                    "uncertainty cannot be rebound to a second acquisition"
+                );
+                // Explicit checked fixture acknowledgment, not process absence.
+                completion
+                    .send(Some(HostGatewayCleanupOutcomeV1::Released))
+                    .unwrap();
+                assert!(terminal.await.unwrap_err().to_string().contains(error));
+                settlement.await.unwrap();
+            }
+        }
+        let custody = NativeAttemptCustody::codex();
+        let acquisition = custody.begin_host_acquisition().unwrap();
+        let completion = acquisition.begin().unwrap();
+        let mut terminal = Box::pin(finish_host_preparation_v1::<()>(
+            Err(AgentWrapperError::Backend {
+                message: "observer lost".into(),
+            }),
+            &acquisition,
+        ));
+        assert!(futures::poll!(&mut terminal).is_pending());
+        // Dropping the response/error awaiter does not detach pending custody.
+        drop(terminal);
+        let settlement = custody.settlement();
+        tokio::pin!(settlement);
+        assert!(futures::poll!(&mut settlement).is_pending());
+        completion
+            .send(Some(HostGatewayCleanupOutcomeV1::Unknown))
+            .unwrap();
+        assert!(settlement
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("cleanup unacknowledged"));
+        assert!(custody.begin_host_acquisition().is_err());
+        let abandoned = NativeAttemptCustody::codex();
+        let acquisition = abandoned.begin_host_acquisition().unwrap();
+        let completion = acquisition.begin().unwrap();
+        drop(completion);
+        assert!(abandoned
+            .settlement()
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("owner unavailable"));
+        assert!(abandoned.begin_host_acquisition().is_err());
+        let no_effect = NativeAttemptCustody::claude();
+        let acquisition = no_effect.begin_host_acquisition().unwrap();
+        assert_eq!(
+            acquisition.close_and_wait().await.unwrap(),
+            HostGatewayCleanupOutcomeV1::NoAcquireSent
+        );
+        assert!(acquisition.begin().is_err());
+        no_effect.settlement().await.unwrap();
+        assert!(no_effect.begin_host_acquisition().is_err());
     }
 }

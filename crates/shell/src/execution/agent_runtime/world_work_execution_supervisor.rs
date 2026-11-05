@@ -336,6 +336,34 @@ pub(crate) struct WorldWorkCancellationAcceptanceOutcomeV1 {
     pub(crate) terminal: Option<WorldWorkTerminalObservationV1>,
 }
 
+#[cfg(target_os = "linux")]
+pub(crate) enum OrdinaryCancellationDecisionV1 {
+    NoActiveCancelableWork,
+    AmbiguousTarget,
+    OwnerUnreachable(&'static str),
+    Accepted(Box<PreparedOrdinaryCancellationV1>),
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) struct PreparedOrdinaryCancellationV1 {
+    supervisor: WorldWorkExecutionSupervisor,
+    acceptance: WorldWorkAcceptanceRecordV1,
+    cancellation: WorldWorkCancellationAcceptanceOutcomeV1,
+}
+
+#[cfg(target_os = "linux")]
+impl PreparedOrdinaryCancellationV1 {
+    pub(crate) fn into_parts(
+        self,
+    ) -> (
+        WorldWorkExecutionSupervisor,
+        WorldWorkAcceptanceRecordV1,
+        WorldWorkCancellationAcceptanceOutcomeV1,
+    ) {
+        (self.supervisor, self.acceptance, self.cancellation)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum WorldWorkInterruptionReasonV1 {
@@ -558,6 +586,96 @@ impl WorldWorkExecutionSupervisorStateV1 {
         }
         Ok(())
     }
+}
+
+/// Decode the complete existing supervisor owner record from a held physical
+/// capture. No storage transaction, recovery, claim, or observation is started.
+#[cfg(target_os = "linux")]
+pub(crate) fn decode_world_controller_supervisor_observations(
+    bytes: Option<&[u8]>,
+    authority_store_id: &str,
+    orchestration_session_id: &str,
+) -> Result<Vec<WorldWorkExecutionObservationV1>> {
+    let Some(bytes) = bytes else {
+        return Ok(Vec::new());
+    };
+    let state: WorldWorkExecutionSupervisorStateV1 =
+        super::host_session_authority::canonical_json::from_slice(bytes)
+            .context("decode held World controller supervisor source")?;
+    state.validate(authority_store_id)?;
+    Ok(state
+        .executions_by_acceptance_record_id
+        .values()
+        .filter(|execution| execution.claim.orchestration_session_id == orchestration_session_id)
+        .map(SupervisedWorldWorkExecutionV1::observation)
+        .collect())
+}
+
+/// Authenticate historical observation for one already-admitted receipt. This
+/// supplies no current control, effect, cleanup or later-send permission.
+#[cfg(target_os = "linux")]
+pub(crate) fn decode_ordinary_accepted_observation(
+    snapshot: &super::host_session_authority::store::AcceptedWorkAuthorityPhysicalSnapshotV1,
+    supervisor_bytes: Option<&[u8]>,
+    expected: &WorldWorkAcceptanceRecordV1,
+) -> Result<WorldWorkExecutionObservationV1> {
+    use super::dispatch_policy_commitment::{
+        resolve_accepted_work_receipt_material_from_snapshot,
+        AcceptedWorkReceiptMaterialResolutionV1, DispatchPolicyCommitmentLookupKeyV1,
+        DispatchPolicyCommitmentSubjectKeyV1,
+    };
+    use super::state_store::{
+        authenticate_persisted_world_work_acceptance, WorldWorkAcceptanceLookupKeyV1,
+    };
+    let witness = authenticate_persisted_world_work_acceptance(
+        snapshot,
+        &WorldWorkAcceptanceLookupKeyV1::new(
+            &expected.authority_store_id,
+            &expected.acceptance_record_id,
+        ),
+    )
+    .map_err(|error| {
+        anyhow::anyhow!("ordinary receipt observation B1 authentication refused: {error:?}")
+    })?;
+    if witness.record() != expected {
+        anyhow::bail!("ordinary receipt observation immutable acceptance differs");
+    }
+    let subject = match &expected.work_identity {
+        AcceptedWorldWorkIdentityV1::EphemeralTask { task_run_id } => {
+            DispatchPolicyCommitmentSubjectKeyV1::EphemeralWork {
+                task_run_id: task_run_id.clone(),
+            }
+        }
+        AcceptedWorldWorkIdentityV1::RetainedTurn {
+            active_run_id,
+            message_id,
+            ..
+        } => DispatchPolicyCommitmentSubjectKeyV1::RetainedWorkerTurn {
+            active_run_id: active_run_id.clone(),
+            message_id: message_id.clone(),
+        },
+    };
+    let key = DispatchPolicyCommitmentLookupKeyV1 {
+        authority_store_id: expected.authority_store_id.clone(),
+        orchestration_session_id: expected.orchestration_session_id.clone(),
+        request_id: expected.request_id.clone(),
+        subject,
+    };
+    if !matches!(
+        resolve_accepted_work_receipt_material_from_snapshot(snapshot, &key, expected).map_err(
+            |error| anyhow::anyhow!(
+                "ordinary receipt observation E2/B1 authentication refused: {error:?}"
+            )
+        )?,
+        AcceptedWorkReceiptMaterialResolutionV1::Resolved(_)
+    ) {
+        anyhow::bail!("ordinary receipt observation exact E2 material unavailable");
+    }
+    super::retained_worker_runtime::read_ordinary_world_work_observation_v1(
+        snapshot,
+        supervisor_bytes,
+        witness.record(),
+    )
 }
 
 #[derive(Clone, Debug)]
@@ -982,6 +1100,276 @@ impl WorldWorkExecutionSupervisor {
         })
     }
 
+    /// Authorize one ordinary control action independently from read/open or
+    /// later-send permission. Original source guards remain live through the
+    /// existing lease owner's actual publication; no Root lock spans transport.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn accept_or_join_ordinary_cancellation(
+        selection: &super::native_launch_context::AuthenticatedOrdinarySelectionV1,
+        request: &super::dispatch_contract::ValidatedWorldDispatchRequestV1,
+    ) -> Result<OrdinaryCancellationDecisionV1> {
+        Self::accept_or_join_ordinary_cancellation_control(selection, request, None)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn accept_or_join_ordinary_stop_cancellation(
+        selection: &super::native_launch_context::AuthenticatedOrdinarySelectionV1,
+        stop: &super::retained_worker_runtime::PreparedOrdinaryWorkerStopV1,
+    ) -> Result<OrdinaryCancellationDecisionV1> {
+        use super::dispatch_contract::*;
+        let record = stop
+            .active_acceptance_record()
+            .ok_or_else(|| anyhow::anyhow!("ordinary Stop has no active accepted turn"))?;
+        let AcceptedWorldWorkIdentityV1::RetainedTurn {
+            active_run_id,
+            message_id,
+            target_participant_id,
+        } = &record.work_identity
+        else {
+            anyhow::bail!("ordinary Stop active acceptance changed family");
+        };
+        let exact = WorldDispatchControlTargetV1::AcceptedRetainedTurn {
+            acceptance_record_id: record.acceptance_record_id.clone(),
+            active_run_id: active_run_id.clone(),
+            message_id: message_id.clone(),
+            target_participant_id: target_participant_id.clone(),
+        };
+        let request = super::dispatch_contract::WorldDispatchRequestV1 {
+            request_id: Some(stop.request().stop_request_id.clone()),
+            idempotency_key: Some(stop.request().stop_request_id.clone()),
+            orchestration_session_id: Some(record.orchestration_session_id.clone()),
+            caller_participant_id: Some(stop.request().caller_participant_id.clone()),
+            action: WorldDispatchActionV1::CancelWorldWork,
+            mode: WorldDispatchModeV1::Retained,
+            target_backend_id: Some(record.target_backend_id.clone()),
+            task_run_id: Some(format!(
+                "substrate_target_v1:{}",
+                serde_json::to_string(&exact)?
+            )),
+            target_participant_id: None,
+            world_id: Some(record.world_id.clone()),
+            world_generation: Some(record.world_generation),
+            dispatch_policy_narrowing: None,
+            payload: WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1::default()),
+        }
+        .validate()?;
+        Self::accept_or_join_ordinary_cancellation_control(selection, &request, Some(stop))
+    }
+
+    #[cfg(target_os = "linux")]
+    fn accept_or_join_ordinary_cancellation_control(
+        selection: &super::native_launch_context::AuthenticatedOrdinarySelectionV1,
+        request: &super::dispatch_contract::ValidatedWorldDispatchRequestV1,
+        stop: Option<&super::retained_worker_runtime::PreparedOrdinaryWorkerStopV1>,
+    ) -> Result<OrdinaryCancellationDecisionV1> {
+        use super::dispatch_contract::{
+            WorldDispatchActionV1, WorldDispatchControlTargetV1, WorldDispatchModeV1,
+        };
+        use super::host_session_authority::schema::{AgentExecutionScopeV1, HostSessionPostureV1};
+        use super::retained_worker_runtime::read_ordinary_retained_worker_from_sources_v1;
+        use super::state_store::{
+            authenticate_ordinary_world_work_session_cut_v1, ProposedWorldWorkIdentityV1,
+        };
+        use crate::execution::orchestrator_world_dispatch::{
+            enforce_world_dispatch_read_or_effect_policy, ordinary_start_selection_carrier,
+            resolve_orchestrator_world_dispatch_exact_target_v1,
+        };
+        if request.action != WorldDispatchActionV1::CancelWorldWork {
+            anyhow::bail!("ordinary cancellation owner requires the Cancel action");
+        }
+        let exact = resolve_orchestrator_world_dispatch_exact_target_v1(request)?;
+        let target = match &exact {
+            Some(
+                WorldDispatchControlTargetV1::AcceptedRetainedTurn {
+                    target_participant_id,
+                    ..
+                }
+                | WorldDispatchControlTargetV1::PendingRetainedAdmission {
+                    target_participant_id,
+                    ..
+                },
+            ) => Some(target_participant_id.as_str()),
+            None if request.mode == WorldDispatchModeV1::Retained => {
+                request.target_participant_id.as_deref()
+            }
+            None => None,
+        };
+        selection.with_ordinary_supervisor_control_sources_v1(target, |context, source, verify_physical| {
+            let current = &source.facts.current;
+            let cleanup_world = stop.map(|stop| super::host_session_authority::schema::WorldBindingV1 {
+                world_id: stop.request().world_id.clone(), world_generation: stop.request().world_generation });
+            let world = cleanup_world.as_ref().or(current.authority.world_binding.as_ref())
+                .ok_or_else(|| anyhow::anyhow!("ordinary cancellation World binding absent"))?;
+            if context.selections.native.placement != transport_api_types::AgentSelectionPlacementV1::Host
+                || context.selections.requested.placement != transport_api_types::AgentSelectionPlacementV1::World
+                || (stop.is_none() && (current.caller.descriptor.execution_scope != AgentExecutionScopeV1::Host
+                || current.authority.lifecycle_posture != HostSessionPostureV1::ActiveAttached
+                || request.caller_participant_id != current.caller.participant_id))
+                || request.orchestration_session_id != context.orchestration_session_id
+                || (stop.is_none() && (current.caller.descriptor.backend_id != context.selections.native.backend_id
+                || current.caller.descriptor.agent_id != context.selections.native.realized_agent_id
+                || current.caller.descriptor.protocol != context.descriptor.protocol
+                || current.caller.descriptor.backend_kind != context.descriptor.backend_kind))
+                || request.target_backend_id != context.selections.requested.backend_id
+            { anyhow::bail!("stale_linkage: ordinary cancellation caller/role source differs"); }
+            if request.world_id != world.world_id || request.world_generation != world.world_generation {
+                anyhow::bail!("world_binding_mismatch: ordinary cancellation requires the exact current World generation");
+            }
+            let verify = || -> Result<()> {
+                verify_physical()?;
+                let home = selection.held_authority().bootstrap_home();
+                let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
+                    Path::new(&context.workspace_binding.workspace_root.physical_path), &home)?;
+                let policy_request = stop.map(|stop| stop.policy_request()).transpose()?;
+                enforce_world_dispatch_read_or_effect_policy(policy_request.as_ref().unwrap_or(request), &policy)
+            };
+            verify()?;
+            let session = authenticate_ordinary_world_work_session_cut_v1(source.snapshot(), &request.orchestration_session_id, world)?;
+            if request.mode == WorldDispatchModeV1::Retained {
+                let target = target.ok_or_else(|| anyhow::anyhow!("ordinary cancellation retained target missing"))?;
+                let row = read_ordinary_retained_worker_from_sources_v1(source.snapshot(), source.admission_registry_bytes(),
+                    &source.admission_key_files(), &request.orchestration_session_id, world, target, &ordinary_start_selection_carrier(selection)?)
+                    .map_err(|error| anyhow::anyhow!("{error}"))?;
+                use super::retained_worker_runtime::OrdinaryRetainedWorkerReadV1;
+                let (issuer, bootstrap_complete) = match &row {
+                    OrdinaryRetainedWorkerReadV1::Spawn { record, native_bootstrap_completed, .. } => (record.issuer_request_id.as_str(), *native_bootstrap_completed),
+                    OrdinaryRetainedWorkerReadV1::Fork { record, native_bootstrap_completed, .. } => (record.activation.request_id.as_str(), *native_bootstrap_completed),
+                };
+                if let Some(WorldDispatchControlTargetV1::PendingRetainedAdmission { issuer_request_id, .. }) = &exact {
+                    if issuer_request_id != issuer { anyhow::bail!("invalid_target_participant: exact pending admission issuer differs"); }
+                }
+                if !bootstrap_complete {
+                    return Ok(OrdinaryCancellationDecisionV1::OwnerUnreachable("retained native bootstrap is unresolved; accepted-turn absence cannot certify its closeout"));
+                }
+                if let Some(registration) = row.inspection_registration() {
+                    let graph = source.target_graph.as_ref().ok_or_else(|| anyhow::anyhow!("ordinary cancellation R0 graph absent"))?;
+                    if graph.registration.registration_id != registration.registration_id
+                        || graph.descriptor.agent_id != context.selections.requested.realized_agent_id {
+                        anyhow::bail!("ordinary cancellation R0 requested role differs");
+                    }
+                    row.validate_inspected_graph(graph).map_err(|error| anyhow::anyhow!("{error}"))?;
+                } else {
+                    return Ok(OrdinaryCancellationDecisionV1::OwnerUnreachable("retained bootstrap has no applied registration; original bootstrap closeout is unresolved"));
+                }
+                if matches!(exact, Some(WorldDispatchControlTargetV1::PendingRetainedAdmission { .. })) {
+                    return Ok(OrdinaryCancellationDecisionV1::OwnerUnreachable("admission resolution requires its original bootstrap owner"));
+                }
+            }
+            let records = session.acceptances().iter().filter(|record| match (&record.work_identity, request.mode, &exact) {
+                (AcceptedWorldWorkIdentityV1::RetainedTurn { active_run_id, message_id, target_participant_id }, WorldDispatchModeV1::Retained,
+                    Some(WorldDispatchControlTargetV1::AcceptedRetainedTurn { acceptance_record_id, active_run_id: wanted_run, message_id: wanted_message, target_participant_id: wanted_target })) =>
+                    record.acceptance_record_id == *acceptance_record_id && active_run_id == wanted_run && message_id == wanted_message && target_participant_id == wanted_target,
+                (AcceptedWorldWorkIdentityV1::RetainedTurn { target_participant_id, .. }, WorldDispatchModeV1::Retained, None) => Some(target_participant_id.as_str()) == target,
+                (AcceptedWorldWorkIdentityV1::EphemeralTask { task_run_id }, WorldDispatchModeV1::Ephemeral, None) => Some(task_run_id.as_str()) == request.task_run_id.as_deref(),
+                _ => false,
+            }).cloned().collect::<Vec<_>>();
+            let pending_proposal = exact.is_none() && request.mode == WorldDispatchModeV1::Retained && session.proposals().iter().any(|proposal|
+                matches!(&proposal.proposed_work, ProposedWorldWorkIdentityV1::RetainedTurn { target_participant_id, .. }
+                    if Some(target_participant_id.as_str()) == target)
+                && !session.acceptances().iter().any(|record| record.acceptance_record_id == proposal.acceptance_context.proposed_acceptance_record_id));
+            if pending_proposal {
+                return Ok(OrdinaryCancellationDecisionV1::OwnerUnreachable("unaccepted retained proposal has unresolved submission truth"));
+            }
+            if records.is_empty() {
+                if exact.is_some() || request.mode == WorldDispatchModeV1::Ephemeral {
+                    anyhow::bail!("invalid_target_participant: exact accepted cancellation target absent");
+                }
+                return Ok(OrdinaryCancellationDecisionV1::NoActiveCancelableWork);
+            }
+            for record in &records {
+                if record.target_backend_id != request.target_backend_id || record.caller_backend_id != context.selections.native.backend_id {
+                    anyhow::bail!("invalid_target_participant: ordinary cancellation accepted role differs");
+                }
+                use super::dispatch_policy_commitment::{DispatchPolicyCommitmentLookupKeyV1, DispatchPolicyCommitmentSubjectKeyV1,
+                    resolve_accepted_work_receipt_material_from_snapshot, AcceptedWorkReceiptMaterialResolutionV1};
+                let subject = match &record.work_identity {
+                    AcceptedWorldWorkIdentityV1::RetainedTurn { active_run_id, message_id, .. } => DispatchPolicyCommitmentSubjectKeyV1::RetainedWorkerTurn { active_run_id: active_run_id.clone(), message_id: message_id.clone() },
+                    AcceptedWorldWorkIdentityV1::EphemeralTask { task_run_id } => DispatchPolicyCommitmentSubjectKeyV1::EphemeralWork { task_run_id: task_run_id.clone() },
+                };
+                let key = DispatchPolicyCommitmentLookupKeyV1 { authority_store_id: record.authority_store_id.clone(), orchestration_session_id: record.orchestration_session_id.clone(), request_id: record.request_id.clone(), subject };
+                if !matches!(resolve_accepted_work_receipt_material_from_snapshot(source.snapshot(), &key, record)
+                    .map_err(|error| anyhow::anyhow!("ordinary cancellation E2/B1 source refused: {error:?}"))?, AcceptedWorkReceiptMaterialResolutionV1::Resolved(_)) {
+                    return Ok(OrdinaryCancellationDecisionV1::OwnerUnreachable("exact accepted-work E2 material is unavailable"));
+                }
+            }
+            let supervisor = Self::bind(Path::new(&source.snapshot().authority_root_identity().physical_path),
+                source.snapshot().authority_root_identity(), source.snapshot().authority_store_id())?;
+            let decision = supervisor.with_existing_state_guarded(&verify, |state| {
+                let mut active = Vec::new();
+                for record in &records {
+                    let Some(execution) = state.executions_by_acceptance_record_id.get(&record.acceptance_record_id) else {
+                        return Ok((OrdinaryCancellationDecisionV1::OwnerUnreachable("exact accepted supervisor claim absent"), false));
+                    };
+                    if !execution.claim.matches_acceptance(record) || execution.durable_frame_cursor < Some(record.runtime_acceptance.frame_sequence) {
+                        anyhow::bail!("ordinary cancellation supervisor/acceptance source differs or has no durable Start");
+                    }
+                    if execution.terminal.is_none() { active.push(record); }
+                }
+                if active.len() > 1 { return Ok((OrdinaryCancellationDecisionV1::AmbiguousTarget, false)); }
+                let record = match active.first() {
+                    Some(record) => (*record).clone(),
+                    None if exact.is_some() || request.mode == WorldDispatchModeV1::Ephemeral => records[0].clone(),
+                    None => return Ok((OrdinaryCancellationDecisionV1::NoActiveCancelableWork, false)),
+                };
+                if record.caller_participant_id != request.caller_participant_id {
+                    anyhow::bail!("invalid_target_participant: accepted cancellation caller differs; history membership grants no control transfer");
+                }
+                if let Some(stop) = stop {
+                    let supervisor_bytes = super::host_session_authority::canonical_json::to_vec(state)?;
+                    super::retained_worker_runtime::authorize_ordinary_stop_cancel_from_source_v1(source.snapshot(),
+                        source.admission_registry_bytes().ok_or_else(|| anyhow::anyhow!("ordinary Stop original admission absent"))?,
+                        &source.admission_key_files(), Some(&supervisor_bytes), stop.request(), &record)?;
+                }
+                let execution = state.executions_by_acceptance_record_id.get_mut(&record.acceptance_record_id)
+                    .ok_or_else(|| anyhow::anyhow!("ordinary cancellation chosen supervisor claim absent"))?;
+                if execution.terminal.is_none() && execution.claim.observer_instance_id != supervisor.observer_instance_id {
+                    return Ok((OrdinaryCancellationDecisionV1::OwnerUnreachable("current cancellation observer lease belongs to another owner"), false));
+                }
+                let proposed = WorldWorkCancellationAcceptanceV1::new(&request.request_id)?;
+                let (cancellation, changed) = apply_cancellation_to_execution(execution, proposed, Utc::now(), &format!("cancel_delivery_{}", Uuid::now_v7()))?;
+                Ok((OrdinaryCancellationDecisionV1::Accepted(Box::new(PreparedOrdinaryCancellationV1 {
+                    supervisor: supervisor.clone(), acceptance: record, cancellation,
+                })), changed))
+            })?;
+            Ok(decision)
+        })
+    }
+
+    #[cfg(target_os = "linux")]
+    fn with_existing_state_guarded<T>(
+        &self,
+        verify: &dyn Fn() -> Result<()>,
+        operation: impl FnOnce(&mut WorldWorkExecutionSupervisorStateV1) -> Result<(T, bool)>,
+    ) -> Result<T> {
+        verify()?;
+        let mut transaction = self
+            .storage
+            .begin_transaction()
+            .context("begin ordinary cancellation owner transaction")?;
+        let result = (|| {
+            verify()?;
+            let bytes = transaction
+                .read_supervisor()?
+                .ok_or_else(|| anyhow::anyhow!("ordinary cancellation supervisor source absent"))?;
+            let mut state: WorldWorkExecutionSupervisorStateV1 =
+                super::host_session_authority::canonical_json::from_slice(&bytes)?;
+            state.validate(&self.authority_store_id)?;
+            let (value, changed) = operation(&mut state)?;
+            state.validate(&self.authority_store_id)?;
+            verify()?;
+            if changed {
+                let bytes = super::host_session_authority::canonical_json::to_vec(&state)?;
+                transaction.replace_supervisor_with_source_guard(&bytes, &|| verify()
+                    .map_err(|_| super::host_session_authority::store::BootstrapError::ordinary_control_source_guard()))?;
+            }
+            Ok(value)
+        })();
+        let finish = transaction.finish();
+        verify()?;
+        finish?;
+        result
+    }
+
     pub(crate) fn accept_or_join_cancellation(
         &self,
         expected_claim: &WorldWorkExecutionClaimV1,
@@ -1017,70 +1405,7 @@ impl WorldWorkExecutionSupervisor {
                 anyhow::bail!("stale or conflicting B4 cancellation execution claim");
             }
 
-            if let Some(terminal) = execution.terminal.clone() {
-                return Ok((
-                    WorldWorkCancellationAcceptanceOutcomeV1 {
-                        accepted_cancel_request_id: execution
-                            .cancellation
-                            .as_ref()
-                            .map(|accepted| accepted.cancel_request_id.clone()),
-                        should_deliver_transport: false,
-                        delivery_claim_id: None,
-                        execution_claim: execution.claim.clone(),
-                        cancellation_pending: false,
-                        terminal: Some(terminal),
-                    },
-                    false,
-                ));
-            }
-
-            if let Some(accepted_cancel_request_id) = execution
-                .cancellation
-                .as_ref()
-                .map(|accepted| accepted.cancel_request_id.clone())
-            {
-                let should_acquire = match &execution.cancellation_delivery {
-                    WorldWorkCancellationDeliveryStateV1::Available => true,
-                    WorldWorkCancellationDeliveryStateV1::Claimed {
-                        lease_expires_at, ..
-                    } => now >= *lease_expires_at,
-                    WorldWorkCancellationDeliveryStateV1::Confirmed { .. } => false,
-                };
-                let delivery_claim_id = if should_acquire {
-                    execution.cancellation_delivery =
-                        cancellation_delivery_claim(proposed_delivery_claim_id, now)?;
-                    Some(proposed_delivery_claim_id.to_string())
-                } else {
-                    None
-                };
-                return Ok((
-                    WorldWorkCancellationAcceptanceOutcomeV1 {
-                        accepted_cancel_request_id: Some(accepted_cancel_request_id),
-                        should_deliver_transport: delivery_claim_id.is_some(),
-                        delivery_claim_id,
-                        execution_claim: execution.claim.clone(),
-                        cancellation_pending: true,
-                        terminal: None,
-                    },
-                    should_acquire,
-                ));
-            }
-
-            let accepted_cancel_request_id = proposed.cancel_request_id.clone();
-            execution.cancellation = Some(proposed);
-            execution.cancellation_delivery =
-                cancellation_delivery_claim(proposed_delivery_claim_id, now)?;
-            Ok((
-                WorldWorkCancellationAcceptanceOutcomeV1 {
-                    accepted_cancel_request_id: Some(accepted_cancel_request_id),
-                    should_deliver_transport: true,
-                    delivery_claim_id: Some(proposed_delivery_claim_id.to_string()),
-                    execution_claim: execution.claim.clone(),
-                    cancellation_pending: true,
-                    terminal: None,
-                },
-                true,
-            ))
+            apply_cancellation_to_execution(execution, proposed, now, proposed_delivery_claim_id)
         })
     }
 
@@ -1194,6 +1519,79 @@ impl WorldWorkExecutionSupervisor {
     }
 }
 
+// Shared existing lease transition. The calling owner authenticates its own
+// claim and action before invoking this in-memory transition.
+fn apply_cancellation_to_execution(
+    execution: &mut SupervisedWorldWorkExecutionV1,
+    proposed: WorldWorkCancellationAcceptanceV1,
+    now: DateTime<Utc>,
+    proposed_delivery_claim_id: &str,
+) -> Result<(WorldWorkCancellationAcceptanceOutcomeV1, bool)> {
+    if let Some(terminal) = execution.terminal.clone() {
+        return Ok((
+            WorldWorkCancellationAcceptanceOutcomeV1 {
+                accepted_cancel_request_id: execution
+                    .cancellation
+                    .as_ref()
+                    .map(|accepted| accepted.cancel_request_id.clone()),
+                should_deliver_transport: false,
+                delivery_claim_id: None,
+                execution_claim: execution.claim.clone(),
+                cancellation_pending: false,
+                terminal: Some(terminal),
+            },
+            false,
+        ));
+    }
+
+    if let Some(accepted_cancel_request_id) = execution
+        .cancellation
+        .as_ref()
+        .map(|accepted| accepted.cancel_request_id.clone())
+    {
+        let should_acquire = match &execution.cancellation_delivery {
+            WorldWorkCancellationDeliveryStateV1::Available => true,
+            WorldWorkCancellationDeliveryStateV1::Claimed {
+                lease_expires_at, ..
+            } => now >= *lease_expires_at,
+            WorldWorkCancellationDeliveryStateV1::Confirmed { .. } => false,
+        };
+        let delivery_claim_id = if should_acquire {
+            execution.cancellation_delivery =
+                cancellation_delivery_claim(proposed_delivery_claim_id, now)?;
+            Some(proposed_delivery_claim_id.to_string())
+        } else {
+            None
+        };
+        return Ok((
+            WorldWorkCancellationAcceptanceOutcomeV1 {
+                accepted_cancel_request_id: Some(accepted_cancel_request_id),
+                should_deliver_transport: delivery_claim_id.is_some(),
+                delivery_claim_id,
+                execution_claim: execution.claim.clone(),
+                cancellation_pending: true,
+                terminal: None,
+            },
+            should_acquire,
+        ));
+    }
+
+    let accepted_cancel_request_id = proposed.cancel_request_id.clone();
+    execution.cancellation = Some(proposed);
+    execution.cancellation_delivery = cancellation_delivery_claim(proposed_delivery_claim_id, now)?;
+    Ok((
+        WorldWorkCancellationAcceptanceOutcomeV1 {
+            accepted_cancel_request_id: Some(accepted_cancel_request_id),
+            should_deliver_transport: true,
+            delivery_claim_id: Some(proposed_delivery_claim_id.to_string()),
+            execution_claim: execution.claim.clone(),
+            cancellation_pending: true,
+            terminal: None,
+        },
+        true,
+    ))
+}
+
 fn cancellation_delivery_claim(
     delivery_claim_id: &str,
     claimed_at: DateTime<Utc>,
@@ -1213,6 +1611,275 @@ fn cancellation_delivery_claim(
 fn current_observer_instance_id() -> &'static str {
     static INSTANCE_ID: LazyLock<String> = LazyLock::new(|| format!("observer_{}", Uuid::now_v7()));
     INSTANCE_ID.as_str()
+}
+
+/// Service-side control admission for the exact retained native turn. The
+/// supplied runtime comes from its held service admission, never the HTTP body.
+/// Only the synchronous SDK cancellation callback executes under the Root lock.
+#[cfg(target_os = "linux")]
+pub(crate) fn with_ordinary_retained_cancel_admission_v1(
+    selection: &super::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    request: &transport_api_types::OrdinaryAcceptedWorkCancelRequestV1,
+    actual_runtime: &transport_api_types::OrdinaryGatewayRuntimeIdentityV1,
+    peer_uid: u32,
+    cancel: impl FnOnce() -> Result<bool>,
+) -> Result<bool> {
+    use transport_api_types::{
+        OrdinaryAcceptedWorkCancelControlV1, OrdinaryGatewayRuntimeIdentityV1,
+    };
+    request.validate().map_err(anyhow::Error::msg)?;
+    let OrdinaryGatewayRuntimeIdentityV1::WorldWorker {
+        orchestration_session_id,
+        caller_participant_id,
+        participant_id,
+        backend_id,
+        run_id,
+        world_id,
+        world_generation,
+    } = actual_runtime
+    else {
+        anyhow::bail!("ordinary cancellation requires the actual retained turn owner");
+    };
+    anyhow::ensure!(
+        peer_uid != 0
+            && request.authority_store_id == selection.authority_store_id()
+            && request.orchestration_session_id == *orchestration_session_id
+            && request.target_backend_id == *backend_id
+            && request.world_id == *world_id
+            && request.world_generation == *world_generation,
+        "ordinary cancellation changed actual owner scope"
+    );
+    selection.with_ordinary_lifecycle_control_sources_v1(participant_id, |context, source, verify_native, _| {
+        for principal in [selection.native_principal(), selection.requested_principal()] {
+            anyhow::ensure!(matches!(principal, transport_api_types::PlatformPrincipalV1::Unix { uid, .. } if *uid == peer_uid),
+                "ordinary cancellation UDS peer differs from original principal");
+        }
+        let world = super::host_session_authority::schema::WorldBindingV1 { world_id: request.world_id.clone(), world_generation: request.world_generation };
+        let session = super::state_store::authenticate_ordinary_world_work_session_cut_v1(source.snapshot(), &request.orchestration_session_id, &world)?;
+        let acceptance = session.acceptances().iter().find(|record| record.acceptance_record_id == request.acceptance_record_id)
+            .ok_or_else(|| anyhow::anyhow!("ordinary cancellation exact B1 acceptance absent"))?;
+        anyhow::ensure!(matches!(&acceptance.work_identity, AcceptedWorldWorkIdentityV1::RetainedTurn {
+            active_run_id, target_participant_id, .. } if active_run_id == run_id && target_participant_id == participant_id)
+            && acceptance.caller_participant_id == *caller_participant_id
+            && acceptance.target_backend_id == *backend_id && acceptance.caller_backend_id == context.selections.native.backend_id,
+            "ordinary cancellation accepted native identity differs");
+        let (checked, lease_expires_at) = checked_ordinary_cancel_delivery_lease(source.snapshot(), source.supervisor_bytes(), acceptance, request)?;
+        let row = super::retained_worker_runtime::read_ordinary_retained_worker_from_sources_v1(source.snapshot(),
+            Some(source.admission_registry_bytes()), &source.admission_key_files(), &request.orchestration_session_id,
+            &world, participant_id, &crate::execution::orchestrator_world_dispatch::ordinary_start_selection_carrier(selection)?)
+            .map_err(|error| anyhow::anyhow!("{error}"))?;
+        let graph = source.target_graph.as_ref().ok_or_else(|| anyhow::anyhow!("ordinary cancellation actual R0 absent"))?;
+        row.validate_inspected_graph(graph).map_err(|error| anyhow::anyhow!("{error}"))?;
+        anyhow::ensure!(graph.descriptor.agent_id == context.selections.requested.realized_agent_id,
+            "ordinary cancellation requested R0 role differs");
+        let policy_request = match &request.control {
+            OrdinaryAcceptedWorkCancelControlV1::CancelWork {} =>
+                ordinary_cancel_policy_for_current_actor(context, &source.facts.current, acceptance, request)?,
+            OrdinaryAcceptedWorkCancelControlV1::StopWorker { stop } => {
+                anyhow::ensure!(stop.target_participant_id == *participant_id,
+                    "ordinary Stop cancellation changed actual member");
+                super::retained_worker_runtime::authorize_ordinary_stop_cancel_from_source_v1(source.snapshot(), source.admission_registry_bytes(), &source.admission_key_files(), source.supervisor_bytes(), stop, acceptance)?
+            }
+        };
+        let verify = || -> Result<()> {
+            verify_native(None)?;
+            anyhow::ensure!(lease_expires_at > Utc::now(),
+                "ordinary cancellation delivery lease expired before effect");
+            let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
+                Path::new(&context.workspace_binding.workspace_root.physical_path), &selection.held_authority().bootstrap_home())?;
+            crate::execution::orchestrator_world_dispatch::enforce_world_dispatch_read_or_effect_policy(&policy_request, &policy)
+        };
+        verify()?;
+        let original_root = source.snapshot().hsa_state_root_bytes();
+        super::host_session_authority::store::with_existing_retained_worker_admission_read(selection.held_authority(), |root, bytes, keys| -> Result<bool> {
+            anyhow::ensure!(root.to_canonical_bytes()? == original_root && bytes == Some(source.admission_registry_bytes())
+                && keys.into_iter().collect::<BTreeMap<_, _>>() == source.admission_key_files().into_iter().collect::<BTreeMap<_, _>>(),
+                "ordinary cancellation locked original sources changed");
+            verify()?;
+            let result = if checked.terminal.is_some() { Ok(false) } else { cancel() };
+            verify()?;
+            result
+        }).map_err(|error| anyhow::anyhow!("ordinary cancellation original source lock refused: {error:?}"))?
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn checked_ordinary_cancel_delivery_lease(
+    snapshot: &super::host_session_authority::store::AcceptedWorkAuthorityPhysicalSnapshotV1,
+    supervisor_bytes: Option<&[u8]>,
+    acceptance: &WorldWorkAcceptanceRecordV1,
+    request: &transport_api_types::OrdinaryAcceptedWorkCancelRequestV1,
+) -> Result<(WorldWorkExecutionObservationV1, DateTime<Utc>)> {
+    let checked = decode_ordinary_accepted_observation(snapshot, supervisor_bytes, acceptance)?;
+    anyhow::ensure!(
+        checked.claim.runtime_submission_id == request.runtime_submission_id,
+        "ordinary cancellation runtime submission differs"
+    );
+    let state: WorldWorkExecutionSupervisorStateV1 =
+        super::host_session_authority::canonical_json::from_slice(
+            supervisor_bytes
+                .ok_or_else(|| anyhow::anyhow!("ordinary cancellation Supervisor absent"))?,
+        )?;
+    state.validate(&request.authority_store_id)?;
+    let execution = state
+        .executions_by_acceptance_record_id
+        .get(&request.acceptance_record_id)
+        .ok_or_else(|| anyhow::anyhow!("ordinary cancellation exact lease absent"))?;
+    anyhow::ensure!(
+        execution.claim.matches_acceptance(acceptance)
+            && execution
+                .cancellation
+                .as_ref()
+                .is_some_and(|lease| lease.cancel_request_id == request.cancel_request_id),
+        "ordinary cancellation original request differs"
+    );
+    match &execution.cancellation_delivery {
+        WorldWorkCancellationDeliveryStateV1::Claimed {
+            delivery_claim_id,
+            lease_expires_at,
+            ..
+        } if delivery_claim_id == &request.delivery_claim_id && *lease_expires_at > Utc::now() => {
+            Ok((checked, *lease_expires_at))
+        }
+        _ => anyhow::bail!("ordinary cancellation delivery lease differs, expired or absent"),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn ordinary_cancel_policy_for_current_actor(
+    context: &super::native_launch_context::NativeLaunchContextV1,
+    current: &super::host_session_authority::facade::ResolvedCurrentAuthorityV1,
+    acceptance: &WorldWorkAcceptanceRecordV1,
+    request: &transport_api_types::OrdinaryAcceptedWorkCancelRequestV1,
+) -> Result<super::dispatch_contract::ValidatedWorldDispatchRequestV1> {
+    use super::dispatch_contract::*;
+    use super::host_session_authority::schema::{
+        AgentExecutionScopeV1, HostSessionPostureV1, WorldBindingV1,
+    };
+    let world = WorldBindingV1 {
+        world_id: request.world_id.clone(),
+        world_generation: request.world_generation,
+    };
+    anyhow::ensure!(
+        context.selections.native.placement == transport_api_types::AgentSelectionPlacementV1::Host
+            && context.selections.requested.placement
+                == transport_api_types::AgentSelectionPlacementV1::World
+            && current.authority.lifecycle_posture == HostSessionPostureV1::ActiveAttached
+            && current.caller.descriptor.execution_scope == AgentExecutionScopeV1::Host
+            && current.caller.participant_id == acceptance.caller_participant_id
+            && current.caller.descriptor.backend_id == context.selections.native.backend_id
+            && current.caller.descriptor.agent_id == context.selections.native.realized_agent_id
+            && current.caller.descriptor.protocol == context.descriptor.protocol
+            && current.caller.descriptor.backend_kind == context.descriptor.backend_kind
+            && current.authority.world_binding.as_ref() == Some(&world),
+        "ordinary cancellation current actor differs; history grants no control transfer"
+    );
+    let (mode, task_run_id, target_participant_id) = match &acceptance.work_identity {
+        AcceptedWorldWorkIdentityV1::RetainedTurn {
+            target_participant_id,
+            ..
+        } => (
+            WorldDispatchModeV1::Retained,
+            None,
+            Some(target_participant_id.clone()),
+        ),
+        AcceptedWorldWorkIdentityV1::EphemeralTask { task_run_id } => (
+            WorldDispatchModeV1::Ephemeral,
+            Some(task_run_id.clone()),
+            None,
+        ),
+    };
+    WorldDispatchRequestV1 {
+        request_id: Some(request.cancel_request_id.clone()),
+        // Policy projection only, never a publication/replay key.
+        idempotency_key: Some(request.cancel_request_id.clone()),
+        orchestration_session_id: Some(request.orchestration_session_id.clone()),
+        caller_participant_id: Some(acceptance.caller_participant_id.clone()),
+        action: WorldDispatchActionV1::CancelWorldWork,
+        mode,
+        target_backend_id: Some(request.target_backend_id.clone()),
+        task_run_id,
+        target_participant_id,
+        world_id: Some(request.world_id.clone()),
+        world_generation: Some(request.world_generation),
+        dispatch_policy_narrowing: None,
+        payload: WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1::default()),
+    }
+    .validate()
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn with_ordinary_ephemeral_cancel_admission_v1(
+    selection: &super::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    request: &transport_api_types::OrdinaryAcceptedWorkCancelRequestV1,
+    actual_runtime: &transport_api_types::OrdinaryGatewayRuntimeIdentityV1,
+    actual_request: &transport_api_types::ExecuteRequest,
+    peer_uid: u32,
+    cancel: impl FnOnce() -> Result<bool>,
+) -> Result<bool> {
+    request.validate().map_err(anyhow::Error::msg)?;
+    anyhow::ensure!(
+        peer_uid != 0
+            && matches!(
+                request.control,
+                transport_api_types::OrdinaryAcceptedWorkCancelControlV1::CancelWork {}
+            ),
+        "ordinary ephemeral cancellation requires exact user Cancel operation"
+    );
+    let member = actual_request
+        .member_dispatch
+        .as_ref()
+        .and_then(transport_api_types::MemberDispatchRequest::as_v1)
+        .ok_or_else(|| anyhow::anyhow!("ordinary ephemeral cancellation original member absent"))?;
+    let expected_runtime = transport_api_types::OrdinaryGatewayRuntimeIdentityV1::WorldWorker {
+        orchestration_session_id: member.orchestration_session_id.clone(),
+        caller_participant_id: member.orchestrator_participant_id.clone(),
+        participant_id: member.participant_id.clone(),
+        backend_id: member.backend_id.clone(),
+        run_id: member.run_id.clone(),
+        world_id: member.world_id.clone(),
+        world_generation: member.world_generation,
+    };
+    anyhow::ensure!(
+        actual_runtime == &expected_runtime
+            && member.e2_launch_activation.is_none()
+            && request.authority_store_id == selection.authority_store_id()
+            && request.orchestration_session_id == member.orchestration_session_id
+            && request.target_backend_id == member.backend_id
+            && request.world_id == member.world_id
+            && request.world_generation == member.world_generation,
+        "ordinary ephemeral cancellation changed actual native admission"
+    );
+    selection.with_ordinary_accepted_control_sources_v1(|context, current, snapshot, supervisor, verify_sources| {
+        for principal in [selection.native_principal(), selection.requested_principal()] {
+            anyhow::ensure!(matches!(principal, transport_api_types::PlatformPrincipalV1::Unix { uid, .. } if *uid == peer_uid),
+                "ordinary cancellation UDS peer differs from original principal");
+        }
+        let world = super::host_session_authority::schema::WorldBindingV1 { world_id: request.world_id.clone(), world_generation: request.world_generation };
+        let session = super::state_store::authenticate_ordinary_world_work_session_cut_v1(snapshot, &request.orchestration_session_id, &world)?;
+        let acceptance = session.acceptances().iter().find(|record| record.acceptance_record_id == request.acceptance_record_id)
+            .ok_or_else(|| anyhow::anyhow!("ordinary ephemeral cancellation exact B1 absent"))?;
+        anyhow::ensure!(matches!(&acceptance.work_identity, AcceptedWorldWorkIdentityV1::EphemeralTask { task_run_id } if task_run_id == &request.runtime_submission_id)
+            && acceptance.caller_participant_id == member.orchestrator_participant_id
+            && acceptance.caller_backend_id == context.selections.native.backend_id,
+            "ordinary ephemeral cancellation changed accepted role or actual task span");
+        let proposal = session.proposals().iter().find(|proposal| proposal.acceptance_context.proposed_acceptance_record_id == acceptance.acceptance_record_id)
+            .ok_or_else(|| anyhow::anyhow!("ordinary ephemeral cancellation original proposal absent"))?;
+        crate::execution::orchestrator_world_dispatch::validate_task_submission_against_proposal(actual_request, proposal)?;
+        let (checked, lease_expires_at) = checked_ordinary_cancel_delivery_lease(snapshot, supervisor, acceptance, request)?;
+        let policy_request = ordinary_cancel_policy_for_current_actor(context, current, acceptance, request)?;
+        let verify = || -> Result<()> {
+            verify_sources()?;
+            anyhow::ensure!(lease_expires_at > Utc::now(), "ordinary ephemeral cancellation delivery lease expired before effect");
+            let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
+                Path::new(&context.workspace_binding.workspace_root.physical_path), &selection.held_authority().bootstrap_home())?;
+            crate::execution::orchestrator_world_dispatch::enforce_world_dispatch_read_or_effect_policy(&policy_request, &policy)
+        };
+        verify()?;
+        let result = if checked.terminal.is_some() { Ok(false) } else { cancel() };
+        verify()?;
+        result
+    })
 }
 
 #[cfg(test)]

@@ -1,3 +1,5 @@
+mod world_controller_history;
+
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -952,6 +954,11 @@ struct ReconstructedAuthorityStateV1 {
     authoritative_lineage_commitment: AuthorityObjectCommitmentV1,
 }
 
+/// Structural input only. Its caller must authenticate every history edge and
+/// referenced object before using it to validate a V3 root.
+pub(super) type AuthorityHistoryProjectionV1 =
+    BTreeMap<String, BTreeMap<u64, DurableSessionAuthorityV1>>;
+
 impl AuthorityStoreInitializationV1 {
     pub(crate) fn validate(&self) -> Result<(), StoreSchemaError> {
         require_version(self.schema_version)?;
@@ -1808,8 +1815,30 @@ impl StateRootV3 {
         }
     }
 
-    fn preserved_v2_validation_view(&self) -> Result<StateRootV2, StoreSchemaError> {
+    fn preserved_v2_validation_view(
+        &self,
+        provided_history: Option<&AuthorityHistoryProjectionV1>,
+    ) -> Result<StateRootV2, StoreSchemaError> {
         let mut preserved = self.preserved_v2_view();
+        // Validate every original registration request/journal/index before
+        // projecting World sessions to their original V2 Start application.
+        // Their interleaved authority edges are checked by V3 World history.
+        preserved.validate_retained_registration_relations()?;
+        let mut world_sessions = self
+            .session_namespace_map
+            .iter()
+            .filter_map(|(session, record)| match record {
+                SessionNamespaceRecordV1::Authority(authority)
+                    if self.has_world_controller_start(authority) =>
+                {
+                    Some(session.clone())
+                }
+                _ => None,
+            })
+            .collect::<std::collections::BTreeSet<_>>();
+        if let Some(histories) = provided_history {
+            world_sessions.extend(histories.keys().cloned());
+        }
         for allocation in self.fork_successor_allocation_map.values() {
             preserved
                 .session_namespace_map
@@ -1889,7 +1918,27 @@ impl StateRootV3 {
                     }
                     **authority = stop.authority_before.as_ref().clone();
                 }
-                if self.has_any_successor_transition(session_id)
+                if world_sessions.contains(session_id) {
+                    **authority = if let Some(history) =
+                        provided_history.and_then(|histories| histories.get(session_id))
+                    {
+                        history
+                            .get(&1)
+                            .ok_or(StoreSchemaError(
+                                "authenticated Start origin is absent from V2 projection",
+                            ))?
+                            .clone()
+                    } else {
+                        let history = self.reconstruct_origin_start_authority_history(authority)?;
+                        history
+                            .get(&1)
+                            .ok_or(StoreSchemaError(
+                                "World Start origin is absent from V2 projection",
+                            ))?
+                            .authority
+                            .clone()
+                    };
+                } else if self.has_any_successor_transition(session_id)
                     || authority.authority_revision != 1
                     || authority.lifecycle_posture != HostSessionPostureV1::ActiveAttached
                 {
@@ -1906,12 +1955,37 @@ impl StateRootV3 {
             }
         }
         preserved
+            .retained_worker_registration_request_index
+            .retain(|_, request| !world_sessions.contains(&request.orchestration_session_id));
+        preserved
+            .retained_worker_registration_journal
+            .retain(|_, registration| {
+                !world_sessions.contains(&registration.orchestration_session_id)
+            });
+        preserved
             .object_index
             .retain(|_, entry| entry.object_schema_version == SCHEMA_VERSION);
         Ok(preserved)
     }
 
     pub(crate) fn validate(&self) -> Result<(), StoreSchemaError> {
+        self.validate_with_history(None)
+    }
+
+    /// Validate all schema records using history already authenticated by HSA's
+    /// object-aware reader. This data supplies historical authority states only;
+    /// it cannot establish permission or replace any stored root/index checks.
+    pub(super) fn validate_with_exact_authority_history(
+        &self,
+        histories: &AuthorityHistoryProjectionV1,
+    ) -> Result<(), StoreSchemaError> {
+        self.validate_with_history(Some(histories))
+    }
+
+    fn validate_with_history(
+        &self,
+        provided_history: Option<&AuthorityHistoryProjectionV1>,
+    ) -> Result<(), StoreSchemaError> {
         if self.schema_version != 3 {
             return Err(StoreSchemaError("StateRootV3 requires schema version 3"));
         }
@@ -1919,7 +1993,7 @@ impl StateRootV3 {
             return Err(StoreSchemaError("V3 root revision must be at least three"));
         }
         self.validate_fork_successor_allocations()?;
-        let preserved = self.preserved_v2_validation_view()?;
+        let preserved = self.preserved_v2_validation_view(provided_history)?;
         preserved.validate()?;
         let mut active_request_keys = std::collections::BTreeSet::new();
         for (key, transaction) in &self.start_transaction_map {
@@ -2047,6 +2121,23 @@ impl StateRootV3 {
                         true,
                     ),
                 };
+            let world_history;
+            let authority = if let Some(histories) = provided_history {
+                histories
+                    .get(&transaction.orchestration_session_id)
+                    .and_then(|history| history.get(&expected_revision))
+                    .ok_or(StoreSchemaError(
+                        "Start transaction has no authenticated authority prefix",
+                    ))?
+            } else if self.has_world_controller_start(authority) && !settled {
+                world_history = self.reconstruct_world_controller_authority_history(authority)?;
+                &world_history
+                    .get(&expected_revision)
+                    .ok_or(StoreSchemaError("World Start transaction prefix is absent"))?
+                    .authority
+            } else {
+                authority
+            };
             let authority_state_mismatch = if settled {
                 authority.authority_revision < expected_revision
                     || (authority.authority_revision == expected_revision
@@ -2062,7 +2153,8 @@ impl StateRootV3 {
                     (!settled && authority.internal_resume_handle_refs.last() != Some(reference))
                         || (settled && !authority.internal_resume_handle_refs.contains(reference))
                         || reference.object_kind != AuthorityObjectKindV1::ResumeHandle
-                        || reference.schema_version != 2
+                        || (reference.schema_version != 2
+                            && !(settled && reference.schema_version == 3))
                 })
             {
                 return Err(StoreSchemaError(
@@ -2299,7 +2391,33 @@ impl StateRootV3 {
                 let history_authority = completed_stop
                     .map(|stop| stop.authority_before.as_ref())
                     .unwrap_or(authority.as_ref());
-                let history = if self.has_any_successor_transition(key) {
+                let history = if let Some(histories) = provided_history {
+                    let history = histories.get(key).ok_or(StoreSchemaError(
+                        "V3 session has no authenticated authority history",
+                    ))?;
+                    let history = history
+                        .iter()
+                        .filter(|(revision, _)| **revision <= history_authority.authority_revision)
+                        .map(|(revision, state)| {
+                            if *revision != state.authority_revision
+                                || state.orchestration_session_id != *key
+                            {
+                                return Err(StoreSchemaError(
+                                    "authenticated authority history index mismatch",
+                                ));
+                            }
+                            Ok((*revision, reconstruct_authority_state(state.clone())?))
+                        })
+                        .collect::<Result<BTreeMap<_, _>, StoreSchemaError>>()?;
+                    if history.last_key_value().map(|(_, state)| &state.authority)
+                        != Some(history_authority)
+                    {
+                        return Err(StoreSchemaError(
+                            "authenticated history differs from exact current authority",
+                        ));
+                    }
+                    history
+                } else if self.has_any_successor_transition(key) {
                     let history =
                         self.reconstruct_successor_authority_history(history_authority)?;
                     let reconstructed = history
@@ -3357,7 +3475,11 @@ impl StateRootV3 {
                 refs.push(registration.retained_worker_ref.clone());
                 refs
             },
-            internal_resume_handle_refs: Vec::new(),
+            internal_resume_handle_refs: if self.has_world_controller_start(&latest.authority) {
+                latest.authority.internal_resume_handle_refs.clone()
+            } else {
+                Vec::new()
+            },
             lifecycle_posture: latest.authority.lifecycle_posture,
             current_policy_ref: latest.authority.current_policy_ref.clone(),
             current_policy_revision: latest.authority.current_policy_revision.clone(),
@@ -3441,7 +3563,7 @@ impl StateRootV3 {
         Ok(Some(BTreeMap::from([(1, initial)])))
     }
 
-    fn reconstruct_v2_authority_history(
+    fn reconstruct_origin_start_authority_history(
         &self,
         current_authority: &DurableSessionAuthorityV1,
     ) -> Result<BTreeMap<u64, ReconstructedAuthorityStateV1>, StoreSchemaError> {
@@ -3529,6 +3651,14 @@ impl StateRootV3 {
             ));
         }
         history.insert(initial.authority.authority_revision, initial.clone());
+        Ok(history)
+    }
+
+    fn reconstruct_v2_authority_history(
+        &self,
+        current_authority: &DurableSessionAuthorityV1,
+    ) -> Result<BTreeMap<u64, ReconstructedAuthorityStateV1>, StoreSchemaError> {
+        let mut history = self.reconstruct_origin_start_authority_history(current_authority)?;
         let consumed = self.extend_contiguous_retained_history(
             &mut history,
             &current_authority.orchestration_session_id,
@@ -3546,6 +3676,10 @@ impl StateRootV3 {
         &self,
         current_authority: &DurableSessionAuthorityV1,
     ) -> Result<BTreeMap<u64, ReconstructedAuthorityStateV1>, StoreSchemaError> {
+        if self.has_world_controller_start(current_authority) {
+            return self.reconstruct_world_controller_authority_history(current_authority);
+        }
+
         let fork_birth = self.reconstruct_fork_successor_birth_history(current_authority)?;
         let fork_born = fork_birth.is_some();
         let mut history = match fork_birth {
@@ -3676,6 +3810,7 @@ impl StateRootV3 {
                     HostSessionTransitionModeV1::ResumeOneTurn,
                     HostSessionStartupOwnershipApplicationV1::NotApplicable,
                     HostSessionPostTurnApplicationV2::Applied {
+                        completion_ref,
                         authority_revision_after,
                         resulting_posture,
                         applied_at,
@@ -3689,8 +3824,59 @@ impl StateRootV3 {
                             .ok_or(StoreSchemaError(
                                 "applied V3 Resume post-turn has no journal",
                             ))?;
+                    let mut post_turn_state = initial_state.clone();
+                    if completion_ref.schema_version == 3 {
+                        if completion_ref.object_kind != AuthorityObjectKindV1::PostTurnCompletion
+                            || post_turn_journal.completion_ref != **completion_ref
+                            || intent.world_binding.is_some()
+                            || initial_state.authority.world_binding.is_some()
+                        {
+                            return Err(StoreSchemaError(
+                                "completion V3 requires an exact direct-host post-turn edge",
+                            ));
+                        }
+                        if matches!(
+                            resulting_posture,
+                            HostSessionPostureV1::ParkedResumable
+                                | HostSessionPostureV1::AwaitingAttention
+                        ) {
+                            post_turn_state = self.reconstruct_completion_v3_authority_state(
+                                &initial_state,
+                                current_authority,
+                            )?;
+                        }
+                    }
+                    if completion_ref.schema_version == 4 {
+                        if completion_ref.object_kind != AuthorityObjectKindV1::PostTurnCompletion
+                            || post_turn_journal.completion_ref != **completion_ref
+                            || intent.world_binding.is_none()
+                            || intent.world_binding != initial_state.authority.world_binding
+                        {
+                            return Err(StoreSchemaError(
+                                "World completion requires its exact World authority edge",
+                            ));
+                        }
+                        // Structural reconstruction admits either zero or one
+                        // append only when the immutable journal's exact authority
+                        // commitment selects it. The object-aware leaf separately
+                        // verifies the unique producer, terminal and native owner.
+                        if reconstruct_reconciled_authority_state(
+                            &initial_state,
+                            *authority_revision_after,
+                            post_turn_journal.authority_record_commitment.clone(),
+                            *resulting_posture,
+                            applied_at,
+                        )
+                        .is_err()
+                        {
+                            post_turn_state = self.reconstruct_completion_v4_authority_state(
+                                &initial_state,
+                                current_authority,
+                            )?;
+                        }
+                    }
                     let reconciled = reconstruct_reconciled_authority_state(
-                        &initial_state,
+                        &post_turn_state,
                         *authority_revision_after,
                         post_turn_journal.authority_record_commitment.clone(),
                         *resulting_posture,
@@ -3729,10 +3915,127 @@ impl StateRootV3 {
         Ok(history)
     }
 
+    /// Reconstruct the single append committed by a resumable completion V3.
+    /// This is structural validation, not authority from the current handle list:
+    /// the caller still checks the full journal commitment, and object-aware
+    /// exact-history validation must authenticate this reference against the
+    /// completion's unique producer and native terminal before admitting a root.
+    fn reconstruct_completion_v3_authority_state(
+        &self,
+        latest: &ReconstructedAuthorityStateV1,
+        current: &DurableSessionAuthorityV1,
+    ) -> Result<ReconstructedAuthorityStateV1, StoreSchemaError> {
+        let prefix = &latest.authority.internal_resume_handle_refs;
+        let references = &current.internal_resume_handle_refs;
+        if latest.authority.world_binding.is_some()
+            || current.world_binding.is_some()
+            || latest.authority.orchestration_session_id != current.orchestration_session_id
+            || !references.starts_with(prefix)
+        {
+            return Err(StoreSchemaError(
+                "completion V3 handle sequence does not extend the exact host prefix",
+            ));
+        }
+        let produced = references.get(prefix.len()).ok_or(StoreSchemaError(
+            "completion V3 produced handle is absent from authority ancestry",
+        ))?;
+        let indexed = self
+            .object_index
+            .get(&produced.ref_id)
+            .ok_or(StoreSchemaError(
+                "completion V3 produced handle has no object index entry",
+            ))?;
+        if produced.object_kind != AuthorityObjectKindV1::ResumeHandle
+            || produced.schema_version != 1
+            || indexed.schema_version != 1
+            || indexed.ref_id != produced.ref_id
+            || indexed.object_kind != produced.object_kind
+            || indexed.object_schema_version != produced.schema_version
+            || indexed.byte_length == 0
+            || indexed.storage_state != AuthorityObjectStorageStateV1::Present
+            || references
+                .iter()
+                .filter(|reference| reference.ref_id == produced.ref_id)
+                .count()
+                != 1
+        {
+            return Err(StoreSchemaError(
+                "completion V3 produced handle is duplicated or its index is inexact",
+            ));
+        }
+        validate_object_commitment_rule(
+            produced.object_kind,
+            produced.schema_version,
+            &produced.commitment,
+        )
+        .map_err(|_| StoreSchemaError("completion V3 produced handle commitment is invalid"))?;
+        let mut authority = latest.authority.clone();
+        authority.internal_resume_handle_refs.push(produced.clone());
+        reconstruct_authority_state(authority)
+    }
+
+    fn reconstruct_completion_v4_authority_state(
+        &self,
+        latest: &ReconstructedAuthorityStateV1,
+        current: &DurableSessionAuthorityV1,
+    ) -> Result<ReconstructedAuthorityStateV1, StoreSchemaError> {
+        let prefix = &latest.authority.internal_resume_handle_refs;
+        let references = &current.internal_resume_handle_refs;
+        if latest.authority.world_binding.is_none()
+            || latest.authority.world_binding != current.world_binding
+            || latest.authority.orchestration_session_id != current.orchestration_session_id
+            || !references.starts_with(prefix)
+        {
+            return Err(StoreSchemaError(
+                "World completion handle sequence differs from its exact World prefix",
+            ));
+        }
+        let produced = references.get(prefix.len()).ok_or(StoreSchemaError(
+            "World completion produced continuation is absent",
+        ))?;
+        let indexed = self
+            .object_index
+            .get(&produced.ref_id)
+            .ok_or(StoreSchemaError(
+                "World produced continuation index is absent",
+            ))?;
+        if produced.object_kind != AuthorityObjectKindV1::ResumeHandle
+            || produced.schema_version != 1
+            || indexed.schema_version != 1
+            || indexed.ref_id != produced.ref_id
+            || indexed.object_kind != produced.object_kind
+            || indexed.object_schema_version != produced.schema_version
+            || indexed.byte_length == 0
+            || indexed.storage_state != AuthorityObjectStorageStateV1::Present
+            || references
+                .iter()
+                .filter(|reference| reference.ref_id == produced.ref_id)
+                .count()
+                != 1
+        {
+            return Err(StoreSchemaError(
+                "World produced continuation index or unique append differs",
+            ));
+        }
+        validate_object_commitment_rule(
+            produced.object_kind,
+            produced.schema_version,
+            &produced.commitment,
+        )
+        .map_err(|_| StoreSchemaError("World produced continuation commitment is invalid"))?;
+        let mut authority = latest.authority.clone();
+        authority.internal_resume_handle_refs.push(produced.clone());
+        reconstruct_authority_state(authority)
+    }
+
     fn reconstruct_runtime_authority_history(
         &self,
         current_authority: &DurableSessionAuthorityV1,
     ) -> Result<BTreeMap<u64, ReconstructedAuthorityStateV1>, StoreSchemaError> {
+        if self.has_world_controller_start(current_authority) {
+            return self.reconstruct_world_controller_authority_history(current_authority);
+        }
+
         if let Some(mut history) =
             self.reconstruct_fork_successor_birth_history(current_authority)?
         {
@@ -3794,7 +4097,7 @@ impl StateRootV3 {
                     .iter()
                     .filter(|reference| {
                         reference.object_kind == AuthorityObjectKindV1::ResumeHandle
-                            && reference.schema_version == 2
+                            && matches!(reference.schema_version, 2 | 3)
                     })
                     .cloned()
                     .collect::<Vec<_>>();
@@ -4297,8 +4600,14 @@ fn v3_object_schema_version_allowed(
     schema_version == SCHEMA_VERSION
         || (matches!(
             object_kind,
-            AuthorityObjectKindV1::TerminalHandoff | AuthorityObjectKindV1::ResumeHandle
+            AuthorityObjectKindV1::TerminalHandoff
+                | AuthorityObjectKindV1::ResumeHandle
+                | AuthorityObjectKindV1::PostTurnProtocolEvent
+                | AuthorityObjectKindV1::PostTurnCompletion
         ) && schema_version == 2)
+        || (object_kind == AuthorityObjectKindV1::PostTurnCompletion
+            && matches!(schema_version, 3 | 4))
+        || (object_kind == AuthorityObjectKindV1::ResumeHandle && schema_version == 3)
 }
 
 fn reservation_matches_v2(
@@ -5075,6 +5384,143 @@ mod tests {
             issuer_request_index: BTreeMap::new(),
             application_journal: BTreeMap::new(),
             object_index: BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn test_completion_v3_reconstruction_preserves_committed_handle() {
+        let mut root =
+            StateRootV3::try_from_v2(&StateRootV2::try_from_greenfield_v1(&root()).unwrap())
+                .unwrap();
+        let reference = |id: char, version| AuthorityObjectRefV1 {
+            ref_id: format!("ao_{}", id.to_string().repeat(32)),
+            object_kind: AuthorityObjectKindV1::ResumeHandle,
+            schema_version: version,
+            commitment: AuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: id.to_string().repeat(64),
+            },
+        };
+        let original = reference('a', 2);
+        let produced = reference('b', 1);
+        let initial = reconstruct_authority_state(DurableSessionAuthorityV1 {
+            schema_version: 1,
+            orchestration_session_id: "session".into(),
+            shell_trace_session_id: "trace".into(),
+            authority_revision: 3,
+            origin: DurableSessionAuthorityOriginV1::StartIntent {
+                intent_id: "start".into(),
+                issuer_request_id: "start-request".into(),
+                payload_commitment: original.commitment.clone(),
+            },
+            authoritative_participant_lineage: vec!["start".into(), "resume".into()],
+            active_authoritative_participant_id: Some("resume".into()),
+            workspace_binding: WorkspaceBindingV1 {
+                workspace_root: home(),
+                authority_store_root: home(),
+                authority_store_id: root.authority_store_id.clone(),
+            },
+            world_binding: None,
+            host_attach_contract_ref: None,
+            retained_worker_refs: Vec::new(),
+            internal_resume_handle_refs: vec![original.clone()],
+            lifecycle_posture: HostSessionPostureV1::ActiveAttached,
+            current_policy_ref: None,
+            current_policy_revision: None,
+            updated_at: timestamp(),
+        })
+        .unwrap();
+        root.object_index.insert(
+            produced.ref_id.clone(),
+            AuthorityObjectIndexEntryV1 {
+                schema_version: 1,
+                ref_id: produced.ref_id.clone(),
+                object_kind: AuthorityObjectKindV1::ResumeHandle,
+                object_schema_version: 1,
+                byte_length: 123,
+                storage_state: AuthorityObjectStorageStateV1::Present,
+            },
+        );
+        let mut committed = initial.authority.clone();
+        committed.internal_resume_handle_refs.push(produced.clone());
+        committed.authority_revision += 1;
+        committed.lifecycle_posture = HostSessionPostureV1::AwaitingAttention;
+        let expected = authority_record_commitment(&committed).unwrap();
+        // The previous reconstruction omitted the append and rejected the same
+        // full commitment that settlement actually publishes.
+        assert!(reconstruct_reconciled_authority_state(
+            &initial,
+            4,
+            expected.clone(),
+            committed.lifecycle_posture,
+            &timestamp(),
+        )
+        .is_err());
+        let prefix = root
+            .reconstruct_completion_v3_authority_state(&initial, &committed)
+            .unwrap();
+        let reconstructed = reconstruct_reconciled_authority_state(
+            &prefix,
+            4,
+            expected.clone(),
+            committed.lifecycle_posture,
+            &timestamp(),
+        )
+        .unwrap();
+        assert_eq!(reconstructed.authority, committed);
+        // A later Resume must not make an earlier edge consume the last handle.
+        let mut later = committed.clone();
+        later.internal_resume_handle_refs.push(reference('c', 1));
+        assert_eq!(
+            root.reconstruct_completion_v3_authority_state(&initial, &later)
+                .unwrap(),
+            prefix
+        );
+        // A substituted handle cannot satisfy the original journal commitment.
+        let mut substituted = prefix.clone();
+        substituted.authority.internal_resume_handle_refs[1].commitment =
+            original.commitment.clone();
+        assert!(reconstruct_reconciled_authority_state(
+            &substituted,
+            4,
+            expected,
+            committed.lifecycle_posture,
+            &timestamp(),
+        )
+        .is_err());
+        for change in 0..6 {
+            let mut invalid = committed.clone();
+            let mut changed_root = root.clone();
+            match change {
+                0 => {
+                    invalid.internal_resume_handle_refs.pop();
+                }
+                1 => {
+                    invalid.internal_resume_handle_refs.push(produced.clone());
+                }
+                2 => {
+                    invalid.internal_resume_handle_refs.swap(0, 1);
+                }
+                3 => {
+                    invalid.internal_resume_handle_refs[1].schema_version = 2;
+                }
+                4 => {
+                    changed_root.object_index.remove(&produced.ref_id);
+                }
+                5 => {
+                    changed_root
+                        .object_index
+                        .get_mut(&produced.ref_id)
+                        .unwrap()
+                        .byte_length = 0;
+                }
+                _ => unreachable!(),
+            }
+            assert!(
+                changed_root
+                    .reconstruct_completion_v3_authority_state(&initial, &invalid)
+                    .is_err(),
+                "case {change}"
+            );
         }
     }
 

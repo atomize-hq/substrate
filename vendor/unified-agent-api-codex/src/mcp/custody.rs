@@ -1,6 +1,8 @@
 //! Actual MCP/app-server child and stdio custody, independent of protocol replies.
+use crate::ProcessTerminationObservation;
 use std::{
     io,
+    process::ExitStatus,
     sync::{Arc, Mutex},
 };
 use tokio::{
@@ -36,9 +38,11 @@ impl std::error::Error for McpSettlementError {}
 #[derive(Debug, Default)]
 struct State {
     sealed: bool,
+    started: bool,
     terminate: bool,
     active: usize,
     failures: u8,
+    terminations: Vec<ProcessTerminationObservation>,
 }
 #[derive(Debug, Default)]
 struct Inner {
@@ -93,6 +97,46 @@ impl McpProcessCustody {
     pub fn new() -> Self {
         Self::default()
     }
+    /// Copy actual app-server child wait observations without sealing, waiting,
+    /// cancellation or launch. Check `settle()` separately. Protocol success and
+    /// synthetic completion status do not supply an actual app-server exit.
+    /// ```no_run
+    /// # async fn inspect(custody: &codex::mcp::McpProcessCustody) -> Result<(), Box<dyn std::error::Error>> {
+    /// custody.settle().await?;
+    /// let observations = custody.observed_process_terminations();
+    /// # let _ = observations; Ok(()) }
+    /// ```
+    pub fn observed_process_terminations(&self) -> Vec<ProcessTerminationObservation> {
+        self.inner
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .terminations
+            .clone()
+    }
+
+    /// Observe admission closed before any app-server spawn attempt began.
+    /// Open empty custody and failed spawns return false. This does not seal,
+    /// cancel or wait; check `settle()` and enclosing cleanup separately.
+    /// ```
+    /// let custody = codex::mcp::McpProcessCustody::new();
+    /// assert!(!custody.observed_closed_before_any_spawn());
+    /// custody.request_termination();
+    /// assert!(custody.observed_closed_before_any_spawn());
+    /// ```
+    pub fn observed_closed_before_any_spawn(&self) -> bool {
+        let state = self
+            .inner
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        state.sealed
+            && !state.started
+            && state.active == 0
+            && state.failures == 0
+            && state.terminations.is_empty()
+    }
+
     /// Seal child admission and request termination. This is not acknowledgment.
     pub fn request_termination(&self) {
         let mut state = self.inner.state.lock().unwrap_or_else(|e| e.into_inner());
@@ -147,15 +191,22 @@ impl McpProcessCustody {
                 "MCP attempt sealed",
             ));
         }
+        state.started = true;
         state.active += 1;
-        let owner = ChildOwner {
+        let mut owner = ChildOwner {
             custody: self.clone(),
             finished: false,
+            process_id: None,
+            status: None,
+            recovery_status: None,
         };
         let result = command.spawn();
         drop(state);
         match result {
-            Ok(child) => Ok((child, owner)),
+            Ok(child) => {
+                owner.process_id = child.id();
+                Ok((child, owner))
+            }
             Err(error) => {
                 owner.finish(0);
                 Err(error)
@@ -167,9 +218,23 @@ impl McpProcessCustody {
 pub(super) struct ChildOwner {
     custody: McpProcessCustody,
     finished: bool,
+    process_id: Option<u32>,
+    status: Option<ExitStatus>,
+    recovery_status: Option<ExitStatus>,
 }
 impl ChildOwner {
     fn finish(mut self, failures: u8) {
+        self.finished = true;
+        self.record(failures);
+    }
+    fn finish_with_observation(
+        mut self,
+        failures: u8,
+        status: Option<ExitStatus>,
+        recovery_status: Option<ExitStatus>,
+    ) {
+        self.status = status;
+        self.recovery_status = recovery_status;
         self.finished = true;
         self.record(failures);
     }
@@ -180,6 +245,11 @@ impl ChildOwner {
             .state
             .lock()
             .unwrap_or_else(|e| e.into_inner());
+        state.terminations.push(ProcessTerminationObservation {
+            process_id: self.process_id,
+            status: self.status,
+            recovery_status: self.recovery_status,
+        });
         state.active -= 1;
         state.failures |= failures;
         drop(state);
@@ -343,7 +413,11 @@ pub(super) fn supervise(
             recovery_wait = ?recovery_wait,
             pipe_failures = failures & (STDIN_FAILED | STDOUT_FAILED | STDERR_FAILED | OWNER_FAILED),
             settlement_failures = failures, "owned app-server child and pipe joins settled");
-        owner.finish(failures);
+        owner.finish_with_observation(
+            failures,
+            status.as_ref().ok().copied(),
+            recovery_wait.and_then(|(_, status)| status),
+        );
     });
 }
 

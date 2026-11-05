@@ -7,6 +7,9 @@
 // allowance at the module boundary and remove it when the facade is integrated.
 #[allow(dead_code)]
 pub(crate) mod canonical_json;
+#[cfg(target_os = "linux")]
+#[allow(dead_code)]
+pub(crate) mod direct_host_resume;
 #[allow(dead_code)]
 pub(crate) mod facade;
 #[allow(dead_code)]
@@ -46,3 +49,10 @@ pub(crate) use facade::{
 mod golden_vectors;
 #[cfg(test)]
 mod transition_tests;
+
+#[cfg(target_os = "linux")]
+#[allow(dead_code)]
+pub(crate) mod current_host_run;
+
+#[cfg(target_os = "linux")]
+pub(crate) mod world_bound_controller;

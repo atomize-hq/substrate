@@ -3,6 +3,7 @@
 mod support;
 
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::Command as StdCommand;
 use support::substrate_shell_driver;
@@ -19,12 +20,24 @@ impl WorkspaceCheckpointFixture {
     fn new() -> Self {
         let temp = Builder::new()
             .prefix("substrate-workspace-checkpoint-")
-            .tempdir_in("/tmp")
+            .tempdir_in(
+                std::env::var_os("XDG_RUNTIME_DIR")
+                    .or_else(|| std::env::var_os("HOME"))
+                    .expect("private fixture parent"),
+            )
             .expect("failed to allocate ws6 temp dir");
         let home = temp.path().join("home");
         fs::create_dir_all(&home).expect("create HOME fixture");
         let substrate_home = temp.path().join("substrate-home");
         fs::create_dir_all(&substrate_home).expect("create SUBSTRATE_HOME fixture");
+        fs::set_permissions(&substrate_home, fs::Permissions::from_mode(0o700))
+            .expect("set private product fixture permissions");
+        for name in ["config.yaml", "policy.yaml"] {
+            let path = substrate_home.join(name);
+            fs::write(&path, "{}\n").expect("write private product config fixture");
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+                .expect("set private product config permissions");
+        }
         let workspace_root = temp.path().join("workspace");
         fs::create_dir_all(&workspace_root).expect("create workspace root");
         Self {
@@ -37,9 +50,18 @@ impl WorkspaceCheckpointFixture {
 
     fn command(&self) -> assert_cmd::Command {
         let mut cmd = substrate_shell_driver();
-        cmd.env("HOME", &self.home)
+        cmd.arg("--install-prefix")
+            .arg(&self.substrate_home)
+            .env("HOME", &self.home)
             .env("USERPROFILE", &self.home)
             .env("SUBSTRATE_HOME", &self.substrate_home)
+            .env_remove("SUBSTRATE_INSTALL_PREFIX")
+            .env_remove("SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1")
+            .env_remove("SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT")
+            .env_remove("SUBSTRATE_INSTALL_PRIMARY_USER")
+            .env_remove("SUBSTRATE_INSTALL_PRIMARY_UID")
+            .env_remove("SUBSTRATE_ROOT")
+            .env_remove("SHIM_TRACE_LOG")
             .env_remove("SUBSTRATE_WORLD")
             .env_remove("SUBSTRATE_WORLD_ENABLED")
             .env_remove("SUBSTRATE_WORLD_ID");

@@ -234,6 +234,18 @@ pub(crate) fn install_bootstrap_projections(
     Ok(encoded)
 }
 
+#[cfg(target_os = "linux")]
+pub(crate) fn acquire_ordinary_configured_home(
+    carrier: &InstallBootstrapContextCarrierV1,
+) -> Result<std::sync::Arc<config_projection::OrdinaryConfiguredAcceptedHomeAuthorityV1>> {
+    bind_unix_install_bootstrap_context(carrier)?;
+    let held = std::sync::Arc::new(
+        config_projection::OrdinaryConfiguredAcceptedHomeAuthorityV1::from_installed_bootstrap_authority(carrier)?,
+    );
+    held.revalidate()?;
+    Ok(held)
+}
+
 #[cfg(unix)]
 pub(crate) fn checked_install_bootstrap_context_from_projections(
 ) -> Result<InstallBootstrapContextCarrierV1> {

@@ -826,21 +826,52 @@ fn write_atomic_patch_yaml<T: serde::Serialize>(
         out.push('\n');
     }
 
-    let parent = path
-        .parent()
-        .ok_or_else(|| anyhow!("path {} has no parent", path.display()))?;
-    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
-    let mut tmp = NamedTempFile::new_in(parent)
-        .with_context(|| format!("failed to create temp file near {}", path.display()))?;
-    tmp.write_all(out.as_bytes())
-        .with_context(|| format!("failed to write {}", path.display()))?;
-    tmp.flush()?;
-    tmp.persist(path)
-        .map_err(|err| anyhow!("failed to persist {}: {}", path.display(), err.error))?;
-    Ok(())
+    #[cfg(target_os = "linux")]
+    {
+        let parent = path
+            .parent()
+            .ok_or_else(|| anyhow!("source parent absent"))?;
+        fs::create_dir_all(parent)?;
+        if crate::execution::workspace_read_cut::try_write_legacy_settings(
+            path,
+            Some(out.as_bytes()),
+        )? == crate::execution::workspace_read_cut::LegacySettingsWriteV1::Revisioned
+        {
+            return Ok(());
+        }
+    }
+    {
+        let parent = path
+            .parent()
+            .ok_or_else(|| anyhow!("path {} has no parent", path.display()))?;
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+        let mut tmp = NamedTempFile::new_in(parent)
+            .with_context(|| format!("failed to create temp file near {}", path.display()))?;
+        tmp.write_all(out.as_bytes())
+            .with_context(|| format!("failed to write {}", path.display()))?;
+        tmp.flush()?;
+        tmp.persist(path)
+            .map_err(|err| anyhow!("failed to persist {}: {}", path.display(), err.error))?;
+        Ok(())
+    }
 }
 
 fn rollback_policy_file(patch_path: &Path, old_patch_raw: Option<&str>) {
+    #[cfg(target_os = "linux")]
+    {
+        // A rollback is an owner write even when it restores identical bytes.
+        // An incomplete earlier write remains diagnosable; it is never repaired here.
+        match crate::execution::workspace_read_cut::try_write_legacy_settings(
+            patch_path,
+            old_patch_raw.map(str::as_bytes),
+        ) {
+            Ok(crate::execution::workspace_read_cut::LegacySettingsWriteV1::UnsupportedCustody) => {
+            }
+            Ok(crate::execution::workspace_read_cut::LegacySettingsWriteV1::Revisioned)
+            | Err(_) => return,
+        }
+    }
     match old_patch_raw {
         Some(raw) => {
             let _ = fs::write(patch_path, raw);
@@ -848,5 +879,77 @@ fn rollback_policy_file(patch_path: &Path, old_patch_raw: Option<&str>) {
         None => {
             let _ = fs::remove_file(patch_path);
         }
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod workspace_read_cut_rollback_tests {
+    use super::*;
+    #[test]
+    fn workspace_read_cut_policy_actual_rollback_same_bytes_advances_revision() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("policy.yaml");
+        crate::execution::workspace_read_cut::write_settings(&path, Some(b"{}\n")).unwrap();
+        let directory = crate::execution::workspace_read_cut::directory(temp.path(), unsafe {
+            libc::geteuid()
+        })
+        .unwrap();
+        let before = crate::execution::workspace_read_cut::read_revision(
+            &directory,
+            "policy.yaml",
+            unsafe { libc::geteuid() },
+        )
+        .unwrap();
+        let patch =
+            policy_model::parse_policy_patch_yaml(&path, "cmd_allowed: [temporary]\n").unwrap();
+        write_atomic_patch_yaml(&path, "", None, &patch).unwrap();
+        rollback_policy_file(&path, Some("{}\n"));
+        let after = crate::execution::workspace_read_cut::read_revision(
+            &directory,
+            "policy.yaml",
+            unsafe { libc::geteuid() },
+        )
+        .unwrap();
+        assert_eq!(after.revision, before.revision + 2);
+        assert_eq!(fs::read(&path).unwrap(), b"{}\n");
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod legacy_custody_remediation_tests {
+    use super::*;
+    #[test]
+    fn workspace_read_cut_legacy_policy_tmp_write_and_rollback_without_coverage() {
+        let temp = tempfile::tempdir_in("/tmp").unwrap();
+        let path = temp.path().join("policy.yaml");
+        let patch =
+            policy_model::parse_policy_patch_yaml(&path, "cmd_allowed: [temporary]\n").unwrap();
+        write_atomic_patch_yaml(&path, "", None, &patch).unwrap();
+        rollback_policy_file(&path, Some("{}\n"));
+        assert_eq!(fs::read(&path).unwrap(), b"{}\n");
+        assert!(!temp
+            .path()
+            .join(".policy.yaml.owner-revision.v1.json")
+            .exists());
+        assert!(
+            crate::execution::workspace_read_cut::directory(temp.path(), unsafe {
+                libc::geteuid()
+            })
+            .is_err()
+        );
+    }
+    #[test]
+    fn workspace_read_cut_legacy_rollback_never_replays_pending_protected_write() {
+        let parent = std::path::PathBuf::from(std::env::var_os("XDG_RUNTIME_DIR").unwrap());
+        let temp = tempfile::tempdir_in(parent).unwrap();
+        let path = temp.path().join("policy.yaml");
+        crate::execution::workspace_read_cut::write_settings(&path, Some(b"original\n")).unwrap();
+        fs::write(
+            temp.path().join(".policy.yaml.owner-revision.v1.pending"),
+            b"incomplete",
+        )
+        .unwrap();
+        rollback_policy_file(&path, Some("must not replay\n"));
+        assert_eq!(fs::read(&path).unwrap(), b"original\n");
     }
 }

@@ -3,6 +3,7 @@ pub mod agent_dev_support;
 pub mod agent_events;
 pub(crate) mod agent_inventory;
 pub(crate) mod agent_runtime;
+pub(crate) mod agent_selection;
 mod agents_cmd;
 mod auto_sync;
 mod cli;
@@ -45,6 +46,8 @@ mod workspace;
 mod workspace_cmd;
 #[cfg(target_os = "linux")]
 pub(crate) mod workspace_open;
+#[cfg(target_os = "linux")]
+pub(crate) mod workspace_read_cut;
 
 pub(crate) use agents_cmd::handle_agent_command;
 pub(crate) use agents_cmd::handle_agents_command;

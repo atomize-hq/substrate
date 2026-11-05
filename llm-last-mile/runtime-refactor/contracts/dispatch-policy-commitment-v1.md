@@ -361,9 +361,27 @@ all of the following from that same reservation: `applied_patch` is a nonempty
 `RestrictedWorldFs` E1 patch, the referenced parent has `allow_capability_narrowing == true`, the
 effective snapshot bytes/ref/hash are the exact E1 result, the full validated-request commitment
 matches, and both preallocated identities match. `UnchangedParent` and every empty patch produce
-`None`. This distinct opaque, ephemeral capability is the only condition under which B3.2a may
-accept `allow_capability_narrowing == true`; B3.2a cannot construct it and receives no patch,
-request-commitment, or snapshot bytes through it.
+`None`. For protected/default admission, this distinct opaque, ephemeral capability remains the
+only condition under which B3.2a may accept `allow_capability_narrowing == true`; B3.2a cannot
+construct it and receives no patch, request-commitment, or snapshot bytes through it.
+
+Genuine ordinary configured admission separately accepts an authenticated `UnchangedParent`
+reservation even when the exact parent permits narrowing. A private typed ordinary
+input/reservation authenticator preserves original configured root/principal custody, applied
+Start/issuer/context, pinned selection/profile/account, current caller/policy and exact stored
+request/reservation/E1/worker/bootstrap identities. It issues an opaque ephemeral ordinary
+condition, never an applied-narrowing attestation. Absence, a permission bit, generation, digest,
+revision or bare generic reservation is insufficient. Before each B3 admission transaction, E2
+recomputes the complete request commitment privately from B3's existing plan argument and the
+same immutable reservation. A private B3 factory binds that opaque check to its own borrow of
+the same plan in the same call; request or plan substitution fails. No E2 request preimage,
+MAC/key material or snapshot bytes cross into B3. The condition adds no durable flag, schema,
+hash domain, registration or lifecycle authority. Immutable cleanup/terminal request checks do
+not reauthorize today's policy/account permission and cannot strand cleanup after revocation.
+Exact retries recreate the condition from genuine original ordinary custody and the same
+reservation, reuse existing identities/fingerprint, and never redeliver accepted input.
+Launch maximum remains parent-at-Spawn AND Spawn patch; every later turn independently resolves
+current-parent-now AND immutable-worker-cap AND turn patch.
 
 The durable unique retry index is `DispatchPolicyCommitmentLookupKeyV1`. The subject discriminator
 allows one request to own both a retained-turn commitment and a later fork commitment. The
@@ -1050,9 +1068,14 @@ One resolver transaction must perform all of the following before returning `Res
    lookup and policy recomputation are forbidden; and
 10. for `RetainedWorkerTurn`, require the exact stored `Existing { cap_ref }`, resolve it only
     within the captured E2 snapshot, authenticate the complete launch/fork cap record and linkage
-    hash, and exact-join ref/hash/record, participant, session, caller, backends, world, generation,
-    and cap snapshot bytes/ref/hash/revision. `EphemeralWork` requires every cap field absent. Cap
-    material in the result originates exclusively from immutable E2 records.
+    hash, and exact-join ref/hash/record, participant, session, target backend, world, generation,
+    and cap snapshot bytes/ref/hash/revision. The cap's caller participant/backend authenticate
+    its immutable launch provenance; they need not equal a later turn's caller. The accepted
+    turn's caller participant/backend independently exact-join its own B1/E2/claim in steps 5–8.
+    This historical projection grants no current caller authorization; ordinary dispatch and
+    service admission retain their genuine current-selection checks. `EphemeralWork` requires
+    every cap field absent. Cap material in the result originates exclusively from immutable
+    E2 records.
 
 The returned `authority_revision_observed`, acceptance record and revision, accepted-work identity,
 runtime evidence, correlation, policy identity, and `accepted_at` originate exclusively from the

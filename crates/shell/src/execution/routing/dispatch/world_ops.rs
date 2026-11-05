@@ -600,6 +600,8 @@ impl MemberDispatchTransportRequest {
 
 fn build_execute_request(input: ExecuteRequestInput) -> ExecuteRequest {
     ExecuteRequest {
+        schema_version: 1,
+        ordinary_start_selection: None,
         profile: input.profile,
         cmd: input.cmd,
         cwd: Some(input.cwd),
@@ -1799,6 +1801,184 @@ fn build_agent_client_and_member_dispatch_request_impl(
     Ok((client, request, agent_id))
 }
 
+#[cfg(target_os = "linux")]
+fn build_ordinary_nonsecret_world_env_map(
+    inherit_from_host: bool,
+    ambient: &std::collections::HashMap<String, String>,
+) -> std::collections::HashMap<String, String> {
+    use std::collections::HashMap;
+
+    const DEFAULT_WORLD_DEPS_BIN: &str = "/var/lib/substrate/world-deps/bin";
+    // Include `/usr/games` for packages like `sl` which install outside `/usr/bin`.
+    const BASELINE_PATH: &str =
+        "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games";
+
+    let world_deps_bin = ambient
+        .get("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR")
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| DEFAULT_WORLD_DEPS_BIN.to_string());
+    let mut env_map: HashMap<String, String> = HashMap::new();
+    env_map.insert(
+        "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR".to_string(),
+        world_deps_bin.clone(),
+    );
+    env_map.insert(
+        "PATH".to_string(),
+        format!("{}:{}", world_deps_bin.trim_end_matches('/'), BASELINE_PATH),
+    );
+    env_map.insert("HOME".to_string(), "/root".to_string());
+    env_map.insert("XDG_CONFIG_HOME".to_string(), "/root/.config".to_string());
+    env_map.insert(
+        "XDG_DATA_HOME".to_string(),
+        "/root/.local/share".to_string(),
+    );
+    env_map.insert("XDG_CACHE_HOME".to_string(), "/root/.cache".to_string());
+    env_map.insert("TERM".to_string(), "xterm-256color".to_string());
+
+    // Preserve Substrate/WORLD control-plane env so policy/config state is visible to world-service
+    // and downstream shims, without inheriting arbitrary host user environment.
+    for (key, value) in ambient {
+        let keep = key.starts_with("SUBSTRATE_") || key.starts_with("WORLD_");
+        if !keep || value.is_empty() || key.starts_with("SUBSTRATE_LLM_BACKEND_AUTH_") {
+            continue;
+        }
+        match key.as_str() {
+            // Reserved keys are owned by the deterministic world env contract above.
+            "PATH" | "HOME" | "TERM" | "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR" => continue,
+            _ if key.starts_with("XDG_") => continue,
+            // Shim bookkeeping must never leak into the world environment.
+            "SHIM_ACTIVE" | "SHIM_CALLER" | "SHIM_CALL_STACK" | "SHIM_DEPTH" => continue,
+            _ => {}
+        }
+        env_map.insert(key.clone(), value.clone());
+    }
+
+    if inherit_from_host {
+        for (key, value) in ambient {
+            let forward =
+                key == "LANG" || key == "TZ" || key == "NO_COLOR" || key.starts_with("LC_");
+            if forward && !value.is_empty() {
+                env_map.insert(key.clone(), value.clone());
+            }
+        }
+    }
+
+    // Always ensure shim/runtime book-keeping does not leak into the world environment.
+    for key in [
+        "SHIM_ACTIVE",
+        "SHIM_CALLER",
+        "SHIM_CALL_STACK",
+        "SHIM_DEPTH",
+    ] {
+        env_map.remove(key);
+    }
+
+    env_map
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn build_ordinary_agent_client_and_member_dispatch_request_for_cwd(
+    selection: &std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+    dispatch: &MemberDispatchTransportRequest,
+    cwd_path: &std::path::Path,
+) -> anyhow::Result<(
+    transport_api_client::AgentClient,
+    transport_api_types::ExecuteRequest,
+    String,
+)> {
+    selection.revalidate()?;
+    if cwd_path != std::path::Path::new(selection.workspace_root())
+        || dispatch.config_projection.is_some()
+        || dispatch.e2_launch_activation.is_none()
+    {
+        anyhow::bail!(
+            "ordinary retained transport requires captured workspace and authenticated E2 launch"
+        );
+    }
+    let effective_config = selection.captured_effective_config();
+    let home = selection.held_authority().bootstrap_home();
+    let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
+        cwd_path, &home,
+    )?;
+    selection.revalidate_requested_account(&policy)?;
+    let material = dispatch
+        .exact_policy_snapshot
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("ordinary retained transport omitted exact E2 policy"))?;
+    material.validate()?;
+    let network =
+        crate::execution::policy_snapshot::resolve_ordinary_world_network_policy_for_snapshot(
+            material.policy_snapshot.clone(),
+            &effective_config,
+        )?;
+    if serde_json::to_vec(&network.snapshot)? != material.policy_snapshot_bytes {
+        anyhow::bail!("ordinary retained exact E2 snapshot changed during network routing");
+    }
+    let ambient: std::collections::HashMap<String, String> = std::env::vars()
+        .filter(|(key, _)| !key.starts_with("SUBSTRATE_LLM_BACKEND_AUTH_"))
+        .collect();
+    let mut env_map = build_ordinary_nonsecret_world_env_map(
+        effective_config.world.env.inherit_from_host,
+        &ambient,
+    );
+    // This path cleanup is transport hygiene, never authority or configuration custody.
+    if let Ok(shim_dir) = substrate_common::paths::shims_dir() {
+        if let Some(path) = env_map.get("PATH").cloned() {
+            let shim = shim_dir.to_string_lossy();
+            env_map.insert(
+                "PATH".into(),
+                path.split(':')
+                    .filter(|segment| *segment != shim.as_ref())
+                    .filter(|segment| !segment.is_empty())
+                    .collect::<Vec<_>>()
+                    .join(":"),
+            );
+        }
+    }
+    crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
+        &network.snapshot,
+        &mut env_map,
+    )?;
+    ensure_world_deps_bin_on_path(&mut env_map);
+    maybe_inject_codex_auth_seed_home_for_policy(
+        &mut env_map,
+        dispatch.backend_kind,
+        &dispatch.backend_id,
+        &policy,
+        Some(selection.requested_principal()),
+    )?;
+    preserve_world_project_dir_override(&mut env_map, cwd_path);
+    let world_network = request_world_network_routing(&network);
+    let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
+    let mut request = build_execute_request(ExecuteRequestInput {
+        profile: current_world_request_profile(),
+        cmd: String::new(),
+        cwd: cwd_path.display().to_string(),
+        env_map,
+        agent_id: agent_id.clone(),
+        policy_snapshot: network.snapshot,
+        world_network,
+        world_fs_mode: policy.world_fs_mode,
+        member_dispatch: Some(build_member_dispatch_payload(dispatch)),
+        acceptance_context: None,
+    });
+    request.schema_version = 2;
+    request.ordinary_start_selection = Some(
+        crate::execution::orchestrator_world_dispatch::ordinary_start_selection_carrier(selection)?,
+    );
+    selection
+        .prepare_world_execute(&request)?
+        .revalidate_before_world_effect()?;
+    let socket = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("/run/substrate.sock"));
+    let client = AgentClient::unix_socket(&socket)?;
+    Ok((client, request, agent_id))
+}
+
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(super) fn preserve_world_project_dir_override(
     env_map: &mut std::collections::HashMap<String, String>,
@@ -2434,7 +2614,14 @@ pub(crate) fn stream_non_pty_via_agent(
             use transport_api_types::ApiError;
             use http_body_util::BodyExt;
 
-            let response = client.execute_stream(request).await?;
+            #[cfg(target_os = "linux")]
+            let response = if request.ordinary_start_selection.is_some() {
+                client.execute_ordinary_member_stream(request).await?
+            } else {
+                client.execute_stream(request).await?.map(|body| body.boxed_unsync())
+            };
+            #[cfg(not(target_os = "linux"))]
+            let response = client.execute_stream(request).await?.map(|body| body.boxed_unsync());
             if !response.status().is_success() {
                 let status = response.status();
                 let body_bytes = response
@@ -2482,14 +2669,16 @@ pub(crate) fn stream_non_pty_via_agent(
 }
 
 #[cfg(not(target_os = "windows"))]
-async fn process_agent_stream<Fut>(
-    body: hyper::body::Incoming,
+async fn process_agent_stream<B, Fut>(
+    body: B,
     agent_label: String,
     command_event_context: Option<ShellCommandEventContext>,
     sigint_rx: &mut tokio::sync::mpsc::UnboundedReceiver<()>,
     cancel: impl FnMut(String, String) -> Fut,
 ) -> anyhow::Result<AgentStreamOutcome>
 where
+    B: hyper::body::Body<Data = hyper::body::Bytes>,
+    B::Error: std::fmt::Display,
     Fut: std::future::Future<Output = anyhow::Result<()>>,
 {
     process_agent_stream_body(
@@ -2816,6 +3005,133 @@ pub(super) fn emit_stream_chunk(
     );
     event.span_id = span_id.map(|s| s.to_string());
     let _ = publish_agent_event(event);
+}
+
+#[cfg(target_os = "linux")]
+fn capture_ordinary_task_nonsecret_env(
+    inherit_locale: bool,
+    snapshot: &transport_api_types::PolicySnapshotV3,
+) -> anyhow::Result<std::collections::BTreeMap<String, String>> {
+    use std::collections::HashMap;
+    // Only these documented nonsecret values are read. In particular, the
+    // broad SUBSTRATE_/WORLD_ forwarding path is never persisted as a template.
+    let deps = std::env::var("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "/var/lib/substrate/world-deps/bin".into());
+    if !std::path::Path::new(&deps).is_absolute() || deps.contains('\0') {
+        anyhow::bail!("ordinary Task dependency path is not an absolute nonsecret path");
+    }
+    let mut env = HashMap::from([
+        ("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR".into(), deps.clone()),
+        ("PATH".into(), format!(
+            "{deps}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games"
+        )),
+        ("HOME".into(), "/root".into()),
+        ("XDG_CONFIG_HOME".into(), "/root/.config".into()),
+        ("XDG_DATA_HOME".into(), "/root/.local/share".into()),
+        ("XDG_CACHE_HOME".into(), "/root/.cache".into()),
+        ("TERM".into(), "xterm-256color".into()),
+    ]);
+    if inherit_locale {
+        for key in [
+            "LANG",
+            "TZ",
+            "NO_COLOR",
+            "LC_ALL",
+            "LC_CTYPE",
+            "LC_COLLATE",
+            "LC_MESSAGES",
+            "LC_MONETARY",
+            "LC_NUMERIC",
+            "LC_TIME",
+            "LC_ADDRESS",
+            "LC_IDENTIFICATION",
+            "LC_MEASUREMENT",
+            "LC_NAME",
+            "LC_PAPER",
+            "LC_TELEPHONE",
+        ] {
+            if let Ok(value) = std::env::var(key) {
+                if !value.is_empty() {
+                    env.insert(key.into(), value);
+                }
+            }
+        }
+    }
+    crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(snapshot, &mut env)?;
+    Ok(env.into_iter().collect())
+}
+
+#[cfg(target_os = "linux")]
+impl crate::execution::agent_runtime::state_store::OrdinaryTaskExecuteTemplateV2 {
+    pub(crate) fn capture_ordinary_task_execute_template(
+        selection: &std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+        material: &ExactDispatchPolicySnapshotMaterialV1,
+    ) -> anyhow::Result<crate::execution::agent_runtime::state_store::OrdinaryTaskExecuteTemplateV2>
+    {
+        use crate::execution::agent_runtime::state_store::{
+            OrdinaryTaskExecuteTemplateV2, OrdinaryTaskWorldNetworkRoutingV2,
+        };
+        selection.require_ordinary_configured_authority()?;
+        material.validate()?;
+        let config = selection.captured_effective_config();
+        let home = selection.held_authority().bootstrap_home();
+        let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
+            std::path::Path::new(selection.workspace_root()),
+            &home,
+        )?;
+        selection.revalidate_requested_account(&policy)?;
+        let network =
+            crate::execution::policy_snapshot::resolve_ordinary_world_network_policy_for_snapshot(
+                material.policy_snapshot.clone(),
+                &config,
+            )?;
+        let policy_bytes = serde_json::to_vec(&network.snapshot)?;
+        if policy_bytes != material.policy_snapshot_bytes {
+            anyhow::bail!("ordinary Task routing changed original exact snapshot");
+        }
+        let routing = request_world_network_routing(&network);
+        let template = OrdinaryTaskExecuteTemplateV2 {
+            schema_version: 2,
+            profile: current_world_request_profile(),
+            cwd: selection.workspace_root().to_string(),
+            env: capture_ordinary_task_nonsecret_env(
+                config.world.env.inherit_from_host,
+                &network.snapshot,
+            )?,
+            agent_id: std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".into()),
+            policy_snapshot_json: String::from_utf8(policy_bytes)?,
+            world_network: Some(OrdinaryTaskWorldNetworkRoutingV2 {
+                isolate_network: routing.isolate_network,
+                allowed_domains: routing.allowed_domains,
+            }),
+            world_fs_mode: policy.world_fs_mode.as_str().to_string(),
+            ordinary_start_selection:
+                crate::execution::orchestrator_world_dispatch::ordinary_start_selection_carrier(
+                    selection,
+                )?,
+        };
+        selection.revalidate()?;
+        home.revalidate()?;
+        Ok(template)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn build_ordinary_task_agent_client(
+        selection: &std::sync::Arc<
+        crate::execution::agent_runtime::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    >,
+        request: &transport_api_types::ExecuteRequest,
+    ) -> anyhow::Result<transport_api_client::AgentClient> {
+        selection.require_ordinary_configured_authority()?;
+        selection
+            .prepare_world_execute(request)?
+            .revalidate_before_world_effect()?;
+        transport_api_client::AgentClient::unix_socket("/run/substrate.sock")
+    }
 }
 
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
@@ -5241,5 +5557,87 @@ mod tests {
         );
         assert_eq!(process_telemetry.process_events[1].exit_code, Some(0));
         assert_eq!(process_telemetry.process_events[1].duration_ms, Some(11));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn ordinary_world_env_preserves_configured_locale_and_nonsecret_controls() {
+        let ambient = std::collections::HashMap::from([
+            ("LANG".to_string(), "en_US.UTF-8".to_string()),
+            ("WORLD_TRACE".to_string(), "yes".to_string()),
+            ("SUBSTRATE_ANCHOR_MODE".to_string(), "project".to_string()),
+        ]);
+        let inherited = super::build_ordinary_nonsecret_world_env_map(true, &ambient);
+        assert_eq!(inherited.get("LANG"), ambient.get("LANG"));
+        assert_eq!(inherited.get("WORLD_TRACE"), ambient.get("WORLD_TRACE"));
+        assert_eq!(
+            inherited.get("SUBSTRATE_ANCHOR_MODE"),
+            ambient.get("SUBSTRATE_ANCHOR_MODE")
+        );
+        let isolated = super::build_ordinary_nonsecret_world_env_map(false, &ambient);
+        assert!(!isolated.contains_key("LANG"));
+        assert_eq!(isolated.get("WORLD_TRACE"), ambient.get("WORLD_TRACE"));
+        assert_eq!(isolated.get("HOME").map(String::as_str), Some("/root"));
+    }
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn ordinary_world_env_excludes_credentials_and_shim_bookkeeping() {
+        let ambient = std::collections::HashMap::from([
+            (
+                "SUBSTRATE_LLM_BACKEND_AUTH_OPENAI_SUBSCRIPTION_ACCESS_TOKEN".to_string(),
+                "synthetic-secret".to_string(),
+            ),
+            (
+                "ANTHROPIC_API_KEY".to_string(),
+                "synthetic-secret".to_string(),
+            ),
+            ("SHIM_DEPTH".to_string(), "4".to_string()),
+            ("LC_TIME".to_string(), "C".to_string()),
+        ]);
+        let result = super::build_ordinary_nonsecret_world_env_map(true, &ambient);
+        assert!(!result.contains_key("SHIM_DEPTH"));
+        assert!(!result.contains_key("ANTHROPIC_API_KEY"));
+        assert!(!result
+            .keys()
+            .any(|key| key.starts_with("SUBSTRATE_LLM_BACKEND_AUTH_")));
+        assert_eq!(result.get("LC_TIME"), ambient.get("LC_TIME"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial_test::serial]
+    fn test_ordinary_task_template_env_excludes_credential_and_arbitrary_control_keys() {
+        let snapshot: PolicySnapshotV3 = serde_json::from_value(json!({
+            "schema_version":3,"net_allowed":["*"],"world_fs":{"host_visible":false,"deny_enforcement":"strict","write":{"deny_list":["component-denied/**"]}}
+        }))
+        .unwrap();
+        let snapshot = snapshot.canonicalize().unwrap();
+        let keys = [
+            "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN",
+            "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID",
+            "ANTHROPIC_API_KEY",
+            "WORLD_ARBITRARY_AUTH",
+            "SUBSTRATE_ARBITRARY_CONTROL",
+        ];
+        let saved = keys.map(std::env::var_os);
+        for key in keys {
+            std::env::set_var(key, "synthetic-private-fixture");
+        }
+        let result = super::capture_ordinary_task_nonsecret_env(false, &snapshot);
+        for (key, value) in keys.iter().zip(saved) {
+            match value {
+                Some(value) => std::env::set_var(key, value),
+                None => std::env::remove_var(key),
+            }
+        }
+        let environment = result.unwrap();
+        for key in keys {
+            assert!(!environment.contains_key(key));
+        }
+        assert_eq!(environment.get("HOME").map(String::as_str), Some("/root"));
+        assert!(environment.contains_key("SUBSTRATE_WORLD_FS_ENFORCEMENT_PLAN_B64"));
+        assert!(!environment
+            .values()
+            .any(|value| value.contains("synthetic-private-fixture")));
     }
 }

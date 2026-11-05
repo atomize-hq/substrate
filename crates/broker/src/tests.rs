@@ -1142,6 +1142,12 @@ mod c0_policy_patch_only_broker_effective_resolution {
 
         fn write_global_policy(&self, yaml: &str) {
             std::fs::write(self.global_policy_path(), yaml).expect("write global policy.yaml");
+            #[cfg(unix)]
+            std::fs::set_permissions(
+                self.global_policy_path(),
+                std::fs::Permissions::from_mode(0o600),
+            )
+            .expect("secure global policy.yaml fixture");
         }
 
         fn write_workspace_policy(&self, yaml: &str) {
@@ -1155,6 +1161,7 @@ mod c0_policy_patch_only_broker_effective_resolution {
             cmd.env("HOME", &self.home);
             cmd.env("USERPROFILE", &self.home);
             cmd.env("SUBSTRATE_HOME", &self.substrate_home);
+            cmd.arg("--install-prefix").arg(&self.substrate_home);
             cmd.args(args);
             cmd.output().expect("run substrate command")
         }

@@ -701,6 +701,16 @@ mod platform {
 
     #[cfg(target_os = "linux")]
     impl TrustedEntryMetadataV1 {
+        /// For an owner publishing a sibling file: directory contents/timestamps
+        /// may advance, while the original directory and security cannot.
+        pub(crate) fn same_identity_and_security(self, other: Self) -> bool {
+            self.device_id == other.device_id
+                && self.inode == other.inode
+                && self.owner_uid == other.owner_uid
+                && self.mode == other.mode
+                && self.link_count == other.link_count
+        }
+
         pub(crate) fn link_count(self) -> u64 {
             self.link_count
         }
@@ -2268,6 +2278,112 @@ mod platform {
             })
         }
 
+        /// Stage only an existing admission registry publication. Ownership is
+        /// taken from this authenticated directory, never from a caller argument.
+        /// Generic native writers keep their strict actor-owned creation path.
+        #[cfg(target_os = "linux")]
+        pub(in crate::execution::agent_runtime::host_session_authority) fn create_admission_registry_temp(
+            &self,
+            name: &str,
+        ) -> Result<TrustedFile, TrustedFsError> {
+            if !name
+                .strip_prefix("admission-registry--")
+                .and_then(|suffix| suffix.strip_suffix(".tmp"))
+                .is_some_and(|nonce| {
+                    nonce.len() == 32
+                        && nonce
+                            .bytes()
+                            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+                })
+            {
+                return Err(TrustedFsError::new(
+                    "invalid lifecycle registry temporary name",
+                ));
+            }
+            validate_open_directory(&self.file, self.device_id, self.owner_uid, true)?;
+            let file = openat_file(
+                self.file.as_raw_fd(),
+                &component(name)?,
+                libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+                FILE_MODE,
+            )?;
+            let stat = fstat(file.as_raw_fd()).map_err(|error| {
+                TrustedFsError::new(format!(
+                    "created registry temporary identity unavailable; cleanup unresolved: {error}"
+                ))
+            })?;
+            let created = TrustedFile {
+                file,
+                device_id: stat.st_dev as u64,
+                inode: stat.st_ino as u64,
+            };
+            let prepared = (|| {
+                if kind_from_mode(stat.st_mode) != EntryKind::RegularFile
+                    || stat.st_dev as u64 != self.device_id
+                    || stat.st_mode & 0o7777 != FILE_MODE
+                    || stat.st_nlink != 1
+                {
+                    return Err(TrustedFsError::new(
+                        "created registry temporary type/mode/device/link mismatch",
+                    ));
+                }
+                let named = self
+                    .stat_entry(name)?
+                    .ok_or_else(|| TrustedFsError::new("created registry temporary disappeared"))?;
+                if named.st_dev != created.device_id || named.st_ino != created.inode {
+                    return Err(TrustedFsError::new(
+                        "created registry temporary changed identity",
+                    ));
+                }
+                if stat.st_uid != self.owner_uid {
+                    converge_created_owner(created.file.as_raw_fd(), self.owner_uid)?;
+                }
+                validate_open_file(&created.file, self.device_id, self.owner_uid)?;
+                self.verify_named_file_identity(name, &created)?;
+                if fstat(created.file.as_raw_fd())?.st_nlink != 1 {
+                    return Err(TrustedFsError::new(
+                        "created registry temporary gained another link",
+                    ));
+                }
+                Ok(())
+            })();
+            if let Err(error) = prepared {
+                // Setup may have failed before the file acquired the intended
+                // owner/mode. Compare the still-held created inode directly;
+                // strict open_file would reject precisely the inode to discard.
+                let dispose = (|| {
+                    let named = self.stat_entry(name)?.ok_or_else(|| {
+                        TrustedFsError::new("created registry temporary disappeared")
+                    })?;
+                    let held = fstat(created.file.as_raw_fd())?;
+                    if named.st_dev != created.device_id
+                        || named.st_ino != created.inode
+                        || held.st_dev as u64 != created.device_id
+                        || held.st_ino as u64 != created.inode
+                        || kind_from_mode(named.st_mode) != EntryKind::RegularFile
+                    {
+                        return Err(TrustedFsError::new(
+                            "created registry temporary cleanup identity differs",
+                        ));
+                    }
+                    self.unlink_file(name)?;
+                    if fstat(created.file.as_raw_fd())?.st_nlink != 0 {
+                        return Err(TrustedFsError::new(
+                            "created registry temporary disposal is unresolved",
+                        ));
+                    }
+                    Ok(())
+                })();
+                if let Err(cleanup) = dispose {
+                    return Err(TrustedFsError::new(format!(
+                        "registry temporary setup failed: {error}; cleanup unresolved: {cleanup}"
+                    )));
+                }
+                return Err(error);
+            }
+            Ok(created)
+        }
+
         pub(crate) fn open_file(&self, name: &str) -> Result<TrustedFile, TrustedFsError> {
             let file = openat_file(
                 self.file.as_raw_fd(),
@@ -2500,6 +2616,31 @@ mod platform {
                 return Err(io_error_value("unlink trusted file"));
             }
             self.sync()
+        }
+
+        /// Dispose only a named file matching this owner's still-held original
+        /// descriptor. Substitution refuses; it never searches for or deletes
+        /// another candidate. The descriptor stays live through unlink/sync.
+        pub(crate) fn unlink_owned_file(
+            &self,
+            name: &str,
+            expected: TrustedFile,
+        ) -> Result<(), TrustedFsError> {
+            use std::os::unix::fs::MetadataExt as _;
+            self.verify_named_file_identity(name, &expected)?;
+            self.unlink_file(name)?;
+            if expected
+                .file
+                .metadata()
+                .map_err(io_error("inspect disposed owned file"))?
+                .nlink()
+                != 0
+            {
+                return Err(TrustedFsError::new(
+                    "owned file disposal identity is unresolved",
+                ));
+            }
+            Ok(())
         }
 
         pub(crate) fn rename_no_replace(

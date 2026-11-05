@@ -25,17 +25,202 @@ pub(super) fn classify_opened(root: &TrustedAuthorityRoot) -> BootstrapClassific
     platform::classify_opened(root)
 }
 
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) fn reconcile_existing_v3_fixture_for_test(
+    path: &Path,
+) -> Result<StateRootV3, BootstrapError> {
+    let root = TrustedAuthorityRoot::open(path)
+        .map_err(|_| BootstrapError("open existing V3 fixture physical root"))?;
+    platform::reconcile_existing_v3_fixture_opened_for_test(&root)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) use platform::{DirectHostInboxStorageAreaV1, DirectHostInboxTransactionV1};
+
+/// Construct a bounded protocol/storage refusal without exposing storage error fields.
+#[cfg(target_os = "linux")]
+impl BootstrapError {
+    pub(crate) fn ordinary_control_source_guard() -> Self {
+        Self("ordinary cancellation source guard refused")
+    }
+
+    pub(super) fn world_controller_source_guard() -> Self {
+        Self("World controller physical source publication guard failed")
+    }
+
+    pub(crate) fn direct_host_inbox(reason: &'static str) -> Self {
+        Self(reason)
+    }
+}
+
+/// Inspect only an already activated physical root. This route never initializes
+/// a missing home/layout/lock, reconciles temps, or grants mutation authority.
+#[cfg(target_os = "linux")]
+pub(crate) fn with_existing_direct_host_inbox_snapshot<T>(
+    path: &Path,
+    operation: impl FnOnce(&mut DirectHostInboxTransactionV1<'_, '_>) -> Result<T, BootstrapError>,
+) -> Result<T, BootstrapError> {
+    let root = TrustedAuthorityRoot::open(path)
+        .map_err(|_| BootstrapError("open existing direct-host snapshot physical root"))?;
+    platform::with_existing_direct_host_inbox_snapshot_opened(&root, operation)
+}
+
+/// Existing-root committed recovery is authority-only. It never initializes a
+/// home or layout, reads keys, reconciles objects, or inspects current ingress.
+#[cfg(target_os = "linux")]
+pub(in crate::execution::agent_runtime::host_session_authority) use platform::DirectHostResumeRecoveryReadV1;
+
+#[cfg(target_os = "linux")]
+pub(in crate::execution::agent_runtime::host_session_authority) fn with_direct_host_resume_recovery<
+    T,
+>(
+    root: &TrustedAuthorityRoot,
+    committed: impl FnOnce(&mut DirectHostResumeRecoveryReadV1<'_>) -> Result<Option<T>, BootstrapError>,
+    active: impl FnOnce(&mut DirectHostInboxTransactionV1<'_, '_>) -> Result<T, BootstrapError>,
+) -> Result<T, BootstrapError> {
+    platform::with_direct_host_resume_recovery_opened(root, committed, active)
+}
+
+/// Serialize admitted raw ingress, canonical source publication and HSA
+/// settlement on the same retained physical-root lock. A missing source is
+/// never evidence that its historical prefix was complete.
+#[cfg(target_os = "linux")]
+pub(crate) fn with_locked_direct_host_inbox_transaction<T>(
+    path: &Path,
+    expected_home: Option<&CanonicalDirectoryV1>,
+    operation: impl FnOnce(&mut DirectHostInboxTransactionV1<'_, '_>) -> Result<T, BootstrapError>,
+) -> Result<T, BootstrapError> {
+    // A bound caller already possesses an exact physical-home identity.
+    // Refuse absence/replacement without creating a substitute directory.
+    let root = if expected_home.is_some() {
+        TrustedAuthorityRoot::open(path)
+            .map_err(|_| BootstrapError("open existing bound direct-host inbox physical root"))?
+    } else {
+        super::trusted_fs::ensure_private_substrate_home(path, unsafe { libc::geteuid() })
+            .map_err(|_| BootstrapError("open or initialize direct-host inbox physical root"))?
+    };
+    if expected_home.is_some_and(|expected| expected != root.identity()) {
+        return Err(BootstrapError(
+            "direct-host inbox bootstrap identity changed",
+        ));
+    }
+    platform::with_locked_direct_host_inbox_transaction_opened(&root, operation)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) use platform::DispatchPolicyCommitmentStorageTransactionV1;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(crate) use platform::DispatchPolicyCommitmentStorageV1;
 pub(crate) use platform::RetainedWorkerAdmissionStorageV1;
 
 #[cfg(all(test, target_os = "linux"))]
 pub(crate) use platform::set_e2_rm_before_final_verify_hook;
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) use platform::set_ordinary_supervisor_before_publication_hook;
 #[cfg(target_os = "linux")]
 pub(crate) use platform::{
     DispatchPolicyCommitmentPhysicalReadV1, DispatchPolicyCommitmentPhysicalSnapshotV1,
     WorldWorkReceiptRegistryPhysicalReadV1,
 };
+
+#[cfg(target_os = "linux")]
+pub(super) use platform::ReadOnlyVersionedAuthorityTransactionV1;
+
+/// Keep semantic refusal distinct from a failure to finalize captured custody.
+#[cfg(target_os = "linux")]
+#[derive(Debug)]
+pub(super) enum CurrentAuthoritySnapshotErrorV1 {
+    Semantic(BootstrapError),
+    Custody(ReadOnlyAuthoritySnapshotErrorV1),
+}
+
+#[cfg(target_os = "linux")]
+impl From<ReadOnlyAuthoritySnapshotErrorV1> for CurrentAuthoritySnapshotErrorV1 {
+    fn from(error: ReadOnlyAuthoritySnapshotErrorV1) -> Self {
+        Self::Custody(error)
+    }
+}
+
+/// Existing reconciling current-authority admission followed by one guarded
+/// typed-object scope. No snapshot or freshness permission escapes the callback.
+#[cfg(target_os = "linux")]
+pub(super) fn with_existing_reconciling_current_snapshot_opened<T>(
+    opened: &TrustedAuthorityRoot,
+    operation: impl FnOnce(
+        &ReadOnlyVersionedAuthorityTransactionV1<'_>,
+    ) -> Result<T, ReadOnlyAuthoritySnapshotErrorV1>,
+) -> Result<T, CurrentAuthoritySnapshotErrorV1> {
+    platform::with_existing_reconciling_current_snapshot_opened(opened, operation)
+}
+
+#[cfg(all(test, target_os = "linux"))]
+pub(super) use platform::{
+    semantic_preflight_count_for_test, set_reconciling_current_before_final_verify_hook,
+};
+
+#[cfg(all(test, target_os = "linux"))]
+pub(super) use platform::{set_current_host_run_read_hook, CurrentHostRunReadPhaseV1};
+#[cfg(target_os = "linux")]
+pub(super) use platform::{
+    with_existing_current_host_run_snapshot_opened, CurrentHostRunReadViewV1,
+};
+
+/// Hold the existing authority root lock while HSA authenticates typed objects.
+///
+/// Each read binds the caller's frozen store ID and root revision to the held
+/// snapshot. Returned bytes stay internal to HSA; callers must establish which
+/// reference is the current authority graph edge and where its context came from.
+/// Every captured file and namespace is revalidated on success and error exits.
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "TASK10 storage component precedes the current-exact resolver"
+)]
+pub(super) fn with_existing_typed_object_snapshot_opened<T>(
+    opened: &TrustedAuthorityRoot,
+    operation: impl FnOnce(
+        &ReadOnlyVersionedAuthorityTransactionV1<'_>,
+    ) -> Result<T, ReadOnlyAuthoritySnapshotErrorV1>,
+) -> Result<T, ReadOnlyAuthoritySnapshotErrorV1> {
+    platform::with_existing_typed_object_snapshot_opened(opened, operation)
+}
+
+/// Original ordinary-selection inspection has its own complete-history reader.
+/// The generic finite typed reader above retains its supported schema contract.
+#[cfg(target_os = "linux")]
+pub(super) fn with_existing_ordinary_selection_snapshot_opened<T>(
+    opened: &TrustedAuthorityRoot,
+    operation: impl FnOnce(
+        &ReadOnlyVersionedAuthorityTransactionV1<'_>,
+    ) -> Result<T, ReadOnlyAuthoritySnapshotErrorV1>,
+) -> Result<T, ReadOnlyAuthoritySnapshotErrorV1> {
+    platform::with_existing_ordinary_selection_snapshot_opened(opened, operation)
+}
+
+#[cfg(target_os = "linux")]
+pub(super) fn with_existing_ordinary_retained_inspection_snapshot<T>(
+    snapshot: &ReadOnlyVersionedAuthorityTransactionV1<'_>,
+    operation: impl FnOnce(
+        &AcceptedWorkAuthorityPhysicalSnapshotV1,
+        Option<&[u8]>,
+        Vec<(String, Vec<u8>)>,
+        Option<&[u8]>,
+    ) -> T,
+) -> Result<T, ReadOnlyAuthoritySnapshotErrorV1> {
+    platform::with_existing_ordinary_retained_inspection_snapshot(snapshot, operation)
+}
+
+#[cfg(target_os = "linux")]
+pub(super) fn with_existing_ordinary_accepted_control_snapshot<T>(
+    snapshot: &ReadOnlyVersionedAuthorityTransactionV1<'_>,
+    operation: impl FnOnce(
+        &AcceptedWorkAuthorityPhysicalSnapshotV1,
+        Option<&[u8]>,
+        &dyn Fn() -> Result<(), ReadOnlyAuthoritySnapshotErrorV1>,
+    ) -> T,
+) -> Result<T, ReadOnlyAuthoritySnapshotErrorV1> {
+    platform::with_existing_ordinary_accepted_control_snapshot(snapshot, operation)
+}
 
 #[cfg(target_os = "linux")]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -76,6 +261,60 @@ impl AcceptedWorkAuthorityPhysicalSnapshotV1 {
 }
 
 #[cfg(target_os = "linux")]
+pub(crate) use platform::HeldAcceptedWorkAuthorityPhysicalSnapshotV1;
+#[cfg(target_os = "linux")]
+pub(crate) use platform::HeldRetainedAdmissionAuthorityControlSourcesV1;
+#[cfg(target_os = "linux")]
+pub(crate) use platform::HeldSupervisorAuthorityControlSourcesV1;
+#[cfg(target_os = "linux")]
+pub(crate) use platform::HeldWorldControllerCompletionPhysicalSourcesV1;
+#[cfg(target_os = "linux")]
+pub(crate) use platform::WorldWorkReceiptRegistryTransactionV1;
+
+/// Retain the actual physical E2/B1 source guards from one existing HSA read.
+/// This does not grant a commit or classify a controller/work population. The
+/// committing owner must exact-join snapshot HSA bytes and verify the held
+/// sources at its commit boundary; missing B1 remains missing source coverage.
+#[cfg(target_os = "linux")]
+pub(crate) fn hold_existing_accepted_work_authority_snapshot(
+    authority: &super::facade::HostSessionAuthority,
+) -> Result<HeldAcceptedWorkAuthorityPhysicalSnapshotV1, ReadOnlyAuthoritySnapshotErrorV1> {
+    platform::hold_existing_accepted_work_authority_snapshot_opened(authority.trusted_root())
+}
+
+#[cfg(target_os = "linux")]
+pub(super) fn hold_existing_supervisor_control_sources_with<R>(
+    authority: &super::facade::HostSessionAuthority,
+    operation: impl FnOnce(&ReadOnlyVersionedAuthorityTransactionV1<'_>) -> R,
+) -> Result<(HeldSupervisorAuthorityControlSourcesV1, R), ReadOnlyAuthoritySnapshotErrorV1> {
+    platform::hold_existing_supervisor_control_sources_opened(authority.trusted_root(), operation)
+}
+
+#[cfg(target_os = "linux")]
+pub(super) fn hold_existing_retained_admission_control_sources_with<R>(
+    authority: &super::facade::HostSessionAuthority,
+    operation: impl FnOnce(&ReadOnlyVersionedAuthorityTransactionV1<'_>) -> R,
+) -> Result<(HeldRetainedAdmissionAuthorityControlSourcesV1, R), ReadOnlyAuthoritySnapshotErrorV1> {
+    platform::hold_existing_retained_admission_control_sources_opened(
+        authority.trusted_root(),
+        operation,
+    )
+}
+
+#[cfg(target_os = "linux")]
+pub(super) fn with_existing_ordinary_world_observation_sources<R>(
+    authority: &super::facade::HostSessionAuthority,
+    operation: impl FnOnce(&AcceptedWorkAuthorityPhysicalSnapshotV1, Option<&[u8]>) -> R,
+) -> Result<R, ReadOnlyAuthoritySnapshotErrorV1> {
+    with_existing_ordinary_selection_snapshot_opened(authority.trusted_root(), |transaction| {
+        with_existing_ordinary_retained_inspection_snapshot(
+            transaction,
+            |snapshot, _, _, supervisor| operation(snapshot, supervisor),
+        )
+    })
+}
+
+#[cfg(target_os = "linux")]
 #[allow(
     dead_code,
     reason = "E2-RM is intentionally unintegrated until the separate B2.2 admission"
@@ -104,6 +343,17 @@ pub(crate) fn dispatch_policy_commitment_storage_for_authority(
     platform::dispatch_policy_commitment_storage_opened(authority.trusted_root())
 }
 
+#[cfg(target_os = "linux")]
+pub(crate) fn dispatch_policy_commitment_storage_for_ordinary_publication(
+    authority: &super::facade::HostSessionAuthority,
+    publication: super::world_bound_controller::AuthenticatedOrdinaryWorldPublicationV1,
+) -> Result<DispatchPolicyCommitmentStorageV1, BootstrapError> {
+    platform::dispatch_policy_commitment_storage_opened_with_publication(
+        authority.trusted_root(),
+        Some(publication),
+    )
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(crate) fn dispatch_policy_commitment_registry_exists_for_authority(
     authority: &super::facade::HostSessionAuthority,
@@ -115,6 +365,29 @@ pub(crate) fn retained_worker_admission_storage_for_authority(
     authority: &super::facade::HostSessionAuthority,
 ) -> Result<RetainedWorkerAdmissionStorageV1, BootstrapError> {
     platform::retained_worker_admission_storage_opened(authority.trusted_root())
+}
+
+/// Existing-only storage for an independently authorized lifecycle publisher.
+/// Acquiring it neither reconciles state nor grants operation permission.
+#[cfg(target_os = "linux")]
+pub(crate) fn retained_worker_admission_storage_existing_for_authority(
+    authority: &super::facade::HostSessionAuthority,
+) -> Result<RetainedWorkerAdmissionStorageV1, BootstrapError> {
+    platform::retained_worker_admission_storage_existing_opened(authority.trusted_root())
+}
+
+/// Read existing admission bytes and keys under the existing root and physical
+/// namespace guards. Absence remains absence; partial publication refuses.
+/// The callback receives source facts only, with no creating/writing storage.
+#[cfg(target_os = "linux")]
+pub(crate) fn with_existing_retained_worker_admission_read<T>(
+    authority: &super::facade::HostSessionAuthority,
+    operation: impl FnOnce(&VersionedStateRoot, Option<&[u8]>, Vec<(String, Vec<u8>)>) -> T,
+) -> Result<T, ReadOnlyAuthoritySnapshotErrorV1> {
+    platform::with_existing_retained_worker_admission_read_opened(
+        authority.trusted_root(),
+        operation,
+    )
 }
 
 #[cfg(test)]
@@ -734,7 +1007,10 @@ mod platform {
     #[cfg(test)]
     use super::LegacyMutationV1;
     #[cfg(target_os = "linux")]
-    use super::{AcceptedWorkAuthorityPhysicalSnapshotV1, ReadOnlyAuthoritySnapshotErrorV1};
+    use super::{
+        AcceptedWorkAuthorityPhysicalSnapshotV1, CurrentAuthoritySnapshotErrorV1,
+        ReadOnlyAuthoritySnapshotErrorV1,
+    };
     use super::{
         BootstrapClassificationV1, BootstrapError, ExpectedRevisionsV1, GeneratedObjectV1,
         GreenfieldUpgradeCrashPointV1, InitializationCrashPointV1, InitializationMaterialV1,
@@ -822,7 +1098,10 @@ mod platform {
     #[path = "transaction.rs"]
     mod transaction;
     #[cfg(target_os = "linux")]
+    pub(super) use dispatch_policy_commitment::dispatch_policy_commitment_storage_opened_with_publication;
+    #[cfg(target_os = "linux")]
     use dispatch_policy_commitment::DispatchPolicyCommitmentReadCapabilityV1;
+    pub(crate) use dispatch_policy_commitment::DispatchPolicyCommitmentStorageTransactionV1;
     pub(crate) use dispatch_policy_commitment::DispatchPolicyCommitmentStorageV1;
     pub(super) use dispatch_policy_commitment::{
         dispatch_policy_commitment_registry_exists_opened,
@@ -832,14 +1111,105 @@ mod platform {
     pub(crate) use dispatch_policy_commitment::{
         DispatchPolicyCommitmentPhysicalReadV1, DispatchPolicyCommitmentPhysicalSnapshotV1,
     };
+    #[cfg(target_os = "linux")]
+    pub(super) use transaction::hold_existing_accepted_work_authority_snapshot_opened;
+    #[cfg(target_os = "linux")]
+    pub(super) use transaction::hold_existing_retained_admission_control_sources_opened;
+    #[cfg(target_os = "linux")]
+    pub(super) use transaction::hold_existing_supervisor_control_sources_opened;
     #[cfg(test)]
     use transaction::retain_classified_legacy_directories_test;
     #[cfg(all(test, target_os = "linux"))]
     pub(crate) use transaction::set_e2_rm_before_final_verify_hook;
+    #[cfg(all(test, target_os = "linux"))]
+    pub(crate) use transaction::set_ordinary_supervisor_before_publication_hook;
+    #[cfg(target_os = "linux")]
+    pub(super) use transaction::with_direct_host_resume_recovery_opened;
+    #[cfg(target_os = "linux")]
+    pub(super) use transaction::with_existing_direct_host_inbox_snapshot_opened;
+    #[cfg(target_os = "linux")]
+    pub(in crate::execution::agent_runtime::host_session_authority) use transaction::with_existing_ordinary_accepted_control_snapshot;
+    #[cfg(target_os = "linux")]
+    pub(in crate::execution::agent_runtime::host_session_authority) use transaction::with_existing_ordinary_retained_inspection_snapshot;
+    #[cfg(target_os = "linux")]
+    pub(super) use transaction::with_existing_retained_worker_admission_read_opened;
+    #[cfg(target_os = "linux")]
+    pub(super) use transaction::with_locked_direct_host_inbox_transaction_opened;
     #[cfg(target_os = "linux")]
     pub(super) use transaction::with_opened_config_projection_hsa_parent;
     #[cfg(target_os = "linux")]
     use transaction::with_opened_existing_versioned_read_only_snapshot;
+    #[cfg(target_os = "linux")]
+    pub(in crate::execution::agent_runtime::host_session_authority) use transaction::DirectHostResumeRecoveryReadV1;
+    #[cfg(target_os = "linux")]
+    pub(crate) use transaction::HeldAcceptedWorkAuthorityPhysicalSnapshotV1;
+    #[cfg(target_os = "linux")]
+    pub(crate) use transaction::HeldRetainedAdmissionAuthorityControlSourcesV1;
+    #[cfg(target_os = "linux")]
+    pub(crate) use transaction::HeldSupervisorAuthorityControlSourcesV1;
+    #[cfg(target_os = "linux")]
+    pub(crate) use transaction::HeldWorldControllerCompletionPhysicalSourcesV1;
+    #[cfg(target_os = "linux")]
+    pub(in crate::execution::agent_runtime::host_session_authority) use transaction::ReadOnlyVersionedAuthorityTransactionV1;
+    #[cfg(target_os = "linux")]
+    pub(crate) use transaction::WorldWorkReceiptRegistryTransactionV1;
+    #[cfg(all(test, target_os = "linux"))]
+    pub(in crate::execution::agent_runtime::host_session_authority) use transaction::{
+        set_current_host_run_read_hook, CurrentHostRunReadPhaseV1,
+    };
+    #[cfg(target_os = "linux")]
+    pub(in crate::execution::agent_runtime::host_session_authority) use transaction::{
+        with_existing_current_host_run_snapshot_opened, CurrentHostRunReadViewV1,
+    };
+    #[cfg(target_os = "linux")]
+    pub(crate) use transaction::{DirectHostInboxStorageAreaV1, DirectHostInboxTransactionV1};
+
+    #[cfg(target_os = "linux")]
+    pub(super) fn with_existing_typed_object_snapshot_opened<T>(
+        opened: &TrustedAuthorityRoot,
+        operation: impl FnOnce(
+            &ReadOnlyVersionedAuthorityTransactionV1<'_>,
+        ) -> Result<T, ReadOnlyAuthoritySnapshotErrorV1>,
+    ) -> Result<T, ReadOnlyAuthoritySnapshotErrorV1> {
+        with_opened_existing_versioned_read_only_snapshot(opened, |transaction| {
+            // This generic reader retains its original supported schema shape.
+            // Accepted-work/B1 source readers authenticate complete V3 history
+            // separately; their facts do not extend this consumer's contract.
+            transaction
+                .captured_root()
+                .validate()
+                .map_err(|_| ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootEncodingInvalid)?;
+            operation(transaction)
+        })
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(super) fn with_existing_ordinary_selection_snapshot_opened<T>(
+        opened: &TrustedAuthorityRoot,
+        operation: impl FnOnce(
+            &ReadOnlyVersionedAuthorityTransactionV1<'_>,
+        ) -> Result<T, ReadOnlyAuthoritySnapshotErrorV1>,
+    ) -> Result<T, ReadOnlyAuthoritySnapshotErrorV1> {
+        // The existing raw read owner authenticates complete typed V3 history
+        // and always finalizes its original captures, including semantic refusal.
+        transaction::with_opened_existing_versioned_read_only_snapshot(opened, operation)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(super) fn with_existing_reconciling_current_snapshot_opened<T>(
+        opened: &TrustedAuthorityRoot,
+        operation: impl FnOnce(
+            &ReadOnlyVersionedAuthorityTransactionV1<'_>,
+        ) -> Result<T, ReadOnlyAuthoritySnapshotErrorV1>,
+    ) -> Result<T, CurrentAuthoritySnapshotErrorV1> {
+        transaction::with_opened_existing_versioned_reconciling_current_snapshot(opened, operation)
+    }
+
+    #[cfg(all(test, target_os = "linux"))]
+    pub(in crate::execution::agent_runtime::host_session_authority) use transaction::{
+        semantic_preflight_count_for_test, set_reconciling_current_before_final_verify_hook,
+    };
+
     #[cfg(test)]
     use transaction::with_semantic_preflight;
     #[cfg(target_os = "linux")]
@@ -882,7 +1252,8 @@ mod platform {
         authority_store_id: String,
     }
 
-    pub(crate) struct RetainedWorkerAdmissionStorageTransactionV1 {
+    pub(crate) struct RetainedWorkerAdmissionStorageTransactionV1<'guard> {
+        authority: &'guard TrustedDirectory,
         authority_root: VersionedStateRoot,
         admission: TrustedDirectory,
         keys: TrustedDirectory,
@@ -890,6 +1261,32 @@ mod platform {
     }
 
     impl RetainedWorkerAdmissionStorageV1 {
+        #[cfg(target_os = "linux")]
+        pub(crate) fn transaction_existing_control<T>(
+            &self,
+            verify_sources: &dyn Fn() -> Result<(), BootstrapError>,
+            operation: impl FnOnce(
+                &mut RetainedWorkerAdmissionStorageTransactionV1<'_>,
+            ) -> Result<T, BootstrapError>,
+        ) -> Result<T, BootstrapError> {
+            verify_sources()?;
+            transaction::with_opened_existing_versioned_control_preflight(
+                &self.root,
+                |transaction| {
+                    verify_sources()?;
+                    if transaction.root.authority_store_id() != self.authority_store_id {
+                        return Err(BootstrapError("existing control admission store changed"));
+                    }
+                    let mut storage = open_existing_retained_admission_control_transaction(
+                        transaction.layout,
+                        &transaction.root,
+                    )?;
+                    verify_sources()?;
+                    operation(&mut storage)
+                },
+            )
+        }
+
         pub(crate) fn authority_store_id(&self) -> &str {
             &self.authority_store_id
         }
@@ -897,7 +1294,7 @@ mod platform {
         pub(crate) fn transaction<T>(
             &self,
             operation: impl FnOnce(
-                &mut RetainedWorkerAdmissionStorageTransactionV1,
+                &mut RetainedWorkerAdmissionStorageTransactionV1<'_>,
             ) -> Result<T, BootstrapError>,
         ) -> Result<T, BootstrapError> {
             with_opened_existing_versioned_semantic_preflight(&self.root, |transaction| {
@@ -914,7 +1311,21 @@ mod platform {
         }
     }
 
-    impl RetainedWorkerAdmissionStorageTransactionV1 {
+    impl RetainedWorkerAdmissionStorageTransactionV1<'_> {
+        #[cfg(target_os = "linux")]
+        pub(crate) fn with_existing_e2_population_source<T>(
+            &self,
+            operation: impl FnOnce(
+                &DispatchPolicyCommitmentPhysicalReadV1,
+                &dyn Fn() -> Result<(), BootstrapError>,
+            ) -> Result<T, BootstrapError>,
+        ) -> Result<T, BootstrapError> {
+            dispatch_policy_commitment::with_existing_e2_source_in_locked_authority(
+                self.authority,
+                operation,
+            )
+        }
+
         pub(crate) fn authority_root(&self) -> &VersionedStateRoot {
             &self.authority_root
         }
@@ -1036,6 +1447,51 @@ mod platform {
             self.publish_registry(temp_name, bytes, true)
         }
 
+        #[cfg(target_os = "linux")]
+        pub(crate) fn replace_registry_with_source_guard(
+            &self,
+            temp_name: &str,
+            bytes: &[u8],
+            verify: &dyn Fn() -> Result<(), BootstrapError>,
+        ) -> Result<(), BootstrapError> {
+            verify()?;
+            if !admission_temp_file_name(temp_name) {
+                return Err(BootstrapError(
+                    "retained admission registry temp name is invalid",
+                ));
+            }
+            let mut temp = self
+                .tmp
+                .create_admission_registry_temp(temp_name)
+                .map_err(|_| BootstrapError("create retained admission registry temp"))?;
+            let staged = (|| {
+                temp.write_all(bytes)
+                    .map_err(|_| BootstrapError("write retained admission registry temp"))?;
+                temp.sync()
+                    .map_err(|_| BootstrapError("sync retained admission registry temp"))?;
+                #[cfg(all(test, target_os = "linux"))]
+                crate::execution::agent_runtime::retained_worker_runtime::run_ordinary_population_before_publication_hook();
+                verify()
+            })();
+            if let Err(error) = staged {
+                self.tmp.unlink_owned_file(temp_name, temp).map_err(|_| {
+                    BootstrapError("retained admission rejected candidate cleanup is unresolved")
+                })?;
+                return Err(error);
+            }
+            self.tmp
+                .rename_replace(
+                    temp_name,
+                    temp,
+                    &self.admission,
+                    RETAINED_ADMISSION_REGISTRY_FILE,
+                )
+                .map_err(|_| BootstrapError("replace retained admission registry"))?;
+            self.admission
+                .sync()
+                .map_err(|_| BootstrapError("sync retained admission directory"))
+        }
+
         #[cfg(test)]
         pub(crate) fn stage_registry_replacement_for_test(
             &self,
@@ -1129,10 +1585,104 @@ mod platform {
         })
     }
 
-    fn open_retained_admission_transaction(
-        layout: &StoreLayout<'_>,
+    #[cfg(target_os = "linux")]
+    pub(super) fn retained_worker_admission_storage_existing_opened(
+        opened: &TrustedAuthorityRoot,
+    ) -> Result<RetainedWorkerAdmissionStorageV1, BootstrapError> {
+        opened
+            .revalidate()
+            .map_err(|_| BootstrapError("revalidate existing admission authority root"))?;
+        // Preserve the already authenticated owner when Root publishes an
+        // authorized lifecycle fact in existing developer-owned admission state.
+        let rebound = opened
+            .reopen_for_dispatch_policy_commitment_storage()
+            .map_err(|_| BootstrapError("open existing admission authority root"))?;
+        if rebound.identity() != opened.identity() {
+            return Err(BootstrapError(
+                "existing admission authority identity differs",
+            ));
+        }
+        let authority_store_id =
+            with_opened_existing_versioned_read_only_snapshot(&rebound, |transaction| {
+                Ok(transaction.authority_store_id().to_owned())
+            })
+            .map_err(|_| {
+                BootstrapError("capture existing admission authority without reconciliation")
+            })?;
+        Ok(RetainedWorkerAdmissionStorageV1 {
+            root: rebound,
+            authority_store_id,
+        })
+    }
+
+    #[cfg(target_os = "linux")]
+    fn open_existing_retained_admission_control_transaction<'guard>(
+        layout: &'guard StoreLayout<'_>,
+        root: &VersionedStateRoot,
+    ) -> Result<RetainedWorkerAdmissionStorageTransactionV1<'guard>, BootstrapError> {
+        let admission = layout
+            .authority
+            .open_directory(RETAINED_ADMISSION_DIRECTORY)
+            .map_err(|_| BootstrapError("open existing control admission directory"))?;
+        let entries = admission
+            .entries()
+            .map_err(|_| BootstrapError("enumerate existing control admission directory"))?;
+        if entries.len() != 3
+            || entries.iter().any(|entry| {
+                !matches!(
+                    (entry.name.as_str(), entry.kind),
+                    (RETAINED_ADMISSION_REGISTRY_FILE, EntryKind::RegularFile)
+                        | (
+                            RETAINED_ADMISSION_KEYS_DIRECTORY | RETAINED_ADMISSION_TEMP_DIRECTORY,
+                            EntryKind::Directory
+                        )
+                )
+            })
+        {
+            return Err(BootstrapError(
+                "existing control admission layout is incomplete or unsafe",
+            ));
+        }
+        for entry in &entries {
+            admission
+                .revalidate_entry(entry)
+                .map_err(|_| BootstrapError("existing control admission entry changed"))?;
+        }
+        let keys = admission
+            .open_directory(RETAINED_ADMISSION_KEYS_DIRECTORY)
+            .map_err(|_| BootstrapError("open existing control admission keys"))?;
+        let tmp = admission
+            .open_directory(RETAINED_ADMISSION_TEMP_DIRECTORY)
+            .map_err(|_| BootstrapError("open existing control admission staging"))?;
+        if keys
+            .entries()
+            .map_err(|_| BootstrapError("enumerate existing control admission keys"))?
+            .iter()
+            .any(|entry| {
+                entry.kind != EntryKind::RegularFile || !admission_key_file_name(&entry.name)
+            })
+            || !tmp
+                .entries()
+                .map_err(|_| BootstrapError("enumerate existing control admission staging"))?
+                .is_empty()
+        {
+            return Err(BootstrapError(
+                "existing control admission has unsafe or pending storage",
+            ));
+        }
+        Ok(RetainedWorkerAdmissionStorageTransactionV1 {
+            authority: &layout.authority,
+            authority_root: root.clone(),
+            admission,
+            keys,
+            tmp,
+        })
+    }
+
+    fn open_retained_admission_transaction<'guard>(
+        layout: &'guard StoreLayout<'_>,
         authority_root: &VersionedStateRoot,
-    ) -> Result<RetainedWorkerAdmissionStorageTransactionV1, BootstrapError> {
+    ) -> Result<RetainedWorkerAdmissionStorageTransactionV1<'guard>, BootstrapError> {
         let admission = match layout
             .authority
             .entry_kind(RETAINED_ADMISSION_DIRECTORY)
@@ -1191,6 +1741,7 @@ mod platform {
             .sync()
             .map_err(|_| BootstrapError("sync retained admission layout"))?;
         Ok(RetainedWorkerAdmissionStorageTransactionV1 {
+            authority: &layout.authority,
             authority_root: authority_root.clone(),
             admission,
             keys,
@@ -1287,6 +1838,37 @@ mod platform {
 
     pub(super) fn classify_opened(root: &TrustedAuthorityRoot) -> BootstrapClassificationV1 {
         classify_opened_checked(root).unwrap_or(BootstrapClassificationV1::CorruptOrUnsupported)
+    }
+
+    #[cfg(all(test, target_os = "linux"))]
+    pub(super) fn reconcile_existing_v3_fixture_opened_for_test(
+        root: &TrustedAuthorityRoot,
+    ) -> Result<StateRootV3, BootstrapError> {
+        with_opened_existing_versioned_semantic_preflight(root, |transaction| {
+            let VersionedStateRoot::V3(before) = &transaction.root else {
+                return Err(BootstrapError(
+                    "existing fixture requires strict V3 authority",
+                ));
+            };
+            let before = before.clone();
+            transaction.reconcile()?;
+            let after = transaction
+                .layout
+                .read_existing_versioned_without_reconciliation(root.identity())
+                .map_err(|_| BootstrapError("revalidate reconciled V3 fixture"))?;
+            if after != VersionedStateRoot::V3(before.clone()) {
+                return Err(BootstrapError(
+                    "V3 fixture reconciliation changed the exact root",
+                ));
+            }
+            transaction
+                .legacy
+                .revalidate(transaction.layout.bootstrap)
+                .map_err(|_| BootstrapError("revalidate V3 fixture legacy custody"))?;
+            root.revalidate()
+                .map_err(|_| BootstrapError("revalidate V3 fixture physical root"))?;
+            Ok(before)
+        })
     }
 
     pub(super) fn bootstrap(path: &std::path::Path) -> Result<StateRootV1, BootstrapError> {
@@ -2037,27 +2619,17 @@ mod platform {
         layout: &StoreLayout<'_>,
         root: &StateRootV3,
     ) -> Result<(), BootstrapError> {
-        super::super::facade::validate_v3_schema_with_external_exact_authority_history(root)
-            .map_err(|_| BootstrapError("validate retained V3 authority candidate semantics"))?;
-        for (session_id, record) in &root.session_namespace_map {
-            if matches!(record, SessionNamespaceRecordV1::Authority(_)) {
-                super::super::facade::exact_v3_authority_history_with_reader(
-                    root,
-                    session_id,
-                    |reference| {
-                        let bytes = layout
-                            .read_object_bytes(reference)
-                            .map_err(|error| error.to_string())?;
-                        verify_object_bytes(layout, root, reference, &bytes, None, false)
-                            .map_err(|error| error.to_string())?;
-                        Ok(bytes)
-                    },
-                )
-                .map_err(|_| {
-                    BootstrapError("authenticate mixed V3 authority ancestry for retained mutation")
-                })?;
-            }
-        }
+        super::super::facade::validate_v3_schema_and_exact_history_with_reader(root, |reference| {
+            let bytes = layout
+                .read_object_bytes(reference)
+                .map_err(|error| error.to_string())?;
+            verify_object_bytes(layout, root, reference, &bytes, None, false)
+                .map_err(|error| error.to_string())?;
+            Ok(bytes)
+        })
+        .map_err(|_| {
+            BootstrapError("authenticate complete retained V3 schema and authority history")
+        })?;
         layout
             .validate_existing_keys_v3(root)
             .map_err(|_| BootstrapError("validate retained V3 commitment keys"))?;

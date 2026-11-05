@@ -321,19 +321,22 @@ fn resolve_world_scoped_codex_binary_path(
     agent_id: &str,
     configured_binary: &str,
 ) -> std::result::Result<PathBuf, RuntimeRealizabilityError> {
-    if configured_binary != CODEX_WORLD_GUEST_ENTRYPOINT {
+    if configured_binary != CODEX_WORLD_GUEST_ENTRYPOINT
+        && configured_binary != config_projection::CODEX_MAIN_PATH_V1
+    {
         return Err(RuntimeRealizabilityError {
             exit_code: 4,
             reason: format!(
-                "selected runtime '{}' is not runtime-realizable in world scope because guest entrypoint '{}' is required for the world-scoped Codex runtime and config.cli.binary '{}' still describes host-local truth; install the world runtime and rerun 'substrate world deps current sync'",
+                "selected runtime '{}' is not runtime-realizable in world scope because installed guest entrypoint '{}' or '{}' is required for the world-scoped Codex runtime and config.cli.binary '{}' still describes host-local truth; install the world runtime and rerun 'substrate world deps current sync'",
                 agent_id,
                 CODEX_WORLD_GUEST_ENTRYPOINT,
+                config_projection::CODEX_MAIN_PATH_V1,
                 configured_binary,
             ),
         });
     }
 
-    let probe_path = world_scoped_codex_guest_entrypoint_probe_path();
+    let probe_path = world_scoped_codex_guest_entrypoint_probe_path(configured_binary);
     match inspect_guest_entrypoint_probe(probe_path.as_path()) {
         GuestEntrypointProbe::Available => {}
         GuestEntrypointProbe::PermissionDenied => {
@@ -352,23 +355,22 @@ fn resolve_world_scoped_codex_binary_path(
                 reason: format!(
                     "selected runtime '{}' is not runtime-realizable in world scope because guest entrypoint '{}' is unavailable; install the world runtime and rerun 'substrate world deps current sync'",
                     agent_id,
-                    CODEX_WORLD_GUEST_ENTRYPOINT,
+                    configured_binary,
                 ),
             });
         }
     }
 
-    Ok(PathBuf::from(CODEX_WORLD_GUEST_ENTRYPOINT))
+    Ok(PathBuf::from(configured_binary))
 }
 
-fn world_scoped_codex_guest_entrypoint_probe_path() -> PathBuf {
-    const DEFAULT_WORLD_DEPS_BIN: &str = "/var/lib/substrate/world-deps/bin";
-    let world_deps_bin = std::env::var("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR")
+fn world_scoped_codex_guest_entrypoint_probe_path(configured_binary: &str) -> PathBuf {
+    std::env::var("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR")
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| DEFAULT_WORLD_DEPS_BIN.to_string());
-    Path::new(&world_deps_bin).join("codex")
+        .map(|directory| Path::new(&directory).join("codex"))
+        .unwrap_or_else(|| PathBuf::from(configured_binary))
 }
 
 enum GuestEntrypointProbe {
@@ -1244,6 +1246,37 @@ mod tests {
             error.reason.contains("host-local truth"),
             "unexpected reason: {}",
             error.reason
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_shipped_codex_world_entrypoint_matches_runtime_contract() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        let _env_guard = crate::execution::world_env_guard();
+        let _world_codex_guard = set_test_world_codex_runtime();
+        let inventory: crate::execution::agent_inventory::AgentFileV3 =
+            serde_yaml::from_str(include_str!("../../../../../config/agents/codex.yaml"))
+                .expect("shipped Codex inventory must parse");
+        let world = inventory.config.placements.world.expect("World placement");
+        let binary = world.cli.expect("World CLI").binary;
+        assert_eq!(binary, config_projection::CODEX_MAIN_PATH_V1);
+        assert_eq!(
+            super::resolve_world_scoped_codex_binary_path("codex-world", &binary)
+                .expect("shipped World entrypoint must be realizable"),
+            PathBuf::from(&binary),
+            "validation must preserve the selected entrypoint"
+        );
+        let absent = tempfile::tempdir().expect("empty probe directory");
+        let _absent = EnvVarGuard::set_path("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR", absent.path());
+        let refused = super::resolve_world_scoped_codex_binary_path("codex-world", &binary)
+            .expect_err("missing selected entrypoint must refuse");
+        assert!(refused.reason.contains(&binary));
+        std::env::remove_var("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR");
+        assert_eq!(
+            super::world_scoped_codex_guest_entrypoint_probe_path(&binary),
+            PathBuf::from(&binary),
+            "the default probe must inspect the configured release path"
         );
     }
 

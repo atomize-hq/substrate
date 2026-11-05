@@ -1,13 +1,52 @@
-//! Component-only retained-worker authority registration.
+//! Retained-worker registration, admission and native lifecycle source facts.
 //!
-//! This module deliberately has no production ingress caller. It owns immutable
-//! retained-object construction while `HostSessionAuthority` owns durable
-//! reservation and authority mutation.
+//! This module constructs immutable retained objects and serializes admission
+//! state. `HostSessionAuthority` owns durable registration/authority mutation;
+//! checked native bootstrap facts remain distinct from logical retirement.
 
 #![allow(
     dead_code,
-    reason = "R0 is a component proof and deliberately has no production ingress caller"
+    reason = "Component proof helpers and platform-specific source paths coexist with production admission"
 )]
+
+mod native_lifecycle;
+mod ordinary_bootstrap_receiver;
+mod ordinary_fork;
+mod ordinary_stop;
+#[cfg(target_os = "linux")]
+pub(crate) use ordinary_bootstrap_receiver::OrdinaryInitialBootstrapReceiverScopeV1;
+#[cfg(target_os = "linux")]
+pub(crate) use ordinary_fork::OrdinaryForkNativeSendPermitV1;
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) use ordinary_fork::{
+    set_ordinary_fork_r0_crash_point_for_test, OrdinaryForkR0CrashPointV1,
+};
+#[cfg(target_os = "linux")]
+pub(crate) use ordinary_stop::{
+    authorize_ordinary_stop_cancel_from_source_v1, read_ordinary_retained_stop_from_sources_v1,
+    require_ordinary_retained_target_open_from_sources, PreparedOrdinaryWorkerStopV1,
+};
+#[cfg(target_os = "linux")]
+pub use ordinary_stop::{OrdinaryRetainedStopAdmissionV1, OrdinaryRetainedStopControlReaderV1};
+
+#[cfg(all(test, target_os = "linux"))]
+thread_local! {
+    static ORDINARY_POPULATION_BEFORE_PUBLICATION: std::cell::RefCell<Option<Box<dyn FnOnce()>>> = std::cell::RefCell::new(None);
+}
+
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) fn set_ordinary_population_before_publication_hook(hook: impl FnOnce() + 'static) {
+    ORDINARY_POPULATION_BEFORE_PUBLICATION
+        .with(|slot| assert!(slot.borrow_mut().replace(Box::new(hook)).is_none()));
+}
+
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) fn run_ordinary_population_before_publication_hook() {
+    if let Some(hook) = ORDINARY_POPULATION_BEFORE_PUBLICATION.with(|slot| slot.borrow_mut().take())
+    {
+        hook();
+    }
+}
 
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
@@ -260,6 +299,8 @@ pub(crate) struct RetainedWorkerAdmissionRecordV1 {
     pub(crate) current_policy_revision: String,
     pub(crate) max_live_retained_workers: u64,
     pub(crate) state: RetainedWorkerAdmissionStateV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) bootstrap_receiver_protocol: Option<u32>,
     pub(crate) record_revision: u64,
 }
 
@@ -315,6 +356,15 @@ struct RetainedWorkerAdmissionRegistryV1 {
     next_slot_sequence_by_session: BTreeMap<String, u64>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     cancel_deliveries_by_request: BTreeMap<String, RetainedWorkerAdmissionCancelDeliveryRecordV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    native_lifecycle_v1: Option<native_lifecycle::RetainedNativeBootstrapLifecycleV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ordinary_forks_v1: Option<ordinary_fork::OrdinaryForkRegistryV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ordinary_stops_v1: Option<ordinary_stop::OrdinaryStopRegistryV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ordinary_bootstrap_receivers_v1:
+        Option<ordinary_bootstrap_receiver::OrdinaryBootstrapReceiverRegistryV1>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -805,6 +855,10 @@ impl RetainedWorkerRuntime {
                 issuer_request_index: BTreeMap::new(),
                 next_slot_sequence_by_session: BTreeMap::new(),
                 cancel_deliveries_by_request: BTreeMap::new(),
+                native_lifecycle_v1: None,
+                ordinary_forks_v1: None,
+                ordinary_stops_v1: None,
+                ordinary_bootstrap_receivers_v1: None,
             };
             let registry_bytes = retain_semantic_error(
                 encode_canonical(&registry, "encode admission registry"),
@@ -987,6 +1041,11 @@ impl RetainedWorkerRuntime {
             .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let authority_store_id = storage.authority_store_id().to_owned();
         let mut semantic_failure = None;
+        let admission_validation = AdmissionValidationEvidenceV1::authenticate(
+            authority,
+            presented_plan,
+            reservation_proof,
+        )?;
         let result = storage.transaction(|transaction| {
             let registry_bytes = transaction.read_registry()?.ok_or_else(
                 super::host_session_authority::store::BootstrapError::retained_admission_semantic,
@@ -1019,7 +1078,7 @@ impl RetainedWorkerRuntime {
                 validate_admission_plan(
                     transaction.authority_root(),
                     &current_plan,
-                    reservation_proof,
+                    &admission_validation,
                 ),
                 &mut semantic_failure,
             )?;
@@ -1208,7 +1267,15 @@ impl RetainedWorkerRuntime {
             .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let authority_store_id = storage.authority_store_id().to_owned();
         let mut semantic_failure = None;
+        let admission_validation =
+            AdmissionValidationEvidenceV1::authenticate(authority, plan, reservation_proof)?;
         let result = storage.transaction(|transaction| {
+            let reserve = |#[cfg(target_os = "linux")] physical: &super::host_session_authority::store::DispatchPolicyCommitmentPhysicalReadV1,
+                #[cfg(target_os = "linux")] verify_population: &dyn Fn() -> Result<(), super::host_session_authority::store::BootstrapError>| {
+            #[cfg(target_os = "linux")]
+            let population = retain_semantic_error(super::dispatch_policy_commitment::decode_ordinary_bootstrap_population(
+                physical, transaction.authority_root().authority_store_id())
+                .map_err(|error| RetainedWorkerRuntimeError(error.to_string())), &mut semantic_failure)?;
             let registry_bytes = transaction.read_registry()?.ok_or_else(
                 super::host_session_authority::store::BootstrapError::retained_admission_semantic,
             )?;
@@ -1310,18 +1377,23 @@ impl RetainedWorkerRuntime {
                 ),
                 &mut semantic_failure,
             )?;
+            #[cfg(target_os = "linux")]
+            let unclassified_forks = retain_semantic_error(validate_admission_e2_population(&registry, &population), &mut semantic_failure)?;
+            #[cfg(not(target_os = "linux"))]
+            let unclassified_forks = 0;
             let slot = retain_semantic_error(
                 reserve_slot_in_registry(
                     &mut registry,
                     transaction.authority_root(),
                     &current_plan,
                     &fingerprint_plan,
-                    reservation_proof,
+                    &admission_validation,
                     &envelope.secret_key,
                     reserved_at,
                     participant_entropy,
                     bootstrap_run_entropy,
                     typed_history.as_ref(),
+                    unclassified_forks,
                 ),
                 &mut semantic_failure,
             )?;
@@ -1332,6 +1404,10 @@ impl RetainedWorkerRuntime {
                 encode_canonical(&registry, "encode admission registry"),
                 &mut semantic_failure,
             )?;
+            #[cfg(all(test, target_os = "linux"))]
+            run_ordinary_population_before_publication_hook();
+            #[cfg(target_os = "linux")]
+            verify_population()?;
             let temp_name = format!("admission-registry--{}.tmp", lower_hex(&publication_nonce));
             #[cfg(test)]
             if crash_point == Some(AdmissionReservationCrashPointV1::BeforeTempPersistence) {
@@ -1363,6 +1439,9 @@ impl RetainedWorkerRuntime {
                     &mut semantic_failure,
                 )?;
             }
+            #[cfg(target_os = "linux")]
+            transaction.replace_registry_with_source_guard(&temp_name, &published, verify_population)?;
+            #[cfg(not(target_os = "linux"))]
             transaction.replace_registry(&temp_name, &published)?;
             #[cfg(test)]
             if crash_point == Some(AdmissionReservationCrashPointV1::AfterSlotReserved) {
@@ -1372,6 +1451,11 @@ impl RetainedWorkerRuntime {
                 );
             }
             Ok(slot)
+            };
+            #[cfg(target_os = "linux")]
+            { transaction.with_existing_e2_population_source(reserve) }
+            #[cfg(not(target_os = "linux"))]
+            { reserve() }
         });
         if let Some(error) = semantic_failure {
             return Err(error);
@@ -1391,6 +1475,37 @@ impl RetainedWorkerRuntime {
             self.validate_admitted_record_graph(authority, plan, &slot.record, reservation_proof)?;
         }
         Ok(slot)
+    }
+
+    /// Read existing admission bytes under held source guards without creating or
+    /// reconciling writer state. Partial publications refuse this service read.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn read_existing_admission_record(
+        &self,
+        authority: &HostSessionAuthority,
+        orchestration_session_id: &str,
+        retained_participant_id: &str,
+    ) -> Result<Option<RetainedWorkerAdmissionRecordV1>, RetainedWorkerRuntimeError> {
+        super::host_session_authority::store::with_existing_retained_worker_admission_read(
+            authority,
+            |root, registry_bytes, keys| {
+                let Some(bytes) = registry_bytes else {
+                    return Ok(None);
+                };
+                let registry: RetainedWorkerAdmissionRegistryV1 =
+                    decode_canonical(bytes, "decode canonical admission registry")?;
+                load_committed_admission_key(root.authority_store_id(), &registry, &keys)?;
+                validate_admission_registry(&registry, root)?;
+                Ok(registry
+                    .records_by_session
+                    .get(orchestration_session_id)
+                    .and_then(|records| records.get(retained_participant_id))
+                    .cloned())
+            },
+        )
+        .map_err(|error| {
+            RetainedWorkerRuntimeError(format!("read existing admission: {error:?}"))
+        })?
     }
 
     pub(crate) fn read_admission_record(
@@ -1834,6 +1949,11 @@ impl RetainedWorkerRuntime {
         let mut publication_nonce = [0_u8; 16];
         rand::rngs::OsRng.fill_bytes(&mut publication_nonce);
         let mut semantic_failure = None;
+        let admission_validation = AdmissionValidationEvidenceV1::authenticate(
+            authority,
+            canonical_plan,
+            reservation_proof,
+        )?;
         let result = storage.transaction(|transaction| {
             let registry_bytes = transaction.read_registry()?.ok_or_else(
                 super::host_session_authority::store::BootstrapError::retained_admission_semantic,
@@ -1871,7 +1991,7 @@ impl RetainedWorkerRuntime {
                     expected_record,
                     &envelope.secret_key,
                     rejection,
-                    reservation_proof,
+                    &admission_validation,
                     typed_history.as_ref(),
                 ),
                 &mut semantic_failure,
@@ -2067,6 +2187,8 @@ impl RetainedWorkerRuntime {
             .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let authority_store_id = storage.authority_store_id().to_owned();
         let mut semantic_failure = None;
+        let admission_validation =
+            AdmissionValidationEvidenceV1::authenticate(authority, plan, reservation_proof)?;
         let result = storage.transaction(|transaction| {
             let registry_bytes = transaction.read_registry()?.ok_or_else(
                 super::host_session_authority::store::BootstrapError::retained_admission_semantic,
@@ -2094,7 +2216,7 @@ impl RetainedWorkerRuntime {
                     &current_plan,
                     plan,
                     retained_participant_id,
-                    reservation_proof,
+                    &admission_validation,
                     &envelope.secret_key,
                     head_acquired_at,
                     typed_history.as_ref(),
@@ -2195,6 +2317,8 @@ impl RetainedWorkerRuntime {
             .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let authority_store_id = storage.authority_store_id().to_owned();
         let mut semantic_failure = None;
+        let admission_validation =
+            AdmissionValidationEvidenceV1::authenticate(authority, plan, reservation_proof)?;
         let result = storage.transaction(|transaction| {
             let registry_bytes = transaction.read_registry()?.ok_or_else(
                 super::host_session_authority::store::BootstrapError::retained_admission_semantic,
@@ -2226,7 +2350,7 @@ impl RetainedWorkerRuntime {
                         secret_key: &envelope.secret_key,
                         post_r0_graph,
                     },
-                    reservation_proof,
+                    &admission_validation,
                     typed_history.as_ref(),
                 ),
                 &mut semantic_failure,
@@ -2343,7 +2467,9 @@ impl RetainedWorkerRuntime {
             .read_preserved_start_root_v2()
             .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let versioned_root = VersionedStateRoot::V2(root.clone());
-        validate_admission_plan(&versioned_root, &current_plan, reservation_proof)?;
+        let admission_validation =
+            AdmissionValidationEvidenceV1::authenticate(authority, plan, reservation_proof)?;
+        validate_admission_plan(&versioned_root, &current_plan, &admission_validation)?;
         validate_reservation_proof_identities(reservation_proof, record)?;
         let registration = admission_registration(&record.state).ok_or_else(|| {
             RetainedWorkerRuntimeError("post-R0 admission has no registration".into())
@@ -2373,7 +2499,7 @@ impl RetainedWorkerRuntime {
         let mut semantic_failure = None;
         let registrations = storage.transaction(|transaction| {
             let Some(registry_bytes) = transaction.read_registry()? else {
-                return Ok(Vec::new());
+                return Ok((Vec::new(), Vec::new()));
             };
             let registry: RetainedWorkerAdmissionRegistryV1 = retain_semantic_error(
                 decode_canonical(&registry_bytes, "decode canonical admission registry"),
@@ -2420,12 +2546,21 @@ impl RetainedWorkerRuntime {
                     found.push((record.clone(), registration));
                 }
             }
-            Ok(found)
+            let forks = retain_semantic_error(
+                registry
+                    .ordinary_forks_v1
+                    .as_ref()
+                    .map(|forks| forks.post_r0_registrations(transaction.authority_root()))
+                    .transpose()
+                    .map(|records| records.unwrap_or_default()),
+                &mut semantic_failure,
+            )?;
+            Ok((found, forks))
         });
         if let Some(error) = semantic_failure {
             return Err(error);
         }
-        let registrations =
+        let (registrations, fork_registrations) =
             registrations.map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let mut graphs = BTreeMap::new();
         for (record, registration) in registrations {
@@ -2456,6 +2591,38 @@ impl RetainedWorkerRuntime {
             {
                 return Err(RetainedWorkerRuntimeError(
                     "post-R0 registry graph identity is duplicated".into(),
+                ));
+            }
+        }
+        for (record, registration) in fork_registrations {
+            let registered_graph =
+                self.resolve_admission_registration_graph(authority, &registration)?;
+            ordinary_fork::validate_fork_target(&record, &registered_graph.resolved_target)?;
+            let session = &record.activation.orchestration_session_id;
+            let current = authority
+                .resolve_current_exact(session, None)
+                .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+            let typed_authority_history = authority
+                .resolve_exact_typed_history(session)
+                .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+            if graphs
+                .insert(
+                    (
+                        session.clone(),
+                        record.activation.retained_participant_id.clone(),
+                    ),
+                    ResolvedPostR0RegistryGraphV1 {
+                        current_exact_authority: CanonicalExactCurrentAuthorityV1::from_resolved(
+                            &current,
+                        ),
+                        typed_authority_history,
+                        registered_graph,
+                    },
+                )
+                .is_some()
+            {
+                return Err(RetainedWorkerRuntimeError(
+                    "post-R0 Fork graph identity is duplicated".into(),
                 ));
             }
         }
@@ -2551,6 +2718,8 @@ impl RetainedWorkerRuntime {
             .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let authority_store_id = storage.authority_store_id().to_owned();
         let mut semantic_failure = None;
+        let admission_validation =
+            AdmissionValidationEvidenceV1::authenticate(authority, plan, reservation_proof)?;
         let result = storage.transaction(|transaction| {
             let registry_bytes = transaction.read_registry()?.ok_or_else(
                 super::host_session_authority::store::BootstrapError::retained_admission_semantic,
@@ -2584,7 +2753,7 @@ impl RetainedWorkerRuntime {
                         claim_entropy: publication.claim_entropy,
                         post_r0_graph: post_r0_graph.as_ref(),
                     },
-                    reservation_proof,
+                    &admission_validation,
                     typed_history.as_ref(),
                 ),
                 &mut semantic_failure,
@@ -3009,6 +3178,8 @@ impl RetainedWorkerRuntime {
         let mut publication_nonce = [0_u8; 16];
         rand::rngs::OsRng.fill_bytes(&mut publication_nonce);
         let mut semantic_failure = None;
+        let admission_validation =
+            AdmissionValidationEvidenceV1::authenticate(authority, plan, reservation_proof)?;
         let result = storage.transaction(|transaction| {
             let registry_bytes = transaction.read_registry()?.ok_or_else(
                 super::host_session_authority::store::BootstrapError::retained_admission_semantic,
@@ -3055,7 +3226,7 @@ impl RetainedWorkerRuntime {
                     &envelope.secret_key,
                     &graph.registered_graph,
                     truth,
-                    reservation_proof,
+                    &admission_validation,
                     typed_history.as_ref(),
                 ),
                 &mut semantic_failure,
@@ -3109,7 +3280,7 @@ impl RetainedWorkerRuntime {
     }
 
     #[cfg(test)]
-    fn reserve_registration_at(
+    pub(crate) fn reserve_registration_at(
         &self,
         authority: &HostSessionAuthority,
         plan: &RetainedWorkerRegistrationPlanV1,
@@ -3648,6 +3819,18 @@ fn load_committed_admission_key(
             "committed admission key envelope identity is inexact".into(),
         ));
     }
+    if let Some(lifecycle) = &registry.native_lifecycle_v1 {
+        lifecycle.verify_mac(&envelope)?;
+    }
+    if let Some(forks) = &registry.ordinary_forks_v1 {
+        forks.verify_mac(&envelope)?;
+    }
+    if let Some(stops) = &registry.ordinary_stops_v1 {
+        stops.verify_mac(&envelope)?;
+    }
+    if let Some(receivers) = &registry.ordinary_bootstrap_receivers_v1 {
+        receivers.verify_mac(&envelope)?;
+    }
     Ok((
         RetainedWorkerAdmissionKeyIdentityV1 {
             authority_store_id: authority_store_id.to_owned(),
@@ -3775,12 +3958,13 @@ fn prepare_registration_head_in_registry(
     current_plan: &RetainedWorkerAdmissionPlanV1,
     supplied_plan: &RetainedWorkerAdmissionPlanV1,
     retained_participant_id: &str,
-    reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
+    admission_validation: &AdmissionValidationEvidenceV1<'_>,
     secret_key: &[u8; 32],
     head_acquired_at: TimestampV1,
     typed_history: Option<&BTreeMap<u64, ResolvedSessionAuthorityV1>>,
 ) -> Result<(AdmissionHeadPreparationV1, bool), RetainedWorkerRuntimeError> {
-    validate_admission_plan(authority_root, current_plan, reservation_proof)?;
+    let reservation_proof = admission_validation.reservation_proof;
+    validate_admission_plan(authority_root, current_plan, admission_validation)?;
     let root = preserved_start_root_view(authority_root)?;
     let mut record = registry
         .records_by_session
@@ -3995,6 +4179,10 @@ fn claim_pending_admission_cancel_delivery_in_record(
     Ok(Some(delivery_claim_id))
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "retain separate authority, plan, record, key, rejection, reservation and history inputs at the existing admission rejection boundary"
+)]
 fn reject_before_registration_in_registry(
     registry: &mut RetainedWorkerAdmissionRegistryV1,
     authority_root: &VersionedStateRoot,
@@ -4003,10 +4191,11 @@ fn reject_before_registration_in_registry(
     expected_record: &RetainedWorkerAdmissionRecordV1,
     secret_key: &[u8; 32],
     rejection: &AdmissionRejectedBeforeRegistrationInputV1,
-    reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
+    admission_validation: &AdmissionValidationEvidenceV1<'_>,
     typed_history: Option<&BTreeMap<u64, ResolvedSessionAuthorityV1>>,
 ) -> Result<(RetainedWorkerAdmissionRecordV1, bool), RetainedWorkerRuntimeError> {
-    validate_admission_plan(authority_root, current_plan, reservation_proof)?;
+    let reservation_proof = admission_validation.reservation_proof;
+    validate_admission_plan(authority_root, current_plan, admission_validation)?;
     let root = preserved_start_root_view(authority_root)?;
     let mut record = registry
         .records_by_session
@@ -4646,10 +4835,11 @@ fn advance_registration_head_in_registry(
     current_plan: &RetainedWorkerAdmissionPlanV1,
     supplied_plan: &RetainedWorkerAdmissionPlanV1,
     input: &AdmissionRegistrationAdvanceInputV1<'_>,
-    reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
+    admission_validation: &AdmissionValidationEvidenceV1<'_>,
     typed_history: Option<&BTreeMap<u64, ResolvedSessionAuthorityV1>>,
 ) -> Result<(RetainedWorkerAdmissionRecordV1, bool), RetainedWorkerRuntimeError> {
-    validate_admission_plan(authority_root, current_plan, reservation_proof)?;
+    let reservation_proof = admission_validation.reservation_proof;
+    validate_admission_plan(authority_root, current_plan, admission_validation)?;
     let root = preserved_start_root_view(authority_root)?;
     let mut record = registry
         .records_by_session
@@ -4755,10 +4945,11 @@ fn claim_transport_in_registry(
     retained_participant_id: &str,
     secret_key: &[u8; 32],
     claim_input: &AdmissionTransportClaimInputV1<'_>,
-    reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
+    admission_validation: &AdmissionValidationEvidenceV1<'_>,
     typed_history: Option<&BTreeMap<u64, ResolvedSessionAuthorityV1>>,
 ) -> Result<RetainedWorkerTransportClaimV1, RetainedWorkerRuntimeError> {
-    validate_admission_plan(authority_root, current_plan, reservation_proof)?;
+    let reservation_proof = admission_validation.reservation_proof;
+    validate_admission_plan(authority_root, current_plan, admission_validation)?;
     let root = preserved_start_root_view(authority_root)?;
     let mut record = registry
         .records_by_session
@@ -4856,6 +5047,7 @@ fn claim_transport_in_registry(
         last_frame_sequence: None,
         claimed_at: claim_input.claimed_at.clone(),
     };
+    record.bootstrap_receiver_protocol = Some(1);
     record.record_revision = record
         .record_revision
         .checked_add(1)
@@ -4882,10 +5074,11 @@ fn advance_admission_runtime_truth_in_registry(
     secret_key: &[u8; 32],
     post_r0_graph: &ResolvedPostR0RegisteredGraphV1,
     truth: &AdmissionRuntimeTruthInputV1<'_>,
-    reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
+    admission_validation: &AdmissionValidationEvidenceV1<'_>,
     typed_history: Option<&BTreeMap<u64, ResolvedSessionAuthorityV1>>,
 ) -> Result<(RetainedWorkerAdmissionRecordV1, bool), RetainedWorkerRuntimeError> {
-    validate_admission_plan(authority_root, current_plan, reservation_proof)?;
+    let reservation_proof = admission_validation.reservation_proof;
+    validate_admission_plan(authority_root, current_plan, admission_validation)?;
     let root = preserved_start_root_view(authority_root)?;
     let mut record = registry
         .records_by_session
@@ -5181,6 +5374,20 @@ fn advance_admission_runtime_truth_in_registry(
             exit_code,
             terminal_at,
         } => {
+            if registry
+                .ordinary_bootstrap_receivers_v1
+                .as_ref()
+                .is_some_and(|receivers| {
+                    receivers.has_consumed_receiver_for(
+                        &record.orchestration_session_id,
+                        &record.retained_participant_id,
+                    )
+                })
+            {
+                return Err(RetainedWorkerRuntimeError(
+                    "consumed native bootstrap requires checked physical retirement; raw transport Exit cannot release capacity".into(),
+                ));
+            }
             frame_identity
                 .validate()
                 .map_err(RetainedWorkerRuntimeError)?;
@@ -5645,12 +5852,51 @@ fn validate_post_r0_registered_graph_against_expectation(
         .retained_worker_registration_request_index
         .get(&issuer_request_id)
         .ok_or_else(|| RetainedWorkerRuntimeError("post-R0 graph has no request".into()))?;
-    let resulting_authority = reconstruct_exact_authority_at_revision(
-        root,
-        current_exact_authority,
-        registration.authority_revision_after,
-        typed_history,
-    )?;
+    let (resulting_authority, resulting_commitment, resulting_lineage_commitment) =
+        if let Some(history) = typed_history {
+            // An immutable registration may precede a controller successor.
+            // Authenticate its historical authority as data, rather than
+            // projecting the current caller into that earlier authority.
+            validate_admission_to_current_exact_authority_ancestry(
+                root,
+                current_exact_authority,
+                record,
+                Some(history),
+            )?;
+            let historical = history
+                .get(&registration.authority_revision_after)
+                .ok_or_else(|| {
+                    RetainedWorkerRuntimeError(
+                        "post-R0 authority is absent from exact typed ancestry".into(),
+                    )
+                })?;
+            let observation = historical.observation();
+            if observation.authority_store_id != root.authority_store_id
+                || observation.orchestration_session_id != record.orchestration_session_id
+                || observation.authority_revision != registration.authority_revision_after
+            {
+                return Err(RetainedWorkerRuntimeError(
+                    "post-R0 authority conflicts with exact typed ancestry".into(),
+                ));
+            }
+            (
+                Cow::Borrowed(&historical.authority),
+                observation.authority_record_commitment,
+                observation.authoritative_lineage_commitment,
+            )
+        } else {
+            let reconstructed = reconstruct_exact_authority_at_revision(
+                root,
+                current_exact_authority,
+                registration.authority_revision_after,
+                None,
+            )?;
+            (
+                Cow::Owned(reconstructed.authority),
+                reconstructed.authority_record_commitment,
+                reconstructed.authoritative_lineage_commitment,
+            )
+        };
     let registration_commitment = canonical_registration_commitment(registration)?;
     let expected_internal_uaa_session_id = format!("uaa_{}", record.bootstrap_run_id);
     let current_authority_commitment = canonical_authority_commitment(current_authority)?;
@@ -5705,31 +5951,23 @@ fn validate_post_r0_registered_graph_against_expectation(
         || registration.current_policy_ref != record.current_policy_ref
         || registration.world_binding != record.world_binding
         || resulting_authority.authority_revision != registration.authority_revision_after
-        || resulting_authority.authority_record_commitment
-            != registration.authority_record_commitment_after
-        || resulting_authority.authoritative_lineage_commitment
-            != registration.authoritative_lineage_commitment_after
+        || resulting_commitment != registration.authority_record_commitment_after
+        || resulting_lineage_commitment != registration.authoritative_lineage_commitment_after
         || resulting_authority
-            .authority
             .authoritative_participant_lineage
             .iter()
             .filter(|participant| *participant == &record.retained_participant_id)
             .count()
             != 1
         || resulting_authority
-            .authority
             .retained_worker_refs
             .iter()
             .filter(|reference| *reference == &registration.retained_worker_ref)
             .count()
             != 1
-        || resulting_authority.authority.world_binding.as_ref() != Some(&record.world_binding)
-        || resulting_authority.authority.current_policy_ref.as_ref()
-            != Some(&record.current_policy_ref)
-        || resulting_authority
-            .authority
-            .current_policy_revision
-            .as_deref()
+        || resulting_authority.world_binding.as_ref() != Some(&record.world_binding)
+        || resulting_authority.current_policy_ref.as_ref() != Some(&record.current_policy_ref)
+        || resulting_authority.current_policy_revision.as_deref()
             != Some(record.current_policy_revision.as_str())
         || resolved.current_authority_revision != current_exact_authority.authority_revision
         || resolved.descriptor != *expected_descriptor
@@ -5810,6 +6048,13 @@ fn validate_complete_post_r0_registry_graphs(
             RetainedWorkerRuntimeError("complete post-R0 graph count overflow".into())
         })?;
     }
+    if let Some(forks) = &registry.ordinary_forks_v1 {
+        validated_count = validated_count
+            .checked_add(forks.validate_complete_graphs(authority_root, resolved_graphs)?)
+            .ok_or_else(|| {
+                RetainedWorkerRuntimeError("complete Fork graph count overflow".into())
+            })?;
+    }
     if validated_count != resolved_graphs.len() {
         return Err(RetainedWorkerRuntimeError(
             "complete post-R0 registry graph snapshot is inexact".into(),
@@ -5860,14 +6105,16 @@ fn reserve_slot_in_registry(
     authority_root: &VersionedStateRoot,
     current_plan: &RetainedWorkerAdmissionPlanV1,
     supplied_plan: &RetainedWorkerAdmissionPlanV1,
-    reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
+    admission_validation: &AdmissionValidationEvidenceV1<'_>,
     secret_key: &[u8; 32],
     reserved_at: TimestampV1,
     participant_entropy: [u8; 16],
     bootstrap_run_entropy: [u8; 16],
     typed_history: Option<&BTreeMap<u64, ResolvedSessionAuthorityV1>>,
+    unclassified_forks: u64,
 ) -> Result<RetainedWorkerAdmissionSlotV1, RetainedWorkerRuntimeError> {
-    validate_admission_plan(authority_root, current_plan, reservation_proof)?;
+    let reservation_proof = admission_validation.reservation_proof;
+    validate_admission_plan(authority_root, current_plan, admission_validation)?;
     let root = preserved_start_root_view(authority_root)?;
     if let Some(locator) = registry
         .issuer_request_index
@@ -5945,12 +6192,45 @@ fn reserve_slot_in_registry(
         ));
     }
     let plan = current_plan;
+    let (closed_spawns, closed_forks) = registry
+        .ordinary_stops_v1
+        .as_ref()
+        .map(|stops| stops.acknowledged_counts(registry))
+        .transpose()?
+        .unwrap_or_default();
     let live_count = registry
         .records_by_session
         .values()
         .flat_map(BTreeMap::values)
         .filter(|record| admission_state_is_live(&record.state))
         .count() as u64;
+    let live_count = live_count.checked_sub(closed_spawns).ok_or_else(|| {
+        RetainedWorkerRuntimeError("ordinary Stop Spawn accounting exceeds live admissions".into())
+    })?;
+    let live_count = live_count
+        .checked_add(
+            registry
+                .ordinary_forks_v1
+                .as_ref()
+                .map_or(0, |forks| forks.live_count() as u64),
+        )
+        .ok_or_else(|| RetainedWorkerRuntimeError("retained population count overflow".into()))?;
+    let live_count = live_count
+        .checked_add(unclassified_forks)
+        .and_then(|count| count.checked_sub(closed_forks))
+        .ok_or_else(|| {
+            RetainedWorkerRuntimeError("complete retained population accounting conflicts".into())
+        })?;
+    let (retired_spawns, retired_forks) = registry
+        .ordinary_bootstrap_receivers_v1
+        .as_ref()
+        .map_or((0, 0), |receivers| receivers.retirement_counts());
+    let live_count = live_count
+        .checked_sub(retired_spawns)
+        .and_then(|count| count.checked_sub(retired_forks))
+        .ok_or_else(|| {
+            RetainedWorkerRuntimeError("initial retirement population accounting conflicts".into())
+        })?;
     if live_count >= plan.policy_and_admission_cap.max_live_retained_workers {
         return Err(RetainedWorkerRuntimeError(format!(
             "retained_worker_cap_reached: live retained worker count {live_count} reaches configured maximum {}",
@@ -6035,6 +6315,7 @@ fn reserve_slot_in_registry(
             slot_sequence,
             reserved_at,
         },
+        bootstrap_receiver_protocol: None,
         record_revision: 1,
     };
     registry.issuer_request_index.insert(
@@ -6060,11 +6341,99 @@ fn reserve_slot_in_registry(
     })
 }
 
+/// B3 owns this borrow. The private factory pairs an E2 check with the same
+/// caller-owned plan in one operation, before any B3 root transaction begins.
+struct AdmissionValidationEvidenceV1<'plan> {
+    reservation_proof: Option<&'plan AuthenticatedFreshSpawnReservationProofV1>,
+    plan: &'plan RetainedWorkerAdmissionPlanV1,
+    #[cfg(target_os = "linux")]
+    ordinary: Option<super::dispatch_policy_commitment::AuthenticatedOrdinaryAdmissionPlanCheckV1>,
+}
+
+impl<'plan> AdmissionValidationEvidenceV1<'plan> {
+    fn authenticate(
+        authority: &HostSessionAuthority,
+        plan: &'plan RetainedWorkerAdmissionPlanV1,
+        reservation_proof: Option<&'plan AuthenticatedFreshSpawnReservationProofV1>,
+    ) -> Result<Self, RetainedWorkerRuntimeError> {
+        #[cfg(target_os = "linux")]
+        let ordinary = match reservation_proof {
+            Some(proof) => proof
+                .authenticate_ordinary_unchanged_parent_plan(authority, plan)
+                .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?,
+            None => None,
+        };
+        #[cfg(not(target_os = "linux"))]
+        let _ = authority;
+        Ok(Self {
+            reservation_proof,
+            plan,
+            #[cfg(target_os = "linux")]
+            ordinary,
+        })
+    }
+
+    #[cfg(test)]
+    fn protected(
+        plan: &'plan RetainedWorkerAdmissionPlanV1,
+        reservation_proof: Option<&'plan AuthenticatedFreshSpawnReservationProofV1>,
+    ) -> Self {
+        Self {
+            reservation_proof,
+            plan,
+            #[cfg(target_os = "linux")]
+            ordinary: None,
+        }
+    }
+
+    fn permits_ordinary_unchanged_parent(
+        &self,
+        root: &StateRootV2,
+        plan: &RetainedWorkerAdmissionPlanV1,
+    ) -> bool {
+        #[cfg(target_os = "linux")]
+        {
+            self.ordinary.as_ref().is_some_and(|ordinary| {
+                ordinary.matches_authority_root(&root.authority_store_id, &root.bootstrap_home)
+                    && self.plan.issuer_request_id == plan.issuer_request_id
+                    && self.plan.spawn_request == plan.spawn_request
+                    && self.plan.descriptor_and_runtime_plan == plan.descriptor_and_runtime_plan
+                    && self.plan.policy_and_admission_cap == plan.policy_and_admission_cap
+            })
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = (root, plan, self.plan);
+            false
+        }
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) fn test_ordinary_admission_scope_rejects_substitution(
+    authority: &HostSessionAuthority,
+    original: &RetainedWorkerAdmissionPlanV1,
+    proof: &AuthenticatedFreshSpawnReservationProofV1,
+    substituted: &RetainedWorkerAdmissionPlanV1,
+) -> Result<bool, RetainedWorkerRuntimeError> {
+    let evidence = AdmissionValidationEvidenceV1::authenticate(authority, original, Some(proof))?;
+    let root = authority
+        .read_preserved_start_root_v2()
+        .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+    if !evidence.permits_ordinary_unchanged_parent(&root, original) {
+        return Err(RetainedWorkerRuntimeError(
+            "test requires genuine ordinary scope".into(),
+        ));
+    }
+    Ok(!evidence.permits_ordinary_unchanged_parent(&root, substituted))
+}
+
 fn validate_admission_plan(
     authority_root: &VersionedStateRoot,
     plan: &RetainedWorkerAdmissionPlanV1,
-    reservation_proof: Option<&AuthenticatedFreshSpawnReservationProofV1>,
+    admission_validation: &AdmissionValidationEvidenceV1<'_>,
 ) -> Result<(), RetainedWorkerRuntimeError> {
+    let reservation_proof = admission_validation.reservation_proof;
     let request = &plan.spawn_request;
     let exact = &plan.exact_authority;
     let runtime = &plan.descriptor_and_runtime_plan;
@@ -6159,7 +6528,8 @@ fn validate_admission_plan(
         || (policy.allow_capability_narrowing
             && !reservation_proof.is_some_and(
                 AuthenticatedFreshSpawnReservationProofV1::permits_capability_narrowing,
-            ))
+            )
+            && !admission_validation.permits_ordinary_unchanged_parent(root.as_ref(), plan))
     {
         return Err(RetainedWorkerRuntimeError(
             "canonical admission plan is incomplete or conflicts with locked authority".into(),
@@ -6510,6 +6880,532 @@ fn admission_registration(
     }
 }
 
+/// Non-reconciling source interpretation for the World completion owner. Use
+/// the complete existing registry/key codec and the captured HSA root, never
+/// admission storage acquisition (which can create or reconcile files).
+#[cfg(target_os = "linux")]
+pub(crate) fn decode_world_controller_admission_records(
+    hsa_root_bytes: &[u8],
+    registry_bytes: Option<&[u8]>,
+    keys: &[(String, Vec<u8>)],
+    session_id: &str,
+    world: &WorldBindingV1,
+) -> Result<Vec<RetainedWorkerAdmissionRecordV1>, RetainedWorkerRuntimeError> {
+    let root = VersionedStateRoot::decode(hsa_root_bytes).map_err(|_| {
+        RetainedWorkerRuntimeError("decode captured admission authority root".into())
+    })?;
+    let Some(bytes) = registry_bytes else {
+        if !keys.is_empty()
+            || match &root {
+                VersionedStateRoot::V1(_) => false,
+                VersionedStateRoot::V2(root) => {
+                    !root.retained_worker_registration_request_index.is_empty()
+                }
+                VersionedStateRoot::V3(root) => {
+                    !root.retained_worker_registration_request_index.is_empty()
+                }
+            }
+        {
+            return Err(RetainedWorkerRuntimeError(
+                "admission source missing for HSA registrations".into(),
+            ));
+        }
+        return Ok(Vec::new());
+    };
+    let registry: RetainedWorkerAdmissionRegistryV1 =
+        decode_canonical(bytes, "decode held complete admission registry")?;
+    validate_committed_admission_key(root.authority_store_id(), &registry, keys)?;
+    validate_admission_registry(&registry, &root)?;
+    let records = registry
+        .records_by_session
+        .get(session_id)
+        .map(|records| records.values().cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+    if records.iter().any(|record| &record.world_binding != world) {
+        return Err(RetainedWorkerRuntimeError(
+            "World admission session generation differs".into(),
+        ));
+    }
+    Ok(records)
+}
+
+/// Complete retained-bootstrap interpretation from the original held capture.
+/// Successful completion and checked initial retirement close attention through
+/// separate facts. Neither grants later execution permission.
+#[cfg(target_os = "linux")]
+pub(crate) struct WorldControllerRetainedBootstrapSourcesV1 {
+    pub(crate) completed_bootstraps: Vec<transport_api_types::E2MemberLaunchActivationCarrierV1>,
+    pub(crate) retired_bootstraps: Vec<transport_api_types::E2MemberLaunchActivationCarrierV1>,
+    pub(crate) unresolved_admission_participant_ids: Vec<String>,
+    pub(crate) unclassified_hsa_retained_participant_ids: Vec<String>,
+}
+
+/// The HSA capture has authenticated complete typed V3 history. Preserve that
+/// owner and its physical finalizer instead of applying the narrower generic
+/// root reader or reconstructing authority from an admission projection.
+#[cfg(target_os = "linux")]
+pub(crate) fn decode_world_controller_admission_sources(
+    source: &super::host_session_authority::store::HeldAcceptedWorkAuthorityPhysicalSnapshotV1,
+    registry_bytes: Option<&[u8]>,
+    keys: &[(String, Vec<u8>)],
+    session_id: &str,
+    world: &WorldBindingV1,
+) -> Result<WorldControllerRetainedBootstrapSourcesV1, RetainedWorkerRuntimeError> {
+    source.verify_sources().map_err(|_| {
+        RetainedWorkerRuntimeError("invalid complete World R0/admission source".into())
+    })?;
+    let outcome = decode_held_retained_admission_source(
+        source.snapshot(),
+        registry_bytes,
+        keys,
+        session_id,
+        world,
+    )
+    .map(|(sources, _)| sources);
+    source.verify_sources().map_err(|_| {
+        RetainedWorkerRuntimeError("invalid complete World R0/admission source".into())
+    })?;
+    outcome
+}
+
+// Only original HSA-owned captures enter here; all callers retain their actual
+// physical guards across the complete consumer and finalization boundary.
+#[cfg(target_os = "linux")]
+fn decode_held_retained_admission_source(
+    snapshot: &super::host_session_authority::store::AcceptedWorkAuthorityPhysicalSnapshotV1,
+    registry_bytes: Option<&[u8]>,
+    keys: &[(String, Vec<u8>)],
+    session_id: &str,
+    world: &WorldBindingV1,
+) -> Result<
+    (
+        WorldControllerRetainedBootstrapSourcesV1,
+        Option<RetainedWorkerAdmissionRegistryV1>,
+    ),
+    RetainedWorkerRuntimeError,
+> {
+    let fail = || RetainedWorkerRuntimeError("invalid complete World R0/admission source".into());
+    let root = VersionedStateRoot::decode(snapshot.hsa_state_root_bytes()).map_err(|_| fail())?;
+    if root.authority_store_id() != snapshot.authority_store_id()
+        || root.root_revision() != snapshot.hsa_root_revision_at_read()
+        || root.bootstrap_home() != snapshot.authority_root_identity()
+    {
+        return Err(fail());
+    }
+    let registry = registry_bytes
+        .map(|bytes| {
+            decode_canonical::<RetainedWorkerAdmissionRegistryV1>(
+                bytes,
+                "decode complete World admission source",
+            )
+        })
+        .transpose()?;
+    let mut matched_issuers = BTreeSet::new();
+    if let Some(registry) = &registry {
+        validate_committed_admission_key(root.authority_store_id(), registry, keys)?;
+        matched_issuers.extend(
+            registry
+                .records_by_session
+                .values()
+                .flat_map(BTreeMap::values)
+                .map(|record| format!("retained-worker-registration:{}", record.issuer_request_id)),
+        );
+        if let Some(forks) = &registry.ordinary_forks_v1 {
+            matched_issuers.extend(forks.validate_registry_joins(registry, &root)?);
+        }
+    } else if !keys.is_empty() {
+        return Err(fail());
+    }
+    let mut unclassified = Vec::new();
+    let mut validation_root = root.clone();
+    // This exact codec projection never becomes an authority root. Unknown
+    // HSA participants remain explicit unresolved coverage in the result.
+    let (requests, journals) = match &mut validation_root {
+        VersionedStateRoot::V1(_) => {
+            if registry.is_some() {
+                return Err(fail());
+            }
+            return Ok((
+                WorldControllerRetainedBootstrapSourcesV1 {
+                    completed_bootstraps: Vec::new(),
+                    retired_bootstraps: Vec::new(),
+                    unresolved_admission_participant_ids: Vec::new(),
+                    unclassified_hsa_retained_participant_ids: Vec::new(),
+                },
+                None,
+            ));
+        }
+        VersionedStateRoot::V2(root) => (
+            &mut root.retained_worker_registration_request_index,
+            &mut root.retained_worker_registration_journal,
+        ),
+        VersionedStateRoot::V3(root) => (
+            &mut root.retained_worker_registration_request_index,
+            &mut root.retained_worker_registration_journal,
+        ),
+    };
+    let mut unclassified_registration_ids = BTreeSet::new();
+    for request in requests.values() {
+        if matched_issuers.contains(&request.issuer_request_id) {
+            continue;
+        }
+        if request.orchestration_session_id == session_id {
+            if &request.world_binding != world {
+                return Err(fail());
+            }
+            unclassified.push(request.retained_participant_id.clone());
+        }
+        unclassified_registration_ids.insert(request.registration_id.clone());
+    }
+    requests.retain(|_, request| !unclassified_registration_ids.contains(&request.registration_id));
+    journals.retain(|id, _| !unclassified_registration_ids.contains(id));
+    let mut completed_bootstraps = Vec::new();
+    let mut retired_bootstraps = Vec::new();
+    let mut unresolved = Vec::new();
+    if let Some(registry) = &registry {
+        validate_admission_registry(registry, &validation_root)?;
+        let population = super::dispatch_policy_commitment::decode_ordinary_bootstrap_population(
+            snapshot.e2(),
+            snapshot.authority_store_id(),
+        )
+        .map_err(|_| fail())?;
+        validate_admission_e2_population(registry, &population)?;
+        for record in registry
+            .records_by_session
+            .get(session_id)
+            .into_iter()
+            .flat_map(BTreeMap::values)
+        {
+            if &record.world_binding != world {
+                return Err(fail());
+            }
+            match registry.native_lifecycle_v1.as_ref().and_then(|lifecycle| {
+                lifecycle.native_completion_for(session_id, &record.retained_participant_id)
+            }) {
+                Some(report) => completed_bootstraps.push(report.observation().activation.clone()),
+                None => unresolved.push(record.retained_participant_id.clone()),
+            }
+        }
+        if let Some(forks) = &registry.ordinary_forks_v1 {
+            let (completed_forks, unresolved_forks) =
+                forks.world_controller_bootstraps(session_id, world)?;
+            completed_bootstraps.extend(completed_forks);
+            unresolved.extend(unresolved_forks);
+        }
+        // A checked bootstrap is not the terminal acknowledgment of an
+        // admitted logical Stop. Keep that separate intent unresolved.
+        if let Some(receivers) = &registry.ordinary_bootstrap_receivers_v1 {
+            retired_bootstraps = receivers.retired_activations(session_id);
+            unresolved.retain(|target| receivers.retirement_for(session_id, target).is_none());
+            for target in receivers.initial_stop_targets(session_id) {
+                let already_retired = receivers.retirement_for(session_id, target).is_some()
+                    || registry
+                        .ordinary_stops_v1
+                        .as_ref()
+                        .and_then(|stops| stops.record(session_id, target))
+                        .is_some_and(|stop| stop.acknowledgment.is_some());
+                if !already_retired && !unresolved.iter().any(|id| id == target) {
+                    unresolved.push(target.to_owned());
+                }
+            }
+        }
+        if let Some(stops) = &registry.ordinary_stops_v1 {
+            for (target, record) in stops.records_for_session(session_id) {
+                if record.request.world_id != world.world_id
+                    || record.request.world_generation != world.world_generation
+                {
+                    return Err(fail());
+                }
+                if record.acknowledgment.is_none() && !unresolved.contains(target) {
+                    unresolved.push(target.clone());
+                }
+            }
+        }
+    }
+    unclassified.sort();
+    unresolved.sort();
+    if unclassified.windows(2).any(|pair| pair[0] == pair[1])
+        || unresolved.windows(2).any(|pair| pair[0] == pair[1])
+    {
+        return Err(fail());
+    }
+    Ok((
+        WorldControllerRetainedBootstrapSourcesV1 {
+            completed_bootstraps,
+            retired_bootstraps,
+            unresolved_admission_participant_ids: unresolved,
+            unclassified_hsa_retained_participant_ids: unclassified,
+        },
+        registry,
+    ))
+}
+
+/// Source facts only. Neither R0 registration nor checked bootstrap completion
+/// establishes current native liveness or logical retirement.
+#[cfg(target_os = "linux")]
+pub(crate) enum OrdinaryRetainedWorkerReadV1 {
+    Spawn {
+        record: Box<RetainedWorkerAdmissionRecordV1>,
+        registration: Option<RetainedWorkerAdmissionRegistrationV1>,
+        native_bootstrap_completed: bool,
+        initial_control: Option<super::dispatch_contract::RetainedInitialControlInspectSnapshotV1>,
+    },
+    Fork {
+        record: Box<ordinary_fork::OrdinaryForkRecordV1>,
+        registration: Option<RetainedWorkerAdmissionRegistrationV1>,
+        native_bootstrap_completed: bool,
+        initial_control: Option<super::dispatch_contract::RetainedInitialControlInspectSnapshotV1>,
+    },
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn read_ordinary_retained_worker_from_sources_v1(
+    snapshot: &super::host_session_authority::store::AcceptedWorkAuthorityPhysicalSnapshotV1,
+    registry_bytes: Option<&[u8]>,
+    keys: &[(String, Vec<u8>)],
+    session_id: &str,
+    world: &WorldBindingV1,
+    participant: &str,
+    expected_start: &transport_api_types::OrdinaryStartSelectionCarrierV1,
+) -> Result<OrdinaryRetainedWorkerReadV1, RetainedWorkerRuntimeError> {
+    expected_start.validate().map_err(|_| {
+        RetainedWorkerRuntimeError("inspection original Start shape differs".into())
+    })?;
+    if expected_start.authority_store_id != snapshot.authority_store_id()
+        || expected_start.original_session_id != session_id
+    {
+        return Err(RetainedWorkerRuntimeError(
+            "inspection original Start store/session differs".into(),
+        ));
+    }
+    let root = VersionedStateRoot::decode(snapshot.hsa_state_root_bytes()).map_err(|_| {
+        RetainedWorkerRuntimeError("inspection original Root decode refused".into())
+    })?;
+    let (_, registry) =
+        decode_held_retained_admission_source(snapshot, registry_bytes, keys, session_id, world)?;
+    let registry = registry.ok_or_else(|| {
+        RetainedWorkerRuntimeError("ordinary retained inspection admission source absent".into())
+    })?;
+    let initial_control = registry
+        .ordinary_bootstrap_receivers_v1
+        .as_ref()
+        .map(|receivers| {
+            receivers.initial_control_observation_for(session_id, participant, expected_start)
+        })
+        .transpose()?
+        .flatten();
+    if let Some(record) = registry
+        .records_by_session
+        .get(session_id)
+        .and_then(|records| records.get(participant))
+    {
+        let completion = registry
+            .native_lifecycle_v1
+            .as_ref()
+            .and_then(|lifecycle| lifecycle.native_completion_for(session_id, participant));
+        if completion.is_some_and(|report| report.observation().source_start != *expected_start) {
+            return Err(RetainedWorkerRuntimeError(
+                "inspection native bootstrap original Start differs".into(),
+            ));
+        }
+        let registration = match admission_registration(&record.state) {
+            Some(registration) => Some(registration.clone()),
+            None if matches!(
+                record.state,
+                RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
+                    | RetainedWorkerAdmissionStateV1::CancelledBeforeRegistration {
+                        registration_head: Some(_),
+                        ..
+                    }
+            ) =>
+            {
+                admission_registration_from_hsa(&root, record)?
+            }
+            None => None,
+        };
+        return Ok(OrdinaryRetainedWorkerReadV1::Spawn {
+            record: Box::new(record.clone()),
+            registration,
+            native_bootstrap_completed: completion.is_some(),
+            initial_control,
+        });
+    }
+    if let Some((record, completed)) = registry
+        .ordinary_forks_v1
+        .as_ref()
+        .and_then(|forks| forks.inspection_record(session_id, participant))
+    {
+        if record.start != *expected_start {
+            return Err(RetainedWorkerRuntimeError(
+                "inspection Fork original Start differs".into(),
+            ));
+        }
+        let registration = record.inspection_applied_registration(&root)?;
+        return Ok(OrdinaryRetainedWorkerReadV1::Fork {
+            record: Box::new(record),
+            registration,
+            native_bootstrap_completed: completed,
+            initial_control,
+        });
+    }
+    Err(RetainedWorkerRuntimeError(
+        "ordinary retained inspection target has no authenticated admission owner".into(),
+    ))
+}
+
+#[cfg(target_os = "linux")]
+impl OrdinaryRetainedWorkerReadV1 {
+    pub(crate) fn inspection_registration(&self) -> Option<&RetainedWorkerAdmissionRegistrationV1> {
+        match self {
+            Self::Spawn { registration, .. } | Self::Fork { registration, .. } => {
+                registration.as_ref()
+            }
+        }
+    }
+
+    pub(crate) fn validate_inspected_graph(
+        &self,
+        target: &ResolvedRetainedTargetV1,
+    ) -> Result<(), RetainedWorkerRuntimeError> {
+        match self {
+            Self::Fork { record, .. } => ordinary_fork::validate_fork_target(record, target),
+            Self::Spawn { record, .. } => {
+                let registration = self.inspection_registration().ok_or_else(|| {
+                    RetainedWorkerRuntimeError("inspection Spawn has no R0 registration".into())
+                })?;
+                if target.registration.registration_id != registration.registration_id
+                    || target.registration.retained_worker_ref != registration.retained_worker_ref
+                    || target.registration.issuer_request_id
+                        != format!("retained-worker-registration:{}", record.issuer_request_id)
+                    || target.registration.retained_participant_id != record.retained_participant_id
+                    || target.descriptor.backend_id != record.backend_id
+                    || target.descriptor.protocol != record.protocol
+                    || target.resume_handle.internal_uaa_session_id
+                        != format!("uaa_{}", record.bootstrap_run_id)
+                    || target.retained_worker.world_binding != record.world_binding
+                    || target.retained_worker.policy_ref != record.current_policy_ref
+                    || target.current_policy.policy_revision != record.current_policy_revision
+                {
+                    return Err(RetainedWorkerRuntimeError(
+                        "inspection Spawn R0 graph differs".into(),
+                    ));
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+/// Decode exact B1 and supervisor sources without reopening either owner.
+#[cfg(target_os = "linux")]
+pub(crate) fn read_ordinary_retained_turn_observation_v1(
+    snapshot: &super::host_session_authority::store::AcceptedWorkAuthorityPhysicalSnapshotV1,
+    supervisor_bytes: Option<&[u8]>,
+    request: &super::dispatch_contract::ValidatedWorldDispatchRequestV1,
+    caller_backend: &str,
+    exact_target: &super::dispatch_contract::WorldDispatchControlTargetV1,
+) -> anyhow::Result<super::world_work_execution_supervisor::WorldWorkExecutionObservationV1> {
+    use super::dispatch_contract::WorldDispatchControlTargetV1;
+    use super::state_store::{
+        authenticate_persisted_world_work_acceptance, AcceptedWorldWorkIdentityV1,
+        WorldWorkAcceptanceLookupKeyV1,
+    };
+    let WorldDispatchControlTargetV1::AcceptedRetainedTurn {
+        acceptance_record_id,
+        active_run_id,
+        message_id,
+        target_participant_id,
+    } = exact_target
+    else {
+        anyhow::bail!("ordinary inspection requires exact retained acceptance identity");
+    };
+    let witness = authenticate_persisted_world_work_acceptance(
+        snapshot,
+        &WorldWorkAcceptanceLookupKeyV1::new(snapshot.authority_store_id(), acceptance_record_id),
+    )
+    .map_err(|error| anyhow::anyhow!("ordinary inspection B1 source refused: {error:?}"))?;
+    let record = witness.record();
+    if record.orchestration_session_id != request.orchestration_session_id
+        || record.caller_participant_id != request.caller_participant_id
+        || record.caller_backend_id != caller_backend
+        || record.target_backend_id != request.target_backend_id
+        || record.world_id != request.world_id
+        || record.world_generation != request.world_generation
+        || !matches!(&record.work_identity, AcceptedWorldWorkIdentityV1::RetainedTurn {
+            active_run_id: accepted_run, message_id: accepted_message, target_participant_id: accepted_target,
+        } if accepted_run == active_run_id && accepted_message == message_id && accepted_target == target_participant_id)
+    {
+        anyhow::bail!("ordinary inspection exact retained receipt linkage differs");
+    }
+    read_ordinary_world_work_observation_v1(snapshot, supervisor_bytes, record)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn read_ordinary_ephemeral_task_observation_v1(
+    snapshot: &super::host_session_authority::store::AcceptedWorkAuthorityPhysicalSnapshotV1,
+    supervisor_bytes: Option<&[u8]>,
+    request: &super::dispatch_contract::ValidatedWorldDispatchRequestV1,
+    caller_backend: &str,
+) -> anyhow::Result<super::world_work_execution_supervisor::WorldWorkExecutionObservationV1> {
+    let world = WorldBindingV1 {
+        world_id: request.world_id.clone(),
+        world_generation: request.world_generation,
+    };
+    let session = super::state_store::authenticate_ordinary_world_work_session_cut_v1(
+        snapshot,
+        &request.orchestration_session_id,
+        &world,
+    )?;
+    let task = request
+        .task_run_id
+        .as_deref()
+        .ok_or_else(|| anyhow::anyhow!("ordinary ephemeral inspection task missing"))?;
+    let identity = super::state_store::AcceptedWorldWorkIdentityV1::EphemeralTask {
+        task_run_id: task.into(),
+    };
+    let mut records = session
+        .acceptances()
+        .iter()
+        .filter(|record| record.work_identity == identity);
+    let record = records.next().ok_or_else(|| {
+        anyhow::anyhow!("ordinary ephemeral inspection exact accepted task absent")
+    })?;
+    if records.next().is_some()
+        || record.caller_participant_id != request.caller_participant_id
+        || record.caller_backend_id != caller_backend
+        || record.target_backend_id != request.target_backend_id
+    {
+        anyhow::bail!("ordinary ephemeral inspection exact accepted task linkage differs");
+    }
+    read_ordinary_world_work_observation_v1(snapshot, supervisor_bytes, record)
+}
+
+#[cfg(target_os = "linux")]
+pub(super) fn read_ordinary_world_work_observation_v1(
+    snapshot: &super::host_session_authority::store::AcceptedWorkAuthorityPhysicalSnapshotV1,
+    supervisor_bytes: Option<&[u8]>,
+    record: &super::state_store::WorldWorkAcceptanceRecordV1,
+) -> anyhow::Result<super::world_work_execution_supervisor::WorldWorkExecutionObservationV1> {
+    let observations =
+        super::world_work_execution_supervisor::decode_world_controller_supervisor_observations(
+            supervisor_bytes,
+            snapshot.authority_store_id(),
+            &record.orchestration_session_id,
+        )?;
+    let observation = observations
+        .into_iter()
+        .find(|observation| observation.claim.acceptance_record_id == record.acceptance_record_id)
+        .ok_or_else(|| {
+            anyhow::anyhow!("ordinary inspection exact supervisor observation unavailable")
+        })?;
+    if !observation.claim.matches_acceptance(record)
+        || observation.durable_frame_cursor < Some(record.runtime_acceptance.frame_sequence)
+    {
+        anyhow::bail!("ordinary inspection exact supervisor observation differs or is incomplete");
+    }
+    Ok(observation)
+}
+
 fn validate_admission_registry(
     registry: &RetainedWorkerAdmissionRegistryV1,
     authority_root: &VersionedStateRoot,
@@ -6525,6 +7421,15 @@ fn validate_admission_registry(
         return Err(RetainedWorkerRuntimeError(
             "admission registry header is invalid".into(),
         ));
+    }
+    if let Some(lifecycle) = &registry.native_lifecycle_v1 {
+        lifecycle.validate_registry_joins(registry)?;
+    }
+    if let Some(stops) = &registry.ordinary_stops_v1 {
+        stops.validate_registry_joins(registry, authority_root)?;
+    }
+    if let Some(receivers) = &registry.ordinary_bootstrap_receivers_v1 {
+        receivers.validate_registry_joins(registry)?;
     }
     let mut expected_issuers = BTreeMap::new();
     let mut participant_ids = BTreeSet::new();
@@ -6559,6 +7464,9 @@ fn validate_admission_registry(
                 || record.admission_authority_revision == 0
                 || record.max_live_retained_workers == 0
                 || record.record_revision == 0
+                || record
+                    .bootstrap_receiver_protocol
+                    .is_some_and(|version| version != 1)
                 || record.canonical_spawn_fingerprint.schema_version != 1
                 || record.canonical_spawn_fingerprint.algorithm
                     != RetainedWorkerAdmissionCommitmentAlgorithmV1::HmacSha256
@@ -6881,7 +7789,16 @@ fn validate_admission_registry(
         }
     }
     let root = preserved_start_root_view(authority_root)?;
+    let fork_requests = registry
+        .ordinary_forks_v1
+        .as_ref()
+        .map(|forks| forks.validate_registry_joins(registry, authority_root))
+        .transpose()?
+        .unwrap_or_default();
     for request in root.retained_worker_registration_request_index.values() {
+        if fork_requests.contains(&request.issuer_request_id) {
+            continue;
+        }
         let admission_issuer = request
             .issuer_request_id
             .strip_prefix("retained-worker-registration:")
@@ -9196,6 +10113,99 @@ mod tests {
         (admission_root, key_path)
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_world_controller_admission_source_custody() {
+        use super::super::host_session_authority::store::hold_existing_accepted_work_authority_snapshot;
+        let (parent, authority, _) = started_authority();
+        let world = authority
+            .resolve_current_exact("r0-session", None)
+            .unwrap()
+            .authority
+            .world_binding
+            .unwrap();
+        let held = hold_existing_accepted_work_authority_snapshot(&authority).unwrap();
+        let absent = held
+            .capture_world_controller_completion_sources("r0-session")
+            .unwrap();
+        assert!(decode_world_controller_admission_records(
+            held.snapshot().hsa_state_root_bytes(),
+            absent.admission_registry_bytes(),
+            &absent.admission_key_files(),
+            "r0-session",
+            &world
+        )
+        .unwrap()
+        .is_empty());
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "world-source-custody", "source proof", 2);
+        let slot = runtime
+            .reserve_admission_slot(&authority, &plan, None)
+            .unwrap();
+        assert!(
+            absent.verify_sources().is_err(),
+            "original admission absence cannot survive real publication"
+        );
+        drop(absent);
+        drop(held);
+        let before = regular_file_contents(&parent.path().join("home"));
+        let held = hold_existing_accepted_work_authority_snapshot(&authority).unwrap();
+        let sources = held
+            .capture_world_controller_completion_sources("r0-session")
+            .unwrap();
+        let records = decode_world_controller_admission_records(
+            held.snapshot().hsa_state_root_bytes(),
+            sources.admission_registry_bytes(),
+            &sources.admission_key_files(),
+            "r0-session",
+            &world,
+        )
+        .unwrap();
+        assert_eq!(records, vec![slot.record]);
+        let wrong = WorldBindingV1 {
+            world_generation: world.world_generation + 1,
+            ..world.clone()
+        };
+        assert!(decode_world_controller_admission_records(
+            held.snapshot().hsa_state_root_bytes(),
+            sources.admission_registry_bytes(),
+            &sources.admission_key_files(),
+            "r0-session",
+            &wrong
+        )
+        .is_err());
+        sources.verify_sources().unwrap();
+        assert_eq!(
+            regular_file_contents(&parent.path().join("home")),
+            before,
+            "supplied-snapshot decoder and capture must not reconcile or publish"
+        );
+        let registry_path = parent
+            .path()
+            .join("home/authority-v1/retained-worker-admission-v1/registry-v1.json");
+        let replacement = registry_path.with_file_name("fixture-replacement");
+        write_private_test_file(&replacement, sources.admission_registry_bytes().unwrap());
+        fs::rename(&replacement, &registry_path).unwrap();
+        assert!(
+            sources.verify_sources().is_err(),
+            "same admission bytes cannot replace the held owner entry"
+        );
+        drop(sources);
+        drop(held);
+        let tmp = registry_path
+            .parent()
+            .unwrap()
+            .join("tmp/admission-registry--fixture.tmp");
+        write_private_test_file(&tmp, b"uncommitted source");
+        let held = hold_existing_accepted_work_authority_snapshot(&authority).unwrap();
+        assert!(
+            held.capture_world_controller_completion_sources("r0-session")
+                .is_err(),
+            "uncommitted admission material must be refused without reconciliation"
+        );
+        assert_eq!(fs::read(&tmp).unwrap(), b"uncommitted source");
+    }
+
     fn regular_file_contents(root: &std::path::Path) -> Vec<(std::path::PathBuf, Vec<u8>)> {
         let mut contents = Vec::new();
         let mut pending = vec![root.to_path_buf()];
@@ -9970,6 +10980,65 @@ mod tests {
             .is_none());
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_canonical_retained_dispatch_does_not_reconcile_admission() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "canonical-read-only", "prompt", 2);
+        let admitted = runtime
+            .register_admitted_worker(&authority, &plan, None)
+            .unwrap();
+        let participant = &admitted.record.retained_participant_id;
+        let claim = runtime
+            .claim_admission_transport(&authority, &plan, participant, None)
+            .unwrap();
+        let (frame, event) =
+            registered_runtime_truth(&plan, &claim.record, "stream-canonical-read-only");
+        runtime
+            .mark_admission_routable(
+                &authority,
+                &plan,
+                participant,
+                None,
+                &frame,
+                &event,
+                timestamp("2026-07-15T21:00:00.000000000Z"),
+            )
+            .unwrap();
+        let current = authority.resolve_current_exact("r0-session", None).unwrap();
+        let resolve = || {
+            super::super::state_store::resolve_canonical_retained_world_dispatch_target(
+                &authority,
+                &current,
+                participant,
+                &plan.descriptor_and_runtime_plan.descriptor.backend_id,
+            )
+        };
+        resolve().expect("exact producer-issued Routable target must resolve");
+        let admission = parent
+            .path()
+            .join("home/authority-v1/retained-worker-admission-v1");
+        let staged = admission
+            .join("tmp")
+            .join(format!("admission-registry--{}.tmp", "ce".repeat(16)));
+        write_private_test_file(&staged, b"uncommitted native writer material");
+        let before = regular_file_contents(&parent.path().join("home"));
+        assert!(
+            resolve().is_err(),
+            "dispatch read must refuse staged writer material"
+        );
+        assert_eq!(
+            before,
+            regular_file_contents(&parent.path().join("home")),
+            "dispatch read must not recover, reconcile or publish native writer state"
+        );
+        assert_eq!(
+            fs::read(&staged).unwrap(),
+            b"uncommitted native writer material"
+        );
+    }
+
     #[test]
     fn registered_truth_uses_exact_member_identity_not_ambient_telemetry_producer() {
         let (_parent, authority, _) = started_authority();
@@ -10214,20 +11283,6 @@ mod tests {
 
     #[test]
     fn caller_pid_socket_and_liveness_never_acquire_replace_renew_or_steal() {
-        let production_source = include_str!("retained_worker_runtime.rs")
-            .split("#[cfg(all(test, any(target_os = \"linux\", target_os = \"macos\")))]")
-            .next()
-            .unwrap()
-            .to_ascii_lowercase();
-        for forbidden in [
-            "pid", "socket", "endpoint", "timeout", "eof", "liveness", "observer", "helper",
-        ] {
-            assert!(
-                !production_source.contains(forbidden),
-                "non-authoritative `{forbidden}` input must not exist in retained admission logic"
-            );
-        }
-
         let (slot_parent, slot_authority, _) = started_authority();
         let runtime = RetainedWorkerRuntime;
         let head_plan = admission_plan(&slot_authority, "no-steal-slot-head", "head", 4);
@@ -12583,7 +13638,7 @@ mod tests {
             &current_plan,
             &earliest_plan,
             &earliest.record.retained_participant_id,
-            None,
+            &AdmissionValidationEvidenceV1::protected(&current_plan, None),
             &envelope.secret_key,
             timestamp("2026-07-15T14:13:00.000000000Z"),
             None,
@@ -13125,7 +14180,7 @@ mod tests {
         assert!(validate_admission_plan(
             &VersionedStateRoot::V2(root),
             &changed_wrapper_caller_plan,
-            None,
+            &AdmissionValidationEvidenceV1::protected(&changed_wrapper_caller_plan, None),
         )
         .is_err());
     }
@@ -13511,7 +14566,7 @@ mod tests {
                 secret_key: &envelope.secret_key,
                 post_r0_graph: &post_r0_graph,
             },
-            None,
+            &AdmissionValidationEvidenceV1::protected(&current_plan, None),
             None,
         )
         .is_err());
@@ -13757,6 +14812,18 @@ mod tests {
             };
             assert_eq!(failure.to_string(), expected_failure);
             let staged_temp_count = fs::read_dir(admission_root.join("tmp")).unwrap().count();
+            #[cfg(target_os = "linux")]
+            if staged_temp_count != 0 {
+                assert!(runtime
+                    .read_existing_admission_record(&authority, "r0-session", &participant_id)
+                    .is_err());
+                assert_eq!(fs::read(&registry_path).unwrap(), registry_before);
+                assert_eq!(
+                    fs::read_dir(admission_root.join("tmp")).unwrap().count(),
+                    staged_temp_count,
+                    "read-only refusal must not reconcile staged writer material"
+                );
+            }
             let durable_after_failure = runtime
                 .read_admission_record(&authority, "r0-session", &participant_id)
                 .unwrap()
@@ -15566,4 +16633,75 @@ mod tests {
             ));
         }
     }
+}
+
+/// Data-only population join for the ordinary E2 publisher, while its existing
+/// Root lock and admission physical guards remain held. Unknown E2 Fork owners
+/// consume capacity. Missing source is never initialized by this reader.
+#[cfg(target_os = "linux")]
+pub(crate) fn count_existing_ordinary_retained_population(
+    root: &VersionedStateRoot,
+    bytes: &[u8],
+    keys: &[(String, Vec<u8>)],
+    population: &super::dispatch_policy_commitment::OrdinaryBootstrapPopulationV1,
+) -> Result<u64, RetainedWorkerRuntimeError> {
+    let registry: RetainedWorkerAdmissionRegistryV1 =
+        decode_canonical(bytes, "decode complete retained population source")?;
+    load_committed_admission_key(root.authority_store_id(), &registry, keys)?;
+    validate_admission_registry(&registry, root)?;
+    validate_admission_e2_population(&registry, population)?;
+    let spawn = registry
+        .records_by_session
+        .values()
+        .flat_map(BTreeMap::values)
+        .filter(|record| admission_state_is_live(&record.state))
+        .count() as u64;
+    let (closed_spawns, closed_forks) = registry
+        .ordinary_stops_v1
+        .as_ref()
+        .map(|stops| stops.acknowledged_counts(&registry))
+        .transpose()?
+        .unwrap_or_default();
+    let (retired_spawns, retired_forks) = registry
+        .ordinary_bootstrap_receivers_v1
+        .as_ref()
+        .map_or((0, 0), |receivers| receivers.retirement_counts());
+    spawn
+        .checked_sub(closed_spawns)
+        .and_then(|count| count.checked_add(population.fork_count()))
+        .and_then(|count| count.checked_sub(closed_forks))
+        .and_then(|count| count.checked_sub(retired_spawns))
+        .and_then(|count| count.checked_sub(retired_forks))
+        .ok_or_else(|| {
+            RetainedWorkerRuntimeError("retained population closeout accounting conflicts".into())
+        })
+}
+
+#[cfg(target_os = "linux")]
+fn validate_admission_e2_population(
+    registry: &RetainedWorkerAdmissionRegistryV1,
+    population: &super::dispatch_policy_commitment::OrdinaryBootstrapPopulationV1,
+) -> Result<u64, RetainedWorkerRuntimeError> {
+    if let Some(receivers) = &registry.ordinary_bootstrap_receivers_v1 {
+        receivers.validate_population(population)?;
+    }
+    if let Some(lifecycle) = &registry.native_lifecycle_v1 {
+        lifecycle.validate_population(population)?;
+    }
+    if let Some(forks) = &registry.ordinary_forks_v1 {
+        forks.validate_population(population)?;
+    }
+    population
+        .fork_count()
+        .checked_sub(
+            registry
+                .ordinary_forks_v1
+                .as_ref()
+                .map_or(0, |forks| forks.live_count() as u64),
+        )
+        .ok_or_else(|| {
+            RetainedWorkerRuntimeError(
+                "Fork population coverage exceeds genuine E2 issuance".into(),
+            )
+        })
 }

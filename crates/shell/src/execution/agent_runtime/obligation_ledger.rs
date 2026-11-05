@@ -1,3 +1,8 @@
+#[cfg(target_os = "linux")]
+pub(crate) mod direct_host_inbox;
+#[cfg(target_os = "linux")]
+pub(crate) mod world_bound_controller;
+
 use anyhow::{Context as _, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -2294,7 +2299,8 @@ pub(crate) fn reconcile_retained_event_obligations(
         next_state.validate()?;
 
         if state_changed || !materialized_events.is_empty() || !projected_obligations.is_empty() {
-            match store.apply_obligation_ledger_materialization_plan(
+            match store.apply_canonical_obligation_ledger_materialization_plan(
+                receipt_registry,
                 &ObligationLedgerMaterializationPlanV1 {
                     expected_revision_cursor: current_cursor,
                     expected_state: current_state,
@@ -2572,7 +2578,7 @@ fn validate_retained_acceptance_and_claim(
     Ok(())
 }
 
-fn validate_state_matches_acceptance(
+pub(super) fn validate_state_matches_acceptance(
     state: &ObligationLedgerSessionStateV1,
     acceptance: &WorldWorkAcceptanceRecordV1,
 ) -> Result<()> {

@@ -64,6 +64,8 @@ fn minimal_policy_snapshot() -> PolicySnapshotV3 {
 
 fn gateway_request(cwd: &Path) -> GatewayLifecycleRequestV1 {
     GatewayLifecycleRequestV1 {
+        schema_version: 1,
+        ordinary_selection: None,
         profile: None,
         cwd: Some(cwd.display().to_string()),
         env: None,

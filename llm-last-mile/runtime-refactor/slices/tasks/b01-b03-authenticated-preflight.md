@@ -409,6 +409,17 @@ unauthorized callers receive no target existence, private path, identity or conf
 
 ## Current-read schema and stable cut
 
+The bounded TASK22 current-actor component is a distinct private increment: explicit
+native owner requests, independent current read/publication decisions under existing
+policy precedence, an immutable separately versioned first Workspace association,
+actual service backend custody, and a mandatory nonreconciling HSA observation. Native
+before/after checks release Workspace locks before IPC; the service joins its own local
+owner/backend/HSA observations. Its nonsecret actor projection is not the complete
+`EligibleObservation` or the all-invalidators monotonic/ABA cut specified below. Strict
+identity-only owner-v1 bytes and serialized execution policies remain unchanged; no
+real permission is activated by this facility. Full PF/init/read-cut/later-send and
+installed qualification obligations remain open.
+
 The proposed Workspace adapter returns an opaque owner-qualified `WorkspaceReadCutV1` containing
 root/store incarnation, config/policy source revisions and protected content commitments, genuine
 Workspace/association revisions, HSA snapshot identity and backend custody incarnation/revision.
@@ -679,3 +690,26 @@ The known baseline HSA inventory failure remains failed and unrerun; broader wor
 platform and installed checks remain unproved. Broader settled/successor/fork/Stop support,
 production caller adoption, full read cut and P1/PF completion remain pending. No commit or
 integration is selected by this acceptance.
+
+### R09–R10 private source implementation (2026-11-01)
+
+The Linux candidate now supplies native `workspace open`, exact approved-absent
+initialization, and distinct `/v1/workspace/preflight` composition. The existing R08
+current-actor wire remains separate. Local settings/component loading uses the independent
+default-deny `workspace_authority.workspace_load` policy projection. Exact actor read,
+initialization and association publication retain separate decisions under the existing
+precedence. An initialization offer also binds its actual native carrier and held-home
+physical identity; it cannot cross native contexts or attest Root-installed authority.
+Global/Workspace settings owner records live
+beside their sources, outside HSA; immutable identity/first-association V1 records are
+preserved. Per-session selected-World association publication has its own incarnation
+and monotonic revision, including explicit active-state changes. Current reads do not
+publish, repair, execute, reserve or send.
+
+The source proof target `consumer_admission_preflight_linux` and its designated
+`test_real_workspace_open_init_and_existing_world_no_send` launcher are present. Its
+protected profile binds genuine owner-published state and the actual native CLI/root
+UDS route, separately approved initialization, measured effects and owner invalidators.
+Missing profile/state/IPC fails. Private namespace source proof does not discharge
+R17 installed/kernel qualification, R15 integration or later full-send fences. Existing
+native WorldFork and trailing-retained Stop producer limitations remain explicit.

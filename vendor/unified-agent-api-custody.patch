@@ -78,7 +78,7 @@
 +            drop(tx); // Stream closes promptly; terminal completion still waits for custody.
 +            if let Some(publisher) = &publisher { publisher.request_disposal(); }
 +            let settlement = settle_attempt(custody.as_ref()).await;
-+            if let Some(publisher) = publisher { publisher.finish(&settlement); }
++            if let Some(publisher) = publisher { finish_attempt_settlement(publisher, &settlement, custody.as_ref()); }
              let _ = completion_tx.send(Err(cancelled_completion_error()));
          }
 -        spawn_outcome = &mut spawn => {
@@ -101,7 +101,7 @@
 +                    let settlement = settle_attempt(custody.as_ref()).await;
 +                    let message = if settlement.is_err() { "backend process settlement failed".to_string() }
 +                        else { adapter.redact_error(BackendHarnessErrorPhase::Spawn, &err) };
-+                    if let Some(publisher) = publisher { publisher.finish(&settlement); }
++                    if let Some(publisher) = publisher { finish_attempt_settlement(publisher, &settlement, custody.as_ref()); }
 +                    surface_control_startup_failure(agent_kind, message, cancel_signal,
 +                        request_termination, tx, completion_tx).await;
                      return;
@@ -137,7 +137,7 @@
          }
      }
  }
-@@ -384,38 +376,66 @@
+@@ -384,37 +376,83 @@
  #[allow(dead_code)]
  async fn send_completion_with_cancel<A: BackendHarnessAdapter>(
      adapter: Arc<A>,
@@ -196,7 +196,6 @@
 -
 -            let _ = completion_tx.send(completion_outcome);
 -        }
--    }
 +            if let Some(custody) = &custody { (custody.request_termination)(); }
 +            (true, completion.await)
 +        }
@@ -207,7 +206,7 @@
 +    }
 +    let settlement = settle_attempt(custody.as_ref()).await;
 +    if let Some(publisher) = publisher {
-+        publisher.finish(&settlement);
++        finish_attempt_settlement(publisher, &settlement, custody.as_ref());
 +    }
 +    // Cancellation still selects its exact normative value; separate acknowledgment retains
 +    // cleanup failure. A successful non-cancel completion cannot hide that failure.
@@ -225,14 +224,34 @@
 +        .map(crate::bounds::enforce_completion_bounds)
 +    };
 +    let _ = completion_tx.send(outcome);
++}
++
++fn finish_attempt_settlement(
++    publisher: SettlementPublisher,
++    result: &Result<(), AgentWrapperError>,
++    custody: Option<&BackendAttemptCustody>,
++) {
++    let closed_before_any_spawn = custody
++        .and_then(|custody| custody.observe_closed_before_any_spawn.as_ref())
++        .map(|observe| observe());
++    match custody.and_then(|custody| custody.observe_processes.as_ref()) {
++        Some(observe) => publisher.finish_with_process_observations(
++            result,
++            Some(observe()),
++            closed_before_any_spawn,
++        ),
++        None => publisher.finish(result),
+     }
  }
  
- #[allow(dead_code)]
-@@ -426,16 +446,33 @@
+@@ -426,16 +464,37 @@
      request_termination: Option<Arc<dyn Fn() + Send + Sync + 'static>>,
  ) -> Result<AgentWrapperRunControl, AgentWrapperError> {
      let normalized = normalize_request(adapter.as_ref(), &defaults, request)?;
 +    let custody = adapter.attempt_custody(&normalized);
++    let supports_process_observation = custody
++        .as_ref()
++        .is_some_and(|custody| custody.observe_processes.is_some());
 +    let observation = custody.as_ref().map(|_| SettlementObservation::default());
 +    let publisher = observation.as_ref().map(SettlementObservation::publisher);
      let agent_kind = normalized.agent_kind.clone();
@@ -256,17 +275,18 @@
 +        }
 +    };
 +    let cancel = match observation {
-+        Some(observation) => AgentWrapperCancelHandle::new_with_settlement(
++        Some(observation) => AgentWrapperCancelHandle::new_with_settlement_and_process_observation(
 +            signal_cancel,
 +            observation.factory(),
 +            observation.disposal_factory(),
++            supports_process_observation.then(|| observation.process_factory()),
 +        ),
 +        None => AgentWrapperCancelHandle::new(signal_cancel),
 +    };
  
      tokio::spawn(drive_control_backend_startup(
          adapter,
-@@ -443,6 +480,8 @@
+@@ -443,6 +502,8 @@
          agent_kind,
          cancel_signal,
          request_termination,
@@ -285,7 +305,7 @@
 +mod settlement_custody;
 --- a/unified-agent-api/src/backend_harness/runtime/tests/settlement_custody.rs
 +++ b/unified-agent-api/src/backend_harness/runtime/tests/settlement_custody.rs
-@@ -0,0 +1,342 @@
+@@ -0,0 +1,344 @@
 +use super::super::super::settlement::{BackendAttemptCustody, SettlementObservation};
 +use super::*;
 +use std::sync::Arc;
@@ -322,6 +342,8 @@
 +        let release = self.release.clone();
 +        let fail = self.fail_settlement;
 +        Some(BackendAttemptCustody {
++            observe_closed_before_any_spawn: None,
++            observe_processes: None,
 +            request_termination: Arc::new(|| {}),
 +            settle: Arc::new(move || {
 +                let settling = settling.clone();
@@ -630,9 +652,13 @@
 +}
 --- a/unified-agent-api/src/backend_harness/settlement.rs
 +++ b/unified-agent-api/src/backend_harness/settlement.rs
-@@ -0,0 +1,123 @@
+@@ -0,0 +1,182 @@
 +//! Retained acknowledgment for the concrete SDK child owners, independent of cancellation value.
-+use crate::{AgentWrapperError, DynAgentWrapperDisposalRequested, DynAgentWrapperSettlement};
++use crate::{
++    AgentWrapperError, AgentWrapperProcessSettlementObservation,
++    AgentWrapperProcessTerminationObservation, DynAgentWrapperDisposalRequested,
++    DynAgentWrapperProcessSettlement, DynAgentWrapperSettlement,
++};
 +use std::sync::{
 +    atomic::{AtomicBool, Ordering},
 +    Arc, Mutex,
@@ -644,6 +670,10 @@
 +pub(crate) struct BackendAttemptCustody {
 +    pub(crate) request_termination: Arc<dyn Fn() + Send + Sync>,
 +    pub(crate) settle: SettlementFactory,
++    // Temporary driver-owned getter. Never captured by the retained public handle.
++    pub(crate) observe_processes:
++        Option<Arc<dyn Fn() -> Vec<AgentWrapperProcessTerminationObservation> + Send + Sync>>,
++    pub(crate) observe_closed_before_any_spawn: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
 +}
 +
 +#[derive(Clone, Default)]
@@ -652,10 +682,16 @@
 +}
 +#[derive(Default)]
 +struct ObservationInner {
-+    result: Mutex<Option<Result<(), String>>>,
++    result: Mutex<Option<PublishedSettlement>>,
 +    changed: Notify,
 +    disposal_requested: AtomicBool,
 +    disposal_changed: Notify,
++}
++#[derive(Clone)]
++struct PublishedSettlement {
++    result: Result<(), String>,
++    observations: Option<Vec<AgentWrapperProcessTerminationObservation>>,
++    closed_before_any_spawn: Option<bool>,
 +}
 +impl SettlementObservation {
 +    pub(crate) fn request_disposal(&self) {
@@ -689,28 +725,61 @@
 +            Box::pin(async move { observation.wait().await })
 +        })
 +    }
++    pub(crate) fn process_factory(
++        &self,
++    ) -> Arc<dyn Fn() -> DynAgentWrapperProcessSettlement + Send + Sync> {
++        let observation = self.clone();
++        Arc::new(move || {
++            let observation = observation.clone();
++            Box::pin(async move {
++                let published = observation.wait_published().await;
++                AgentWrapperProcessSettlementObservation {
++                    acknowledged: published.result.is_ok(),
++                    observations: published.observations,
++                    closed_before_any_spawn: published.closed_before_any_spawn,
++                }
++            })
++        })
++    }
 +    pub(crate) fn publisher(&self) -> SettlementPublisher {
 +        SettlementPublisher(Some(self.clone()))
 +    }
-+    fn publish(&self, result: Result<(), String>) {
++    fn publish(
++        &self,
++        result: Result<(), String>,
++        observations: Option<Vec<AgentWrapperProcessTerminationObservation>>,
++        closed_before_any_spawn: Option<bool>,
++    ) {
 +        let mut slot = self.inner.result.lock().unwrap_or_else(|e| e.into_inner());
 +        if slot.is_none() {
-+            *slot = Some(result);
++            *slot = Some(PublishedSettlement {
++                result,
++                observations,
++                closed_before_any_spawn,
++            });
 +        }
 +        drop(slot);
 +        self.inner.changed.notify_waiters();
 +    }
 +    async fn wait(&self) -> Result<(), AgentWrapperError> {
++        self.wait_published()
++            .await
++            .result
++            .map_err(|message| AgentWrapperError::Backend { message })
++    }
++    async fn wait_published(&self) -> PublishedSettlement {
 +        loop {
 +            let changed = self.inner.changed.notified();
++            tokio::pin!(changed);
++            changed.as_mut().enable();
 +            if let Some(result) = self
 +                .inner
 +                .result
 +                .lock()
-+                .unwrap_or_else(|e| e.into_inner())
++                .unwrap_or_else(|error| error.into_inner())
 +                .clone()
 +            {
-+                return result.map_err(|message| AgentWrapperError::Backend { message });
++                return result;
 +            }
 +            changed.await;
 +        }
@@ -724,13 +793,23 @@
 +        }
 +    }
 +
-+    pub(crate) fn finish(mut self, result: &Result<(), AgentWrapperError>) {
++    pub(crate) fn finish(self, result: &Result<(), AgentWrapperError>) {
++        self.finish_with_process_observations(result, None, None)
++    }
++    pub(crate) fn finish_with_process_observations(
++        mut self,
++        result: &Result<(), AgentWrapperError>,
++        observations: Option<Vec<AgentWrapperProcessTerminationObservation>>,
++        closed_before_any_spawn: Option<bool>,
++    ) {
 +        if let Some(observation) = self.0.take() {
 +            observation.publish(
 +                result
 +                    .as_ref()
 +                    .map(|_| ())
 +                    .map_err(|_| "backend process settlement failed".to_string()),
++                observations,
++                closed_before_any_spawn,
 +            );
 +        }
 +    }
@@ -739,9 +818,11 @@
 +    fn drop(&mut self) {
 +        if let Some(observation) = self.0.take() {
 +            observation.request_disposal();
-+            observation.publish(Err(
-+                "backend settlement owner ended without acknowledgment".to_string()
-+            ));
++            observation.publish(
++                Err("backend settlement owner ended without acknowledgment".to_string()),
++                None,
++                None,
++            );
 +        }
 +    }
 +}
@@ -772,7 +853,7 @@
          config,
          run_start_cwd,
          termination,
-@@ -222,6 +224,28 @@
+@@ -222,6 +224,44 @@
      type BackendEvent = ClaudeBackendEvent;
      type BackendCompletion = ClaudeBackendCompletion;
      type BackendError = ClaudeBackendError;
@@ -783,8 +864,24 @@
 +    ) -> Option<crate::backend_harness::BackendAttemptCustody> {
 +        let cancel = self.custody.clone();
 +        let settle = self.custody.clone();
++        let observed = self.custody.clone();
++        let admission_observed = self.custody.clone();
 +        Some(crate::backend_harness::BackendAttemptCustody {
++            observe_closed_before_any_spawn: Some(Arc::new(move || {
++                admission_observed.observed_closed_before_any_spawn()
++            })),
 +            request_termination: Arc::new(move || cancel.request_termination()),
++            observe_processes: Some(Arc::new(move || {
++                observed
++                    .observed_process_terminations()
++                    .into_iter()
++                    .map(|value| crate::AgentWrapperProcessTerminationObservation {
++                        process_id: value.process_id,
++                        status: value.status,
++                        recovery_status: value.recovery_status,
++                    })
++                    .collect()
++            })),
 +            settle: Arc::new(move || {
 +                let settle = settle.clone();
 +                Box::pin(async move {
@@ -801,7 +898,7 @@
  
      fn spawn(
          &self,
-@@ -242,6 +266,7 @@
+@@ -242,6 +282,7 @@
          >,
      > {
          let config = self.config.clone();
@@ -809,7 +906,7 @@
          let termination = self.termination.clone();
          let allow_flag_preflight = Arc::clone(&self.allow_flag_preflight);
          let NormalizedRequest {
-@@ -290,7 +315,7 @@
+@@ -290,7 +331,7 @@
              if external_sandbox {
                  allow_dangerously_skip_permissions =
                      match preflight_allow_flag_support(allow_flag_preflight.as_ref(), || {
@@ -818,7 +915,7 @@
                      })
                      .await
                      {
-@@ -340,7 +365,10 @@
+@@ -340,7 +381,10 @@
                  }
              }
  
@@ -848,16 +945,39 @@
          config,
          run_start_cwd,
          termination,
-@@ -230,7 +232,7 @@
+@@ -224,21 +226,25 @@
+         run_start_cwd.as_deref(),
+     )
+     .ok_or(super::CodexBackendError::WorkingDirectoryUnresolved)?;
+-    builder = builder.working_dir(working_dir);
++    builder = builder.working_dir(working_dir.clone());
+ 
+     let has_add_dirs = !add_dirs.is_empty();
      if has_add_dirs {
          let probe_client = builder.clone().build();
          let capabilities = probe_client
 -            .probe_capabilities_with_env_overrides(&env)
-+            .probe_capabilities_with_env_overrides_custody(&env, &custody)
++            .probe_capabilities_with_env_overrides_for_current_dir_with_custody(
++                &env,
++                &working_dir,
++                Some(&custody),
++            )
              .await;
          if !capabilities.guard_add_dir().is_supported() {
              return Err(super::CodexBackendError::AddDirsRejectedByRuntime);
-@@ -254,7 +256,7 @@
+         }
+-        builder = builder.capability_feature_hints(codex::CodexFeatureFlags {
+-            supports_add_dir: true,
+-            ..Default::default()
+-        });
++        // Streaming uses this same builder, cwd, environment and custody. Retain
++        // this attempt's actual probe result rather than launching a second pass.
++        // Native admission and executable custody remain independent checks.
++        builder = builder.capability_snapshot(capabilities);
+     }
+ 
+     // Codex crate treats `Duration::ZERO` as “no timeout”.
+@@ -254,7 +260,7 @@
      let handle = match resume {
          None => {
              client
@@ -866,7 +986,7 @@
                      ExecStreamRequest {
                          prompt,
                          ephemeral: false,
-@@ -266,22 +268,25 @@
+@@ -266,22 +272,25 @@
                          json_event_log: None,
                      },
                      &env,
@@ -1490,7 +1610,7 @@
          CodexBackendError::Timeout { timeout: _timeout } => PINNED_TIMEOUT.to_string(),
          CodexBackendError::AddDirsRejectedByRuntime => {
              super::PINNED_ADD_DIRS_RUNTIME_REJECTION.to_string()
-@@ -319,6 +340,46 @@
+@@ -319,6 +340,78 @@
      type BackendCompletion = CodexBackendCompletion;
      type BackendError = CodexBackendError;
  
@@ -1501,8 +1621,24 @@
 +        if req.policy.fork.is_some() {
 +            let cancel = self.mcp_custody.clone();
 +            let settle = self.mcp_custody.clone();
++            let observed = self.mcp_custody.clone();
++            let admission_observed = self.mcp_custody.clone();
 +            return Some(crate::backend_harness::BackendAttemptCustody {
++                observe_closed_before_any_spawn: Some(Arc::new(move || {
++                    admission_observed.observed_closed_before_any_spawn()
++                })),
 +                request_termination: Arc::new(move || cancel.request_termination()),
++                observe_processes: Some(Arc::new(move || {
++                    observed
++                        .observed_process_terminations()
++                        .into_iter()
++                        .map(|value| crate::AgentWrapperProcessTerminationObservation {
++                            process_id: value.process_id,
++                            status: value.status,
++                            recovery_status: value.recovery_status,
++                        })
++                        .collect()
++                })),
 +                settle: Arc::new(move || {
 +                    let settle = settle.clone();
 +                    Box::pin(async move {
@@ -1518,8 +1654,24 @@
 +        }
 +        let cancel = self.custody.clone();
 +        let settle = self.custody.clone();
++        let observed = self.custody.clone();
++        let admission_observed = self.custody.clone();
 +        Some(crate::backend_harness::BackendAttemptCustody {
++            observe_closed_before_any_spawn: Some(Arc::new(move || {
++                admission_observed.observed_closed_before_any_spawn()
++            })),
 +            request_termination: Arc::new(move || cancel.request_termination()),
++            observe_processes: Some(Arc::new(move || {
++                observed
++                    .observed_process_terminations()
++                    .into_iter()
++                    .map(|value| crate::AgentWrapperProcessTerminationObservation {
++                        process_id: value.process_id,
++                        status: value.status,
++                        recovery_status: value.recovery_status,
++                    })
++                    .collect()
++            })),
 +            settle: Arc::new(move || {
 +                let settle = settle.clone();
 +                Box::pin(async move {
@@ -1537,7 +1689,7 @@
      fn spawn(
          &self,
          req: NormalizedRequest<Self::Policy>,
-@@ -338,6 +399,8 @@
+@@ -338,6 +431,8 @@
          >,
      > {
          let config = self.config.clone();
@@ -1546,7 +1698,7 @@
          let run_start_cwd = self.run_start_cwd.clone();
          let termination = self.termination.clone();
          let handle_state = Arc::clone(&self.handle_state);
-@@ -359,6 +422,7 @@
+@@ -359,6 +454,7 @@
          Box::pin(async move {
              let spawned = match if let Some(selector) = fork {
                  super::fork::spawn_fork_v1_flow(super::fork::ForkFlowRequest {
@@ -1554,7 +1706,7 @@
                      selector,
                      prompt,
                      working_dir,
-@@ -376,6 +440,7 @@
+@@ -376,6 +472,7 @@
                  .await
              } else {
                  super::exec::spawn_exec_or_resume_flow(super::exec::ExecFlowRequest {
@@ -1564,7 +1716,7 @@
                      termination,
 --- a/unified-agent-api/src/cancel_settlement.rs
 +++ b/unified-agent-api/src/cancel_settlement.rs
-@@ -0,0 +1,79 @@
+@@ -0,0 +1,140 @@
 +//! Additive observation on the existing cancellation handle; no runtime dependency when disabled.
 +use crate::{AgentWrapperCancelHandle, AgentWrapperError};
 +use std::{
@@ -1578,6 +1730,34 @@
 +pub type DynAgentWrapperSettlement =
 +    Pin<Box<dyn Future<Output = Result<(), AgentWrapperError>> + Send + 'static>>;
 +
++/// Copied actual child wait data. Missing values are explicitly unknown and
++/// supply neither process-absence proof nor authority. Primary and recovery
++/// statuses remain separate.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct AgentWrapperProcessTerminationObservation {
++    pub process_id: Option<u32>,
++    pub status: Option<std::process::ExitStatus>,
++    pub recovery_status: Option<std::process::ExitStatus>,
++}
++
++/// The existing unit settlement outcome plus its copied actual wait data.
++/// `None` observations means the owner did not publish the snapshot. An empty
++/// list is not proof that no process ever existed. Consumers still need exact
++/// run/source custody and their independent terminal/cleanup checks.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct AgentWrapperProcessSettlementObservation {
++    pub acknowledged: bool,
++    pub observations: Option<Vec<AgentWrapperProcessTerminationObservation>>,
++    /// Positive copied admission closeout before any spawn attempt. `None` is
++    /// unsupported/missing; `Some(false)` does not prove a child existed. Even
++    /// `Some(true)` needs checked settlement and exact enclosing custody.
++    pub closed_before_any_spawn: Option<bool>,
++}
++
++/// Observation only: polling does not cancel, seal admission or launch.
++pub type DynAgentWrapperProcessSettlement =
++    Pin<Box<dyn Future<Output = AgentWrapperProcessSettlementObservation> + Send + 'static>>;
++
 +/// Nonterminal request to revoke an enclosing per-run route. Resolving this
 +/// observation does not acknowledge child/stdio settlement or report an outcome.
 +pub type DynAgentWrapperDisposalRequested = Pin<Box<dyn Future<Output = ()> + Send + 'static>>;
@@ -1587,6 +1767,8 @@
 +    pub(super) cancel: Box<dyn Fn() + Send + Sync + 'static>,
 +    pub(super) settlement: Option<Arc<dyn Fn() -> DynAgentWrapperSettlement + Send + Sync>>,
 +    pub(super) disposal: Option<Arc<dyn Fn() -> DynAgentWrapperDisposalRequested + Send + Sync>>,
++    pub(super) process_settlement:
++        Option<Arc<dyn Fn() -> DynAgentWrapperProcessSettlement + Send + Sync>>,
 +}
 +
 +impl AgentWrapperCancelHandle {
@@ -1596,14 +1778,45 @@
 +        settlement: Arc<dyn Fn() -> DynAgentWrapperSettlement + Send + Sync>,
 +        disposal: Arc<dyn Fn() -> DynAgentWrapperDisposalRequested + Send + Sync>,
 +    ) -> Self {
++        Self::new_with_settlement_and_process_observation(cancel, settlement, disposal, None)
++    }
++
++    pub(crate) fn new_with_settlement_and_process_observation(
++        cancel: impl Fn() + Send + Sync + 'static,
++        settlement: Arc<dyn Fn() -> DynAgentWrapperSettlement + Send + Sync>,
++        disposal: Arc<dyn Fn() -> DynAgentWrapperDisposalRequested + Send + Sync>,
++        process_settlement: Option<Arc<dyn Fn() -> DynAgentWrapperProcessSettlement + Send + Sync>>,
++    ) -> Self {
 +        Self {
 +            inner: Arc::new(AgentWrapperCancelInner {
 +                called: AtomicBool::new(false),
 +                cancel: Box::new(cancel),
 +                settlement: Some(settlement),
 +                disposal: Some(disposal),
++                process_settlement,
 +            }),
 +        }
++    }
++
++    /// Observe the copied actual child wait results after the existing backend
++    /// settlement publisher finishes. This future retains data/watch state only,
++    /// not native custody or spawn-admission callbacks. Unsupported observation
++    /// is `None`; failed/missing publication remains explicit in the result.
++    /// The raw completion and `settlement()` contract are unchanged.
++    /// ```no_run
++    /// # async fn inspect(cancel: &agent_api::AgentWrapperCancelHandle) {
++    /// if let Some(observation) = cancel.process_settlement() {
++    ///     let actual_waits = observation.await;
++    ///     // Check settlement(), exact run custody and the enclosing cleanup independently.
++    ///     let _ = actual_waits;
++    /// }
++    /// # }
++    /// ```
++    pub fn process_settlement(&self) -> Option<DynAgentWrapperProcessSettlement> {
++        self.inner
++            .process_settlement
++            .as_ref()
++            .map(|factory| factory())
 +    }
 +
 +    /// Returns a retained checked child/stdio settlement observation when supported by this run.
@@ -1646,17 +1859,18 @@
 +}
 --- a/unified-agent-api/src/lib.rs
 +++ b/unified-agent-api/src/lib.rs
-@@ -12,6 +12,9 @@
+@@ -12,6 +12,10 @@
  use futures_core::Stream;
  
  mod agent_kind;
 +mod cancel_settlement;
 +use cancel_settlement::AgentWrapperCancelInner;
-+pub use cancel_settlement::{DynAgentWrapperDisposalRequested, DynAgentWrapperSettlement};
++pub use cancel_settlement::{DynAgentWrapperDisposalRequested, DynAgentWrapperSettlement,
++    DynAgentWrapperProcessSettlement, AgentWrapperProcessTerminationObservation, AgentWrapperProcessSettlementObservation};
  mod runtime_support;
  
  use crate::mcp::{
-@@ -146,11 +149,6 @@
+@@ -146,11 +150,6 @@
      }
  }
  
@@ -1668,12 +1882,13 @@
  #[derive(Clone)]
  pub struct AgentWrapperCancelHandle {
      inner: Arc<AgentWrapperCancelInner>,
-@@ -170,6 +168,8 @@
+@@ -170,6 +169,9 @@
              inner: Arc::new(AgentWrapperCancelInner {
                  called: AtomicBool::new(false),
                  cancel: Box::new(cancel),
 +                settlement: None,
 +                disposal: None,
++                process_settlement: None,
              }),
          }
      }
@@ -2350,7 +2565,7 @@
  mod cli;
  mod client_core;
 +mod process_custody;
-+pub use process_custody::{ExecProcessCustody, ExecSettlementError};
++pub use process_custody::{ExecProcessCustody, ExecSettlementError, ProcessTerminationObservation};
  mod commands;
  mod defaults;
  mod error;
@@ -2381,7 +2596,7 @@
              .await
      }
  
-@@ -310,30 +312,55 @@
+@@ -310,30 +312,74 @@
          &self,
          current_dir: &Path,
      ) -> CodexCapabilities {
@@ -2439,7 +2654,26 @@
          .await
 +    }
 +
-+    pub(crate) async fn probe_capabilities_with_env_overrides_for_current_dir_with_custody(
++    /// Probes the executable using the same working directory, environment overrides,
++    /// and process custody as the intended execution. The result describes CLI
++    /// compatibility; it is not execution authority or a held executable identity.
++    /// Callers retain responsibility for settling `custody` after startup failures.
++    ///
++    /// ```no_run
++    /// # async fn example() {
++    /// let client = codex::CodexClient::builder().build();
++    /// let custody = codex::ExecProcessCustody::default();
++    /// let capabilities = client
++    ///     .probe_capabilities_with_env_overrides_for_current_dir_with_custody(
++    ///         &std::collections::BTreeMap::new(),
++    ///         std::path::Path::new("/workspace"),
++    ///         Some(&custody),
++    ///     )
++    ///     .await;
++    /// # let _ = capabilities;
++    /// # }
++    /// ```
++    pub async fn probe_capabilities_with_env_overrides_for_current_dir_with_custody(
 +        &self,
 +        env: &BTreeMap<String, String>,
 +        current_dir: &Path,
@@ -2456,7 +2690,7 @@
      }
  
      async fn probe_capabilities_internal(
-@@ -341,6 +368,7 @@
+@@ -341,6 +387,7 @@
          cache_policy: CapabilityCachePolicy,
          env_overrides: &[(String, String)],
          current_dir: Option<&Path>,
@@ -2464,7 +2698,7 @@
      ) -> CodexCapabilities {
          let cache_key = capability_cache_key_for_current_dir_with_env(
              self.command_env.binary_path(),
-@@ -394,6 +422,7 @@
+@@ -394,6 +441,7 @@
                  fingerprint.clone(),
                  env_overrides,
                  current_dir,
@@ -2472,7 +2706,7 @@
              )
              .await;
  
-@@ -413,6 +442,7 @@
+@@ -413,6 +461,7 @@
          fingerprint: Option<BinaryFingerprint>,
          env_overrides: &[(String, String)],
          current_dir: Option<&Path>,
@@ -2480,7 +2714,7 @@
      ) -> CodexCapabilities {
          let mut plan = CapabilityProbePlan::default();
          let mut features = CodexFeatureFlags::default();
-@@ -420,11 +450,7 @@
+@@ -420,11 +469,7 @@
  
          plan.steps.push(CapabilityProbeStep::VersionFlag);
          match self
@@ -2493,7 +2727,7 @@
              .await
          {
              Ok(output) => {
-@@ -451,10 +477,11 @@
+@@ -451,10 +496,11 @@
  
          plan.steps.push(CapabilityProbeStep::FeaturesListJson);
          match self
@@ -2506,7 +2740,7 @@
              )
              .await
          {
-@@ -489,10 +516,11 @@
+@@ -489,10 +535,11 @@
          if !parsed_features {
              plan.steps.push(CapabilityProbeStep::FeaturesListText);
              match self
@@ -2519,7 +2753,7 @@
                  )
                  .await
              {
-@@ -522,11 +550,7 @@
+@@ -522,11 +569,7 @@
          if version::should_run_help_fallback(&features) {
              plan.steps.push(CapabilityProbeStep::HelpFallback);
              match self
@@ -2646,10 +2880,12 @@
              transport: Arc::new(transport),
 --- a/unified-agent-api-codex/src/mcp/custody.rs
 +++ b/unified-agent-api-codex/src/mcp/custody.rs
-@@ -0,0 +1,420 @@
+@@ -0,0 +1,494 @@
 +//! Actual MCP/app-server child and stdio custody, independent of protocol replies.
++use crate::ProcessTerminationObservation;
 +use std::{
 +    io,
++    process::ExitStatus,
 +    sync::{Arc, Mutex},
 +};
 +use tokio::{
@@ -2685,9 +2921,11 @@
 +#[derive(Debug, Default)]
 +struct State {
 +    sealed: bool,
++    started: bool,
 +    terminate: bool,
 +    active: usize,
 +    failures: u8,
++    terminations: Vec<ProcessTerminationObservation>,
 +}
 +#[derive(Debug, Default)]
 +struct Inner {
@@ -2742,6 +2980,46 @@
 +    pub fn new() -> Self {
 +        Self::default()
 +    }
++    /// Copy actual app-server child wait observations without sealing, waiting,
++    /// cancellation or launch. Check `settle()` separately. Protocol success and
++    /// synthetic completion status do not supply an actual app-server exit.
++    /// ```no_run
++    /// # async fn inspect(custody: &codex::mcp::McpProcessCustody) -> Result<(), Box<dyn std::error::Error>> {
++    /// custody.settle().await?;
++    /// let observations = custody.observed_process_terminations();
++    /// # let _ = observations; Ok(()) }
++    /// ```
++    pub fn observed_process_terminations(&self) -> Vec<ProcessTerminationObservation> {
++        self.inner
++            .state
++            .lock()
++            .unwrap_or_else(|error| error.into_inner())
++            .terminations
++            .clone()
++    }
++
++    /// Observe admission closed before any app-server spawn attempt began.
++    /// Open empty custody and failed spawns return false. This does not seal,
++    /// cancel or wait; check `settle()` and enclosing cleanup separately.
++    /// ```
++    /// let custody = codex::mcp::McpProcessCustody::new();
++    /// assert!(!custody.observed_closed_before_any_spawn());
++    /// custody.request_termination();
++    /// assert!(custody.observed_closed_before_any_spawn());
++    /// ```
++    pub fn observed_closed_before_any_spawn(&self) -> bool {
++        let state = self
++            .inner
++            .state
++            .lock()
++            .unwrap_or_else(|error| error.into_inner());
++        state.sealed
++            && !state.started
++            && state.active == 0
++            && state.failures == 0
++            && state.terminations.is_empty()
++    }
++
 +    /// Seal child admission and request termination. This is not acknowledgment.
 +    pub fn request_termination(&self) {
 +        let mut state = self.inner.state.lock().unwrap_or_else(|e| e.into_inner());
@@ -2796,15 +3074,22 @@
 +                "MCP attempt sealed",
 +            ));
 +        }
++        state.started = true;
 +        state.active += 1;
-+        let owner = ChildOwner {
++        let mut owner = ChildOwner {
 +            custody: self.clone(),
 +            finished: false,
++            process_id: None,
++            status: None,
++            recovery_status: None,
 +        };
 +        let result = command.spawn();
 +        drop(state);
 +        match result {
-+            Ok(child) => Ok((child, owner)),
++            Ok(child) => {
++                owner.process_id = child.id();
++                Ok((child, owner))
++            }
 +            Err(error) => {
 +                owner.finish(0);
 +                Err(error)
@@ -2816,9 +3101,23 @@
 +pub(super) struct ChildOwner {
 +    custody: McpProcessCustody,
 +    finished: bool,
++    process_id: Option<u32>,
++    status: Option<ExitStatus>,
++    recovery_status: Option<ExitStatus>,
 +}
 +impl ChildOwner {
 +    fn finish(mut self, failures: u8) {
++        self.finished = true;
++        self.record(failures);
++    }
++    fn finish_with_observation(
++        mut self,
++        failures: u8,
++        status: Option<ExitStatus>,
++        recovery_status: Option<ExitStatus>,
++    ) {
++        self.status = status;
++        self.recovery_status = recovery_status;
 +        self.finished = true;
 +        self.record(failures);
 +    }
@@ -2829,6 +3128,11 @@
 +            .state
 +            .lock()
 +            .unwrap_or_else(|e| e.into_inner());
++        state.terminations.push(ProcessTerminationObservation {
++            process_id: self.process_id,
++            status: self.status,
++            recovery_status: self.recovery_status,
++        });
 +        state.active -= 1;
 +        state.failures |= failures;
 +        drop(state);
@@ -2992,7 +3296,11 @@
 +            recovery_wait = ?recovery_wait,
 +            pipe_failures = failures & (STDIN_FAILED | STDOUT_FAILED | STDERR_FAILED | OWNER_FAILED),
 +            settlement_failures = failures, "owned app-server child and pipe joins settled");
-+        owner.finish(failures);
++        owner.finish_with_observation(
++            failures,
++            status.as_ref().ok().copied(),
++            recovery_wait.and_then(|(_, status)| status),
++        );
 +    });
 +}
 +
@@ -3769,7 +4077,7 @@
          Ok(Err(_)) => Err(McpError::ChannelClosed),
 --- a/unified-agent-api-codex/src/process_custody.rs
 +++ b/unified-agent-api-codex/src/process_custody.rs
-@@ -0,0 +1,808 @@
+@@ -0,0 +1,901 @@
 +//! Attempt-local ownership of real children and their stdio tasks.
 +use std::{
 +    future::Future,
@@ -3812,6 +4120,16 @@
 +}
 +impl std::error::Error for ExecSettlementError {}
 +
++/// Observed wait data for one actual child owner. Missing PID/status is
++/// explicitly unknown, including failed spawn or abandoned ownership. A
++/// snapshot alone is not checked settlement or permission to execute.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct ProcessTerminationObservation {
++    pub process_id: Option<u32>,
++    pub status: Option<ExitStatus>,
++    pub recovery_status: Option<ExitStatus>,
++}
++
 +#[derive(Debug, Default)]
 +struct State {
 +    sealed: bool,
@@ -3820,6 +4138,7 @@
 +    cancelled: bool,
 +    active: usize,
 +    failures: u8,
++    terminations: Vec<ProcessTerminationObservation>,
 +}
 +#[derive(Debug, Default)]
 +struct Inner {
@@ -3871,6 +4190,48 @@
 +    pub fn new() -> Self {
 +        Self::default()
 +    }
++    /// Copy observed actual child wait results without sealing admission,
++    /// cancelling, waiting or launching. Await and check `settle()` separately
++    /// before treating this list as the settled attempt's observations. Unknown
++    /// primary waits stay unknown even when a recovery wait yields a status.
++    /// ```no_run
++    /// # async fn inspect(custody: &codex::ExecProcessCustody) -> Result<(), Box<dyn std::error::Error>> {
++    /// custody.settle().await?;
++    /// let observations = custody.observed_process_terminations();
++    /// # let _ = observations; Ok(()) }
++    /// ```
++    pub fn observed_process_terminations(&self) -> Vec<ProcessTerminationObservation> {
++        self.inner
++            .state
++            .lock()
++            .unwrap_or_else(|error| error.into_inner())
++            .terminations
++            .clone()
++    }
++
++    /// Observe admission closed before any spawn attempt began. An open empty
++    /// attempt, a failed spawn, or an abandoned admission check returns false.
++    /// This does not seal, cancel or wait; check `settle()` and enclosing cleanup
++    /// separately. It covers only this custody's child admission.
++    /// ```
++    /// let custody = codex::ExecProcessCustody::new();
++    /// assert!(!custody.observed_closed_before_any_spawn());
++    /// custody.request_termination();
++    /// assert!(custody.observed_closed_before_any_spawn());
++    /// ```
++    pub fn observed_closed_before_any_spawn(&self) -> bool {
++        let state = self
++            .inner
++            .state
++            .lock()
++            .unwrap_or_else(|error| error.into_inner());
++        state.sealed
++            && !state.started
++            && state.active == 0
++            && state.failures == 0
++            && state.terminations.is_empty()
++    }
++
 +    /// Creates custody with a fallible check before every actual spawn, including
 +    /// capability/help preflights and executable-busy retries. The callback runs
 +    /// outside the custody lock. Cancellation/sealing is checked again under the
@@ -3931,6 +4292,12 @@
 +            self.ensure_open()?;
 +            let admission = {
 +                let mut state = self.inner.state.lock().unwrap_or_else(|e| e.into_inner());
++                if state.sealed || state.cancelled {
++                    return Err(crate::CodexError::CaptureIo(io::Error::new(
++                        io::ErrorKind::Interrupted,
++                        "process attempt sealed",
++                    )));
++                }
 +                // Freeze callback installation before leaving the lock, even when no
 +                // callback is configured. A concurrent installer cannot be skipped.
 +                state.started = true;
@@ -3986,9 +4353,12 @@
 +        // Register actual child ownership before the syscall, without any intervening await.
 +        state.started = true;
 +        state.active += 1;
-+        let owner = ChildOwner {
++        let mut owner = ChildOwner {
 +            custody: self.clone(),
 +            acknowledged: false,
++            process_id: None,
++            status: None,
++            recovery_status: None,
 +        };
 +        let child = command.spawn().map_err(|source| crate::CodexError::Spawn {
 +            binary: binary.to_path_buf(),
@@ -3996,7 +4366,10 @@
 +        });
 +        drop(state);
 +        match child {
-+            Ok(child) => Ok((child, owner)),
++            Ok(child) => {
++                owner.process_id = child.id();
++                Ok((child, owner))
++            }
 +            Err(error) => {
 +                owner.finish(0);
 +                Err(error)
@@ -4079,14 +4452,20 @@
 +        }
 +        state.started = true;
 +        state.active += 1;
-+        let owner = ChildOwner {
++        let mut owner = ChildOwner {
 +            custody: self.clone(),
 +            acknowledged: false,
++            process_id: None,
++            status: None,
++            recovery_status: None,
 +        };
 +        let child = crate::process::spawn_with_retry(command, binary);
 +        drop(state);
 +        match child {
-+            Ok(child) => Ok((child, owner)),
++            Ok(child) => {
++                owner.process_id = child.id();
++                Ok((child, owner))
++            }
 +            Err(error) => {
 +                owner.finish(0);
 +                Err(error)
@@ -4115,9 +4494,22 @@
 +pub(crate) struct ChildOwner {
 +    custody: ExecProcessCustody,
 +    acknowledged: bool,
++    process_id: Option<u32>,
++    status: Option<ExitStatus>,
++    recovery_status: Option<ExitStatus>,
 +}
 +impl ChildOwner {
 +    fn finish(mut self, failures: u8) {
++        self.complete(failures);
++    }
++    fn finish_with_observation(
++        mut self,
++        failures: u8,
++        status: Option<ExitStatus>,
++        recovery_status: Option<ExitStatus>,
++    ) {
++        self.status = status;
++        self.recovery_status = recovery_status;
 +        self.complete(failures);
 +    }
 +    fn complete(&mut self, failures: u8) {
@@ -4127,6 +4519,11 @@
 +            .state
 +            .lock()
 +            .unwrap_or_else(|e| e.into_inner());
++        state.terminations.push(ProcessTerminationObservation {
++            process_id: self.process_id,
++            status: self.status,
++            recovery_status: self.recovery_status,
++        });
 +        state.failures |= failures;
 +        if failures != 0 {
 +            // A failed owner cannot authorize fallback probes or other later child effects.
@@ -4299,6 +4696,7 @@
 +    let mut stdout_outcome = None;
 +    let mut stderr_outcome = None;
 +    let mut status = None;
++    let mut recovery_status = None;
 +    let mut failures = setup_failures;
 +    let mut stopping = setup_failures != 0;
 +    if stopping {
@@ -4371,7 +4769,10 @@
 +                        failures |= WAIT_FAILED; stopping = true; stop.stop();
 +                        if child.start_kill().is_err() { failures |= KILL_FAILED; }
 +                        // Keep the original failed wait visible even if this cleanup wait succeeds.
-+                        let _cleanup_wait = child.wait().await.map_err(|_| { failures |= WAIT_FAILED; });
++                        match child.wait().await {
++                            Ok(exit) => recovery_status = Some(exit),
++                            Err(_) => failures |= WAIT_FAILED,
++                        }
 +                        Err(error)
 +                    }
 +                };
@@ -4404,7 +4805,7 @@
 +    let stdout = stdout_outcome.expect("stdout owner joined");
 +    let stderr = stderr_outcome.expect("stderr owner joined");
 +    // All awaitable owners have been checked before releasing this registration or any error.
-+    owner.finish(failures);
++    owner.finish_with_observation(failures, status.as_ref().ok().copied(), recovery_status);
 +    if let Some(tx) = ready {
 +        let error = match &stdin {
 +            Err(error) => copy_error(error),
@@ -5164,7 +5565,7 @@
 +}
 --- a/unified-agent-api-codex/tests/terminal_custody.rs
 +++ b/unified-agent-api-codex/tests/terminal_custody.rs
-@@ -0,0 +1,206 @@
+@@ -0,0 +1,538 @@
 +#![cfg(unix)]
 +use codex::{CodexClient, ExecProcessCustody, ExecStreamRequest, ResumeRequest};
 +use futures_util::StreamExt;
@@ -5308,6 +5709,44 @@
 +}
 +
 +#[tokio::test]
++async fn test_closed_before_any_spawn_requires_explicit_admission_closeout() {
++    let dir = tempfile::tempdir().unwrap();
++    let marker = dir.path().join("must-not-run");
++    let env = BTreeMap::from([("READY".to_string(), marker.display().to_string())]);
++    let client = CodexClient::builder()
++        .binary(fixture(dir.path()))
++        .working_dir(dir.path())
++        .build();
++    let custody = ExecProcessCustody::new();
++    assert!(custody.observed_process_terminations().is_empty());
++    assert!(!custody.observed_closed_before_any_spawn());
++    custody.request_termination();
++    assert!(client
++        .stream_exec_with_env_overrides_custody(request("hello".into()), &env, &custody)
++        .await
++        .is_err());
++    custody.settle().await.unwrap();
++    assert!(custody.observed_closed_before_any_spawn());
++    assert!(custody.observed_process_terminations().is_empty());
++    let _ = client
++        .probe_capabilities_with_env_overrides_custody(&env, &custody)
++        .await;
++    assert!(custody.observed_closed_before_any_spawn());
++    assert!(!marker.exists());
++
++    let failed = ExecProcessCustody::new();
++    let missing = CodexClient::builder()
++        .binary(dir.path().join("missing-binary"))
++        .build();
++    assert!(missing
++        .stream_exec_with_env_overrides_custody(request("hello".into()), &env, &failed)
++        .await
++        .is_err());
++    failed.settle().await.unwrap();
++    assert!(!failed.observed_closed_before_any_spawn());
++}
++
++#[tokio::test]
 +async fn test_retained_termination_closes_events_without_completion_poll() {
 +    let dir = tempfile::tempdir().unwrap();
 +    let marker = dir.path().join("exec");
@@ -5370,6 +5809,300 @@
 +            .unwrap()
 +            .unwrap();
 +    }
++}
++
++#[tokio::test]
++async fn test_observed_child_wait_retains_actual_signal_after_startup_drop() {
++    use std::os::unix::process::ExitStatusExt;
++    let dir = tempfile::tempdir().unwrap();
++    let marker = dir.path().join("actual-child-pid");
++    let binary = dir.path().join("physical-wait-codex");
++    std::fs::write(
++        &binary,
++        r#"#!/bin/sh
++printf '%s' "$$" > "$READY"
++exec /bin/sleep 30
++"#,
++    )
++    .unwrap();
++    std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700)).unwrap();
++    let env = BTreeMap::from([("READY".to_string(), marker.display().to_string())]);
++    let client = CodexClient::builder()
++        .binary(binary)
++        .working_dir(dir.path())
++        .quiet(true)
++        .mirror_stdout(false)
++        .build();
++    let custody = ExecProcessCustody::new();
++    assert!(
++        custody.observed_process_terminations().is_empty(),
++        "observation itself must not seal admission or spawn"
++    );
++    let mut startup = Box::pin(client.stream_exec_with_env_overrides_custody(
++        request("x".repeat(4 * 1024 * 1024)),
++        &env,
++        &custody,
++    ));
++    tokio::select! {
++        result = &mut startup => panic!("stdin fixture must block startup: {}", result.is_ok()),
++        _ = admitted(&marker) => {},
++    }
++    let actual_pid = std::fs::read_to_string(&marker)
++        .unwrap()
++        .parse::<u32>()
++        .unwrap();
++    drop(startup);
++    tokio::time::timeout(Duration::from_secs(3), custody.settle())
++        .await
++        .unwrap()
++        .unwrap();
++    let observations = custody.observed_process_terminations();
++    assert_eq!(observations.len(), 1);
++    assert_eq!(observations[0].process_id, Some(actual_pid));
++    assert_eq!(
++        observations[0].status.unwrap().signal(),
++        Some(9),
++        "actual checked start_kill wait, not a requested INT/TERM or synthetic completion status"
++    );
++    assert!(observations[0].recovery_status.is_none());
++    assert!(!custody.observed_closed_before_any_spawn());
++}
++
++#[tokio::test]
++async fn test_mcp_public_startup_drop_records_actual_wait_signal() {
++    use codex::mcp::{ClientInfo, CodexAppServer, McpProcessCustody, StdioServerConfig};
++    use std::{ffi::OsString, os::unix::process::ExitStatusExt};
++    let dir = tempfile::tempdir().unwrap();
++    let marker = dir.path().join("actual-mcp-pid");
++    let binary = dir.path().join("physical-mcp-wait");
++    std::fs::write(
++        &binary,
++        r#"#!/bin/sh
++printf '%s' "$$" > "$READY"
++exec /bin/sleep 30
++"#,
++    )
++    .unwrap();
++    std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700)).unwrap();
++    let config = StdioServerConfig {
++        binary,
++        code_home: Some(dir.path().to_path_buf()),
++        current_dir: Some(dir.path().to_path_buf()),
++        env: vec![(OsString::from("READY"), marker.as_os_str().to_owned())],
++        app_server_analytics_default_enabled: false,
++        mirror_stdio: false,
++        startup_timeout: Duration::from_secs(10),
++    };
++    let custody = McpProcessCustody::new();
++    assert!(custody.observed_process_terminations().is_empty());
++    let mut startup = Box::pin(CodexAppServer::with_capabilities_and_custody(
++        config,
++        ClientInfo {
++            name: "owned-physical-wait-fixture".into(),
++            version: "1".into(),
++        },
++        serde_json::json!({}),
++        custody.clone(),
++    ));
++    tokio::select! {
++        result = &mut startup => panic!("synthetic app-server must wait for initialize: {}", result.is_ok()),
++        _ = admitted(&marker) => {},
++    }
++    let actual_pid = std::fs::read_to_string(&marker)
++        .unwrap()
++        .parse::<u32>()
++        .unwrap();
++    drop(startup);
++    custody.request_termination();
++    tokio::time::timeout(Duration::from_secs(3), custody.settle())
++        .await
++        .unwrap()
++        .unwrap();
++    let observations = custody.observed_process_terminations();
++    assert_eq!(observations.len(), 1);
++    assert_eq!(observations[0].process_id, Some(actual_pid));
++    assert_eq!(
++        observations[0].status.unwrap().signal(),
++        Some(9),
++        "actual MCP child wait is independent from protocol synthetic success"
++    );
++    assert!(observations[0].recovery_status.is_none());
++    assert!(!custody.observed_closed_before_any_spawn());
++}
++
++#[tokio::test]
++async fn test_universal_process_settlement_preserves_cancelled_and_actual_wait() {
++    use agent_api::{
++        backends::codex::{CodexBackend, CodexBackendConfig},
++        AgentWrapperError, AgentWrapperGateway, AgentWrapperKind, AgentWrapperRunRequest,
++    };
++    use std::{os::unix::process::ExitStatusExt, sync::Arc};
++    let dir = tempfile::tempdir().unwrap();
++    let marker = dir.path().join("universal-actual-pid");
++    let binary = dir.path().join("physical-universal-wait");
++    std::fs::write(
++        &binary,
++        r#"#!/bin/sh
++printf '%s' "$$" > "$READY"
++exec /bin/sleep 30
++"#,
++    )
++    .unwrap();
++    std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700)).unwrap();
++    let backend = Arc::new(CodexBackend::new(CodexBackendConfig {
++        binary: Some(binary),
++        codex_home: Some(dir.path().to_path_buf()),
++        default_working_dir: Some(dir.path().to_path_buf()),
++        env: BTreeMap::from([("READY".into(), marker.display().to_string())]),
++        ..Default::default()
++    }));
++    let mut gateway = AgentWrapperGateway::new();
++    gateway.register(backend).unwrap();
++    let kind = AgentWrapperKind::new("codex").unwrap();
++    let control = gateway
++        .run_control(
++            &kind,
++            AgentWrapperRunRequest {
++                prompt: "owned synthetic process wait fixture".into(),
++                ..Default::default()
++            },
++        )
++        .await
++        .unwrap();
++    let mut process_observation = control
++        .cancel
++        .process_settlement()
++        .expect("real Codex custody must support actual wait observation");
++    // Merely polling the observation must not seal or interrupt native startup.
++    assert!(
++        tokio::time::timeout(Duration::from_millis(20), &mut process_observation)
++            .await
++            .is_err()
++    );
++    admitted(&marker).await;
++    let actual_pid = std::fs::read_to_string(&marker)
++        .unwrap()
++        .parse::<u32>()
++        .unwrap();
++    let unit_ack = control.cancel.settlement().unwrap();
++    control.cancel.cancel();
++    // Checked native custody is independent of consumer stream finality. Keep
++    // both observations and drain the universal stream before gated completion.
++    tokio::time::timeout(Duration::from_secs(3), unit_ack)
++        .await
++        .unwrap()
++        .unwrap();
++    let actual = tokio::time::timeout(Duration::from_secs(3), process_observation)
++        .await
++        .unwrap();
++    let mut events = control.handle.events;
++    tokio::time::timeout(Duration::from_secs(3), async {
++        while events.next().await.is_some() {}
++    })
++    .await
++    .unwrap();
++    let raw = tokio::time::timeout(Duration::from_secs(3), control.handle.completion)
++        .await
++        .unwrap();
++    assert!(
++        matches!(raw, Err(AgentWrapperError::Backend { message }) if message == "cancelled"),
++        "physical observation cannot replace normative raw cancellation"
++    );
++    assert!(actual.acknowledged);
++    assert_eq!(actual.closed_before_any_spawn, Some(false));
++    let observations = actual
++        .observations
++        .expect("supported actual wait snapshot absent");
++    assert_eq!(observations.len(), 1);
++    assert_eq!(observations[0].process_id, Some(actual_pid));
++    assert_eq!(observations[0].status.unwrap().signal(), Some(9));
++    assert!(observations[0].recovery_status.is_none());
++}
++
++#[tokio::test(flavor = "current_thread")]
++async fn test_universal_cancel_before_startup_has_positive_admission_closeout() {
++    use agent_api::{
++        backends::codex::{CodexBackend, CodexBackendConfig},
++        AgentWrapperError, AgentWrapperGateway, AgentWrapperKind, AgentWrapperRunRequest,
++    };
++    use std::sync::Arc;
++    let dir = tempfile::tempdir().unwrap();
++    let marker = dir.path().join("must-not-run");
++    let backend = Arc::new(CodexBackend::new(CodexBackendConfig {
++        binary: Some(fixture(dir.path())),
++        codex_home: Some(dir.path().to_path_buf()),
++        default_working_dir: Some(dir.path().to_path_buf()),
++        env: BTreeMap::from([("READY".into(), marker.display().to_string())]),
++        ..Default::default()
++    }));
++    let mut gateway = AgentWrapperGateway::new();
++    gateway.register(backend).unwrap();
++    let control = gateway
++        .run_control(
++            &AgentWrapperKind::new("codex").unwrap(),
++            AgentWrapperRunRequest {
++                prompt: "cancel before startup is polled".into(),
++                ..Default::default()
++            },
++        )
++        .await
++        .unwrap();
++    // This current-thread executor has not polled the spawned startup driver.
++    let process = control.cancel.process_settlement().unwrap();
++    let unit_ack = control.cancel.settlement().unwrap();
++    control.cancel.cancel();
++    tokio::time::timeout(Duration::from_secs(3), unit_ack)
++        .await
++        .unwrap()
++        .unwrap();
++    let observed = tokio::time::timeout(Duration::from_secs(3), process)
++        .await
++        .unwrap();
++    assert!(observed.acknowledged);
++    assert_eq!(observed.closed_before_any_spawn, Some(true));
++    assert_eq!(observed.observations, Some(Vec::new()));
++    let mut events = control.handle.events;
++    tokio::time::timeout(Duration::from_secs(3), async {
++        while events.next().await.is_some() {}
++    })
++    .await
++    .unwrap();
++    assert!(
++        matches!(control.handle.completion.await, Err(AgentWrapperError::Backend { message }) if message == "cancelled")
++    );
++    assert!(!marker.exists());
++}
++
++#[tokio::test]
++async fn test_closed_mcp_admission_refuses_actual_startup() {
++    use codex::mcp::{ClientInfo, CodexAppServer, McpProcessCustody, StdioServerConfig};
++    let dir = tempfile::tempdir().unwrap();
++    let custody = McpProcessCustody::new();
++    assert!(!custody.observed_closed_before_any_spawn());
++    custody.request_termination();
++    let config = StdioServerConfig {
++        binary: dir.path().join("must-not-spawn"),
++        code_home: Some(dir.path().to_path_buf()),
++        current_dir: Some(dir.path().to_path_buf()),
++        env: vec![],
++        app_server_analytics_default_enabled: false,
++        mirror_stdio: false,
++        startup_timeout: Duration::from_secs(1),
++    };
++    assert!(CodexAppServer::with_capabilities_and_custody(
++        config,
++        ClientInfo {
++            name: "closed-admission-fixture".into(),
++            version: "1".into()
++        },
++        serde_json::json!({}),
++        custody.clone()
++    )
++    .await
++    .is_err());
++    custody.settle().await.unwrap();
++    assert!(custody.observed_closed_before_any_spawn());
++    assert!(custody.observed_process_terminations().is_empty());
 +}
 --- a/unified-agent-api-claude-code/src/client/mod.rs
 +++ b/unified-agent-api-claude-code/src/client/mod.rs
@@ -5992,7 +6725,7 @@
  mod home;
  mod process;
 +mod process_custody;
-+pub use process_custody::{ClaudeProcessCustody, ClaudeSettlementError};
++pub use process_custody::{ClaudeProcessCustody, ClaudeSettlementError, ProcessTerminationObservation};
  mod stream_json;
  pub mod wrapper_coverage_manifest;
  
@@ -6129,7 +6862,7 @@
 +}
 --- a/unified-agent-api-claude-code/src/process_custody.rs
 +++ b/unified-agent-api-claude-code/src/process_custody.rs
-@@ -0,0 +1,830 @@
+@@ -0,0 +1,920 @@
 +//! Attempt-local ownership of real children and their stdio tasks.
 +use std::{
 +    future::Future,
@@ -6172,6 +6905,15 @@
 +}
 +impl std::error::Error for ClaudeSettlementError {}
 +
++/// Actual child-owner wait data, independent from logical completion. Missing
++/// values are unknown, not proof of process absence or successful settlement.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct ProcessTerminationObservation {
++    pub process_id: Option<u32>,
++    pub status: Option<ExitStatus>,
++    pub recovery_status: Option<ExitStatus>,
++}
++
 +#[derive(Debug, Default)]
 +struct State {
 +    sealed: bool,
@@ -6180,6 +6922,7 @@
 +    cancelled: bool,
 +    active: usize,
 +    failures: u8,
++    terminations: Vec<ProcessTerminationObservation>,
 +}
 +#[derive(Debug, Default)]
 +struct Inner {
@@ -6231,6 +6974,46 @@
 +    pub fn new() -> Self {
 +        Self::default()
 +    }
++    /// Copy known actual wait results without sealing, cancelling, waiting or
++    /// launching. Check `settle()` separately before treating this as the settled
++    /// attempt's snapshot. A recovery wait does not replace a failed primary wait.
++    /// ```no_run
++    /// # async fn inspect(custody: &claude_code::ClaudeProcessCustody) -> Result<(), Box<dyn std::error::Error>> {
++    /// custody.settle().await?;
++    /// let observations = custody.observed_process_terminations();
++    /// # let _ = observations; Ok(()) }
++    /// ```
++    pub fn observed_process_terminations(&self) -> Vec<ProcessTerminationObservation> {
++        self.inner
++            .state
++            .lock()
++            .unwrap_or_else(|error| error.into_inner())
++            .terminations
++            .clone()
++    }
++
++    /// Observe admission closed before any spawn attempt began. Open empty
++    /// custody and failed/abandoned attempts return false. This does not seal,
++    /// cancel or wait; check `settle()` and enclosing cleanup separately.
++    /// ```
++    /// let custody = claude_code::ClaudeProcessCustody::new();
++    /// assert!(!custody.observed_closed_before_any_spawn());
++    /// custody.request_termination();
++    /// assert!(custody.observed_closed_before_any_spawn());
++    /// ```
++    pub fn observed_closed_before_any_spawn(&self) -> bool {
++        let state = self
++            .inner
++            .state
++            .lock()
++            .unwrap_or_else(|error| error.into_inner());
++        state.sealed
++            && !state.started
++            && state.active == 0
++            && state.failures == 0
++            && state.terminations.is_empty()
++    }
++
 +    /// Creates custody with a fallible check before every actual spawn, including
 +    /// capability/help preflights and executable-busy retries. The callback runs
 +    /// outside the custody lock. Cancellation/sealing is checked again under the
@@ -6291,6 +7074,12 @@
 +            self.ensure_open()?;
 +            let admission = {
 +                let mut state = self.inner.state.lock().unwrap_or_else(|e| e.into_inner());
++                if state.sealed || state.cancelled {
++                    return Err(crate::ClaudeCodeError::StdoutRead(io::Error::new(
++                        io::ErrorKind::Interrupted,
++                        "process attempt sealed",
++                    )));
++                }
 +                // Freeze callback installation before leaving the lock, even when no
 +                // callback is configured. A concurrent installer cannot be skipped.
 +                state.started = true;
@@ -6346,9 +7135,12 @@
 +        // Register actual child ownership before the syscall, without any intervening await.
 +        state.started = true;
 +        state.active += 1;
-+        let owner = ChildOwner {
++        let mut owner = ChildOwner {
 +            custody: self.clone(),
 +            acknowledged: false,
++            process_id: None,
++            status: None,
++            recovery_status: None,
 +        };
 +        let child = command
 +            .spawn()
@@ -6358,7 +7150,10 @@
 +            });
 +        drop(state);
 +        match child {
-+            Ok(child) => Ok((child, owner)),
++            Ok(child) => {
++                owner.process_id = child.id();
++                Ok((child, owner))
++            }
 +            Err(error) => {
 +                owner.finish(0);
 +                Err(error)
@@ -6441,14 +7236,20 @@
 +        }
 +        state.started = true;
 +        state.active += 1;
-+        let owner = ChildOwner {
++        let mut owner = ChildOwner {
 +            custody: self.clone(),
 +            acknowledged: false,
++            process_id: None,
++            status: None,
++            recovery_status: None,
 +        };
 +        let child = crate::process::spawn_with_retry(command, binary);
 +        drop(state);
 +        match child {
-+            Ok(child) => Ok((child, owner)),
++            Ok(child) => {
++                owner.process_id = child.id();
++                Ok((child, owner))
++            }
 +            Err(error) => {
 +                owner.finish(0);
 +                Err(error)
@@ -6477,9 +7278,22 @@
 +pub(crate) struct ChildOwner {
 +    custody: ClaudeProcessCustody,
 +    acknowledged: bool,
++    process_id: Option<u32>,
++    status: Option<ExitStatus>,
++    recovery_status: Option<ExitStatus>,
 +}
 +impl ChildOwner {
 +    fn finish(mut self, failures: u8) {
++        self.complete(failures);
++    }
++    fn finish_with_observation(
++        mut self,
++        failures: u8,
++        status: Option<ExitStatus>,
++        recovery_status: Option<ExitStatus>,
++    ) {
++        self.status = status;
++        self.recovery_status = recovery_status;
 +        self.complete(failures);
 +    }
 +    fn complete(&mut self, failures: u8) {
@@ -6489,6 +7303,11 @@
 +            .state
 +            .lock()
 +            .unwrap_or_else(|e| e.into_inner());
++        state.terminations.push(ProcessTerminationObservation {
++            process_id: self.process_id,
++            status: self.status,
++            recovery_status: self.recovery_status,
++        });
 +        state.failures |= failures;
 +        if failures != 0 {
 +            // A failed owner cannot authorize fallback probes or other later child effects.
@@ -6686,6 +7505,7 @@
 +    let mut stdout_outcome = None;
 +    let mut stderr_outcome = None;
 +    let mut status = None;
++    let mut recovery_status = None;
 +    let mut failures = setup_failures;
 +    let mut stopping = setup_failures != 0;
 +    if stopping {
@@ -6758,7 +7578,10 @@
 +                        failures |= WAIT_FAILED; stopping = true; stop.stop();
 +                        if child.start_kill().is_err() { failures |= KILL_FAILED; }
 +                        // Keep the original failed wait visible even if this cleanup wait succeeds.
-+                        let _cleanup_wait = child.wait().await.map_err(|_| { failures |= WAIT_FAILED; });
++                        match child.wait().await {
++                            Ok(exit) => recovery_status = Some(exit),
++                            Err(_) => failures |= WAIT_FAILED,
++                        }
 +                        Err(error)
 +                    }
 +                };
@@ -6791,7 +7614,7 @@
 +    let stdout = stdout_outcome.expect("stdout owner joined");
 +    let stderr = stderr_outcome.expect("stderr owner joined");
 +    // All awaitable owners have been checked before releasing this registration or any error.
-+    owner.finish(failures);
++    owner.finish_with_observation(failures, status.as_ref().ok().copied(), recovery_status);
 +    if let Some(tx) = ready {
 +        let error = match &stdin {
 +            Err(error) => copy_error(error),
@@ -7602,7 +8425,7 @@
 +}
 --- a/unified-agent-api-claude-code/tests/terminal_custody.rs
 +++ b/unified-agent-api-claude-code/tests/terminal_custody.rs
-@@ -0,0 +1,145 @@
+@@ -0,0 +1,192 @@
 +#![cfg(unix)]
 +use claude_code::{ClaudeClient, ClaudePrintRequest, ClaudeProcessCustody};
 +use std::{
@@ -7642,6 +8465,25 @@
 +        .working_dir(dir)
 +        .env("READY", marker.display().to_string())
 +        .build()
++}
++
++#[tokio::test]
++async fn test_closed_before_any_spawn_is_observation_only() {
++    let dir = tempfile::tempdir().unwrap();
++    let marker = dir.path().join("must-not-run");
++    let client = client(dir.path(), &marker);
++    let custody = ClaudeProcessCustody::new();
++    assert!(custody.observed_process_terminations().is_empty());
++    assert!(!custody.observed_closed_before_any_spawn());
++    custody.request_termination();
++    assert!(client
++        .print_stream_json_control_with_custody(ClaudePrintRequest::new("closed"), &custody)
++        .await
++        .is_err());
++    custody.settle().await.unwrap();
++    assert!(custody.observed_closed_before_any_spawn());
++    assert!(custody.observed_process_terminations().is_empty());
++    assert!(!marker.exists());
 +}
 +
 +#[tokio::test]
@@ -7747,4 +8589,32 @@
 +        .expect("every real stdio owner must acknowledge cleanup")
 +        .expect("checked settlement must succeed");
 +    drop(termination);
++}
++
++#[tokio::test]
++async fn test_claude_observed_child_wait_retains_actual_signal() {
++    use std::os::unix::process::ExitStatusExt;
++    let dir = tempfile::tempdir().unwrap();
++    let marker = dir.path().join("observed-signal");
++    let client = client(dir.path(), &marker);
++    let custody = ClaudeProcessCustody::new();
++    assert!(custody.observed_process_terminations().is_empty());
++    let mut startup = Box::pin(client.print_stream_json_control_with_custody(
++        ClaudePrintRequest::new("stdin-observed-signal").stdin_bytes(vec![b'x'; 4 * 1024 * 1024]),
++        &custody,
++    ));
++    tokio::select! {
++        result = &mut startup => panic!("stdin fixture must block startup: {}", result.is_ok()),
++        _ = admitted(&marker) => {},
++    }
++    drop(startup);
++    tokio::time::timeout(Duration::from_secs(3), custody.settle())
++        .await
++        .unwrap()
++        .unwrap();
++    let observations = custody.observed_process_terminations();
++    assert_eq!(observations.len(), 1);
++    assert!(observations[0].process_id.is_some());
++    assert_eq!(observations[0].status.unwrap().signal(), Some(9));
++    assert!(observations[0].recovery_status.is_none());
 +}

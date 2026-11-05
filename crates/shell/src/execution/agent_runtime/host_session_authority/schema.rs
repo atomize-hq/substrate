@@ -792,6 +792,260 @@ pub(crate) struct PostTurnCompletionHashInputV1 {
     pub(crate) completed_at: TimestampV1,
 }
 
+/// The authenticated native sequence observed by the Resume helper. These
+/// values are evidence to join to HSA state, never an authorization capability.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+pub(crate) enum DirectHostNativeSequenceV1 {
+    Codex {
+        resumed_thread_id: String,
+        started_turn_id: String,
+    },
+    ClaudeCode {
+        initialized_session_id: String,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DirectHostNativeTerminalEvidenceV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) backend_id: String,
+    pub(crate) protocol: String,
+    pub(crate) native_session_id: String,
+    pub(crate) thread_id: String,
+    pub(crate) turn_id: String,
+    pub(crate) sequence: DirectHostNativeSequenceV1,
+    pub(crate) terminal_event_kind: String,
+    pub(crate) raw_event_sha256: String,
+    /// One terminal within this transition run; this is not a world cursor.
+    pub(crate) terminal_ordinal: u64,
+}
+
+/// Exact persisted identities authenticated before direct-host settlement.
+/// Encoding this value alone does not authenticate any of its claims.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DirectHostResumeBindingV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) authority_store_id: String,
+    pub(crate) bootstrap_home: CanonicalDirectoryV1,
+    pub(crate) workspace_binding: WorkspaceBindingV1,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) shell_trace_session_id: String,
+    pub(crate) authoritative_participant_id: String,
+    pub(crate) authoritative_lineage: Vec<String>,
+    pub(crate) authority_history_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) authority_revision_observed: u64,
+    pub(crate) authority_record_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) policy_ref: Option<AuthorityObjectRefV1>,
+    pub(crate) policy_revision: Option<String>,
+    pub(crate) descriptor_ref: AuthorityObjectRefV1,
+    pub(crate) host_attach_contract_ref: AuthorityObjectRefV1,
+    pub(crate) intent_id: String,
+    pub(crate) issuer_request_id: String,
+    pub(crate) payload_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) intent_revision_observed: u64,
+    pub(crate) claim_id: String,
+    pub(crate) claimant_attempt_id: String,
+    pub(crate) run_id: String,
+    pub(crate) initial_application_result_ref: AuthorityObjectRefV1,
+    pub(crate) transition_input_ref: AuthorityObjectRefV1,
+    pub(crate) input_acceptance_ref: Option<AuthorityObjectRefV1>,
+    pub(crate) consumed_resume_handle_ref: AuthorityObjectRefV1,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DirectHostCanonicalAttentionEntryV1 {
+    pub(crate) obligation_id: String,
+    pub(crate) obligation_revision: u64,
+    pub(crate) canonical_record_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) original_receipt_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) original_publication_commitment: AuthorityObjectCommitmentV1,
+}
+
+/// Ledger-issued exhaustive whole-session cut. HSA must independently join
+/// these commitments to retained enrollment, heads and immutable publications.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DirectHostCanonicalAttentionCutV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) authority_store_id: String,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) genesis_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) source_head_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) ledger_head_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) receipt_high_water: u64,
+    pub(crate) ledger_revision: u64,
+    pub(crate) source_protocol: String,
+    pub(crate) unresolved_attention: Vec<DirectHostCanonicalAttentionEntryV1>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PostTurnProtocolEventHashInputV2 {
+    pub(crate) schema_version: u32,
+    pub(crate) binding: DirectHostResumeBindingV1,
+    pub(crate) protocol_actor: HostPostTurnProtocolActorV1,
+    pub(crate) event_id: String,
+    pub(crate) kind: HostPostTurnProtocolEventKindV1,
+    pub(crate) native_terminal: Option<DirectHostNativeTerminalEvidenceV1>,
+    pub(crate) emitted_at: TimestampV1,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PostTurnCompletionHashInputV2 {
+    pub(crate) schema_version: u32,
+    pub(crate) binding: DirectHostResumeBindingV1,
+    pub(crate) protocol_event_ref: AuthorityObjectRefV1,
+    pub(crate) outcome: PostTurnCompletionOutcomeV1,
+    pub(crate) attention_cut: Option<DirectHostCanonicalAttentionCutV1>,
+    pub(crate) completed_at: TimestampV1,
+}
+
+/// Direct-host completion with its authenticated target-owned continuation.
+/// V1/V2 remain immutable historical codecs.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PostTurnCompletionHashInputV3 {
+    pub(crate) schema_version: u32,
+    pub(crate) binding: DirectHostResumeBindingV1,
+    pub(crate) protocol_event_ref: AuthorityObjectRefV1,
+    pub(crate) outcome: PostTurnCompletionOutcomeV1,
+    pub(crate) attention_cut: Option<DirectHostCanonicalAttentionCutV1>,
+    pub(crate) completed_at: TimestampV1,
+    pub(crate) produced_resume_handle_ref: Option<AuthorityObjectRefV1>,
+}
+
+/// World-controller Start settlement. The nested V2 value is shared Start
+/// exchange/terminal data, not an independently published V2 handle. The V3
+/// codec, hash, history and posture also require the exhaustive World source cut.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct StartContinuationHandleHashInputV3 {
+    pub(crate) schema_version: u32,
+    pub(crate) continuation: StartContinuationHandleHashInputV2,
+    pub(crate) world_binding: WorldBindingV1,
+    #[serde(with = "world_controller_selection_wire_v1")]
+    pub(crate) native_selection: transport_api_types::ResolvedAgentSelectionV1,
+    #[serde(with = "world_controller_selection_wire_v1")]
+    pub(crate) requested_selection: transport_api_types::ResolvedAgentSelectionV1,
+    pub(crate) work_attention_cut: WorldControllerWorkAttentionCutV1,
+}
+
+/// Exact persisted current target/run/input binding for a World-bound local
+/// controller. Only the genuine HSA/helper producer authenticates these fields.
+/// This has no direct-Host binding and cannot be decoded by its historical codec.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WorldControllerResumeBindingV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) authority_store_id: String,
+    pub(crate) bootstrap_home: CanonicalDirectoryV1,
+    pub(crate) workspace_binding: WorkspaceBindingV1,
+    pub(crate) world_binding: WorldBindingV1,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) shell_trace_session_id: String,
+    pub(crate) authoritative_participant_id: String,
+    pub(crate) authoritative_lineage: Vec<String>,
+    pub(crate) original_start_intent_id: String,
+    pub(crate) original_start_run_id: String,
+    #[serde(with = "world_controller_selection_wire_v1")]
+    pub(crate) native_selection: transport_api_types::ResolvedAgentSelectionV1,
+    #[serde(with = "world_controller_selection_wire_v1")]
+    pub(crate) requested_selection: transport_api_types::ResolvedAgentSelectionV1,
+    pub(crate) authority_revision_observed: u64,
+    pub(crate) authority_record_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) policy_ref: AuthorityObjectRefV1,
+    pub(crate) policy_revision: String,
+    pub(crate) descriptor_ref: AuthorityObjectRefV1,
+    pub(crate) intent_id: String,
+    pub(crate) issuer_request_id: String,
+    pub(crate) payload_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) intent_revision_observed: u64,
+    pub(crate) claim_id: String,
+    pub(crate) claimant_attempt_id: String,
+    pub(crate) run_id: String,
+    pub(crate) initial_application_result_ref: AuthorityObjectRefV1,
+    pub(crate) transition_input_ref: AuthorityObjectRefV1,
+    pub(crate) input_acceptance_ref: AuthorityObjectRefV1,
+    pub(crate) consumed_resume_handle_ref: AuthorityObjectRefV1,
+}
+
+/// World-controller Resume completion, containing the exact checked native
+/// sequence and independent World work/attention cut. Its target owns the new
+/// continuation. Older completion records retain their original wire meaning.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PostTurnCompletionHashInputV4 {
+    pub(crate) schema_version: u32,
+    pub(crate) binding: WorldControllerResumeBindingV1,
+    pub(crate) protocol_actor: HostPostTurnProtocolActorV1,
+    pub(crate) event_id: String,
+    pub(crate) kind: HostPostTurnProtocolEventKindV1,
+    pub(crate) native_terminal: DirectHostNativeTerminalEvidenceV1,
+    pub(crate) work_attention_cut: WorldControllerWorkAttentionCutV1,
+    pub(crate) completed_at: TimestampV1,
+    pub(crate) produced_resume_handle_ref: Option<AuthorityObjectRefV1>,
+}
+
+/// Preserve the complete transport-owned JSON representation in these new
+/// records. HSA's historical serializer treats Rust enum tags specially; the
+/// transport selection instead has ordinary JSON strings for placement/origin.
+/// Deserialization still uses its closed typed codec, and validation checks its
+/// original full-content digest. Older HSA serialization is unchanged.
+mod world_controller_selection_wire_v1 {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use transport_api_types::ResolvedAgentSelectionV1;
+
+    pub(super) fn serialize<S: Serializer>(
+        value: &ResolvedAgentSelectionV1,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        serde_json::to_value(value)
+            .map_err(serde::ser::Error::custom)?
+            .serialize(serializer)
+    }
+
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<ResolvedAgentSelectionV1, D::Error> {
+        ResolvedAgentSelectionV1::deserialize(deserializer)
+    }
+}
+
+impl StartContinuationHandleHashInputV3 {
+    pub(crate) fn resulting_posture(&self) -> HostSessionPostureV1 {
+        if self.work_attention_cut.has_unresolved() {
+            HostSessionPostureV1::AwaitingAttention
+        } else if matches!(
+            &self.continuation.state,
+            StartContinuationHandleStateV2::Settled {
+                completion_kind: StartTurnCompletionKindV1::ResumableClean,
+                ..
+            }
+        ) {
+            HostSessionPostureV1::ParkedResumable
+        } else {
+            HostSessionPostureV1::Terminal
+        }
+    }
+}
+
+impl PostTurnCompletionHashInputV4 {
+    pub(crate) fn resulting_posture(&self) -> HostSessionPostureV1 {
+        if self.work_attention_cut.has_unresolved() {
+            HostSessionPostureV1::AwaitingAttention
+        } else if self.kind == HostPostTurnProtocolEventKindV1::ResumableClean {
+            HostSessionPostureV1::ParkedResumable
+        } else {
+            HostSessionPostureV1::Terminal
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", content = "value", deny_unknown_fields)]
 pub(crate) enum TerminalHandoffStateV1 {
@@ -865,5 +1119,60 @@ mod tests {
             br#""2026-07-11T12:49:11.000000000+00:00""#,
         )
         .is_err());
+    }
+}
+
+/// Serializable source facts are meaningful only when joined by the HSA owner
+/// to the genuine controller run and its guarded commit. No effect grant.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WorldControllerWorkAttentionCutV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) authority_store_id: String,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) world_binding: WorldBindingV1,
+    pub(crate) hsa_root_revision: u64,
+    pub(crate) e2_registry_sha256: Option<String>,
+    pub(crate) admission_registry_sha256: Option<String>,
+    pub(crate) e2_session_source_ids: Vec<String>,
+    pub(crate) unresolved_e2_source_ids: Vec<String>,
+    pub(crate) unresolved_admission_participant_ids: Vec<String>,
+    pub(crate) unclassified_hsa_retained_participant_ids: Vec<String>,
+    pub(crate) b1_registry_sha256: String,
+    pub(crate) supervisor_sha256: Option<String>,
+    pub(crate) ledger_files_sha256: std::collections::BTreeMap<String, String>,
+    pub(crate) proposal_request_ids: Vec<String>,
+    pub(crate) acceptance_record_ids: Vec<String>,
+    pub(crate) pending_request_ids: Vec<String>,
+    pub(crate) unresolved_work_acceptance_ids: Vec<String>,
+    pub(crate) unresolved_attention_acceptance_ids: Vec<String>,
+    pub(crate) completed_work: Vec<WorldControllerCompletedWorkV1>,
+    pub(crate) unresolved_attention:
+        Vec<super::super::obligation_ledger::UnresolvedAttentionObligationSnapshotEntryV1>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WorldControllerCompletedWorkV1 {
+    pub(crate) acceptance_record_id: String,
+    pub(crate) acceptance_record_revision: u64,
+    pub(crate) accepted_work_identity: AcceptedWorldWorkIdentityV1,
+    pub(crate) stream_id: String,
+    pub(crate) terminal_event_id: String,
+    pub(crate) terminal_event_sequence: u64,
+    pub(crate) exit_code: i32,
+    pub(crate) e2_commitment_id: String,
+    pub(crate) e2_commitment_hash: String,
+}
+
+impl WorldControllerWorkAttentionCutV1 {
+    pub(crate) fn has_unresolved(&self) -> bool {
+        !self.pending_request_ids.is_empty()
+            || !self.unresolved_work_acceptance_ids.is_empty()
+            || !self.unresolved_attention_acceptance_ids.is_empty()
+            || !self.unresolved_e2_source_ids.is_empty()
+            || !self.unresolved_admission_participant_ids.is_empty()
+            || !self.unclassified_hsa_retained_participant_ids.is_empty()
+            || !self.unresolved_attention.is_empty()
     }
 }

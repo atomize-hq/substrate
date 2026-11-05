@@ -927,6 +927,8 @@ async fn legacy_world_doctor_report_v1_via_execute(
     let policy_snapshot = network_policy.snapshot;
 
     let req = ExecuteRequest {
+        schema_version: 1,
+        ordinary_start_selection: None,
         profile: None,
         cmd: "sh -lc 'set -e; d=\".substrate_doctor_probe.$$\"; rm -rf \"$d\"; mkdir \"$d\"; cd \"$d\"; rm -f .substrate_enum_probe; touch .substrate_enum_probe; ls -a1; rm -f .substrate_enum_probe; cd ..; rmdir \"$d\"'".to_string(),
         cwd: Some(cwd_path.display().to_string()),

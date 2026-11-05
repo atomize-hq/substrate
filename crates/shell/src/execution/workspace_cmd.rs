@@ -32,10 +32,20 @@ const DEFAULT_POLICY_PATCH_YAML: &str = r#"# Substrate policy patch (sparse over
 
 pub(crate) fn handle_workspace_command(cmd: &WorkspaceCmd, cli: &Cli) -> i32 {
     let result: Result<i32> = match &cmd.action {
+        WorkspaceAction::Open(_)
+        | WorkspaceAction::InitializeApproved(_)
+        | WorkspaceAction::Preflight(_)
+        | WorkspaceAction::PublishWorldAssociation(_) => {
+            Err(actionable("native Workspace adapter unavailable"))
+        }
         WorkspaceAction::Init(args) if args.publish_owner => {
             Err(actionable("native Workspace owner binding is required"))
         }
-        WorkspaceAction::Status(_) => Err(actionable("native Workspace owner binding is required")),
+        WorkspaceAction::Status(_)
+        | WorkspaceAction::CurrentActor(_)
+        | WorkspaceAction::PublishAssociation(_) => {
+            Err(actionable("native Workspace owner binding is required"))
+        }
         WorkspaceAction::Init(args) => run_workspace_init(args).map(|_| 0),
         WorkspaceAction::Disable(args) => run_workspace_disable(args).map(|_| 0),
         WorkspaceAction::Enable(args) => run_workspace_enable(args).map(|_| 0),
@@ -54,7 +64,7 @@ pub(crate) fn handle_workspace_command(cmd: &WorkspaceCmd, cli: &Cli) -> i32 {
 }
 
 pub(crate) fn is_workspace_owner_action(cli: &Cli) -> bool {
-    matches!(&cli.sub, Some(crate::execution::cli::SubCommands::Workspace(cmd)) if matches!(&cmd.action, WorkspaceAction::Status(_)) || matches!(&cmd.action, WorkspaceAction::Init(args) if args.publish_owner))
+    matches!(&cli.sub, Some(crate::execution::cli::SubCommands::Workspace(cmd)) if matches!(&cmd.action, WorkspaceAction::Status(_) | WorkspaceAction::CurrentActor(_) | WorkspaceAction::PublishAssociation(_) | WorkspaceAction::Open(_) | WorkspaceAction::InitializeApproved(_) | WorkspaceAction::Preflight(_) | WorkspaceAction::PublishWorldAssociation(_)) || matches!(&cmd.action, WorkspaceAction::Init(args) if args.publish_owner))
 }
 
 /// Only these explicit actions bypass startup scaffolding; native binding precedes disclosure.
@@ -77,6 +87,27 @@ pub(crate) fn try_handle_workspace_owner_command(
     let Some(crate::execution::cli::SubCommands::Workspace(cmd)) = &cli.sub else {
         return None;
     };
+    if matches!(
+        &cmd.action,
+        WorkspaceAction::Open(_)
+            | WorkspaceAction::InitializeApproved(_)
+            | WorkspaceAction::Preflight(_)
+            | WorkspaceAction::PublishWorldAssociation(_)
+    ) {
+        return Some(run_workspace_native_adapter_v1(
+            &cmd.action,
+            install_context,
+        ));
+    }
+    if let WorkspaceAction::CurrentActor(args) | WorkspaceAction::PublishAssociation(args) =
+        &cmd.action
+    {
+        return Some(run_native_workspace_current_v1(
+            args,
+            matches!(&cmd.action, WorkspaceAction::PublishAssociation(_)),
+            install_context,
+        ));
+    }
     let (path, publish, json_output) = match &cmd.action {
         WorkspaceAction::Init(args) => {
             if args.force || args.examples {
@@ -540,10 +571,18 @@ fn run_workspace_enable(args: &WorkspacePathArgs) -> Result<()> {
     let workspace_root = require_workspace_root_any(&start, "workspace enable")?;
     let marker = workspace::workspace_disabled_marker_path(&workspace_root);
 
-    match fs::remove_file(&marker) {
-        Ok(()) => {}
-        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-        Err(err) => return Err(anyhow!("failed to remove {}: {err}", marker.display())),
+    #[cfg(target_os = "linux")]
+    let revisioned =
+        crate::execution::workspace_read_cut::try_write_legacy_settings(&marker, None)?
+            == crate::execution::workspace_read_cut::LegacySettingsWriteV1::Revisioned;
+    #[cfg(not(target_os = "linux"))]
+    let revisioned = false;
+    if !revisioned {
+        match fs::remove_file(&marker) {
+            Ok(()) => {}
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+            Err(err) => return Err(anyhow!("failed to remove {}: {err}", marker.display())),
+        }
     }
     crate::execution::config_model::invalidate_config_cache();
     crate::execution::policy_snapshot::invalidate_policy_snapshot_cache();
@@ -2420,6 +2459,20 @@ fn ensure_example_files(workspace_root: &Path) -> Result<()> {
 }
 
 fn write_atomic_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    if matches!(
+        path.file_name().and_then(|n| n.to_str()),
+        Some("workspace.yaml" | "policy.yaml" | "workspace.disabled")
+    ) && path
+        .parent()
+        .and_then(|p| p.file_name())
+        .is_some_and(|n| n == ".substrate")
+        && crate::execution::workspace_read_cut::try_write_legacy_settings(path, Some(bytes))?
+            == crate::execution::workspace_read_cut::LegacySettingsWriteV1::Revisioned
+    {
+        return Ok(());
+    }
+
     let parent = path
         .parent()
         .ok_or_else(|| anyhow!("path {} has no parent", path.display()))?;
@@ -2432,4 +2485,192 @@ fn write_atomic_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
     tmp.persist(path)
         .map_err(|err| anyhow!("failed to persist {}: {}", path.display(), err.error))?;
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn run_native_workspace_current_v1(
+    args: &crate::execution::cli::WorkspaceCurrentArgs,
+    publish: bool,
+    carrier: &transport_api_types::InstallBootstrapContextCarrierV1,
+) -> i32 {
+    use std::io::Read;
+    use std::os::unix::fs::OpenOptionsExt;
+    use transport_api_types::{
+        WorkspaceCurrentOperationV1 as O, WorkspaceCurrentRefusalV1 as F,
+        WorkspaceCurrentRequestV1, WorkspaceCurrentResponseV1 as R,
+    };
+    let result = (|| -> Result<R> {
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK)
+            .open(&args.request)?;
+        if !file.metadata()?.is_file() || file.metadata()?.len() > 32768 {
+            return Err(anyhow!("Malformed"));
+        }
+        let mut bytes = Vec::new();
+        file.take(32769).read_to_end(&mut bytes)?;
+        if bytes.len() > 32768 {
+            return Err(anyhow!("Malformed"));
+        }
+        let request: WorkspaceCurrentRequestV1 = serde_json::from_slice(&bytes)?;
+        request.validate().map_err(anyhow::Error::msg)?;
+        if request.native_context != *carrier
+            || matches!(request.operation, O::PublishAssociation) != publish
+        {
+            return Err(anyhow!("Denied"));
+        }
+        crate::execution::workspace_open::run_native_workspace_current_request_v1(&request)
+    })();
+    let response = result.unwrap_or(R::Refused { reason: F::Denied });
+    let success = matches!(
+        response,
+        R::CurrentActor(..) | R::AssociationPublished { .. }
+    );
+    println!(
+        "{}",
+        serde_json::to_string(&response).expect("bounded response serialization")
+    );
+    if success {
+        0
+    } else {
+        2
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn run_workspace_native_adapter_v1(
+    action: &WorkspaceAction,
+    carrier: &transport_api_types::InstallBootstrapContextCarrierV1,
+) -> i32 {
+    use std::io::Read;
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+    let result = (|| -> Result<serde_json::Value> {
+        if let WorkspaceAction::Open(args) = action {
+            let selected = args.path.clone().unwrap_or(std::env::current_dir()?);
+            return Ok(crate::execution::workspace_open::workspace_open_native_v1(
+                carrier, &selected,
+            ));
+        }
+        let (WorkspaceAction::InitializeApproved(args)
+        | WorkspaceAction::Preflight(args)
+        | WorkspaceAction::PublishWorldAssociation(args)) = action
+        else {
+            return Err(anyhow!("Denied"));
+        };
+        let mut file = fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK)
+            .open(&args.request)?;
+        let m = file.metadata()?;
+        if !m.is_file()
+            || m.uid() != unsafe { libc::geteuid() }
+            || m.mode() & 0o077 != 0
+            || m.len() > 32768
+            || m.nlink() != 1
+        {
+            return Err(anyhow!("Denied"));
+        }
+        let mut bytes = Vec::new();
+        (&mut file).take(32769).read_to_end(&mut bytes)?;
+        if bytes.len() > 32768 {
+            return Err(anyhow!("Denied"));
+        }
+        if matches!(action, WorkspaceAction::InitializeApproved(_)) {
+            let decision: transport_api_types::WorkspaceInitializationDecisionV1 =
+                serde_json::from_slice(&bytes)?;
+            return Ok(
+                crate::execution::workspace_open::workspace_initialize_native_v1(
+                    carrier, &decision,
+                ),
+            );
+        }
+        if matches!(action, WorkspaceAction::Preflight(_)) {
+            let request: transport_api_types::WorkspaceCurrentRequestV1 =
+                serde_json::from_slice(&bytes)?;
+            if request.native_context != *carrier {
+                return Err(anyhow!("Denied"));
+            }
+            return Ok(serde_json::to_value(
+                crate::execution::workspace_open::run_native_workspace_preflight_request_v1(
+                    &request,
+                ),
+            )?);
+        }
+        let update: transport_api_types::WorkspaceAssociationUpdateV1 =
+            serde_json::from_slice(&bytes)?;
+        if update.current.native_context != *carrier {
+            return Err(anyhow!("Denied"));
+        }
+        let socket = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("/run/substrate.sock"));
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+        let client = transport_api_client::AgentClient::unix_socket(socket)?;
+        let response = runtime
+            .block_on(client.workspace_association_update_v1(&update))
+            .unwrap_or(
+                transport_api_types::WorkspaceAssociationUpdateResponseV1::AssociationPublicationFailed {
+                    reason: transport_api_types::WorkspaceCurrentRefusalV1::Changed,
+                    effects: transport_api_types::WorkspaceAssociationUpdateEffectsV1::unknown(),
+                },
+            );
+        Ok(serde_json::to_value(response)?)
+    })();
+    let value = result.unwrap_or_else(|_| serde_json::json!({"state":"Refused","reason":"Denied"}));
+    let success = matches!(
+        value["state"].as_str(),
+        Some(
+            "Loaded"
+                | "InitializationOffered"
+                | "Initialized"
+                | "NotInitialized"
+                | "EligibleObservation"
+                | "AssociationPublished"
+        )
+    );
+    println!(
+        "{}",
+        serde_json::to_string(&value).expect("bounded typed response")
+    );
+    if success {
+        0
+    } else {
+        2
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod workspace_read_cut_control_writer_tests {
+    use super::*;
+    #[test]
+    fn workspace_read_cut_actual_disable_enable_advances_absence_revision() {
+        let temp = tempfile::tempdir().unwrap();
+        let control = temp.path().join(".substrate");
+        fs::create_dir(&control).unwrap();
+        fs::write(control.join("workspace.yaml"), b"{}\n").unwrap();
+        let args = WorkspacePathArgs {
+            path: Some(temp.path().to_owned()),
+        };
+        run_workspace_disable(&args).unwrap();
+        let held =
+            crate::execution::workspace_read_cut::directory(&control, unsafe { libc::geteuid() })
+                .unwrap();
+        let disabled = crate::execution::workspace_read_cut::read_revision(
+            &held,
+            "workspace.disabled",
+            unsafe { libc::geteuid() },
+        )
+        .unwrap();
+        run_workspace_enable(&args).unwrap();
+        let enabled = crate::execution::workspace_read_cut::read_revision(
+            &held,
+            "workspace.disabled",
+            unsafe { libc::geteuid() },
+        )
+        .unwrap();
+        assert_eq!(enabled.revision, disabled.revision + 1);
+        assert!(!control.join("workspace.disabled").exists());
+    }
 }

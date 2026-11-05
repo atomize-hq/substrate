@@ -4800,36 +4800,40 @@ fn verify_start_intent_objects(
     root: &StateRootV2,
     intent: &HostSessionTransitionIntentV2,
 ) -> Result<(), TransitionProtocolError> {
+    verify_start_intent_objects_with_reader(intent, &mut |reference, context| {
+        store::read_typed_object_v2_or_v3_opened(
+            authority.trusted_root(),
+            root.root_revision,
+            reference,
+            context,
+        )
+        .map_err(|error| error.to_string())
+    })
+}
+
+pub(super) fn verify_start_intent_objects_with_reader<F>(
+    intent: &HostSessionTransitionIntentV2,
+    read_object: &mut F,
+) -> Result<(), TransitionProtocolError>
+where
+    F: FnMut(
+        &AuthorityObjectRefV1,
+        Option<&ObjectVerificationContextV1>,
+    ) -> Result<Vec<u8>, String>,
+{
     let context = ObjectVerificationContextV1 {
         intent_id: intent.intent_id.clone(),
         run_id: intent.run_id.clone(),
         parent_intent: None,
     };
-    let descriptor_bytes = store::read_typed_object_v2_or_v3_opened(
-        authority.trusted_root(),
-        root.root_revision,
-        &intent.descriptor_ref,
-        None,
-    )
-    .map_err(protocol_error)?;
+    let descriptor_bytes = read_object(&intent.descriptor_ref, None).map_err(protocol_error)?;
     let descriptor: AgentDescriptorHashInputV1 =
         canonical_json::from_slice(&descriptor_bytes).map_err(protocol_error)?;
-    let attach_bytes = store::read_typed_object_v2_or_v3_opened(
-        authority.trusted_root(),
-        root.root_revision,
-        &intent.host_attach_contract_ref,
-        None,
-    )
-    .map_err(protocol_error)?;
+    let attach_bytes =
+        read_object(&intent.host_attach_contract_ref, None).map_err(protocol_error)?;
     let attach: HostAttachContractHashInputV1 =
         canonical_json::from_slice(&attach_bytes).map_err(protocol_error)?;
-    let policy_bytes = store::read_typed_object_v2_or_v3_opened(
-        authority.trusted_root(),
-        root.root_revision,
-        &attach.contract.policy_ref,
-        None,
-    )
-    .map_err(protocol_error)?;
+    let policy_bytes = read_object(&attach.contract.policy_ref, None).map_err(protocol_error)?;
     let policy: PolicyObjectHashInputV1 =
         canonical_json::from_slice(&policy_bytes).map_err(protocol_error)?;
     if descriptor.schema_version != 1
@@ -4847,21 +4851,10 @@ fn verify_start_intent_objects(
             "Start descriptor, attach contract, or policy projection is inconsistent",
         ));
     }
-    store::read_typed_object_v2_or_v3_opened(
-        authority.trusted_root(),
-        root.root_revision,
-        &intent.target_participant_lease_token_ref,
-        Some(&context),
-    )
-    .map_err(protocol_error)?;
-    if let Some(reference) = intent.transition_input_ref.as_ref() {
-        store::read_typed_object_v2_or_v3_opened(
-            authority.trusted_root(),
-            root.root_revision,
-            reference,
-            Some(&context),
-        )
+    read_object(&intent.target_participant_lease_token_ref, Some(&context))
         .map_err(protocol_error)?;
+    if let Some(reference) = intent.transition_input_ref.as_ref() {
+        read_object(reference, Some(&context)).map_err(protocol_error)?;
     }
     let parent = ObjectVerificationContextV1 {
         intent_id: intent.intent_id.clone(),
@@ -4870,13 +4863,8 @@ fn verify_start_intent_objects(
             intent.clone(),
         ))),
     };
-    let transport_bytes = store::read_typed_object_v2_or_v3_opened(
-        authority.trusted_root(),
-        root.root_revision,
-        &intent.transport_payload_ref,
-        Some(&parent),
-    )
-    .map_err(protocol_error)?;
+    let transport_bytes =
+        read_object(&intent.transport_payload_ref, Some(&parent)).map_err(protocol_error)?;
     let transport: TransitionTransportPayloadObjectV1 =
         canonical_json::from_slice(&transport_bytes).map_err(protocol_error)?;
     let expected_transport = TransitionTransportPayloadObjectV1 {
@@ -4917,6 +4905,29 @@ pub(super) fn verify_applied_start(
     intent: &HostSessionTransitionIntentV2,
     request: &ApplyHostSessionTransitionRequestV1,
 ) -> Result<(), TransitionProtocolError> {
+    verify_applied_start_with_reader(root, intent, request, |reference, context| {
+        store::read_typed_object_v2_or_v3_opened(
+            authority.trusted_root(),
+            root.root_revision,
+            reference,
+            context,
+        )
+        .map_err(|error| error.to_string())
+    })
+}
+
+pub(super) fn verify_applied_start_with_reader<F>(
+    root: &StateRootV2,
+    intent: &HostSessionTransitionIntentV2,
+    request: &ApplyHostSessionTransitionRequestV1,
+    mut read_object: F,
+) -> Result<(), TransitionProtocolError>
+where
+    F: FnMut(
+        &AuthorityObjectRefV1,
+        Option<&ObjectVerificationContextV1>,
+    ) -> Result<Vec<u8>, String>,
+{
     let (
         claim_id,
         authority_revision_before,
@@ -4984,13 +4995,7 @@ pub(super) fn verify_applied_start(
     else {
         return Err(error("committed Start has no durable authority"));
     };
-    let application_bytes = store::read_typed_object_v2_or_v3_opened(
-        authority.trusted_root(),
-        root.root_revision,
-        application_result_ref,
-        None,
-    )
-    .map_err(protocol_error)?;
+    let application_bytes = read_object(application_result_ref, None).map_err(protocol_error)?;
     let application: ApplicationResultHashInputV1 =
         canonical_json::from_slice(&application_bytes).map_err(protocol_error)?;
     let expected_application = ApplicationResultHashInputV1 {
@@ -5011,23 +5016,12 @@ pub(super) fn verify_applied_start(
     if application != expected_application {
         return Err(error("committed application result object conflicts"));
     }
-    verify_start_intent_objects(authority, root, intent)?;
-    let attach_bytes = store::read_typed_object_v2_or_v3_opened(
-        authority.trusted_root(),
-        root.root_revision,
-        &intent.host_attach_contract_ref,
-        None,
-    )
-    .map_err(protocol_error)?;
+    verify_start_intent_objects_with_reader(intent, &mut read_object)?;
+    let attach_bytes =
+        read_object(&intent.host_attach_contract_ref, None).map_err(protocol_error)?;
     let attach: HostAttachContractHashInputV1 =
         canonical_json::from_slice(&attach_bytes).map_err(protocol_error)?;
-    let policy_bytes = store::read_typed_object_v2_or_v3_opened(
-        authority.trusted_root(),
-        root.root_revision,
-        &attach.contract.policy_ref,
-        None,
-    )
-    .map_err(protocol_error)?;
+    let policy_bytes = read_object(&attach.contract.policy_ref, None).map_err(protocol_error)?;
     let policy: PolicyObjectHashInputV1 =
         canonical_json::from_slice(&policy_bytes).map_err(protocol_error)?;
     let initial_authority = DurableSessionAuthorityV1 {
@@ -5765,60 +5759,47 @@ fn verify_successor_intent_objects(
     root: &StateRootV3,
     intent: &HostSessionTransitionIntentV3,
 ) -> Result<(), TransitionProtocolError> {
-    let descriptor_bytes = store::read_typed_object_v2_or_v3_opened(
-        authority.trusted_root(),
-        root.root_revision,
-        &intent.descriptor_ref,
-        None,
-    )
-    .map_err(protocol_error)?;
+    verify_successor_intent_objects_with_reader(intent, &mut |reference, context| {
+        store::read_typed_object_v2_or_v3_opened(
+            authority.trusted_root(),
+            root.root_revision,
+            reference,
+            context,
+        )
+        .map_err(|error| error.to_string())
+    })
+}
+
+pub(super) fn verify_successor_intent_objects_with_reader<F>(
+    intent: &HostSessionTransitionIntentV3,
+    read_object: &mut F,
+) -> Result<(), TransitionProtocolError>
+where
+    F: FnMut(
+        &AuthorityObjectRefV1,
+        Option<&ObjectVerificationContextV1>,
+    ) -> Result<Vec<u8>, String>,
+{
+    let descriptor_bytes = read_object(&intent.descriptor_ref, None).map_err(protocol_error)?;
     let _: AgentDescriptorHashInputV1 =
         canonical_json::from_slice(&descriptor_bytes).map_err(protocol_error)?;
-    let attach_bytes = store::read_typed_object_v2_or_v3_opened(
-        authority.trusted_root(),
-        root.root_revision,
-        &intent.host_attach_contract_ref,
-        None,
-    )
-    .map_err(protocol_error)?;
+    let attach_bytes =
+        read_object(&intent.host_attach_contract_ref, None).map_err(protocol_error)?;
     let attach: HostAttachContractHashInputV1 =
         canonical_json::from_slice(&attach_bytes).map_err(protocol_error)?;
-    store::read_typed_object_v2_or_v3_opened(
-        authority.trusted_root(),
-        root.root_revision,
-        &attach.contract.policy_ref,
-        None,
-    )
-    .map_err(protocol_error)?;
+    read_object(&attach.contract.policy_ref, None).map_err(protocol_error)?;
     let context = ObjectVerificationContextV1 {
         intent_id: intent.intent_id.clone(),
         run_id: intent.run_id.clone(),
         parent_intent: None,
     };
-    store::read_typed_object_v2_or_v3_opened(
-        authority.trusted_root(),
-        root.root_revision,
-        &intent.target_participant_lease_token_ref,
-        Some(&context),
-    )
-    .map_err(protocol_error)?;
-    if let Some(reference) = intent.transition_input_ref.as_ref() {
-        store::read_typed_object_v2_or_v3_opened(
-            authority.trusted_root(),
-            root.root_revision,
-            reference,
-            Some(&context),
-        )
+    read_object(&intent.target_participant_lease_token_ref, Some(&context))
         .map_err(protocol_error)?;
+    if let Some(reference) = intent.transition_input_ref.as_ref() {
+        read_object(reference, Some(&context)).map_err(protocol_error)?;
     }
     if let Some(reference) = intent.resume_handle_ref.as_ref() {
-        store::read_typed_object_v2_or_v3_opened(
-            authority.trusted_root(),
-            root.root_revision,
-            reference,
-            None,
-        )
-        .map_err(protocol_error)?;
+        read_object(reference, None).map_err(protocol_error)?;
     }
     let parent = ObjectVerificationContextV1 {
         intent_id: intent.intent_id.clone(),
@@ -5838,13 +5819,8 @@ fn verify_successor_intent_objects(
         intent.transport_payload_state,
         HostSessionTransitionTransportPayloadStateV1::Retained
     ) {
-        let transport_bytes = store::read_typed_object_v2_or_v3_opened(
-            authority.trusted_root(),
-            root.root_revision,
-            &intent.transport_payload_ref,
-            Some(&parent),
-        )
-        .map_err(protocol_error)?;
+        let transport_bytes =
+            read_object(&intent.transport_payload_ref, Some(&parent)).map_err(protocol_error)?;
         let transport: TransitionTransportPayloadObjectV1 =
             canonical_json::from_slice(&transport_bytes).map_err(protocol_error)?;
         if transport != transport_value_from_successor_intent(intent) {

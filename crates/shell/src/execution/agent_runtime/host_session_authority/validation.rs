@@ -81,7 +81,9 @@ fn object_schema_version(
 ) -> Result<(), ValidationError> {
     match object_kind {
         AuthorityObjectKindV1::TerminalHandoff if matches!(schema_version, 1 | 2) => Ok(()),
-        AuthorityObjectKindV1::ResumeHandle if matches!(schema_version, 1 | 2) => Ok(()),
+        AuthorityObjectKindV1::ResumeHandle if matches!(schema_version, 1..=3) => Ok(()),
+        AuthorityObjectKindV1::PostTurnCompletion if matches!(schema_version, 1..=4) => Ok(()),
+        AuthorityObjectKindV1::PostTurnProtocolEvent if matches!(schema_version, 1 | 2) => Ok(()),
         _ => schema_v1(schema_version),
     }
 }
@@ -940,12 +942,678 @@ impl ValidatedCanonicalV1 for PostTurnCompletionHashInputV1 {
         validate_work_identity(&self.accepted_work_identity)?;
         validate_host_transition_correlation(&self.host_transition_correlation)?;
         required(&self.terminal_event_id)?;
+        if self.protocol_event_ref.schema_version != 1 {
+            return Err(ValidationError(
+                "V1 post-turn completion requires a V1 protocol event",
+            ));
+        }
         validate_ref(
             &self.protocol_event_ref,
             AuthorityObjectKindV1::PostTurnProtocolEvent,
         )
     }
 }
+
+impl sealed::Sealed for DirectHostNativeTerminalEvidenceV1 {}
+impl ValidatedCanonicalV1 for DirectHostNativeTerminalEvidenceV1 {
+    fn validate(&self) -> Result<(), ValidationError> {
+        schema_v1(self.schema_version)?;
+        for value in [
+            &self.backend_id,
+            &self.protocol,
+            &self.native_session_id,
+            &self.thread_id,
+            &self.turn_id,
+        ] {
+            required(value)?;
+        }
+        if self.native_session_id != self.thread_id
+            || self.terminal_ordinal != 1
+            || !lower_hex(&self.raw_event_sha256, 64)
+        {
+            return Err(ValidationError(
+                "invalid direct-host native terminal identity",
+            ));
+        }
+        let valid = match &self.sequence {
+            DirectHostNativeSequenceV1::Codex {
+                resumed_thread_id,
+                started_turn_id,
+            } => {
+                resumed_thread_id == &self.thread_id
+                    && started_turn_id == &self.turn_id
+                    && matches!(
+                        self.terminal_event_kind.as_str(),
+                        "turn.completed" | "turn.failed"
+                    )
+            }
+            DirectHostNativeSequenceV1::ClaudeCode {
+                initialized_session_id,
+            } => {
+                initialized_session_id == &self.thread_id
+                    && self.turn_id == self.thread_id
+                    && matches!(
+                        self.terminal_event_kind.as_str(),
+                        "result.success" | "result.error"
+                    )
+            }
+        };
+        if !valid {
+            return Err(ValidationError(
+                "direct-host native terminal sequence does not join",
+            ));
+        }
+        Ok(())
+    }
+}
+impl CanonicalHashInputV1 for DirectHostNativeTerminalEvidenceV1 {}
+
+impl sealed::Sealed for DirectHostResumeBindingV1 {}
+impl ValidatedCanonicalV1 for DirectHostResumeBindingV1 {
+    fn validate(&self) -> Result<(), ValidationError> {
+        schema_v1(self.schema_version)?;
+        for value in [
+            &self.authority_store_id,
+            &self.orchestration_session_id,
+            &self.shell_trace_session_id,
+            &self.authoritative_participant_id,
+            &self.intent_id,
+            &self.issuer_request_id,
+            &self.claim_id,
+            &self.claimant_attempt_id,
+            &self.run_id,
+        ] {
+            required(value)?;
+        }
+        validate_directory(&self.bootstrap_home)?;
+        validate_workspace(&self.workspace_binding)?;
+        if self.workspace_binding.authority_store_id != self.authority_store_id
+            || self.workspace_binding.authority_store_root != self.bootstrap_home
+            || self.authority_revision_observed == 0
+            || self.intent_revision_observed == 0
+            || self.authoritative_lineage.last() != Some(&self.authoritative_participant_id)
+            || self.authoritative_lineage.iter().any(String::is_empty)
+            || self
+                .authoritative_lineage
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                != self.authoritative_lineage.len()
+            || self.policy_ref.is_some() != self.policy_revision.is_some()
+        {
+            return Err(ValidationError("invalid direct-host persisted binding"));
+        }
+        validate_canonical_commitment(&self.authority_history_commitment)?;
+        validate_canonical_commitment(&self.authority_record_commitment)?;
+        validate_canonical_commitment(&self.payload_commitment)?;
+        if let Some(reference) = &self.policy_ref {
+            validate_ref(reference, AuthorityObjectKindV1::Policy)?;
+        }
+        if let Some(revision) = &self.policy_revision {
+            required(revision)?;
+        }
+        validate_ref(&self.descriptor_ref, AuthorityObjectKindV1::AgentDescriptor)?;
+        validate_ref(
+            &self.host_attach_contract_ref,
+            AuthorityObjectKindV1::HostAttachContract,
+        )?;
+        validate_ref(
+            &self.initial_application_result_ref,
+            AuthorityObjectKindV1::ApplicationResult,
+        )?;
+        validate_ref(
+            &self.transition_input_ref,
+            AuthorityObjectKindV1::TransitionInput,
+        )?;
+        if let Some(reference) = &self.input_acceptance_ref {
+            validate_ref(reference, AuthorityObjectKindV1::InputAcceptance)?;
+        }
+        validate_ref(
+            &self.consumed_resume_handle_ref,
+            AuthorityObjectKindV1::ResumeHandle,
+        )
+    }
+}
+impl CanonicalHashInputV1 for DirectHostResumeBindingV1 {}
+
+impl sealed::Sealed for DirectHostCanonicalAttentionCutV1 {}
+impl ValidatedCanonicalV1 for DirectHostCanonicalAttentionCutV1 {
+    fn validate(&self) -> Result<(), ValidationError> {
+        schema_v1(self.schema_version)?;
+        required(&self.authority_store_id)?;
+        required(&self.orchestration_session_id)?;
+        if self.source_protocol != "substrate.direct-host-inbox.resume-only.v1"
+            || self.unresolved_attention.len() > 4096
+        {
+            return Err(ValidationError(
+                "unsupported direct-host attention source or size",
+            ));
+        }
+        for commitment in [
+            &self.genesis_commitment,
+            &self.source_head_commitment,
+            &self.ledger_head_commitment,
+        ] {
+            validate_canonical_commitment(commitment)?;
+        }
+        let mut previous: Option<&str> = None;
+        for entry in &self.unresolved_attention {
+            required(&entry.obligation_id)?;
+            if entry.obligation_revision == 0
+                || previous.is_some_and(|id| id >= entry.obligation_id.as_str())
+            {
+                return Err(ValidationError(
+                    "direct-host attention revisions are not strictly ordered",
+                ));
+            }
+            validate_canonical_commitment(&entry.canonical_record_commitment)?;
+            validate_canonical_commitment(&entry.original_receipt_commitment)?;
+            validate_canonical_commitment(&entry.original_publication_commitment)?;
+            previous = Some(&entry.obligation_id);
+        }
+        Ok(())
+    }
+}
+impl CanonicalHashInputV1 for DirectHostCanonicalAttentionCutV1 {}
+
+impl sealed::Sealed for PostTurnProtocolEventHashInputV2 {}
+impl ValidatedCanonicalV1 for PostTurnProtocolEventHashInputV2 {
+    fn validate(&self) -> Result<(), ValidationError> {
+        schema_v2(self.schema_version)?;
+        self.binding.validate()?;
+        required(&self.event_id)?;
+        let accepted = self.binding.input_acceptance_ref.is_some();
+        let runtime_rejected = matches!(
+            self.kind,
+            HostPostTurnProtocolEventKindV1::TerminalFailure {
+                reason: HostPostTurnTerminalReasonV1::ResumeRuntimeCreationRejected,
+            }
+        );
+        match (&self.protocol_actor, runtime_rejected) {
+            (
+                HostPostTurnProtocolActorV1::LaunchApplicationClaimant {
+                    claim_id,
+                    claimant_attempt_id,
+                },
+                true,
+            ) if claim_id == &self.binding.claim_id
+                && claimant_attempt_id == &self.binding.claimant_attempt_id => {}
+            (
+                HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant { participant_id },
+                false,
+            ) if participant_id == &self.binding.authoritative_participant_id => {}
+            _ => return Err(ValidationError("direct-host post-turn actor does not join")),
+        }
+        let expects_accepted = !matches!(
+            self.kind,
+            HostPostTurnProtocolEventKindV1::TerminalFailure {
+                reason: HostPostTurnTerminalReasonV1::ResumeRuntimeCreationRejected
+                    | HostPostTurnTerminalReasonV1::TargetFailedBeforeInputAcceptance,
+            }
+        );
+        if accepted != expects_accepted {
+            return Err(ValidationError(
+                "direct-host post-turn input boundary does not join",
+            ));
+        }
+        if runtime_rejected {
+            if self.native_terminal.is_some() {
+                return Err(ValidationError(
+                    "runtime rejection cannot claim a native terminal",
+                ));
+            }
+        } else {
+            let native = self
+                .native_terminal
+                .as_ref()
+                .ok_or(ValidationError("direct-host native terminal is absent"))?;
+            native.validate()?;
+            let native_failed = matches!(
+                native.terminal_event_kind.as_str(),
+                "turn.failed" | "result.error"
+            );
+            if native_failed
+                != matches!(
+                    self.kind,
+                    HostPostTurnProtocolEventKindV1::TerminalFailure { .. }
+                )
+            {
+                return Err(ValidationError("direct-host native outcome does not join"));
+            }
+        }
+        Ok(())
+    }
+}
+impl CanonicalHashInputV1 for PostTurnProtocolEventHashInputV2 {}
+
+impl sealed::Sealed for PostTurnCompletionHashInputV2 {}
+impl ValidatedCanonicalV1 for PostTurnCompletionHashInputV2 {
+    fn validate(&self) -> Result<(), ValidationError> {
+        schema_v2(self.schema_version)?;
+        self.binding.validate()?;
+        validate_ref(
+            &self.protocol_event_ref,
+            AuthorityObjectKindV1::PostTurnProtocolEvent,
+        )?;
+        if self.protocol_event_ref.schema_version != 2 {
+            return Err(ValidationError(
+                "direct-host completion requires a V2 protocol event",
+            ));
+        }
+        match (&self.outcome, &self.attention_cut) {
+            (PostTurnCompletionOutcomeV1::ResumableClean, Some(cut)) => {
+                cut.validate()?;
+                if self.binding.input_acceptance_ref.is_none()
+                    || cut.authority_store_id != self.binding.authority_store_id
+                    || cut.orchestration_session_id != self.binding.orchestration_session_id
+                {
+                    return Err(ValidationError(
+                        "direct-host completion attention scope does not join",
+                    ));
+                }
+            }
+            (
+                PostTurnCompletionOutcomeV1::TerminalClean
+                | PostTurnCompletionOutcomeV1::TerminalFailure,
+                None,
+            ) => {}
+            _ => {
+                return Err(ValidationError(
+                    "direct-host completion has no exact attention disposition",
+                ))
+            }
+        }
+        Ok(())
+    }
+}
+impl CanonicalHashInputV1 for PostTurnCompletionHashInputV2 {}
+
+impl sealed::Sealed for PostTurnCompletionHashInputV3 {}
+impl ValidatedCanonicalV1 for PostTurnCompletionHashInputV3 {
+    fn validate(&self) -> Result<(), ValidationError> {
+        if self.schema_version != 3 {
+            return Err(ValidationError(
+                "direct-host completion requires schema version 3",
+            ));
+        }
+        // Validate the shared fields under the unchanged V2 rules. This view is
+        // never serialized or hashed as a replacement for the V3 object.
+        PostTurnCompletionHashInputV2 {
+            schema_version: 2,
+            binding: self.binding.clone(),
+            protocol_event_ref: self.protocol_event_ref.clone(),
+            outcome: self.outcome,
+            attention_cut: self.attention_cut.clone(),
+            completed_at: self.completed_at.clone(),
+        }
+        .validate()?;
+        match (self.outcome, &self.produced_resume_handle_ref) {
+            (PostTurnCompletionOutcomeV1::ResumableClean, Some(reference)) => {
+                validate_ref(reference, AuthorityObjectKindV1::ResumeHandle)?;
+                if reference.schema_version != 1 {
+                    return Err(ValidationError(
+                        "produced continuation requires ResumeHandle schema1",
+                    ));
+                }
+            }
+            (
+                PostTurnCompletionOutcomeV1::TerminalClean
+                | PostTurnCompletionOutcomeV1::TerminalFailure,
+                None,
+            ) => {}
+            _ => {
+                return Err(ValidationError(
+                    "completion continuation disagrees with terminal disposition",
+                ))
+            }
+        }
+        Ok(())
+    }
+}
+impl CanonicalHashInputV1 for PostTurnCompletionHashInputV3 {}
+
+fn validate_world_controller_selection(
+    native: &transport_api_types::ResolvedAgentSelectionV1,
+    requested: &transport_api_types::ResolvedAgentSelectionV1,
+    backend_id: &str,
+) -> Result<(), ValidationError> {
+    native
+        .validate()
+        .map_err(|_| ValidationError("invalid native controller selection"))?;
+    requested
+        .validate()
+        .map_err(|_| ValidationError("invalid requested World selection"))?;
+    if native.placement != transport_api_types::AgentSelectionPlacementV1::Host
+        || requested.placement != transport_api_types::AgentSelectionPlacementV1::World
+        || native.backend_id != backend_id
+    {
+        return Err(ValidationError("World controller selection roles differ"));
+    }
+    Ok(())
+}
+
+impl sealed::Sealed for WorldControllerWorkAttentionCutV1 {}
+impl ValidatedCanonicalV1 for WorldControllerWorkAttentionCutV1 {
+    fn validate(&self) -> Result<(), ValidationError> {
+        use std::collections::BTreeSet;
+        schema_v1(self.schema_version)?;
+        required(&self.authority_store_id)?;
+        required(&self.orchestration_session_id)?;
+        validate_world(&self.world_binding)?;
+        if self.hsa_root_revision == 0
+            || !lower_hex(&self.b1_registry_sha256, 64)
+            || self
+                .e2_registry_sha256
+                .as_ref()
+                .is_some_and(|hash| !lower_hex(hash, 64))
+            || self
+                .supervisor_sha256
+                .as_ref()
+                .is_some_and(|hash| !lower_hex(hash, 64))
+            || self
+                .admission_registry_sha256
+                .as_ref()
+                .is_some_and(|hash| !lower_hex(hash, 64))
+            || self.ledger_files_sha256.iter().any(|(path, hash)| {
+                path.is_empty()
+                    || path.split('/').any(|part| {
+                        part.is_empty() || matches!(part, "." | "..") || part.contains('\\')
+                    })
+                    || !lower_hex(hash, 64)
+            })
+        {
+            return Err(ValidationError(
+                "invalid World controller physical source cut",
+            ));
+        }
+        for values in [
+            &self.proposal_request_ids,
+            &self.acceptance_record_ids,
+            &self.pending_request_ids,
+            &self.unresolved_work_acceptance_ids,
+            &self.unresolved_attention_acceptance_ids,
+            &self.e2_session_source_ids,
+            &self.unresolved_e2_source_ids,
+            &self.unresolved_admission_participant_ids,
+            &self.unclassified_hsa_retained_participant_ids,
+        ] {
+            if values.iter().any(String::is_empty)
+                || values.windows(2).any(|pair| pair[0] >= pair[1])
+            {
+                return Err(ValidationError(
+                    "World source identities are not unique and ordered",
+                ));
+            }
+        }
+        if self.proposal_request_ids.len()
+            != self.acceptance_record_ids.len() + self.pending_request_ids.len()
+            || !self
+                .pending_request_ids
+                .iter()
+                .all(|id| self.proposal_request_ids.contains(id))
+        {
+            return Err(ValidationError("World proposal coverage is incomplete"));
+        }
+        let mut covered = BTreeSet::new();
+        if (!self.e2_session_source_ids.is_empty() && self.e2_registry_sha256.is_none())
+            || !self
+                .unresolved_e2_source_ids
+                .iter()
+                .all(|id| self.e2_session_source_ids.contains(id))
+            || (!self.unresolved_admission_participant_ids.is_empty()
+                && self.admission_registry_sha256.is_none())
+            || !self
+                .unresolved_attention_acceptance_ids
+                .iter()
+                .all(|id| self.acceptance_record_ids.contains(id))
+        {
+            return Err(ValidationError(
+                "World pending source coverage is incomplete",
+            ));
+        }
+        for id in &self.unresolved_work_acceptance_ids {
+            covered.insert(id.as_str());
+        }
+        for work in &self.completed_work {
+            for value in [
+                &work.acceptance_record_id,
+                &work.stream_id,
+                &work.terminal_event_id,
+                &work.e2_commitment_id,
+            ] {
+                required(value)?;
+            }
+            validate_work_identity(&work.accepted_work_identity)?;
+            if work.acceptance_record_revision == 0
+                || work.terminal_event_sequence == 0
+                || !lower_hex(&work.e2_commitment_hash, 64)
+                || !covered.insert(&work.acceptance_record_id)
+                || self.e2_registry_sha256.is_none()
+                || self.supervisor_sha256.is_none()
+            {
+                return Err(ValidationError(
+                    "invalid or duplicate completed World work source",
+                ));
+            }
+        }
+        if covered
+            != self
+                .acceptance_record_ids
+                .iter()
+                .map(String::as_str)
+                .collect()
+        {
+            return Err(ValidationError("World acceptance coverage is incomplete"));
+        }
+        let mut attention = BTreeSet::new();
+        for entry in &self.unresolved_attention {
+            required(&entry.obligation_id)?;
+            validate_canonical_commitment(&entry.canonical_record_commitment)?;
+            if entry.obligation_revision == 0 || !attention.insert(&entry.obligation_id) {
+                return Err(ValidationError(
+                    "invalid or duplicate World attention source",
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+impl CanonicalHashInputV1 for WorldControllerWorkAttentionCutV1 {}
+
+impl sealed::Sealed for StartContinuationHandleHashInputV3 {}
+impl ValidatedCanonicalV1 for StartContinuationHandleHashInputV3 {
+    fn validate(&self) -> Result<(), ValidationError> {
+        if self.schema_version != 3 {
+            return Err(ValidationError("World Start continuation requires schema3"));
+        }
+        let core = &self.continuation;
+        core.validate()?;
+        validate_world(&self.world_binding)?;
+        self.work_attention_cut.validate()?;
+        validate_world_controller_selection(
+            &self.native_selection,
+            &self.requested_selection,
+            &core.backend_id,
+        )?;
+        let StartContinuationHandleStateV2::Settled {
+            protocol_actor,
+            thread_id,
+            turn_id,
+            provider_event_kind,
+            completion_kind,
+            obligation_snapshot,
+            ..
+        } = &core.state
+        else {
+            return Err(ValidationError(
+                "World Start continuation must contain exact settled Start data",
+            ));
+        };
+        let native_outcome = match completion_kind {
+            StartTurnCompletionKindV1::ResumableClean
+            | StartTurnCompletionKindV1::TerminalClean => {
+                matches!(
+                    provider_event_kind.as_str(),
+                    "turn.completed" | "result.success"
+                )
+            }
+            StartTurnCompletionKindV1::TerminalFailure { .. } => {
+                matches!(provider_event_kind.as_str(), "turn.failed" | "result.error")
+            }
+        };
+        if self.work_attention_cut.authority_store_id != core.authority_store_id
+            || self.work_attention_cut.orchestration_session_id != core.orchestration_session_id
+            || self.work_attention_cut.world_binding != self.world_binding
+            || thread_id != &core.internal_uaa_session_id
+            || obligation_snapshot.is_some()
+            || !native_outcome
+            || (provider_event_kind.starts_with("result.") && thread_id != turn_id)
+            || *protocol_actor
+                != (HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant {
+                    participant_id: core.participant_id.clone(),
+                })
+        {
+            return Err(ValidationError(
+                "World Start completion source/actor/native join differs",
+            ));
+        }
+        Ok(())
+    }
+}
+impl CanonicalHashInputV1 for StartContinuationHandleHashInputV3 {}
+
+impl sealed::Sealed for WorldControllerResumeBindingV1 {}
+impl ValidatedCanonicalV1 for WorldControllerResumeBindingV1 {
+    fn validate(&self) -> Result<(), ValidationError> {
+        schema_v1(self.schema_version)?;
+        for value in [
+            &self.authority_store_id,
+            &self.orchestration_session_id,
+            &self.shell_trace_session_id,
+            &self.authoritative_participant_id,
+            &self.original_start_intent_id,
+            &self.original_start_run_id,
+            &self.intent_id,
+            &self.issuer_request_id,
+            &self.claim_id,
+            &self.claimant_attempt_id,
+            &self.run_id,
+            &self.policy_revision,
+        ] {
+            required(value)?;
+        }
+        validate_directory(&self.bootstrap_home)?;
+        validate_workspace(&self.workspace_binding)?;
+        validate_world(&self.world_binding)?;
+        validate_world_controller_selection(
+            &self.native_selection,
+            &self.requested_selection,
+            &self.native_selection.backend_id,
+        )?;
+        if self.workspace_binding.authority_store_id != self.authority_store_id
+            || self.workspace_binding.authority_store_root != self.bootstrap_home
+            || self.authority_revision_observed == 0
+            || self.intent_revision_observed == 0
+            || !self
+                .authoritative_lineage
+                .contains(&self.authoritative_participant_id)
+            || self.authoritative_lineage.iter().any(String::is_empty)
+            || self
+                .authoritative_lineage
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                != self.authoritative_lineage.len()
+        {
+            return Err(ValidationError(
+                "World controller persisted binding differs",
+            ));
+        }
+        validate_canonical_commitment(&self.authority_record_commitment)?;
+        validate_canonical_commitment(&self.payload_commitment)?;
+        for (reference, kind) in [
+            (&self.policy_ref, AuthorityObjectKindV1::Policy),
+            (&self.descriptor_ref, AuthorityObjectKindV1::AgentDescriptor),
+            (
+                &self.initial_application_result_ref,
+                AuthorityObjectKindV1::ApplicationResult,
+            ),
+            (
+                &self.transition_input_ref,
+                AuthorityObjectKindV1::TransitionInput,
+            ),
+            (
+                &self.input_acceptance_ref,
+                AuthorityObjectKindV1::InputAcceptance,
+            ),
+            (
+                &self.consumed_resume_handle_ref,
+                AuthorityObjectKindV1::ResumeHandle,
+            ),
+        ] {
+            validate_ref(reference, kind)?;
+        }
+        Ok(())
+    }
+}
+impl CanonicalHashInputV1 for WorldControllerResumeBindingV1 {}
+
+impl sealed::Sealed for PostTurnCompletionHashInputV4 {}
+impl ValidatedCanonicalV1 for PostTurnCompletionHashInputV4 {
+    fn validate(&self) -> Result<(), ValidationError> {
+        if self.schema_version != 4 {
+            return Err(ValidationError(
+                "World controller completion requires schema4",
+            ));
+        }
+        self.binding.validate()?;
+        self.native_terminal.validate()?;
+        self.work_attention_cut.validate()?;
+        required(&self.event_id)?;
+        if self.native_terminal.backend_id != self.binding.native_selection.backend_id
+            || self.work_attention_cut.authority_store_id != self.binding.authority_store_id
+            || self.work_attention_cut.orchestration_session_id
+                != self.binding.orchestration_session_id
+            || self.work_attention_cut.world_binding != self.binding.world_binding
+            || self.protocol_actor
+                != (HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant {
+                    participant_id: self.binding.authoritative_participant_id.clone(),
+                })
+        {
+            return Err(ValidationError(
+                "World controller completion actor/native/source differs",
+            ));
+        }
+        let success = matches!(
+            self.native_terminal.terminal_event_kind.as_str(),
+            "turn.completed" | "result.success"
+        );
+        match (&self.kind, &self.produced_resume_handle_ref) {
+            (HostPostTurnProtocolEventKindV1::ResumableClean, Some(reference)) if success => {
+                validate_ref(reference, AuthorityObjectKindV1::ResumeHandle)?;
+                if reference.schema_version != 1 {
+                    return Err(ValidationError(
+                        "World continuation must be target-owned schema1",
+                    ));
+                }
+            }
+            (HostPostTurnProtocolEventKindV1::TerminalClean, None) if success => {}
+            (
+                HostPostTurnProtocolEventKindV1::TerminalFailure {
+                    reason: HostPostTurnTerminalReasonV1::TargetFailedAfterInputAcceptance,
+                },
+                None,
+            ) if !success => {}
+            _ => {
+                return Err(ValidationError(
+                    "World controller native outcome/continuation differs",
+                ))
+            }
+        }
+        Ok(())
+    }
+}
+impl CanonicalHashInputV1 for PostTurnCompletionHashInputV4 {}
 
 impl sealed::Sealed for TerminalHandoffHashInputV1 {}
 impl ValidatedCanonicalV1 for TerminalHandoffHashInputV1 {
@@ -1144,4 +1812,354 @@ impl CanonicalHashInputV1 for TerminalHandoffHashInputV2 {}
 
 pub(crate) mod sealed {
     pub trait Sealed {}
+}
+
+#[cfg(test)]
+mod direct_host_codec_tests {
+    use super::*;
+    use crate::execution::agent_runtime::host_session_authority::{canonical_json, hash};
+
+    fn commitment() -> AuthorityObjectCommitmentV1 {
+        AuthorityObjectCommitmentV1::CanonicalSha256 {
+            digest_hex: "1".repeat(64),
+        }
+    }
+
+    fn reference(kind: AuthorityObjectKindV1) -> AuthorityObjectRefV1 {
+        AuthorityObjectRefV1 {
+            ref_id: format!("ao_{}", "1".repeat(32)),
+            object_kind: kind,
+            schema_version: 1,
+            commitment: if kind == AuthorityObjectKindV1::TransitionInput {
+                AuthorityObjectCommitmentV1::StoreHmacSha256 {
+                    key_id: format!("ak_{}", "1".repeat(32)),
+                    domain: "substrate.a1.transition-input.v1".into(),
+                    digest_hex: "1".repeat(64),
+                }
+            } else {
+                commitment()
+            },
+        }
+    }
+
+    fn binding() -> DirectHostResumeBindingV1 {
+        let home = CanonicalDirectoryV1 {
+            physical_path: "/test/home".into(),
+            physical_identity: DirectoryPhysicalIdentityV1::Linux {
+                device_id: 1,
+                inode: 2,
+            },
+        };
+        DirectHostResumeBindingV1 {
+            schema_version: 1,
+            authority_store_id: format!("as_{}", "1".repeat(32)),
+            bootstrap_home: home.clone(),
+            workspace_binding: WorkspaceBindingV1 {
+                workspace_root: CanonicalDirectoryV1 {
+                    physical_path: "/test/workspace".into(),
+                    ..home.clone()
+                },
+                authority_store_root: home,
+                authority_store_id: format!("as_{}", "1".repeat(32)),
+            },
+            orchestration_session_id: "session".into(),
+            shell_trace_session_id: "trace".into(),
+            authoritative_participant_id: "participant".into(),
+            authoritative_lineage: vec!["participant".into()],
+            authority_history_commitment: commitment(),
+            authority_revision_observed: 4,
+            authority_record_commitment: commitment(),
+            policy_ref: None,
+            policy_revision: None,
+            descriptor_ref: reference(AuthorityObjectKindV1::AgentDescriptor),
+            host_attach_contract_ref: reference(AuthorityObjectKindV1::HostAttachContract),
+            intent_id: "intent".into(),
+            issuer_request_id: "request".into(),
+            payload_commitment: commitment(),
+            intent_revision_observed: 3,
+            claim_id: "claim".into(),
+            claimant_attempt_id: "attempt".into(),
+            run_id: "run".into(),
+            initial_application_result_ref: reference(AuthorityObjectKindV1::ApplicationResult),
+            transition_input_ref: reference(AuthorityObjectKindV1::TransitionInput),
+            input_acceptance_ref: Some(reference(AuthorityObjectKindV1::InputAcceptance)),
+            consumed_resume_handle_ref: reference(AuthorityObjectKindV1::ResumeHandle),
+        }
+    }
+
+    fn native() -> DirectHostNativeTerminalEvidenceV1 {
+        DirectHostNativeTerminalEvidenceV1 {
+            schema_version: 1,
+            backend_id: "backend".into(),
+            protocol: "protocol".into(),
+            native_session_id: "thread".into(),
+            thread_id: "thread".into(),
+            turn_id: "turn".into(),
+            sequence: DirectHostNativeSequenceV1::Codex {
+                resumed_thread_id: "thread".into(),
+                started_turn_id: "turn".into(),
+            },
+            terminal_event_kind: "turn.completed".into(),
+            raw_event_sha256: "2".repeat(64),
+            terminal_ordinal: 1,
+        }
+    }
+
+    fn event() -> PostTurnProtocolEventHashInputV2 {
+        PostTurnProtocolEventHashInputV2 {
+            schema_version: 2,
+            binding: binding(),
+            protocol_actor: HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant {
+                participant_id: "participant".into(),
+            },
+            event_id: "run-terminal".into(),
+            kind: HostPostTurnProtocolEventKindV1::ResumableClean,
+            native_terminal: Some(native()),
+            emitted_at: TimestampV1::parse("2026-10-29T00:00:00.000000000Z").unwrap(),
+        }
+    }
+
+    #[test]
+    fn test_direct_host_resume_codec_requires_exact_native_sequence() {
+        native().validate().unwrap();
+        for change in 0..6 {
+            let mut value = native();
+            match change {
+                0 => value.thread_id = "other-thread".into(),
+                1 => value.turn_id = "other-turn".into(),
+                2 => value.terminal_event_kind = "result.success".into(),
+                3 => value.raw_event_sha256 = "X".repeat(64),
+                4 => value.terminal_ordinal = 2,
+                _ => value.native_session_id.clear(),
+            }
+            assert!(value.validate().is_err(), "accepted substitution {change}");
+        }
+        let mut claude = native();
+        claude.sequence = DirectHostNativeSequenceV1::ClaudeCode {
+            initialized_session_id: "thread".into(),
+        };
+        claude.turn_id = "thread".into();
+        claude.terminal_event_kind = "result.success".into();
+        claude.validate().unwrap();
+        claude.turn_id = "turn".into();
+        assert!(claude.validate().is_err());
+    }
+
+    #[test]
+    fn test_direct_host_resume_codec_preserves_actor_and_input_failure_order() {
+        event().validate().unwrap();
+        let mut value = event();
+        value.binding.input_acceptance_ref = None;
+        assert!(value.validate().is_err());
+        value.kind = HostPostTurnProtocolEventKindV1::TerminalFailure {
+            reason: HostPostTurnTerminalReasonV1::ResumeRuntimeCreationRejected,
+        };
+        value.protocol_actor = HostPostTurnProtocolActorV1::LaunchApplicationClaimant {
+            claim_id: "claim".into(),
+            claimant_attempt_id: "attempt".into(),
+        };
+        assert!(value.validate().is_err()); // A launch rejection cannot carry native evidence.
+        value.native_terminal = None;
+        value.validate().unwrap();
+        value.binding.input_acceptance_ref = binding().input_acceptance_ref;
+        assert!(value.validate().is_err()); // Post-acceptance launch failure is never pre-acceptance rejection.
+        value = event();
+        value.protocol_actor = HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant {
+            participant_id: "other".into(),
+        };
+        assert!(value.validate().is_err());
+        value = event();
+        value.native_terminal.as_mut().unwrap().terminal_event_kind = "turn.failed".into();
+        assert!(value.validate().is_err());
+        value.kind = HostPostTurnProtocolEventKindV1::TerminalFailure {
+            reason: HostPostTurnTerminalReasonV1::TargetFailedAfterInputAcceptance,
+        };
+        value.validate().unwrap();
+    }
+
+    #[test]
+    fn test_direct_host_resume_codec_does_not_reinterpret_world_v1() {
+        let value = event();
+        let bytes = hash::canonical_object_bytes(
+            AuthorityObjectKindV1::PostTurnProtocolEvent,
+            hash::CanonicalObjectHashInputV1::PostTurnProtocolEventV2(&value),
+        )
+        .unwrap();
+        assert_eq!(
+            canonical_json::from_slice::<PostTurnProtocolEventHashInputV2>(&bytes).unwrap(),
+            value
+        );
+        assert!(canonical_json::from_slice::<PostTurnProtocolEventHashInputV1>(&bytes).is_err());
+        let mut object = serde_json::to_value(&value).unwrap();
+        object["world_binding"] = serde_json::json!({"world_id": "forged", "world_generation": 1});
+        assert!(serde_json::from_value::<PostTurnProtocolEventHashInputV2>(object).is_err());
+        let mut wrong_version = value;
+        wrong_version.schema_version = 1;
+        assert!(wrong_version.validate().is_err());
+        assert!(object_schema_version(AuthorityObjectKindV1::PostTurnProtocolEvent, 3).is_err());
+        assert!(object_schema_version(AuthorityObjectKindV1::ObligationSnapshot, 2).is_err());
+    }
+
+    #[test]
+    fn test_completion_v3_requires_exact_continuation_and_preserves_v2_codec() {
+        let mut event_ref = reference(AuthorityObjectKindV1::PostTurnProtocolEvent);
+        event_ref.schema_version = 2;
+        let v2 = PostTurnCompletionHashInputV2 {
+            schema_version: 2,
+            binding: binding(),
+            protocol_event_ref: event_ref,
+            outcome: PostTurnCompletionOutcomeV1::TerminalClean,
+            attention_cut: None,
+            completed_at: TimestampV1::parse("2026-10-29T00:00:00.000000000Z").unwrap(),
+        };
+        let old = hash::canonical_object_bytes(
+            AuthorityObjectKindV1::PostTurnCompletion,
+            hash::CanonicalObjectHashInputV1::PostTurnCompletionV2(&v2),
+        )
+        .unwrap();
+        let mut v3 = PostTurnCompletionHashInputV3 {
+            schema_version: 3,
+            binding: v2.binding.clone(),
+            protocol_event_ref: v2.protocol_event_ref.clone(),
+            outcome: v2.outcome,
+            attention_cut: None,
+            completed_at: v2.completed_at.clone(),
+            produced_resume_handle_ref: None,
+        };
+        v3.validate().unwrap();
+        let bytes = hash::canonical_object_bytes(
+            AuthorityObjectKindV1::PostTurnCompletion,
+            hash::CanonicalObjectHashInputV1::PostTurnCompletionV3(&v3),
+        )
+        .unwrap();
+        assert_eq!(
+            canonical_json::from_slice::<PostTurnCompletionHashInputV3>(&bytes).unwrap(),
+            v3
+        );
+        assert!(canonical_json::from_slice::<PostTurnCompletionHashInputV2>(&bytes).is_err());
+        assert!(canonical_json::from_slice::<PostTurnCompletionHashInputV3>(&old).is_err());
+        assert_eq!(
+            hash::canonical_object_bytes(
+                AuthorityObjectKindV1::PostTurnCompletion,
+                hash::CanonicalObjectHashInputV1::PostTurnCompletionV2(&v2)
+            )
+            .unwrap(),
+            old
+        );
+        let mut unknown = serde_json::to_value(&v3).unwrap();
+        unknown["future"] = serde_json::json!(1);
+        assert!(serde_json::from_value::<PostTurnCompletionHashInputV3>(unknown).is_err());
+        v3.produced_resume_handle_ref = Some(reference(AuthorityObjectKindV1::ResumeHandle));
+        assert!(
+            v3.validate().is_err(),
+            "terminal clean cannot produce a continuation"
+        );
+        v3.outcome = PostTurnCompletionOutcomeV1::TerminalFailure;
+        assert!(
+            v3.validate().is_err(),
+            "terminal failure cannot produce a continuation"
+        );
+        v3.outcome = PostTurnCompletionOutcomeV1::ResumableClean;
+        v3.attention_cut = Some(DirectHostCanonicalAttentionCutV1 {
+            schema_version: 1,
+            authority_store_id: v3.binding.authority_store_id.clone(),
+            orchestration_session_id: v3.binding.orchestration_session_id.clone(),
+            genesis_commitment: commitment(),
+            source_head_commitment: commitment(),
+            ledger_head_commitment: commitment(),
+            receipt_high_water: 0,
+            ledger_revision: 0,
+            source_protocol: "substrate.direct-host-inbox.resume-only.v1".into(),
+            unresolved_attention: vec![],
+        });
+        v3.validate().unwrap();
+        v3.produced_resume_handle_ref = None;
+        assert!(
+            v3.validate().is_err(),
+            "resumable completion must produce its continuation"
+        );
+        for (kind, version) in [
+            (AuthorityObjectKindV1::ResumeHandle, 2),
+            (AuthorityObjectKindV1::ResumeHandle, 3),
+            (AuthorityObjectKindV1::PostTurnCompletion, 1),
+        ] {
+            let mut r = reference(kind);
+            r.schema_version = version;
+            v3.produced_resume_handle_ref = Some(r);
+            assert!(v3.validate().is_err());
+        }
+        for kind in [
+            AuthorityObjectKindV1::PostTurnProtocolEvent,
+            AuthorityObjectKindV1::TerminalHandoff,
+            AuthorityObjectKindV1::ApplicationResult,
+        ] {
+            assert!(object_schema_version(kind, 3).is_err());
+        }
+        object_schema_version(AuthorityObjectKindV1::ResumeHandle, 3).unwrap();
+        assert!(object_schema_version(AuthorityObjectKindV1::ResumeHandle, 4).is_err());
+        object_schema_version(AuthorityObjectKindV1::PostTurnCompletion, 3).unwrap();
+    }
+
+    #[test]
+    fn test_direct_host_resume_codec_requires_explicit_complete_attention_cut() {
+        let mut event_ref = reference(AuthorityObjectKindV1::PostTurnProtocolEvent);
+        event_ref.schema_version = 2;
+        let mut value = PostTurnCompletionHashInputV2 {
+            schema_version: 2,
+            binding: binding(),
+            protocol_event_ref: event_ref,
+            outcome: PostTurnCompletionOutcomeV1::ResumableClean,
+            attention_cut: None,
+            completed_at: TimestampV1::parse("2026-10-29T00:00:00.000000000Z").unwrap(),
+        };
+        assert!(value.validate().is_err());
+        value.attention_cut = Some(DirectHostCanonicalAttentionCutV1 {
+            schema_version: 1,
+            authority_store_id: value.binding.authority_store_id.clone(),
+            orchestration_session_id: value.binding.orchestration_session_id.clone(),
+            genesis_commitment: commitment(),
+            source_head_commitment: commitment(),
+            ledger_head_commitment: commitment(),
+            receipt_high_water: 0,
+            ledger_revision: 0,
+            source_protocol: "substrate.direct-host-inbox.resume-only.v1".into(),
+            unresolved_attention: vec![],
+        });
+        value.validate().unwrap(); // Structural validation alone does not authenticate this cut.
+        value
+            .attention_cut
+            .as_mut()
+            .unwrap()
+            .orchestration_session_id = "other".into();
+        assert!(value.validate().is_err());
+        value.attention_cut = None;
+        value.outcome = PostTurnCompletionOutcomeV1::TerminalFailure;
+        value.validate().unwrap();
+        value.protocol_event_ref.schema_version = 1;
+        assert!(value.validate().is_err());
+    }
+}
+
+#[cfg(test)]
+mod direct_host_world_v1_preservation_tests {
+    use super::*;
+    use crate::execution::agent_runtime::host_session_authority::{canonical_json, hash};
+
+    #[test]
+    fn test_direct_host_resume_codec_keeps_world_v1_event_reference_strict() {
+        let mut completion: PostTurnCompletionHashInputV1 =
+            canonical_json::from_slice(include_bytes!("testdata/post-turn-completion.json"))
+                .unwrap();
+        assert_eq!(
+            hash::canonical_sha256(&completion).unwrap(),
+            "5f09e17c0e0822f97e04d13977fb4b009b62a49ad92703b629bb953d82ec704c"
+        );
+        for version in [2, 3] {
+            completion.protocol_event_ref.schema_version = version;
+            assert!(
+                hash::canonical_sha256(&completion).is_err(),
+                "world V1 completion admitted a V{version} event reference"
+            );
+        }
+    }
 }

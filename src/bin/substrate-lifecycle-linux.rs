@@ -556,9 +556,9 @@ fn run_pm_bound_guest_pairing_operator_tty_session_v1(
     {
         bail!("R6 operator proof does not have the fixed guest layout");
     }
-    require_r6_pm_bound_lima_guest_v1(&binding)?;
+    require_r6_pm_bound_lima_guest_v1(binding)?;
     require_r6_not_expired_at_v1(launch.expires_at_unix_ns, "operator launch")?;
-    let commitment = read_r6_operator_tty_confirmation_commitment_v1(executor, &binding)?;
+    let commitment = read_r6_operator_tty_confirmation_commitment_v1(executor, binding)?;
     require_r6_not_expired_at_v1(launch.expires_at_unix_ns, "operator launch")?;
     persist_r6_guest_operator_proof_v1(executor, &launch, &commitment)
 }
@@ -1070,10 +1070,6 @@ fn current_bootstrap_intent_path_v1(executor: &LinuxManagedArtifactExecutorV1) -
     ))
 }
 
-fn require_current_guest_pairing_ticket_v1(ticket: &GuestPublisherPairingTicketV1) -> Result<()> {
-    require_r6_not_expired_at_v1(ticket.challenge.expires_at_unix_ns, "guest pairing ticket")
-}
-
 /// R6 has one expiry boundary everywhere: equality is already expired. Callers must perform this
 /// check immediately before every mutable transition, leaving an expired active record preserved.
 fn require_r6_not_expired_at_v1(expires_at_unix_ns: u64, label: &str) -> Result<()> {
@@ -1089,13 +1085,6 @@ fn require_r6_not_expired_at_now_v1(
         bail!("{label} expired");
     }
     Ok(())
-}
-
-fn require_committable_guest_pairing_ticket_v1(
-    ticket: &GuestPublisherPairingTicketV1,
-    _hello: &GuestPublisherBootstrapHelloV1,
-) -> Result<()> {
-    require_current_guest_pairing_ticket_v1(ticket)
 }
 
 fn path_exists_or_symlink_v1(path: &Path) -> Result<bool> {
@@ -2590,16 +2579,6 @@ fn persist_protected_state_v1(
     atomic_write_file_v1(&executor.protected_state_path, &bytes, 0o600)
 }
 
-fn begin_guest_publisher_bootstrap_v1(
-    _executor: &LinuxManagedArtifactExecutorV1,
-    _ticket: &GuestPublisherPairingTicketV1,
-    _kill_point: KillPointV1,
-) -> Result<GuestPublisherBootstrapHelloV1> {
-    bail!(
-        "generic guest bootstrap is unreachable without the exact PM-bound R6 data and operator-TTY sessions"
-    )
-}
-
 fn open_guest_controlling_tty_v1(
     executor: &LinuxManagedArtifactExecutorV1,
 ) -> Result<(File, File)> {
@@ -2728,10 +2707,6 @@ fn validate_r6_operator_proof_before_intent_v1(
     let proof_sha256 = guest_publisher_pairing_operator_proof_sha256_v1(&proof)
         .context("digest validated R6 operator proof")?;
     Ok((proof, proof_sha256))
-}
-
-fn verify_guest_publisher_pairing_ticket_v1(ticket: &GuestPublisherPairingTicketV1) -> Result<()> {
-    validate_guest_publisher_pairing_ticket_v1(ticket)
 }
 
 fn emit_guest_publisher_bootstrap_hello_v1(
@@ -3009,57 +2984,6 @@ fn open_or_join_guest_signing_key_v1(
     ensure_guest_artifact_directory_v1(executor, challenge_id)?;
     load_or_create_linux_signing_key_v1(&path)?;
     Ok(path)
-}
-
-fn materialize_guest_signing_key_v1(guest_key_path: &Path, final_key_path: &Path) -> Result<()> {
-    match fs::symlink_metadata(final_key_path) {
-        Ok(metadata) if !metadata.file_type().is_file() => {
-            bail!(
-                "publisher signing key path is not a regular file: {}",
-                final_key_path.display()
-            )
-        }
-        Ok(_) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => {
-            return Err(error).with_context(|| format!("stat {}", final_key_path.display()))
-        }
-    }
-
-    let parent = final_key_path
-        .parent()
-        .ok_or_else(|| anyhow!("publisher signing key path has no parent"))?;
-    fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
-    let leaf = final_key_path
-        .file_name()
-        .and_then(|leaf| leaf.to_str())
-        .ok_or_else(|| anyhow!("publisher signing key path has no file name"))?;
-    let tmp_path = parent.join(format!(".{leaf}.tmp-{}", unix_now_ns_v1()?));
-    fs::copy(guest_key_path, &tmp_path).with_context(|| {
-        format!(
-            "copy guest key {} -> {}",
-            guest_key_path.display(),
-            tmp_path.display()
-        )
-    })?;
-    fs::set_permissions(&tmp_path, fs::Permissions::from_mode(0o600))
-        .with_context(|| format!("chmod {}", tmp_path.display()))?;
-    fs::rename(&tmp_path, final_key_path).with_context(|| {
-        format!(
-            "rename guest key {} -> {}",
-            tmp_path.display(),
-            final_key_path.display()
-        )
-    })?;
-    let final_file = OpenOptions::new()
-        .read(true)
-        .open(final_key_path)
-        .with_context(|| format!("open {}", final_key_path.display()))?;
-    final_file
-        .sync_all()
-        .with_context(|| format!("sync {}", final_key_path.display()))?;
-    linux_fsync_parent_v1(final_key_path)?;
-    Ok(())
 }
 
 fn ensure_guest_signing_key_matches_durable_intent_v1(

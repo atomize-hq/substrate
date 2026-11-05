@@ -755,6 +755,7 @@ mod native0156 {
                 env,
                 "spn_native0156_1".into(),
                 MemberRuntimeLaunchAdmissionV1 {
+                    ordinary_effect: None,
                     dispatch,
                     acceptance_context: None,
                     policy_snapshot: sample_e2_submit_turn_request()

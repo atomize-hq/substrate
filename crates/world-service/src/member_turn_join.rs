@@ -59,6 +59,10 @@ struct MemberTurnStableKeyV1 {
 impl MemberTurnStableKeyV1 {
     fn from_request(request: &MemberTurnSubmitRequestV1) -> anyhow::Result<Self> {
         request.validate().map_err(anyhow::Error::msg)?;
+        Self::from_validated_request(request)
+    }
+
+    fn from_validated_request(request: &MemberTurnSubmitRequestV1) -> anyhow::Result<Self> {
         let carrier = request.policy_snapshot_carrier.as_ref().ok_or_else(|| {
             anyhow::anyhow!("E2 member-turn reservation requires policy_snapshot_carrier")
         })?;
@@ -82,6 +86,12 @@ impl MemberTurnStableKeyV1 {
 
 fn canonical_request_bytes(request: &MemberTurnSubmitRequestV1) -> anyhow::Result<Vec<u8>> {
     request.validate().map_err(anyhow::Error::msg)?;
+    canonical_validated_request_bytes(request)
+}
+
+fn canonical_validated_request_bytes(
+    request: &MemberTurnSubmitRequestV1,
+) -> anyhow::Result<Vec<u8>> {
     let value = serde_json::to_value(request)?;
     serde_json::to_vec(&recursively_sorted_json(value)).map_err(Into::into)
 }
@@ -491,6 +501,34 @@ impl MemberTurnJoinRegistry {
     ) -> Result<Option<MemberTurnJoinReservation>, MemberTurnJoinError> {
         self.revalidate_root().map_err(join_unsafe)?;
         let stable_key = MemberTurnStableKeyV1::from_request(request).map_err(join_unsafe)?;
+        let canonical = canonical_request_bytes(request).map_err(join_unsafe)?;
+        self.join_existing_validated(request, stable_key, &canonical)
+    }
+
+    pub(crate) fn join_existing_ordinary(
+        &self,
+        request: &MemberTurnSubmitRequestV1,
+        admission: &substrate_shell::OrdinaryWorldTurnAdmissionV1,
+    ) -> Result<Option<MemberTurnJoinReservation>, MemberTurnJoinError> {
+        admission
+            .validate_exact_request(request)
+            .map_err(join_unsafe)?;
+        request
+            .validate_ordinary_representation()
+            .map_err(join_unsafe)?;
+        let stable_key =
+            MemberTurnStableKeyV1::from_validated_request(request).map_err(join_unsafe)?;
+        let canonical = canonical_validated_request_bytes(request).map_err(join_unsafe)?;
+        self.join_existing_validated(request, stable_key, &canonical)
+    }
+
+    fn join_existing_validated(
+        &self,
+        request: &MemberTurnSubmitRequestV1,
+        stable_key: MemberTurnStableKeyV1,
+        canonical: &[u8],
+    ) -> Result<Option<MemberTurnJoinReservation>, MemberTurnJoinError> {
+        self.revalidate_root().map_err(join_unsafe)?;
         let record_id = stable_key_id(&self.inner.digest_key, &stable_key).map_err(join_unsafe)?;
         let acceptance = request
             .acceptance_context
@@ -538,7 +576,11 @@ impl MemberTurnJoinRegistry {
         reconcile_record_directory_temps(&record_directory).map_err(join_unsafe)?;
         let mut record = read_record(&record_directory, &record_id).map_err(join_unsafe)?;
         let prior_revision = record.record_revision;
-        verify_request_digest(&self.inner.digest_key, request, &record.request_digest_hex)?;
+        verify_request_digest(
+            &self.inner.digest_key,
+            canonical,
+            &record.request_digest_hex,
+        )?;
         if record.stable_key != stable_key
             || record.acceptance_record_id != acceptance.proposed_acceptance_record_id
             || record.message_id != *message_id
@@ -570,9 +612,41 @@ impl MemberTurnJoinRegistry {
     ) -> Result<MemberTurnJoinReservation, MemberTurnJoinError> {
         self.revalidate_root().map_err(join_unsafe)?;
         let stable_key = MemberTurnStableKeyV1::from_request(request).map_err(join_unsafe)?;
+        let canonical = canonical_request_bytes(request).map_err(join_unsafe)?;
+        let digest = request_digest(&self.inner.digest_key, request).map_err(join_unsafe)?;
+        self.reserve_validated(request, stable_key, &canonical, digest)
+    }
+
+    pub(crate) fn reserve_ordinary(
+        &self,
+        request: &MemberTurnSubmitRequestV1,
+        admission: &substrate_shell::OrdinaryWorldTurnAdmissionV1,
+    ) -> Result<MemberTurnJoinReservation, MemberTurnJoinError> {
+        admission
+            .validate_exact_request(request)
+            .map_err(join_unsafe)?;
+        request
+            .validate_ordinary_representation()
+            .map_err(join_unsafe)?;
+        let stable_key =
+            MemberTurnStableKeyV1::from_validated_request(request).map_err(join_unsafe)?;
+        let canonical = canonical_validated_request_bytes(request).map_err(join_unsafe)?;
+        let digest = lowercase_hex(
+            &domain_separated_hmac(&self.inner.digest_key, REQUEST_DIGEST_DOMAIN, &canonical)
+                .map_err(join_unsafe)?,
+        );
+        self.reserve_validated(request, stable_key, &canonical, digest)
+    }
+
+    fn reserve_validated(
+        &self,
+        request: &MemberTurnSubmitRequestV1,
+        stable_key: MemberTurnStableKeyV1,
+        canonical: &[u8],
+        request_digest: String,
+    ) -> Result<MemberTurnJoinReservation, MemberTurnJoinError> {
+        self.revalidate_root().map_err(join_unsafe)?;
         let record_id = stable_key_id(&self.inner.digest_key, &stable_key).map_err(join_unsafe)?;
-        let request_digest =
-            request_digest(&self.inner.digest_key, request).map_err(join_unsafe)?;
         let acceptance = request
             .acceptance_context
             .as_ref()
@@ -604,7 +678,11 @@ impl MemberTurnJoinRegistry {
         {
             reconcile_record_directory_temps(&record_directory).map_err(join_unsafe)?;
             let record = read_record(&record_directory, &record_id).map_err(join_unsafe)?;
-            verify_request_digest(&self.inner.digest_key, request, &record.request_digest_hex)?;
+            verify_request_digest(
+                &self.inner.digest_key,
+                canonical,
+                &record.request_digest_hex,
+            )?;
             if record.stable_key != stable_key
                 || record.acceptance_record_id != acceptance.proposed_acceptance_record_id
                 || record.message_id != *message_id
@@ -1782,17 +1860,16 @@ fn read_record(
 
 fn verify_request_digest(
     key: &[u8],
-    request: &MemberTurnSubmitRequestV1,
+    canonical: &[u8],
     stored_hex: &str,
 ) -> Result<(), MemberTurnJoinError> {
     let stored = decode_lower_hex_32(stored_hex).map_err(join_unsafe)?;
-    let canonical = canonical_request_bytes(request).map_err(join_unsafe)?;
     let mut mac = HmacSha256::new_from_slice(key)
         .map_err(|_| join_unsafe("member-turn HMAC key length is invalid"))?;
     mac.update(&(REQUEST_DIGEST_DOMAIN.len() as u64).to_be_bytes());
     mac.update(REQUEST_DIGEST_DOMAIN);
     mac.update(&(canonical.len() as u64).to_be_bytes());
-    mac.update(&canonical);
+    mac.update(canonical);
     mac.verify_slice(&stored)
         .map_err(|_| MemberTurnJoinError::RequestConflict)
 }
@@ -2787,6 +2864,30 @@ mod tests {
                 host_transition_correlation: None,
             }),
         }
+    }
+
+    #[test]
+    fn test_protected_registry_refuses_zero_generation() {
+        let root = tempfile::tempdir().unwrap();
+        let registry = MemberTurnJoinRegistry::open(root.path()).unwrap();
+        let mut request = request();
+        request.world_generation = 0;
+        request
+            .policy_snapshot_carrier
+            .as_mut()
+            .unwrap()
+            .target_world
+            .world_generation = 0;
+        transport_api_types::OrdinaryMemberTurnSubmitRequestV1::from_request(request.clone())
+            .unwrap();
+        assert!(registry.reserve(&request).is_err());
+        assert!(registry.join_existing(&request).is_err());
+        assert_eq!(
+            count_record_directories(&registry.inner.records).unwrap(),
+            0
+        );
+        assert!(MemberTurnStableKeyV1::from_request(&request).is_err());
+        assert!(canonical_request_bytes(&request).is_err());
     }
 
     fn non_e2_start(stream_id: &str) -> ExecuteStreamFrame {

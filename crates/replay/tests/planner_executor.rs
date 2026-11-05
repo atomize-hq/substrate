@@ -70,10 +70,11 @@ fn make_state(raw_cmd: &str) -> ExecutionState {
 
 fn replay_strategy_trace_path() -> PathBuf {
     static TRACE_CTX_INIT: OnceLock<()> = OnceLock::new();
-    let tempdir = Box::leak(Box::new(tempfile::tempdir().unwrap()));
+    static TRACE_ROOT: OnceLock<tempfile::TempDir> = OnceLock::new();
+    let tempdir = TRACE_ROOT.get_or_init(|| tempfile::tempdir().unwrap());
     let trace_path = tempdir.path().join("trace.jsonl");
     TRACE_CTX_INIT.get_or_init(|| {
-        let ctx = TraceContext::default();
+        let ctx = TraceContext::explicit_product(tempdir.path()).unwrap();
         set_global_trace_context(ctx).unwrap();
     });
     substrate_trace::init_trace(Some(trace_path.clone())).unwrap();

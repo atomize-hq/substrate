@@ -40,6 +40,8 @@ use std::thread;
 pub(crate) use self::world::initialize_world;
 #[cfg(target_os = "linux")]
 pub(crate) use dispatch::build_authenticated_world_deps_client_and_request;
+#[cfg(target_os = "linux")]
+pub(crate) use dispatch::build_ordinary_agent_client_and_member_dispatch_request_for_cwd;
 pub(crate) use dispatch::world_persistent_session::{
     ReplPersistentSessionClient, ReplSessionStartParams, ReplStdinMode,
 };
@@ -667,6 +669,8 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
                 &config,
                 #[cfg(target_os = "linux")]
                 install_context.context.intended_host_principal.clone(),
+                #[cfg(target_os = "linux")]
+                install_context.clone(),
             )
         }
         ShellMode::Wrap(cmd) => run_wrap_mode(&config, cmd),

@@ -1,4 +1,7 @@
-use super::config::{load_install_config, save_install_config, InstallConfig};
+use super::config::{
+    load_install_config, refuse_protected_install_config, save_install_config, InstallConfig,
+};
+use crate::execution::config_model::is_protected_selection_config_error_v1;
 use crate::execution::env_sh_path;
 #[cfg(target_os = "linux")]
 use crate::execution::socket_activation;
@@ -155,6 +158,7 @@ pub fn run_enable(
         }
         substrate_paths::substrate_home()?
     };
+    refuse_protected_install_config(&substrate_home.join("config.yaml"))?;
     let helper_override = env::var("SUBSTRATE_WORLD_ENABLE_SCRIPT")
         .ok()
         .map(PathBuf::from);
@@ -187,6 +191,7 @@ pub fn run_enable(
     let mut corrupt_config = false;
     let mut config = match load_install_config(&config_path) {
         Ok(cfg) => cfg,
+        Err(err) if is_protected_selection_config_error_v1(&err) => return Err(err),
         Err(err) => {
             corrupt_config = true;
             println!(
@@ -297,6 +302,10 @@ fn run_enable_with_provision_deps(
     args: &WorldEnableArgs,
     #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
 ) -> Result<()> {
+    #[cfg(unix)]
+    refuse_protected_install_config(
+        &Path::new(&install_context.context.selected_host_prefix).join("config.yaml"),
+    )?;
     ensure_supported_backend_or_exit();
 
     let cwd =
@@ -393,6 +402,7 @@ fn run_enable_with_provision_deps(
     let mut corrupt_config = false;
     let mut config = match load_install_config(&config_path) {
         Ok(cfg) => cfg,
+        Err(err) if is_protected_selection_config_error_v1(&err) => return Err(err),
         Err(err) => {
             corrupt_config = true;
             println!(
@@ -630,5 +640,73 @@ mod tests {
 
         let detected = find_repo_checkout_helper(&target_bin).expect("repo helper");
         assert_eq!(detected, helper);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_enable_entries_refuse_protected_input_before_effects() {
+        use std::os::unix::fs::PermissionsExt;
+        use transport_api_types::InstallBootstrapContextV1;
+        let temp = tempdir().unwrap();
+        let home = temp.path().join("selected-home");
+        let script = home.join("scripts/substrate/world-enable.sh");
+        std::fs::create_dir_all(script.parent().unwrap()).unwrap();
+        // A fixture helper can only mark its own invocation and exit.
+        std::fs::write(
+            &script,
+            "#!/bin/sh\nprintf invoked > \"$0.marker\"\nexit 73\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let marker = script.with_file_name("world-enable.sh.marker");
+        let config_path = home.join("config.yaml");
+        let env_path = home.join("env.sh");
+        std::fs::write(&env_path, "existing env sentinel\n").unwrap();
+        // Structural fixture carrier only: no passwd lookup or configured authority.
+        let carrier = InstallBootstrapContextCarrierV1::from_context(
+            InstallBootstrapContextV1::new_unix(home.to_str().unwrap(), "fixture-user", 1234)
+                .unwrap(),
+        )
+        .unwrap();
+        for provision_deps in [false, true] {
+            let args = WorldEnableArgs {
+                home: Some(home.clone()),
+                profile: "release".into(),
+                provision_deps,
+                dry_run: false,
+                verbose: false,
+                force: false,
+                timeout: 1,
+            };
+            for raw in crate::execution::config_model::PROTECTED_SELECTION_CONFIG_FIXTURES_V1 {
+                std::fs::write(&config_path, raw).unwrap();
+                let error = run_enable(&args, &carrier).unwrap_err();
+                assert!(
+                    is_protected_selection_config_error_v1(&error),
+                    "{error:#}; {raw}"
+                );
+                assert_eq!(std::fs::read_to_string(&config_path).unwrap(), *raw);
+                assert_eq!(
+                    std::fs::read_to_string(&env_path).unwrap(),
+                    "existing env sentinel\n"
+                );
+                assert!(!marker.exists(), "zero fixture provision invocations");
+                assert!(!home.join("logs").exists());
+                assert!(!home.join("deps").exists());
+            }
+            let unreadable_yaml = b"\xffagents: {defaults: {selection: {harness: codex}}}\n";
+            std::fs::write(&config_path, unreadable_yaml).unwrap();
+            let error = run_enable(&args, &carrier).unwrap_err();
+            assert!(is_protected_selection_config_error_v1(&error));
+            assert_eq!(std::fs::read(&config_path).unwrap(), unreadable_yaml);
+            assert_eq!(
+                std::fs::read_to_string(&env_path).unwrap(),
+                "existing env sentinel\n"
+            );
+            assert!(!marker.exists(), "zero fixture provision invocations");
+            assert!(!home.join("logs").exists());
+            assert!(!home.join("deps").exists());
+            assert_eq!(std::fs::read_dir(&home).unwrap().count(), 3);
+        }
     }
 }

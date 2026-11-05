@@ -52,6 +52,13 @@ use super::state_store::{
 };
 use super::world_work_execution_supervisor::WorldWorkExecutionClaimV1;
 
+#[cfg(target_os = "linux")]
+mod ordinary_fork;
+#[cfg(target_os = "linux")]
+pub(crate) use ordinary_fork::{
+    publish_ordinary_fork_commitment, resolve_ordinary_fork_policy_material,
+};
+
 const REQUEST_COMMITMENT_DOMAIN: &str = "substrate.e2.fresh-spawn-validated-request.v1";
 const RESERVATION_HASH_DOMAIN: &str = "substrate.e2.dispatch-policy-commitment-reservation.v1";
 const COMMITMENT_HASH_DOMAIN: &str = "substrate.e2.dispatch-policy-commitment.v1";
@@ -506,9 +513,36 @@ pub(crate) struct AuthenticatedFreshSpawnReservationProofV1 {
     retained_participant_id: String,
     bootstrap_run_id: String,
     narrowing_attestation: Option<OpaqueFreshSpawnNarrowingAttestationV1>,
+    #[cfg(target_os = "linux")]
+    ordinary_unchanged_parent: Option<AuthenticatedOrdinaryUnchangedParentAdmissionV1>,
 }
 
 struct OpaqueFreshSpawnNarrowingAttestationV1;
+
+/// E2-owned genuine ordinary provenance. Contains no request, snapshot or MAC.
+#[cfg(target_os = "linux")]
+struct AuthenticatedOrdinaryUnchangedParentAdmissionV1 {
+    selection: std::sync::Arc<super::native_launch_context::AuthenticatedOrdinarySelectionV1>,
+}
+
+/// A completed E2 check. B3 binds it to its own borrowed plan in the same call.
+/// This exports only the opaque check and root identity, never E2 request material.
+#[cfg(target_os = "linux")]
+pub(crate) struct AuthenticatedOrdinaryAdmissionPlanCheckV1 {
+    authority_store_id: String,
+    bootstrap_home: super::host_session_authority::schema::CanonicalDirectoryV1,
+}
+
+#[cfg(target_os = "linux")]
+impl AuthenticatedOrdinaryAdmissionPlanCheckV1 {
+    pub(crate) fn matches_authority_root(
+        &self,
+        authority_store_id: &str,
+        bootstrap_home: &super::host_session_authority::schema::CanonicalDirectoryV1,
+    ) -> bool {
+        self.authority_store_id == authority_store_id && &self.bootstrap_home == bootstrap_home
+    }
+}
 
 impl AuthenticatedFreshSpawnReservationProofV1 {
     pub(crate) fn retained_participant_id(&self) -> &str {
@@ -521,6 +555,112 @@ impl AuthenticatedFreshSpawnReservationProofV1 {
 
     pub(crate) fn permits_capability_narrowing(&self) -> bool {
         self.narrowing_attestation.is_some()
+    }
+
+    /// Runs before B3 takes the shared authority-root lock. Reauthenticates only
+    /// immutable request/reservation truth, never today's effect permission.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn authenticate_ordinary_unchanged_parent_plan(
+        &self,
+        authority: &HostSessionAuthority,
+        plan: &RetainedWorkerAdmissionPlanV1,
+    ) -> Result<Option<AuthenticatedOrdinaryAdmissionPlanCheckV1>, DispatchPolicyCommitmentError>
+    {
+        let Some(ordinary) = &self.ordinary_unchanged_parent else {
+            return Ok(None);
+        };
+        let fail = || {
+            DispatchPolicyCommitmentError::new(
+                "ordinary unchanged-parent admission binding changed",
+            )
+        };
+        self.validate_admission_plan_binding(plan)?;
+        let selection = &ordinary.selection;
+        let context = selection.context();
+        let held_home = selection.held_authority().bootstrap_home();
+        if authority.bootstrap_home().identity().map_err(|_| fail())?
+            != held_home.identity().map_err(|_| fail())?
+            || plan.exact_authority.authority.workspace_binding != context.workspace_binding
+            || plan.issuer_request_id != self.request_id
+            || !plan.policy_and_admission_cap.allow_capability_narrowing
+            || self.permits_capability_narrowing()
+            || plan.spawn_request.orchestration_session_id != selection.original_session_id()
+            || plan.spawn_request.caller_participant_id != selection.current_participant_id()
+            || plan.exact_authority.caller_descriptor.backend_id
+                != selection.native_selection().backend_id
+            || plan.spawn_request.target_backend_id != selection.requested_selection().backend_id
+            || selection.current_world_binding()
+                != Some((
+                    plan.spawn_request.world_id.as_str(),
+                    plan.spawn_request.world_generation,
+                ))
+        {
+            return Err(fail());
+        }
+        let physical =
+            read_existing_accepted_work_authority_snapshot(authority).map_err(|_| fail())?;
+        if physical.authority_store_id() != self.reservation_ref.authority_store_id
+            || physical.authority_store_id() != selection.authority_store_id()
+            || physical.authority_root_identity() != held_home.identity().map_err(|_| fail())?
+        {
+            return Err(fail());
+        }
+        let DispatchPolicyCommitmentPhysicalReadV1::Present(e2) = physical.e2() else {
+            return Err(fail());
+        };
+        let registry: DispatchPolicyCommitmentRegistryV1 = decode_canonical(e2.registry_bytes())?;
+        let keys: Vec<_> = e2
+            .key_files()
+            .iter()
+            .map(|(name, bytes)| (name.clone(), bytes.clone()))
+            .collect();
+        validate_registry_and_key(&registry, physical.authority_store_id(), &keys)?;
+        let reservation = registry
+            .reservations_by_id
+            .get(&self.reservation_ref.reservation_id)
+            .ok_or_else(fail)?;
+        validate_reservation(reservation, &self.reservation_ref)?;
+        validate_proof_matches_reservation(self, reservation)?;
+        if reservation.applied_patch != AppliedDispatchPolicyPatchIdentityV1::UnchangedParent
+            || reservation.reason.is_some()
+            || reservation.caller_backend_id != selection.native_selection().backend_id
+            || reservation.policy_snapshot_ref != plan.policy_and_admission_cap.current_policy_ref
+            || reservation.policy_snapshot_hash
+                != plan
+                    .policy_and_admission_cap
+                    .current_policy
+                    .canonical_policy_snapshot_sha256
+        {
+            return Err(fail());
+        }
+        let bytes = reservation.policy_snapshot_bytes.resolve_inline()?;
+        let snapshot: PolicySnapshotV3 = serde_json::from_slice(&bytes).map_err(|_| fail())?;
+        let material = validate_policy_snapshot_material(
+            &snapshot,
+            &bytes,
+            &reservation.policy_snapshot_ref,
+            &reservation.policy_snapshot_hash,
+            &reservation.policy_snapshot_revision,
+        )?;
+        // Reuses the existing E2-owned complete request-HMAC recomputation.
+        // Physical snapshot locks have already been released. No B3 lock is held.
+        let verified = authenticate_fresh_spawn_reservation(
+            authority,
+            &self.reservation_ref,
+            &plan.spawn_request,
+            plan,
+            &material,
+        )?;
+        if verified.retained_participant_id != self.retained_participant_id
+            || verified.bootstrap_run_id != self.bootstrap_run_id
+            || verified.permits_capability_narrowing()
+        {
+            return Err(fail());
+        }
+        Ok(Some(AuthenticatedOrdinaryAdmissionPlanCheckV1 {
+            authority_store_id: physical.authority_store_id().to_owned(),
+            bootstrap_home: physical.authority_root_identity().clone(),
+        }))
     }
 
     pub(crate) fn validate_admission_plan_binding(
@@ -1005,6 +1145,151 @@ pub(crate) struct FreshSpawnReservationInputV1 {
     pub(crate) reason: Option<String>,
 }
 
+/// Configured ordinary admission input. No serialized field can construct it.
+#[cfg(target_os = "linux")]
+pub(crate) struct AuthenticatedOrdinaryFreshSpawnInputV1 {
+    selection: std::sync::Arc<super::native_launch_context::AuthenticatedOrdinarySelectionV1>,
+    input: FreshSpawnReservationInputV1,
+    // Actual resolved policy stays E2-owned and is dropped by the consuming mint.
+    steering: substrate_broker::WorldDispatchPolicy,
+}
+
+#[cfg(target_os = "linux")]
+impl AuthenticatedOrdinaryFreshSpawnInputV1 {
+    pub(crate) fn authenticate(
+        selection: std::sync::Arc<super::native_launch_context::AuthenticatedOrdinarySelectionV1>,
+        input: FreshSpawnReservationInputV1,
+    ) -> Result<Self, DispatchPolicyCommitmentError> {
+        let fail = || {
+            DispatchPolicyCommitmentError::new(
+                "ordinary fresh Spawn lost configured current identity or policy",
+            )
+        };
+        selection
+            .require_ordinary_configured_authority()
+            .map_err(|_| fail())?;
+        selection.revalidate().map_err(|_| fail())?;
+        validate_fresh_spawn_representation(&input)?;
+        let current = selection
+            .held_authority()
+            .resolve_current_exact(selection.original_session_id(), None)
+            .map_err(|_| fail())?;
+        let world = current.authority.world_binding.as_ref().ok_or_else(fail)?;
+        if selection.native_selection().placement
+            != transport_api_types::AgentSelectionPlacementV1::Host
+            || selection.requested_selection().placement
+                != transport_api_types::AgentSelectionPlacementV1::World
+            || input.spawn_request.orchestration_session_id != selection.original_session_id()
+            || input.spawn_request.caller_participant_id != selection.current_participant_id()
+            || input.caller_backend_id != selection.native_selection().backend_id
+            || input.spawn_request.target_backend_id != selection.requested_selection().backend_id
+            || world.world_id != input.spawn_request.world_id
+            || world.world_generation != input.spawn_request.world_generation
+            || selection.current_world_binding()
+                != Some((world.world_id.as_str(), world.world_generation))
+            || current.authority.current_policy_ref.as_ref() != Some(&input.parent_policy_ref)
+            || current.current_policy.policy_revision != input.parent_policy_revision
+            || input.policy_snapshot.snapshot_ref() != &input.parent_policy_ref
+            || input.policy_snapshot.revision() != input.parent_policy_revision
+            || (world.world_generation == 0
+                && input.applied_patch != AppliedDispatchPolicyPatchIdentityV1::UnchangedParent)
+            || (input.applied_patch == AppliedDispatchPolicyPatchIdentityV1::UnchangedParent
+                && input.policy_snapshot.hash()
+                    != current.current_policy.canonical_policy_snapshot_sha256)
+        {
+            return Err(fail());
+        }
+        let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
+            std::path::Path::new(selection.workspace_root()),
+            &selection.held_authority().bootstrap_home(),
+        )
+        .map_err(|_| fail())?;
+        let steering = policy.world_dispatch_policy();
+        if !steering.enabled
+            || !steering
+                .allowed_actions
+                .iter()
+                .any(|action| action == "spawn_world_worker")
+            || !steering.allowed_modes.iter().any(|mode| mode == "retained")
+            || !steering
+                .allowed_backends
+                .iter()
+                .any(|backend| backend == &input.spawn_request.target_backend_id)
+            || steering.max_live_retained_workers == 0
+        {
+            return Err(fail());
+        }
+        selection
+            .revalidate_requested_account(&policy)
+            .map_err(|_| fail())?;
+        selection.revalidate().map_err(|_| fail())?;
+        Ok(Self {
+            selection,
+            input,
+            steering,
+        })
+    }
+}
+
+/// Created only by the genuine ordinary authenticator/reservation seam.
+#[cfg(target_os = "linux")]
+pub(crate) struct AuthenticatedOrdinaryFreshSpawnReservationV1 {
+    input: AuthenticatedOrdinaryFreshSpawnInputV1,
+    reservation: FreshSpawnReservationOutcomeV1,
+}
+
+#[cfg(target_os = "linux")]
+impl AuthenticatedOrdinaryFreshSpawnReservationV1 {
+    pub(crate) fn authenticate_admission_plan(
+        self,
+        plan: &RetainedWorkerAdmissionPlanV1,
+    ) -> Result<AuthenticatedFreshSpawnReservationProofV1, DispatchPolicyCommitmentError> {
+        let input = AuthenticatedOrdinaryFreshSpawnInputV1::authenticate(
+            self.input.selection,
+            self.input.input,
+        )?;
+        if input.input.spawn_request != plan.spawn_request {
+            return Err(DispatchPolicyCommitmentError::new(
+                "ordinary admission changed the complete Spawn request",
+            ));
+        }
+        let cap = &plan.policy_and_admission_cap;
+        let actual = &input.steering;
+        if cap.dispatch_enabled != actual.enabled
+            || cap.allowed_backends != actual.allowed_backends
+            || cap.allowed_actions != actual.allowed_actions
+            || cap.allowed_modes != actual.allowed_modes
+            || cap.same_session_only != actual.same_session_only
+            || cap.same_world_binding_only != actual.same_world_binding_only
+            || cap.allow_capability_narrowing != actual.allow_capability_narrowing
+            || cap.max_live_retained_workers != u64::from(actual.max_live_retained_workers)
+            || cap.max_concurrent_ephemeral != u64::from(actual.max_concurrent_ephemeral)
+        {
+            return Err(DispatchPolicyCommitmentError::new(
+                "ordinary admission cap differs from actual current parent permission",
+            ));
+        }
+        let mut proof = authenticate_fresh_spawn_reservation(
+            input.selection.held_authority(),
+            &self.reservation.reservation_ref,
+            &input.input.spawn_request,
+            plan,
+            &input.input.policy_snapshot,
+        )?;
+        if input.input.applied_patch == AppliedDispatchPolicyPatchIdentityV1::UnchangedParent
+            && plan.policy_and_admission_cap.allow_capability_narrowing
+        {
+            // The exact reservation ref was returned by this typed reserve operation;
+            // generic authentication verified that same immutable reservation and E1.
+            proof.ordinary_unchanged_parent =
+                Some(AuthenticatedOrdinaryUnchangedParentAdmissionV1 {
+                    selection: input.selection,
+                });
+        }
+        Ok(proof)
+    }
+}
+
 pub(crate) struct FreshSpawnReservationOutcomeV1 {
     pub(crate) reservation_ref: DispatchPolicyCommitmentReservationRefV1,
     #[cfg(test)]
@@ -1092,6 +1377,11 @@ pub(crate) struct AuthenticatedDispatchPolicyCommitmentV1 {
 }
 
 impl AuthenticatedDispatchPolicyCommitmentV1 {
+    /// Authenticated ancestry data; this reference grants no new effect permission.
+    pub(crate) fn fork_source_cap_ref(&self) -> Option<&DispatchPolicyCommitmentRefV1> {
+        self.record.source_worker_cap_ref.as_ref()
+    }
+
     pub(crate) fn commitment_ref(&self) -> DispatchPolicyCommitmentRefV1 {
         DispatchPolicyCommitmentRefV1 {
             authority_store_id: self.record.authority_store_id.clone(),
@@ -1418,6 +1708,12 @@ pub(crate) fn initialize_dispatch_policy_commitment_registry(
 ) -> Result<(), DispatchPolicyCommitmentError> {
     let storage =
         dispatch_policy_commitment_storage_for_authority(authority).map_err(storage_error)?;
+    initialize_dispatch_policy_commitment_registry_in_storage(&storage)
+}
+
+fn initialize_dispatch_policy_commitment_registry_in_storage(
+    storage: &super::host_session_authority::store::DispatchPolicyCommitmentStorageV1,
+) -> Result<(), DispatchPolicyCommitmentError> {
     let authority_store_id = storage.authority_store_id().to_string();
     let mut semantic_failure = None;
     let result = storage.transaction(|transaction| {
@@ -1505,8 +1801,120 @@ pub(crate) fn reserve_fresh_spawn(
 ) -> Result<FreshSpawnReservationOutcomeV1, DispatchPolicyCommitmentError> {
     initialize_dispatch_policy_commitment_registry(authority)?;
     validate_fresh_spawn_input(&input)?;
+    reserve_validated_fresh_spawn(authority, input)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn reserve_ordinary_fresh_spawn(
+    input: AuthenticatedOrdinaryFreshSpawnInputV1,
+) -> Result<AuthenticatedOrdinaryFreshSpawnReservationV1, DispatchPolicyCommitmentError> {
+    // Reauthenticate immediately before the first E2 effect, retaining custody.
+    let input = AuthenticatedOrdinaryFreshSpawnInputV1::authenticate(input.selection, input.input)?;
+    let authority = input.selection.held_authority();
+    if let Some(reservation) = join_existing_ordinary_spawn_reservation(&input)? {
+        return Ok(AuthenticatedOrdinaryFreshSpawnReservationV1 { input, reservation });
+    }
+    let publication = super::host_session_authority::world_bound_controller::authenticate_ordinary_world_publication(&input.selection)
+        .map_err(|error| DispatchPolicyCommitmentError::new(error.to_string()))?;
+    let storage = super::host_session_authority::store::dispatch_policy_commitment_storage_for_ordinary_publication(authority, publication)
+        .map_err(storage_error)?;
+    initialize_dispatch_policy_commitment_registry_in_storage(&storage)?;
+    let reservation = reserve_validated_fresh_spawn_in_storage(&storage, input.input.clone())?;
+    Ok(AuthenticatedOrdinaryFreshSpawnReservationV1 { input, reservation })
+}
+
+/// Join an existing exact reservation through the complete non-reconciling
+/// owner codec. This supplies no new-work admission or later World send permit.
+#[cfg(target_os = "linux")]
+fn join_existing_ordinary_spawn_reservation(
+    input: &AuthenticatedOrdinaryFreshSpawnInputV1,
+) -> Result<Option<FreshSpawnReservationOutcomeV1>, DispatchPolicyCommitmentError> {
+    let snapshot = read_existing_accepted_work_authority_snapshot(input.selection.held_authority())
+        .map_err(|_| DispatchPolicyCommitmentError::new("read existing ordinary Spawn source"))?;
+    let DispatchPolicyCommitmentPhysicalReadV1::Present(physical) = snapshot.e2() else {
+        return Ok(None);
+    };
+    let lookup = fresh_spawn_lookup_key(snapshot.authority_store_id(), &input.input);
+    let registry =
+        decode_and_authenticate_e2_registry(physical, snapshot.authority_store_id(), &lookup)
+            .map_err(|_| {
+                DispatchPolicyCommitmentError::new("authenticate complete ordinary Spawn source")
+            })?;
+    let Some(index) = registry
+        .request_subject_index
+        .get(&lookup_index_key(&lookup)?)
+    else {
+        return Ok(None);
+    };
+    if index.lookup_key != lookup {
+        return Err(DispatchPolicyCommitmentError::new(
+            "ordinary Spawn retry index collision",
+        ));
+    }
+    let reference = match &index.entry {
+        DispatchPolicyCommitmentIndexEntryV1::FreshSpawnReserved { reservation_ref }
+        | DispatchPolicyCommitmentIndexEntryV1::Committed {
+            reservation_ref: Some(reservation_ref),
+            ..
+        } => reservation_ref,
+        _ => {
+            return Err(DispatchPolicyCommitmentError::new(
+                "ordinary Spawn retry changed entry class",
+            ))
+        }
+    };
+    let reservation = registry
+        .reservations_by_id
+        .get(&reference.reservation_id)
+        .ok_or_else(|| {
+            DispatchPolicyCommitmentError::new("ordinary Spawn retry reservation missing")
+        })?;
+    validate_reservation(reservation, reference)?;
+    let keys = physical
+        .key_files()
+        .iter()
+        .map(|(name, bytes)| (name.clone(), bytes.clone()))
+        .collect::<Vec<_>>();
+    let key = validate_registry_and_key(&registry, snapshot.authority_store_id(), &keys)?;
+    let request_bytes = canonical_json::to_vec(&input.input.spawn_request).map_err(|_| {
+        DispatchPolicyCommitmentError::new("canonicalize exact ordinary Spawn retry")
+    })?;
+    let request_commitment = FreshSpawnValidatedRequestCommitmentV1 {
+        schema_version: 1,
+        algorithm: FreshSpawnRequestCommitmentAlgorithmV1::HmacSha256,
+        key_id: registry.request_commitment_key.key_id.clone(),
+        domain: REQUEST_COMMITMENT_DOMAIN.into(),
+        digest_hex: hmac_fresh_spawn_request(&key.secret_key, &request_bytes),
+    };
+    ensure_reservation_matches_input(reservation, &input.input, &request_commitment)?;
+    Ok(Some(FreshSpawnReservationOutcomeV1 {
+        reservation_ref: reservation_ref(reservation),
+        #[cfg(test)]
+        retained_participant_id: reservation.retained_participant_id.clone(),
+        #[cfg(test)]
+        bootstrap_run_id: reservation.bootstrap_run_id.clone(),
+        #[cfg(test)]
+        proposed_commitment_id: reservation.proposed_commitment_id.clone(),
+        #[cfg(test)]
+        proof: proof_from_reservation(reservation, false),
+        #[cfg(test)]
+        joined: true,
+    }))
+}
+
+fn reserve_validated_fresh_spawn(
+    authority: &HostSessionAuthority,
+    input: FreshSpawnReservationInputV1,
+) -> Result<FreshSpawnReservationOutcomeV1, DispatchPolicyCommitmentError> {
     let storage =
         dispatch_policy_commitment_storage_for_authority(authority).map_err(storage_error)?;
+    reserve_validated_fresh_spawn_in_storage(&storage, input)
+}
+
+fn reserve_validated_fresh_spawn_in_storage(
+    storage: &super::host_session_authority::store::DispatchPolicyCommitmentStorageV1,
+    input: FreshSpawnReservationInputV1,
+) -> Result<FreshSpawnReservationOutcomeV1, DispatchPolicyCommitmentError> {
     let mut semantic_failure = None;
     #[cfg(test)]
     let mut joined = false;
@@ -2030,6 +2438,22 @@ pub(crate) fn resolve_accepted_work_receipt_material(
     validate_e2_rm_lookup_key(exact_request_subject_key)?;
     let snapshot = read_existing_accepted_work_authority_snapshot(authority)
         .map_err(AcceptedWorkReceiptMaterialErrorV1::PhysicalRead)?;
+    resolve_accepted_work_receipt_material_from_snapshot(
+        &snapshot,
+        exact_request_subject_key,
+        expected_b1_acceptance,
+    )
+}
+
+/// Authenticate receipt meaning from the supplied genuine physical snapshot.
+/// Its owner retains/finalizes custody; this performs no reopen or mutation.
+#[cfg(target_os = "linux")]
+pub(crate) fn resolve_accepted_work_receipt_material_from_snapshot(
+    snapshot: &super::host_session_authority::store::AcceptedWorkAuthorityPhysicalSnapshotV1,
+    exact_request_subject_key: &DispatchPolicyCommitmentLookupKeyV1,
+    expected_b1_acceptance: &WorldWorkAcceptanceRecordV1,
+) -> Result<AcceptedWorkReceiptMaterialResolutionV1, AcceptedWorkReceiptMaterialErrorV1> {
+    validate_e2_rm_lookup_key(exact_request_subject_key)?;
     if snapshot.authority_store_id() != exact_request_subject_key.authority_store_id {
         return Err(AcceptedWorkReceiptMaterialErrorV1::CrossScopeE2Material {
             field: AcceptedWorkBindingFieldV1::AuthorityStoreId,
@@ -2038,7 +2462,7 @@ pub(crate) fn resolve_accepted_work_receipt_material(
 
     let registry = match snapshot.e2() {
         DispatchPolicyCommitmentPhysicalReadV1::Absent => {
-            let witness = authenticate_expected_b1(&snapshot, expected_b1_acceptance)?;
+            let witness = authenticate_expected_b1(snapshot, expected_b1_acceptance)?;
             validate_lookup_key_matches_b1(exact_request_subject_key, witness.record()).map_err(
                 |field| AcceptedWorkReceiptMaterialErrorV1::E2B1LinkageMismatch { field },
             )?;
@@ -2062,7 +2486,7 @@ pub(crate) fn resolve_accepted_work_receipt_material(
     let digest = lookup_index_key(exact_request_subject_key)
         .map_err(|_| AcceptedWorkReceiptMaterialErrorV1::InvalidLookupKey)?;
     let Some(index) = registry.request_subject_index.get(&digest) else {
-        let witness = authenticate_expected_b1(&snapshot, expected_b1_acceptance)?;
+        let witness = authenticate_expected_b1(snapshot, expected_b1_acceptance)?;
         validate_lookup_key_matches_b1(exact_request_subject_key, witness.record())
             .map_err(|field| AcceptedWorkReceiptMaterialErrorV1::E2B1LinkageMismatch { field })?;
         let matching_material = registry.commitments_by_id.values().any(|record| {
@@ -2114,7 +2538,7 @@ pub(crate) fn resolve_accepted_work_receipt_material(
     else {
         return Err(AcceptedWorkReceiptMaterialErrorV1::CorruptE2Registry);
     };
-    let witness = authenticate_b1(&snapshot, &record.authority_store_id, acceptance_record_id)?;
+    let witness = authenticate_b1(snapshot, &record.authority_store_id, acceptance_record_id)?;
     compare_expected_b1(witness.record(), expected_b1_acceptance)?;
     validate_lookup_key_matches_b1(exact_request_subject_key, witness.record())
         .map_err(|field| AcceptedWorkReceiptMaterialErrorV1::E2B1LinkageMismatch { field })?;
@@ -2541,12 +2965,8 @@ fn authenticate_e2_rm_policy_material(
         AppliedDispatchPolicyPatchIdentityV1::RestrictedWorldFs {
             canonical_patch, ..
         } => {
-            validate_applied_patch(applied_patch)?;
-            let patch: DispatchPolicyNarrowingPatchV1 =
-                decode_canonical(&canonical_patch.resolve_inline()?)?;
-            patch
-                .validate()
-                .map_err(|_| DispatchPolicyCommitmentError::new("invalid E2-RM policy patch"))?;
+            let _ = canonical_patch;
+            let patch = decode_applied_policy_patch(applied_patch)?;
             if patch.request_id != request_id
                 || patch.orchestration_session_id != orchestration_session_id
                 || patch.caller_participant_id != caller_participant_id
@@ -2598,10 +3018,10 @@ fn authenticate_retained_cap(
         .ok_or(AcceptedWorkReceiptMaterialErrorV1::RetainedCapAuthenticationFailed)?;
     validate_commitment(cap, Some(cap_ref))
         .map_err(|_| AcceptedWorkReceiptMaterialErrorV1::RetainedCapAuthenticationFailed)?;
+    // The cap authenticates its launch caller; B1/E2/the preserved claim above
+    // independently authenticate this turn's caller, which may be a successor.
     if cap.authority_store_id != record.authority_store_id
         || cap.orchestration_session_id != record.orchestration_session_id
-        || cap.caller_participant_id != record.caller_participant_id
-        || cap.caller_backend_id != record.caller_backend_id
         || cap.target_backend_id != record.target_backend_id
         || cap.world_id != record.world_id
         || cap.world_generation != record.world_generation
@@ -2683,6 +3103,158 @@ fn decode_and_authenticate_e2_registry(
     validate_e2_rm_complete_registry_semantics(&registry, selected_commitment_id)
         .map_err(|_| AcceptedWorkReceiptMaterialErrorV1::CorruptE2Registry)?;
     Ok(registry)
+}
+
+/// Complete E2 owner decoding for a supplied physical capture. These records
+/// describe pending and committed work; they confer no execution authority.
+#[cfg(target_os = "linux")]
+pub(crate) struct OrdinaryBootstrapPopulationV1 {
+    members: BTreeMap<(String, String), E2MemberLaunchActivationCarrierV1>,
+}
+
+#[cfg(target_os = "linux")]
+impl OrdinaryBootstrapPopulationV1 {
+    pub(crate) fn member_for(
+        &self,
+        session: &str,
+        participant: &str,
+    ) -> Option<&E2MemberLaunchActivationCarrierV1> {
+        self.members
+            .get(&(session.to_owned(), participant.to_owned()))
+    }
+
+    pub(crate) fn contains_activation(
+        &self,
+        activation: &E2MemberLaunchActivationCarrierV1,
+    ) -> bool {
+        self.members.get(&(
+            activation.orchestration_session_id.clone(),
+            activation.retained_participant_id.clone(),
+        )) == Some(activation)
+    }
+
+    pub(crate) fn fork_count(&self) -> u64 {
+        self.members
+            .values()
+            .filter(|a| a.launch_kind == E2MemberLaunchKindV1::Fork)
+            .count() as u64
+    }
+}
+
+/// Decode the complete captured E2 population, without filtering another
+/// session or treating a missing Fork admission envelope as empty population.
+/// The committing owner separately retains and finalizes the physical guards.
+#[cfg(target_os = "linux")]
+pub(crate) fn decode_ordinary_bootstrap_population(
+    physical: &DispatchPolicyCommitmentPhysicalReadV1,
+    authority_store_id: &str,
+) -> Result<OrdinaryBootstrapPopulationV1, DispatchPolicyCommitmentError> {
+    let DispatchPolicyCommitmentPhysicalReadV1::Present(physical) = physical else {
+        return Ok(OrdinaryBootstrapPopulationV1 {
+            members: BTreeMap::new(),
+        });
+    };
+    let syntax: Value = decode_canonical(physical.registry_bytes())?;
+    classify_e2_schema_versions(&syntax, physical.key_files()).map_err(|_| {
+        DispatchPolicyCommitmentError::new("unsupported complete E2 population schema")
+    })?;
+    let registry: DispatchPolicyCommitmentRegistryV1 = decode_canonical(physical.registry_bytes())?;
+    let keys = physical
+        .key_files()
+        .iter()
+        .map(|(name, bytes)| (name.clone(), bytes.clone()))
+        .collect::<Vec<_>>();
+    validate_registry_and_key(&registry, authority_store_id, &keys)?;
+    ordinary_bootstrap_population_from_registry(&registry)
+}
+
+#[cfg(target_os = "linux")]
+fn ordinary_bootstrap_population_from_registry(
+    registry: &DispatchPolicyCommitmentRegistryV1,
+) -> Result<OrdinaryBootstrapPopulationV1, DispatchPolicyCommitmentError> {
+    validate_e2_rm_complete_registry_semantics(registry, None)?;
+    let mut members = BTreeMap::new();
+    for reference in registry.retained_worker_caps_by_participant_id.values() {
+        let record = registry
+            .commitments_by_id
+            .get(&reference.commitment_id)
+            .ok_or_else(|| DispatchPolicyCommitmentError::new("E2 population cap missing"))?;
+        let snapshot_bytes = record.policy_snapshot_bytes.resolve_inline()?;
+        let snapshot = serde_json::from_slice(&snapshot_bytes).map_err(|_| {
+            DispatchPolicyCommitmentError::new("E2 population policy decode failed")
+        })?;
+        let authenticated = AuthenticatedDispatchPolicyCommitmentV1 {
+            record: record.clone(),
+            snapshot,
+            snapshot_bytes,
+        };
+        let activation = authenticated.member_launch_activation_carrier()?;
+        if members
+            .insert(
+                (
+                    activation.orchestration_session_id.clone(),
+                    activation.retained_participant_id.clone(),
+                ),
+                activation,
+            )
+            .is_some()
+        {
+            return Err(DispatchPolicyCommitmentError::new(
+                "E2 population identity duplicated",
+            ));
+        }
+    }
+    Ok(OrdinaryBootstrapPopulationV1 { members })
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn decode_world_controller_e2_session_sources(
+    snapshot: &super::host_session_authority::store::AcceptedWorkAuthorityPhysicalSnapshotV1,
+    session_id: &str,
+    world: &WorldBindingV1,
+) -> Result<
+    (
+        Vec<DispatchPolicyCommitmentReservationV1>,
+        Vec<DispatchPolicyCommitmentV1>,
+    ),
+    DispatchPolicyCommitmentError,
+> {
+    let DispatchPolicyCommitmentPhysicalReadV1::Present(physical) = snapshot.e2() else {
+        return Ok((Vec::new(), Vec::new()));
+    };
+    let syntax: Value = decode_canonical(physical.registry_bytes())?;
+    classify_e2_schema_versions(&syntax, physical.key_files())
+        .map_err(|_| DispatchPolicyCommitmentError::new("unsupported World E2 source schema"))?;
+    let registry: DispatchPolicyCommitmentRegistryV1 = decode_canonical(physical.registry_bytes())?;
+    let keys = physical
+        .key_files()
+        .iter()
+        .map(|(name, bytes)| (name.clone(), bytes.clone()))
+        .collect::<Vec<_>>();
+    validate_registry_and_key(&registry, snapshot.authority_store_id(), &keys)?;
+    validate_e2_rm_complete_registry_semantics(&registry, None)?;
+    let reservations = registry
+        .reservations_by_id
+        .values()
+        .filter(|record| record.orchestration_session_id == session_id)
+        .cloned()
+        .collect::<Vec<_>>();
+    let commitments = registry
+        .commitments_by_id
+        .values()
+        .filter(|record| record.orchestration_session_id == session_id)
+        .cloned()
+        .collect::<Vec<_>>();
+    if reservations.iter().any(|record| {
+        record.world_id != world.world_id || record.world_generation != world.world_generation
+    }) || commitments.iter().any(|record| {
+        record.world_id != world.world_id || record.world_generation != world.world_generation
+    }) {
+        return Err(DispatchPolicyCommitmentError::new(
+            "World E2 session generation differs",
+        ));
+    }
+    Ok((reservations, commitments))
 }
 
 #[cfg(target_os = "linux")]
@@ -3030,12 +3602,19 @@ pub(crate) fn publish_accepted_work_commitment(
     authority: &HostSessionAuthority,
     input: AcceptedWorkPolicyCommitmentInputV1,
 ) -> Result<PersistedDispatchPolicyCommitmentV1, DispatchPolicyCommitmentError> {
+    validate_applied_patch(&input.applied_patch)?;
+    publish_accepted_work_commitment_inner(authority, input)
+}
+
+fn publish_accepted_work_commitment_inner(
+    authority: &HostSessionAuthority,
+    input: AcceptedWorkPolicyCommitmentInputV1,
+) -> Result<PersistedDispatchPolicyCommitmentV1, DispatchPolicyCommitmentError> {
     input
         .acceptance
         .validate()
         .map_err(|_| DispatchPolicyCommitmentError::new("invalid durable B1 acceptance"))?;
     validate_component("idempotency_key", &input.idempotency_key)?;
-    validate_applied_patch(&input.applied_patch)?;
     validate_claim_matches_acceptance(&input.execution_claim, &input.acceptance)?;
     if input.acceptance.current_policy_snapshot_ref != *input.policy_snapshot.snapshot_ref()
         || input.acceptance.current_policy_snapshot_hash != input.policy_snapshot.hash()
@@ -3125,6 +3704,21 @@ pub(crate) fn publish_fork_commitment(
     authority: &HostSessionAuthority,
     input: ForkPolicyCommitmentInputV1,
 ) -> Result<PersistedDispatchPolicyCommitmentV1, DispatchPolicyCommitmentError> {
+    if input.world_generation == 0 {
+        return Err(DispatchPolicyCommitmentError::new(
+            "fork world generation or authority binding is invalid",
+        ));
+    }
+    let fork_request_hash = fork_input_request_hash(&input)?;
+    initialize_dispatch_policy_commitment_registry(authority)?;
+    let storage =
+        dispatch_policy_commitment_storage_for_authority(authority).map_err(storage_error)?;
+    publish_fork_commitment_in_storage(&storage, input, fork_request_hash)
+}
+
+fn fork_input_request_hash(
+    input: &ForkPolicyCommitmentInputV1,
+) -> Result<String, DispatchPolicyCommitmentError> {
     for (name, value) in [
         ("request_id", input.request_id.as_str()),
         ("idempotency_key", input.idempotency_key.as_str()),
@@ -3150,21 +3744,62 @@ pub(crate) fn publish_fork_commitment(
     ] {
         validate_component(name, value)?;
     }
-    if input.world_generation == 0 {
-        return Err(DispatchPolicyCommitmentError::new(
-            "fork world generation or authority binding is invalid",
-        ));
-    }
     validate_applied_patch(&input.applied_patch)?;
     let canonical_request: Value = decode_canonical(&input.canonical_validated_dispatch_request)?;
-    let fork_request_hash = canonical_domain_hash(
+    canonical_domain_hash(
         FORK_REQUEST_HASH_DOMAIN,
         "validated_dispatch_request",
         canonical_request,
-    )?;
-    initialize_dispatch_policy_commitment_registry(authority)?;
-    let storage =
-        dispatch_policy_commitment_storage_for_authority(authority).map_err(storage_error)?;
+    )
+}
+
+/// Affine provenance of the actual first locked E2 publication. This confers
+/// no admission or native-send permission by itself and cannot be reconstructed
+/// from an immutable join or missing admission record.
+#[derive(Debug)]
+pub(crate) struct AuthenticatedOrdinaryForkIssuanceV1 {
+    reference: DispatchPolicyCommitmentRefV1,
+}
+
+impl AuthenticatedOrdinaryForkIssuanceV1 {
+    pub(crate) fn validate_for_activation(
+        self,
+        activation: &E2MemberLaunchActivationCarrierV1,
+    ) -> Result<(), DispatchPolicyCommitmentError> {
+        if activation.launch_kind != E2MemberLaunchKindV1::Fork
+            || self.reference.authority_store_id != activation.commitment_ref.authority_store_id
+            || self.reference.commitment_id != activation.commitment_ref.commitment_id
+            || self.reference.exact_linkage_hash != activation.commitment_ref.exact_linkage_hash
+        {
+            return Err(DispatchPolicyCommitmentError::new(
+                "Fork first-publication provenance conflicts",
+            ));
+        }
+        Ok(())
+    }
+}
+
+fn publish_fork_commitment_in_storage(
+    storage: &super::host_session_authority::store::DispatchPolicyCommitmentStorageV1,
+    input: ForkPolicyCommitmentInputV1,
+    fork_request_hash: String,
+) -> Result<PersistedDispatchPolicyCommitmentV1, DispatchPolicyCommitmentError> {
+    publish_fork_commitment_in_storage_with_issuance(storage, input, fork_request_hash, None)
+        .map(|(record, _issuance)| record)
+}
+
+fn publish_fork_commitment_in_storage_with_issuance(
+    storage: &super::host_session_authority::store::DispatchPolicyCommitmentStorageV1,
+    input: ForkPolicyCommitmentInputV1,
+    fork_request_hash: String,
+    ordinary_max_live_retained_workers: Option<u64>,
+) -> Result<
+    (
+        PersistedDispatchPolicyCommitmentV1,
+        Option<AuthenticatedOrdinaryForkIssuanceV1>,
+    ),
+    DispatchPolicyCommitmentError,
+> {
     if input
         .authenticated_policy
         .source_worker_cap_ref()
@@ -3250,78 +3885,123 @@ pub(crate) fn publish_fork_commitment(
                 ));
                 return Err(BootstrapError::dispatch_policy_commitment_semantic());
             }
-            return Ok(existing.clone());
+            return Ok((existing.clone(), false));
         }
 
-        // Fork is deliberately outside B3.2a admission. Keep its stable child
-        // and bootstrap identities in the existing non-admission namespace so
-        // WorldService does not mistake the E2-owned fork link for a Fresh
-        // Spawn launch-authority proof.
-        let child_participant_id = format!("ash_{}", Uuid::now_v7());
-        let bootstrap_run_id = Uuid::now_v7().to_string();
-        let mut record = fork_record_from_input(
-            storage.authority_store_id(),
-            &input,
-            &fork_request_hash,
-            child_participant_id.clone(),
-            bootstrap_run_id,
-            retain_semantic(current_timestamp(), &mut semantic_failure)?,
-        );
-        record.exact_linkage_hash =
-            retain_semantic(commitment_hash(&record), &mut semantic_failure)?;
-        retain_semantic(
-            validate_non_spawn_subject_rules(&record),
-            &mut semantic_failure,
-        )?;
-        let reference = commitment_ref(&record);
-        if registry
-            .commitments_by_id
-            .contains_key(&record.commitment_id)
-            || registry
-                .retained_worker_caps_by_participant_id
-                .contains_key(&child_participant_id)
-        {
-            semantic_failure = Some(DispatchPolicyCommitmentError::new(
-                "fork generated commitment or child identity collision",
-            ));
+        #[cfg(target_os = "linux")]
+        if let Some(maximum) = ordinary_max_live_retained_workers {
+            return transaction.with_existing_retained_admission_source(|root, bytes, keys, verify_population| {
+                retain_semantic(super::retained_worker_runtime::require_ordinary_retained_target_open_from_sources(
+                    root, bytes, &keys, &input.orchestration_session_id, &input.source_participant_id)
+                    .map_err(|error| DispatchPolicyCommitmentError::new(error.to_string())), &mut semantic_failure)?;
+                let population = retain_semantic(ordinary_bootstrap_population_from_registry(&registry), &mut semantic_failure)?;
+                let live = retain_semantic(super::retained_worker_runtime::count_existing_ordinary_retained_population(root, bytes, &keys, &population)
+                    .map_err(|error| DispatchPolicyCommitmentError::new(error.to_string())), &mut semantic_failure)?;
+                if live >= maximum {
+                    semantic_failure = Some(DispatchPolicyCommitmentError::new(format!(
+                        "retained_worker_cap_reached: complete retained population {live} reaches configured maximum {maximum}")));
+                    return Err(BootstrapError::dispatch_policy_commitment_semantic());
+                }
+                publish_new_fork_record_in_transaction(transaction, &mut registry, storage.authority_store_id(),
+                    &input, &fork_request_hash, &lookup_key, (&mut semantic_failure, verify_population)).map(|record| (record, true))
+            });
+        }
+        #[cfg(not(target_os = "linux"))]
+        if ordinary_max_live_retained_workers.is_some() {
+            semantic_failure = Some(DispatchPolicyCommitmentError::new("ordinary Fork population custody requires Linux"));
             return Err(BootstrapError::dispatch_policy_commitment_semantic());
         }
-        registry
-            .commitments_by_id
-            .insert(record.commitment_id.clone(), record.clone());
-        registry
-            .retained_worker_caps_by_participant_id
-            .insert(child_participant_id, reference.clone());
-        registry.request_subject_index.insert(
-            lookup_digest.clone(),
-            DispatchPolicyCommitmentIndexRecordV1 {
-                lookup_key: lookup_key.clone(),
-                entry: DispatchPolicyCommitmentIndexEntryV1::Committed {
-                    reservation_ref: None,
-                    fresh_spawn_validated_request_commitment: None,
-                    commitment_ref: reference,
-                },
-            },
-        );
-        let bytes = retain_semantic(encode_canonical(&registry), &mut semantic_failure)?;
-        transaction.replace_registry(
-            &format!("dispatch-policy-registry--{}.tmp", random_nonce()),
-            &bytes,
-        )?;
-        if transaction.read_registry()?.as_deref() != Some(bytes.as_slice()) {
-            semantic_failure = Some(DispatchPolicyCommitmentError::new(
-                "fork commitment readback mismatch",
-            ));
-            return Err(BootstrapError::dispatch_policy_commitment_semantic());
-        }
-        Ok(record)
+        publish_new_fork_record_in_transaction(transaction, &mut registry, storage.authority_store_id(),
+            &input, &fork_request_hash, &lookup_key, (&mut semantic_failure, &|| Ok(()))).map(|record| (record, true))
     });
     if let Some(error) = semantic_failure {
         return Err(error);
     }
     result
-        .map(PersistedDispatchPolicyCommitmentV1)
+        .map(|(record, fresh)| {
+            let issuance = fresh.then(|| AuthenticatedOrdinaryForkIssuanceV1 {
+                reference: commitment_ref(&record),
+            });
+            (PersistedDispatchPolicyCommitmentV1(record), issuance)
+        })
         .map_err(storage_error)
+}
+
+fn publish_new_fork_record_in_transaction(
+    transaction: &super::host_session_authority::store::DispatchPolicyCommitmentStorageTransactionV1,
+    registry: &mut DispatchPolicyCommitmentRegistryV1,
+    authority_store_id: &str,
+    input: &ForkPolicyCommitmentInputV1,
+    fork_request_hash: &str,
+    lookup_key: &DispatchPolicyCommitmentLookupKeyV1,
+    publication_validation: (
+        &mut Option<DispatchPolicyCommitmentError>,
+        &dyn Fn() -> Result<(), BootstrapError>,
+    ),
+) -> Result<DispatchPolicyCommitmentV1, BootstrapError> {
+    let (semantic_failure, verify_population) = publication_validation;
+    let lookup_digest = retain_semantic(lookup_index_key(lookup_key), semantic_failure)?;
+    // Fork is deliberately outside B3.2a admission. Keep its stable child
+    // and bootstrap identities in the existing non-admission namespace so
+    // WorldService does not mistake the E2-owned fork link for a Fresh
+    // Spawn launch-authority proof.
+    let child_participant_id = format!("ash_{}", Uuid::now_v7());
+    let bootstrap_run_id = Uuid::now_v7().to_string();
+    let mut record = fork_record_from_input(
+        authority_store_id,
+        input,
+        fork_request_hash,
+        child_participant_id.clone(),
+        bootstrap_run_id,
+        retain_semantic(current_timestamp(), semantic_failure)?,
+    );
+    record.exact_linkage_hash = retain_semantic(commitment_hash(&record), semantic_failure)?;
+    retain_semantic(validate_non_spawn_subject_rules(&record), semantic_failure)?;
+    let reference = commitment_ref(&record);
+    if registry
+        .commitments_by_id
+        .contains_key(&record.commitment_id)
+        || registry
+            .retained_worker_caps_by_participant_id
+            .contains_key(&child_participant_id)
+    {
+        *semantic_failure = Some(DispatchPolicyCommitmentError::new(
+            "fork generated commitment or child identity collision",
+        ));
+        return Err(BootstrapError::dispatch_policy_commitment_semantic());
+    }
+    registry
+        .commitments_by_id
+        .insert(record.commitment_id.clone(), record.clone());
+    registry
+        .retained_worker_caps_by_participant_id
+        .insert(child_participant_id, reference.clone());
+    registry.request_subject_index.insert(
+        lookup_digest.clone(),
+        DispatchPolicyCommitmentIndexRecordV1 {
+            lookup_key: lookup_key.clone(),
+            entry: DispatchPolicyCommitmentIndexEntryV1::Committed {
+                reservation_ref: None,
+                fresh_spawn_validated_request_commitment: None,
+                commitment_ref: reference,
+            },
+        },
+    );
+    let bytes = retain_semantic(encode_canonical(&registry), semantic_failure)?;
+    #[cfg(all(test, target_os = "linux"))]
+    super::retained_worker_runtime::run_ordinary_population_before_publication_hook();
+    transaction.replace_registry_with_source_guard(
+        &format!("dispatch-policy-registry--{}.tmp", random_nonce()),
+        &bytes,
+        verify_population,
+    )?;
+    if transaction.read_registry()?.as_deref() != Some(bytes.as_slice()) {
+        *semantic_failure = Some(DispatchPolicyCommitmentError::new(
+            "fork commitment readback mismatch",
+        ));
+        return Err(BootstrapError::dispatch_policy_commitment_semantic());
+    }
+    Ok(record)
 }
 
 fn publish_complete_non_spawn_commitment(
@@ -4327,6 +5007,90 @@ pub(crate) fn resolve_retained_turn_policy_material(
     authority: &HostSessionAuthority,
     input: RetainedTurnPolicyResolutionInputV1,
 ) -> Result<AuthenticatedRetainedTurnPolicyMaterialV1, DispatchPolicyCommitmentError> {
+    let material = resolve_retained_turn_policy_material_inner(authority, input, false)?;
+    material.carrier.validate().map_err(|_| {
+        DispatchPolicyCommitmentError::new("constructed retained-turn carrier is invalid")
+    })?;
+    Ok(material)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn resolve_ordinary_retained_turn_policy_material(
+    selection: &super::native_launch_context::AuthenticatedOrdinarySelectionV1,
+    input: RetainedTurnPolicyResolutionInputV1,
+) -> Result<AuthenticatedRetainedTurnPolicyMaterialV1, DispatchPolicyCommitmentError> {
+    let fail = || {
+        DispatchPolicyCommitmentError::new(
+            "ordinary retained policy lost configured current identity",
+        )
+    };
+    selection
+        .require_ordinary_configured_authority()
+        .map_err(|_| fail())?;
+    selection.revalidate().map_err(|_| fail())?;
+    if selection.native_selection().placement
+        != transport_api_types::AgentSelectionPlacementV1::Host
+        || selection.requested_selection().placement
+            != transport_api_types::AgentSelectionPlacementV1::World
+        || input.orchestration_session_id != selection.original_session_id()
+        || input.caller_participant_id != selection.current_participant_id()
+        || input.caller_backend_id != selection.native_selection().backend_id
+        || input.target_backend_id != selection.requested_selection().backend_id
+        || selection.current_world_binding()
+            != Some((input.world_id.as_str(), input.world_generation))
+    {
+        return Err(fail());
+    }
+    let current = selection
+        .held_authority()
+        .resolve_current_exact(selection.original_session_id(), None)
+        .map_err(|_| fail())?;
+    if current.authority.current_policy_ref.as_ref()
+        != Some(input.current_parent_and_turn_patch.snapshot_ref())
+        || current.current_policy.policy_revision != input.current_parent_and_turn_patch.revision()
+        || (input.turn_patch.is_none()
+            && current.current_policy.canonical_policy_snapshot_sha256
+                != input.current_parent_and_turn_patch.hash())
+    {
+        return Err(fail());
+    }
+    let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
+        std::path::Path::new(selection.workspace_root()),
+        &selection.held_authority().bootstrap_home(),
+    )
+    .map_err(|_| fail())?;
+    let steering = policy.world_dispatch_policy();
+    if !steering.enabled
+        || !steering
+            .allowed_actions
+            .iter()
+            .any(|action| action == "continue_world_worker")
+        || !steering.allowed_modes.iter().any(|mode| mode == "retained")
+        || !steering
+            .allowed_backends
+            .iter()
+            .any(|backend| backend == &input.target_backend_id)
+    {
+        return Err(fail());
+    }
+    selection
+        .revalidate_requested_account(&policy)
+        .map_err(|_| fail())?;
+    let material =
+        resolve_retained_turn_policy_material_inner(selection.held_authority(), input, true)?;
+    material
+        .carrier
+        .validate_ordinary_representation()
+        .map_err(DispatchPolicyCommitmentError::new)?;
+    selection.revalidate().map_err(|_| fail())?;
+    Ok(material)
+}
+
+fn resolve_retained_turn_policy_material_inner(
+    authority: &HostSessionAuthority,
+    input: RetainedTurnPolicyResolutionInputV1,
+    ordinary_representation: bool,
+) -> Result<AuthenticatedRetainedTurnPolicyMaterialV1, DispatchPolicyCommitmentError> {
     let authenticated =
         authenticate_dispatch_policy_commitment(authority, input.cap.commitment_ref())?;
     if input.cap.commitment_ref() != &authenticated.commitment_ref()
@@ -4345,7 +5109,17 @@ pub(crate) fn resolve_retained_turn_policy_material(
             "retained-turn cap descriptor or runtime binding mismatch",
         ));
     }
-    validate_retained_turn_patch_bindings(&input)?;
+    #[cfg(target_os = "linux")]
+    if ordinary_representation {
+        validate_ordinary_retained_turn_patch_bindings(&input)?;
+    } else {
+        validate_retained_turn_patch_bindings(&input)?;
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = ordinary_representation;
+        validate_retained_turn_patch_bindings(&input)?;
+    }
     let snapshot = conjoin_policy_snapshots(
         input.current_parent_and_turn_patch.snapshot(),
         authenticated.policy_snapshot(),
@@ -4388,15 +5162,26 @@ pub(crate) fn resolve_retained_turn_policy_material(
             .as_ref()
             .and_then(|patch| patch.reason.clone()),
     };
-    carrier.validate().map_err(|_| {
-        DispatchPolicyCommitmentError::new("constructed retained-turn carrier is invalid")
-    })?;
     Ok(AuthenticatedRetainedTurnPolicyMaterialV1 { carrier })
 }
 
 pub(crate) fn resolve_fork_policy_material(
     authority: &HostSessionAuthority,
     input: ForkPolicyResolutionInputV1,
+) -> Result<AuthenticatedForkPolicyMaterialV1, DispatchPolicyCommitmentError> {
+    if input.world_generation == 0 {
+        return Err(DispatchPolicyCommitmentError::new(
+            "fork world generation is invalid",
+        ));
+    }
+    let authenticated =
+        authenticate_dispatch_policy_commitment(authority, input.source_cap.commitment_ref())?;
+    resolve_fork_policy_material_inner(input, authenticated)
+}
+
+fn resolve_fork_policy_material_inner(
+    input: ForkPolicyResolutionInputV1,
+    authenticated: AuthenticatedDispatchPolicyCommitmentV1,
 ) -> Result<AuthenticatedForkPolicyMaterialV1, DispatchPolicyCommitmentError> {
     for (name, value) in [
         ("request_id", input.request_id.as_str()),
@@ -4418,13 +5203,6 @@ pub(crate) fn resolve_fork_policy_material(
     ] {
         validate_component(name, value)?;
     }
-    if input.world_generation == 0 {
-        return Err(DispatchPolicyCommitmentError::new(
-            "fork world generation is invalid",
-        ));
-    }
-    let authenticated =
-        authenticate_dispatch_policy_commitment(authority, input.source_cap.commitment_ref())?;
     if input.source_cap.commitment_ref() != &authenticated.commitment_ref()
         || input.source_cap.authority_store_id() != authenticated.authority_store_id()
         || input.source_cap.orchestration_session_id() != authenticated.orchestration_session_id()
@@ -4534,7 +5312,9 @@ fn validate_retained_turn_patch_bindings(
     Ok(())
 }
 
-fn transport_policy_ref(reference: &AuthorityObjectRefV1) -> transport_api_types::PolicyRefV1 {
+pub(crate) fn transport_policy_ref(
+    reference: &AuthorityObjectRefV1,
+) -> transport_api_types::PolicyRefV1 {
     let object_kind = match reference.object_kind {
         super::host_session_authority::schema::AuthorityObjectKindV1::AgentDescriptor => {
             transport_api_types::AuthorityObjectKindV1::AgentDescriptor
@@ -4604,6 +5384,267 @@ fn transport_policy_ref(reference: &AuthorityObjectRefV1) -> transport_api_types
         schema_version: reference.schema_version,
         commitment,
     }
+}
+
+/// Evaluate actual current policy against an independently authenticated cap.
+/// Equality is checked only after computing the semantic intersection.
+#[cfg(target_os = "linux")]
+pub(crate) fn ordinary_policy_snapshot_within_current_v1(
+    current: &PolicySnapshotV3,
+    permitted: &PolicySnapshotV3,
+) -> Result<(), DispatchPolicyCommitmentError> {
+    let intersection = conjoin_policy_snapshots(current, permitted)?;
+    let intersection = serde_json::to_vec(&intersection).map_err(|_| {
+        DispatchPolicyCommitmentError::new("serialize ordinary current policy intersection")
+    })?;
+    let permitted = serde_json::to_vec(
+        &permitted
+            .canonicalize()
+            .map_err(DispatchPolicyCommitmentError::new)?,
+    )
+    .map_err(|_| {
+        DispatchPolicyCommitmentError::new("serialize ordinary authenticated permitted policy")
+    })?;
+    if intersection != permitted {
+        return Err(DispatchPolicyCommitmentError::new(
+            "ordinary current policy revoked part of the authenticated effect",
+        ));
+    }
+    Ok(())
+}
+
+/// Authenticate the immutable launch cap, actual member and admission subject;
+/// then evaluate current policy. Never initializes or publishes an E2 registry.
+#[cfg(target_os = "linux")]
+pub(crate) fn authenticate_ordinary_member_launch_policy_v1(
+    authority: &HostSessionAuthority,
+    member: &transport_api_types::MemberDispatchRequestV1,
+    current: &PolicySnapshotV3,
+    enforced: &PolicySnapshotV3,
+    current_allows_narrowing: bool,
+    allow_already_routable: bool,
+) -> Result<E2MemberLaunchActivationCarrierV1, DispatchPolicyCommitmentError> {
+    let authenticated = authenticate_ordinary_member_launch_source_v1(
+        authority,
+        member,
+        enforced,
+        allow_already_routable,
+    )?;
+    if !current_allows_narrowing
+        && authenticated.record.applied_patch
+            != AppliedDispatchPolicyPatchIdentityV1::UnchangedParent
+    {
+        return Err(DispatchPolicyCommitmentError::new(
+            "ordinary current policy revoked capability narrowing",
+        ));
+    }
+    ordinary_policy_snapshot_within_current_v1(current, authenticated.policy_snapshot())?;
+    authenticated.member_launch_activation_carrier()
+}
+
+/// Authenticate immutable launch source facts and exact R0 ancestry only.
+/// This does not authorize an effect by the historical caller. A Fork uses its
+/// child's independently authenticated current permission to read this source.
+#[cfg(target_os = "linux")]
+pub(crate) fn authenticate_ordinary_member_launch_source_v1(
+    authority: &HostSessionAuthority,
+    member: &transport_api_types::MemberDispatchRequestV1,
+    enforced: &PolicySnapshotV3,
+    allow_already_routable: bool,
+) -> Result<AuthenticatedDispatchPolicyCommitmentV1, DispatchPolicyCommitmentError> {
+    let fail = || {
+        DispatchPolicyCommitmentError::new(
+            "ordinary member launch changed authenticated cap, member, claim, or subject",
+        )
+    };
+    member
+        .validate()
+        .map_err(DispatchPolicyCommitmentError::new)?;
+    let ResolvedPolicyCommitmentCompatibilityV1::Compatible { cap } = resolve_retained_worker_cap(
+        authority,
+        &member.orchestration_session_id,
+        &member.participant_id,
+    )?
+    else {
+        return Err(fail());
+    };
+    let authenticated = authenticate_dispatch_policy_commitment(authority, cap.commitment_ref())?;
+    let activation = authenticated.member_launch_activation_carrier()?;
+    if member.e2_launch_activation.as_ref() != Some(&activation)
+        || activation.orchestration_session_id != member.orchestration_session_id
+        || activation.caller_participant_id != member.orchestrator_participant_id
+        || activation.target_backend_id != member.backend_id
+        || activation.retained_participant_id != member.participant_id
+        || activation.bootstrap_run_id != member.run_id
+        || activation.target_world.world_id != member.world_id
+        || activation.target_world.world_generation != member.world_generation
+        || member.resumed_from_participant_id.is_some()
+    {
+        return Err(fail());
+    }
+    match activation.launch_kind {
+        E2MemberLaunchKindV1::FreshSpawn => {
+            use super::retained_worker_runtime::{
+                RetainedWorkerAdmissionStateV1, RetainedWorkerRuntime,
+            };
+            let proof = member
+                .retained_worker_launch_authority
+                .as_ref()
+                .ok_or_else(fail)?;
+            proof
+                .validate()
+                .map_err(DispatchPolicyCommitmentError::new)?;
+            let PolicyCommitmentAuthorityLinkV1::RetainedAdmission {
+                stable_admission_identity,
+            } = &authenticated.record.authority_link
+            else {
+                return Err(fail());
+            };
+            let source = &stable_admission_identity.stable_source_fields;
+            let durable = RetainedWorkerRuntime
+                .read_existing_admission_record(
+                    authority,
+                    &member.orchestration_session_id,
+                    &member.participant_id,
+                )
+                .map_err(|_| fail())?
+                .ok_or_else(fail)?;
+            let (registration, transport_claim_id) = match &durable.state {
+                RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal {
+                    registration,
+                    transport_claim_id,
+                    ..
+                } => (registration, transport_claim_id),
+                RetainedWorkerAdmissionStateV1::Routable {
+                    registration,
+                    transport_claim_id: Some(transport_claim_id),
+                    ..
+                } if allow_already_routable => (registration, transport_claim_id),
+                _ => return Err(fail()),
+            };
+            if registration != &stable_admission_identity.registration
+                || durable.authority_store_id != source.authority_store_id
+                || durable.issuer_request_id != source.issuer_request_id
+                || durable.canonical_spawn_fingerprint != source.canonical_spawn_fingerprint
+                || durable.orchestration_session_id != source.orchestration_session_id
+                || durable.retained_participant_id != source.retained_participant_id
+                || durable.bootstrap_run_id != source.bootstrap_run_id
+                || durable.backend_id != source.backend_id
+                || durable.protocol != source.protocol
+                || durable.world_binding != source.world_binding
+                || durable.current_policy_ref != source.current_policy_ref
+                || durable.current_policy_revision != source.current_policy_revision
+                || proof.authority_store_id != durable.authority_store_id
+                || proof.issuer_request_id != durable.issuer_request_id
+                || proof.canonical_spawn_fingerprint.key_id
+                    != durable.canonical_spawn_fingerprint.key_id
+                || proof.canonical_spawn_fingerprint.digest_hex
+                    != durable.canonical_spawn_fingerprint.digest_hex
+                || proof.registration_id != registration.registration_id
+                || proof.retained_worker_ref_id != registration.retained_worker_ref.ref_id
+                || proof.transport_claim_id != *transport_claim_id
+                || proof.orchestration_session_id != member.orchestration_session_id
+                || proof.caller_participant_id != member.orchestrator_participant_id
+                || proof.retained_participant_id != member.participant_id
+                || proof.bootstrap_run_id != member.run_id
+                || proof.backend_id != member.backend_id
+                || proof.protocol != member.protocol
+                || proof.world_binding.world_id != member.world_id
+                || proof.world_binding.world_generation != member.world_generation
+                || proof.current_policy_ref_id != durable.current_policy_ref.ref_id
+                || proof.current_policy_revision != durable.current_policy_revision
+                || member.parent_participant_id.is_some()
+            {
+                return Err(fail());
+            }
+            // The supplied proof is only a locator: the existing resolver
+            // authenticates registration/typed ancestry and exact R0 membership.
+            let target = super::retained_worker_runtime::RetainedWorkerRegistrationResultV1 {
+                authority_store_id: proof.authority_store_id.clone(),
+                registration_id: proof.registration_id.clone(),
+                registration_commitment: serde_json::from_value(
+                    serde_json::to_value(&proof.registration_commitment).map_err(|_| fail())?,
+                )
+                .map_err(|_| fail())?,
+                orchestration_session_id: proof.orchestration_session_id.clone(),
+                retained_participant_id: proof.retained_participant_id.clone(),
+                retained_worker_ref: registration.retained_worker_ref.clone(),
+                authority_revision_after: proof.authority_revision_after,
+                authority_record_commitment_after: serde_json::from_value(
+                    serde_json::to_value(&proof.authority_record_commitment_after)
+                        .map_err(|_| fail())?,
+                )
+                .map_err(|_| fail())?,
+            };
+            let resolved = RetainedWorkerRuntime
+                .resolve_retained_target(authority, &target)
+                .map_err(|_| fail())?;
+            if serde_json::to_value(&resolved.registration.retained_worker_ref.commitment)
+                .map_err(|_| fail())?
+                != serde_json::to_value(&proof.retained_worker_commitment).map_err(|_| fail())?
+            {
+                return Err(fail());
+            }
+        }
+        E2MemberLaunchKindV1::Fork => {
+            if member.retained_worker_launch_authority.is_some()
+                || member.parent_participant_id != activation.source_participant_id
+            {
+                return Err(fail());
+            }
+        }
+    }
+    if serde_json::to_vec(enforced).map_err(|_| fail())? != authenticated.policy_snapshot_bytes() {
+        return Err(fail());
+    }
+    Ok(authenticated)
+}
+
+/// The exact B1 turn proposal authenticates the complete submitted turn and
+/// original patch. Independently authenticate its immutable worker cap here.
+#[cfg(target_os = "linux")]
+pub(crate) fn authenticate_ordinary_member_turn_policy_v1(
+    authority: &HostSessionAuthority,
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
+    current: &PolicySnapshotV3,
+) -> Result<(), DispatchPolicyCommitmentError> {
+    let fail = || DispatchPolicyCommitmentError::new("ordinary turn cap or effect subject changed");
+    request
+        .validate_ordinary_representation()
+        .map_err(DispatchPolicyCommitmentError::new)?;
+    let supplied = request.policy_snapshot_carrier.as_ref().ok_or_else(fail)?;
+    let ResolvedPolicyCommitmentCompatibilityV1::Compatible { cap } = resolve_retained_worker_cap(
+        authority,
+        &request.orchestration_session_id,
+        &request.participant_id,
+    )?
+    else {
+        return Err(fail());
+    };
+    let authenticated = authenticate_dispatch_policy_commitment(authority, cap.commitment_ref())?;
+    let record = &authenticated.record;
+    if supplied.immutable_worker_cap_ref
+        != (DispatchPolicyCommitmentRefCarrierV1 {
+            authority_store_id: record.authority_store_id.clone(),
+            commitment_id: record.commitment_id.clone(),
+            exact_linkage_hash: record.exact_linkage_hash.clone(),
+        })
+        || supplied.immutable_worker_cap_created_revision != record.created_revision
+        || supplied.immutable_worker_cap_application_revision != record.application_revision
+        || authenticated.retained_participant_id() != Some(request.participant_id.as_str())
+        || record.orchestration_session_id != request.orchestration_session_id
+        || record.target_backend_id != request.backend_id
+        || record.world_id != request.world_id
+        || record.world_generation != request.world_generation
+    {
+        return Err(fail());
+    }
+    let enforced = supplied
+        .policy_snapshot()
+        .map_err(DispatchPolicyCommitmentError::new)?;
+    ordinary_policy_snapshot_within_current_v1(authenticated.policy_snapshot(), &enforced)?;
+    ordinary_policy_snapshot_within_current_v1(current, &enforced)?;
+    Ok(())
 }
 
 fn conjoin_policy_snapshots(
@@ -5174,6 +6215,49 @@ fn validate_fresh_spawn_input(
     validate_applied_patch(&input.applied_patch)
 }
 
+fn validate_fresh_spawn_representation(
+    input: &FreshSpawnReservationInputV1,
+) -> Result<(), DispatchPolicyCommitmentError> {
+    for (name, value) in [
+        ("request_id", input.spawn_request.request_id.as_str()),
+        (
+            "idempotency_key",
+            input.spawn_request.idempotency_key.as_str(),
+        ),
+        (
+            "orchestration_session_id",
+            input.spawn_request.orchestration_session_id.as_str(),
+        ),
+        (
+            "caller_participant_id",
+            input.spawn_request.caller_participant_id.as_str(),
+        ),
+        ("caller_backend_id", input.caller_backend_id.as_str()),
+        (
+            "target_backend_id",
+            input.spawn_request.target_backend_id.as_str(),
+        ),
+        ("world_id", input.spawn_request.world_id.as_str()),
+        (
+            "parent_policy_revision",
+            input.parent_policy_revision.as_str(),
+        ),
+    ] {
+        validate_component(name, value)?;
+    }
+    if input.spawn_request.schema_version != 1
+        || input.spawn_request.action != "spawn_world_worker"
+        || input.spawn_request.mode != "retained"
+        || input.spawn_request.task_run_id.is_some()
+        || input.spawn_request.target_participant_id.is_some()
+    {
+        return Err(DispatchPolicyCommitmentError::new(
+            "fresh-spawn input has invalid identity or policy composition",
+        ));
+    }
+    validate_applied_patch(&input.applied_patch)
+}
+
 fn fresh_spawn_lookup_key(
     authority_store_id: &str,
     input: &FreshSpawnReservationInputV1,
@@ -5213,7 +6297,10 @@ fn validate_applied_patch(
                     "restricted policy patch bytes or hash mismatch",
                 ));
             }
-            let _: Value = decode_canonical(&bytes)?;
+            let decoded: DispatchPolicyNarrowingPatchV1 = decode_canonical(&bytes)?;
+            decoded
+                .validate()
+                .map_err(|_| DispatchPolicyCommitmentError::new("invalid protected E1 patch"))?;
             Ok(())
         }
     }
@@ -5355,6 +6442,51 @@ fn validate_commitment(
             "committed PolicySnapshotV3 byte identity mismatch",
         ));
     }
+    #[cfg(target_os = "linux")]
+    if matches!(
+        &record.applied_patch,
+        AppliedDispatchPolicyPatchIdentityV1::RestrictedWorldFs {
+            patch_schema_version: 2,
+            ..
+        }
+    ) {
+        let patch = decode_applied_policy_patch(&record.applied_patch)?;
+        let subject_matches = match (&record.subject, &patch.applies_to) {
+            (
+                DispatchPolicyCommitmentSubjectV1::EphemeralWork { .. },
+                transport_api_types::DispatchCapabilitySubjectV1::EphemeralTask,
+            ) => true,
+            (
+                DispatchPolicyCommitmentSubjectV1::RetainedWorkerTurn {
+                    retained_participant_id,
+                    ..
+                },
+                transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerTurn {
+                    retained_participant_id: target,
+                },
+            ) => retained_participant_id == target,
+            _ => false,
+        };
+        if !subject_matches
+            || !matches!(
+                record.authority_link,
+                PolicyCommitmentAuthorityLinkV1::B1 { .. }
+            )
+            || patch.request_id != record.request_id
+            || patch.orchestration_session_id != record.orchestration_session_id
+            || patch.caller_participant_id != record.caller_participant_id
+            || patch.target_backend_id != record.target_backend_id
+            || patch.target_world.world_id != record.world_id
+            || patch.target_world.world_generation != record.world_generation
+            || patch.parent_policy_ref != transport_policy_ref(&record.parent_policy_ref)
+            || patch.parent_policy_revision != record.parent_policy_revision
+        {
+            return Err(DispatchPolicyCommitmentError::new(
+                "ordinary patch does not join exact B1 record subject",
+            ));
+        }
+        return Ok(());
+    }
     validate_applied_patch(&record.applied_patch)
 }
 
@@ -5406,6 +6538,8 @@ fn proof_from_reservation(
         bootstrap_run_id: reservation.bootstrap_run_id.clone(),
         narrowing_attestation: permits_capability_narrowing
             .then_some(OpaqueFreshSpawnNarrowingAttestationV1),
+        #[cfg(target_os = "linux")]
+        ordinary_unchanged_parent: None,
     }
 }
 
@@ -5504,7 +6638,332 @@ pub(crate) fn test_authenticated_fresh_spawn_reservation_proof(
         bootstrap_run_id: bootstrap_run_id.into(),
         narrowing_attestation: permits_capability_narrowing
             .then_some(OpaqueFreshSpawnNarrowingAttestationV1),
+        #[cfg(target_os = "linux")]
+        ordinary_unchanged_parent: None,
     }
+}
+
+/// Canonical ordinary patch syntax, not an execution capability.
+#[cfg(target_os = "linux")]
+pub(crate) fn ordinary_applied_dispatch_policy_patch_identity(
+    patch: Option<&DispatchPolicyNarrowingPatchV1>,
+) -> Result<AppliedDispatchPolicyPatchIdentityV1, DispatchPolicyCommitmentError> {
+    let Some(patch) = patch else {
+        return Ok(AppliedDispatchPolicyPatchIdentityV1::UnchangedParent);
+    };
+    let ordinary =
+        super::dispatch_contract::OrdinaryDispatchPolicyNarrowingPatchV2::from_patch(patch)
+            .map_err(|_| DispatchPolicyCommitmentError::new("invalid ordinary patch syntax"))?;
+    if patch
+        .restricted_policy_patch
+        .world_fs
+        .as_ref()
+        .is_none_or(|fs| fs.is_empty())
+    {
+        return Err(DispatchPolicyCommitmentError::new(
+            "ordinary patch must not be empty",
+        ));
+    }
+    let bytes = encode_canonical(&ordinary)?;
+    Ok(AppliedDispatchPolicyPatchIdentityV1::RestrictedWorldFs {
+        patch_schema_version: 2,
+        patch_hash: patch_identity_hash(&bytes)?,
+        canonical_patch: ImmutableBytesMaterialV1::inline(&bytes),
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn decode_applied_policy_patch(
+    patch: &AppliedDispatchPolicyPatchIdentityV1,
+) -> Result<DispatchPolicyNarrowingPatchV1, DispatchPolicyCommitmentError> {
+    let AppliedDispatchPolicyPatchIdentityV1::RestrictedWorldFs {
+        patch_schema_version,
+        canonical_patch,
+        patch_hash,
+    } = patch
+    else {
+        return Err(DispatchPolicyCommitmentError::new(
+            "missing restricted patch",
+        ));
+    };
+    let bytes = canonical_patch.resolve_inline()?;
+    if patch_identity_hash(&bytes)? != *patch_hash {
+        return Err(DispatchPolicyCommitmentError::new(
+            "ordinary patch hash mismatch",
+        ));
+    }
+    let decoded = match patch_schema_version {
+        1 => {
+            validate_applied_patch(patch)?;
+            decode_canonical(&bytes)?
+        }
+        2 => {
+            let ordinary: super::dispatch_contract::OrdinaryDispatchPolicyNarrowingPatchV2 =
+                decode_canonical(&bytes)?;
+            ordinary
+                .into_patch()
+                .map_err(|_| DispatchPolicyCommitmentError::new("invalid ordinary patch"))?
+        }
+        _ => {
+            return Err(DispatchPolicyCommitmentError::new(
+                "unsupported patch representation",
+            ))
+        }
+    };
+    if decoded
+        .restricted_policy_patch
+        .world_fs
+        .as_ref()
+        .is_none_or(|fs| fs.is_empty())
+    {
+        return Err(DispatchPolicyCommitmentError::new("empty ordinary patch"));
+    }
+    Ok(decoded)
+}
+
+/// Subject-bound current admission retained through the ordinary observer.
+/// Its fields cannot be constructed from serialized syntax or a B1 builder.
+#[cfg(target_os = "linux")]
+pub(crate) struct AuthenticatedOrdinaryAcceptedWorkPublicationV1 {
+    selection: std::sync::Arc<super::native_launch_context::AuthenticatedOrdinarySelectionV1>,
+    proposal: super::state_store::WorldWorkAcceptanceProposalV1,
+    applied_patch: AppliedDispatchPolicyPatchIdentityV1,
+    policy_snapshot: ValidatedPolicySnapshotMaterialV1,
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn authenticate_ordinary_accepted_work_publication_v1(
+    selection: std::sync::Arc<super::native_launch_context::AuthenticatedOrdinarySelectionV1>,
+    proposal: &super::state_store::WorldWorkAcceptanceProposalV1,
+    applied_patch: &AppliedDispatchPolicyPatchIdentityV1,
+    policy_snapshot: &ValidatedPolicySnapshotMaterialV1,
+) -> Result<AuthenticatedOrdinaryAcceptedWorkPublicationV1, DispatchPolicyCommitmentError> {
+    let fail = || {
+        DispatchPolicyCommitmentError::new(
+            "ordinary publication lost genuine issuer, selection, B1 or current policy",
+        )
+    };
+    selection
+        .require_ordinary_configured_authority()
+        .map_err(|_| fail())?;
+    selection.revalidate().map_err(|_| fail())?;
+    let physical =
+        super::host_session_authority::store::read_existing_accepted_work_authority_snapshot(
+            selection.held_authority(),
+        )
+        .map_err(|_| fail())?;
+    let authenticated = super::state_store::authenticate_pending_ordinary_world_work_proposal_v1(
+        &physical,
+        &proposal.orchestration_session_id,
+        &proposal.acceptance_context,
+    )
+    .map_err(|_| fail())?;
+    let request = match &proposal.submission_identity {
+        super::state_store::WorldWorkSubmissionIdentityV1::EphemeralTask {
+            validated_dispatch_request,
+            ..
+        }
+        | super::state_store::WorldWorkSubmissionIdentityV1::RetainedTurn {
+            validated_dispatch_request,
+            ..
+        } => validated_dispatch_request,
+    };
+    let current = selection
+        .held_authority()
+        .resolve_current_exact(selection.original_session_id(), None)
+        .map_err(|_| fail())?;
+    if authenticated.proposal() != proposal
+        || proposal.authority_store_id != selection.authority_store_id()
+        || proposal.orchestration_session_id != selection.original_session_id()
+        || proposal.caller_participant_id != selection.current_participant_id()
+        || proposal.caller_backend_id != selection.native_selection().backend_id
+        || proposal.target_backend_id != selection.requested_selection().backend_id
+        || selection.current_world_binding()
+            != Some((proposal.world_id.as_str(), proposal.world_generation))
+        || current.observation.authority_store_id != proposal.authority_store_id
+        || current.authority.orchestration_session_id != proposal.orchestration_session_id
+        || current.caller.participant_id != proposal.caller_participant_id
+        || current.caller.descriptor.backend_id != proposal.caller_backend_id
+        || current.caller.descriptor.agent_id != selection.native_selection().realized_agent_id
+        || current
+            .authority
+            .workspace_binding
+            .workspace_root
+            .physical_path
+            != selection.workspace_root()
+        || current.observation.authority_revision != selection.current_authority_revision()
+        || current
+            .authority
+            .world_binding
+            .as_ref()
+            .is_none_or(|world| {
+                world.world_id != proposal.world_id
+                    || world.world_generation != proposal.world_generation
+            })
+        || proposal.current_policy_snapshot_ref != *policy_snapshot.snapshot_ref()
+        || proposal.current_policy_snapshot_hash != policy_snapshot.hash()
+        || proposal.current_policy_revision != policy_snapshot.revision()
+        || ordinary_applied_dispatch_policy_patch_identity(
+            request.dispatch_policy_narrowing.as_ref(),
+        )? != *applied_patch
+    {
+        return Err(fail());
+    }
+    let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
+        std::path::Path::new(selection.workspace_root()),
+        &selection.held_authority().bootstrap_home(),
+    )
+    .map_err(|_| fail())?;
+    selection
+        .revalidate_requested_account(&policy)
+        .map_err(|_| fail())?;
+    let steering = policy.world_dispatch_policy();
+    if !steering.enabled
+        || !steering
+            .allowed_actions
+            .iter()
+            .any(|a| a == request.action.as_str())
+        || !steering
+            .allowed_modes
+            .iter()
+            .any(|m| m == request.mode.as_str())
+        || !steering
+            .allowed_backends
+            .iter()
+            .any(|b| b == &proposal.target_backend_id)
+        || (request.dispatch_policy_narrowing.is_some() && !steering.allow_capability_narrowing)
+    {
+        return Err(fail());
+    }
+    let current_snapshot =
+        crate::execution::policy_snapshot::resolve_policy_snapshot_for_bootstrap_home(
+            std::path::Path::new(selection.workspace_root()),
+            &selection.held_authority().bootstrap_home(),
+        )
+        .map_err(|_| fail())?;
+    if current_snapshot.snapshot_hash != current.current_policy.canonical_policy_snapshot_sha256 {
+        return Err(fail());
+    }
+    ordinary_policy_snapshot_within_current_v1(
+        &current_snapshot.snapshot,
+        policy_snapshot.snapshot(),
+    )?;
+    selection.revalidate().map_err(|_| fail())?;
+    Ok(AuthenticatedOrdinaryAcceptedWorkPublicationV1 {
+        selection,
+        proposal: proposal.clone(),
+        applied_patch: applied_patch.clone(),
+        policy_snapshot: policy_snapshot.clone(),
+    })
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn publish_ordinary_accepted_work_commitment(
+    proof: &AuthenticatedOrdinaryAcceptedWorkPublicationV1,
+    input: AcceptedWorkPolicyCommitmentInputV1,
+) -> Result<PersistedDispatchPolicyCommitmentV1, DispatchPolicyCommitmentError> {
+    let fail = || {
+        DispatchPolicyCommitmentError::new(
+            "ordinary publication changed admitted B1 or immutable effect material",
+        )
+    };
+    proof
+        .selection
+        .require_ordinary_configured_authority()
+        .map_err(|_| fail())?;
+    let physical =
+        super::host_session_authority::store::read_existing_accepted_work_authority_snapshot(
+            proof.selection.held_authority(),
+        )
+        .map_err(|_| fail())?;
+    let proposal = super::state_store::authenticate_pending_ordinary_world_work_proposal_v1(
+        &physical,
+        &proof.proposal.orchestration_session_id,
+        &proof.proposal.acceptance_context,
+    )
+    .map_err(|_| fail())?;
+    let key = super::state_store::WorldWorkAcceptanceLookupKeyV1::new(
+        input.acceptance.authority_store_id.clone(),
+        input.acceptance.acceptance_record_id.clone(),
+    );
+    let accepted =
+        super::state_store::authenticate_persisted_world_work_acceptance(&physical, &key)
+            .map_err(|_| fail())?;
+    let request = match &proof.proposal.submission_identity {
+        super::state_store::WorldWorkSubmissionIdentityV1::EphemeralTask {
+            validated_dispatch_request,
+            ..
+        }
+        | super::state_store::WorldWorkSubmissionIdentityV1::RetainedTurn {
+            validated_dispatch_request,
+            ..
+        } => validated_dispatch_request,
+    };
+    if proposal.proposal() != &proof.proposal
+        || accepted.record() != &input.acceptance
+        || input.acceptance.acceptance_record_id
+            != proof
+                .proposal
+                .acceptance_context
+                .proposed_acceptance_record_id
+        || input.idempotency_key != request.idempotency_key
+        || input.applied_patch != proof.applied_patch
+        || input.policy_snapshot.bytes() != proof.policy_snapshot.bytes()
+        || input.policy_snapshot.snapshot_ref() != proof.policy_snapshot.snapshot_ref()
+        || input.policy_snapshot.hash() != proof.policy_snapshot.hash()
+        || input.policy_snapshot.revision() != proof.policy_snapshot.revision()
+        || input.reason
+            != request
+                .dispatch_policy_narrowing
+                .as_ref()
+                .and_then(|p| p.reason.clone())
+    {
+        return Err(fail());
+    }
+    if !matches!(
+        input.applied_patch,
+        AppliedDispatchPolicyPatchIdentityV1::UnchangedParent
+    ) {
+        decode_applied_policy_patch(&input.applied_patch)?;
+    }
+    publish_accepted_work_commitment_inner(proof.selection.held_authority(), input)
+}
+
+#[cfg(target_os = "linux")]
+fn validate_ordinary_retained_turn_patch_bindings(
+    input: &RetainedTurnPolicyResolutionInputV1,
+) -> Result<(), DispatchPolicyCommitmentError> {
+    let Some(patch) = &input.turn_patch else {
+        return Ok(());
+    };
+    super::dispatch_contract::OrdinaryDispatchPolicyNarrowingPatchV2::from_patch(patch)
+        .map_err(|_| DispatchPolicyCommitmentError::new("invalid ordinary retained-turn patch"))?;
+    let expected_parent = transport_policy_ref(input.current_parent_and_turn_patch.snapshot_ref());
+    if patch.request_id != input.active_run_id
+        || patch.orchestration_session_id != input.orchestration_session_id
+        || patch.caller_participant_id != input.caller_participant_id
+        || patch.target_backend_id != input.target_backend_id
+        || patch.target_world.world_id != input.world_id
+        || patch.target_world.world_generation != input.world_generation
+        || patch.parent_policy_ref != expected_parent
+        || patch.parent_policy_revision != input.current_parent_and_turn_patch.revision()
+        || !matches!(
+            &patch.applies_to,
+            transport_api_types::DispatchCapabilitySubjectV1::RetainedWorkerTurn {
+                retained_participant_id
+            } if retained_participant_id == &input.retained_participant_id
+        )
+        || patch
+            .restricted_policy_patch
+            .world_fs
+            .as_ref()
+            .is_none_or(|world_fs| world_fs.is_empty())
+    {
+        return Err(DispatchPolicyCommitmentError::new(
+            "retained-turn patch does not match current authority, world, or subject",
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -5698,6 +7157,18 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_protected_fresh_spawn_generation_zero_refused() {
+        let mut input = fresh_spawn_input("protected zero refusal");
+        input.spawn_request.world_generation = 0;
+        assert!(validate_fresh_spawn_input(&input).is_err());
+        assert!(validate_fresh_spawn_representation(&input).is_ok());
+        // Representation validation is not a constructible ordinary capability.
+        let (_temp, authority) = started_authority();
+        initialize_dispatch_policy_commitment_registry(&authority).unwrap();
+        assert!(reserve_fresh_spawn(&authority, input).is_err());
+    }
+
     fn fresh_spawn_input(prompt: &str) -> FreshSpawnReservationInputV1 {
         let snapshot = policy_snapshot(&["src/lib.rs"], &["src/lib.rs"], &["api.example"]);
         let bytes = serde_json::to_vec(&snapshot).expect("snapshot bytes");
@@ -5734,6 +7205,68 @@ mod tests {
             .expect("validated snapshot"),
             reason: None,
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_world_controller_e2_source_includes_pending_reservations() {
+        use super::super::host_session_authority::store::hold_existing_accepted_work_authority_snapshot;
+        let (_parent, authority) = started_authority();
+        initialize_dispatch_policy_commitment_registry(&authority).unwrap();
+        let reserved =
+            reserve_fresh_spawn(&authority, fresh_spawn_input("pending source proof")).unwrap();
+        let held = hold_existing_accepted_work_authority_snapshot(&authority).unwrap();
+        let world = WorldBindingV1 {
+            world_id: "e2-world".into(),
+            world_generation: 7,
+        };
+        let (pending, committed) =
+            decode_world_controller_e2_session_sources(held.snapshot(), "e2-session", &world)
+                .unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(
+            pending[0].reservation_id,
+            reserved.reservation_ref.reservation_id
+        );
+        assert_eq!(
+            pending[0].retained_participant_id,
+            reserved.retained_participant_id
+        );
+        assert!(committed.is_empty());
+        let wrong = WorldBindingV1 {
+            world_generation: 8,
+            ..world.clone()
+        };
+        assert!(
+            decode_world_controller_e2_session_sources(held.snapshot(), "e2-session", &wrong)
+                .is_err()
+        );
+        assert_eq!(
+            decode_world_controller_e2_session_sources(held.snapshot(), "sibling", &wrong).unwrap(),
+            (vec![], vec![])
+        );
+        held.verify_sources().unwrap();
+        drop(held);
+        // E2 component fixture supplies its existing stable admission witness;
+        // no claim of native execution or R0 routability follows.
+        let admission = test_admission_for_reservation(&reserved);
+        let published =
+            publish_fresh_spawn_commitment(&authority, &reserved.proof, &admission).unwrap();
+        let held = hold_existing_accepted_work_authority_snapshot(&authority).unwrap();
+        let (pending, committed) =
+            decode_world_controller_e2_session_sources(held.snapshot(), "e2-session", &world)
+                .unwrap();
+        assert_eq!(
+            pending.len(),
+            1,
+            "committed reservations remain part of immutable intent history"
+        );
+        assert_eq!(committed.len(), 1);
+        assert_eq!(
+            committed[0].commitment_id,
+            published.commitment_ref().commitment_id
+        );
+        held.verify_sources().unwrap();
     }
 
     fn publish_test_source_worker_cap(
@@ -5778,6 +7311,7 @@ mod tests {
             current_policy_ref: policy_ref(),
             current_policy_revision: "e2-policy".into(),
             max_live_retained_workers: 8,
+            bootstrap_receiver_protocol: None,
             state: RetainedWorkerAdmissionStateV1::PreTransportNonterminal {
                 registration: RetainedWorkerAdmissionRegistrationV1 {
                     registration_id: "registration-e2-source".into(),
@@ -6257,6 +7791,66 @@ mod tests {
         assert_eq!(
             cap.cap_policy_snapshot_revision(),
             source_cap.record().policy_snapshot_revision
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_e2_rm_receipt_preserves_cap_birth_caller_for_a_later_turn() {
+        let (_parent, authority) = started_authority();
+        let store_id = authority
+            .read_preserved_start_root_v2()
+            .unwrap()
+            .authority_store_id;
+        let (source, _) = publish_test_source_worker_cap(&authority);
+        let fork = publish_fork_commitment(
+            &authority,
+            fork_commitment_input(&authority, &source, "later caller receipt"),
+        )
+        .unwrap();
+        let child = fork.fork_child_participant_id().unwrap().to_owned();
+        let mut input = accepted_work_input(
+            &store_id,
+            "wwa_018f0f2e-7b4c-7aa1-8c22-123456789ae0",
+            "request-e2-rm-successor",
+            AcceptedWorldWorkIdentityV1::RetainedTurn {
+                active_run_id: "request-e2-rm-successor".into(),
+                message_id: "wwm_018f0f2e-7b4c-7aa1-8c22-123456789ae1".into(),
+                target_participant_id: child.clone(),
+            },
+            validated_material(policy_snapshot(&["src"], &["src"], &["api.example"])),
+            Some(fork.commitment_ref()),
+        );
+        // Fixture B1 and its preserved claim name this turn's caller. Neither
+        // changes the already published Fork cap's immutable launch caller.
+        input.acceptance.caller_participant_id = "e2-successor".into();
+        input.execution_claim.caller_participant_id = "e2-successor".into();
+        input.acceptance.caller_backend_id = "cli:successor".into();
+        input.execution_claim.caller_backend_id = "cli:successor".into();
+        let (key, _) = persist_e2_rm_case(&authority, &input);
+        let material = resolved_e2_rm(&authority, &key, &input.acceptance);
+        let cap = material.retained_worker_cap().unwrap();
+        assert_eq!(cap.cap_ref(), &fork.commitment_ref());
+        assert_eq!(cap.caller_participant_id(), "e2-orchestrator");
+        assert_eq!(cap.caller_backend_id(), "cli:codex");
+        assert_eq!(material.caller_participant_id(), "e2-successor");
+        assert_eq!(material.caller_backend_id(), "cli:successor");
+        let receipt = crate::execution::orchestrator_world_dispatch::project_active_retained_turn_receipt_for_test(&material).unwrap();
+        assert_eq!(receipt.orchestrator_participant_id, "e2-successor");
+        assert_eq!(receipt.target_participant_id, child);
+        assert_eq!(
+            receipt.worker_policy_cap_hash,
+            fork.commitment_ref().exact_linkage_hash
+        );
+        let mut substituted = input.acceptance.clone();
+        substituted.caller_participant_id = cap.caller_participant_id().into();
+        assert_eq!(
+            resolve_accepted_work_receipt_material(&authority, &key, &substituted),
+            Err(
+                AcceptedWorkReceiptMaterialErrorV1::ExpectedB1AcceptanceMismatch {
+                    field: AcceptedWorkBindingFieldV1::CallerParticipantId,
+                }
+            ),
         );
     }
 
@@ -8127,5 +9721,103 @@ mod tests {
             .expect("private replacement root permissions");
 
         assert!(initialize_dispatch_policy_commitment_registry(&authority).is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn ordinary_current_policy_accepts_authenticated_narrowing() {
+        let current = policy_snapshot(&["."], &["."], &["a.example", "b.example"])
+            .canonicalize()
+            .expect("valid current fixture");
+        let narrowed = policy_snapshot(&["src"], &["src/lib.rs"], &["a.example"])
+            .canonicalize()
+            .expect("valid narrowed fixture");
+        ordinary_policy_snapshot_within_current_v1(&current, &narrowed)
+            .expect("current semantic permission includes authenticated narrowing");
+        let mut read_only = narrowed.clone();
+        read_only.world_fs.write.enabled = false;
+        read_only.world_fs.fail_closed.routing = true;
+        let read_only = read_only
+            .canonicalize()
+            .expect("valid read-only cap fixture");
+        ordinary_policy_snapshot_within_current_v1(&current, &read_only)
+            .expect("authenticated write revocation remains a valid narrowing");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn ordinary_current_policy_refuses_revoked_effect() {
+        let permitted = policy_snapshot(&["src"], &["src/lib.rs"], &["a.example"])
+            .canonicalize()
+            .expect("valid permitted fixture");
+        let revoked_network = policy_snapshot(&["."], &["."], &["b.example"])
+            .canonicalize()
+            .expect("valid revoked_network fixture");
+        assert!(ordinary_policy_snapshot_within_current_v1(&revoked_network, &permitted).is_err());
+        let revoked_path = policy_snapshot(&["tests"], &["tests"], &["a.example"])
+            .canonicalize()
+            .expect("valid revoked_path fixture");
+        assert!(ordinary_policy_snapshot_within_current_v1(&revoked_path, &permitted).is_err());
+        let mut revoked_write = permitted.clone();
+        revoked_write.world_fs.write.enabled = false;
+        revoked_write.world_fs.fail_closed.routing = true;
+        let revoked_write = revoked_write
+            .canonicalize()
+            .expect("valid write-revoked current fixture");
+        let error = ordinary_policy_snapshot_within_current_v1(&revoked_write, &permitted)
+            .expect_err("valid current write revocation must refuse permitted write");
+        assert_eq!(
+            error.to_string(),
+            "ordinary current policy revoked part of the authenticated effect"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_ordinary_patch_syntax_never_opens_protected_publication_or_spawn() {
+        let mut patch = fork_patch();
+        patch.applies_to = transport_api_types::DispatchCapabilitySubjectV1::EphemeralTask;
+        patch.target_world.world_generation = 0;
+        let ordinary = ordinary_applied_dispatch_policy_patch_identity(Some(&patch)).unwrap();
+        assert_eq!(decode_applied_policy_patch(&ordinary).unwrap(), patch);
+        assert!(applied_dispatch_policy_patch_identity(Some(&patch)).is_err());
+        assert!(validate_applied_patch(&ordinary).is_err());
+        let mut cross_variant = ordinary.clone();
+        let AppliedDispatchPolicyPatchIdentityV1::RestrictedWorldFs {
+            patch_schema_version,
+            ..
+        } = &mut cross_variant
+        else {
+            unreachable!()
+        };
+        *patch_schema_version = 1;
+        assert!(validate_applied_patch(&cross_variant).is_err());
+        assert!(decode_applied_policy_patch(&cross_variant).is_err());
+        let mut spawn = fresh_spawn_input("unchanged protected input");
+        spawn.applied_patch = ordinary.clone();
+        assert!(validate_fresh_spawn_input(&spawn).is_err());
+        assert!(validate_fresh_spawn_representation(&spawn).is_err());
+        let (_parent, authority) = started_authority();
+        let store_id = authority
+            .read_preserved_start_root_v2()
+            .unwrap()
+            .authority_store_id;
+        let mut input = accepted_work_input(
+            &store_id,
+            "wwa_018f0f2e-7b4c-7aa1-8c22-123456789abc",
+            "ordinary-cannot-use-protected-publisher",
+            AcceptedWorldWorkIdentityV1::EphemeralTask {
+                task_run_id: "ordinary-task".into(),
+            },
+            validated_material(policy_snapshot(
+                &["src/lib.rs"],
+                &["src/lib.rs"],
+                &["api.example"],
+            )),
+            None,
+        );
+        input.applied_patch = ordinary;
+        assert!(publish_accepted_work_commitment(&authority, input).is_err());
+        assert!(!super::super::host_session_authority::store::dispatch_policy_commitment_registry_exists_for_authority(&authority).unwrap());
     }
 }

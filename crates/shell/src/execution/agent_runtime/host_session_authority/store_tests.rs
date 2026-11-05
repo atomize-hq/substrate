@@ -25,6 +25,381 @@ use crate::execution::agent_runtime::host_session_authority::store_schema::{
 };
 use crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot;
 
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "requires an explicitly owned private Root namespace and a real UID1000 publisher"]
+fn test_existing_owner_storage_reopen_survives_root_service_principal() {
+    use crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority;
+    use crate::execution::agent_runtime::retained_worker_runtime::RetainedWorkerRuntime;
+    use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+    use std::os::unix::process::CommandExt;
+    use std::process::Command;
+    const FILTER: &str = "execution::agent_runtime::host_session_authority::store::tests::test_existing_owner_storage_reopen_survives_root_service_principal";
+    if let Some(base) = std::env::var_os("TASK20_NATIVE_STORAGE_CHILD") {
+        assert_eq!(unsafe { libc::geteuid() }, 1000);
+        let home = std::path::PathBuf::from(base).join(".substrate");
+        if std::env::var("TASK20_NATIVE_STORAGE_MODE").unwrap() == "bootstrap" {
+            fs::DirBuilder::new().mode(0o700).create(&home).unwrap();
+            let authority =
+                HostSessionAuthority::from_trusted_root(TrustedAuthorityRoot::open(&home).unwrap())
+                    .unwrap();
+            authority.bootstrap().unwrap();
+        } else if std::env::var("TASK20_NATIVE_STORAGE_MODE").unwrap() == "registry" {
+            let authority = HostSessionAuthority::open(&home).unwrap();
+            initialize_owned_registry_for_test(&authority);
+        } else if std::env::var("TASK20_NATIVE_STORAGE_MODE").unwrap() == "verify" {
+            let authority = HostSessionAuthority::open(&home).unwrap();
+            assert_eq!(
+                RetainedWorkerRuntime
+                    .read_existing_admission_record(&authority, "absent-session", "absent-worker")
+                    .unwrap(),
+                None
+            );
+        } else {
+            let pending = home
+                .join("authority-v1/retained-worker-admission-v1/tmp")
+                .join(format!("admission-registry--{}.tmp", "a".repeat(32)));
+            fs::write(&pending, b"deliberate native incomplete stage").unwrap();
+            fs::set_permissions(pending, fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        return;
+    }
+    assert_eq!(
+        unsafe { libc::geteuid() },
+        0,
+        "private Root controller required"
+    );
+    let base = tempfile::tempdir().unwrap();
+    let name = std::ffi::CString::new(base.path().as_os_str().as_bytes()).unwrap();
+    assert_eq!(unsafe { libc::chown(name.as_ptr(), 1000, 1000) }, 0);
+    let publish = |mode: &str| {
+        let mut command = Command::new(std::env::current_exe().unwrap());
+        command
+            .args([
+                FILTER,
+                "--exact",
+                "--ignored",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .env("HOME", base.path())
+            .env("TMPDIR", base.path())
+            .env("TASK20_NATIVE_STORAGE_CHILD", base.path())
+            .env("TASK20_NATIVE_STORAGE_MODE", mode)
+            .current_dir(base.path());
+        unsafe {
+            command.pre_exec(|| {
+                if libc::setgroups(0, std::ptr::null()) != 0
+                    || libc::setgid(1000) != 0
+                    || libc::setuid(1000) != 0
+                {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        let output = command.output().unwrap();
+        assert!(
+            output.status.success(),
+            "native publisher failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        println!("actual native publisher {mode} wait={}", output.status);
+    };
+    publish("bootstrap");
+    let home = base.path().join(".substrate");
+    let authority = HostSessionAuthority::from_trusted_root(
+        TrustedAuthorityRoot::open_for_owner(&home, 1000).unwrap(),
+    )
+    .unwrap();
+    let snapshot = || {
+        let mut entries = std::collections::BTreeMap::new();
+        let mut pending = vec![home.clone()];
+        while let Some(path) = pending.pop() {
+            let m = fs::symlink_metadata(&path).unwrap();
+            let bytes = if m.is_file() {
+                Some(fs::read(&path).unwrap())
+            } else {
+                None
+            };
+            entries.insert(
+                path.clone(),
+                (
+                    m.dev(),
+                    m.ino(),
+                    m.uid(),
+                    m.gid(),
+                    m.mode(),
+                    m.nlink(),
+                    m.mtime(),
+                    m.mtime_nsec(),
+                    m.ctime(),
+                    m.ctime_nsec(),
+                    bytes,
+                ),
+            );
+            if m.is_dir() {
+                pending.extend(fs::read_dir(path).unwrap().map(|e| e.unwrap().path()));
+            }
+        }
+        entries
+    };
+    let before = snapshot();
+    assert_eq!(
+        RetainedWorkerRuntime
+            .read_existing_admission_record(&authority, "absent-session", "absent-worker")
+            .expect("Root reader must retain authenticated developer ownership"),
+        None
+    );
+    read_existing_accepted_work_authority_snapshot(&authority)
+        .expect("held source read must retain authenticated developer ownership");
+    let existing = retained_worker_admission_storage_existing_for_authority(&authority)
+        .expect("existing lifecycle storage must retain the authenticated developer owner");
+    assert_eq!(
+        before,
+        snapshot(),
+        "existing lifecycle storage acquisition allocated or reconciled owner state"
+    );
+    drop(existing);
+    assert!(
+        retained_worker_admission_storage_for_authority(&authority).is_err(),
+        "read permission must not grant native writer acquisition"
+    );
+    assert_eq!(
+        before,
+        snapshot(),
+        "existing and absent reads changed durable storage"
+    );
+    publish("registry");
+    let directory = home.join("authority-v1/retained-worker-admission-v1");
+    let registry_path = directory.join("registry-v1.json");
+    let original_registry = fs::read(&registry_path).unwrap();
+    let key_before = snapshot()
+        .into_iter()
+        .filter(|(path, _)| path.starts_with(directory.join("keys")))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let existing = retained_worker_admission_storage_existing_for_authority(&authority).unwrap();
+    let verify = || {
+        authority
+            .trusted_root()
+            .revalidate()
+            .map_err(|_| BootstrapError("Root unit source changed"))
+    };
+    existing
+        .transaction_existing_control(&verify, |transaction| {
+            assert_eq!(
+                transaction.read_registry()?.as_deref(),
+                Some(original_registry.as_slice())
+            );
+            transaction.replace_registry_with_source_guard(
+                &format!("admission-registry--{}.tmp", "b".repeat(32)),
+                &original_registry,
+                &verify,
+            )
+        })
+        .expect("Root must publish a lifecycle registry temp as its authenticated owner");
+    let published = fs::metadata(&registry_path).unwrap();
+    assert_eq!(published.uid(), 1000);
+    assert_eq!(published.mode() & 0o7777, 0o600);
+    assert_eq!(published.nlink(), 1);
+    assert_eq!(fs::read(&registry_path).unwrap(), original_registry);
+    let successful_inode = published.ino();
+    let rejected_name = format!("admission-registry--{}.tmp", "c".repeat(32));
+    let rejected_path = directory.join("tmp").join(&rejected_name);
+    let changed_root = home.clone();
+    let observed = std::rc::Rc::new(std::cell::Cell::new(false));
+    let observed_hook = observed.clone();
+    crate::execution::agent_runtime::retained_worker_runtime::set_ordinary_population_before_publication_hook(move || {
+        let staged = fs::metadata(&rejected_path).unwrap();
+        assert_eq!(staged.uid(), 1000);
+        assert_eq!(staged.mode() & 0o7777, 0o600);
+        observed_hook.set(true);
+        fs::set_permissions(changed_root, fs::Permissions::from_mode(0o750)).unwrap();
+    });
+    let rejected = existing.transaction_existing_control(&verify, |transaction| {
+        transaction.replace_registry_with_source_guard(&rejected_name, &original_registry, &verify)
+    });
+    fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(
+        observed.get(),
+        "actual Root staging did not reach the physical source invalidator"
+    );
+    assert!(rejected.is_err());
+    assert_eq!(
+        fs::metadata(&registry_path).unwrap().ino(),
+        successful_inode
+    );
+    assert_eq!(fs::read(&registry_path).unwrap(), original_registry);
+    assert_eq!(fs::read_dir(directory.join("tmp")).unwrap().count(), 0);
+    assert_eq!(
+        snapshot()
+            .into_iter()
+            .filter(|(path, _)| path.starts_with(directory.join("keys")))
+            .collect::<std::collections::BTreeMap<_, _>>(),
+        key_before
+    );
+    publish("verify");
+    assert!(retained_worker_admission_storage_for_authority(&authority).is_err());
+    publish("partial");
+    let partial = snapshot();
+    assert!(RetainedWorkerRuntime
+        .read_existing_admission_record(&authority, "absent-session", "absent-worker")
+        .is_err());
+    assert_eq!(
+        partial,
+        snapshot(),
+        "partial read initialized or repaired owner state"
+    );
+}
+
+#[cfg(target_os = "linux")]
+fn initialize_owned_registry_for_test(
+    authority: &crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority,
+) {
+    use crate::execution::agent_runtime::host_session_authority::{
+        schema::{
+            AgentDescriptorV1, AgentExecutionScopeV1, HostAttachCapabilitiesV1,
+            HostAttachExecutionClientStartV1, HostAttachLaunchKnobsV1, HostAttachModePreferenceV1,
+            RuntimeBackendKindV1,
+        },
+        transition::{
+            IssueHostSessionTransitionRequestV1, StartContractMaterialV1, TransitionIssueOutcomeV1,
+        },
+    };
+    // Use the native issuer to establish strict versioned state. No runtime,
+    // World, acceptance or execution fact is constructed by this storage fixture.
+    let root = authority.bootstrap().unwrap();
+    let request = IssueHostSessionTransitionRequestV1 {
+        intent_id: "storage-component-intent".into(),
+        issuer_request_id: "storage-component-issuer".into(),
+        mode: HostSessionTransitionModeV1::Start,
+        authority_precondition: HostSessionAuthorityPreconditionV1::ExpectedAbsent,
+        orchestration_session_id: "storage-component-session".into(),
+        shell_trace_session_id: "storage-component-trace".into(),
+        caller: HostSessionTransitionCallerV1 {
+            kind: HostSessionTransitionCallerKindV1::PublicCli,
+            caller_participant_id: None,
+            auto_attach_obligation_id: None,
+            auto_attach_claim_owner: None,
+        },
+        source_authoritative_participant_id: None,
+        target_authoritative_participant_id: "storage-component-participant".into(),
+        target_participant_lease_token: b"storage-component-lease".to_vec(),
+        run_id: "storage-component-run".into(),
+        resulting_authoritative_lineage: vec!["storage-component-participant".into()],
+        workspace_binding: WorkspaceBindingV1 {
+            workspace_root: root.bootstrap_home.clone(),
+            authority_store_root: root.bootstrap_home,
+            authority_store_id: root.authority_store_id,
+        },
+        world_binding: None,
+        start_contract: StartContractMaterialV1 {
+            descriptor: AgentDescriptorV1 {
+                schema_version: 1,
+                agent_id: "codex".into(),
+                backend_id: "cli:codex".into(),
+                backend_kind: RuntimeBackendKindV1::Codex,
+                protocol: "substrate.agent.session".into(),
+                execution_scope: AgentExecutionScopeV1::Host,
+                binary_path: std::env::current_exe()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+            },
+            policy: PolicyObjectHashInputV1 {
+                schema_version: 1,
+                policy_revision: "storage-component-policy".into(),
+                canonical_policy_snapshot_sha256: "a".repeat(64),
+            },
+            capabilities: HostAttachCapabilitiesV1 {
+                session_resume: true,
+                session_fork: true,
+                session_stop: true,
+                status_snapshot: true,
+                event_stream: true,
+            },
+            launch_knobs: HostAttachLaunchKnobsV1 {
+                requested_execution_scope: AgentExecutionScopeV1::Host,
+                host_execution_client_start: HostAttachExecutionClientStartV1::Defer,
+                attach_mode_preference: HostAttachModePreferenceV1::ContinuityPreferred,
+            },
+        },
+        transition_input: None,
+    };
+    let now =
+        TimestampV1::parse(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true))
+            .unwrap();
+    assert!(matches!(
+        authority.issue_start_at(&request, now, 300).unwrap(),
+        TransitionIssueOutcomeV1::Issued(_)
+    ));
+    crate::execution::agent_runtime::retained_worker_runtime::RetainedWorkerRuntime
+        .initialize_admission_registry(authority)
+        .unwrap();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_existing_registry_publication_cleans_failed_creation() {
+    use crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority;
+    const FILTER: &str = "execution::agent_runtime::host_session_authority::store::tests::test_existing_registry_publication_cleans_failed_creation";
+    const CHILD: &str = "TASK20_ADMISSION_CREATE_UMASK_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([FILTER, "--exact", "--nocapture", "--test-threads=1"])
+            .env(CHILD, "1")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "actual publication child failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
+    let home = root();
+    let authority = HostSessionAuthority::open(home.path()).unwrap();
+    authority.bootstrap().unwrap();
+    initialize_owned_registry_for_test(&authority);
+    let directory = home
+        .path()
+        .join("authority-v1/retained-worker-admission-v1");
+    let original = fs::read(directory.join("registry-v1.json")).unwrap();
+    let storage = retained_worker_admission_storage_existing_for_authority(&authority).unwrap();
+    let verify = || {
+        authority
+            .trusted_root()
+            .revalidate()
+            .map_err(|_| BootstrapError("unit source changed"))
+    };
+    // Only this dedicated subprocess changes its process-wide umask.
+    let previous = unsafe { libc::umask(0o777) };
+    let result = storage.transaction_existing_control(&verify, |transaction| {
+        transaction.replace_registry_with_source_guard(
+            &format!("admission-registry--{}.tmp", "d".repeat(32)),
+            &original,
+            &verify,
+        )
+    });
+    unsafe { libc::umask(previous) };
+    assert!(
+        result.is_err(),
+        "exact0600 validation must refuse the restrictive creation"
+    );
+    assert_eq!(
+        fs::read(directory.join("registry-v1.json")).unwrap(),
+        original
+    );
+    assert_eq!(
+        fs::read_dir(directory.join("tmp")).unwrap().count(),
+        0,
+        "failed temporary creation must dispose its own inode"
+    );
+}
+
 fn safe_test_parent() -> std::path::PathBuf {
     std::env::var_os("XDG_RUNTIME_DIR")
         .map(std::path::PathBuf::from)
@@ -4706,4 +5081,1829 @@ fn legacy_transaction_directory_read_retains_enumerated_descendant_identity() {
         fs::read(retained.join("snapshot.json")).unwrap(),
         b"original"
     );
+}
+
+#[cfg(target_os = "linux")]
+mod typed_object_snapshot {
+    use super::*;
+    use crate::execution::agent_runtime::host_session_authority::{
+        facade::HostSessionAuthority,
+        schema::{
+            AgentDescriptorV1, AgentExecutionScopeV1, HostAttachCapabilitiesV1,
+            HostAttachExecutionClientStartV1, HostAttachLaunchKnobsV1, HostAttachModePreferenceV1,
+            RuntimeBackendKindV1,
+        },
+        store_format::{AuthorityStoreCommitmentKeyFileV1, TempNameV1},
+        transition::{
+            IssueHostSessionTransitionRequestV1, StartContractMaterialV1, TransitionIssueOutcomeV1,
+        },
+    };
+    use std::collections::BTreeMap;
+    use std::os::unix::fs::{symlink, MetadataExt};
+
+    struct Fixture {
+        home: tempfile::TempDir,
+        opened: TrustedAuthorityRoot,
+        frozen: VersionedStateRoot,
+        intent: HostSessionTransitionIntentV2,
+    }
+
+    impl Fixture {
+        fn published(v3: bool) -> Self {
+            let home = root();
+            let authority = HostSessionAuthority::open(home.path()).unwrap();
+            let initial = authority.bootstrap().unwrap();
+            let request = IssueHostSessionTransitionRequestV1 {
+                intent_id: "snapshot-intent".into(),
+                issuer_request_id: "snapshot-request".into(),
+                mode: HostSessionTransitionModeV1::Start,
+                authority_precondition: HostSessionAuthorityPreconditionV1::ExpectedAbsent,
+                orchestration_session_id: "snapshot-session".into(),
+                shell_trace_session_id: "snapshot-trace".into(),
+                caller: HostSessionTransitionCallerV1 {
+                    kind: HostSessionTransitionCallerKindV1::PublicCli,
+                    caller_participant_id: None,
+                    auto_attach_obligation_id: None,
+                    auto_attach_claim_owner: None,
+                },
+                source_authoritative_participant_id: None,
+                target_authoritative_participant_id: "snapshot-participant".into(),
+                target_participant_lease_token: b"snapshot-lease".to_vec(),
+                run_id: "snapshot-run".into(),
+                resulting_authoritative_lineage: vec!["snapshot-participant".into()],
+                workspace_binding: WorkspaceBindingV1 {
+                    workspace_root: initial.bootstrap_home.clone(),
+                    authority_store_root: initial.bootstrap_home,
+                    authority_store_id: initial.authority_store_id,
+                },
+                world_binding: None,
+                start_contract: StartContractMaterialV1 {
+                    descriptor: AgentDescriptorV1 {
+                        schema_version: 1,
+                        agent_id: "codex".into(),
+                        backend_id: "cli:codex".into(),
+                        backend_kind: RuntimeBackendKindV1::Codex,
+                        protocol: "substrate.agent.session".into(),
+                        execution_scope: AgentExecutionScopeV1::Host,
+                        binary_path: "/usr/bin/codex".into(),
+                    },
+                    policy: PolicyObjectHashInputV1 {
+                        schema_version: 1,
+                        policy_revision: "snapshot-policy".into(),
+                        canonical_policy_snapshot_sha256: "aa".repeat(32),
+                    },
+                    capabilities: HostAttachCapabilitiesV1 {
+                        session_resume: true,
+                        session_fork: true,
+                        session_stop: true,
+                        status_snapshot: true,
+                        event_stream: true,
+                    },
+                    launch_knobs: HostAttachLaunchKnobsV1 {
+                        requested_execution_scope: AgentExecutionScopeV1::Host,
+                        host_execution_client_start: HostAttachExecutionClientStartV1::StartNow,
+                        attach_mode_preference: HostAttachModePreferenceV1::ContinuityPreferred,
+                    },
+                },
+                transition_input: Some(b"snapshot-input".to_vec()),
+            };
+            let TransitionIssueOutcomeV1::Issued(intent) = authority
+                .issue_start_at(
+                    &request,
+                    TimestampV1::parse("2026-10-27T12:00:00.000000000Z").unwrap(),
+                    300,
+                )
+                .unwrap()
+            else {
+                panic!("production start must be published")
+            };
+            let opened = TrustedAuthorityRoot::open(home.path()).unwrap();
+            let mut frozen = read_opened_root_v2_or_v3(&opened).unwrap();
+            if v3 {
+                let VersionedStateRoot::V2(current) = &frozen else {
+                    panic!("expected V2")
+                };
+                frozen = VersionedStateRoot::V3(
+                    upgrade_v2_root_to_v3_exact_current_opened(&opened, current, || Ok(()))
+                        .unwrap(),
+                );
+            }
+            Self {
+                home,
+                opened,
+                frozen,
+                intent,
+            }
+        }
+
+        fn context(&self, transport: bool) -> ObjectVerificationContextV1 {
+            ObjectVerificationContextV1 {
+                intent_id: self.intent.intent_id.clone(),
+                run_id: self.intent.run_id.clone(),
+                parent_intent: transport.then(|| {
+                    VersionedObjectVerificationParentIntentV1::V2(Box::new(self.intent.clone()))
+                }),
+            }
+        }
+
+        fn object_path(&self, reference: &AuthorityObjectRefV1) -> std::path::PathBuf {
+            let kind = match reference.object_kind {
+                AuthorityObjectKindV1::AgentDescriptor => "agent-descriptor",
+                AuthorityObjectKindV1::LeaseToken => "lease-token",
+                AuthorityObjectKindV1::TransitionInput => "transition-input",
+                AuthorityObjectKindV1::TransitionTransportPayload => "transition-transport-payload",
+                _ => panic!("fixture object kind"),
+            };
+            self.home
+                .path()
+                .join("authority-v1/objects")
+                .join(kind)
+                .join(format!("v{}", reference.schema_version))
+                .join(format!("{}.obj", reference.ref_id))
+        }
+
+        fn key_path(&self) -> std::path::PathBuf {
+            let AuthorityObjectCommitmentV1::StoreHmacSha256 { key_id, .. } =
+                &self.intent.target_participant_lease_token_ref.commitment
+            else {
+                panic!("HMAC fixture")
+            };
+            self.home
+                .path()
+                .join("authority-v1/keys")
+                .join(format!("{key_id}.key"))
+        }
+
+        fn read(
+            &self,
+            reference: &AuthorityObjectRefV1,
+            context: Option<&ObjectVerificationContextV1>,
+        ) -> Result<Vec<u8>, ReadOnlyAuthoritySnapshotErrorV1> {
+            with_existing_typed_object_snapshot_opened(&self.opened, |snapshot| {
+                snapshot.read_typed_object(
+                    self.frozen.authority_store_id(),
+                    self.frozen.root_revision(),
+                    reference,
+                    context,
+                )
+            })
+        }
+
+        fn unchanged_error(
+            &self,
+            reference: &AuthorityObjectRefV1,
+            context: Option<&ObjectVerificationContextV1>,
+        ) -> ReadOnlyAuthoritySnapshotErrorV1 {
+            let before = tree(self.home.path());
+            let error = self.read(reference, context).unwrap_err();
+            assert!(
+                before == tree(self.home.path()),
+                "read failure changed persistent state"
+            );
+            error
+        }
+
+        // Negative-only mutation of an already production-published root. Root
+        // validation remains enabled; malformed relations may refuse before read.
+        fn mutate_root(&self, change: impl FnOnce(&mut StateRootV2)) {
+            let VersionedStateRoot::V2(mut root) = self.frozen.clone() else {
+                panic!("V2 fault fixture")
+            };
+            change(&mut root);
+            fs::write(
+                self.home.path().join("authority-v1/state-root-v1.json"),
+                canonical_json::to_vec(&root).unwrap(),
+            )
+            .unwrap();
+        }
+    }
+
+    #[derive(PartialEq, Eq)]
+    struct EntryState {
+        metadata: (u64, u64, u32, u32, u32, u64, u64, i64, i64, i64, i64),
+        bytes: Vec<u8>,
+        link: Option<std::path::PathBuf>,
+    }
+
+    fn tree(root: &std::path::Path) -> BTreeMap<std::path::PathBuf, EntryState> {
+        fn visit(
+            root: &std::path::Path,
+            path: &std::path::Path,
+            result: &mut BTreeMap<std::path::PathBuf, EntryState>,
+        ) {
+            let metadata = fs::symlink_metadata(path).unwrap();
+            result.insert(
+                path.strip_prefix(root).unwrap().to_owned(),
+                EntryState {
+                    metadata: (
+                        metadata.dev(),
+                        metadata.ino(),
+                        metadata.mode(),
+                        metadata.uid(),
+                        metadata.gid(),
+                        metadata.nlink(),
+                        metadata.len(),
+                        metadata.mtime(),
+                        metadata.mtime_nsec(),
+                        metadata.ctime(),
+                        metadata.ctime_nsec(),
+                    ),
+                    bytes: if metadata.is_file() {
+                        fs::read(path).unwrap()
+                    } else {
+                        Vec::new()
+                    },
+                    link: metadata
+                        .file_type()
+                        .is_symlink()
+                        .then(|| fs::read_link(path).unwrap()),
+                },
+            );
+            if metadata.is_dir() {
+                for entry in fs::read_dir(path).unwrap() {
+                    visit(root, &entry.unwrap().path(), result);
+                }
+            }
+        }
+        let mut result = BTreeMap::new();
+        visit(root, root, &mut result);
+        result
+    }
+
+    fn io(operation: &'static str) -> ReadOnlyAuthoritySnapshotErrorV1 {
+        ReadOnlyAuthoritySnapshotErrorV1::Io { operation }
+    }
+
+    #[test]
+    fn test_production_published_v2_v3_multi_object_reads_are_unchanged() {
+        for v3 in [false, true] {
+            let fixture = Fixture::published(v3);
+            let refs = [
+                (&fixture.intent.descriptor_ref, None),
+                (
+                    &fixture.intent.target_participant_lease_token_ref,
+                    Some(fixture.context(false)),
+                ),
+                (
+                    fixture.intent.transition_input_ref.as_ref().unwrap(),
+                    Some(fixture.context(false)),
+                ),
+                (
+                    &fixture.intent.transport_payload_ref,
+                    Some(fixture.context(true)),
+                ),
+            ];
+            let before = tree(fixture.home.path());
+            with_existing_typed_object_snapshot_opened(&fixture.opened, |snapshot| {
+                for (reference, context) in &refs {
+                    let bytes = snapshot.read_typed_object(
+                        fixture.frozen.authority_store_id(),
+                        fixture.frozen.root_revision(),
+                        reference,
+                        context.as_ref(),
+                    )?;
+                    assert!(bytes == fs::read(fixture.object_path(reference)).unwrap());
+                }
+                Ok(())
+            })
+            .unwrap();
+            assert!(
+                before == tree(fixture.home.path()),
+                "successful reads changed persistent state"
+            );
+        }
+    }
+
+    #[test]
+    fn test_frozen_binding_and_exact_reference_fail_without_mutation() {
+        let fixture = Fixture::published(false);
+        let before = tree(fixture.home.path());
+        for (store, revision, expected) in [
+            (
+                "as_00000000000000000000000000000000",
+                fixture.frozen.root_revision(),
+                io("frozen HSA authority store mismatch"),
+            ),
+            (
+                fixture.frozen.authority_store_id(),
+                fixture.frozen.root_revision() + 1,
+                io("frozen HSA root revision mismatch"),
+            ),
+        ] {
+            let error = with_existing_typed_object_snapshot_opened(&fixture.opened, |snapshot| {
+                snapshot.read_typed_object(store, revision, &fixture.intent.descriptor_ref, None)
+            })
+            .unwrap_err();
+            assert_eq!(error, expected);
+        }
+        assert!(before == tree(fixture.home.path()));
+        for case in 0..5 {
+            let mut reference = fixture.intent.descriptor_ref.clone();
+            match case {
+                0 => reference.ref_id = "ao_00000000000000000000000000000000".into(),
+                1 => reference.object_kind = AuthorityObjectKindV1::Policy,
+                2 => reference.schema_version = 2,
+                3 => reference.ref_id = "../unsafe".into(),
+                _ => {
+                    reference.commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+                        digest_hex: "00".repeat(32),
+                    }
+                }
+            }
+            let expected = match case {
+                0..=2 => "typed object has no exact present index entry",
+                3 => "typed object ref ID is invalid",
+                _ => "canonical object commitment mismatch",
+            };
+            assert_eq!(fixture.unchanged_error(&reference, None), io(expected));
+        }
+        assert_eq!(
+            fixture.unchanged_error(
+                &fixture.intent.descriptor_ref,
+                Some(&fixture.context(false))
+            ),
+            io("canonical object has unexpected parent context")
+        );
+    }
+
+    #[test]
+    fn test_hmac_context_domain_commitment_and_parent_are_bound() {
+        let fixture = Fixture::published(true);
+        let lease = &fixture.intent.target_participant_lease_token_ref;
+        assert_eq!(
+            fixture.unchanged_error(lease, None),
+            io("sensitive object parent context is missing")
+        );
+        for case in 0..5 {
+            let mut reference = lease.clone();
+            let mut context = fixture.context(false);
+            match case {
+                0 => context.intent_id.push_str("-other"),
+                1 => context.run_id.push_str("-other"),
+                2 => {
+                    let AuthorityObjectCommitmentV1::StoreHmacSha256 { domain, .. } =
+                        &mut reference.commitment
+                    else {
+                        unreachable!()
+                    };
+                    domain.push_str("-other");
+                }
+                3 => {
+                    let AuthorityObjectCommitmentV1::StoreHmacSha256 { digest_hex, .. } =
+                        &mut reference.commitment
+                    else {
+                        unreachable!()
+                    };
+                    *digest_hex = "00".repeat(32);
+                }
+                _ => context.parent_intent = fixture.context(true).parent_intent,
+            }
+            let expected = match case {
+                2 => "typed object commitment rule is invalid",
+                4 => "sensitive object has an unexpected full parent",
+                _ => "sensitive object commitment mismatch",
+            };
+            assert_eq!(
+                fixture.unchanged_error(&reference, Some(&context)),
+                io(expected)
+            );
+        }
+        let transport = &fixture.intent.transport_payload_ref;
+        assert_eq!(
+            fixture.unchanged_error(transport, Some(&fixture.context(false))),
+            io("transport payload parent is missing")
+        );
+        for case in 0..4 {
+            let mut context = fixture.context(true);
+            let mut reference = transport.clone();
+            let Some(VersionedObjectVerificationParentIntentV1::V2(parent)) =
+                &mut context.parent_intent
+            else {
+                unreachable!()
+            };
+            match case {
+                0 => context.run_id.push_str("-other"),
+                1 => {
+                    parent.transport_payload_ref.ref_id =
+                        "ao_00000000000000000000000000000000".into()
+                }
+                2 => parent
+                    .target_authoritative_participant_id
+                    .push_str("-other"),
+                _ => {
+                    let AuthorityObjectCommitmentV1::StoreHmacSha256 { digest_hex, .. } =
+                        &mut reference.commitment
+                    else {
+                        unreachable!()
+                    };
+                    *digest_hex = "00".repeat(32);
+                }
+            }
+            let expected = if case == 2 {
+                "transport payload and V2 parent intent disagree"
+            } else {
+                "transport ref or HMAC context disagrees with V2 parent"
+            };
+            assert_eq!(
+                fixture.unchanged_error(&reference, Some(&context)),
+                io(expected)
+            );
+        }
+    }
+
+    #[test]
+    fn test_key_envelope_identity_and_bytes_are_checked_after_capture() {
+        for case in 0..6 {
+            let fixture = Fixture::published(false);
+            let path = fixture.key_path();
+            let mut envelope =
+                AuthorityStoreCommitmentKeyFileV1::decode(&fs::read(&path).unwrap()).unwrap();
+            match case {
+                0 => envelope.authority_store_id = "as_00000000000000000000000000000000".into(),
+                1 => envelope.key_id = "ak_00000000000000000000000000000000".into(),
+                2 => {
+                    envelope.created_at =
+                        TimestampV1::parse("2026-10-01T12:00:00.000000000Z").unwrap()
+                }
+                3 => envelope.secret_key[0] ^= 1,
+                4 => {
+                    fs::write(&path, b"corrupt envelope").unwrap();
+                }
+                _ => {
+                    fs::remove_file(&path).unwrap();
+                }
+            }
+            if case < 4 {
+                fs::write(&path, envelope.encode().unwrap()).unwrap();
+            }
+            let expected = match case {
+                0..=2 => "sensitive object key identity mismatch",
+                3 => "sensitive object commitment mismatch",
+                4 => "decode sensitive object key",
+                _ => "sensitive object key file is absent",
+            };
+            assert_eq!(
+                fixture.unchanged_error(
+                    &fixture.intent.target_participant_lease_token_ref,
+                    Some(&fixture.context(false))
+                ),
+                io(expected)
+            );
+        }
+    }
+
+    #[test]
+    fn test_index_faults_keep_root_validation_and_present_checks() {
+        for case in 0..6 {
+            let fixture = Fixture::published(false);
+            fixture.mutate_root(|root| {
+                let entry = root
+                    .object_index
+                    .get_mut(&fixture.intent.descriptor_ref.ref_id)
+                    .unwrap();
+                match case {
+                    0 => entry.ref_id = "ao_00000000000000000000000000000000".into(),
+                    1 => entry.object_kind = AuthorityObjectKindV1::Policy,
+                    2 => entry.object_schema_version = 2,
+                    3 => {
+                        entry.storage_state = AuthorityObjectStorageStateV1::Released {
+                            terminal_handoff_ref: placeholder_ref(
+                                "ao_00000000000000000000000000000000",
+                                AuthorityObjectKindV1::TerminalHandoff,
+                            ),
+                            released_at: TimestampV1::parse("2026-10-27T12:00:00.000000000Z")
+                                .unwrap(),
+                        }
+                    }
+                    4 => entry.byte_length += 1,
+                    _ => {
+                        root.object_index
+                            .remove(&fixture.intent.descriptor_ref.ref_id);
+                    }
+                }
+            });
+            let error = fixture.unchanged_error(&fixture.intent.descriptor_ref, None);
+            // ID/schema/release conflicts refuse during root decoding. A wrong
+            // descriptor kind or missing descriptor index reaches the new reader.
+            let expected = match case {
+                0 | 2 | 3 => ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootEncodingInvalid,
+                4 => io("typed object byte length mismatch"),
+                _ => io("typed object has no exact present index entry"),
+            };
+            assert_eq!(error, expected, "index fault {case}");
+        }
+    }
+
+    #[test]
+    fn test_missing_and_corrupt_object_material_is_nonmutating() {
+        for case in 0..4 {
+            let fixture = Fixture::published(false);
+            let path = fixture.object_path(&fixture.intent.descriptor_ref);
+            match case {
+                0 => fs::remove_file(&path).unwrap(),
+                1 => {
+                    let mut bytes = fs::read(&path).unwrap();
+                    bytes[0] = b'!';
+                    fs::write(&path, bytes).unwrap();
+                }
+                2 => fs::write(&path, b"short").unwrap(),
+                _ => fs::remove_dir_all(path.parent().unwrap()).unwrap(),
+            }
+            let expected = match case {
+                0 => "typed object file is absent",
+                1 => "canonical object bytes are invalid",
+                2 => "typed object byte length mismatch",
+                _ => "typed object namespace is absent",
+            };
+            assert_eq!(
+                fixture.unchanged_error(&fixture.intent.descriptor_ref, None),
+                io(expected)
+            );
+        }
+    }
+
+    #[test]
+    fn test_unsafe_object_key_and_namespace_material_refuses_without_repair() {
+        for is_key in [false, true] {
+            for case in 0..4 {
+                let fixture = Fixture::published(false);
+                let path = if is_key {
+                    fixture.key_path()
+                } else {
+                    fixture.object_path(&fixture.intent.target_participant_lease_token_ref)
+                };
+                match case {
+                    0 => {
+                        let held = path.with_extension("held");
+                        fs::rename(&path, &held).unwrap();
+                        symlink(&held, &path).unwrap();
+                    }
+                    1 => fs::hard_link(&path, path.with_extension("hardlink")).unwrap(),
+                    2 => fs::set_permissions(&path, fs::Permissions::from_mode(0o666)).unwrap(),
+                    _ => {
+                        fs::remove_file(&path).unwrap();
+                        fs::create_dir(&path).unwrap();
+                        fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+                    }
+                }
+                let error = fixture.unchanged_error(
+                    &fixture.intent.target_participant_lease_token_ref,
+                    Some(&fixture.context(false)),
+                );
+                assert!(
+                    matches!(
+                        error,
+                        ReadOnlyAuthoritySnapshotErrorV1::UnsafeNamespaceEntry { .. }
+                            | ReadOnlyAuthoritySnapshotErrorV1::UnsafeFileMetadata { .. }
+                    ),
+                    "unsafe material case {case}: {error:?}"
+                );
+            }
+        }
+        let fixture = Fixture::published(false);
+        let path = fixture
+            .object_path(&fixture.intent.descriptor_ref)
+            .parent()
+            .unwrap()
+            .to_owned();
+        let held = path.with_file_name("held-version");
+        fs::rename(&path, &held).unwrap();
+        symlink(&held, &path).unwrap();
+        assert!(matches!(
+            fixture.unchanged_error(&fixture.intent.descriptor_ref, None),
+            ReadOnlyAuthoritySnapshotErrorV1::UnsafeNamespaceEntry { .. }
+        ));
+    }
+
+    #[test]
+    fn test_pending_transaction_refuses_before_callback_without_repair() {
+        let fixture = Fixture::published(false);
+        let name = TempNameV1::Root {
+            root_revision: fixture.frozen.root_revision() + 1,
+            nonce: "ab".repeat(16),
+        }
+        .file_name();
+        let path = fixture.home.path().join("authority-v1/tmp").join(&name);
+        fs::write(&path, b"pending replacement").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+        let before = tree(fixture.home.path());
+        let error =
+            with_existing_typed_object_snapshot_opened(&fixture.opened, |_| -> Result<(), _> {
+                panic!("pending transaction must not invoke reader")
+            })
+            .unwrap_err();
+        assert_eq!(
+            error,
+            ReadOnlyAuthoritySnapshotErrorV1::AuthorityTemporaryMaterialPresent { name }
+        );
+        assert!(before == tree(fixture.home.path()));
+    }
+
+    #[test]
+    fn test_success_and_error_exits_revalidate_captured_files_and_bindings() {
+        for callback_error in [false, true] {
+            for case in 0..7 {
+                let fixture = Fixture::published(false);
+                let object_path =
+                    fixture.object_path(&fixture.intent.target_participant_lease_token_ref);
+                let key_path = fixture.key_path();
+                let before = tree(fixture.home.path());
+                let expected_after = std::rc::Rc::new(std::cell::RefCell::new(None));
+                let changed = expected_after.clone();
+                let home = fixture.home.path().to_owned();
+                set_e2_rm_before_final_verify_hook(move || {
+                    match case {
+                        0 => {
+                            let bytes = fs::read(&object_path).unwrap();
+                            fs::rename(&object_path, object_path.with_extension("held")).unwrap();
+                            fs::write(&object_path, bytes).unwrap();
+                            fs::set_permissions(&object_path, fs::Permissions::from_mode(0o600))
+                                .unwrap();
+                        }
+                        1 => {
+                            let bytes = fs::read(&key_path).unwrap();
+                            fs::rename(&key_path, key_path.with_extension("held")).unwrap();
+                            fs::write(&key_path, bytes).unwrap();
+                            fs::set_permissions(&key_path, fs::Permissions::from_mode(0o600))
+                                .unwrap();
+                        }
+                        2 => {
+                            let directory = object_path.parent().unwrap();
+                            let held = directory.with_file_name("held-version");
+                            fs::rename(directory, &held).unwrap();
+                            fs::create_dir(directory).unwrap();
+                            fs::set_permissions(directory, fs::Permissions::from_mode(0o700))
+                                .unwrap();
+                            fs::copy(held.join(object_path.file_name().unwrap()), &object_path)
+                                .unwrap();
+                        }
+                        3 => {
+                            let mut bytes = fs::read(&object_path).unwrap();
+                            bytes[0] ^= 1;
+                            fs::write(&object_path, bytes).unwrap();
+                        }
+                        4 => {
+                            let mut bytes = fs::read(&key_path).unwrap();
+                            let last = bytes.len() - 1;
+                            bytes[last] ^= 1;
+                            fs::write(&key_path, bytes).unwrap();
+                        }
+                        5 => {
+                            let directory = key_path.parent().unwrap();
+                            let held = directory.with_file_name("held-keys");
+                            fs::rename(directory, &held).unwrap();
+                            fs::create_dir(directory).unwrap();
+                            fs::set_permissions(directory, fs::Permissions::from_mode(0o700))
+                                .unwrap();
+                            fs::copy(held.join(key_path.file_name().unwrap()), &key_path).unwrap();
+                        }
+                        _ => {
+                            let directory = home.join("authority-v1/objects");
+                            let held = directory.with_file_name("held-objects");
+                            fs::rename(&directory, &held).unwrap();
+                            fs::create_dir(&directory).unwrap();
+                            fs::set_permissions(&directory, fs::Permissions::from_mode(0o700))
+                                .unwrap();
+                        }
+                    }
+                    *changed.borrow_mut() = Some(tree(&home));
+                });
+                let mut context = fixture.context(false);
+                if callback_error {
+                    context.run_id.push_str("-wrong");
+                }
+                let error = fixture
+                    .read(
+                        &fixture.intent.target_participant_lease_token_ref,
+                        Some(&context),
+                    )
+                    .unwrap_err();
+                assert!(
+                    matches!(
+                        error,
+                        ReadOnlyAuthoritySnapshotErrorV1::SnapshotEntryChanged { .. }
+                            | ReadOnlyAuthoritySnapshotErrorV1::NamespaceChanged { .. }
+                    ),
+                    "exit case {case}: {error:?}"
+                );
+                let after = tree(fixture.home.path());
+                assert!(before != after, "attack must change captured material");
+                assert!(
+                    expected_after.borrow().as_ref().unwrap() == &after,
+                    "reader changed attack state"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_missing_file_error_retains_namespace_and_error_exit_precedence() {
+        for is_key in [false, true] {
+            let fixture = Fixture::published(false);
+            let reference = &fixture.intent.target_participant_lease_token_ref;
+            let path = if is_key {
+                fixture.key_path()
+            } else {
+                fixture.object_path(reference)
+            };
+            let bytes = fs::read(&path).unwrap();
+            fs::remove_file(&path).unwrap();
+            // Establish the actual missing-file failure before arranging substitution.
+            let expected = if is_key {
+                "sensitive object key file is absent"
+            } else {
+                "typed object file is absent"
+            };
+            assert_eq!(
+                fixture.unchanged_error(reference, Some(&fixture.context(false))),
+                io(expected)
+            );
+            let after_attack = std::rc::Rc::new(std::cell::RefCell::new(None));
+            let changed = after_attack.clone();
+            let home = fixture.home.path().to_owned();
+            set_e2_rm_before_final_verify_hook(move || {
+                fs::write(&path, bytes).unwrap();
+                fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+                *changed.borrow_mut() = Some(tree(&home));
+            });
+            let error = fixture
+                .read(reference, Some(&fixture.context(false)))
+                .unwrap_err();
+            assert!(matches!(
+                error,
+                ReadOnlyAuthoritySnapshotErrorV1::NamespaceChanged { .. }
+                    | ReadOnlyAuthoritySnapshotErrorV1::SnapshotEntryChanged { .. }
+            ));
+            assert!(after_attack.borrow().as_ref().unwrap() == &tree(fixture.home.path()));
+        }
+    }
+
+    #[test]
+    fn test_verification_only_keys_read_existing_objects_and_missing_retired_keys_refuse() {
+        for missing in [false, true] {
+            let mut fixture = Fixture::published(false);
+            let AuthorityObjectCommitmentV1::StoreHmacSha256 { key_id, .. } =
+                &fixture.intent.target_participant_lease_token_ref.commitment
+            else {
+                panic!("HMAC fixture")
+            };
+            let old_key_id = key_id.clone();
+            fixture.frozen = platform::rotate_commitment_key_versioned_test(
+                fixture.home.path(),
+                material(0x9a),
+                None,
+            )
+            .unwrap();
+            assert_eq!(
+                fixture.frozen.commitment_key_registry()[&old_key_id].state,
+                AuthorityStoreCommitmentKeyStateV1::VerificationOnly
+            );
+            let before = tree(fixture.home.path());
+            assert!(
+                fixture
+                    .read(
+                        &fixture.intent.target_participant_lease_token_ref,
+                        Some(&fixture.context(false))
+                    )
+                    .unwrap()
+                    == b"snapshot-lease"
+            );
+            assert!(before == tree(fixture.home.path()));
+            fixture.mutate_root(|root| {
+                if missing {
+                    root.commitment_key_registry.remove(&old_key_id);
+                } else {
+                    root.commitment_key_registry
+                        .get_mut(&old_key_id)
+                        .unwrap()
+                        .state = AuthorityStoreCommitmentKeyStateV1::Retired;
+                }
+            });
+            let expected = if missing {
+                // Removing the initial registry key also breaks the production
+                // greenfield certificate; this refuses before any object read.
+                ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootEncodingInvalid
+            } else {
+                io("sensitive object key is unavailable")
+            };
+            assert_eq!(
+                fixture.unchanged_error(
+                    &fixture.intent.target_participant_lease_token_ref,
+                    Some(&fixture.context(false))
+                ),
+                expected,
+                "missing registry key: {missing}"
+            );
+        }
+        // A caller-supplied reference naming an unregistered key reaches the
+        // new reader on a structurally valid production root.
+        let fixture = Fixture::published(false);
+        let mut reference = fixture.intent.target_participant_lease_token_ref.clone();
+        let AuthorityObjectCommitmentV1::StoreHmacSha256 { key_id, .. } = &mut reference.commitment
+        else {
+            unreachable!()
+        };
+        *key_id = "ak_00000000000000000000000000000000".into();
+        assert_eq!(
+            fixture.unchanged_error(&reference, Some(&fixture.context(false))),
+            io("sensitive object key is unavailable")
+        );
+    }
+
+    #[test]
+    fn test_v1_frozen_roots_are_refused_without_upgrade_or_initialization() {
+        let home = root();
+        let authority = HostSessionAuthority::open(home.path()).unwrap();
+        let initial = authority.bootstrap().unwrap();
+        let opened = TrustedAuthorityRoot::open(home.path()).unwrap();
+        let before = tree(home.path());
+        let reference = placeholder_ref(
+            "ao_00000000000000000000000000000000",
+            AuthorityObjectKindV1::Policy,
+        );
+        let error = with_existing_typed_object_snapshot_opened(&opened, |snapshot| {
+            snapshot.read_typed_object(
+                &initial.authority_store_id,
+                initial.root_revision,
+                &reference,
+                None,
+            )
+        })
+        .unwrap_err();
+        assert_eq!(
+            error,
+            io("typed object snapshot requires StateRootV2 or StateRootV3")
+        );
+        assert!(before == tree(home.path()));
+    }
+
+    #[test]
+    fn test_production_terminal_transport_is_not_present_and_is_not_repaired() {
+        use crate::execution::agent_runtime::host_session_authority::{
+            schema::{HostStartupOwnershipProtocolActorV1, HostStartupOwnershipProtocolEventV1},
+            transition::{
+                ApplyHostSessionTransitionRequestV1, ClaimHostSessionTransitionRequestV1,
+                ResolveStartupOwnershipRequestV1, TransitionClaimOutcomeV1,
+            },
+        };
+        let mut fixture = Fixture::published(false);
+        let authority = HostSessionAuthority::open(fixture.home.path()).unwrap();
+        let claim = ClaimHostSessionTransitionRequestV1 {
+            intent_id: fixture.intent.intent_id.clone(),
+            issuer_request_id: fixture.intent.issuer_request_id.clone(),
+            payload_commitment: fixture.intent.payload_commitment.clone(),
+            expected_intent_revision: fixture.intent.intent_revision,
+            claim_id: "snapshot-claim".into(),
+            claimant_attempt_id: "snapshot-attempt".into(),
+        };
+        let TransitionClaimOutcomeV1::Claimed(claimed) = authority
+            .claim_start_at(
+                &claim,
+                TimestampV1::parse("2026-10-27T12:01:00.000000000Z").unwrap(),
+                30,
+            )
+            .unwrap()
+        else {
+            panic!("production claim must publish")
+        };
+        let HostSessionTransitionIntentStateV2::Claimed { claim_revision, .. } = claimed.state
+        else {
+            unreachable!()
+        };
+        authority
+            .apply_start_at(
+                &ApplyHostSessionTransitionRequestV1 {
+                    intent_id: claimed.intent_id.clone(),
+                    issuer_request_id: claimed.issuer_request_id.clone(),
+                    payload_commitment: claimed.payload_commitment.clone(),
+                    expected_intent_revision: claimed.intent_revision,
+                    claim_id: claim.claim_id.clone(),
+                    expected_claim_revision: claim_revision,
+                },
+                TimestampV1::parse("2026-10-27T12:01:10.000000000Z").unwrap(),
+            )
+            .unwrap();
+        // Publish actual terminal startup truth through the production protocol;
+        // no runtime process is created by these authority publication methods.
+        authority
+            .resolve_startup_ownership_at(
+                &ResolveStartupOwnershipRequestV1 {
+                    intent_id: claimed.intent_id,
+                    issuer_request_id: claimed.issuer_request_id,
+                    payload_commitment: claimed.payload_commitment,
+                    protocol_actor:
+                        HostStartupOwnershipProtocolActorV1::LaunchApplicationClaimant {
+                            claim_id: claim.claim_id,
+                            claimant_attempt_id: claim.claimant_attempt_id,
+                        },
+                    protocol_event: HostStartupOwnershipProtocolEventV1::RuntimeCreationRejected {
+                        rejection_id: "snapshot-runtime-rejected".into(),
+                    },
+                    observed_at: TimestampV1::parse("2026-10-27T12:01:20.000000000Z").unwrap(),
+                },
+                TimestampV1::parse("2026-10-27T12:01:21.000000000Z").unwrap(),
+            )
+            .unwrap();
+        fixture.frozen = read_opened_root_v2_or_v3(&fixture.opened).unwrap();
+        // Production startup publication upgrades the retained Start root to V3.
+        let VersionedStateRoot::V3(root) = &fixture.frozen else {
+            unreachable!()
+        };
+        assert_ne!(
+            root.object_index[&fixture.intent.transport_payload_ref.ref_id].storage_state,
+            AuthorityObjectStorageStateV1::Present
+        );
+        assert_eq!(
+            fixture.unchanged_error(
+                &fixture.intent.transport_payload_ref,
+                Some(&fixture.context(true))
+            ),
+            io("typed object has no exact present index entry")
+        );
+    }
+
+    #[test]
+    fn test_noncanonical_json_and_cross_store_hmac_are_rejected_after_capture() {
+        use crate::execution::agent_runtime::host_session_authority::hash::{
+            store_hmac_sha256, SensitiveDomainV1,
+        };
+        let fixture = Fixture::published(false);
+        let mut reference = fixture.intent.target_participant_lease_token_ref.clone();
+        let envelope =
+            AuthorityStoreCommitmentKeyFileV1::decode(&fs::read(fixture.key_path()).unwrap())
+                .unwrap();
+        let AuthorityObjectCommitmentV1::StoreHmacSha256 { digest_hex, .. } =
+            &mut reference.commitment
+        else {
+            unreachable!()
+        };
+        *digest_hex = store_hmac_sha256(
+            &envelope.secret_key,
+            SensitiveDomainV1::ParticipantLeaseToken,
+            "as_00000000000000000000000000000000",
+            &fixture.intent.intent_id,
+            Some(&fixture.intent.run_id),
+            b"snapshot-lease",
+        )
+        .unwrap();
+        assert_eq!(
+            fixture.unchanged_error(&reference, Some(&fixture.context(false))),
+            io("sensitive object commitment mismatch")
+        );
+        let path = fixture.object_path(&fixture.intent.descriptor_ref);
+        let original = fs::read(&path).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&original).unwrap();
+        let fields = value
+            .as_object()
+            .unwrap()
+            .iter()
+            .rev()
+            .map(|(key, value)| {
+                format!(
+                    "{}:{}",
+                    serde_json::to_string(key).unwrap(),
+                    serde_json::to_string(value).unwrap()
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        let noncanonical = format!("{{{fields}}}").into_bytes();
+        assert_eq!(original.len(), noncanonical.len());
+        assert!(original != noncanonical);
+        fs::write(path, noncanonical).unwrap();
+        assert_eq!(
+            fixture.unchanged_error(&fixture.intent.descriptor_ref, None),
+            io("canonical object bytes are invalid")
+        );
+    }
+
+    mod schema_binding {
+        use super::*;
+        use crate::execution::agent_runtime::host_session_authority::{
+            schema::{
+                ResumeHandleHashInputV1, StartContinuationHandleHashInputV2,
+                StartContinuationHandleStateV2,
+            },
+            validation::CanonicalHashInputV1,
+        };
+
+        fn object<T: serde::Serialize + CanonicalHashInputV1>(
+            kind: AuthorityObjectKindV1,
+            schema_version: u32,
+            id: u8,
+            value: &T,
+        ) -> (AuthorityObjectRefV1, Vec<u8>) {
+            (
+                AuthorityObjectRefV1 {
+                    ref_id: format!("ao_{}", format!("{id:02x}").repeat(16)),
+                    object_kind: kind,
+                    schema_version,
+                    commitment: AuthorityObjectCommitmentV1::CanonicalSha256 {
+                        digest_hex: canonical_sha256(value).unwrap(),
+                    },
+                },
+                canonical_json::to_vec(value).unwrap(),
+            )
+        }
+
+        // Existing Start expiry and Start-continuation protocols publish the
+        // positive schema1 terminal and schema2 resume objects, respectively.
+        fn published(v3: bool) -> (Fixture, Vec<AuthorityObjectRefV1>) {
+            use crate::execution::agent_runtime::host_session_authority::transition::{
+                ApplyHostSessionTransitionRequestV1, ClaimHostSessionTransitionRequestV1,
+                ExpireHostSessionTransitionRequestV1, TransitionClaimOutcomeV1,
+            };
+            let mut fixture = Fixture::published(false);
+            let authority = HostSessionAuthority::open(fixture.home.path()).unwrap();
+            let mut continuation_ref = None;
+            if v3 {
+                let claim = ClaimHostSessionTransitionRequestV1 {
+                    intent_id: fixture.intent.intent_id.clone(),
+                    issuer_request_id: fixture.intent.issuer_request_id.clone(),
+                    payload_commitment: fixture.intent.payload_commitment.clone(),
+                    expected_intent_revision: fixture.intent.intent_revision,
+                    claim_id: "snapshot-claim".into(),
+                    claimant_attempt_id: "snapshot-attempt".into(),
+                };
+                let TransitionClaimOutcomeV1::Claimed(claimed) = authority
+                    .claim_start_at(
+                        &claim,
+                        TimestampV1::parse("2026-10-27T12:01:00.000000000Z").unwrap(),
+                        30,
+                    )
+                    .unwrap()
+                else {
+                    panic!("production claim must publish")
+                };
+                let HostSessionTransitionIntentStateV2::Claimed { claim_revision, .. } =
+                    claimed.state
+                else {
+                    unreachable!()
+                };
+                authority
+                    .apply_start_at(
+                        &ApplyHostSessionTransitionRequestV1 {
+                            intent_id: claimed.intent_id.clone(),
+                            issuer_request_id: claimed.issuer_request_id.clone(),
+                            payload_commitment: claimed.payload_commitment.clone(),
+                            expected_intent_revision: claimed.intent_revision,
+                            claim_id: claim.claim_id.clone(),
+                            expected_claim_revision: claim_revision,
+                        },
+                        TimestampV1::parse("2026-10-27T12:01:10.000000000Z").unwrap(),
+                    )
+                    .unwrap();
+                let root = authority.read_a12a_root().unwrap();
+                continuation_ref = Some(publish_continuation(
+                    &authority,
+                    &root.transition_intent_map[&fixture.intent.intent_id],
+                ));
+            } else {
+                authority
+                    .expire_start_at(
+                        &ExpireHostSessionTransitionRequestV1 {
+                            intent_id: fixture.intent.intent_id.clone(),
+                            issuer_request_id: fixture.intent.issuer_request_id.clone(),
+                            payload_commitment: fixture.intent.payload_commitment.clone(),
+                            expected_intent_revision: fixture.intent.intent_revision,
+                        },
+                        TimestampV1::parse("2026-10-27T12:05:01.000000000Z").unwrap(),
+                    )
+                    .unwrap();
+            }
+            fixture.frozen = read_opened_root_v2_or_v3(&fixture.opened).unwrap();
+            let intents = match &fixture.frozen {
+                VersionedStateRoot::V2(root) => &root.transition_intent_map,
+                VersionedStateRoot::V3(root) => &root.transition_intent_map,
+                _ => unreachable!(),
+            };
+            let intent = &intents[&fixture.intent.intent_id];
+            let reference = if let Some(reference) = continuation_ref {
+                reference
+            } else {
+                match &intent.state {
+                    HostSessionTransitionIntentStateV2::Expired {
+                        terminal_handoff_ref,
+                        ..
+                    } => terminal_handoff_ref.clone(),
+                    _ => match &intent.transport_payload_state {
+                        HostSessionTransitionTransportPayloadStateV1::ReleaseEligible {
+                            terminal_handoff_ref,
+                        }
+                        | HostSessionTransitionTransportPayloadStateV1::Released {
+                            terminal_handoff_ref,
+                            ..
+                        } => terminal_handoff_ref.clone(),
+                        _ => panic!("production terminal publication must retain its reference"),
+                    },
+                }
+            };
+            assert_eq!(reference.schema_version, if v3 { 2 } else { 1 });
+            (fixture, vec![reference])
+        }
+
+        // Adapted from transition_tests::prepare_start_continuity_transaction.
+        // All registration/root/object state is published and validated by production APIs.
+        fn publish_continuation(
+            authority: &HostSessionAuthority,
+            intent: &HostSessionTransitionIntentV2,
+        ) -> AuthorityObjectRefV1 {
+            use crate::execution::agent_runtime::host_session_authority::{
+                start_continuity::{
+                    EstablishStartContinuationRequestV1, StartContinuationOutcomeV1,
+                    StartTransactionBeginOutcomeV1,
+                },
+                store_schema::{StartTransactionRecordV1, StartTransactionStateV1},
+            };
+            fn timestamp(value: &str) -> TimestampV1 {
+                TimestampV1::parse(value).unwrap()
+            }
+            let HostSessionTransitionIntentStateV2::Applied {
+                application_result_ref,
+                authority_revision_after,
+                ..
+            } = &intent.state
+            else {
+                panic!("Start must remain applied")
+            };
+            let root = authority.read_a12a_root().unwrap();
+            let registration = EstablishStartContinuationRequestV1 {
+                start_transaction_id: "stx_start_1".into(),
+                request_key_sha256: "c".repeat(64),
+                authority_store_id: root.authority_store_id,
+                orchestration_session_id: intent.orchestration_session_id.clone(),
+                intent_id: intent.intent_id.clone(),
+                issuer_request_id: intent.issuer_request_id.clone(),
+                payload_commitment: intent.payload_commitment.clone(),
+                application_result_ref: application_result_ref.clone(),
+                run_id: intent.run_id.clone(),
+                expected_authority_revision: *authority_revision_after,
+                authoritative_participant_id: intent.target_authoritative_participant_id.clone(),
+                backend_id: "cli:codex".into(),
+                protocol: "substrate.agent.session".into(),
+                exchange_id: "exchange-start-1".into(),
+                exchange_sequence: 1,
+                provider_event_kind: "turn.exchange_opened".into(),
+                exchange_evidence_sha256: "a".repeat(64),
+                internal_uaa_session_id: "uaa-session-start-1".into(),
+                observed_at: timestamp("2026-10-27T12:01:20.000000000Z"),
+            };
+            let transaction = StartTransactionRecordV1 {
+                schema_version: 1,
+                transaction_id: registration.start_transaction_id.clone(),
+                request_key_sha256: registration.request_key_sha256.clone(),
+                prompt_sha256: "d".repeat(64),
+                authority_store_id: registration.authority_store_id.clone(),
+                orchestration_session_id: registration.orchestration_session_id.clone(),
+                shell_trace_session_id: intent.shell_trace_session_id.clone(),
+                authoritative_participant_id: registration.authoritative_participant_id.clone(),
+                backend_id: registration.backend_id.clone(),
+                protocol: registration.protocol.clone(),
+                workspace_root: intent
+                    .workspace_binding
+                    .workspace_root
+                    .physical_path
+                    .clone(),
+                world_id: intent
+                    .world_binding
+                    .as_ref()
+                    .map(|binding| binding.world_id.clone()),
+                world_generation: intent
+                    .world_binding
+                    .as_ref()
+                    .map(|binding| binding.world_generation),
+                public_backend_id: registration.backend_id.clone(),
+                public_scope: if intent.world_binding.is_some() {
+                    "world".into()
+                } else {
+                    "host".into()
+                },
+                start_intent_id: registration.intent_id.clone(),
+                start_issuer_request_id: registration.issuer_request_id.clone(),
+                start_payload_commitment: registration.payload_commitment.clone(),
+                start_application_result_ref: registration.application_result_ref.clone(),
+                start_run_id: registration.run_id.clone(),
+                start_authority_revision: registration.expected_authority_revision,
+                created_at: timestamp("2026-10-27T12:01:10.000000000Z"),
+                updated_at: timestamp("2026-10-27T12:01:10.000000000Z"),
+                state: StartTransactionStateV1::PromptNotSubmitted,
+            };
+            assert!(matches!(
+                authority.begin_start_transaction(&transaction).unwrap(),
+                StartTransactionBeginOutcomeV1::Applied(_)
+            ));
+            authority
+                .mark_start_prompt_submission_no_replay_barrier(
+                    &registration.start_transaction_id,
+                    &registration.request_key_sha256,
+                    timestamp("2026-10-27T12:01:15.000000000Z"),
+                )
+                .unwrap();
+            match authority
+                .establish_start_continuation(&registration)
+                .unwrap()
+            {
+                StartContinuationOutcomeV1::Applied(value) => value.resume_handle_ref,
+                _ => panic!("production continuation must publish"),
+            }
+        }
+
+        // Resume objects are validated and published by the real canonical orphan
+        // publisher. They become indexed only as an explicitly adverse root fault.
+        fn adverse(position: usize) -> (Fixture, AuthorityObjectRefV1) {
+            if position >= 2 {
+                let (mut fixture, references) = published(false);
+                if let VersionedStateRoot::V2(root) = &fixture.frozen {
+                    fixture.frozen = VersionedStateRoot::V3(
+                        upgrade_v2_root_to_v3_exact_current_opened(
+                            &fixture.opened,
+                            root,
+                            || Ok(()),
+                        )
+                        .unwrap(),
+                    );
+                }
+                if position == 3 {
+                    use crate::execution::agent_runtime::host_session_authority::schema::{
+                        TerminalHandoffHashInputV1, TerminalHandoffHashInputV2,
+                    };
+                    let old: TerminalHandoffHashInputV1 = canonical_json::from_slice(
+                        &fs::read(path(&fixture, &references[0])).unwrap(),
+                    )
+                    .unwrap();
+                    let value = TerminalHandoffHashInputV2 {
+                        schema_version: 2,
+                        intent_id: old.intent_id,
+                        run_id: old.run_id,
+                        payload_commitment: old.payload_commitment,
+                        terminal_state: old.terminal_state,
+                        application_result_ref: old.application_result_ref,
+                        input_acceptance_ref: old.input_acceptance_ref,
+                        startup_ownership_result_ref: None,
+                        post_turn_completion_ref: old.post_turn_completion_ref,
+                        post_turn_application_result_ref: old.post_turn_application_result_ref,
+                        recorded_at: old.recorded_at,
+                    };
+                    let (reference, bytes) =
+                        object(AuthorityObjectKindV1::TerminalHandoff, 2, 0x93, &value);
+                    prepare_typed_object_v3_opened(
+                        &fixture.opened,
+                        fixture.frozen.root_revision(),
+                        &reference,
+                        &bytes,
+                        None,
+                    )
+                    .unwrap();
+                    return (fixture, reference);
+                }
+                return (fixture, references[0].clone());
+            }
+            let fixture = Fixture::published(true);
+            let resume = ResumeHandleHashInputV1 {
+                schema_version: 1,
+                orchestration_session_id: fixture.intent.orchestration_session_id.clone(),
+                participant_id: fixture.intent.target_authoritative_participant_id.clone(),
+                backend_id: "cli:codex".into(),
+                protocol: "substrate.agent.session".into(),
+                internal_uaa_session_id: "schema-binding-session".into(),
+            };
+            let resume_v2 = StartContinuationHandleHashInputV2 {
+                schema_version: 2,
+                authority_store_id: fixture.frozen.authority_store_id().into(),
+                orchestration_session_id: resume.orchestration_session_id.clone(),
+                participant_id: resume.participant_id.clone(),
+                backend_id: resume.backend_id.clone(),
+                protocol: resume.protocol.clone(),
+                internal_uaa_session_id: resume.internal_uaa_session_id.clone(),
+                start_intent_id: fixture.intent.intent_id.clone(),
+                start_issuer_request_id: fixture.intent.issuer_request_id.clone(),
+                start_payload_commitment: fixture.intent.payload_commitment.clone(),
+                start_application_result_ref: placeholder_ref(
+                    "ao_96969696969696969696969696969696",
+                    AuthorityObjectKindV1::ApplicationResult,
+                ),
+                start_run_id: fixture.intent.run_id.clone(),
+                authority_revision_before: 1,
+                authority_record_commitment_before: fixture.intent.payload_commitment.clone(),
+                authority_revision_after: 2,
+                state: StartContinuationHandleStateV2::Registered {
+                    exchange_id: "schema-binding-exchange".into(),
+                    exchange_sequence: 1,
+                    provider_event_kind: "thread.started".into(),
+                    evidence_sha256: "ab".repeat(32),
+                    observed_at: TimestampV1::parse("2026-10-27T12:05:00.000000000Z").unwrap(),
+                },
+            };
+            let (reference, bytes) = if position == 0 {
+                object(AuthorityObjectKindV1::ResumeHandle, 1, 0x91, &resume)
+            } else {
+                object(AuthorityObjectKindV1::ResumeHandle, 2, 0x92, &resume_v2)
+            };
+            prepare_typed_object_v3_opened(
+                &fixture.opened,
+                fixture.frozen.root_revision(),
+                &reference,
+                &bytes,
+                None,
+            )
+            .unwrap();
+            (fixture, reference)
+        }
+
+        fn path(fixture: &Fixture, reference: &AuthorityObjectRefV1) -> std::path::PathBuf {
+            fixture
+                .home
+                .path()
+                .join("authority-v1/objects")
+                .join(match reference.object_kind {
+                    AuthorityObjectKindV1::ResumeHandle => "resume-handle",
+                    AuthorityObjectKindV1::TerminalHandoff => "terminal-handoff",
+                    _ => unreachable!(),
+                })
+                .join(format!("v{}", reference.schema_version))
+                .join(format!("{}.obj", reference.ref_id))
+        }
+
+        #[test]
+        fn test_schema_1_and_2_production_published_objects_read_in_v2_and_v3() {
+            for v3 in [false, true] {
+                let (fixture, references) = published(v3);
+                let before = tree(fixture.home.path());
+                for reference in references {
+                    assert_eq!(
+                        fixture.read(&reference, None).unwrap(),
+                        fs::read(path(&fixture, &reference)).unwrap()
+                    );
+                }
+                assert!(before == tree(fixture.home.path()));
+            }
+        }
+
+        #[test]
+        fn test_cross_schema_payloads_refuse_even_with_matching_digest_index_and_length() {
+            for position in [1, 0, 3, 2] {
+                let (fixture, original) = adverse(position);
+                let bytes = fs::read(path(&fixture, &original)).unwrap();
+                let mut wrong = original.clone();
+                wrong.ref_id = "ao_95959595959595959595959595959595".into();
+                wrong.schema_version = 3 - original.schema_version;
+                let wrong_path = path(&fixture, &wrong);
+                fs::create_dir_all(wrong_path.parent().unwrap()).unwrap();
+                fs::set_permissions(
+                    wrong_path.parent().unwrap(),
+                    fs::Permissions::from_mode(0o700),
+                )
+                .unwrap();
+                fs::write(&wrong_path, &bytes).unwrap();
+                fs::set_permissions(&wrong_path, fs::Permissions::from_mode(0o600)).unwrap();
+                // Negative-only extra index entry: the digest still authenticates
+                // the unchanged production-published bytes under the wrong schema.
+                let mut root = fixture.frozen.clone();
+                let index = match &mut root {
+                    VersionedStateRoot::V2(root) => &mut root.object_index,
+                    VersionedStateRoot::V3(root) => &mut root.object_index,
+                    _ => unreachable!(),
+                };
+                index.insert(
+                    wrong.ref_id.clone(),
+                    AuthorityObjectIndexEntryV1 {
+                        schema_version: 1,
+                        ref_id: wrong.ref_id.clone(),
+                        object_kind: wrong.object_kind,
+                        object_schema_version: wrong.schema_version,
+                        byte_length: bytes.len() as u64,
+                        storage_state: AuthorityObjectStorageStateV1::Present,
+                    },
+                );
+                fs::write(
+                    fixture.home.path().join("authority-v1/state-root-v1.json"),
+                    root.to_canonical_bytes().unwrap(),
+                )
+                .unwrap();
+                assert_eq!(
+                    fixture.unchanged_error(&wrong, None),
+                    io("canonical object schema version mismatch")
+                );
+            }
+        }
+        #[test]
+        fn test_absent_or_conflicting_schema_retains_guard_and_final_error_precedence() {
+            for schema in [
+                None,
+                Some(serde_json::json!(2)),
+                Some(serde_json::json!("1")),
+            ] {
+                let fixture = Fixture::published(false);
+                let reference = &fixture.intent.descriptor_ref;
+                let path = fixture.object_path(reference);
+                let mut value: serde_json::Value =
+                    serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+                let expected = if let Some(schema) = schema {
+                    let expected = if schema.is_number() {
+                        "canonical object schema version mismatch"
+                    } else {
+                        "canonical object schema version is absent"
+                    };
+                    value["schema_version"] = schema;
+                    io(expected)
+                } else {
+                    value.as_object_mut().unwrap().remove("schema_version");
+                    io("canonical object schema version is absent")
+                };
+                let bytes = canonical_json::to_vec(&value).unwrap();
+                fs::write(&path, &bytes).unwrap();
+                fixture.mutate_root(|root| {
+                    root.object_index
+                        .get_mut(&reference.ref_id)
+                        .unwrap()
+                        .byte_length = bytes.len() as u64
+                });
+                assert_eq!(fixture.unchanged_error(reference, None), expected);
+                let mut attack_state = None;
+                let error =
+                    with_existing_typed_object_snapshot_opened(&fixture.opened, |snapshot| {
+                        let error = snapshot
+                            .read_typed_object(
+                                fixture.frozen.authority_store_id(),
+                                fixture.frozen.root_revision(),
+                                reference,
+                                None,
+                            )
+                            .unwrap_err();
+                        assert_eq!(error, expected);
+                        fs::write(&path, b"changed after schema failure").unwrap();
+                        attack_state = Some(tree(fixture.home.path()));
+                        Err::<Vec<u8>, _>(error)
+                    })
+                    .unwrap_err();
+                assert!(matches!(
+                    error,
+                    ReadOnlyAuthoritySnapshotErrorV1::SnapshotEntryChanged { .. }
+                ));
+                assert!(attack_state.unwrap() == tree(fixture.home.path()));
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+mod direct_host_inbox_storage_tests {
+    use super::*;
+
+    #[test]
+    fn test_direct_host_inbox_storage_pre_activation_and_activated_scope() {
+        let home = root();
+        with_locked_direct_host_inbox_transaction(home.path(), None, |tx| {
+            assert!(tx.authority_root().is_none());
+            tx.write_file(
+                DirectHostInboxStorageAreaV1::RawInbox,
+                &["request.json"],
+                None,
+                b"raw request",
+            )
+        })
+        .unwrap();
+        let activated = bootstrap(home.path()).unwrap();
+        with_locked_direct_host_inbox_transaction(
+            home.path(),
+            Some(&activated.bootstrap_home),
+            |tx| {
+                assert_eq!(
+                    tx.authority_root().unwrap().authority_store_id(),
+                    activated.authority_store_id
+                );
+                assert_eq!(
+                    tx.read_file(DirectHostInboxStorageAreaV1::RawInbox, &["request.json"])?,
+                    Some(b"raw request".to_vec())
+                );
+                tx.write_file(
+                    DirectHostInboxStorageAreaV1::Source,
+                    &["receipts", "one.json"],
+                    None,
+                    b"immutable receipt",
+                )?;
+                assert_eq!(
+                    tx.list_files(DirectHostInboxStorageAreaV1::Source, &["receipts"])?,
+                    vec![("one.json".to_string(), b"immutable receipt".to_vec())]
+                );
+                Ok(())
+            },
+        )
+        .unwrap();
+        let mut wrong = activated.bootstrap_home;
+        wrong.physical_path.push_str("-copied");
+        assert!(
+            with_locked_direct_host_inbox_transaction(home.path(), Some(&wrong), |_| Ok(()))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn test_direct_host_inbox_storage_exact_replace_and_retained_bytes() {
+        let home = root();
+        bootstrap(home.path()).unwrap();
+        with_locked_direct_host_inbox_transaction(home.path(), None, |tx| {
+            assert_eq!(
+                tx.list_files(DirectHostInboxStorageAreaV1::Source, &[])?,
+                vec![]
+            );
+            tx.write_file(
+                DirectHostInboxStorageAreaV1::Source,
+                &["head.json"],
+                None,
+                b"head one",
+            )?;
+            assert!(tx
+                .write_file(
+                    DirectHostInboxStorageAreaV1::Source,
+                    &["head.json"],
+                    None,
+                    b"head two"
+                )
+                .is_err());
+            tx.write_file(
+                DirectHostInboxStorageAreaV1::Source,
+                &["head.json"],
+                Some(b"head one"),
+                b"head two",
+            )
+        })
+        .unwrap();
+        let result = with_locked_direct_host_inbox_transaction(home.path(), None, |tx| {
+            assert_eq!(
+                tx.read_file(DirectHostInboxStorageAreaV1::Source, &["head.json"])?,
+                Some(b"head two".to_vec())
+            );
+            fs::write(
+                home.path().join("direct-host-inbox-ledger-v1/head.json"),
+                b"changed outside lock",
+            )
+            .unwrap();
+            Ok(())
+        });
+        assert!(
+            result.is_err(),
+            "an out-of-protocol write cannot validate a retained cut"
+        );
+    }
+
+    #[test]
+    fn test_direct_host_inbox_storage_serializes_on_physical_root_lock() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+        let home = root();
+        bootstrap(home.path()).unwrap();
+        let path = home.path().to_path_buf();
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let first = std::thread::spawn(move || {
+            with_locked_direct_host_inbox_transaction(&path, None, |tx| {
+                entered_tx.send(()).unwrap();
+                release_rx.recv().unwrap();
+                tx.write_file(
+                    DirectHostInboxStorageAreaV1::Source,
+                    &["head.json"],
+                    None,
+                    b"first",
+                )
+            })
+            .unwrap();
+        });
+        entered_rx.recv().unwrap();
+        let path = home.path().to_path_buf();
+        let (attempt_tx, attempt_rx) = mpsc::channel();
+        let (second_tx, second_rx) = mpsc::channel();
+        let second = std::thread::spawn(move || {
+            attempt_tx.send(()).unwrap();
+            with_locked_direct_host_inbox_transaction(&path, None, |tx| {
+                second_tx.send(()).unwrap();
+                assert_eq!(
+                    tx.read_file(DirectHostInboxStorageAreaV1::Source, &["head.json"])?,
+                    Some(b"first".to_vec())
+                );
+                Ok(())
+            })
+            .unwrap();
+        });
+        attempt_rx.recv().unwrap();
+        assert!(matches!(
+            second_rx.recv_timeout(Duration::from_millis(50)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ));
+        release_tx.send(()).unwrap();
+        second_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        first.join().unwrap();
+        second.join().unwrap();
+    }
+
+    #[test]
+    fn test_direct_host_inbox_storage_rejects_replaced_root_lock() {
+        let home = root();
+        bootstrap(home.path()).unwrap();
+        let result = with_locked_direct_host_inbox_transaction(home.path(), None, |_| {
+            let lock = home.path().join("authority-v1/lock/root.lock");
+            fs::rename(&lock, lock.with_extension("old")).unwrap();
+            fs::write(lock, b"").unwrap();
+            Ok(())
+        });
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_direct_host_inbox_storage_rejects_unsafe_and_oversized_artifacts() {
+        let home = root();
+        bootstrap(home.path()).unwrap();
+        with_locked_direct_host_inbox_transaction(home.path(), None, |tx| {
+            assert!(tx
+                .write_file(
+                    DirectHostInboxStorageAreaV1::Source,
+                    &["too-big.json"],
+                    None,
+                    &vec![0; 32 * 1024 * 1024 + 1]
+                )
+                .is_err());
+            assert!(tx
+                .read_file(
+                    DirectHostInboxStorageAreaV1::Source,
+                    &["..", "escaped.json"]
+                )
+                .is_err());
+            tx.write_file(
+                DirectHostInboxStorageAreaV1::Source,
+                &["original.json"],
+                None,
+                b"original",
+            )
+        })
+        .unwrap();
+        let source = home.path().join("direct-host-inbox-ledger-v1");
+        fs::hard_link(source.join("original.json"), source.join("alias.json")).unwrap();
+        assert!(
+            with_locked_direct_host_inbox_transaction(home.path(), None, |tx| tx
+                .read_file(DirectHostInboxStorageAreaV1::Source, &["original.json"]))
+            .is_err()
+        );
+        fs::remove_file(source.join("alias.json")).unwrap();
+        std::os::unix::fs::symlink(source.join("original.json"), source.join("link.json")).unwrap();
+        assert!(
+            with_locked_direct_host_inbox_transaction(home.path(), None, |tx| tx
+                .read_file(DirectHostInboxStorageAreaV1::Source, &["link.json"]))
+            .is_err()
+        );
+    }
+    #[test]
+    fn test_direct_host_inbox_storage_replacement_bounds_pending_temp() {
+        let home = root();
+        bootstrap(home.path()).unwrap();
+        let original = vec![b'a'; 16 * 1024 * 1024 + 1];
+        let replacement = vec![b'b'; original.len()];
+        with_locked_direct_host_inbox_transaction(home.path(), None, |tx| {
+            tx.write_file(
+                DirectHostInboxStorageAreaV1::Source,
+                &["large.json"],
+                None,
+                &original,
+            )?;
+            let refused = tx.write_file(
+                DirectHostInboxStorageAreaV1::Source,
+                &["large.json"],
+                Some(&original),
+                &replacement,
+            );
+            assert!(
+                refused.is_err(),
+                "old artifact plus pending temp exceeds 32 MiB"
+            );
+            assert!(
+                tx.read_file(DirectHostInboxStorageAreaV1::Source, &["large.json"])?
+                    .as_deref()
+                    == Some(original.as_slice()),
+                "refusal must preserve the original complete bytes"
+            );
+            assert_eq!(
+                tx.list_files(DirectHostInboxStorageAreaV1::Source, &[])?
+                    .len(),
+                1,
+                "refusal must allocate no publication temp"
+            );
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn test_direct_host_inbox_storage_refuses_excessive_inventory_depth() {
+        let home = root();
+        bootstrap(home.path()).unwrap();
+        with_locked_direct_host_inbox_transaction(home.path(), None, |tx| {
+            tx.write_file(
+                DirectHostInboxStorageAreaV1::Source,
+                &["original.json"],
+                None,
+                b"original",
+            )
+        })
+        .unwrap();
+        let mut nested = home.path().join("direct-host-inbox-ledger-v1");
+        for _ in 0..17 {
+            nested = nested.join("nested");
+            fs::create_dir(&nested).unwrap();
+            fs::set_permissions(&nested, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        let error = with_locked_direct_host_inbox_transaction(home.path(), None, |tx| {
+            tx.write_file(
+                DirectHostInboxStorageAreaV1::Source,
+                &["next.json"],
+                None,
+                b"next",
+            )
+        })
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "direct-host inbox inventory exceeds its depth bound"
+        );
+        assert!(!home
+            .path()
+            .join("direct-host-inbox-ledger-v1/next.json")
+            .exists());
+        assert_eq!(
+            fs::read(
+                home.path()
+                    .join("direct-host-inbox-ledger-v1/original.json")
+            )
+            .unwrap(),
+            b"original"
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+mod direct_host_resume_recovery_tests {
+    use super::*;
+
+    fn recovery_home() -> tempfile::TempDir {
+        let parent = std::env::var_os("XDG_RUNTIME_DIR").expect("owned nonwriting fixture parent");
+        let home = tempfile::tempdir_in(parent).unwrap();
+        std::fs::set_permissions(home.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        home
+    }
+
+    fn snapshot(
+        home: &std::path::Path,
+    ) -> std::collections::BTreeMap<std::path::PathBuf, (u32, Option<Vec<u8>>)> {
+        let mut result = std::collections::BTreeMap::new();
+        let mut pending = vec![home.to_path_buf()];
+        while let Some(path) = pending.pop() {
+            let info = std::fs::symlink_metadata(&path).unwrap();
+            if info.is_dir() {
+                pending.extend(std::fs::read_dir(&path).unwrap().map(|e| e.unwrap().path()));
+            }
+            result.insert(
+                path.strip_prefix(home).unwrap().to_path_buf(),
+                (
+                    info.permissions().mode(),
+                    if info.is_dir() {
+                        None
+                    } else {
+                        Some(std::fs::read(&path).unwrap())
+                    },
+                ),
+            );
+        }
+        result
+    }
+
+    #[test]
+    fn test_direct_host_resume_recovery_missing_authority_has_no_effect() {
+        let home = recovery_home();
+        let root = TrustedAuthorityRoot::open(home.path()).unwrap();
+        let before = snapshot(home.path());
+        let result = super::super::with_direct_host_resume_recovery::<()>(
+            &root,
+            |_| panic!("committed callback requires existing authority"),
+            |_| panic!("active callback requires existing authority"),
+        );
+        assert!(result.is_err());
+        assert_eq!(snapshot(home.path()), before);
+    }
+
+    #[test]
+    fn test_direct_host_resume_recovery_missing_lock_is_not_repaired() {
+        let home = recovery_home();
+        bootstrap(home.path()).unwrap();
+        let root = TrustedAuthorityRoot::open(home.path()).unwrap();
+        std::fs::remove_file(home.path().join("authority-v1/lock/root.lock")).unwrap();
+        let before = snapshot(home.path());
+        let result = super::super::with_direct_host_resume_recovery::<()>(
+            &root,
+            |_| panic!("committed callback requires original retained root lock"),
+            |_| panic!("active callback requires original retained root lock"),
+        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("root lock is absent"));
+        assert_eq!(snapshot(home.path()), before);
+    }
 }

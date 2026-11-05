@@ -63,5 +63,9 @@ world = { path = "../world" }
 agent_api = { package = "unified-agent-api", version = "=0.3.7", default-features = false, features = ["codex", "claude_code"] }
 
 [dev-dependencies]
+transport-api-client = { path = "../transport-api-client" }
 config-projection = { path = "../config-projection", features = ["test-support"] }
 tempfile = "3"
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+world = { path = "../world", features = ["test-support"] }

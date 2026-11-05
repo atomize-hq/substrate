@@ -1,6 +1,12 @@
-use anyhow::{anyhow, bail, Context, Result};
-use serde_json::{json, Value};
+#[cfg(target_os = "macos")]
+use anyhow::anyhow;
+use anyhow::{bail, Context, Result};
+#[cfg(target_os = "macos")]
+use serde_json::json;
+use serde_json::Value;
+#[cfg(target_os = "macos")]
 use sha2::{Digest, Sha256};
+#[cfg(target_os = "macos")]
 use std::collections::BTreeMap;
 #[cfg(target_os = "macos")]
 use std::fs::OpenOptions;
@@ -12,14 +18,19 @@ use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::Path;
 #[cfg(target_os = "macos")]
 use std::process::Command;
+#[cfg(target_os = "macos")]
 use substrate_common::{
-    canonical_mac_publisher_install_provenance_v1, mac_publisher_control_requirement_cdhash_v1,
-    validate_mac_publisher_install_provenance_v1, validate_publisher_bootstrap_authorization_v1,
-    ExecutorBuildEvidenceV1, GuestPublisherPairingTicketV1, MacPublisherBootstrapRequestV1,
-    MacPublisherInstallProvenanceV1, ManagedArtifactEntryV1, ManagedArtifactManifestV1,
-    ManagedLifecyclePublisherRequestV1, ManagedLifecycleStateV1, PublisherBootstrapAuthorizationV1,
-    PublisherBootstrapComponentRoleV1, PublisherBootstrapComponentV1,
+    canonical_mac_publisher_install_provenance_v1, validate_mac_publisher_install_provenance_v1,
+    validate_publisher_bootstrap_authorization_v1, ExecutorBuildEvidenceV1,
+    MacPublisherBootstrapRequestV1, MacPublisherInstallProvenanceV1, ManagedArtifactEntryV1,
+    ManagedArtifactManifestV1, ManagedLifecycleStateV1, PublisherBootstrapComponentRoleV1,
+    PublisherBootstrapComponentV1,
 };
+use substrate_common::{
+    mac_publisher_control_requirement_cdhash_v1, GuestPublisherPairingTicketV1,
+    ManagedLifecyclePublisherRequestV1, PublisherBootstrapAuthorizationV1,
+};
+#[cfg(target_os = "macos")]
 use transport_api_types::InstallBootstrapContextCarrierV1;
 
 use super::{ManagedLifecycleControlRequestV1, MappedLifecycleTagV1};
@@ -1556,6 +1567,7 @@ unsafe extern "C" fn ignore_mac_xpc_event_v1(
 /// The reply object and its bounded `response` field are classified separately so XPC transport
 /// errors cannot be misreported as publisher protocol frames.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg(any(target_os = "macos", test))]
 enum MacXpcReplyObjectV1 {
     ConnectionInvalid,
     ConnectionInterrupted,
@@ -1565,12 +1577,14 @@ enum MacXpcReplyObjectV1 {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg(any(target_os = "macos", test))]
 enum MacXpcReplyDataV1 {
     Missing,
     Present(usize),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg(any(target_os = "macos", test))]
 enum MacXpcReplyClassificationV1 {
     ConnectionInvalid,
     ConnectionInterrupted,
@@ -1582,7 +1596,9 @@ enum MacXpcReplyClassificationV1 {
     DictionaryResponse,
 }
 
+#[cfg(any(target_os = "macos", test))]
 impl MacXpcReplyClassificationV1 {
+    #[cfg(target_os = "macos")]
     const fn label(self) -> &'static str {
         match self {
             Self::ConnectionInvalid => "connection-invalid",
@@ -1597,6 +1613,7 @@ impl MacXpcReplyClassificationV1 {
     }
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn classify_mac_xpc_reply_v1(
     object: MacXpcReplyObjectV1,
     data: MacXpcReplyDataV1,

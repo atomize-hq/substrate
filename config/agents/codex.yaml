@@ -7,6 +7,7 @@ config:
   placements:
     host:
       enabled: true
+      selection: {harness: codex, provider: openai, connection_profile: "built_in:codex-subscription", model: codex-mini-latest}
       cli:
         runtime_family: codex
         binary: codex
@@ -22,6 +23,7 @@ config:
         mcp_client: false
     world:
       enabled: true
+      selection: {harness: codex, provider: openai, connection_profile: "built_in:codex-subscription", model: codex-mini-latest}
       cli:
         runtime_family: codex
         binary: /var/lib/substrate/world-deps/codex-runtime/bin/codex
@@ -36,6 +38,5 @@ config:
         llm: true
         mcp_client: false
       runtime_projection:
-        model: codex
         mcp_servers: []
         features: []

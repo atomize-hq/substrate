@@ -24,7 +24,7 @@ mod error;
 mod home;
 mod process;
 mod process_custody;
-pub use process_custody::{ClaudeProcessCustody, ClaudeSettlementError};
+pub use process_custody::{ClaudeProcessCustody, ClaudeSettlementError, ProcessTerminationObservation};
 mod stream_json;
 pub mod wrapper_coverage_manifest;
 

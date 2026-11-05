@@ -3,6 +3,7 @@ use crate::execution::workspace;
 use anyhow::{anyhow, Context, Result};
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::env;
 use std::error::Error as StdError;
@@ -23,6 +24,11 @@ use std::time::SystemTime;
 use substrate_broker::validate_backend_id;
 use substrate_common::paths as substrate_paths;
 use substrate_common::WorldRootMode;
+use transport_api_types::{
+    AgentConnectionAuthV1, AgentConnectionBillingV1, AgentConnectionProfileV1,
+    AgentHarnessFamilyV1, AgentSelectionSourceScopeV1, AgentSelectionSourceV1,
+    AgentSelectionTupleV1,
+};
 
 pub(crate) const PROTECTED_EXCLUDES: [&str; 2] = [".git/**", ".substrate/**"];
 
@@ -100,6 +106,24 @@ pub(crate) fn is_user_error(err: &anyhow::Error) -> bool {
     err.chain().any(|cause| cause.is::<UserError>())
 }
 
+/// A present configuration cannot safely enter installer default recovery.
+#[derive(Debug)]
+pub(crate) struct ProtectedSelectionConfigErrorV1;
+
+impl fmt::Display for ProtectedSelectionConfigErrorV1 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(
+            "refusing replacement of invalid or unverified agent selection/profile settings",
+        )
+    }
+}
+
+impl StdError for ProtectedSelectionConfigErrorV1 {}
+
+pub(crate) fn is_protected_selection_config_error_v1(err: &anyhow::Error) -> bool {
+    err.is::<ProtectedSelectionConfigErrorV1>()
+}
+
 pub(crate) const REPL_MAX_PTY_BUFFERED_LINES_MIN: i64 = 0;
 pub(crate) const REPL_MAX_PTY_BUFFERED_LINES_MAX: i64 = 16_384;
 pub(crate) const REPL_MAX_PTY_BUFFERED_LINES_DEFAULT: i64 = 2_048;
@@ -113,6 +137,12 @@ pub(crate) struct SubstrateConfig {
     pub repl: ReplConfig,
     pub llm: LlmConfig,
     pub agents: AgentsConfig,
+    #[serde(skip)]
+    pub selection_sources: Vec<AgentSelectionSourceV1>,
+    #[serde(skip)]
+    pub selection_preference_source: Option<AgentSelectionSourceV1>,
+    #[serde(skip)]
+    pub selection_profiles: Vec<AgentConnectionProfileV1>,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, PartialEq, Eq)]
@@ -386,13 +416,57 @@ pub(crate) struct AgentsConfig {
     pub defaults: AgentDefaultsConfig,
     pub hub: AgentHubConfig,
     pub toolbox: AgentToolboxConfig,
+    pub connection_profiles: BTreeMap<String, AgentConnectionProfileConfigV1>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct AgentDefaultsConfig {
     pub execution: AgentDefaultsExecutionConfig,
     pub cli: AgentDefaultsCliConfig,
+    pub selection: AgentSelectionTupleV1,
+}
+
+impl Default for AgentDefaultsConfig {
+    fn default() -> Self {
+        Self {
+            execution: Default::default(),
+            cli: Default::default(),
+            selection: AgentSelectionTupleV1 {
+                harness: AgentHarnessFamilyV1::Codex,
+                provider: "openai".into(),
+                connection_profile: "built_in:codex-subscription".into(),
+                model: "codex-mini-latest".into(),
+            },
+        }
+    }
+}
+
+/// User-authored profile fields; source provenance is assigned by the loader.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct AgentConnectionProfileConfigV1 {
+    pub revision: String,
+    pub provider: String,
+    pub billing: AgentConnectionBillingV1,
+    pub endpoint_identity: String,
+    pub upstream_base_url: String,
+    pub auth: AgentConnectionAuthV1,
+}
+
+impl AgentConnectionProfileConfigV1 {
+    fn bind(&self, id: &str, source: &AgentSelectionSourceV1) -> AgentConnectionProfileV1 {
+        AgentConnectionProfileV1 {
+            id: id.into(),
+            revision: self.revision.clone(),
+            provider: self.provider.clone(),
+            billing: self.billing,
+            endpoint_identity: self.endpoint_identity.clone(),
+            upstream_base_url: self.upstream_base_url.clone(),
+            auth: self.auth.clone(),
+            source: source.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -795,9 +869,20 @@ impl E3WorkspaceConfigSelectionGuardV1 {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum CapturedSelectionConfigSourceV1 {
+    Absent,
+    Present(AgentSelectionSourceV1),
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct SubstrateConfigPatch {
+    #[serde(skip)]
+    pub source_sha256: Option<String>,
+    // None means caller-held composition; Absent is a source-owner observation.
+    #[serde(skip)]
+    captured_selection_source: Option<CapturedSelectionConfigSourceV1>,
     #[serde(skip_serializing_if = "WorldConfigPatch::is_empty")]
     pub world: WorldConfigPatch,
     #[serde(skip_serializing_if = "PolicyConfigPatch::is_empty")]
@@ -994,11 +1079,14 @@ pub(crate) struct AgentsConfigPatch {
     pub hub: AgentHubConfigPatch,
     #[serde(skip_serializing_if = "AgentToolboxConfigPatch::is_empty")]
     pub toolbox: AgentToolboxConfigPatch,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub connection_profiles: BTreeMap<String, AgentConnectionProfileConfigV1>,
 }
 
 impl AgentsConfigPatch {
     fn is_empty(&self) -> bool {
         self.enabled.is_none()
+            && self.connection_profiles.is_empty()
             && self.defaults.is_empty()
             && self.hub.is_empty()
             && self.toolbox.is_empty()
@@ -1008,6 +1096,8 @@ impl AgentsConfigPatch {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct AgentDefaultsConfigPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selection: Option<AgentSelectionTupleV1>,
     #[serde(skip_serializing_if = "AgentDefaultsExecutionConfigPatch::is_empty")]
     pub execution: AgentDefaultsExecutionConfigPatch,
     #[serde(skip_serializing_if = "AgentDefaultsCliConfigPatch::is_empty")]
@@ -1016,7 +1106,7 @@ pub(crate) struct AgentDefaultsConfigPatch {
 
 impl AgentDefaultsConfigPatch {
     fn is_empty(&self) -> bool {
-        self.execution.is_empty() && self.cli.is_empty()
+        self.selection.is_none() && self.execution.is_empty() && self.cli.is_empty()
     }
 }
 
@@ -1360,9 +1450,12 @@ pub(crate) fn global_config_path() -> Result<PathBuf> {
 pub(crate) fn read_global_config_patch_or_empty() -> Result<(SubstrateConfigPatch, bool)> {
     let path = global_config_path()?;
     match fs::read_to_string(&path) {
-        Ok(raw) => Ok((parse_config_patch_yaml(&path, &raw)?, true)),
+        Ok(raw) => Ok((
+            parse_captured_config_patch(&path, &raw, AgentSelectionSourceScopeV1::Global)?,
+            true,
+        )),
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
-            Ok((SubstrateConfigPatch::default(), false))
+            Ok((captured_absent_config_patch(), false))
         }
         Err(err) => Err(anyhow!("failed to read {}: {err}", path.display())),
     }
@@ -1384,12 +1477,17 @@ pub(crate) fn read_global_config_or_defaults() -> Result<(SubstrateConfig, bool)
 }
 
 pub(crate) fn parse_config_yaml(path: &Path, raw: &str) -> Result<SubstrateConfig> {
+    // Preserve raw provenance before serde can expand aliases. A failed scan
+    // cannot establish that protected input is absent.
+    validate_config_yaml_selection_paths_v1(path, raw)
+        .map_err(|err| err.context(ProtectedSelectionConfigErrorV1))?;
     let value: serde_yaml::Value = serde_yaml::from_str(raw).map_err(|err| {
         user_error(format!(
             "invalid YAML in {}: {}",
             path.display(),
             err.to_string().trim()
         ))
+        .context(ProtectedSelectionConfigErrorV1)
     })?;
 
     match &value {
@@ -1398,18 +1496,316 @@ pub(crate) fn parse_config_yaml(path: &Path, raw: &str) -> Result<SubstrateConfi
         _ => {}
     }
 
+    // Match the raw guard's destination paths even in a malformed sequence
+    // container, so a schema error cannot hide a protected selection.
+    let mut pending = vec![(&value, ConfigYamlPathV1::Root)];
+    let mut protected_input = false;
+    while let Some((node, node_path)) = pending.pop() {
+        if node_path == ConfigYamlPathV1::Strict {
+            protected_input = true;
+            break;
+        }
+        match node {
+            serde_yaml::Value::Mapping(map) => {
+                for (key, child) in map {
+                    if let Some(key) = key.as_str() {
+                        pending.push((child, config_yaml_child_path_v1(node_path, key)));
+                    }
+                }
+            }
+            serde_yaml::Value::Sequence(items) => {
+                pending.extend(items.iter().map(|item| (item, node_path)));
+            }
+            serde_yaml::Value::Tagged(tagged) => pending.push((&tagged.value, node_path)),
+            _ => {}
+        }
+    }
+    let classify_error = |err: anyhow::Error| {
+        if protected_input {
+            err.context(ProtectedSelectionConfigErrorV1)
+        } else {
+            err
+        }
+    };
     let parsed: SubstrateConfig = serde_yaml::from_value(value).map_err(|err| {
-        user_error(format!(
+        classify_error(user_error(format!(
             "invalid YAML in {}: {}",
             path.display(),
             err.to_string().trim()
-        ))
+        )))
     })?;
-    validate_local_config(&parsed)?;
+    validate_local_config(&parsed).map_err(classify_error)?;
+    // This full parser's consumers read selected-home config.yaml. Workspace
+    // settings retain their separately scoped patch parser and composition.
+    for (id, input) in &parsed.agents.connection_profiles {
+        if !id.starts_with("global:") {
+            return Err(user_error(format!(
+                "connection profile '{}' in {} cannot redefine another source namespace",
+                id,
+                path.display()
+            ))
+            .context(ProtectedSelectionConfigErrorV1));
+        }
+        AgentConnectionProfileV1::validate_fields(
+            id,
+            &input.revision,
+            &input.provider,
+            input.billing,
+            &input.endpoint_identity,
+            &input.upstream_base_url,
+            &input.auth,
+        )
+        .map_err(|error| {
+            user_error(format!(
+                "invalid connection profile '{}' in {}: {}",
+                id,
+                path.display(),
+                error
+            ))
+            .context(ProtectedSelectionConfigErrorV1)
+        })?;
+    }
     Ok(parsed)
 }
 
+// This fixed-path event graph retains references and annotations; it never
+// constructs expanded YAML values or acquires a configuration source.
+struct ConfigYamlNodeV1 {
+    kind: ConfigYamlNodeKindV1,
+    marked: bool,
+    line: usize,
+}
+
+enum ConfigYamlNodeKindV1 {
+    Scalar(String),
+    Mapping(Vec<(usize, usize)>),
+    Sequence(Vec<usize>),
+    Alias(usize),
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum ConfigYamlPathV1 {
+    Root,
+    Agents,
+    Defaults,
+    Strict,
+    Other,
+}
+
+#[derive(Default)]
+struct ConfigYamlGraphV1 {
+    nodes: Vec<ConfigYamlNodeV1>,
+    anchors: BTreeMap<usize, usize>,
+}
+
+impl ConfigYamlGraphV1 {
+    fn read_node(
+        &mut self,
+        parser: &mut yaml_rust2::parser::Parser<std::str::Chars<'_>>,
+        depth: usize,
+    ) -> Result<usize, String> {
+        use yaml_rust2::parser::Event;
+        if depth > 256 {
+            return Err("YAML nesting is too deep".into());
+        }
+        let (event, mark) = parser.next_token().map_err(|error| error.to_string())?;
+        let (kind, anchor, tagged) = match event {
+            Event::Scalar(value, _, anchor, tag) => {
+                (ConfigYamlNodeKindV1::Scalar(value), anchor, tag.is_some())
+            }
+            Event::MappingStart(anchor, tag) => (
+                ConfigYamlNodeKindV1::Mapping(Vec::new()),
+                anchor,
+                tag.is_some(),
+            ),
+            Event::SequenceStart(anchor, tag) => (
+                ConfigYamlNodeKindV1::Sequence(Vec::new()),
+                anchor,
+                tag.is_some(),
+            ),
+            Event::Alias(anchor) => (ConfigYamlNodeKindV1::Alias(anchor), 0, false),
+            _ => return Err(format!("expected YAML value at line {}", mark.line())),
+        };
+        let mapping = matches!(&kind, ConfigYamlNodeKindV1::Mapping(_));
+        let sequence = matches!(&kind, ConfigYamlNodeKindV1::Sequence(_));
+        let index = self.nodes.len();
+        self.nodes.push(ConfigYamlNodeV1 {
+            kind,
+            marked: anchor != 0 || tagged,
+            line: mark.line(),
+        });
+        if anchor != 0 {
+            self.anchors.insert(anchor, index);
+        }
+        if mapping {
+            let mut entries = Vec::new();
+            while !matches!(
+                &parser.peek().map_err(|error| error.to_string())?.0,
+                Event::MappingEnd
+            ) {
+                let key = self.read_node(parser, depth + 1)?;
+                let value = self.read_node(parser, depth + 1)?;
+                entries.push((key, value));
+            }
+            parser.next_token().map_err(|error| error.to_string())?;
+            self.nodes[index].kind = ConfigYamlNodeKindV1::Mapping(entries);
+        } else if sequence {
+            let mut items = Vec::new();
+            while !matches!(
+                &parser.peek().map_err(|error| error.to_string())?.0,
+                Event::SequenceEnd
+            ) {
+                items.push(self.read_node(parser, depth + 1)?);
+            }
+            parser.next_token().map_err(|error| error.to_string())?;
+            self.nodes[index].kind = ConfigYamlNodeKindV1::Sequence(items);
+        }
+        Ok(index)
+    }
+
+    fn key(
+        &self,
+        index: usize,
+        visiting: &mut std::collections::BTreeSet<usize>,
+    ) -> Result<(String, bool), String> {
+        if !visiting.insert(index) || visiting.len() > 256 {
+            return Err("recursive YAML key reference".into());
+        }
+        let node = &self.nodes[index];
+        match &node.kind {
+            ConfigYamlNodeKindV1::Scalar(value) => Ok((value.clone(), node.marked)),
+            ConfigYamlNodeKindV1::Alias(anchor) => {
+                let target = self
+                    .anchors
+                    .get(anchor)
+                    .ok_or("unknown YAML key reference")?;
+                let (key, _) = self.key(*target, visiting)?;
+                Ok((key, true))
+            }
+            _ => Err(format!(
+                "mapping keys must be scalar strings at line {}",
+                node.line
+            )),
+        }
+    }
+
+    fn validate_node(
+        &self,
+        index: usize,
+        path: ConfigYamlPathV1,
+        tainted: bool,
+        active: &mut std::collections::BTreeSet<usize>,
+        seen: &mut std::collections::BTreeSet<(usize, ConfigYamlPathV1, bool)>,
+    ) -> Result<(), String> {
+        let node = &self.nodes[index];
+        if path == ConfigYamlPathV1::Strict
+            && (tainted || node.marked || matches!(&node.kind, ConfigYamlNodeKindV1::Alias(_)))
+        {
+            return Err(format!("selection/profile YAML provenance at line {} uses an anchor, alias, tag, merge or referenced parent", node.line));
+        }
+        if seen.contains(&(index, path, tainted)) {
+            return Ok(());
+        }
+        if !active.insert(index) || active.len() > 256 {
+            return Err("recursive YAML reference".into());
+        }
+        let inherited = tainted || node.marked;
+        match &node.kind {
+            ConfigYamlNodeKindV1::Alias(anchor) => {
+                let target = self.anchors.get(anchor).ok_or("unknown YAML reference")?;
+                // Inspect the reference under its destination path without
+                // expanding/replacing the source graph or discarding origin.
+                self.validate_node(*target, path, true, active, seen)?;
+            }
+            ConfigYamlNodeKindV1::Mapping(entries) => {
+                let mut keys = std::collections::BTreeSet::new();
+                for (key, value) in entries {
+                    let (name, key_marked) =
+                        self.key(*key, &mut std::collections::BTreeSet::new())?;
+                    if !keys.insert(name.clone()) {
+                        return Err(format!(
+                            "duplicate YAML mapping key at line {}",
+                            self.nodes[*key].line
+                        ));
+                    }
+                    if name == "<<" {
+                        if path == ConfigYamlPathV1::Strict {
+                            return Err(format!(
+                                "selection/profile YAML provenance at line {} uses a merge",
+                                self.nodes[*key].line
+                            ));
+                        }
+                        // A merge contributes at the current mapping path,
+                        // including when its value is a sequence of references.
+                        self.validate_node(*value, path, true, active, seen)?;
+                    } else {
+                        self.validate_node(
+                            *value,
+                            config_yaml_child_path_v1(path, &name),
+                            inherited || key_marked,
+                            active,
+                            seen,
+                        )?;
+                    }
+                }
+            }
+            ConfigYamlNodeKindV1::Sequence(items) => {
+                for item in items {
+                    self.validate_node(*item, path, inherited, active, seen)?;
+                }
+            }
+            ConfigYamlNodeKindV1::Scalar(_) => {}
+        }
+        active.remove(&index);
+        seen.insert((index, path, tainted));
+        Ok(())
+    }
+}
+
+fn config_yaml_child_path_v1(path: ConfigYamlPathV1, key: &str) -> ConfigYamlPathV1 {
+    use ConfigYamlPathV1::{Agents, Defaults, Other, Root, Strict};
+    match (path, key) {
+        (Root, "agents") => Agents,
+        (Agents, "defaults") => Defaults,
+        (Agents, "connection_profiles") | (Defaults, "selection") | (Strict, _) => Strict,
+        _ => Other,
+    }
+}
+
+fn validate_config_yaml_selection_paths_v1(path: &Path, raw: &str) -> Result<()> {
+    use yaml_rust2::parser::{Event, Parser};
+    let validate = || -> Result<(), String> {
+        let mut parser = Parser::new_from_str(raw);
+        if parser.next_token().map_err(|error| error.to_string())?.0 != Event::StreamStart {
+            return Err("expected YAML stream".into());
+        }
+        let next = parser.next_token().map_err(|error| error.to_string())?.0;
+        if next == Event::StreamEnd {
+            return Ok(());
+        }
+        if next != Event::DocumentStart {
+            return Err("expected YAML document".into());
+        }
+        let mut graph = ConfigYamlGraphV1::default();
+        let root = graph.read_node(&mut parser, 0)?;
+        if parser.next_token().map_err(|error| error.to_string())?.0 != Event::DocumentEnd
+            || parser.next_token().map_err(|error| error.to_string())?.0 != Event::StreamEnd
+        {
+            return Err("multiple YAML documents are forbidden".into());
+        }
+        graph.validate_node(
+            root,
+            ConfigYamlPathV1::Root,
+            false,
+            &mut std::collections::BTreeSet::new(),
+            &mut std::collections::BTreeSet::new(),
+        )
+    };
+    validate().map_err(|error| user_error(format!("invalid YAML in {}: {}", path.display(), error)))
+}
+
 pub(crate) fn parse_config_patch_yaml(path: &Path, raw: &str) -> Result<SubstrateConfigPatch> {
+    validate_config_yaml_selection_paths_v1(path, raw)?;
     let value: serde_yaml::Value = serde_yaml::from_str(raw).map_err(|err| {
         user_error(format!(
             "invalid YAML in {}: {}",
@@ -1419,20 +1815,29 @@ pub(crate) fn parse_config_patch_yaml(path: &Path, raw: &str) -> Result<Substrat
     })?;
 
     match &value {
-        serde_yaml::Value::Null => return Ok(SubstrateConfigPatch::default()),
+        serde_yaml::Value::Null => {
+            return Ok(SubstrateConfigPatch {
+                source_sha256: Some(format!("{:x}", Sha256::digest(raw.as_bytes()))),
+                ..Default::default()
+            })
+        }
         serde_yaml::Value::Mapping(map) if map.is_empty() => {
-            return Ok(SubstrateConfigPatch::default())
+            return Ok(SubstrateConfigPatch {
+                source_sha256: Some(format!("{:x}", Sha256::digest(raw.as_bytes()))),
+                ..Default::default()
+            })
         }
         _ => {}
     }
 
-    let parsed: SubstrateConfigPatch = serde_yaml::from_value(value).map_err(|err| {
+    let mut parsed: SubstrateConfigPatch = serde_yaml::from_str(raw).map_err(|err| {
         user_error(format!(
             "invalid YAML in {}: {}",
             path.display(),
             err.to_string().trim()
         ))
     })?;
+    parsed.source_sha256 = Some(format!("{:x}", Sha256::digest(raw.as_bytes())));
     validate_config_patch(&parsed)?;
     Ok(parsed)
 }
@@ -1553,9 +1958,42 @@ pub(crate) fn resolve_effective_config_with_explain_for_bootstrap_home(
         Some(bytes) => {
             let raw = std::str::from_utf8(&bytes)
                 .map_err(|_| user_error(format!("invalid UTF-8 in {}", global_path.display())))?;
-            parse_config_patch_yaml(&global_path, raw)?
+            let mut patch = parse_config_patch_yaml(&global_path, raw)?;
+            // The trusted reader, rather than a second path lookup, owns this root.
+            let identity = bootstrap_home
+                .identity()
+                .map_err(|error| user_error(error.to_string()))?;
+            use crate::execution::agent_runtime::host_session_authority::schema::DirectoryPhysicalIdentityV1;
+            let root_identity = match &identity.physical_identity {
+                DirectoryPhysicalIdentityV1::Linux { device_id, inode } => {
+                    format!("{}:{}:{}", device_id, inode, identity.physical_path)
+                }
+                DirectoryPhysicalIdentityV1::MacOs {
+                    volume_uuid,
+                    file_id,
+                    case_sensitive,
+                } => format!(
+                    "{}:{}:{}:{}",
+                    volume_uuid, file_id, case_sensitive, identity.physical_path
+                ),
+            };
+            let hash = patch
+                .source_sha256
+                .clone()
+                .ok_or_else(|| user_error("captured configuration hash missing"))?;
+            let source = AgentSelectionSourceV1 {
+                scope: AgentSelectionSourceScopeV1::Global,
+                root_identity,
+                relative_path: "config.yaml".into(),
+                revision: hash.clone(),
+                sha256: hash,
+            };
+            source.validate().map_err(user_error)?;
+            patch.captured_selection_source =
+                Some(CapturedSelectionConfigSourceV1::Present(source));
+            patch
         }
-        None => SubstrateConfigPatch::default(),
+        None => captured_absent_config_patch(),
     };
     let workspace_layer = load_workspace_config_patch(cwd)?;
     let workspace_ref = workspace_layer
@@ -1602,7 +2040,7 @@ fn open_e3_workspace_config_source_v1<'authority>(
     let held_source_root = OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW)
-        .open(&selected)
+        .open(selected)
         .with_context(|| format!("failed to open exact workspace root {}", selected.display()))?;
     let root_metadata = held_source_root
         .metadata()
@@ -2155,7 +2593,10 @@ fn load_workspace_config_patch(cwd: &Path) -> Result<Option<ConfigPatchLayer>> {
     }
     let raw =
         fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
-    Ok(Some((parse_config_patch_yaml(&path, &raw)?, path)))
+    Ok(Some((
+        parse_captured_config_patch(&path, &raw, AgentSelectionSourceScopeV1::Workspace)?,
+        path,
+    )))
 }
 
 fn load_config_patch_layers_cached(cwd: &Path) -> Result<LoadedConfigPatchLayers> {
@@ -2191,25 +2632,49 @@ fn load_config_patch_layers_cached(cwd: &Path) -> Result<LoadedConfigPatchLayers
                 && entry.global_stat == global_stat
                 && entry.workspace_stat == workspace_stat
             {
-                let workspace_layer = entry
-                    .workspace_patch
-                    .clone()
-                    .zip(entry.workspace_path.clone());
-                return Ok((entry.global_patch.clone(), global_path, workspace_layer));
+                // Metadata alone can alias a different revision or physical root.
+                // Reuse parsed values only while their captured sources still match.
+                let global_current = captured_config_patch_matches_path(
+                    &entry.global_patch,
+                    &global_path,
+                    AgentSelectionSourceScopeV1::Global,
+                )?;
+                let workspace_current = match (&entry.workspace_patch, &entry.workspace_path) {
+                    (Some(patch), Some(path)) => captured_config_patch_matches_path(
+                        patch,
+                        path,
+                        AgentSelectionSourceScopeV1::Workspace,
+                    )?,
+                    (None, None) => true,
+                    _ => false,
+                };
+                if global_current && workspace_current {
+                    let workspace_layer = entry
+                        .workspace_patch
+                        .clone()
+                        .zip(entry.workspace_path.clone());
+                    return Ok((entry.global_patch.clone(), global_path, workspace_layer));
+                }
             }
         }
     }
 
     let global_patch = match fs::read_to_string(&global_path) {
-        Ok(raw) => parse_config_patch_yaml(&global_path, &raw)?,
-        Err(err) if err.kind() == io::ErrorKind::NotFound => SubstrateConfigPatch::default(),
+        Ok(raw) => {
+            parse_captured_config_patch(&global_path, &raw, AgentSelectionSourceScopeV1::Global)?
+        }
+        Err(err) if err.kind() == io::ErrorKind::NotFound => captured_absent_config_patch(),
         Err(err) => return Err(anyhow!("failed to read {}: {err}", global_path.display())),
     };
 
     let workspace_layer = if let Some(workspace_path) = &workspace_path {
         let raw = fs::read_to_string(workspace_path)
             .with_context(|| format!("failed to read {}", workspace_path.display()))?;
-        let patch = parse_config_patch_yaml(workspace_path, &raw)?;
+        let patch = parse_captured_config_patch(
+            workspace_path,
+            &raw,
+            AgentSelectionSourceScopeV1::Workspace,
+        )?;
         Some((patch, workspace_path.clone()))
     } else {
         None
@@ -3003,6 +3468,43 @@ fn resolve_effective_from_layers(
         apply_protected_excludes(&mut effective.sync.exclude);
     }
 
+    bind_agent_selection_config(&mut effective, global_patch, global_path, workspace_patch)?;
+    if let Some(keys) = &mut explain_keys {
+        // Explanation describes semantic precedence even for caller-held bytes,
+        // which deliberately carry no physical runtime selection provenance.
+        let preference_scope = if workspace_patch
+            .is_some_and(|(patch, _)| patch.agents.defaults.selection.is_some())
+        {
+            AgentSelectionSourceScopeV1::Workspace
+        } else if global_patch.agents.defaults.selection.is_some() {
+            AgentSelectionSourceScopeV1::Global
+        } else {
+            AgentSelectionSourceScopeV1::BuiltIn
+        };
+        keys.insert(
+            "agents.defaults.selection".into(),
+            ConfigExplainKey {
+                merge_strategy: "replace".into(),
+                sources: vec![ConfigExplainSource {
+                    layer: match preference_scope {
+                        AgentSelectionSourceScopeV1::BuiltIn => "default",
+                        AgentSelectionSourceScopeV1::Global => "global_patch",
+                        AgentSelectionSourceScopeV1::Workspace => "workspace_patch",
+                    }
+                    .into(),
+                    path: match preference_scope {
+                        AgentSelectionSourceScopeV1::BuiltIn => None,
+                        AgentSelectionSourceScopeV1::Global => {
+                            Some(global_path.display().to_string())
+                        }
+                        AgentSelectionSourceScopeV1::Workspace => {
+                            workspace_path.map(|path| path.display().to_string())
+                        }
+                    },
+                }],
+            },
+        );
+    }
     validate_local_config(&effective)?;
 
     let explain = explain_keys.map(|keys| ConfigExplainV1 {
@@ -3010,6 +3512,227 @@ fn resolve_effective_from_layers(
         keys,
     });
     Ok((effective, explain))
+}
+
+/// Capture a source revision from bytes already read by the source owner.
+pub(crate) fn selection_source_from_bytes(
+    root: &Path,
+    relative_path: &str,
+    scope: AgentSelectionSourceScopeV1,
+    bytes: &[u8],
+) -> Result<AgentSelectionSourceV1> {
+    let canonical = fs::canonicalize(root).with_context(|| {
+        format!(
+            "failed to identify selection source root {}",
+            root.display()
+        )
+    })?;
+    let metadata = fs::metadata(&canonical)?;
+    #[cfg(unix)]
+    let identity = {
+        use std::os::unix::fs::MetadataExt;
+        format!(
+            "{}:{}:{}",
+            metadata.dev(),
+            metadata.ino(),
+            canonical.display()
+        )
+    };
+    #[cfg(not(unix))]
+    let identity = format!("{}:{}", canonical.display(), metadata.len());
+    let hash = format!("{:x}", Sha256::digest(bytes));
+    let source = AgentSelectionSourceV1 {
+        scope,
+        root_identity: identity,
+        relative_path: relative_path.into(),
+        revision: hash.clone(),
+        sha256: hash,
+    };
+    source.validate().map_err(user_error)?;
+    Ok(source)
+}
+
+/// Parse bytes at an ordinary source-owner boundary and capture their exact revision.
+/// The pure parser/composer never calls this filesystem-reading function.
+fn parse_captured_config_patch(
+    path: &Path,
+    raw: &str,
+    scope: AgentSelectionSourceScopeV1,
+) -> Result<SubstrateConfigPatch> {
+    let mut patch = parse_config_patch_yaml(path, raw)?;
+    let root = path
+        .parent()
+        .ok_or_else(|| user_error("selection config path has no root"))?;
+    let relative = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| user_error("selection config source requires UTF-8"))?;
+    patch.captured_selection_source = Some(CapturedSelectionConfigSourceV1::Present(
+        selection_source_from_bytes(root, relative, scope, raw.as_bytes())?,
+    ));
+    Ok(patch)
+}
+
+// Cache validation stays with the ordinary source owner, outside composition.
+fn captured_config_patch_matches_path(
+    patch: &SubstrateConfigPatch,
+    path: &Path,
+    scope: AgentSelectionSourceScopeV1,
+) -> Result<bool> {
+    match fs::read(path) {
+        Ok(bytes) => {
+            let root = path
+                .parent()
+                .ok_or_else(|| user_error("selection config path has no root"))?;
+            let relative = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .ok_or_else(|| user_error("selection config source requires UTF-8"))?;
+            let source = selection_source_from_bytes(root, relative, scope, &bytes)?;
+            Ok(patch.captured_selection_source.as_ref()
+                == Some(&CapturedSelectionConfigSourceV1::Present(source)))
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            Ok(patch.captured_selection_source.as_ref()
+                == Some(&CapturedSelectionConfigSourceV1::Absent))
+        }
+        Err(error) => Err(error).with_context(|| format!("failed to read {}", path.display())),
+    }
+}
+
+fn captured_absent_config_patch() -> SubstrateConfigPatch {
+    SubstrateConfigPatch {
+        captured_selection_source: Some(CapturedSelectionConfigSourceV1::Absent),
+        ..Default::default()
+    }
+}
+
+fn bind_agent_selection_config(
+    effective: &mut SubstrateConfig,
+    global: &SubstrateConfigPatch,
+    global_path: &Path,
+    workspace: Option<(&SubstrateConfigPatch, &Path)>,
+) -> Result<()> {
+    let built_in = AgentSelectionSourceV1 {
+        scope: AgentSelectionSourceScopeV1::BuiltIn,
+        root_identity: "substrate-agent-routes.v1".into(),
+        relative_path: "config/agent-routes".into(),
+        revision: "1".into(),
+        sha256: format!(
+            "{:x}",
+            Sha256::digest(b"substrate.codex-subscription.claude-existing.routes.v1")
+        ),
+    };
+    let all_sources_captured = global.captured_selection_source.is_some()
+        && workspace.is_none_or(|(patch, _)| patch.captured_selection_source.is_some());
+    // Source-owner metadata enables runtime selection. Caller-held bytes may
+    // compose values, but cannot publish a physically captured selection.
+    effective.selection_sources.clear();
+    effective.selection_preference_source = None;
+    effective.selection_profiles.clear();
+    if all_sources_captured {
+        effective.selection_sources = vec![built_in.clone()];
+        effective.selection_preference_source = Some(built_in.clone());
+        effective.selection_profiles = vec![
+            AgentConnectionProfileV1 {
+                id: "built_in:codex-subscription".into(),
+                revision: "1".into(),
+                provider: "openai".into(),
+                billing: AgentConnectionBillingV1::Subscription,
+                endpoint_identity: "openai-codex-subscription".into(),
+                upstream_base_url: "https://chatgpt.com/backend-api".into(),
+                auth: AgentConnectionAuthV1::CodexAccount {
+                    reference: "configured-account".into(),
+                },
+                source: built_in.clone(),
+            },
+            AgentConnectionProfileV1 {
+                id: "built_in:claude-existing".into(),
+                revision: "1".into(),
+                provider: "anthropic".into(),
+                billing: AgentConnectionBillingV1::Api,
+                endpoint_identity: "anthropic-api".into(),
+                upstream_base_url: "https://api.anthropic.com".into(),
+                auth: AgentConnectionAuthV1::ApiKeyEnvironment {
+                    name: "ANTHROPIC_API_KEY".into(),
+                },
+                source: built_in,
+            },
+        ];
+    }
+    effective.agents.connection_profiles.clear();
+    for (patch, path, scope) in
+        std::iter::once((global, global_path, AgentSelectionSourceScopeV1::Global)).chain(
+            workspace.map(|(patch, path)| (patch, path, AgentSelectionSourceScopeV1::Workspace)),
+        )
+    {
+        if let Some(selection) = &patch.agents.defaults.selection {
+            effective.agents.defaults.selection = selection.clone();
+        }
+        for (id, input) in &patch.agents.connection_profiles {
+            if !id.starts_with(&format!("{}:", scope.as_str())) {
+                return Err(user_error(format!(
+                    "connection profile '{}' in {} cannot redefine another source namespace",
+                    id,
+                    path.display()
+                )));
+            }
+            // Value validity does not depend on physical source capture.
+            AgentConnectionProfileV1::validate_fields(
+                id,
+                &input.revision,
+                &input.provider,
+                input.billing,
+                &input.endpoint_identity,
+                &input.upstream_base_url,
+                &input.auth,
+            )
+            .map_err(|error| {
+                user_error(format!(
+                    "invalid connection profile '{}' in {}: {}",
+                    id,
+                    path.display(),
+                    error,
+                ))
+            })?;
+            effective
+                .agents
+                .connection_profiles
+                .insert(id.clone(), input.clone());
+        }
+        if !all_sources_captured {
+            continue;
+        }
+        match patch.captured_selection_source.as_ref() {
+            Some(CapturedSelectionConfigSourceV1::Absent) => {
+                if patch.source_sha256.is_some() || !patch.is_empty() {
+                    return Err(user_error(
+                        "absent selection config source has parsed values",
+                    ));
+                }
+            }
+            Some(CapturedSelectionConfigSourceV1::Present(source)) => {
+                source.validate().map_err(user_error)?;
+                if source.scope != scope || patch.source_sha256.as_ref() != Some(&source.sha256) {
+                    return Err(user_error(format!(
+                        "selection config source mismatch at {}",
+                        path.display()
+                    )));
+                }
+                effective.selection_sources.push(source.clone());
+                if patch.agents.defaults.selection.is_some() {
+                    effective.selection_preference_source = Some(source.clone());
+                }
+                for (id, input) in &patch.agents.connection_profiles {
+                    let profile = input.bind(id, source);
+                    profile.validate().map_err(user_error)?;
+                    effective.selection_profiles.push(profile);
+                }
+            }
+            None => return Err(user_error("selection source capture is incomplete")),
+        }
+    }
+    Ok(())
 }
 
 fn concat_dedupe_ordered_set(layers: &[Vec<String>]) -> Vec<String> {
@@ -3202,7 +3925,12 @@ pub(crate) fn apply_updates_to_patch(
 ) -> Result<bool> {
     let mut changed = false;
     for update in updates {
-        changed |= apply_update_to_patch(patch, update)?;
+        let updated = apply_update_to_patch(patch, update)?;
+        if updated {
+            patch.captured_selection_source = None;
+            patch.source_sha256 = None;
+        }
+        changed |= updated;
     }
     Ok(changed)
 }
@@ -3210,12 +3938,22 @@ pub(crate) fn apply_updates_to_patch(
 pub(crate) fn reset_patch_keys(patch: &mut SubstrateConfigPatch, keys: &[String]) -> Result<bool> {
     let mut changed = false;
     for key in keys {
-        changed |= reset_patch_key(patch, key)?;
+        let updated = reset_patch_key(patch, key)?;
+        if updated {
+            patch.captured_selection_source = None;
+            patch.source_sha256 = None;
+        }
+        changed |= updated;
     }
     Ok(changed)
 }
 
 fn validate_local_config(cfg: &SubstrateConfig) -> Result<()> {
+    cfg.agents
+        .defaults
+        .selection
+        .validate()
+        .map_err(user_error)?;
     if cfg.world.anchor_mode == WorldRootMode::Custom && cfg.world.anchor_path.trim().is_empty() {
         return Err(user_error(
             "anchor_mode=custom requires world.anchor_path to be non-empty",
@@ -3229,6 +3967,9 @@ fn validate_local_config(cfg: &SubstrateConfig) -> Result<()> {
 }
 
 fn validate_config_patch(patch: &SubstrateConfigPatch) -> Result<()> {
+    if let Some(selection) = &patch.agents.defaults.selection {
+        selection.validate().map_err(user_error)?;
+    }
     if let Some(default_backend) = patch.llm.routing.default_backend.as_deref() {
         validate_backend_id_or_empty(default_backend, "llm.routing.default_backend")?;
     }
@@ -3338,6 +4079,23 @@ fn apply_update_to_patch(patch: &mut SubstrateConfigPatch, update: &ConfigUpdate
             "llm.routing.default_backend",
         ),
         "agents.enabled" => apply_bool_opt(&mut patch.agents.enabled, &update.op, &update.value),
+        "agents.defaults.selection" => {
+            if update.op != UpdateOp::Set {
+                return Err(user_error(
+                    "agents.defaults.selection requires a complete replacement",
+                ));
+            }
+            let selection: AgentSelectionTupleV1 =
+                serde_json::from_str(&update.value).map_err(|error| {
+                    user_error(format!(
+                        "invalid complete agents.defaults.selection JSON: {error}"
+                    ))
+                })?;
+            selection.validate().map_err(user_error)?;
+            let changed = patch.agents.defaults.selection.as_ref() != Some(&selection);
+            patch.agents.defaults.selection = Some(selection);
+            Ok(changed)
+        }
         "agents.defaults.execution.scope" => apply_enum_agent_execution_scope_opt(
             &mut patch.agents.defaults.execution.scope,
             &update.op,
@@ -3401,6 +4159,7 @@ fn reset_patch_key(patch: &mut SubstrateConfigPatch, key: &str) -> Result<bool> 
         "llm.gateway.mode" => reset_opt(&mut patch.llm.gateway.mode),
         "llm.routing.default_backend" => reset_opt(&mut patch.llm.routing.default_backend),
         "agents.enabled" => reset_opt(&mut patch.agents.enabled),
+        "agents.defaults.selection" => reset_opt(&mut patch.agents.defaults.selection),
         "agents.defaults.execution.scope" => reset_opt(&mut patch.agents.defaults.execution.scope),
         "agents.defaults.cli.mode" => reset_opt(&mut patch.agents.defaults.cli.mode),
         "agents.hub.orchestrator_agent_id" => {
@@ -3757,6 +4516,25 @@ fn dedupe_ordered_set_in_place(items: &mut Vec<String>) {
 }
 
 #[cfg(test)]
+pub(crate) const PROTECTED_SELECTION_CONFIG_FIXTURES_V1: &[&str] = &[
+    "world: {anchor_path: &model exact-model}\nagents: {defaults: {selection: {harness: codex, provider: openai, connection_profile: 'built_in:codex-subscription', model: *model}}}\n",
+    "agents: {defaults: {selection: &tuple {harness: codex, provider: openai, connection_profile: 'built_in:codex-subscription', model: exact-model}}}\n",
+    "agents: &agents {defaults: {selection: {harness: codex, provider: openai, connection_profile: 'built_in:codex-subscription', model: exact-model}}}\n",
+    "agents: {defaults: {selection: {harness: codex, provider: !!str openai, connection_profile: 'built_in:codex-subscription', model: exact-model}}}\n",
+    "agents: {defaults: {<<: {selection: {harness: codex, provider: openai, connection_profile: 'built_in:codex-subscription', model: exact-model}}}}\n",
+    "agents: {defaults: {selection: {harness: codex}}}\n",
+    "agents: {defaults: {selection: {harness: codex, provider: openai, connection_profile: 'built_in:codex-subscription', model: exact-model, unknown: true}}}\n",
+    "agents: {connection_profiles: {'global:broken': {}}}\n",
+    "agents: {connection_profiles: {'global:broken': {revision: '', provider: openai, billing: subscription, endpoint_identity: openai-subscription, upstream_base_url: 'https://chatgpt.com/backend-api', auth: {auth_kind: codex_account, reference: configured-account}}}}\n",
+    "agents: {connection_profiles: {'workspace:team': {revision: '1', provider: openai, billing: subscription, endpoint_identity: openai-subscription, upstream_base_url: 'https://chatgpt.com/backend-api', auth: {auth_kind: codex_account, reference: configured-account}}}}\n",
+    "[{agents: {defaults: {selection: {harness: codex}}}}]\n",
+    "agents: [{defaults: {selection: {harness: codex}}}]\n",
+    "agents: {defaults: [{selection: {harness: codex}}]}\n",
+    "world: [\n",
+    "world: {enabled: invalid}\nagents: {defaults: {selection: {harness: codex, provider: openai, connection_profile: 'built_in:codex-subscription', model: pinned-model}}}\n",
+];
+
+#[cfg(test)]
 mod tests {
     use super::*;
     #[cfg(unix)]
@@ -3765,6 +4543,665 @@ mod tests {
     use std::ffi::OsString;
     use std::fs;
     use tempfile::TempDir;
+
+    fn compose_selection_test_layers(
+        global: &SubstrateConfigPatch,
+        global_path: &Path,
+        workspace: Option<(&SubstrateConfigPatch, &Path)>,
+    ) -> (SubstrateConfig, ConfigExplainV1) {
+        let (config, explain) = resolve_effective_from_layers(
+            global,
+            global_path,
+            workspace,
+            &EnvOverrides::default(),
+            &CliConfigOverrides::default(),
+            true,
+            true,
+        )
+        .unwrap();
+        (config, explain.unwrap())
+    }
+
+    #[test]
+    fn test_config_yaml_preserves_unrelated_and_mixed_aliases() {
+        let path = Path::new("/caller-held/config.yaml");
+        let selection = "agents:\n  defaults:\n    selection: {harness: codex, provider: openai, connection_profile: 'built_in:codex-subscription', model: exact-model}\n";
+        let world = "world:\n  enabled: &flag false\n  caged: *flag\n";
+        for raw in [
+            world.to_string(),
+            format!("{world}{selection}"),
+            format!("{world}{SELECTION_GLOBAL_PROFILE}").replace("world: {caged: false}\n", ""),
+        ] {
+            let patch = parse_config_patch_yaml(path, &raw).unwrap();
+            assert_eq!(patch.world.enabled, Some(false));
+            assert_eq!(patch.world.caged, Some(false));
+            assert_eq!(
+                patch.source_sha256,
+                Some(format!("{:x}", Sha256::digest(raw.as_bytes())))
+            );
+        }
+        for raw in [
+            "agents: &old {enabled: true, defaults: {execution: {scope: world}}}\n",
+            "world: {anchor_path: &word world}\nagents: {defaults: {execution: {scope: *word}}}\n",
+            "world: {enabled: !!bool false}\n",
+            "world:\n  anchor_path: |-\n    *text &text !text\n    ---\n",
+        ] {
+            parse_config_patch_yaml(path, raw).unwrap();
+        }
+        let raw = format!("{world}{selection}");
+        let overrides = CapturedConfigOverridesV1 {
+            environment: EnvOverrides::default(),
+            cli: CliConfigOverrides::default(),
+        };
+        let (config, _) = resolve_effective_config_from_sources_v1(
+            path,
+            Some(raw.as_bytes()),
+            Path::new("/caller-held/workspace.yaml"),
+            b"{}\n",
+            &overrides,
+            &substrate_broker::Policy::default(),
+        )
+        .unwrap();
+        assert!(!config.world.enabled && !config.world.caged);
+        assert_eq!(config.agents.defaults.selection.model, "exact-model");
+        assert!(config.selection_sources.is_empty());
+        assert!(config.selection_profiles.is_empty());
+        assert!(config.selection_preference_source.is_none());
+    }
+
+    #[test]
+    fn test_config_yaml_refuses_indirect_selection_profile_provenance() {
+        let path = Path::new("/caller-held/provenance.yaml");
+        let tuple = "{harness: codex, provider: openai, connection_profile: 'built_in:codex-subscription', model: exact-model}";
+        let attacks = [
+            format!("agents: {{defaults: {{selection: &tuple {tuple}}}}}\n"),
+            format!("agents: &agents {{defaults: {{selection: {tuple}}}}}\n"),
+            format!("agents: {{defaults: &defaults {{selection: {tuple}}}}}\n"),
+            format!("&root {{agents: {{defaults: {{selection: {tuple}}}}}}}\n"),
+            format!("!!map {{agents: {{defaults: {{selection: {tuple}}}}}}}\n"),
+            format!("agents: !!map {{defaults: {{selection: {tuple}}}}}\n"),
+            format!("agents: {{defaults: !!map {{selection: {tuple}}}}}\n"),
+            format!("agents: {{defaults: {{selection: !!map {tuple}}}}}\n"),
+            "world: {anchor_path: &model exact-model}\nagents: {defaults: {selection: {harness: codex, provider: openai, connection_profile: 'built_in:codex-subscription', model: *model}}}\n".into(),
+            "agents: {defaults: {selection: {harness: codex, provider: !!str openai, connection_profile: 'built_in:codex-subscription', model: exact-model}}}\n".into(),
+            format!("world: {{anchor_path: &key selection}}\nagents: {{defaults: {{*key : {tuple}}}}}\n"),
+            format!("agents: {{defaults: {{&key selection: {tuple}}}}}\n"),
+            format!("template: &template {{defaults: {{selection: {tuple}}}}}\nagents: *template\n"),
+            format!("template: &template {{selection: {tuple}}}\nagents: {{defaults: *template}}\n"),
+            format!("template: &template {tuple}\nagents: {{defaults: {{selection: *template}}}}\n"),
+            format!("<<: {{agents: {{defaults: {{selection: {tuple}}}}}}}\n"),
+            format!("template: &template {{agents: {{defaults: {{selection: {tuple}}}}}}}\n<<: [*template]\n"),
+            format!("agents: {{<<: {{defaults: {{selection: {tuple}}}}}}}\n"),
+            format!("agents: {{defaults: {{<<: {{selection: {tuple}}}}}}}\n"),
+            format!("agents: {{defaults: {{selection: {{<<: {tuple}, model: overridden}}}}}}\n"),
+            "agents: {connection_profiles: &profiles {}}\n".into(),
+            "agents: {connection_profiles: !!map {}}\n".into(),
+            "template: &profiles {}\nagents: {connection_profiles: *profiles}\n".into(),
+            "template: &agents {connection_profiles: {}}\nagents: *agents\n".into(),
+            "agents: {<<: {connection_profiles: {}}}\n".into(),
+            "world: {anchor_path: &key connection_profiles}\nagents: {*key : {}}\n".into(),
+            "agents: {connection_profiles: {<<: {}}}\n".into(),
+            SELECTION_GLOBAL_PROFILE.replace("revision: global-r1", "revision: &revision global-r1"),
+            SELECTION_GLOBAL_PROFILE.replace("reference: selected-account", "reference: !!str selected-account"),
+        ];
+        for raw in attacks {
+            let direct = validate_config_yaml_selection_paths_v1(path, &raw)
+                .unwrap_err()
+                .to_string();
+            assert!(
+                direct.contains("selection/profile YAML provenance"),
+                "{direct}; {raw}"
+            );
+            let integrated = parse_config_patch_yaml(path, &raw).unwrap_err().to_string();
+            assert!(
+                integrated.contains("selection/profile YAML provenance"),
+                "{integrated}"
+            );
+            assert!(integrated.contains(path.to_str().unwrap()));
+        }
+    }
+
+    #[test]
+    fn test_config_yaml_retains_structural_refusals_and_exact_source_hash() {
+        let path = Path::new("/caller-held/structure.yaml");
+        for raw in [
+            "world: {enabled: true, enabled: false}\n",
+            "agents: {connection_profiles: {'global:duplicate': {}, 'global:duplicate': {}}}\n",
+            "agents: {defaults: {selection: {harness: codex, provider: openai, provider: other, connection_profile: 'built_in:codex-subscription', model: m}}}\n",
+        ] {
+            assert!(parse_config_patch_yaml(path, raw).unwrap_err().to_string().contains("duplicate YAML mapping key"));
+        }
+        for raw in [
+            "world: {enabled: true, enabled: false}\n",
+            "agents: {defaults: {selection: {harness: codex, provider: openai, provider: other, connection_profile: 'built_in:codex-subscription', model: m}}}\n",
+            "agents: {connection_profiles: {'global:duplicate': {}, 'global:duplicate': {}}}\n",
+            "world: {}\n---\nworld: {}\n",
+            "---\nworld: {}\n---\nagents: {}\n",
+            "world: {unknown: true}\n",
+            "agents: {defaults: {selection: {harness: codex}}}\n",
+            "agents: {defaults: {selection: {harness: codex, provider: openai, connection_profile: 'built_in:codex-subscription', model: m, unknown: true}}}\n",
+            "agents: {connection_profiles: {'global:empty': {}}}\n",
+        ] {
+            assert!(parse_config_patch_yaml(path, raw).is_err(), "{raw}");
+        }
+        let raw = "world: {enabled: &flag false, caged: *flag}\n";
+        let first = parse_config_patch_yaml(path, raw).unwrap();
+        let second =
+            parse_config_patch_yaml(path, &format!("{raw}# same values, new raw revision\n"))
+                .unwrap();
+        assert_eq!(
+            serde_json::to_value(&first).unwrap(),
+            serde_json::to_value(&second).unwrap()
+        );
+        assert_ne!(first.source_sha256, second.source_sha256);
+        assert!(
+            first.captured_selection_source.is_none() && second.captured_selection_source.is_none()
+        );
+    }
+
+    #[test]
+    fn test_selection_defaults_replace_whole_block_and_reject_partial_unknown() {
+        let global_path = Path::new("/caller-held/global/config.yaml");
+        let workspace_path = Path::new("/caller-held/workspace/workspace.yaml");
+        let global = parse_config_patch_yaml(global_path,
+            "agents: {defaults: {selection: {harness: codex, provider: openai, connection_profile: 'global:subscription', model: global-model}}}\n").unwrap();
+        let workspace = parse_config_patch_yaml(workspace_path,
+            "agents: {defaults: {selection: {harness: claude_code, provider: anthropic, connection_profile: 'workspace:team', model: workspace-model}}}\n").unwrap();
+        let (config, explain) =
+            compose_selection_test_layers(&global, global_path, Some((&workspace, workspace_path)));
+        assert_eq!(
+            config.agents.defaults.selection,
+            workspace.agents.defaults.selection.clone().unwrap()
+        );
+        assert_eq!(
+            config.agents.defaults.selection.harness,
+            AgentHarnessFamilyV1::ClaudeCode
+        );
+        assert_eq!(config.agents.defaults.selection.provider, "anthropic");
+        assert_eq!(
+            config.agents.defaults.selection.connection_profile,
+            "workspace:team"
+        );
+        assert_eq!(config.agents.defaults.selection.model, "workspace-model");
+        assert_eq!(
+            explain.keys.0["agents.defaults.selection"].sources[0].layer,
+            "workspace_patch"
+        );
+        assert_eq!(
+            explain.keys.0["agents.defaults.selection"].sources[0]
+                .path
+                .as_deref(),
+            workspace_path.to_str()
+        );
+        let (without_workspace, _) = compose_selection_test_layers(&global, global_path, None);
+        assert_eq!(
+            without_workspace.agents.defaults.selection,
+            global.agents.defaults.selection.clone().unwrap()
+        );
+
+        let complete = serde_json::json!({"harness":"codex", "provider":"openai", "connection_profile":"global:subscription", "model":"exact-model"});
+        for path in [global_path, workspace_path] {
+            for missing in ["harness", "provider", "connection_profile", "model"] {
+                let mut partial = complete.clone();
+                partial.as_object_mut().unwrap().remove(missing);
+                let raw = format!("agents:\n  defaults:\n    selection: {}\n", partial);
+                assert!(parse_config_patch_yaml(path, &raw)
+                    .unwrap_err()
+                    .to_string()
+                    .contains(path.to_str().unwrap()));
+            }
+            let mut unknown = complete.clone();
+            unknown["agent_id"] = serde_json::json!("unapproved");
+            let raw = format!("agents:\n  defaults:\n    selection: {}\n", unknown);
+            assert!(parse_config_patch_yaml(path, &raw).is_err());
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_selection_source_cache_rechecks_exact_bytes_when_size_and_mtime_match() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        let temp = TempDir::new().unwrap();
+        let home = temp.path().join("home");
+        fs::create_dir(&home).unwrap();
+        let _home = EnvGuard::set("SUBSTRATE_HOME", &home);
+        let path = home.join("config.yaml");
+        fs::write(&path, SELECTION_GLOBAL_PROFILE).unwrap();
+        invalidate_config_cache();
+        let (first, _, _) = load_config_patch_layers_cached(temp.path()).unwrap();
+        let before = fs::metadata(&path).unwrap();
+        let changed = SELECTION_GLOBAL_PROFILE.replace("exact-model", "other-model");
+        assert_eq!(changed.len(), SELECTION_GLOBAL_PROFILE.len());
+        fs::write(&path, &changed).unwrap();
+        fs::File::open(&path)
+            .unwrap()
+            .set_modified(before.modified().unwrap())
+            .unwrap();
+        assert_eq!(
+            FileStatKey::for_path(&path).unwrap(),
+            FileStatKey {
+                exists: true,
+                mtime: before.modified().ok(),
+                size: Some(before.len())
+            }
+        );
+        let (second, _, _) = load_config_patch_layers_cached(temp.path()).unwrap();
+        assert_eq!(
+            first.agents.defaults.selection.as_ref().unwrap().model,
+            "exact-model"
+        );
+        assert_eq!(
+            second.agents.defaults.selection.as_ref().unwrap().model,
+            "other-model"
+        );
+        assert_ne!(first.source_sha256, second.source_sha256);
+        let (resolved, _) = compose_selection_test_layers(&second, &path, None);
+        let source = resolved.selection_preference_source.unwrap();
+        assert_eq!(
+            source.sha256,
+            format!("{:x}", Sha256::digest(changed.as_bytes()))
+        );
+        invalidate_config_cache();
+    }
+
+    const SELECTION_GLOBAL_PROFILE: &str = "agents:\n  defaults:\n    selection: {harness: codex, provider: openai, connection_profile: 'global:subscription', model: exact-model}\n  connection_profiles:\n    'global:subscription':\n      revision: global-r1\n      provider: openai\n      billing: subscription\n      endpoint_identity: openai-codex-subscription\n      upstream_base_url: https://chatgpt.com/backend-api\n      auth: {auth_kind: codex_account, reference: selected-account}\nworld: {caged: false}\n";
+
+    #[test]
+    fn test_selection_profile_semantics_refuse_invalid_pure_and_captured_inputs() {
+        let temp = TempDir::new().unwrap();
+        let global_path = temp.path().join("config.yaml");
+        let workspace_path = temp.path().join("workspace.yaml");
+        let overrides = CapturedConfigOverridesV1 {
+            environment: EnvOverrides::default(),
+            cli: CliConfigOverrides::default(),
+        };
+        let policy = substrate_broker::Policy::default();
+        let original: serde_json::Value = serde_yaml::from_str(SELECTION_GLOBAL_PROFILE).unwrap();
+        for scope in [
+            AgentSelectionSourceScopeV1::Global,
+            AgentSelectionSourceScopeV1::Workspace,
+        ] {
+            let id = format!("{}:subscription", scope.as_str());
+            let mut valid = original.clone();
+            let profile = valid["agents"]["connection_profiles"]
+                .as_object_mut()
+                .unwrap()
+                .remove("global:subscription")
+                .unwrap();
+            valid["agents"]["connection_profiles"][&id] = profile;
+            valid["agents"]["defaults"]["selection"]["connection_profile"] = serde_json::json!(id);
+            let path = if scope == AgentSelectionSourceScopeV1::Global {
+                &global_path
+            } else {
+                &workspace_path
+            };
+            let compose_pure = |raw: &str| {
+                let (global_bytes, workspace_bytes) =
+                    if scope == AgentSelectionSourceScopeV1::Global {
+                        (Some(raw.as_bytes()), b"{}\n".as_slice())
+                    } else {
+                        (None, raw.as_bytes())
+                    };
+                resolve_effective_config_from_sources_v1(
+                    &global_path,
+                    global_bytes,
+                    &workspace_path,
+                    workspace_bytes,
+                    &overrides,
+                    &policy,
+                )
+            };
+            let valid_raw = serde_yaml::to_string(&valid).unwrap();
+            let (pure, _) = compose_pure(&valid_raw).unwrap();
+            assert!(pure.selection_sources.is_empty());
+            assert!(pure.selection_profiles.is_empty());
+            assert!(pure.selection_preference_source.is_none());
+            let captured = parse_captured_config_patch(path, &valid_raw, scope).unwrap();
+            let empty = captured_absent_config_patch();
+            let (physical, _) = if scope == AgentSelectionSourceScopeV1::Global {
+                compose_selection_test_layers(&captured, &global_path, None)
+            } else {
+                compose_selection_test_layers(
+                    &empty,
+                    &global_path,
+                    Some((&captured, &workspace_path)),
+                )
+            };
+            assert_eq!(
+                serde_json::to_value(&pure).unwrap(),
+                serde_json::to_value(&physical).unwrap()
+            );
+            assert!(physical
+                .selection_profiles
+                .iter()
+                .any(|profile| profile.id == id));
+
+            let mut empty_profile = valid.clone();
+            empty_profile["agents"]["connection_profiles"][&id] = serde_json::json!({});
+            let raw = serde_yaml::to_string(&empty_profile).unwrap();
+            assert!(compose_pure(&raw).is_err());
+            assert!(parse_captured_config_patch(path, &raw, scope).is_err());
+
+            let cases = [
+                ("revision", serde_json::json!("")),
+                ("provider", serde_json::json!("")),
+                ("endpoint_identity", serde_json::json!("")),
+                ("upstream_base_url", serde_json::json!("")),
+                (
+                    "upstream_base_url",
+                    serde_json::json!("http://example.test/v1"),
+                ),
+                (
+                    "upstream_base_url",
+                    serde_json::json!("https://secret@example.test/v1"),
+                ),
+                (
+                    "auth",
+                    serde_json::json!({"auth_kind":"codex_account", "reference":""}),
+                ),
+                (
+                    "auth",
+                    serde_json::json!({"auth_kind":"api_key_environment", "name":""}),
+                ),
+                (
+                    "auth",
+                    serde_json::json!({"auth_kind":"api_key_environment", "name":"9BAD"}),
+                ),
+            ];
+            for (field, value) in cases {
+                let mut invalid = valid.clone();
+                invalid["agents"]["connection_profiles"][&id][field] = value;
+                let raw = serde_yaml::to_string(&invalid).unwrap();
+                let pure_error = compose_pure(&raw).unwrap_err().to_string();
+                let captured = parse_captured_config_patch(path, &raw, scope).unwrap();
+                let (global, workspace) = if scope == AgentSelectionSourceScopeV1::Global {
+                    (&captured, None)
+                } else {
+                    (&empty, Some((&captured, workspace_path.as_path())))
+                };
+                let physical_error = resolve_effective_from_layers(
+                    global,
+                    &global_path,
+                    workspace,
+                    &EnvOverrides::default(),
+                    &CliConfigOverrides::default(),
+                    true,
+                    true,
+                )
+                .unwrap_err()
+                .to_string();
+                assert_eq!(
+                    pure_error, physical_error,
+                    "same profile value checks for {scope:?}/{field}"
+                );
+                assert!(pure_error.contains(path.to_str().unwrap()), "{pure_error}");
+                assert!(
+                    pure_error.contains("invalid connection profile"),
+                    "{pure_error}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_selection_profiles_preserve_source_namespaces_endpoint_and_auth() {
+        let temp = TempDir::new().unwrap();
+        let global_path = temp.path().join("config.yaml");
+        let workspace_path = temp.path().join("workspace.yaml");
+        let global = parse_captured_config_patch(
+            &global_path,
+            SELECTION_GLOBAL_PROFILE,
+            AgentSelectionSourceScopeV1::Global,
+        )
+        .unwrap();
+        let workspace_raw = "agents:\n  defaults:\n    selection: {harness: codex, provider: openai, connection_profile: 'workspace:team', model: workspace-model}\n  connection_profiles:\n    'workspace:team':\n      revision: local-r2\n      provider: openai\n      billing: subscription\n      endpoint_identity: openai-codex-subscription\n      upstream_base_url: https://chatgpt.com/backend-api\n      auth: {auth_kind: codex_account, reference: local-account}\n";
+        let workspace = parse_captured_config_patch(
+            &workspace_path,
+            workspace_raw,
+            AgentSelectionSourceScopeV1::Workspace,
+        )
+        .unwrap();
+        let (config, _) = compose_selection_test_layers(
+            &global,
+            &global_path,
+            Some((&workspace, &workspace_path)),
+        );
+        let selected = config
+            .selection_profiles
+            .iter()
+            .find(|profile| profile.id == "global:subscription")
+            .unwrap();
+        assert_eq!(selected.revision, "global-r1");
+        assert_eq!(selected.source.scope, AgentSelectionSourceScopeV1::Global);
+        assert_eq!(selected.endpoint_identity, "openai-codex-subscription");
+        assert_eq!(
+            selected.upstream_base_url,
+            "https://chatgpt.com/backend-api"
+        );
+        assert_eq!(
+            selected.auth,
+            AgentConnectionAuthV1::CodexAccount {
+                reference: "selected-account".into()
+            }
+        );
+        let local = config
+            .selection_profiles
+            .iter()
+            .find(|profile| profile.id == "workspace:team")
+            .unwrap();
+        assert_eq!(local.source.scope, AgentSelectionSourceScopeV1::Workspace);
+        assert_eq!(
+            local.auth,
+            AgentConnectionAuthV1::CodexAccount {
+                reference: "local-account".into()
+            }
+        );
+        assert_eq!(config.agents.defaults.selection.model, "workspace-model");
+        assert_eq!(
+            config.agents.defaults.selection.connection_profile,
+            "workspace:team"
+        );
+        assert_eq!(
+            config.selection_preference_source.as_ref(),
+            Some(&local.source)
+        );
+        assert_eq!(
+            local.source.sha256,
+            format!("{:x}", Sha256::digest(workspace_raw.as_bytes()))
+        );
+        for malicious in [
+            workspace_raw.replace("workspace:team", "global:subscription"),
+            workspace_raw
+                .replace("workspace:team", "global:subscription")
+                .replace(
+                    "https://chatgpt.com/backend-api",
+                    "https://other.example/api",
+                ),
+            workspace_raw
+                .replace("workspace:team", "global:subscription")
+                .replace("local-account", "substituted-account"),
+            workspace_raw.replace("workspace:team", "built_in:codex-subscription"),
+        ] {
+            let patch = parse_config_patch_yaml(&workspace_path, &malicious).unwrap();
+            let error = resolve_effective_from_layers(
+                &global,
+                &global_path,
+                Some((&patch, &workspace_path)),
+                &EnvOverrides::default(),
+                &CliConfigOverrides::default(),
+                true,
+                true,
+            )
+            .unwrap_err();
+            assert!(error
+                .to_string()
+                .contains("cannot redefine another source namespace"));
+            assert!(error.to_string().contains(workspace_path.to_str().unwrap()));
+        }
+    }
+
+    #[test]
+    fn test_selection_complete_set_reset_preserves_unrelated_config_and_invalidates_capture() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("config.yaml");
+        let original = parse_captured_config_patch(
+            &path,
+            SELECTION_GLOBAL_PROFILE,
+            AgentSelectionSourceScopeV1::Global,
+        )
+        .unwrap();
+        let before = serde_json::to_value(&original).unwrap();
+        let replacement = serde_json::json!({"harness":"claude_code", "provider":"anthropic", "connection_profile":"workspace:team", "model":"changed-exact-model"});
+        for value in [
+            r#"{"harness":"codex"}"#,
+            r#"{"harness":"codex","provider":"openai","connection_profile":"global:subscription","model":"m","extra":true}"#,
+        ] {
+            let mut patch = original.clone();
+            let update = ConfigUpdate {
+                key: "agents.defaults.selection".into(),
+                op: UpdateOp::Set,
+                value: value.into(),
+            };
+            assert!(apply_updates_to_patch(&mut patch, &[update]).is_err());
+            assert_eq!(patch, original);
+        }
+        for op in [UpdateOp::Append, UpdateOp::Remove] {
+            let mut patch = original.clone();
+            assert!(apply_updates_to_patch(
+                &mut patch,
+                &[ConfigUpdate {
+                    key: "agents.defaults.selection".into(),
+                    op,
+                    value: replacement.to_string()
+                }]
+            )
+            .is_err());
+            assert_eq!(patch, original);
+        }
+        let mut patch = original.clone();
+        let update = ConfigUpdate {
+            key: "agents.defaults.selection".into(),
+            op: UpdateOp::Set,
+            value: replacement.to_string(),
+        };
+        assert!(apply_updates_to_patch(&mut patch, std::slice::from_ref(&update)).unwrap());
+        let mut expected = before.clone();
+        expected["agents"]["defaults"]["selection"] = replacement;
+        assert_eq!(serde_json::to_value(&patch).unwrap(), expected);
+        assert!(patch.captured_selection_source.is_none());
+        assert!(patch.source_sha256.is_none());
+        assert!(!apply_updates_to_patch(&mut patch, &[update]).unwrap());
+        assert!(reset_patch_keys(&mut patch, &["agents.defaults.selection".into()]).unwrap());
+        expected["agents"]["defaults"]
+            .as_object_mut()
+            .unwrap()
+            .remove("selection");
+        if expected["agents"]["defaults"]
+            .as_object()
+            .unwrap()
+            .is_empty()
+        {
+            expected["agents"]
+                .as_object_mut()
+                .unwrap()
+                .remove("defaults");
+        }
+        assert_eq!(serde_json::to_value(&patch).unwrap(), expected);
+        assert!(!reset_patch_keys(&mut patch, &["agents.defaults.selection".into()]).unwrap());
+        let roundtrip =
+            parse_config_patch_yaml(&path, &serde_yaml::to_string(&patch).unwrap()).unwrap();
+        assert_eq!(serde_json::to_value(&roundtrip).unwrap(), expected);
+        assert_eq!(
+            roundtrip.agents.connection_profiles,
+            original.agents.connection_profiles
+        );
+    }
+
+    #[test]
+    fn test_selection_source_capture_is_separate_from_caller_held_pure_composition() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("config.yaml");
+        let raw = SELECTION_GLOBAL_PROFILE;
+        let captured =
+            parse_captured_config_patch(&path, raw, AgentSelectionSourceScopeV1::Global).unwrap();
+        let captured_source = match captured.captured_selection_source.as_ref().unwrap() {
+            CapturedSelectionConfigSourceV1::Present(source) => source.clone(),
+            CapturedSelectionConfigSourceV1::Absent => panic!("present source required"),
+        };
+        assert_eq!(captured_source.scope, AgentSelectionSourceScopeV1::Global);
+        assert_eq!(captured_source.relative_path, "config.yaml");
+        assert_eq!(
+            captured_source.sha256,
+            format!("{:x}", Sha256::digest(raw.as_bytes()))
+        );
+        assert_eq!(captured_source.revision, captured_source.sha256);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            let metadata = fs::metadata(temp.path()).unwrap();
+            assert_eq!(
+                captured_source.root_identity,
+                format!(
+                    "{}:{}:{}",
+                    metadata.dev(),
+                    metadata.ino(),
+                    temp.path().canonicalize().unwrap().display()
+                )
+            );
+        }
+        // Removing the real source root after capture must not add I/O to composition.
+        temp.close().unwrap();
+        let (physical, _) = compose_selection_test_layers(&captured, &path, None);
+        assert_eq!(
+            physical.selection_preference_source.as_ref(),
+            Some(&captured_source)
+        );
+        assert!(physical.selection_sources.contains(&captured_source));
+        let selected = physical
+            .selection_profiles
+            .iter()
+            .find(|profile| profile.id == "global:subscription")
+            .unwrap();
+        assert_eq!(selected.source, captured_source);
+        let pure_patch = parse_config_patch_yaml(&path, raw).unwrap();
+        let (pure, _) = compose_selection_test_layers(&pure_patch, &path, None);
+        assert_eq!(
+            serde_json::to_value(&pure).unwrap(),
+            serde_json::to_value(&physical).unwrap()
+        );
+        assert!(pure.selection_sources.is_empty());
+        assert!(pure.selection_profiles.is_empty());
+        assert!(pure.selection_preference_source.is_none());
+        let overrides = CapturedConfigOverridesV1 {
+            environment: EnvOverrides::default(),
+            cli: CliConfigOverrides::default(),
+        };
+        let (caller_held, _) = resolve_effective_config_from_sources_v1(
+            &path,
+            Some(raw.as_bytes()),
+            Path::new("/unopened/workspace/workspace.yaml"),
+            b"{}\n",
+            &overrides,
+            &substrate_broker::Policy::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            caller_held.agents.defaults.selection,
+            physical.agents.defaults.selection
+        );
+        assert!(caller_held.selection_sources.is_empty());
+        assert!(caller_held.selection_profiles.is_empty());
+        assert!(caller_held.selection_preference_source.is_none());
+        let snapshot = crate::execution::agent_inventory::AgentInventorySnapshotV3 {
+            entries: BTreeMap::new(),
+            definitions: Vec::new(),
+        };
+        assert!(snapshot
+            .resolve_selection(&caller_held, None, None, AgentExecutionScope::Host)
+            .unwrap_err()
+            .to_string()
+            .contains("no captured source"));
+    }
 
     #[test]
     #[serial]
@@ -3865,7 +5302,20 @@ mod tests {
             true,
         )
         .unwrap();
-        assert_eq!(snapshot.effective, compatibility.0);
+        // Preserve equality of every semantic configuration field; physical
+        // capture metadata now belongs only to the ordinary source owner.
+        assert_eq!(
+            serde_json::to_value(&snapshot.effective).unwrap(),
+            serde_json::to_value(&compatibility.0).unwrap()
+        );
+        assert!(snapshot.effective.selection_sources.is_empty());
+        assert!(snapshot.effective.selection_profiles.is_empty());
+        assert!(snapshot.effective.selection_preference_source.is_none());
+        assert_eq!(compatibility.0.selection_sources.len(), 1);
+        assert_eq!(
+            compatibility.0.selection_sources[0].scope,
+            AgentSelectionSourceScopeV1::BuiltIn
+        );
         assert_eq!(
             serde_json::to_value(&snapshot.explain).unwrap(),
             serde_json::to_value(compatibility.1.unwrap()).unwrap()
@@ -3900,6 +5350,19 @@ mod tests {
         .expect("write selected config");
         let workspace = TempDir::new().expect("workspace");
         let authority = HostSessionAuthority::open(selected.path()).expect("open authority");
+        // A selected config remains subject to the trusted-reader mode rule.
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(
+            selected.path().join("config.yaml"),
+            fs::Permissions::from_mode(0o644),
+        )
+        .unwrap();
+        assert!(authority.bootstrap_home().read_config_yaml().is_err());
+        fs::set_permissions(
+            selected.path().join("config.yaml"),
+            fs::Permissions::from_mode(0o600),
+        )
+        .unwrap();
         let (config, explain) = resolve_effective_config_with_explain_for_bootstrap_home(
             workspace.path(),
             &CliConfigOverrides::default(),
@@ -3909,6 +5372,17 @@ mod tests {
         .expect("resolve selected config");
 
         assert!(config.sync.auto_sync);
+        let global_source = config
+            .selection_sources
+            .iter()
+            .find(|source| source.scope == AgentSelectionSourceScopeV1::Global)
+            .unwrap();
+        assert_eq!(global_source.relative_path, "config.yaml");
+        assert_eq!(
+            global_source.sha256,
+            format!("{:x}", Sha256::digest(b"sync:\n  auto_sync: true\n"))
+        );
+        assert_eq!(global_source.revision, global_source.sha256);
         let explain =
             serde_json::to_string(&explain.expect("explain payload")).expect("serialize explain");
         assert!(explain.contains(&selected.path().join("config.yaml").display().to_string()));
@@ -5059,5 +6533,57 @@ world:
         let bytes_1 = serde_json::to_vec_pretty(&explain_1.unwrap()).unwrap();
         let bytes_2 = serde_json::to_vec_pretty(&explain_2.unwrap()).unwrap();
         assert_eq!(bytes_1, bytes_2);
+    }
+
+    #[test]
+    fn test_full_settings_rejects_protected_provenance() {
+        let raw = "world: {anchor_path: &model exact-model}\nagents: {defaults: {selection: {harness: codex, provider: openai, connection_profile: 'built_in:codex-subscription', model: *model}}}\n";
+        assert!(parse_config_yaml(Path::new("/caller-held/config.yaml"), raw).is_err());
+    }
+
+    #[test]
+    fn test_full_settings_selection_errors_are_typed() {
+        let path = Path::new("/caller-held/config.yaml");
+        for raw in PROTECTED_SELECTION_CONFIG_FIXTURES_V1 {
+            let error = parse_config_yaml(path, raw).unwrap_err();
+            assert!(
+                is_protected_selection_config_error_v1(&error),
+                "{error:#}; {raw}"
+            );
+            assert!(is_protected_selection_config_error_v1(
+                &error.context("outer writer")
+            ));
+        }
+        for raw in [
+            "world: {enabled: invalid}\n",
+            "[{world: {enabled: invalid}}]\n",
+            "agents: [{enabled: invalid}]\n",
+            "agents: {defaults: [{execution: invalid}]}\n",
+        ] {
+            let error = parse_config_yaml(path, raw).unwrap_err();
+            assert!(
+                !is_protected_selection_config_error_v1(&error),
+                "{error:#}; {raw}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_full_settings_selection_guard_preserves_generic_anchors() {
+        let path = Path::new("/caller-held/config.yaml");
+        for raw in [
+            "world: {enabled: &flag false, caged: *flag}\n".to_string(),
+            "world: {enabled: &flag false, caged: *flag}\nagents: {defaults: {selection: {harness: codex, provider: openai, connection_profile: 'built_in:codex-subscription', model: pinned-model}}}\n".to_string(),
+            SELECTION_GLOBAL_PROFILE.replace("world: {caged: false}", "world: {enabled: &flag false, caged: *flag}"),
+        ] {
+            let cfg = parse_config_yaml(path, &raw).unwrap();
+            assert!(!cfg.world.enabled && !cfg.world.caged);
+            assert!(cfg.selection_sources.is_empty());
+            assert!(cfg.selection_profiles.is_empty());
+            assert!(cfg.selection_preference_source.is_none());
+            if raw.contains("pinned-model") {
+                assert_eq!(cfg.agents.defaults.selection.model, "pinned-model");
+            }
+        }
     }
 }

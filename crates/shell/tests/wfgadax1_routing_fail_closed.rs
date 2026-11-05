@@ -3,9 +3,24 @@
 mod support;
 
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use support::{temp_dir, AgentSocket, SocketResponse};
+use support::{AgentSocket, SocketResponse};
 use tempfile::Builder;
+
+fn secure_temp_dir(prefix: &str) -> tempfile::TempDir {
+    // Match the existing private native fixtures; shared_tmpdir mutates TMPDIR.
+    let parent = std::env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(format!("/run/user/{}", unsafe { libc::geteuid() })));
+    let temp = Builder::new()
+        .prefix(prefix)
+        .tempdir_in(parent)
+        .expect("allocate secure routing fixture root");
+    fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))
+        .expect("secure owned routing fixture root");
+    temp
+}
 
 fn manager_manifest_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/manager_hooks.yaml")
@@ -37,7 +52,14 @@ metadata: {{}}
 "#
     );
     fs::create_dir_all(substrate_home).expect("create SUBSTRATE_HOME");
+    fs::set_permissions(substrate_home, fs::Permissions::from_mode(0o700))
+        .expect("secure private install prefix");
     fs::write(substrate_home.join("policy.yaml"), profile).expect("write policy.yaml");
+    fs::set_permissions(
+        substrate_home.join("policy.yaml"),
+        fs::Permissions::from_mode(0o600),
+    )
+    .expect("secure private policy source");
 }
 
 fn base_cmd(project_dir: &Path, home_dir: &Path, trace_path: &Path) -> assert_cmd::Command {
@@ -49,13 +71,15 @@ fn base_cmd(project_dir: &Path, home_dir: &Path, trace_path: &Path) -> assert_cm
         .env("SUBSTRATE_MANAGER_MANIFEST", manager_manifest_path())
         .env("SHIM_TRACE_LOG", trace_path)
         .env("SUBSTRATE_CAGED", "0")
+        .arg("--install-prefix")
+        .arg(home_dir.join(".substrate"))
         .arg("--uncaged");
     cmd
 }
 
 #[test]
 fn wfgadax1_fail_closed_routing_true_world_disabled_hard_errors_exit_2() {
-    let temp = temp_dir("substrate-wfgadax1-world-disabled-");
+    let temp = secure_temp_dir("substrate-wfgadax1-world-disabled-");
     let home = temp.path().join("home");
     let project = temp.path().join("project");
     fs::create_dir_all(home.join(".substrate")).expect("create SUBSTRATE_HOME");
@@ -89,10 +113,7 @@ fn wfgadax1_fail_closed_routing_true_world_disabled_hard_errors_exit_2() {
 
 #[test]
 fn wfgadax1_runtime_routing_fail_closed_missing_socket_maps_to_exit_3() {
-    let temp = Builder::new()
-        .prefix("substrate-wfgadax1-world-missing-")
-        .tempdir_in("/tmp")
-        .expect("create missing-socket tempdir");
+    let temp = secure_temp_dir("substrate-wfgadax1-world-missing-");
     let home = temp.path().join("home");
     let project = temp.path().join("project");
     fs::create_dir_all(home.join(".substrate")).expect("create SUBSTRATE_HOME");
@@ -102,8 +123,15 @@ fn wfgadax1_runtime_routing_fail_closed_missing_socket_maps_to_exit_3() {
     let trace_path = temp.path().join("trace.jsonl");
     fs::write(&trace_path, "").expect("seed trace log");
 
-    let socket_path = temp.path().join("sockdir/missing.sock");
-    fs::create_dir_all(socket_path.parent().expect("socket parent")).expect("create socket dir");
+    let socket_dir = Builder::new()
+        .prefix("substrate-wfgadax1-missing-sock-")
+        .tempdir_in("/tmp")
+        .expect("create short missing-socket directory");
+    let socket_path = socket_dir.path().join("missing.sock");
+    assert!(
+        socket_path.as_os_str().len() < 108,
+        "owned socket path must fit Linux sockaddr_un"
+    );
 
     let marker = "__wfgadax1_missing_socket__";
     let assert = base_cmd(&project, &home, &trace_path)
@@ -124,7 +152,7 @@ fn wfgadax1_runtime_routing_fail_closed_missing_socket_maps_to_exit_3() {
 
 #[test]
 fn wfgadax1_runtime_routing_fail_closed_strategy_unavailable_maps_to_exit_4() {
-    let temp = temp_dir("substrate-wfgadax1-strategy-unavailable-");
+    let temp = secure_temp_dir("substrate-wfgadax1-strategy-unavailable-");
     let home = temp.path().join("home");
     let project = temp.path().join("project");
     fs::create_dir_all(home.join(".substrate")).expect("create SUBSTRATE_HOME");
@@ -141,9 +169,11 @@ fn wfgadax1_runtime_routing_fail_closed_strategy_unavailable_maps_to_exit_4() {
     let socket_path: PathBuf = socket_dir.path().join("world-service.sock");
     let _socket = AgentSocket::start(
         &socket_path,
-        SocketResponse::CapabilitiesAndExecuteStreamError {
-            message: "WORLD_FS_STRATEGY_UNAVAILABLE fallback_reason=fallback_mount_failed"
-                .to_string(),
+        SocketResponse::CapabilitiesAndCurrentPlainCommandStream {
+            scopes: vec![],
+            error: Some(
+                "WORLD_FS_STRATEGY_UNAVAILABLE fallback_reason=fallback_mount_failed".to_string(),
+            ),
         },
     );
 
@@ -167,7 +197,7 @@ fn wfgadax1_runtime_routing_fail_closed_strategy_unavailable_maps_to_exit_4() {
 
 #[test]
 fn wfgadax1_exports_fail_closed_routing_state_env_var_and_deletes_require_world() {
-    let temp = temp_dir("substrate-wfgadax1-exported-env-");
+    let temp = secure_temp_dir("substrate-wfgadax1-exported-env-");
     let home = temp.path().join("home");
     let project = temp.path().join("project");
     fs::create_dir_all(home.join(".substrate")).expect("create SUBSTRATE_HOME");
@@ -183,7 +213,10 @@ fn wfgadax1_exports_fail_closed_routing_state_env_var_and_deletes_require_world(
     let socket_path: PathBuf = socket_dir.path().join("world-service.sock");
     let _socket = AgentSocket::start(
         &socket_path,
-        SocketResponse::CapabilitiesAndHostExecute { scopes: vec![] },
+        SocketResponse::CapabilitiesAndCurrentPlainCommandStream {
+            scopes: vec![],
+            error: None,
+        },
     );
 
     // Policy-derived state should override any input env value.
@@ -212,7 +245,7 @@ fn wfgadax1_exports_fail_closed_routing_state_env_var_and_deletes_require_world(
 
 #[test]
 fn wfgadax1_exports_fail_closed_routing_state_false_is_0_and_output_only() {
-    let temp = temp_dir("substrate-wfgadax1-exported-env-false-");
+    let temp = secure_temp_dir("substrate-wfgadax1-exported-env-false-");
     let home = temp.path().join("home");
     let project = temp.path().join("project");
     fs::create_dir_all(home.join(".substrate")).expect("create SUBSTRATE_HOME");
@@ -228,7 +261,10 @@ fn wfgadax1_exports_fail_closed_routing_state_false_is_0_and_output_only() {
     let socket_path: PathBuf = socket_dir.path().join("world-service.sock");
     let _socket = AgentSocket::start(
         &socket_path,
-        SocketResponse::CapabilitiesAndHostExecute { scopes: vec![] },
+        SocketResponse::CapabilitiesAndCurrentPlainCommandStream {
+            scopes: vec![],
+            error: None,
+        },
     );
 
     write_policy(&home.join(".substrate"), false);

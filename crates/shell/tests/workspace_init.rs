@@ -6,11 +6,13 @@ use assert_cmd::Command;
 use common::{substrate_shell_driver, temp_dir};
 use serde_yaml::Value as YamlValue;
 use std::fs;
+use std::os::unix::fs::DirBuilderExt;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 struct WorkspaceFixture {
     _temp: TempDir,
+    _context_temp: TempDir,
     home: PathBuf,
     substrate_home: PathBuf,
 }
@@ -18,12 +20,28 @@ struct WorkspaceFixture {
 impl WorkspaceFixture {
     fn new() -> Self {
         let temp = temp_dir("substrate-workspace-");
-        let home = temp.path().join("home");
-        fs::create_dir_all(&home).expect("failed to create HOME fixture");
-        let substrate_home = temp.path().join("substrate-home");
-        fs::create_dir_all(&substrate_home).expect("failed to create SUBSTRATE_HOME fixture");
+        // The authority context needs protected ancestors; workspace targets
+        // remain owned children of sticky /tmp to exercise ordinary CLI writes.
+        let context_temp = tempfile::Builder::new()
+            .prefix("substrate-workspace-context-")
+            .tempdir_in(
+                fs::canonicalize(common::shared_tmpdir())
+                    .expect("failed to resolve protected test parent"),
+            )
+            .expect("failed to create protected invocation context");
+        let home = context_temp.path().join("home");
+        fs::DirBuilder::new()
+            .mode(0o700)
+            .create(&home)
+            .expect("failed to create HOME fixture");
+        let substrate_home = context_temp.path().join("substrate-home");
+        fs::DirBuilder::new()
+            .mode(0o700)
+            .create(&substrate_home)
+            .expect("failed to create SUBSTRATE_HOME fixture");
         Self {
             _temp: temp,
+            _context_temp: context_temp,
             home,
             substrate_home,
         }
@@ -31,7 +49,9 @@ impl WorkspaceFixture {
 
     fn command(&self) -> Command {
         let mut cmd = substrate_shell_driver();
-        cmd.env("HOME", &self.home)
+        cmd.arg("--install-prefix")
+            .arg(&self.substrate_home)
+            .env("HOME", &self.home)
             .env("USERPROFILE", &self.home)
             .env("SUBSTRATE_HOME", &self.substrate_home);
         cmd

@@ -341,6 +341,75 @@ impl Service<Uri> for UnixConnectorService {
     }
 }
 
+/// Dedicated one-request connection: endpoint authentication applies to the stream carrying
+/// the request, with no pool reuse or check-then-connect gap. Root is the service custodian.
+#[cfg(target_os = "linux")]
+pub(crate) async fn workspace_current_on_authenticated_uds_v1(
+    path: &Path,
+    bytes: Vec<u8>,
+) -> Result<Vec<u8>> {
+    workspace_owner_on_authenticated_uds_v1(path, bytes, "/v1/workspace/current").await
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) async fn workspace_owner_on_authenticated_uds_v1(
+    path: &Path,
+    bytes: Vec<u8>,
+    route: &'static str,
+) -> Result<Vec<u8>> {
+    anyhow::ensure!(
+        matches!(
+            route,
+            "/v1/workspace/current" | "/v1/workspace/preflight" | "/v1/workspace/association"
+        ),
+        "Unsupported"
+    );
+    use http_body_util::BodyExt;
+    use std::os::unix::fs::{FileTypeExt, MetadataExt};
+    let before = std::fs::symlink_metadata(path)?;
+    if !before.file_type().is_socket() || before.uid() != 0 {
+        anyhow::bail!("Unsupported");
+    }
+    let stream = UnixStream::connect(path).await?;
+    let peer = stream.peer_cred()?;
+    let after = std::fs::symlink_metadata(path)?;
+    if peer.uid() != 0
+        || before.dev() != after.dev()
+        || before.ino() != after.ino()
+        || before.uid() != after.uid()
+        || before.mode() != after.mode()
+    {
+        anyhow::bail!("WrongBinding");
+    }
+    let (mut sender, connection) =
+        hyper::client::conn::http1::handshake(TokioIo::new(stream)).await?;
+    let task = tokio::spawn(connection);
+    let result = async {
+        let request = hyper::Request::builder()
+            .method(hyper::Method::POST)
+            .uri(route)
+            .header("host", "localhost")
+            .header("content-type", "application/json")
+            .header("connection", "close")
+            .body(Full::new(Bytes::from(bytes)))?;
+        let response = sender.send_request(request).await?;
+        if !response.status().is_success() {
+            anyhow::bail!("Refused");
+        }
+        let bytes = http_body_util::Limited::new(response.into_body(), 32768)
+            .collect()
+            .await
+            .map_err(|error| anyhow::Error::msg(error.to_string()))?
+            .to_bytes();
+        Ok(bytes.to_vec())
+    }
+    .await;
+    drop(sender);
+    task.abort();
+    let _ = task.await;
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

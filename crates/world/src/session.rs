@@ -113,6 +113,8 @@ pub struct SessionWorld {
     pub started_at: SystemTime,
     pub network_filter: Option<crate::netfilter::NetFilter>,
     pub fs_by_span: HashMap<String, FsDiff>,
+    custody_incarnation: String,
+    custody_revision: std::sync::atomic::AtomicU64,
     shared_binding: Option<SharedWorldBindingSnapshot>,
     policy_snapshot_hash: Option<String>,
     exact_adoption_policy_ref_id: Option<String>,
@@ -256,6 +258,8 @@ impl SessionWorld {
             started_at: SystemTime::now(),
             network_filter: None,
             fs_by_span: HashMap::new(),
+            custody_incarnation: uuid::Uuid::now_v7().to_string(),
+            custody_revision: std::sync::atomic::AtomicU64::new(1),
             shared_binding,
             policy_snapshot_hash: None,
             exact_adoption_policy_ref_id: None,
@@ -733,6 +737,8 @@ impl SessionWorld {
             started_at: UNIX_EPOCH + Duration::from_millis(metadata.started_at_unix_millis),
             network_filter: None,
             fs_by_span: HashMap::new(),
+            custody_incarnation: uuid::Uuid::now_v7().to_string(),
+            custody_revision: std::sync::atomic::AtomicU64::new(1),
             shared_binding,
             policy_snapshot_hash: metadata.policy_snapshot_hash,
             exact_adoption_policy_ref_id: metadata.exact_adoption_policy_ref_id,
@@ -793,6 +799,7 @@ impl SessionWorld {
     }
 
     pub(crate) fn persist_metadata(&self) -> Result<()> {
+        self.advance_custody_revision()?;
         let metadata_dir = Self::metadata_dir(&self.root_dir, &self.id);
         fs::create_dir_all(&metadata_dir)
             .with_context(|| format!("failed to create {}", metadata_dir.display()))?;
@@ -917,6 +924,9 @@ impl SessionWorld {
 
         let current = Self::read_canonical_metadata(&durable_metadata_path)?;
         let desired = Self::exact_bound_world_adoption_metadata(&current, adoption)?;
+        if current != desired || durable_temp_path.exists() {
+            self.advance_custody_revision()?;
+        }
 
         if durable_temp_path.exists() {
             if !Self::is_real_file(&durable_temp_path) {
@@ -2102,6 +2112,307 @@ impl Drop for SessionWorld {
     }
 }
 
+#[cfg(target_os = "linux")]
+type CustodyFileIdentityV1 = (u64, u64, u32, u32, u64, i64, i64, i64, i64);
+
+/// Sealed observation of one existing cached producer and its held physical metadata.
+/// It is never deserialized, persisted, or manufactured by a read.
+#[cfg(target_os = "linux")]
+pub struct ExistingWorldCustodyV1<'a> {
+    world: &'a SessionWorld,
+    root: fs::File,
+    directory: fs::File,
+    metadata: fs::File,
+    bytes: Vec<u8>,
+    root_identity: (u64, u64, u32, u32),
+    directory_identity: (u64, u64, u32, u32),
+    file_identity: CustodyFileIdentityV1,
+    revision: u64,
+    binding_ref: String,
+}
+
+impl SessionWorld {
+    fn advance_custody_revision(&self) -> Result<()> {
+        self.custody_revision
+            .fetch_update(
+                std::sync::atomic::Ordering::SeqCst,
+                std::sync::atomic::Ordering::SeqCst,
+                |revision| revision.checked_add(1),
+            )
+            .map_err(|_| anyhow!("custody revision exhausted"))?;
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn read_existing_custody_nonreconciling(
+        &self,
+        trusted_root: &Path,
+        session: &str,
+        world_id: &str,
+        generation: u64,
+        project: &Path,
+    ) -> Result<ExistingWorldCustodyV1<'_>> {
+        use std::os::fd::AsRawFd;
+        use std::os::unix::fs::OpenOptionsExt;
+        if self.root_dir != trusted_root
+            || self.id != world_id
+            || self.project_dir != project
+            || !matches!(&self.shared_binding, Some(binding) if binding.orchestration_session_id == session
+                && binding.world_id == world_id && binding.world_generation == generation
+                && binding.binding_state == SharedWorldBindingState::Active)
+        {
+            anyhow::bail!("custody binding mismatch");
+        }
+        let mut root = fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NOATIME)
+            .open("/")?;
+        for part in trusted_root.components() {
+            match part {
+                std::path::Component::RootDir => {}
+                std::path::Component::Normal(name) => {
+                    root = open_custody_at_v1(&root, name, true)?;
+                }
+                _ => anyhow::bail!("unsupported custody root"),
+            }
+        }
+        if unsafe { libc::flock(root.as_raw_fd(), libc::LOCK_SH | libc::LOCK_NB) } != 0 {
+            return Err(std::io::Error::last_os_error()).context("custody root busy");
+        }
+        let directory = open_custody_at_v1(&root, std::ffi::OsStr::new(world_id), true)?;
+        let metadata = open_custody_at_v1(
+            &directory,
+            std::ffi::OsStr::new(SESSION_METADATA_FILE_NAME),
+            false,
+        )?;
+        let root_identity = custody_directory_identity_v1(&root)?;
+        let directory_identity = custody_directory_identity_v1(&directory)?;
+        let file_identity = custody_file_identity_v1(&metadata)?;
+        let bytes = read_custody_bytes_v1(&metadata)?;
+        let expected = serde_json::to_vec_pretty(&self.to_metadata()?)?;
+        if bytes != expected {
+            anyhow::bail!("custody metadata is stale or corrupt");
+        }
+        let revision = self
+            .custody_revision
+            .load(std::sync::atomic::Ordering::SeqCst);
+        let material = serde_json::to_vec(&(
+            "substrate.existing-world-custody.v1",
+            &self.custody_incarnation,
+            revision,
+            session,
+            world_id,
+            generation,
+            project,
+            root_identity,
+            directory_identity,
+            file_identity,
+            &bytes,
+        ))?;
+        let binding_ref = format!("{:x}", Sha256::digest(material));
+        let held = ExistingWorldCustodyV1 {
+            world: self,
+            root,
+            directory,
+            metadata,
+            bytes,
+            root_identity,
+            directory_identity,
+            file_identity,
+            revision,
+            binding_ref,
+        };
+        held.revalidate()?;
+        Ok(held)
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn open_custody_at_v1(
+    directory: &fs::File,
+    name: &std::ffi::OsStr,
+    is_directory: bool,
+) -> Result<fs::File> {
+    use std::os::fd::{AsRawFd, FromRawFd};
+    use std::os::unix::ffi::OsStrExt;
+    let name = std::ffi::CString::new(name.as_bytes())?;
+    let flags = libc::O_RDONLY
+        | libc::O_CLOEXEC
+        | libc::O_NOFOLLOW
+        | libc::O_NONBLOCK
+        | libc::O_NOATIME
+        | if is_directory { libc::O_DIRECTORY } else { 0 };
+    let fd = unsafe { libc::openat(directory.as_raw_fd(), name.as_ptr(), flags) };
+    if fd < 0 {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    Ok(unsafe { fs::File::from_raw_fd(fd) })
+}
+
+#[cfg(target_os = "linux")]
+fn custody_directory_identity_v1(file: &fs::File) -> Result<(u64, u64, u32, u32)> {
+    use std::os::unix::fs::MetadataExt;
+    let meta = file.metadata()?;
+    if !meta.is_dir()
+        || meta.uid() != unsafe { libc::geteuid() }
+        || meta.mode() & 0o7022 != 0
+        || meta.mode() & 0o700 != 0o700
+    {
+        anyhow::bail!("unsafe custody directory");
+    }
+    Ok((meta.dev(), meta.ino(), meta.uid(), meta.mode()))
+}
+
+#[cfg(target_os = "linux")]
+fn custody_file_identity_v1(file: &fs::File) -> Result<CustodyFileIdentityV1> {
+    use std::os::unix::fs::MetadataExt;
+    let meta = file.metadata()?;
+    if !meta.is_file()
+        || meta.uid() != unsafe { libc::geteuid() }
+        || meta.nlink() != 1
+        || meta.mode() & 0o7133 != 0
+        || meta.mode() & 0o600 != 0o600
+        || meta.len() > 65536
+    {
+        anyhow::bail!("unsafe custody file");
+    }
+    Ok((
+        meta.dev(),
+        meta.ino(),
+        meta.uid(),
+        meta.mode(),
+        meta.len(),
+        meta.mtime(),
+        meta.mtime_nsec(),
+        meta.ctime(),
+        meta.ctime_nsec(),
+    ))
+}
+
+#[cfg(target_os = "linux")]
+fn read_custody_bytes_v1(file: &fs::File) -> Result<Vec<u8>> {
+    use std::os::unix::fs::FileExt;
+    let size = file.metadata()?.len();
+    if size > 65536 {
+        anyhow::bail!("custody record too large");
+    }
+    let mut bytes = vec![0; size as usize];
+    file.read_exact_at(&mut bytes, 0)?;
+    Ok(bytes)
+}
+
+#[cfg(target_os = "linux")]
+impl ExistingWorldCustodyV1<'_> {
+    /// Return placement facts for an exact cached producer and one complete
+    /// caller-supplied physical recipe. This read grants no execution permission.
+    /// The surrounding custody closure finalizes its guards on success or error.
+    ///
+    /// ```no_run
+    /// # fn inspect(held: &world::session::ExistingWorldCustodyV1<'_>,
+    /// #            expected: world_api::WorldSpec) -> anyhow::Result<()> {
+    /// let (spec, world, path, cgroup) = held.world_placement_for_specs_v1(&[expected])?;
+    /// # let _ = (spec, world, path, cgroup);
+    /// # Ok(()) }
+    /// ```
+    pub fn world_placement_for_specs_v1(
+        &self,
+        expected: &[WorldSpec],
+    ) -> Result<(WorldSpec, world_api::WorldHandle, PathBuf, fs::File)> {
+        use std::os::unix::fs::OpenOptionsExt;
+        self.revalidate()?;
+        let binding = self
+            .world
+            .shared_binding
+            .as_ref()
+            .ok_or_else(|| anyhow!("exact placement omitted shared ownership"))?;
+        let selected = expected
+            .iter()
+            .find(|spec| {
+                matches!(&spec.reuse_mode, world_api::WorldReuseMode::SharedOrchestration(owner)
+                if owner.orchestration_session_id == binding.orchestration_session_id
+                    && owner.action == world_api::SharedWorldOwnerAction::AttachOrCreate)
+                    && self.world.current_spec_exactly_matches_target(spec)
+            })
+            .ok_or_else(|| anyhow!("exact placement changed the complete physical World spec"))?;
+        // Include current workspace physical identity in the commitment check;
+        // equal path strings do not cover replacement of that directory.
+        let committed: SessionWorldMetadata = serde_json::from_slice(&self.bytes)?;
+        if !SessionWorld::metadata_exactly_matches_physical_spec(&committed, selected) {
+            anyhow::bail!("exact placement physical commitment changed");
+        }
+        let cgroup = fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(&self.world.cgroup_path)?;
+        self.revalidate()?;
+        Ok((
+            selected.clone(),
+            world_api::WorldHandle {
+                id: self.world.id.clone(),
+                shared_binding: Some(binding.clone()),
+            },
+            self.world.cgroup_path.clone(),
+            cgroup,
+        ))
+    }
+
+    /// Nonsecret owner incarnation/revision for a current read observation.
+    ///
+    /// ```no_run
+    /// # fn inspect(custody:&world::session::ExistingWorldCustodyV1<'_>) {
+    /// let (incarnation,revision)=custody.revision_observation_v1();
+    /// # let _=(incarnation,revision); }
+    /// ```
+    pub fn revision_observation_v1(&self) -> (&str, u64) {
+        (&self.world.custody_incarnation, self.revision)
+    }
+    pub fn binding_ref(&self) -> &str {
+        &self.binding_ref
+    }
+    pub fn revalidate(&self) -> Result<()> {
+        use std::os::fd::AsRawFd;
+        if self
+            .world
+            .custody_revision
+            .load(std::sync::atomic::Ordering::SeqCst)
+            != self.revision
+            || custody_directory_identity_v1(&self.root)? != self.root_identity
+            || custody_directory_identity_v1(&self.directory)? != self.directory_identity
+            || custody_file_identity_v1(&self.metadata)? != self.file_identity
+            || read_custody_bytes_v1(&self.metadata)? != self.bytes
+        {
+            anyhow::bail!("custody changed");
+        }
+        SessionWorld::validate_bound_directory_identity(&self.world.root_dir, &self.root)?;
+        let path = self.world.root_dir.join(&self.world.id);
+        SessionWorld::validate_bound_directory_identity(&path, &self.directory)?;
+        let named = open_custody_at_v1(
+            &self.directory,
+            std::ffi::OsStr::new(SESSION_METADATA_FILE_NAME),
+            false,
+        )?;
+        if custody_file_identity_v1(&named)? != self.file_identity
+            || read_custody_bytes_v1(&named)? != self.bytes
+        {
+            anyhow::bail!("custody record substituted");
+        }
+        // Enumerate only this exact directory to reject incomplete producer publication.
+        // No World listing or metadata is returned to the consumer.
+        let descriptor_path =
+            PathBuf::from(format!("/proc/self/fd/{}", self.directory.as_raw_fd()));
+        if fs::read_dir(descriptor_path)?.any(|entry| match entry {
+            Ok(entry) => entry
+                .file_name()
+                .to_str()
+                .is_none_or(|name| name != SESSION_METADATA_FILE_NAME),
+            Err(_) => true,
+        }) {
+            anyhow::bail!("custody publication incomplete or unsupported");
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2177,6 +2488,8 @@ mod tests {
             started_at: std::time::SystemTime::UNIX_EPOCH,
             network_filter: None,
             fs_by_span: HashMap::new(),
+            custody_incarnation: uuid::Uuid::now_v7().to_string(),
+            custody_revision: std::sync::atomic::AtomicU64::new(1),
             shared_binding: None,
             policy_snapshot_hash: None,
             exact_adoption_policy_ref_id: None,
@@ -2231,6 +2544,8 @@ mod tests {
             started_at: UNIX_EPOCH + Duration::from_millis(1_234),
             network_filter: None,
             fs_by_span: HashMap::new(),
+            custody_incarnation: uuid::Uuid::now_v7().to_string(),
+            custody_revision: std::sync::atomic::AtomicU64::new(1),
             shared_binding: None,
             policy_snapshot_hash: None,
             exact_adoption_policy_ref_id: None,
@@ -2297,6 +2612,8 @@ mod tests {
             started_at: std::time::SystemTime::UNIX_EPOCH,
             network_filter: None,
             fs_by_span: HashMap::new(),
+            custody_incarnation: uuid::Uuid::now_v7().to_string(),
+            custody_revision: std::sync::atomic::AtomicU64::new(1),
             shared_binding: None,
             policy_snapshot_hash: None,
             exact_adoption_policy_ref_id: None,
@@ -2385,6 +2702,8 @@ mod tests {
             started_at: UNIX_EPOCH + Duration::from_millis(1_234),
             network_filter: None,
             fs_by_span: HashMap::new(),
+            custody_incarnation: uuid::Uuid::now_v7().to_string(),
+            custody_revision: std::sync::atomic::AtomicU64::new(1),
             shared_binding: None,
             policy_snapshot_hash: None,
             exact_adoption_policy_ref_id: None,
@@ -2472,6 +2791,8 @@ mod tests {
             started_at: UNIX_EPOCH + Duration::from_millis(1_234),
             network_filter: None,
             fs_by_span: HashMap::new(),
+            custody_incarnation: uuid::Uuid::now_v7().to_string(),
+            custody_revision: std::sync::atomic::AtomicU64::new(1),
             shared_binding: Some(SharedWorldBindingSnapshot {
                 orchestration_session_id: owner_spec.orchestration_session_id.clone(),
                 world_id: "wld_shared".into(),
@@ -2575,6 +2896,8 @@ mod tests {
             started_at: UNIX_EPOCH + Duration::from_millis(1_234),
             network_filter: None,
             fs_by_span: HashMap::new(),
+            custody_incarnation: uuid::Uuid::now_v7().to_string(),
+            custody_revision: std::sync::atomic::AtomicU64::new(1),
             shared_binding: Some(SharedWorldBindingSnapshot {
                 orchestration_session_id: owner_spec.orchestration_session_id,
                 world_id: "wld_shared".into(),
@@ -2663,6 +2986,8 @@ mod tests {
             started_at: UNIX_EPOCH + Duration::from_millis(1_234),
             network_filter: None,
             fs_by_span: HashMap::new(),
+            custody_incarnation: uuid::Uuid::now_v7().to_string(),
+            custody_revision: std::sync::atomic::AtomicU64::new(1),
             shared_binding: Some(SharedWorldBindingSnapshot {
                 orchestration_session_id: owner_spec.orchestration_session_id.clone(),
                 world_id: "wld_shared".into(),
@@ -2725,6 +3050,8 @@ mod tests {
             started_at: UNIX_EPOCH + Duration::from_millis(1_000),
             network_filter: None,
             fs_by_span: HashMap::new(),
+            custody_incarnation: uuid::Uuid::now_v7().to_string(),
+            custody_revision: std::sync::atomic::AtomicU64::new(1),
             shared_binding: Some(SharedWorldBindingSnapshot {
                 orchestration_session_id: owner_spec.orchestration_session_id.clone(),
                 world_id: "wld_old".into(),
@@ -2749,6 +3076,8 @@ mod tests {
             started_at: UNIX_EPOCH + Duration::from_millis(2_000),
             network_filter: None,
             fs_by_span: HashMap::new(),
+            custody_incarnation: uuid::Uuid::now_v7().to_string(),
+            custody_revision: std::sync::atomic::AtomicU64::new(1),
             shared_binding: Some(SharedWorldBindingSnapshot {
                 orchestration_session_id: owner_spec.orchestration_session_id.clone(),
                 world_id: "wld_new".into(),
@@ -3039,6 +3368,8 @@ mod tests {
             started_at: UNIX_EPOCH + Duration::from_millis(1_234),
             network_filter: None,
             fs_by_span: HashMap::new(),
+            custody_incarnation: uuid::Uuid::now_v7().to_string(),
+            custody_revision: std::sync::atomic::AtomicU64::new(1),
             shared_binding: Some(SharedWorldBindingSnapshot {
                 orchestration_session_id: owner_spec.orchestration_session_id,
                 world_id: "wld_shared".into(),
@@ -3098,6 +3429,8 @@ mod tests {
             started_at: std::time::SystemTime::UNIX_EPOCH,
             network_filter: None,
             fs_by_span: HashMap::new(),
+            custody_incarnation: uuid::Uuid::now_v7().to_string(),
+            custody_revision: std::sync::atomic::AtomicU64::new(1),
             shared_binding: None,
             policy_snapshot_hash: None,
             exact_adoption_policy_ref_id: None,
@@ -3267,6 +3600,94 @@ mod tests {
             adoption_correlation_id: "adopt_corr_no_prompt_marker".into(),
         };
         (world, adoption)
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    #[ignore = "requires an explicitly owned private Root namespace for no-atime producer custody"]
+    fn test_existing_world_placement_requires_complete_physical_spec() {
+        use std::os::unix::fs::MetadataExt;
+        let temp = tempdir().unwrap();
+        let (mut world, adoption) = exact_bound_world_adoption_fixture(&temp);
+        world.adopt_exact_bound_world_ownership(&adoption).unwrap();
+        let held = world
+            .read_existing_custody_nonreconciling(
+                &world.root_dir,
+                &adoption.orchestration_session_id,
+                &world.id,
+                adoption.world_generation,
+                &world.project_dir,
+            )
+            .unwrap();
+        let before = fs::read(
+            world
+                .root_dir
+                .join(&world.id)
+                .join(SESSION_METADATA_FILE_NAME),
+        )
+        .unwrap();
+        let expected = adoption.target_spec;
+        let (_, actual, path, cgroup) = held
+            .world_placement_for_specs_v1(std::slice::from_ref(&expected))
+            .unwrap();
+        assert_eq!(actual.id, world.id);
+        assert_eq!(actual.shared_binding, world.shared_binding);
+        assert_eq!(path, world.cgroup_path);
+        let named = fs::metadata(&path).unwrap();
+        let opened = cgroup.metadata().unwrap();
+        assert_eq!((opened.dev(), opened.ino()), (named.dev(), named.ino()));
+
+        // These resource/overlay/policy changes are invisible to the old weak
+        // compatible-session lookup. Exact custody must refuse each one.
+        let mut changed = Vec::new();
+        let mut cpu = expected.clone();
+        cpu.limits.cpu = None;
+        changed.push(cpu);
+        let mut memory = expected.clone();
+        memory.limits.memory = None;
+        changed.push(memory);
+        let mut preload = expected.clone();
+        preload.enable_preload = true;
+        changed.push(preload);
+        let mut fs_mode = expected.clone();
+        fs_mode.fs_mode = WorldFsMode::ReadOnly;
+        changed.push(fs_mode);
+        let mut isolation = expected.clone();
+        isolation.always_isolate = true;
+        changed.push(isolation);
+        let mut owner = expected.clone();
+        owner.reuse_mode = world_api::WorldReuseMode::GenericCompatible;
+        changed.push(owner);
+        let mut policy = expected.clone();
+        policy.backend_policy = Some(serde_json::from_value(serde_json::json!({
+            "schema_version": 1,
+            "policy_snapshot": {"schema_version": 3, "net_allowed": [], "world_fs": {
+                "host_visible": true, "fail_closed": {"routing": false},
+                "caged_required": false, "write": {"enabled": true, "allow_list": [], "deny_list": []}
+            }},
+            "world_network": {"isolate_network": false, "allowed_domains": []}
+        })).unwrap());
+        changed.push(policy);
+        for candidate in changed {
+            assert!(held.world_placement_for_specs_v1(&[candidate]).is_err());
+        }
+        held.revalidate().unwrap();
+        assert_eq!(
+            before,
+            fs::read(
+                world
+                    .root_dir
+                    .join(&world.id)
+                    .join(SESSION_METADATA_FILE_NAME)
+            )
+            .unwrap()
+        );
+        fs::rename(&world.project_dir, temp.path().join("old-project")).unwrap();
+        fs::create_dir(&world.project_dir).unwrap();
+        assert!(
+            held.world_placement_for_specs_v1(&[expected]).is_err(),
+            "equal workspace path must not hide physical replacement"
+        );
     }
 
     #[test]

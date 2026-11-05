@@ -351,7 +351,6 @@ fn build_e3_authenticated_uds_router(
     e3_local_transport::E3AuthenticatedLinuxUdsListenerV1,
 )> {
     let configured = service.accepted_home_authority.as_ref()?;
-    service.e3_projection_preparations.as_ref()?;
     let mut core = libc::rlimit {
         rlim_cur: libc::RLIM_INFINITY,
         rlim_max: libc::RLIM_INFINITY,
@@ -371,20 +370,44 @@ fn build_e3_authenticated_uds_router(
     )
     .ok()?;
     let routes = Router::new()
+        .route("/v1/gateway/host-turn", post(handlers::gateway_host_turn))
         .route(
-            "/v1/e3/config-projection/prepare",
-            post(handlers::e3_config_projection_prepare),
+            "/v1/ordinary/member/execute/stream",
+            post(handlers::ordinary_initial_execute_stream),
         )
         .route(
-            "/v1/e3/config-projection/cancel",
-            post(handlers::e3_config_projection_cancel),
+            "/v1/ordinary/member/stop",
+            post(handlers::ordinary_retained_worker_stop),
         )
-        .with_state(service.clone());
+        .route(
+            "/v1/ordinary/member/bootstrap/control",
+            post(handlers::ordinary_initial_bootstrap_control),
+        )
+        .route(
+            "/v1/ordinary/work/cancel",
+            post(handlers::ordinary_accepted_work_cancel),
+        );
+    // Ordinary Host admission needs authenticated installed-home/peer custody,
+    // while protected preparation additionally needs its complete E3 owner.
+    let routes = if service.e3_projection_preparations.is_some() {
+        routes
+            .route(
+                "/v1/e3/config-projection/prepare",
+                post(handlers::e3_config_projection_prepare),
+            )
+            .route(
+                "/v1/e3/config-projection/cancel",
+                post(handlers::e3_config_projection_cancel),
+            )
+    } else {
+        routes
+    };
+    let routes = routes.with_state(service.clone());
     Some((build_router(service).merge(routes), authentication))
 }
 
 fn build_router(service: WorldService) -> Router {
-    Router::new()
+    let router = Router::new()
         .route("/v1/capabilities", get(handlers::capabilities))
         .route("/v1/doctor/world", get(handlers::doctor_world))
         .route("/v1/execute", post(handlers::execute))
@@ -405,11 +428,29 @@ fn build_router(service: WorldService) -> Router {
             post(handlers::execute_stream_replay),
         )
         .route("/v1/member_turn/stream", post(handlers::member_turn_stream))
+        .route(
+            "/v1/ordinary/member_turn/stream",
+            post(handlers::ordinary_member_turn_stream),
+        )
         .route("/v1/stream", get(handlers::stream))
         .route("/v1/trace/:span_id", get(handlers::get_trace))
         .route("/v1/request_scopes", post(handlers::request_scopes))
-        .route("/v1/gc", post(handlers::gc))
-        .with_state(service)
+        .route("/v1/gc", post(handlers::gc));
+    #[cfg(target_os = "linux")]
+    let router = router
+        .route(
+            "/v1/workspace/current",
+            post(handlers::workspace_current_v1),
+        )
+        .route(
+            "/v1/workspace/preflight",
+            post(handlers::workspace_preflight_v1),
+        )
+        .route(
+            "/v1/workspace/association",
+            post(handlers::workspace_association_update_v1),
+        );
+    router.with_state(service)
 }
 
 #[cfg(unix)]
@@ -478,6 +519,10 @@ async fn run_uds_server(
                             let connection_router = authenticated_router.clone()
                                 .layer(axum::Extension(peer))
                                 .layer(axum::Extension(Arc::clone(&listener)));
+                            let connection_router = match substrate_shell::WorkspaceNativePeerV1::capture_linux_uds_v1(&stream) {
+                                Ok(workspace_peer) => connection_router.layer(axum::Extension(workspace_peer)),
+                                Err(_) => connection_router,
+                            };
                             let connection_shutdown = shutdown.clone();
                             connections.spawn(async move {
                                 let connection = hyper::server::conn::Http::new()
@@ -531,8 +576,20 @@ async fn run_uds_server(
         "World agent listening on Unix socket"
     );
 
+    #[cfg(target_os = "linux")]
+    let make_service =
+        hyper::service::make_service_fn(move |connection: &tokio::net::UnixStream| {
+            let router =
+                match substrate_shell::WorkspaceNativePeerV1::capture_linux_uds_v1(connection) {
+                    Ok(peer) => router.clone().layer(axum::Extension(peer)),
+                    Err(_) => router.clone(),
+                };
+            async move { Ok::<_, std::convert::Infallible>(router) }
+        });
+    #[cfg(not(target_os = "linux"))]
+    let make_service = router.into_make_service();
     hyper::Server::builder(from_stream(stream))
-        .serve(router.into_make_service())
+        .serve(make_service)
         .with_graceful_shutdown(async move {
             shutdown.cancelled().await;
         })
@@ -804,6 +861,49 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[tokio::test]
+    async fn test_ordinary_initial_stream_refuses_missing_peer_before_body() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let state = tempfile::tempdir().unwrap();
+        let service = WorldService::new_with_member_turn_state_root_for_test(state.path()).unwrap();
+        let polled = Arc::new(AtomicBool::new(false));
+        let observed = Arc::clone(&polled);
+        let stream = futures_util::stream::once(async move {
+            observed.store(true, Ordering::SeqCst);
+            Ok::<_, std::io::Error>(hyper::body::Bytes::from_static(b"untrusted-body"))
+        });
+        let request = hyper::Request::post("/v1/ordinary/member/execute/stream")
+            .body(hyper::Body::wrap_stream(stream))
+            .unwrap();
+        let response =
+            handlers::ordinary_initial_execute_stream(axum::extract::State(service), request).await;
+        assert_eq!(response.status(), hyper::StatusCode::FORBIDDEN);
+        assert!(!polled.load(Ordering::SeqCst));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn test_initial_control_refuses_missing_peer_before_body() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let state = tempfile::tempdir().unwrap();
+        let service = WorldService::new_with_member_turn_state_root_for_test(state.path()).unwrap();
+        let polled = Arc::new(AtomicBool::new(false));
+        let observed = Arc::clone(&polled);
+        let stream = futures_util::stream::once(async move {
+            observed.store(true, Ordering::SeqCst);
+            Ok::<_, std::io::Error>(hyper::body::Bytes::from_static(b"untrusted-control-body"))
+        });
+        let request = hyper::Request::post("/v1/ordinary/member/bootstrap/control")
+            .body(hyper::Body::wrap_stream(stream))
+            .unwrap();
+        let response =
+            handlers::ordinary_initial_bootstrap_control(axum::extract::State(service), request)
+                .await;
+        assert_eq!(response.status(), hyper::StatusCode::FORBIDDEN);
+        assert!(!polled.load(Ordering::SeqCst));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
     async fn e3_routes_are_absent_from_baseline_router_before_body_read() {
         use std::sync::atomic::{AtomicBool, Ordering};
         use tower::ServiceExt;
@@ -812,6 +912,10 @@ mod tests {
         for route in [
             "/v1/e3/config-projection/prepare",
             "/v1/e3/config-projection/cancel",
+            "/v1/ordinary/member/stop",
+            "/v1/ordinary/member/execute/stream",
+            "/v1/ordinary/work/cancel",
+            "/v1/ordinary/member/bootstrap/control",
         ] {
             let polled = Arc::new(AtomicBool::new(false));
             let observed = Arc::clone(&polled);

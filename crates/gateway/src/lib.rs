@@ -19,3 +19,7 @@ mod tests {
         assert_eq!(result, 4);
     }
 }
+
+#[cfg(target_os = "linux")]
+#[doc(hidden)]
+pub mod managed_host_admission;

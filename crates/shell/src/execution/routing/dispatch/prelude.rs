@@ -23,3 +23,6 @@ pub(crate) use super::world_ops::{
 };
 #[cfg(all(test, target_os = "linux"))]
 pub(crate) use super::world_ops::{init_linux_world_with_probe, LinuxWorldInit};
+
+#[cfg(target_os = "linux")]
+pub(crate) use super::world_ops::build_ordinary_agent_client_and_member_dispatch_request_for_cwd;

@@ -3366,6 +3366,108 @@ failure leaves non-E3 service paths available but makes every V2/E3 request
 `ConfiguredAcceptedHomeAuthorityV1::from_record_for_test` and must pass the same record and physical
 checks.
 
+**Ordinary configured-home construction and observation.** Linux ordinary startup uses the
+distinct sealed OrdinaryConfiguredAcceptedHomeAuthorityV1, whose only public production
+constructor compares its canonical invocation carrier with the fixed
+/var/lib/substrate/install-bootstrap-authority-v1 source. It never constructs the protected
+ConfiguredAcceptedHomeAuthorityV1 and never opens the private writer lock, including with
+O_PATH. The existing service constructor, publisher, lock mode and E3 consumers retain their
+separate contracts.
+
+The ordinary reader holds root, records, active-head, immutable-record and accepted-home
+descriptors. It requires fixed root-owned ancestor custody, root/records mode 0750
+root:substrate, canonical closed head/record bytes and hashes, mode 0640 single-link
+root:substrate source files, and equality of every held source entry with its actual named
+entry. It validates the exact carrier, commitment, account, forward/reverse passwd UID and
+primary GID, current nonroot real/effective UID/GID, and the private accepted home's owner,
+primary GID, physical path/device/inode. Carrier data, group membership and a matching digest
+alone cannot confer this capability.
+
+Acquisition and revalidation refuse pending recognized
+.e3-bootstrap-tmp.<lowercase-uuidv7>.<record|head> entries, malformed or wrongly placed
+temporaries, unknown namespace entries, missing publication, unsafe metadata and substitutions.
+The reader performs no recovery. Immutable-record hardlink windows with link count two refuse.
+Completed unreferenced immutable records confer no current authority. The publisher's existing
+record-before-atomic-head order and record-before-head recovery permit a quiescent stable
+snapshot. Both source namespace snapshots and held/named descriptor identities are checked
+around the read; equal head strings are insufficient. A head/record/root change invalidates the
+held ordinary generation rather than silently switching it.
+
+Ordinary REPL entry acquires this seal before ordinary selection resolution. Source-owned
+OrdinaryBootstrapAuthorityInputV1 explicitly distinguishes existing input from ordinary sealed
+input; absence, caller kind, revision and request digest cannot choose that class. Genuine
+accepted-home authority supplies configuration, policy and inventory. The actual native and
+requested selections, their captured sources and separately resolved account bindings reach
+immutable native context staging before Start issuer publication. The issuer commits that
+context, and the runtime retains authenticated original selection with the ordinary seal.
+Acquisition, source or account refusal cannot fall back to existing input. Service-side protected
+authentication and current-run admission remain separate.
+
+Every later effect must revalidate its held inputs immediately before use. These observations
+and separate HSA transactions do not promise atomic exclusion against subsequent privileged
+publication. Private cfg(test) user-owned fixture sources exercise components only; they do not
+establish unprivileged installed-source access, current-run authority or native lifecycle proof.
+
+
+**Ordinary Task retry material and retained delivery.** The ordinary Task producer uses a
+closed version 2 receipt-registry payload within the existing opaque physical registry namespace.
+Each ordinary proposal and its original nonsecret Execute template occupy one atomic entry.
+The template pins the original profile, cwd, agent ID, explicit environment allowlist, exact
+policy bytes, network/filesystem request and original Start carrier. Frozen V1 canonical
+proposal/receipt codecs and submission-hash bytes remain unchanged; V1-only writes retain
+their original encoding. Unknown versions, fields, orphan templates and conflicting subjects
+refuse. A raced or reopened retry reconstructs from its existing proposal/template pair.
+Accepted-work resolution does not resubmit accepted work. These are storage and identity rules,
+not proof of a successful production client/service exchange.
+
+Account extraction, current held-home policy, runtime permission and placement checks occur
+outside B1 operation closures. The closures perform only allocation-dependent construction,
+hashing, validation and atomic map updates. Pinned original policy/template bytes never confer
+continuing permission. The ordinary observer retains its genuine selected admission and checks
+again before transport; the independent service retains its own actual World/run and effect
+admission. Ordinary retained Continue uses its held original selection, exact retained E2 cap
+and allocated B1 message, rather than an ambient client or legacy World-binding rewrite.
+Other control/fork continuations require their separately authenticated operations; the later
+Fork Resume R0Routable dependency does not block initial Spawn or initial Fork.
+
+**Ordinary native and private-prompt custody.** The original validated install carrier is retained
+as data only in the explicitly ordinary runtime branch. It cannot mint a capability. Actual native
+Start/Resume bridge construction keeps the positive ordinary selection and takes the actual
+manifest's session, participant, backend and run claims. The independent service authenticates
+those claims; a bridge DTO is not current-run verification. Generic private-prompt entry retains
+an explicit ordinary class and refuses before turn bookkeeping, readiness, gateway or provider
+effects while a guarded selected submission is unavailable. Nonordinary behavior keeps its
+existing independently authorized route.
+
+Birth revalidation reads current policy and selection-affecting configuration/inventory through
+the held accepted home. Current placement/capability/connection permission and fresh account
+bindings are checked again before issuer publication, claim and application while retaining the
+original decision, plan and issuer bytes. These separate observations do not promise atomic
+exclusion against a later privileged publication or revocation.
+
+**Ordinary successor limitation.** A separate strict ordinary helper envelope carries original
+Start/install data and closed nested runtime/participant/session mirrors. Decoding rejects duplicate
+keys and raw principal extras before permissive typed expansion; the ordinary receiver refuses for missing genuine current-run verification before installed/account/HSA reads
+or startup. Independently acquiring the fixed-source ordinary seal and joining genuine current-run
+provenance remain obligations before enabling that receiver. This component format does not
+authorize a successor.
+
+The existing legacy successor receiver has no independently authenticated provenance that
+distinguishes a stripped ordinary inner plan from an otherwise valid legacy/protected plan when
+the ordinary context is missing or tampered. Its protected codec and validation behavior remain
+unchanged. Consequently the actual ordinary auto-attach entry, successor builder and launcher
+refuse before ledger claims, issue/claim/apply, plan publication and process spawn. Envelope/data/
+receiver components do not remove that refusal. No file-presence, absence, caller-kind, revision
+or digest heuristic may authorize a legacy fallback.
+
+The independently reviewed current Host run verifier is still unavailable; service HostActor
+gateway refusal remains. Ordinary World worker history is held by the live retained member
+between successive processes, separately from Host native history; a missing holder after service
+restart refuses rather than reconstructing custody from a path. Source/components and synthetic
+fixtures do not establish installed-source access, enabled-account production acquisition,
+actual selected client/service/native lifecycle success, or finding closure.
+
+
 The projection registry root is reached only from that configured accepted-home bound capability and
 only after the parent HSA root lock has been acquired and the closed layout revalidated as specified
 above. Its already-open `CanonicalDirectoryV1` is revalidated, then every descendant component is
@@ -8595,3 +8697,53 @@ installed-proof and runtime-lifecycle designs stay settled. E3-F remains admitte
 installed proof, deployment, integration or E2-RM/B2.2/B3.2/B4 closure is claimed. A needed semantic
 change beyond this finite bridge and earlier authority requires an exact stop, not an implied
 service/schema/lease/executor/retry expansion.
+
+Ordinary World Continue reads existing ResumeOneTurn records only to extract the
+B1/E2 work-correlation data under separately positive ordinary dispatch admission.
+Original-Start World continuation keeps no correlation when no matching Resume
+exists; a missing or ambiguous matching correlation refuses. The exact applied
+revision/commitment join can refuse after a later registration advances the
+revision without replacing the participant. That compatible-observation call-site
+limitation remains open for the genuine current-run handoff; the scan is not Host
+run authentication and does not implement C.
+
+
+### Ordinary Host gateway turn transport V1
+
+`HostGatewayTurnRequestV1` / `HostGatewayTurnResponseV1` describe a separate,
+closed `POST /v1/gateway/host-turn` wire contract with Acquire, Revalidate and
+Release. Schema versions and every field are required; Release requires an
+explicit null or exact lease handle. Acquire accepts only HostActor selection.
+Its Rust selection field is boxed; the JSON selection object is unchanged.
+Nested selection and wiring reject unknown, duplicate and missing fields. A
+response must match the operation, acquisition key and any echoed known handle.
+Unknown is permitted for any operation only as unresolved identity, never as
+admission, active wiring or cleanup acknowledgment.
+Both wiring URLs must be canonical nonzero `http://127.0.0.1:<port>` endpoints.
+The existing gateway lifecycle wire contract is unchanged by this addition.
+
+Before the first request, the caller generates and retains a 32-byte OS-random
+cleanup secret, represented by exactly 43 unpadded base64url characters.
+`acquire_id_from_cleanup_token` derives `hgt_` plus lowercase SHA256 of
+`substrate.host-gateway-turn.cleanup.v1`, one NUL byte and the decoded secret.
+This commitment authenticates no execution authority. It must not enter native
+configuration, selection/B1 storage, logs or diagnostics. A lease handle encodes
+`hgl_<32 lowercase hex service-instance digits>_<32 lowercase hex route digits>`;
+syntax does not prove issuance, instance ownership or permission.
+
+`AgentClient::gateway_host_turn` accepts only the installed Linux Unix socket
+path `/run/substrate.sock`, sends once and validates a bounded strict reply.
+It never retries or falls back to another transport. Errors omit request bodies,
+cleanup secrets, route tickets and remote error bodies. Unknown means unresolved
+identity; neither Unknown nor transport/decode failure acknowledges cleanup.
+The caller retains the exact key/secret to reconcile the same operation.
+
+This transport/client slice does not register a service endpoint or authorize a
+Host gateway process. The intended Linux provisioner supplies the privileged
+service, fixed bootstrap and inherited authenticated socket construction path;
+installed readiness is separate. Actual Host placement and the genuine reviewed
+current-application/held authority join remain unavailable, so Host service and
+native admission continue to refuse before effects. No World placement is
+fabricated. Service-owned cancellation-independent reservations, exact terminal
+Release, native startup terminal custody and integrated Start/Resume proof remain
+required before enabling that dependent path.

@@ -405,18 +405,35 @@ fn write_atomic_patch_yaml(
         out.push('\n');
     }
 
-    let parent = path
-        .parent()
-        .ok_or_else(|| anyhow!("path {} has no parent", path.display()))?;
-    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
-    let mut tmp = NamedTempFile::new_in(parent)
-        .with_context(|| format!("failed to create temp file near {}", path.display()))?;
-    tmp.write_all(out.as_bytes())
-        .with_context(|| format!("failed to write {}", path.display()))?;
-    tmp.flush()?;
-    tmp.persist(path)
-        .map_err(|err| anyhow!("failed to persist {}: {}", path.display(), err.error))?;
-    Ok(())
+    #[cfg(target_os = "linux")]
+    {
+        let parent = path
+            .parent()
+            .ok_or_else(|| anyhow!("source parent absent"))?;
+        fs::create_dir_all(parent)?;
+        if crate::execution::workspace_read_cut::try_write_legacy_settings(
+            path,
+            Some(out.as_bytes()),
+        )? == crate::execution::workspace_read_cut::LegacySettingsWriteV1::Revisioned
+        {
+            return Ok(());
+        }
+    }
+    {
+        let parent = path
+            .parent()
+            .ok_or_else(|| anyhow!("path {} has no parent", path.display()))?;
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+        let mut tmp = NamedTempFile::new_in(parent)
+            .with_context(|| format!("failed to create temp file near {}", path.display()))?;
+        tmp.write_all(out.as_bytes())
+            .with_context(|| format!("failed to write {}", path.display()))?;
+        tmp.flush()?;
+        tmp.persist(path)
+            .map_err(|err| anyhow!("failed to persist {}: {}", path.display(), err.error))?;
+        Ok(())
+    }
 }
 
 fn cli_overrides(cli: &Cli) -> CliConfigOverrides {
@@ -577,5 +594,47 @@ mod tests {
 
         let after = fs::read(&workspace_yaml).unwrap();
         assert_eq!(after, before);
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod legacy_custody_remediation_tests {
+    use super::*;
+    #[test]
+    fn workspace_read_cut_legacy_config_tmp_preserves_writer_without_coverage() {
+        let temp = tempfile::tempdir_in("/tmp").unwrap();
+        let path = temp.path().join("config.yaml");
+        write_atomic_patch_yaml(&path, "", None, &SubstrateConfigPatch::default()).unwrap();
+        assert!(path.is_file());
+        assert!(!temp
+            .path()
+            .join(".config.yaml.owner-revision.v1.json")
+            .exists());
+        assert!(
+            crate::execution::workspace_read_cut::directory(temp.path(), unsafe {
+                libc::geteuid()
+            })
+            .is_err()
+        );
+    }
+    #[test]
+    fn workspace_read_cut_legacy_config_never_falls_back_after_integrity_error() {
+        let parent = std::path::PathBuf::from(std::env::var_os("XDG_RUNTIME_DIR").unwrap());
+        let temp = tempfile::tempdir_in(parent).unwrap();
+        let path = temp.path().join("config.yaml");
+        crate::execution::workspace_read_cut::write_settings(&path, Some(b"original\n")).unwrap();
+        fs::write(
+            temp.path().join(".config.yaml.owner-revision.v1.json"),
+            b"invalid",
+        )
+        .unwrap();
+        assert!(
+            write_atomic_patch_yaml(&path, "", None, &SubstrateConfigPatch::default()).is_err()
+        );
+        assert_eq!(fs::read(&path).unwrap(), b"original\n");
+        assert!(!temp
+            .path()
+            .join(".config.yaml.owner-revision.v1.pending")
+            .exists());
     }
 }
