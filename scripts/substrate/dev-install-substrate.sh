@@ -1723,7 +1723,6 @@ build_and_stage_mac_aarch64_lima_artifacts_v1() {
 
   local zig="/opt/homebrew/opt/zig/bin/zig"
   local target="aarch64-unknown-linux-gnu"
-  local build_command="cargo build --locked --offline --target aarch64-unknown-linux-gnu --release -p substrate --bin substrate-lifecycle-linux -p world-service --bin world-service -p substrate-gateway --bin substrate-gateway -p substrate --bin substrate"
   local bundle_dir="${BIN_DIR}/linux"
   local external_root linker_wrapper artifact_stage toolchain cargo_lock
   local name source digest existing_digest mode file_type
@@ -1903,7 +1902,7 @@ publish_mac_publisher_install_provenance_v1() {
     || fatal "macOS lifecycle source measurement is not canonical"
 
   source_commit="$(git rev-parse HEAD)" || fatal "cannot resolve installer source commit"
-  source_tree="$(git rev-parse HEAD^{tree})" || fatal "cannot resolve installer source tree"
+  source_tree="$(git rev-parse "HEAD^{tree}")" || fatal "cannot resolve installer source tree"
   source_ref="$(git symbolic-ref -q HEAD || printf '%s' detached)"
   review_sha="$(shasum -a 256 "${review_path}" | awk '{print $1}')" \
     || fatal "cannot measure R5 review record"
@@ -1911,6 +1910,8 @@ publish_mac_publisher_install_provenance_v1() {
   [[ -n "${limactl_path}" && -f "${limactl_path}" && ! -L "${limactl_path}" && -x "${limactl_path}" ]] \
     || fatal "installer cannot resolve one fixed no-follow limactl image for macOS publisher provenance"
 
+  # Embedded script uses adjacent shell quoting for literal stat formats.
+  # shellcheck disable=SC1078
   run_privileged sh -ceu '
 set -eu
 PATH=/usr/bin:/bin:/usr/sbin:/sbin

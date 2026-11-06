@@ -9,43 +9,62 @@ use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::fs;
-use std::io::{BufRead, BufReader, Read as _, Seek as _, SeekFrom, Write as _};
+#[cfg(target_os = "macos")]
+use std::io::{BufRead, BufReader, Seek as _, SeekFrom};
+use std::io::{Read as _, Write as _};
 #[cfg(target_os = "macos")]
 use std::os::fd::{AsRawFd, FromRawFd};
 #[cfg(target_os = "macos")]
 use std::os::unix::ffi::OsStringExt;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
+#[cfg(any(target_os = "macos", all(test, unix)))]
+use std::os::unix::fs::PermissionsExt;
 #[cfg(target_os = "macos")]
-use std::os::unix::fs::{FileExt as _, MetadataExt, OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{FileExt as _, OpenOptionsExt};
 #[cfg(target_os = "macos")]
 use std::os::unix::process::CommandExt as _;
 use std::path::{Path, PathBuf};
+#[cfg(any(test, target_os = "macos"))]
+use std::process::Command;
+#[cfg(target_os = "macos")]
+use std::process::Stdio;
 #[cfg(target_os = "macos")]
 use std::process::{Child, ExitStatus};
-use std::process::{Command, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+#[cfg(target_os = "macos")]
 use substrate_common::{
     canonical_action_receipt_bytes_v1, canonical_action_receipt_index_bytes_v1,
-    canonical_guest_publisher_pairing_host_record_v1,
     canonical_guest_publisher_pairing_operator_launch_signature_payload_v1,
+    canonical_mac_publisher_service_state_record_v1, canonical_managed_manifest_head_v1,
+    canonical_manifest_bytes_v1, classify_mac_publisher_service_install_v1,
+    classify_mac_publisher_service_retirement_v1, mac_publisher_service_state_record_sha256_v1,
+    managed_action_prepared_record_sha256_v1, parse_publisher_bootstrap_authorization_v1,
+    validate_mac_publisher_install_provenance_v1, validate_managed_action_receipt_signature_v1,
+    MacPublisherServiceFileIdentityV1, MacPublisherServiceFilesObservationV1,
+    MacPublisherServiceInstallDecisionV1, MacPublisherServiceRecordObservationV1,
+    MacPublisherServiceRegistrationObservationV1, MacPublisherServiceRetirementDecisionV1,
+    MacPublisherServiceStatePhaseV1, MacPublisherServiceStateRecordV1,
+    MacR6GuestAarch64ElfIdentityV1, MacR6HostMachOIdentityV1, ManagedActionReceiptIndexV1,
+    ManagedManifestHeadV1,
+};
+use substrate_common::{
+    canonical_guest_publisher_pairing_host_record_v1,
     canonical_guest_publisher_pairing_operator_launch_v1,
     canonical_guest_publisher_pairing_ticket_v1, canonical_lifecycle_publisher_protected_state_v1,
     canonical_lifecycle_signature_payload_v1, canonical_lima_stage_one_authorization_v1,
     canonical_mac_lima_stage_one_capsule_v1, canonical_mac_publisher_bootstrap_attempt_locator_v1,
     canonical_mac_publisher_control_admission_v1, canonical_mac_publisher_install_provenance_v1,
-    canonical_mac_publisher_service_state_record_v1, canonical_mac_r6_pairing_continuation_v1,
-    canonical_mac_r6_pairing_predecessor_v1, canonical_managed_manifest_head_v1,
-    canonical_manifest_bytes_v1, classify_mac_publisher_service_install_v1,
-    classify_mac_publisher_service_retirement_v1,
+    canonical_mac_r6_pairing_continuation_v1, canonical_mac_r6_pairing_predecessor_v1,
     compare_and_swap_guest_publisher_pairing_host_record_recovery_v1,
     compare_and_swap_guest_publisher_pairing_host_record_v1,
     guest_publisher_bootstrap_hello_public_key_sha256_v1,
     guest_publisher_bootstrap_hello_sha256_v1, guest_publisher_pairing_operator_launch_sha256_v1,
     guest_publisher_pairing_operator_proof_sha256_v1, lifecycle_anchor_sha256_v1,
     mac_publisher_bootstrap_request_sha256_v1, mac_publisher_control_authority_sha256_v1,
-    mac_publisher_service_state_record_sha256_v1, managed_action_prepared_record_sha256_v1,
     parse_and_validate_guest_publisher_pairing_operator_launch_v1, parse_p256_spki_der_v1,
-    parse_publisher_bootstrap_authorization_v1, publisher_bootstrap_authorization_sha256_v1,
-    validate_guest_publisher_bootstrap_hello_v1, validate_guest_publisher_bootstrap_transcript_v1,
+    publisher_bootstrap_authorization_sha256_v1, validate_guest_publisher_bootstrap_hello_v1,
+    validate_guest_publisher_bootstrap_transcript_v1,
     validate_guest_publisher_pairing_host_record_v1,
     validate_guest_publisher_pairing_operator_launch_against_ticket_and_host_record_at_v1,
     validate_guest_publisher_pairing_operator_proof_against_ticket_at_v1,
@@ -56,40 +75,37 @@ use substrate_common::{
     validate_lima_stage_one_observation_v1, validate_mac_lima_stage_one_capsule_v1,
     validate_mac_publisher_bootstrap_attempt_locator_v1,
     validate_mac_publisher_control_admission_v1, validate_mac_publisher_control_authority_v1,
-    validate_mac_publisher_install_provenance_v1, validate_mac_r6_pairing_continuation_v1,
-    validate_mac_r6_pairing_host_record_identities_v1,
+    validate_mac_r6_pairing_continuation_v1, validate_mac_r6_pairing_host_record_identities_v1,
     validate_mac_r6_pairing_operator_launch_identities_v1, validate_mac_r6_pairing_predecessor_v1,
-    validate_mac_r6_pairing_ticket_identities_v1, validate_managed_action_receipt_signature_v1,
-    validate_managed_lifecycle_publisher_request_v1, validate_publisher_bootstrap_authorization_v1,
-    verify_p256_p1363_low_s_v1, ExecutorBuildEvidenceV1, GuestPublisherBootstrapHelloV1,
-    GuestPublisherBootstrapTranscriptV1, GuestPublisherPairingChallengeV1,
-    GuestPublisherPairingDataSessionV1, GuestPublisherPairingHostRecordV1,
-    GuestPublisherPairingOperatorLaunchV1, GuestPublisherPairingOperatorProofV1,
-    GuestPublisherPairingOperatorTtySessionV1, GuestPublisherPairingSessionBindingV1,
-    GuestPublisherPairingTicketV1, LifecyclePublisherAnchorV1, LifecyclePublisherProtectedStateV1,
-    LifecycleSignatureV1, LimaStageOneAuthorizationV1, LimaStageOneObservationV1,
-    MacLimaStageOneCapsuleV1, MacLimaStageOneSuccessorTemplateV1,
-    MacPublisherBootstrapAttemptLocatorV1, MacPublisherBootstrapRequestV1,
-    MacPublisherControlAdmissionV1, MacPublisherControlAuthorityV1,
-    MacPublisherInstallProvenanceV1, MacPublisherServiceFileIdentityV1,
-    MacPublisherServiceFilesObservationV1, MacPublisherServiceInstallDecisionV1,
-    MacPublisherServiceRecordObservationV1, MacPublisherServiceRegistrationObservationV1,
-    MacPublisherServiceRetirementDecisionV1, MacPublisherServiceStatePhaseV1,
-    MacPublisherServiceStateRecordV1, MacR6GuestAarch64ElfIdentityV1, MacR6HostMachOIdentityV1,
-    MacR6PairingContinuationV1, MacR6PairingPredecessorV1, ManagedActionPreparedRecordV1,
-    ManagedActionReceiptIndexV1, ManagedActionReceiptV1, ManagedActionV1,
+    validate_mac_r6_pairing_ticket_identities_v1, validate_managed_lifecycle_publisher_request_v1,
+    validate_publisher_bootstrap_authorization_v1, verify_p256_p1363_low_s_v1,
+    ExecutorBuildEvidenceV1, GuestPublisherBootstrapHelloV1, GuestPublisherBootstrapTranscriptV1,
+    GuestPublisherPairingChallengeV1, GuestPublisherPairingDataSessionV1,
+    GuestPublisherPairingHostRecordV1, GuestPublisherPairingOperatorLaunchV1,
+    GuestPublisherPairingOperatorProofV1, GuestPublisherPairingOperatorTtySessionV1,
+    GuestPublisherPairingSessionBindingV1, GuestPublisherPairingTicketV1,
+    LifecyclePublisherAnchorV1, LifecyclePublisherProtectedStateV1, LifecycleSignatureV1,
+    LimaStageOneAuthorizationV1, LimaStageOneObservationV1, MacLimaStageOneCapsuleV1,
+    MacLimaStageOneSuccessorTemplateV1, MacPublisherBootstrapAttemptLocatorV1,
+    MacPublisherBootstrapRequestV1, MacPublisherControlAdmissionV1, MacPublisherControlAuthorityV1,
+    MacPublisherInstallProvenanceV1, MacR6PairingContinuationV1, MacR6PairingPredecessorV1,
+    ManagedActionPreparedRecordV1, ManagedActionReceiptV1, ManagedActionV1,
     ManagedArtifactDispositionV1, ManagedArtifactEntryV1, ManagedArtifactIdentityV1,
     ManagedArtifactManifestV1, ManagedArtifactRoleV1, ManagedExecutorIdentityV1,
-    ManagedLifecyclePublisherRequestV1, ManagedLifecycleStateV1, ManagedManifestHeadV1,
-    PublisherBootstrapAuthorizationV1, GUEST_PUBLISHER_PAIRING_OPERATOR_FIXED_COMMAND_V1,
-    GUEST_PUBLISHER_PAIRING_OPERATOR_GUEST_EXECUTABLE_PATH_V1,
-    GUEST_PUBLISHER_PAIRING_OPERATOR_LAUNCH_SCHEMA_OWNER_V1,
-    GUEST_PUBLISHER_PAIRING_OPERATOR_LAUNCH_SCHEMA_VERSION_V1,
+    ManagedLifecyclePublisherRequestV1, ManagedLifecycleStateV1, PublisherBootstrapAuthorizationV1,
     MAC_R6_PAIRING_CONTINUATION_SIGNATURE_DOMAIN_V1,
     MAC_R6_PAIRING_PREDECESSOR_SIGNATURE_DOMAIN_V1,
 };
+#[cfg(any(test, target_os = "macos"))]
+use substrate_common::{
+    GUEST_PUBLISHER_PAIRING_OPERATOR_FIXED_COMMAND_V1,
+    GUEST_PUBLISHER_PAIRING_OPERATOR_GUEST_EXECUTABLE_PATH_V1,
+    GUEST_PUBLISHER_PAIRING_OPERATOR_LAUNCH_SCHEMA_OWNER_V1,
+    GUEST_PUBLISHER_PAIRING_OPERATOR_LAUNCH_SCHEMA_VERSION_V1,
+};
+#[cfg(target_os = "macos")]
+use substrate_shell::{complete_mac_lima_stage_one_transition_v1, resume_action_receipt_commit_v1};
 use substrate_shell::{
-    complete_mac_lima_stage_one_transition_v1, resume_action_receipt_commit_v1,
     validate_mapped_lifecycle_control_request_v1, InstallBootstrapContextCarrierV1,
     ManagedLifecycleControlRequestV1, MappedLifecycleTagV1, PlatformBootstrapMappingV1,
     PlatformPrincipalV1,
@@ -98,41 +114,175 @@ use substrate_shell::{
 const MAC_MACH_SERVICE_V1: &str = "com.substrate.lifecycle.publisher.v1";
 const MAC_STATE_ROOT_V1: &str = "/Library/Application Support/Substrate/lifecycle-v1";
 const MAC_KEYCHAIN_SERVICE_V1: &str = "com.substrate.lifecycle.v1";
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed system Keychain identity for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_SYSTEM_KEYCHAIN_PATH_V1: &str = "/Library/Keychains/System.keychain";
 const MAC_CONTROL_ADMISSION_ACCOUNT_V1: &str = "mac-control-admission-authority.v1";
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain retained bootstrap provenance path for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_BOOTSTRAP_PROVENANCE_PATH_V1: &str =
     "/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json";
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed publisher helper path for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_PUBLISHER_HELPER_PATH_V1: &str =
     "/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1";
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed publisher launch plist path for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_PUBLISHER_PLIST_PATH_V1: &str =
     "/Library/LaunchDaemons/com.substrate.lifecycle.publisher.v1.plist";
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed launchctl publisher service target for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_PUBLISHER_SERVICE_TARGET_V1: &str = "system/com.substrate.lifecycle.publisher.v1";
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain publisher service state Keychain account suffix for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_PUBLISHER_SERVICE_STATE_ACCOUNT_SUFFIX_V1: &str = "publisher-service-state";
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain compiled publisher plist verification bytes for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_PUBLISHER_PLIST_BYTES_V1: &[u8] =
     include_bytes!("../../scripts/mac/com.substrate.lifecycle.publisher.v1.plist");
 const MAX_MAC_XPC_FRAME_BYTES_V1: usize = 1024 * 1024;
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain bounded bootstrap frame deadlines for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_BOOTSTRAP_FRAME_FINISH_TIMEOUT_V1: Duration = Duration::from_secs(5);
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retained for shared milestone diagnostics and Linux tests"
+    )
+)]
 const MAC_BOOTSTRAP_MILESTONE_PREFIX_V1: &str = "substrate.bootstrap.milestone";
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain R6 data frame timeout for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const R6_DATA_FRAME_TIMEOUT_V1: Duration = Duration::from_secs(30);
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain R6 child exit timeout for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const R6_DATA_CHILD_EXIT_TIMEOUT_V1: Duration = Duration::from_secs(30);
 // R6 is a new pairing-only authority derived from a completed install, never a Stage-1 renewal.
 const R6_PAIRING_TICKET_LIFETIME_NS_V1: u64 = 300 * 1_000_000_000;
 // Signed R6 documents are prepared into distinct durable Keychain accounts. Their validity
 // begins only after this fixed commit lead, so predecessor, continuation, and Available-state
 // CAS all complete before any of the exact 300-second admission window can be consumed.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain R6 pairing preparation lead for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const R6_PAIRING_PREPARE_LEAD_NS_V1: u64 = 10 * 1_000_000_000;
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed R6 pairing continuation command for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const R6_PAIRING_CONTINUATION_COMMAND_V1: &str = "guest-publisher-pairing-direct-interactive-v1";
 /// Lifecycle effects may take materially longer than the bounded FD3 bootstrap frame.  This
 /// is still a fixed executor-owned ceiling, never a caller supplied timeout.
+#[cfg(target_os = "macos")]
 const MAC_LIMA_EFFECT_TIMEOUT_V1: Duration = Duration::from_secs(300);
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed limactl executable path for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_LIMA_TOOL_PATH_V1: &str = "/usr/local/bin/limactl";
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed limactl child search path for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_LIMA_CHILD_PATH_V1: &str = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain inherited stage-one profile descriptor path for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_LIMA_PROFILE_CHILD_PATH_V1: &str = "/dev/fd/3";
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain inherited stage-one profile descriptor number for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_LIMA_PROFILE_CHILD_FD_V1: libc::c_int = 3;
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed post-PM staging root for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_LIMA_POST_PM_STAGING_ROOT_V1: &str = "/var/lib/substrate/.substrate-lifecycle-v1/staged";
 // The descriptor-bound source is streamed into a same-directory temporary object and published
 // atomically. A partial temp from interruption is either proven exact and completed, or removed
 // only after no-follow root-owned verification. The final generation key is never written directly.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed stdin artifact transfer program for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_LIMA_POST_PM_STDIN_TRANSFER_SCRIPT_V1: &str = r#"import hashlib, os, stat, sys
 target, expected_sha, expected_size = sys.argv[1], sys.argv[2], int(sys.argv[3])
 root = '/var/lib/substrate/.substrate-lifecycle-v1/staged/'
@@ -209,6 +359,13 @@ finally:
 
 // Publish one already-verified generation blob into a final guest path using a same-filesystem
 // temp, file fsync, atomic replacement, directory fsync, and final no-follow verification.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed atomic artifact publish program for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_LIMA_POST_PM_ATOMIC_PUBLISH_SCRIPT_V1: &str = r#"import hashlib, os, stat, sys
 source, target, expected_sha, mode_text, generation_key, replace_text = sys.argv[1:]
 mode = int(mode_text, 8); replace = replace_text == 'replace'
@@ -292,6 +449,13 @@ finally:
 // Freshly measure the fixed installed guest publisher executor through a no-follow descriptor.
 // The host independently exact-joins this canonical observation to the signed manifest before it
 // can create any R6 predecessor.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed installed executor measurement program for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_LIMA_R6_INSTALLED_EXECUTOR_MEASURE_SCRIPT_V1: &str = r#"import hashlib, json, os, stat
 path = '/usr/libexec/substrate/substrate-lifecycle-linux'
 fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
@@ -315,6 +479,13 @@ finally:
     os.close(fd)
 "#;
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed guest service readiness program for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_LIMA_WORLD_SERVICE_READINESS_SCRIPT_V1: &str = r#"set -u
 service_sha="$1"
 socket_sha="$2"
@@ -361,23 +532,86 @@ code=$(/usr/bin/sudo -n -u "$fresh_principal" -- /usr/bin/curl --silent --show-e
 /usr/bin/test "$(/usr/bin/stat -c '%U:%G:%a' /run/substrate 2>/dev/null)" = root:substrate:750 || exit 48
 printf '%s\n' substrate-world-service-ready-v1
 "#;
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain maximum root input size for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_LIMA_ROOT_INPUT_MAX_BYTES_V1: u64 = 256 * 1024 * 1024;
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain child descriptor scan bound for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_LIMA_CHILD_FD_SCAN_LIMIT_V1: libc::c_long = 1_048_576;
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain ownership traversal entry bound for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_LIMA_OWNERSHIP_MAX_ENTRIES_V1: usize = 100_000;
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain ownership traversal depth bound for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_LIMA_OWNERSHIP_MAX_DEPTH_V1: usize = 64;
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain stage-one template algorithm identifier for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_LIMA_STAGE_ONE_PROFILE_TEMPLATE_ALGORITHM_V1: &str =
     "substrate.mac-lima-stage-one-profile-template";
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain stage-one template version for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_LIMA_STAGE_ONE_PROFILE_TEMPLATE_VERSION_V1: u32 = 1;
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain stage-one guest marker path for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_LIMA_STAGE_ONE_MARKER_PATH_V1: &str =
     "/var/lib/substrate/.substrate-lima-stage-one-marker.v1";
 // The marker is deliberately root-private. Lima's default guest principal owns the control
 // session, so only this one fixed read crosses sudo; the machine/account/UID/home observations
 // remain bound to the non-root guest principal.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed stage-one observation command for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_LIMA_STAGE_ONE_OBSERVATION_COMMAND_V1: &str = "set -eu; /usr/bin/sudo -n /bin/cat /var/lib/substrate/.substrate-lima-stage-one-marker.v1; printf 'guest_machine_id=%s\\nguest_account=%s\\nguest_uid=%s\\nguest_home=%s\\n' \"$(cat /etc/machine-id)\" \"$(id -un)\" \"$(id -u)\" \"$(getent passwd \"$(id -un)\" | cut -d: -f6)\"";
 // This deliberately contains only an attempt/capsule marker and fixed Lima profile constants.
 // It neither stages project bytes nor installs packages, DNS, publisher, world, or forwarding
 // components. Dynamic data are rendered by `render_mac_lima_stage_one_profile_v1` only after the
 // signed Stage-1 authorization was derived from retained state.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed stage-one profile template for publisher bootstrap and Lima stage-one support"
+    )
+)]
 const MAC_LIMA_STAGE_ONE_PROFILE_TEMPLATE_V1: &str = r#"arch: "aarch64"
 minimumLimaVersion: "1.0.0"
 images:
@@ -398,6 +632,13 @@ provision:
 #[derive(Debug, Clone)]
 pub struct MacManagedArtifactExecutorV1 {
     state_root: PathBuf,
+    #[cfg_attr(
+        not(target_os = "macos"),
+        allow(
+            dead_code,
+            reason = "retain publisher protected-state path in the executor layout for publisher bootstrap and Lima stage-one support"
+        )
+    )]
     protected_state: PathBuf,
     pairing_root: PathBuf,
 }
@@ -411,6 +652,13 @@ pub struct MacLifecyclePublisherServiceV1 {
 /// Account-database identity used for every retained publisher-side `limactl` child. The IH
 /// carrier binds account+UID; the local account database supplies the exact primary GID and home.
 /// Every spawn re-resolves the same tuple before dropping root credentials.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain resolved account, uid, gid and home tuple for publisher bootstrap and Lima stage-one support"
+    )
+)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct MacLimaPrincipalV1 {
     account: String,
@@ -713,6 +961,7 @@ fn consume_publisher_bootstrap_fd3_v1(fd: i32) -> Result<()> {
     }
 }
 
+#[cfg(any(test, target_os = "macos"))]
 fn mac_bootstrap_milestone_line_v1(milestone: &'static str, elapsed: Duration) -> String {
     format!(
         "{MAC_BOOTSTRAP_MILESTONE_PREFIX_V1}={milestone} elapsed_ms={}",
@@ -780,6 +1029,10 @@ fn emit_mac_bootstrap_milestone_v1(started: Instant, milestone: &'static str) {
     }
 }
 
+#[allow(
+    dead_code,
+    reason = "retained nonmacOS milestone sink for shared bootstrap paths"
+)]
 #[cfg(not(target_os = "macos"))]
 fn emit_mac_bootstrap_milestone_v1(started: Instant, milestone: &'static str) {
     let _ = (started, milestone);
@@ -2355,6 +2608,13 @@ fn execute_closed_mac_publisher_service_state_retirement_v1() -> Result<Value> {
     bail!("publisher service-state retirement is unavailable off macOS")
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain bootstrap evidence sha256 for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_bootstrap_evidence_sha256_v1(
     authorization: &PublisherBootstrapAuthorizationV1,
 ) -> Result<String> {
@@ -2364,6 +2624,13 @@ fn mac_bootstrap_evidence_sha256_v1(
     )?))
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain bootstrap intent account derivation for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_keychain_bootstrap_intent_account_v1(scope_id: &str) -> Result<String> {
     mac_keychain_account_v1(scope_id, "publisher-bootstrap-intent")
 }
@@ -2371,6 +2638,13 @@ fn mac_keychain_bootstrap_intent_account_v1(scope_id: &str) -> Result<String> {
 /// The locator account is selected solely from retained authority facts.  It is intentionally
 /// not scope-addressed: the scope is the value recovered *from* this fixed-key record, never a
 /// caller parameter or an ambient project/VM discovery result.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain canonical bootstrap attempt locator account for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_keychain_bootstrap_attempt_locator_account_v1(attempt_key_sha256: &str) -> Result<String> {
     if attempt_key_sha256.len() != 64
         || !attempt_key_sha256
@@ -2384,6 +2658,13 @@ fn mac_keychain_bootstrap_attempt_locator_account_v1(attempt_key_sha256: &str) -
     ))
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain read bootstrap attempt locator by account for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_read_bootstrap_attempt_locator_by_account_v1(
     account: &str,
 ) -> Result<MacPublisherBootstrapAttemptLocatorV1> {
@@ -2401,6 +2682,13 @@ fn mac_read_bootstrap_attempt_locator_by_account_v1(
     Ok(locator)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain bootstrap attempt key for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_bootstrap_attempt_key_v1(
     authorization: &PublisherBootstrapAuthorizationV1,
     provenance: &MacPublisherInstallProvenanceV1,
@@ -2438,6 +2726,13 @@ fn mac_bootstrap_attempt_key_v1(
     ))
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain deterministic bootstrap component identity for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_deterministic_bootstrap_component_id_v1(
     scope_id: &str,
     attempt_id: &str,
@@ -2465,6 +2760,13 @@ fn mac_deterministic_bootstrap_component_id_v1(
 /// Materialize the original authorization from the retained locator and a freshly attested FD3
 /// derivation.  Only fixed allocation fields change; a final digest comparison rejects any
 /// changed image, provenance, carrier, source, component, or manifest byte.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain reconstruct bootstrap authorization from locator for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_reconstruct_bootstrap_authorization_from_locator_v1(
     fresh: &PublisherBootstrapAuthorizationV1,
     locator: &MacPublisherBootstrapAttemptLocatorV1,
@@ -2536,6 +2838,13 @@ fn mac_reconstruct_bootstrap_authorization_from_locator_v1(
     Ok(restored)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain open or allocate bootstrap attempt locator for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_open_or_allocate_bootstrap_attempt_locator_v1(
     fresh: &PublisherBootstrapAuthorizationV1,
     provenance: &MacPublisherInstallProvenanceV1,
@@ -2634,6 +2943,13 @@ fn mac_open_or_allocate_bootstrap_attempt_locator_v1(
 /// A completed locator is only a bounded-response replay if its retained original bootstrap
 /// state is still exactly present.  It never converts a missing, advanced, or substituted
 /// capsule/anchor into reusable direct-bootstrap authority.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain validate completed bootstrap attempt locator joins for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_validate_completed_bootstrap_attempt_locator_joins_v1(
     locator: &MacPublisherBootstrapAttemptLocatorV1,
 ) -> Result<()> {
@@ -2670,6 +2986,13 @@ fn mac_validate_completed_bootstrap_attempt_locator_joins_v1(
     Ok(())
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain decode attempt locator response for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_decode_attempt_locator_response_v1(
     locator: &MacPublisherBootstrapAttemptLocatorV1,
 ) -> Result<Value> {
@@ -2689,6 +3012,13 @@ fn mac_decode_attempt_locator_response_v1(
     Ok(value)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain complete bootstrap attempt locator for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_complete_bootstrap_attempt_locator_v1(
     locator: &MacPublisherBootstrapAttemptLocatorV1,
     authorization: &PublisherBootstrapAuthorizationV1,
@@ -2743,6 +3073,13 @@ fn mac_complete_bootstrap_attempt_locator_v1(
     Ok(next)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain bootstrap intent value for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_bootstrap_intent_value_v1(
     authorization: &PublisherBootstrapAuthorizationV1,
     authorization_sha256: &str,
@@ -2770,12 +3107,26 @@ fn mac_bootstrap_intent_value_v1(
     })
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain bootstrap intent observation for publisher bootstrap and Lima stage-one support"
+    )
+)]
 struct MacBootstrapIntentObservationV1 {
     bytes: Vec<u8>,
     state: String,
     key_spki_sha256: Option<String>,
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain parse bootstrap intent for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_parse_bootstrap_intent_v1(
     bytes: &[u8],
     authorization: &PublisherBootstrapAuthorizationV1,
@@ -2831,6 +3182,13 @@ fn mac_parse_bootstrap_intent_v1(
     })
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain create or open bootstrap intent for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_create_or_open_bootstrap_intent_v1(
     authorization: &PublisherBootstrapAuthorizationV1,
     authorization_sha256: &str,
@@ -2869,6 +3227,13 @@ fn mac_create_or_open_bootstrap_intent_v1(
     )
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain transition bootstrap intent for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_transition_bootstrap_intent_v1(
     authorization: &PublisherBootstrapAuthorizationV1,
     authorization_sha256: &str,
@@ -2917,6 +3282,13 @@ fn mac_transition_bootstrap_intent_v1(
     )
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain preflight control admission authority for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_preflight_control_admission_authority_v1(
     authority: &MacPublisherControlAuthorityV1,
     authorization_sha256: &str,
@@ -2955,6 +3327,13 @@ fn mac_preflight_control_admission_authority_v1(
     Ok(())
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain persist control admission authority for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn persist_mac_control_admission_authority_v1(
     admission: &MacPublisherControlAdmissionV1,
 ) -> Result<()> {
@@ -3022,6 +3401,13 @@ fn replace_mac_control_admission_authority_v1(next: &MacPublisherControlAdmissio
     )
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain system keychain p256 key exists for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_system_keychain_p256_key_exists_v1(scope_id: &str) -> Result<bool> {
     let key_tag = mac_keychain_signing_key_tag_v1(scope_id)?;
     #[cfg(target_os = "macos")]
@@ -3035,6 +3421,13 @@ fn mac_system_keychain_p256_key_exists_v1(scope_id: &str) -> Result<bool> {
     }
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain ensure system keychain p256 spki der for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_ensure_system_keychain_p256_spki_der_v1(scope_id: &str) -> Result<Vec<u8>> {
     let key_tag = mac_keychain_signing_key_tag_v1(scope_id)?;
     #[cfg(target_os = "macos")]
@@ -3065,6 +3458,13 @@ fn mac_system_keychain_sign_p1363_low_s_v1(scope_id: &str, payload: &[u8]) -> Re
     }
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain executor identity from bootstrap evidence for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_executor_identity_from_bootstrap_evidence_v1(
     authorization: &PublisherBootstrapAuthorizationV1,
 ) -> ManagedExecutorIdentityV1 {
@@ -3085,6 +3485,13 @@ fn mac_executor_identity_from_bootstrap_evidence_v1(
     }
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain initial lifecycle anchor signature for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_sign_initial_lifecycle_anchor_v1(
     scope_id: &str,
     anchor: &LifecyclePublisherAnchorV1,
@@ -3109,6 +3516,13 @@ fn mac_sign_initial_lifecycle_anchor_v1(
     })
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain build initial publisher protected state for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn build_initial_mac_publisher_protected_state_v1(
     authorization: &PublisherBootstrapAuthorizationV1,
     authorization_sha256: &str,
@@ -3150,6 +3564,13 @@ fn build_initial_mac_publisher_protected_state_v1(
     Ok(state)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain validate existing initial publisher state for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn validate_existing_initial_publisher_state_v1(
     state: &LifecyclePublisherProtectedStateV1,
     authorization: &PublisherBootstrapAuthorizationV1,
@@ -3190,6 +3611,13 @@ fn validate_existing_initial_publisher_state_v1(
     Ok(())
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain validate direct greenfield bootstrap authorization for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn validate_direct_greenfield_bootstrap_authorization_v1(
     authorization: &PublisherBootstrapAuthorizationV1,
 ) -> Result<()> {
@@ -3209,10 +3637,24 @@ fn validate_direct_greenfield_bootstrap_authorization_v1(
     Ok(())
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain lima stage one profile template sha256 for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_lima_stage_one_profile_template_sha256_v1() -> String {
     sha256_hex_bootstrap_v1(MAC_LIMA_STAGE_ONE_PROFILE_TEMPLATE_V1.as_bytes())
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain validated stage-one profile rendering for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn render_mac_lima_stage_one_profile_v1(attempt_id: &str, capsule_digest: &str) -> Result<Vec<u8>> {
     mac_require_uuid_v7_component_v1(attempt_id, "Lima Stage-1 profile attempt")?;
     if capsule_digest.len() != 64
@@ -3233,6 +3675,13 @@ fn render_mac_lima_stage_one_profile_v1(attempt_id: &str, capsule_digest: &str) 
         .into_bytes())
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain lima stage one instance entry for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_lima_stage_one_instance_entry_v1(scope_id: &str) -> ManagedArtifactEntryV1 {
     ManagedArtifactEntryV1 {
         object_id: scope_id.to_string(),
@@ -3263,6 +3712,13 @@ fn mac_lima_stage_one_instance_entry_v1(scope_id: &str) -> ManagedArtifactEntryV
     }
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed post-PM action literals for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_post_pm_action_literal_v1(action: ManagedActionV1) -> &'static str {
     match action {
         ManagedActionV1::Create => "create",
@@ -3279,6 +3735,13 @@ fn mac_post_pm_action_literal_v1(action: ManagedActionV1) -> &'static str {
 /// The post-PM table is intentionally materialized here, not inferred from a prefix, CLI
 /// selector, request payload, or caller-provided command.  A manifest contains one entry per
 /// fixed role and one signed planned receipt per fixed role/action row.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed post-PM role and action table for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_lima_post_pm_role_rows_v1(
     principal: &str,
 ) -> Vec<(String, &'static str, String, Vec<ManagedActionV1>)> {
@@ -3429,6 +3892,13 @@ fn mac_lima_post_pm_role_rows_v1(
 
 /// A byte artifact is accepted only from the retained prefix path derived by the signed
 /// manifest.  This mapping has no caller input and deliberately excludes the old guest relay.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain post pm artifact source path for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_post_pm_artifact_source_path_v1(prefix: &str, role: &str) -> Option<String> {
     let normalized = prefix.trim_end_matches('/');
     let name = match role {
@@ -3486,11 +3956,25 @@ fn mac_measure_post_pm_artifact_source_v1(path: &Path) -> Result<(String, String
     ))
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain nonmacOS post-PM artifact measurement refusal for publisher bootstrap and Lima stage-one support"
+    )
+)]
 #[cfg(not(target_os = "macos"))]
 fn mac_measure_post_pm_artifact_source_v1(_path: &Path) -> Result<(String, String, u64)> {
     bail!("retained macOS post-PM artifact measurement is unavailable off macOS")
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain lima post pm entry for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_lima_post_pm_entry_v1(
     scope_id: &str,
     prefix: &str,
@@ -3547,6 +4031,13 @@ fn mac_lima_post_pm_entry_v1(
     })
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain lima closed post pm entries for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_lima_closed_post_pm_entries_v1(
     scope_id: &str,
     prefix: &str,
@@ -3574,6 +4065,13 @@ fn mac_lima_closed_post_pm_entries_v1(
 /// root provenance fixes the package/build facts; the manifest binds the exact no-follow bytes
 /// and physical identity used by the later guest copy.  A changed, missing, linked, reordered,
 /// or additional artifact cannot become a Stage-1 successor fact.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain validate lima retained artifacts against provenance for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn validate_mac_lima_retained_artifacts_against_provenance_v1(
     provenance: &MacPublisherInstallProvenanceV1,
     entries: &[ManagedArtifactEntryV1],
@@ -3646,6 +4144,13 @@ fn validate_mac_lima_retained_artifacts_against_provenance_v1(
     Ok(())
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain closed post-PM receipt plan for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_lima_closed_post_pm_receipt_plan_v1(
     scope_id: &str,
     attempt_id: &str,
@@ -3713,6 +4218,13 @@ fn mac_lima_closed_post_pm_receipt_plan_v1(
     Ok(planned)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain canonical absolute principal home validation for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_require_canonical_absolute_home_v1(home: &str) -> Result<()> {
     if home.is_empty() || home == "/" || home.contains(['\0', '\n', '\r']) {
         bail!("macOS Lima principal home is empty, root, or contains control bytes");
@@ -3741,6 +4253,13 @@ fn mac_require_canonical_absolute_home_v1(home: &str) -> Result<()> {
     Ok(())
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain carrier and observed principal identity join for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_join_lima_principal_v1(
     carrier: &InstallBootstrapContextCarrierV1,
     observed_account: &str,
@@ -3770,6 +4289,13 @@ fn mac_join_lima_principal_v1(
     })
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain passwd buffer len for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_passwd_buffer_len_v1() -> Result<usize> {
     // SAFETY: sysconf has no pointer arguments and only reads the process configuration.
     let configured = unsafe { libc::sysconf(libc::_SC_GETPW_R_SIZE_MAX) };
@@ -3784,6 +4310,13 @@ fn mac_passwd_buffer_len_v1() -> Result<usize> {
     Ok(size)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain account-database resolution of retained principal for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_resolve_lima_principal_v1(
     carrier: &InstallBootstrapContextCarrierV1,
 ) -> Result<MacLimaPrincipalV1> {
@@ -3883,6 +4416,13 @@ fn mac_resolve_lima_principal_v1(
     Ok(principal)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain revalidate lima principal for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_revalidate_lima_principal_v1(
     carrier: &InstallBootstrapContextCarrierV1,
     principal: &MacLimaPrincipalV1,
@@ -3893,6 +4433,13 @@ fn mac_revalidate_lima_principal_v1(
     Ok(())
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain sign lima stage one authorization for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn sign_mac_lima_stage_one_authorization_v1(
     scope_id: &str,
     authorization: &LimaStageOneAuthorizationV1,
@@ -3925,6 +4472,13 @@ fn sign_mac_lima_stage_one_authorization_v1(
     })
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain derive lima stage one authorization for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn derive_mac_lima_stage_one_authorization_v1(
     authorization: &PublisherBootstrapAuthorizationV1,
     authorization_sha256: &str,
@@ -4063,6 +4617,13 @@ fn derive_mac_lima_stage_one_authorization_v1(
 
 /// Create the first signed anchor or resume only an exact Prepared/Completed direct-bootstrap
 /// transaction. Every mismatch leaves the Keychain, retained channel, and protected state intact.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain bootstrap publisher from authorized fd3 for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn bootstrap_mac_publisher_from_authorized_fd3_v1(
     authorization: &PublisherBootstrapAuthorizationV1,
     provenance: &MacPublisherInstallProvenanceV1,
@@ -4250,6 +4811,13 @@ fn bootstrap_mac_publisher_from_authorized_fd3_v1(
 }
 
 /// Security.framework returns X9.62 DER. The stored anchor uses exactly P-256 P1363 low-S.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain strict DER to low-S P-256 conversion for publisher bootstrap and Lima stage-one support"
+    )
+)]
 fn mac_p256_der_signature_to_p1363_low_s_v1(der: &[u8]) -> Result<[u8; 64]> {
     let mut cursor = 0usize;
     if der.get(cursor) != Some(&0x30) {
@@ -4278,15 +4846,36 @@ fn mac_p256_der_signature_to_p1363_low_s_v1(der: &[u8]) -> Result<[u8; 64]> {
     Ok(output)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain P-256 group order for P-256 signature support"
+    )
+)]
 const MAC_P256_ORDER_V1: [u8; 32] = [
     0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
     0xbc, 0xe6, 0xfa, 0xad, 0xa7, 0x17, 0x9e, 0x84, 0xf3, 0xb9, 0xca, 0xc2, 0xfc, 0x63, 0x25, 0x51,
 ];
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain P-256 half-order for low-S enforcement for P-256 signature support"
+    )
+)]
 const MAC_P256_ORDER_HALF_V1: [u8; 32] = [
     0x7f, 0xff, 0xff, 0xff, 0x80, 0x00, 0x00, 0x00, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
     0xde, 0x73, 0x7d, 0x56, 0xd3, 0x8b, 0xcf, 0x42, 0x79, 0xdc, 0xf2, 0x36, 0xb3, 0x15, 0xec, 0xa8,
 ];
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain read der length for P-256 signature support"
+    )
+)]
 fn mac_read_der_length_v1(der: &[u8], cursor: &mut usize) -> Result<usize> {
     let first = *der
         .get(*cursor)
@@ -4313,6 +4902,13 @@ fn mac_read_der_length_v1(der: &[u8], cursor: &mut usize) -> Result<usize> {
     Ok(length)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain read der positive integer for P-256 signature support"
+    )
+)]
 fn mac_read_der_positive_integer_v1<'a>(der: &'a [u8], cursor: &mut usize) -> Result<&'a [u8]> {
     if der.get(*cursor) != Some(&0x02) {
         bail!("System Keychain P-256 DER signature omits an integer");
@@ -4330,6 +4926,13 @@ fn mac_read_der_positive_integer_v1<'a>(der: &'a [u8], cursor: &mut usize) -> Re
     Ok(integer)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain write p256 scalar for P-256 signature support"
+    )
+)]
 fn mac_write_p256_scalar_v1(integer: &[u8], destination: &mut [u8]) -> Result<()> {
     let integer = integer.strip_prefix(&[0]).unwrap_or(integer);
     if integer.is_empty() || integer.len() > destination.len() {
@@ -4344,6 +4947,10 @@ fn mac_write_p256_scalar_v1(integer: &[u8], destination: &mut [u8]) -> Result<()
     Ok(())
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(dead_code, reason = "retain be gt for P-256 signature support")
+)]
 fn mac_be_gt_v1(left: &[u8], right: &[u8]) -> bool {
     left.iter()
         .zip(right)
@@ -4351,6 +4958,10 @@ fn mac_be_gt_v1(left: &[u8], right: &[u8]) -> bool {
         .unwrap_or(false)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(dead_code, reason = "retain be subtract for P-256 signature support")
+)]
 fn mac_be_subtract_v1(left: &[u8; 32], right: &[u8]) -> Result<[u8; 32]> {
     if right.len() != left.len() || !mac_be_gt_v1(left, right) {
         bail!("System Keychain P-256 scalar subtraction underflow");
@@ -6135,14 +6746,13 @@ int main(int argc, char **argv) {
             classify_mac_post_pm_transaction_v1(7, 8, true, true, false, Some("Completed"))
                 .is_err()
         );
-        assert_eq!(
+        assert!(
             mac_post_pm_effect_retry_decision_v1(MacPostPmEffectObservationStateV1::Before)
-                .unwrap(),
-            true
+                .unwrap()
         );
-        assert_eq!(
-            mac_post_pm_effect_retry_decision_v1(MacPostPmEffectObservationStateV1::After).unwrap(),
-            false
+        assert!(
+            !mac_post_pm_effect_retry_decision_v1(MacPostPmEffectObservationStateV1::After)
+                .unwrap()
         );
         assert!(
             mac_post_pm_effect_retry_decision_v1(MacPostPmEffectObservationStateV1::Ambiguous)
@@ -6840,17 +7450,20 @@ printf '%s' "$ENDPOINT_CODE"
             mac_systemd_quoted_field_v1("/home/alice\tsmith/.substrate", "guest home", true,)
                 .is_err()
         );
-        let fixed_steps = mac_fixed_install_steps_v1("alice");
-        assert!(fixed_steps.ends_with(&[
-            (
-                "mac.lima.guest-service-state(socket)".to_string(),
-                ManagedActionV1::Enable,
-            ),
-            (
-                "mac.lima.guest-service-state(service)".to_string(),
-                ManagedActionV1::Start,
-            ),
-        ]));
+        #[cfg(target_os = "macos")]
+        {
+            let fixed_steps = mac_fixed_install_steps_v1("alice");
+            assert!(fixed_steps.ends_with(&[
+                (
+                    "mac.lima.guest-service-state(socket)".to_string(),
+                    ManagedActionV1::Enable,
+                ),
+                (
+                    "mac.lima.guest-service-state(service)".to_string(),
+                    ManagedActionV1::Start,
+                ),
+            ]));
+        }
         let mut mismatched = binary.clone();
         mismatched.identity.metadata = Some(
             json!({"artifact_source_path":"/tmp/untrusted","artifact_source_physical_identity":"dev:1:ino:2","artifact_source_kind":"retained-prefix-linux-artifact"}),
@@ -7627,6 +8240,13 @@ fn closed_mac_role_action_v1(role: &str, action: ManagedActionV1) -> bool {
 /// receipt plan, entries, source/build identity, and manifest time all come from the signed
 /// Stage-1 template. This is intentionally not a generic mapper and has no caller-selected
 /// paths or role/action.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain signed stage-one successor manifest derivation for fixed Lima and pairing preparation support"
+    )
+)]
 fn derive_mac_lima_stage_one_successor_manifest_v1(
     stage_one: &LimaStageOneAuthorizationV1,
     carrier: &InstallBootstrapContextCarrierV1,
@@ -7823,6 +8443,13 @@ fn mac_issue_closed_post_pm_requests_after_stage_one_v1(
     Ok(requests)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain stage one profile path for fixed Lima and pairing preparation support"
+    )
+)]
 fn mac_stage_one_profile_path_v1(
     executor: &MacManagedArtifactExecutorV1,
     scope_id: &str,
@@ -7837,12 +8464,26 @@ fn mac_stage_one_profile_path_v1(
         .join(format!("{attempt_id}.yaml")))
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain lima inherited input role for fixed Lima and pairing preparation support"
+    )
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MacLimaInheritedInputRoleV1 {
     StageOneProfile,
     PostPmStdinSource,
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain lima inherited input for fixed Lima and pairing preparation support"
+    )
+)]
 #[derive(Debug)]
 struct MacLimaInheritedInputV1 {
     role: MacLimaInheritedInputRoleV1,
@@ -8038,6 +8679,7 @@ fn mac_publish_immutable_file_atomic_no_replace_v1(
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
 fn mac_write_stage_one_profile_absent_or_exact_v1(
     executor: &MacManagedArtifactExecutorV1,
     stage_one: &LimaStageOneAuthorizationV1,
@@ -8158,6 +8800,13 @@ fn mac_write_stage_one_profile_absent_or_exact_v1(
     result
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed lima command outcome for fixed Lima and pairing preparation support"
+    )
+)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum MacFixedLimaCommandOutcomeV1 {
     Success(String),
@@ -8170,12 +8819,26 @@ enum MacFixedLimaCommandOutcomeV1 {
     },
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed lima child io for fixed Lima and pairing preparation support"
+    )
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MacFixedLimaChildIoV1 {
     Captured,
     Streaming,
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain validate fixed lima argument plan for fixed Lima and pairing preparation support"
+    )
+)]
 fn mac_validate_fixed_lima_argument_plan_v1(
     arguments: &[&str],
     inherited_input: Option<&MacLimaInheritedInputV1>,
@@ -8343,6 +9006,13 @@ fn mac_validate_fixed_lima_argument_plan_v1(
 /// make the normal supported path deterministic and fail closed whenever either implicit Lima
 /// overlay exists or the `_config` path cannot be inspected unambiguously without following a
 /// leaf link.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain require absent lima owner overlays for fixed Lima and pairing preparation support"
+    )
+)]
 fn mac_require_absent_lima_owner_overlays_v1(
     principal: &MacLimaPrincipalV1,
     lima_home: &str,
@@ -8400,6 +9070,13 @@ fn mac_require_absent_lima_owner_overlays_v1(
     Ok(())
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain verify lima control state ownership for fixed Lima and pairing preparation support"
+    )
+)]
 fn mac_verify_lima_control_state_ownership_v1(
     principal: &MacLimaPrincipalV1,
     lima_home: &str,
@@ -8456,6 +9133,7 @@ fn mac_verify_lima_control_state_ownership_v1(
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
 fn mac_verify_lima_inherited_input_descriptor_v1(
     inherited_input: &MacLimaInheritedInputV1,
 ) -> Result<()> {
@@ -8670,6 +9348,13 @@ fn mac_spawn_fixed_lima_child_v1(
     )
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain require privileged fixed lima owner for fixed Lima and pairing preparation support"
+    )
+)]
 fn mac_require_privileged_fixed_lima_owner_v1(real_uid: u32, effective_uid: u32) -> Result<()> {
     if real_uid != 0 || effective_uid != 0 {
         bail!("privileged macOS Lima publisher is not running with root authority");
@@ -8699,6 +9384,13 @@ fn mac_spawn_fixed_lima_stream_child_v1(
     ))
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain run fixed lima command outcome for fixed Lima and pairing preparation support"
+    )
+)]
 fn mac_run_fixed_lima_command_outcome_v1(
     tool: &Path,
     carrier: &InstallBootstrapContextCarrierV1,
@@ -8737,6 +9429,13 @@ fn mac_run_fixed_lima_command_outcome_v1(
     mac_join_fixed_lima_outcome_and_post_validation_v1(outcome, post_validation)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain validate lima after command for fixed Lima and pairing preparation support"
+    )
+)]
 fn mac_validate_lima_after_command_v1(
     carrier: &InstallBootstrapContextCarrierV1,
     principal: &MacLimaPrincipalV1,
@@ -8746,6 +9445,13 @@ fn mac_validate_lima_after_command_v1(
     mac_validate_lima_post_effect_state_v1(principal, lima_home)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain validate lima post effect state for fixed Lima and pairing preparation support"
+    )
+)]
 fn mac_validate_lima_post_effect_state_v1(
     principal: &MacLimaPrincipalV1,
     lima_home: &str,
@@ -8755,6 +9461,13 @@ fn mac_validate_lima_post_effect_state_v1(
     Ok(())
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain join fixed lima outcome and post validation for fixed Lima and pairing preparation support"
+    )
+)]
 fn mac_join_fixed_lima_outcome_and_post_validation_v1(
     outcome: Result<MacFixedLimaCommandOutcomeV1>,
     post_validation: Result<()>,
@@ -8819,6 +9532,13 @@ fn mac_collect_fixed_lima_child_outcome_v1(
     }
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed principal-bound limactl command execution for fixed Lima and pairing preparation support"
+    )
+)]
 fn mac_run_fixed_lima_command_v1(
     tool: &Path,
     carrier: &InstallBootstrapContextCarrierV1,
@@ -8842,8 +9562,22 @@ fn mac_run_fixed_lima_command_v1(
     }
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed limactl list arguments for fixed Lima and pairing preparation support"
+    )
+)]
 const MAC_LIMA_LIST_ALL_ARGUMENTS_V1: [&str; 2] = ["list", "--json"];
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain canonical and unambiguous limactl list parser for fixed Lima and pairing preparation support"
+    )
+)]
 fn mac_parse_fixed_lima_list_v1(output: &str, instance_name: &str) -> Result<Option<String>> {
     if output.is_empty() {
         return Ok(None);
@@ -8871,15 +9605,20 @@ fn mac_parse_fixed_lima_list_v1(output: &str, instance_name: &str) -> Result<Opt
             .and_then(Value::as_str)
             .filter(|status| !status.is_empty())
             .ok_or_else(|| anyhow::anyhow!("fixed limactl row {} lacks status", index + 1))?;
-        if name == instance_name {
-            if found.replace(status.to_string()).is_some() {
-                bail!("fixed limactl list has an ambiguous selected instance");
-            }
+        if name == instance_name && found.replace(status.to_string()).is_some() {
+            bail!("fixed limactl list has an ambiguous selected instance");
         }
     }
     Ok(found)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain parse stage one observation for fixed Lima and pairing preparation support"
+    )
+)]
 fn mac_parse_stage_one_observation_v1(
     output: &str,
     stage_one: &LimaStageOneAuthorizationV1,
@@ -8989,6 +9728,13 @@ fn mac_reobserve_completed_stage_one_v1(
     Ok(first)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain prepared record signature for fixed Lima and pairing preparation support"
+    )
+)]
 fn sign_mac_prepared_record_v1(
     scope_id: &str,
     record: &ManagedActionPreparedRecordV1,
@@ -9012,6 +9758,13 @@ fn sign_mac_prepared_record_v1(
     })
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain action receipt signature for fixed Lima and pairing preparation support"
+    )
+)]
 fn sign_mac_action_receipt_v1(
     scope_id: &str,
     receipt: &ManagedActionReceiptV1,
@@ -9073,6 +9826,13 @@ fn load_or_sign_mac_lima_stage_one_receipt_v1(
     }
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain prepare lima stage one transition for fixed Lima and pairing preparation support"
+    )
+)]
 fn prepare_mac_lima_stage_one_transition_v1(
     executor: &MacManagedArtifactExecutorV1,
     stage_one: &LimaStageOneAuthorizationV1,
@@ -9437,6 +10197,13 @@ fn resume_mac_lima_stage_one_after_protected_state_cas_v1(
     })))
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain sign r6 pairing predecessor for fixed Lima and pairing preparation support"
+    )
+)]
 fn mac_sign_r6_pairing_predecessor_v1(
     scope_id: &str,
     predecessor: &MacR6PairingPredecessorV1,
@@ -9464,6 +10231,13 @@ fn mac_sign_r6_pairing_predecessor_v1(
     })
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain sign r6 pairing continuation for fixed Lima and pairing preparation support"
+    )
+)]
 fn mac_sign_r6_pairing_continuation_v1(
     scope_id: &str,
     continuation: &MacR6PairingContinuationV1,
@@ -9491,6 +10265,13 @@ fn mac_sign_r6_pairing_continuation_v1(
     })
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain r6 pairing predecessor exact install binding for fixed Lima and pairing preparation support"
+    )
+)]
 fn mac_r6_pairing_predecessor_exact_install_binding_v1(
     predecessor: &MacR6PairingPredecessorV1,
     expected: &MacR6PairingPredecessorV1,
@@ -9529,6 +10310,13 @@ fn mac_open_r6_pairing_predecessor_document_v1(
     Ok(Some((predecessor, bytes)))
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain open r6 pairing continuation document for fixed Lima and pairing preparation support"
+    )
+)]
 fn mac_open_r6_pairing_continuation_document_v1(
     predecessor: &MacR6PairingPredecessorV1,
 ) -> Result<Option<(MacR6PairingContinuationV1, Vec<u8>)>> {
@@ -10774,6 +11562,13 @@ fn execute_closed_mac_lima_stage_one_effect_v1(
 /// The only state classifications that may advance a closed ordinary post-PM transaction.
 /// This deliberately separates a stale completed observation from a source-anchor retry that
 /// owns the retained prepared record; neither path can allocate a second counter.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain post pm transaction class for post-PM effect and recovery support"
+    )
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MacPostPmTransactionClassV1 {
     New,
@@ -10786,6 +11581,13 @@ enum MacPostPmTransactionClassV1 {
 /// Classify post-PM recovery before the normal current-counter gate.  The caller supplies only
 /// facts already recomputed from the protected state, signed prepared record, exact request, and
 /// retained attempt journal; no caller retry selector exists.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain protected post-PM recovery classification for post-PM effect and recovery support"
+    )
+)]
 fn classify_mac_post_pm_transaction_v1(
     request_counter: u64,
     state_counter: u64,
@@ -10821,6 +11623,13 @@ fn classify_mac_post_pm_transaction_v1(
     Ok(MacPostPmTransactionClassV1::New)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain post pm attempt journal for post-PM effect and recovery support"
+    )
+)]
 #[derive(Debug, Clone, PartialEq)]
 struct MacPostPmAttemptJournalV1 {
     schema_owner: String,
@@ -10832,6 +11641,13 @@ struct MacPostPmAttemptJournalV1 {
     effect_observation: Option<Value>,
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain canonical post pm attempt journal for post-PM effect and recovery support"
+    )
+)]
 fn canonical_mac_post_pm_attempt_journal_v1(
     journal: &MacPostPmAttemptJournalV1,
 ) -> Result<Vec<u8>> {
@@ -11246,6 +12062,13 @@ fn mac_open_exact_completed_post_pm_receipt_v1(
     Ok(receipt)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain post pm effect primitive for post-PM effect and recovery support"
+    )
+)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum MacPostPmEffectPrimitiveV1 {
     /// Exact limactl argv for an instance transition; no guest executable is involved.
@@ -11277,6 +12100,13 @@ enum MacPostPmEffectPrimitiveV1 {
     },
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain post pm effect plan for post-PM effect and recovery support"
+    )
+)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct MacPostPmEffectPlanV1 {
     role: String,
@@ -11294,6 +12124,13 @@ struct MacPostPmEffectPlanV1 {
     target_integrity: Option<MacPostPmTargetIntegrityV1>,
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain post pm target integrity for post-PM effect and recovery support"
+    )
+)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct MacPostPmTargetIntegrityV1 {
     path: String,
@@ -11307,6 +12144,13 @@ struct MacPostPmTargetIntegrityV1 {
     mode: String,
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain post pm effect observation state for post-PM effect and recovery support"
+    )
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MacPostPmEffectObservationStateV1 {
     Before,
@@ -11314,6 +12158,13 @@ enum MacPostPmEffectObservationStateV1 {
     Ambiguous,
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain prepared first effect decision for post-PM effect and recovery support"
+    )
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MacPreparedFirstEffectDecisionV1 {
     Execute,
@@ -11324,6 +12175,13 @@ enum MacPreparedFirstEffectDecisionV1 {
 /// been completed by socket demand activation or reboot, but before its journal advanced. Only
 /// the exact service Start owns this recovery exception; every other role/action remains
 /// absent-before-first-effect.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain first-effect recovery decision for post-PM effect and recovery support"
+    )
+)]
 fn mac_prepared_first_effect_decision_v1(
     role: &str,
     action: ManagedActionV1,
@@ -11349,6 +12207,13 @@ fn mac_prepared_first_effect_decision_v1(
 /// The recovery decision is deliberately pure so every kill boundary is testable without a
 /// native effect. `Before` is the only state that can execute the original idempotent primitive;
 /// `After` must complete the durable receipt without replay and `Ambiguous` is preserving-first.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain post-PM exact retry decision for post-PM effect and recovery support"
+    )
+)]
 fn mac_post_pm_effect_retry_decision_v1(
     observation: MacPostPmEffectObservationStateV1,
 ) -> Result<bool> {
@@ -11364,6 +12229,13 @@ fn mac_post_pm_effect_retry_decision_v1(
 /// A fresh effect and a replay share the same terminal rule: only an independently observed
 /// after-state may cross the receipt boundary.  Before and ambiguous observations preserve the
 /// prepared/journal state for bounded recovery instead of manufacturing a receipt.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain verified post-PM after-state gate for post-PM effect and recovery support"
+    )
+)]
 fn mac_require_post_pm_after_state_v1(state: MacPostPmEffectObservationStateV1) -> Result<()> {
     match state {
         MacPostPmEffectObservationStateV1::After => Ok(()),
@@ -11379,6 +12251,13 @@ fn mac_require_post_pm_after_state_v1(state: MacPostPmEffectObservationStateV1) 
 /// Classify only the closed observation programs emitted by the fixed effect planner.  Exit
 /// status is evidence only for the explicitly enumerated `test`, `getent`, and `systemctl`
 /// probes; every other nonzero/spawn/timeout condition is ambiguous and cannot trigger replay.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain classify post pm probe for post-PM effect and recovery support"
+    )
+)]
 fn mac_classify_post_pm_probe_v1(
     plan: &MacPostPmEffectPlanV1,
     exited_successfully: bool,
@@ -11507,6 +12386,13 @@ fn mac_classify_post_pm_probe_v1(
     }
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain post pm artifact binding for post-PM effect and recovery support"
+    )
+)]
 fn mac_post_pm_artifact_binding_v1(
     entry: &ManagedArtifactEntryV1,
     selected_host_prefix: &str,
@@ -11557,6 +12443,13 @@ fn mac_post_pm_artifact_binding_v1(
     ))
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain systemd quoted field for post-PM effect and recovery support"
+    )
+)]
 fn mac_systemd_quoted_field_v1(value: &str, label: &str, allow_spaces: bool) -> Result<String> {
     if value.is_empty()
         || value.bytes().any(|byte| byte.is_ascii_control())
@@ -11579,6 +12472,13 @@ fn mac_reject_unauthorized_world_netfilter_v1() -> Result<()> {
     Ok(())
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain render world service unit for post-PM effect and recovery support"
+    )
+)]
 fn mac_render_world_service_unit_v1(mapping: &PlatformBootstrapMappingV1) -> Result<Vec<u8>> {
     mac_reject_unauthorized_world_netfilter_v1()?;
     let encoded = serde_json::to_value(mapping).context("encode fixed Lima unit mapping")?;
@@ -11663,6 +12563,13 @@ fn mac_render_world_service_unit_v1(mapping: &PlatformBootstrapMappingV1) -> Res
     Ok(rendered.into_bytes())
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed role-scoped post-PM effect plan for post-PM effect and recovery support"
+    )
+)]
 fn mac_post_pm_effect_plan_v1(
     entry: &ManagedArtifactEntryV1,
     action: ManagedActionV1,
@@ -12151,6 +13058,13 @@ fn mac_run_fixed_lima_command_owned_outcome_v1(
     mac_run_fixed_lima_command_outcome_v1(tool, carrier, principal, lima_home, &borrowed, None)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed privileged guest shell argument prefix for post-PM effect and recovery support"
+    )
+)]
 fn mac_fixed_privileged_guest_shell_argv_v1(arguments: &[String]) -> Vec<String> {
     let mut exact = vec![
         "shell".to_string(),
@@ -12164,6 +13078,13 @@ fn mac_fixed_privileged_guest_shell_argv_v1(arguments: &[String]) -> Vec<String>
     exact
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain target link probe argv for post-PM effect and recovery support"
+    )
+)]
 fn mac_target_link_probe_argv_v1(path: &str) -> [String; 3] {
     [
         "/usr/bin/test".to_string(),
@@ -12172,6 +13093,13 @@ fn mac_target_link_probe_argv_v1(path: &str) -> [String; 3] {
     ]
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain target exists probe argv for post-PM effect and recovery support"
+    )
+)]
 fn mac_target_exists_probe_argv_v1(path: &str) -> [String; 3] {
     [
         "/usr/bin/test".to_string(),
@@ -12180,6 +13108,13 @@ fn mac_target_exists_probe_argv_v1(path: &str) -> [String; 3] {
     ]
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed lima stdin transfer arguments for post-PM effect and recovery support"
+    )
+)]
 fn mac_fixed_lima_stdin_transfer_arguments_v1(
     guest_staging_path: &str,
     source: &MacLimaInheritedInputV1,
@@ -12217,6 +13152,13 @@ fn mac_run_fixed_lima_stdin_source_v1(
     mac_run_fixed_lima_command_v1(tool, carrier, principal, lima_home, &borrowed, Some(source))
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain post pm generation key for post-PM effect and recovery support"
+    )
+)]
 fn mac_post_pm_generation_key_v1(
     prepared: &ManagedActionPreparedRecordV1,
     role: &str,
@@ -12238,6 +13180,13 @@ fn mac_post_pm_generation_key_v1(
     ))
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain post pm generation staging path for post-PM effect and recovery support"
+    )
+)]
 fn mac_post_pm_generation_staging_path_v1(
     prepared: &ManagedActionPreparedRecordV1,
     role: &str,
@@ -12250,6 +13199,13 @@ fn mac_post_pm_generation_staging_path_v1(
     ))
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain fixed lima atomic publish arguments for post-PM effect and recovery support"
+    )
+)]
 fn mac_fixed_lima_atomic_publish_arguments_v1(
     source: &str,
     target: &str,
@@ -14225,6 +15181,13 @@ fn mac_keychain_r6_pairing_continuation_account_v1(
     mac_keychain_account_v1(scope_id, &format!("r6-pairing-continuation-{generation}"))
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain keychain r6 pairing tombstone account for R6 retained pairing and admission support"
+    )
+)]
 fn mac_keychain_r6_pairing_tombstone_account_v1(scope_id: &str, generation: u64) -> Result<String> {
     if generation == 0 {
         bail!("R6 tombstone account generation is invalid");
@@ -14232,6 +15195,13 @@ fn mac_keychain_r6_pairing_tombstone_account_v1(scope_id: &str, generation: u64)
     mac_keychain_account_v1(scope_id, &format!("r6-pairing-tombstone-{generation}"))
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain keychain r6 pairing missed activation account for R6 retained pairing and admission support"
+    )
+)]
 fn mac_keychain_r6_pairing_missed_activation_account_v1(
     scope_id: &str,
     generation: u64,
@@ -14284,6 +15254,13 @@ fn open_mac_lima_stage_one_capsule_v1(scope_id: &str) -> Result<Option<MacLimaSt
     Ok(Some(capsule))
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain stage-one capsule transition validation for R6 retained pairing and admission support"
+    )
+)]
 fn stage_one_capsule_transition_is_exact_v1(
     current: &MacLimaStageOneCapsuleV1,
     next: &MacLimaStageOneCapsuleV1,
@@ -14348,6 +15325,13 @@ fn stage_one_capsule_transition_is_exact_v1(
     Ok(())
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain stage-one capsule compare-and-swap for R6 retained pairing and admission support"
+    )
+)]
 fn compare_and_swap_mac_lima_stage_one_capsule_v1(
     current: Option<&MacLimaStageOneCapsuleV1>,
     next: &MacLimaStageOneCapsuleV1,
@@ -14440,6 +15424,13 @@ fn base64url_encode_mac_v1(bytes: &[u8]) -> String {
     output
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain base64url decode for R6 retained pairing and admission support"
+    )
+)]
 fn mac_base64url_decode_v1(value: &str) -> Result<Vec<u8>> {
     fn sextet(byte: u8) -> Option<u8> {
         match byte {
@@ -14625,6 +15616,13 @@ fn mac_verified_control_admission_v1() -> Result<MacPublisherControlAdmissionV1>
     Ok(admission)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain attest xpc control image for R6 retained pairing and admission support"
+    )
+)]
 fn attest_mac_xpc_control_image_v1(
     message: *mut core::ffi::c_void,
     authority: &MacPublisherControlAuthorityV1,
@@ -14997,6 +15995,13 @@ fn mac_r6_pairing_activation_record_value_v1(record: &MacR6PairingActivationReco
     })
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain sign r6 pairing activation record for R6 retained pairing and admission support"
+    )
+)]
 fn mac_sign_r6_pairing_activation_record_v1(
     scope_id: &str,
     record: &MacR6PairingActivationRecordV1,
@@ -15121,6 +16126,13 @@ fn open_mac_r6_pairing_predecessor_state_v1(
 /// Derive the only producer-side replacement transition. PairingEffectStarted and Consumed are
 /// deliberately excluded: expiry can replace only an unused Available predecessor, and equality
 /// at the deadline is expired under the half-open validity interval.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain derive r6 pairing expired unused tombstone for R6 retained pairing and admission support"
+    )
+)]
 fn derive_mac_r6_pairing_expired_unused_tombstone_v1(
     current: &MacR6PairingPredecessorStateV1,
     expires_at_unix_ns: u64,
@@ -15146,6 +16158,13 @@ fn derive_mac_r6_pairing_expired_unused_tombstone_v1(
     Ok(tombstone)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain derive r6 pairing missed activation tombstone for R6 retained pairing and admission support"
+    )
+)]
 fn derive_mac_r6_pairing_missed_activation_tombstone_v1(
     current: &MacR6PairingPredecessorStateV1,
     issued_at_unix_ns: u64,
@@ -15349,6 +16368,13 @@ fn mac_now_unix_ns_v1() -> Result<u64> {
     u64::try_from(duration.as_nanos()).context("macOS Stage-1 clock exceeds u64 nanoseconds")
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain derive r6 pairing prepared window for R6 retained pairing and admission support"
+    )
+)]
 fn derive_r6_pairing_prepared_window_v1(prepare_now_unix_ns: u64) -> Result<(u64, u64)> {
     let issued_at_unix_ns = prepare_now_unix_ns
         .checked_add(R6_PAIRING_PREPARE_LEAD_NS_V1)
@@ -15818,6 +16844,13 @@ fn plan_r6_issue_predecessor_rejoin_v1(
     }
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        clippy::drop_non_drop,
+        reason = "the non-macOS guard is inert; macOS Drop releases the lock at these calls"
+    )
+)]
 fn issue_lima_guest_pairing_ticket_inner_v1(
     executor: &MacManagedArtifactExecutorV1,
     control: &ManagedLifecycleControlRequestV1,
@@ -16326,26 +17359,24 @@ pub fn advance_lima_guest_pairing_record_v1(
             R6ExpiredAdvanceDispositionV1::ReplayConsumed => {}
         }
     }
-    if record.state == "ticket_consumed" {
-        if predecessor_state.state == "PairingEffectStarted"
-            && predecessor_state.pairing_attempt_id.as_deref() == Some(challenge_id)
-        {
-            let record_sha256 = sha256_hex_bootstrap_v1(
-                &canonical_guest_publisher_pairing_host_record_v1(&record)?,
-            );
-            persist_mac_r6_pairing_predecessor_state_transition_v1(
-                &control.scope_id,
-                &predecessor_state.predecessor_id,
-                predecessor_state.predecessor_generation,
-                "Consumed",
-                Some(challenge_id),
-                predecessor_state.effect_admitted_at_unix_ns,
-                Some(&record_sha256),
-            )?;
-        }
-        // Continue into the exact replay handshake below; only its guest marker acknowledgement
-        // authorizes returning the original host receipt.
+    if record.state == "ticket_consumed"
+        && predecessor_state.state == "PairingEffectStarted"
+        && predecessor_state.pairing_attempt_id.as_deref() == Some(challenge_id)
+    {
+        let record_sha256 =
+            sha256_hex_bootstrap_v1(&canonical_guest_publisher_pairing_host_record_v1(&record)?);
+        persist_mac_r6_pairing_predecessor_state_transition_v1(
+            &control.scope_id,
+            &predecessor_state.predecessor_id,
+            predecessor_state.predecessor_generation,
+            "Consumed",
+            Some(challenge_id),
+            predecessor_state.effect_admitted_at_unix_ns,
+            Some(&record_sha256),
+        )?;
     }
+    // Continue into the exact replay handshake below; only its guest marker acknowledgement
+    // authorizes returning the original host receipt.
     let record = match record.state.as_str() {
         "sessions_opened"
         | "operator_proof_verified"
@@ -16382,7 +17413,7 @@ fn r6_pairing_consumed_response_v1(completed: &GuestPublisherPairingHostRecordV1
         "session_id": completed.data_session.session_id,
         "record_generation": completed.record_generation,
         "record_sha256": sha256_hex_bootstrap_v1(
-            &canonical_guest_publisher_pairing_host_record_v1(&completed)?
+            &canonical_guest_publisher_pairing_host_record_v1(completed)?
         ),
     }))
 }
@@ -16419,6 +17450,13 @@ fn record_r6_direct_operator_failure_v1(
 /// Admit the pairing effect only after the independently signed operator proof has validated.
 /// Issue/replay alone leaves an unused predecessor Available. A crash after this CAS but before
 /// the host-record CAS is recovered by accepting only the same challenge ID on retry.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain r6 effect admission decision for R6 retained pairing and admission support"
+    )
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum R6EffectAdmissionDecisionV1 {
     Prepare,
@@ -16428,6 +17466,13 @@ enum R6EffectAdmissionDecisionV1 {
     RollBackPreparedExpired,
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain classify r6 effect admission for R6 retained pairing and admission support"
+    )
+)]
 fn classify_r6_effect_admission_v1(
     state: &str,
     state_attempt_id: Option<&str>,
@@ -16482,6 +17527,13 @@ fn classify_r6_effect_admission_v1(
     }
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain admit r6 predecessor effect after operator proof for R6 retained pairing and admission support"
+    )
+)]
 fn admit_r6_predecessor_effect_after_operator_proof_v1(
     control: &ManagedLifecycleControlRequestV1,
     current: &GuestPublisherPairingHostRecordV1,
@@ -16572,6 +17624,13 @@ fn admit_r6_predecessor_effect_after_operator_proof_v1(
 
 /// Commit one in-memory R6 transition through both the common transition validator and the
 /// protected Keychain CAS.  All callers construct only the fixed transition-table successor.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        clippy::drop_non_drop,
+        reason = "retain explicit guard drop at the cross-platform CAS boundary"
+    )
+)]
 fn persist_r6_guest_pairing_record_transition_v1(
     executor: &MacManagedArtifactExecutorV1,
     control: &ManagedLifecycleControlRequestV1,
@@ -16965,6 +18024,13 @@ fn open_active_mac_guest_pairing_record_v1(
     Ok(Some(record))
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        clippy::too_many_arguments,
+        reason = "retain exact R6 active-pointer admission facts"
+    )
+)]
 fn classify_r6_active_pointer_consumption_v1(
     record_state: &str,
     has_operator_proof: bool,
@@ -17731,6 +18797,13 @@ fn read_r6_data_child_frame_v1(reader: &mut BufReader<std::process::ChildStdout>
     serde_json::from_str(&frame).context("decode one R6 data-child frame")
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain decode r6 data operator proof frame for R6 retained pairing and admission support"
+    )
+)]
 fn decode_r6_data_operator_proof_frame_v1(
     value: &Value,
 ) -> Result<(GuestPublisherPairingOperatorProofV1, String)> {
@@ -17761,6 +18834,13 @@ fn decode_r6_data_operator_proof_frame_v1(
     Ok((proof, claimed_sha256.to_string()))
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain r6 operator proof expected commitment for R6 retained pairing and admission support"
+    )
+)]
 fn r6_operator_proof_expected_commitment_v1(
     ticket: &GuestPublisherPairingTicketV1,
     binding: &GuestPublisherPairingSessionBindingV1,
@@ -17783,6 +18863,13 @@ fn r6_operator_proof_expected_commitment_v1(
     ))
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain accept r6 operator proof before intent for R6 retained pairing and admission support"
+    )
+)]
 fn accept_r6_operator_proof_before_intent_v1(
     executor: &MacManagedArtifactExecutorV1,
     control: &ManagedLifecycleControlRequestV1,
@@ -17838,6 +18925,13 @@ fn accept_r6_operator_proof_before_intent_v1(
     persist_r6_guest_pairing_record_transition_v1(executor, control, current, next)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain decode r6 data hello frame for R6 retained pairing and admission support"
+    )
+)]
 fn decode_r6_data_hello_frame_v1(value: &Value) -> Result<GuestPublisherBootstrapHelloV1> {
     let object = value
         .as_object()
@@ -17854,6 +18948,13 @@ fn decode_r6_data_hello_frame_v1(value: &Value) -> Result<GuestPublisherBootstra
     .context("decode signed R6 guest Hello")
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain decode r6 data guest anchor frame for R6 retained pairing and admission support"
+    )
+)]
 fn decode_r6_data_guest_anchor_frame_v1(value: &Value) -> Result<LifecyclePublisherAnchorV1> {
     let object = value
         .as_object()
@@ -17870,6 +18971,13 @@ fn decode_r6_data_guest_anchor_frame_v1(value: &Value) -> Result<LifecyclePublis
     .context("decode signed R6 guest anchor")
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain sign r6 guest pairing transcript for R6 retained pairing and admission support"
+    )
+)]
 fn mac_sign_r6_guest_pairing_transcript_v1(
     scope_id: &str,
     ticket: &GuestPublisherPairingTicketV1,
@@ -17907,6 +19015,13 @@ fn mac_sign_r6_guest_pairing_transcript_v1(
     Ok(transcript)
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain validate r6 guest anchor for R6 retained pairing and admission support"
+    )
+)]
 fn validate_r6_guest_anchor_v1(
     record: &GuestPublisherPairingHostRecordV1,
     hello: &GuestPublisherBootstrapHelloV1,
@@ -18068,6 +19183,13 @@ unsafe extern "C" fn ignore_mac_xpc_event_v1(
 
 /// The reply object and its bounded `response` field are classified separately so XPC transport
 /// errors cannot be misreported as publisher protocol frames.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain xpc reply object for XPC reply and publisher response support"
+    )
+)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum MacXpcReplyObjectV1 {
     ConnectionInvalid,
@@ -18077,12 +19199,26 @@ enum MacXpcReplyObjectV1 {
     UnexpectedXpcType,
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain xpc reply data for XPC reply and publisher response support"
+    )
+)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum MacXpcReplyDataV1 {
     Missing,
     Present(usize),
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain xpc reply classification for XPC reply and publisher response support"
+    )
+)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum MacXpcReplyClassificationV1 {
     ConnectionInvalid,
@@ -18096,6 +19232,13 @@ enum MacXpcReplyClassificationV1 {
 }
 
 impl MacXpcReplyClassificationV1 {
+    #[cfg_attr(
+        not(target_os = "macos"),
+        allow(
+            dead_code,
+            reason = "retain XPC reply classification label mapping for XPC reply and publisher response support"
+        )
+    )]
     const fn label(self) -> &'static str {
         match self {
             Self::ConnectionInvalid => "connection-invalid",
@@ -18110,6 +19253,13 @@ impl MacXpcReplyClassificationV1 {
     }
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain classify xpc reply for XPC reply and publisher response support"
+    )
+)]
 fn classify_mac_xpc_reply_v1(
     object: MacXpcReplyObjectV1,
     data: MacXpcReplyDataV1,
@@ -19236,6 +20386,13 @@ struct MacAuditTokenFfiV1 {
 /// Attach the exact retained peer authority to any response produced after audit-token,
 /// designated-requirement, and opened-image admission. Pre-admission failures never call this
 /// helper and therefore cannot claim an authenticated peer binding.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "retain authenticated publisher response for XPC reply and publisher response support"
+    )
+)]
 fn authenticated_mac_publisher_response_v1(
     result: Result<Value>,
     authority: &MacPublisherControlAuthorityV1,

@@ -1090,7 +1090,10 @@ mod tests {
 
     fn home() -> tempfile::TempDir {
         use std::os::unix::fs::PermissionsExt;
-        let home = tempfile::tempdir_in(env!("CARGO_MANIFEST_DIR")).unwrap();
+        let parent = std::env::var_os("SUBSTRATE_A1_TEST_PARENT")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+        let home = tempfile::tempdir_in(parent).unwrap();
         std::fs::set_permissions(home.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
         home
     }

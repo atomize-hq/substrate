@@ -171,6 +171,8 @@ EOF
   chmod 0755 "${harness}"
 
   set +e
+  # The invoking test user owns the output capture.
+  # shellcheck disable=SC2024
   sudo -n -- /usr/bin/env \
     PATH="${FIXED_PATH}" \
     HOME="${CALLER_HOME}" \

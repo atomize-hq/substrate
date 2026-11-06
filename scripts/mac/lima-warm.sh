@@ -15,14 +15,9 @@ VM_NAME="${SUBSTRATE_LIMA_VM_NAME:-substrate}"
 PROFILE="${LIMA_PROFILE_PATH:-${SCRIPT_DIR}/lima/substrate.yaml}"
 PROJECT_PATH=""
 CHECK_ONLY=0
-BUILD_PROFILE="${LIMA_BUILD_PROFILE:-release}"
 LAYOUT_SENTINEL="/etc/substrate-lima-layout"
 LAYOUT_VERSION="socket-parity-v2-staged-workspace-v1"
-STAGED_WORKSPACE_ROOT="/var/lib/substrate/staged-workspace"
-STAGED_WORKSPACE_CURRENT="${STAGED_WORKSPACE_ROOT}/current"
-STAGED_WORKSPACE_MANIFEST_NAME=".substrate-lima-stage-manifest"
 WAIT_TIMEOUT=120
-SKIP_GUEST_BUILD="${SUBSTRATE_LIMA_SKIP_GUEST_BUILD:-0}"
 HELP_REQUESTED=0
 INSTALL_PREFIX_RAW=""
 INSTALL_PREFIX_DECLARED=0
@@ -135,6 +130,8 @@ script_unit_source_dir="${SCRIPT_DIR}/lima/units"
 if [[ -d "${project_unit_source_dir}" ]]; then
     CANONICAL_UNIT_SOURCE_DIR="${project_unit_source_dir}"
 elif [[ -d "${script_unit_source_dir}" ]]; then
+    # Preserve the resolved directory for sourceable lifecycle fixtures.
+    # shellcheck disable=SC2034
     CANONICAL_UNIT_SOURCE_DIR="${script_unit_source_dir}"
 else
     fatal "Canonical guest unit directory not found. Expected ${project_unit_source_dir} or ${script_unit_source_dir}."
