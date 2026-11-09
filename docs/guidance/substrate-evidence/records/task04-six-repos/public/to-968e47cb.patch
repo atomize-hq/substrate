@@ -1,0 +1,47 @@
+diff --git a/scripts/ci/canonical_shell_wall_runner.py b/scripts/ci/canonical_shell_wall_runner.py
+index e3df67d6a4544f8301197084a819aee7748df426..176b7ee083491086dfdabe24e6e5b64540b94cd9 100644
+--- a/scripts/ci/canonical_shell_wall_runner.py
++++ b/scripts/ci/canonical_shell_wall_runner.py
+@@ -14092,13 +14092,9 @@ def host_main(arguments: Mapping[str, object]) -> int:
+         stage_a_reaped = True
+         if stage_a_status != 0:
+             raise RunnerError(68, "stage_a_liveness_failed")
+-        if (
+-            _reap_owned_children_to_echild(
+-                time.monotonic() + CLEANUP_TIMEOUT_SECONDS
+-            )
+-            != 0
+-        ):
+-            raise RunnerError(68, "stage_a_liveness_failed")
++        _reap_owned_children_to_echild(
++            time.monotonic() + CLEANUP_TIMEOUT_SECONDS
++        )
+         stage_a_process_teardown_proved = True
+         if final["exit-code"] != 0:
+             raise RunnerError(68, "stage_a_liveness_failed")
+diff --git a/scripts/ci/test_canonical_shell_wall_runner.py b/scripts/ci/test_canonical_shell_wall_runner.py
+index 0b9ed61ae42dbb746860b0fd0fffc33042558637..9518da2fba21a54953b16428213d3c0fb9f1ad23 100644
+--- a/scripts/ci/test_canonical_shell_wall_runner.py
++++ b/scripts/ci/test_canonical_shell_wall_runner.py
+@@ -413,6 +413,21 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
+     def test_reaps_reparented_descendant(self) -> None:
+         result = self.run_bounded_fixture("production-reparent")
+         self.assertEqual(result, {"echld": True, "pid": 1, "reaped": 2})
++        source = _module_source(runner).decode("utf-8")
++        host = source[
++            source.index("def host_main") : source.index(
++                "def _run_selftest_bootstrap"
++            )
++        ]
++        normal_reap = host.index(
++            "_reap_owned_children_to_echild(",
++            host.index("stage_a_status ="),
++        )
++        teardown_proved = host.index(
++            "stage_a_process_teardown_proved = True",
++            normal_reap,
++        )
++        self.assertNotIn("!= 0", host[normal_reap:teardown_proved])
+ 
+     def test_process_group_escape_remains_contained(self) -> None:
+         result = self.run_bounded_fixture("production-setsid")

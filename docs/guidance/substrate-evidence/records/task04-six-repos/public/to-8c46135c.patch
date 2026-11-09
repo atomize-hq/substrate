@@ -1,0 +1,74 @@
+diff --git a/scripts/ci/canonical_shell_wall_runner.py b/scripts/ci/canonical_shell_wall_runner.py
+index 6c0d32a60d9c9414e39f52e9f25db225b91ca72c..e19264ed580b7517c47cd6c2db34c43eeee83d22 100644
+--- a/scripts/ci/canonical_shell_wall_runner.py
++++ b/scripts/ci/canonical_shell_wall_runner.py
+@@ -6831,9 +6831,11 @@ def summarize_test_log(
+         active_name: bytes | None = None
+         active_where = b""
+         active_body: list[bytes] = []
++        active_backtrace_note_seen = False
+ 
+         def flush() -> None:
+-            nonlocal active_name, active_where, active_body, signature_bytes_total
++            nonlocal active_name, active_where, active_body
++            nonlocal active_backtrace_note_seen, signature_bytes_total
+             if active_name is None:
+                 return
+             body = b" ".join(line.rstrip(b"\n") for line in active_body)
+@@ -6853,6 +6855,7 @@ def summarize_test_log(
+             active_name = None
+             active_where = b""
+             active_body = []
++            active_backtrace_note_seen = False
+ 
+         for line in lines:
+             panic = PANIC_PATTERN.fullmatch(line)
+@@ -6885,7 +6888,13 @@ def summarize_test_log(
+                 ):
+                     flush()
+                     continue
+-                if line.startswith(b"note: run with") or line.strip() == b"":
++                if line.startswith(b"note: run with"):
++                    active_backtrace_note_seen = True
++                    continue
++                if active_backtrace_note_seen and line == b"ok\n":
++                    flush()
++                    continue
++                if line.strip() == b"":
+                     continue
+                 active_body.append(line)
+         flush()
+diff --git a/scripts/ci/test_canonical_shell_wall_runner.py b/scripts/ci/test_canonical_shell_wall_runner.py
+index 15f94a4be62d410d1f3fd866d20ab20ad3ae077c..a1f084b10a07afad3a23dc0c46a94fd5619f5a53 100644
+--- a/scripts/ci/test_canonical_shell_wall_runner.py
++++ b/scripts/ci/test_canonical_shell_wall_runner.py
+@@ -5959,6 +5959,29 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
+         self.assertTrue(signatures.endswith(b"\n"))
+         self.assertIn(b"aos_<id>", signatures)
+         self.assertIn(b".tmp<id>", signatures)
++        note = (
++            b"note: run with `RUST_BACKTRACE=1` environment variable "
++            b"to display a backtrace\n"
++        )
++        interleaved = runner.GOLDEN_LOG.replace(note, note + b"ok\n", 1)
++        interleaved_summary, interleaved_names, interleaved_signatures = (
++            runner.summarize_test_log(interleaved, 101)
++        )
++        self.assertEqual(interleaved_summary["analysis_status"], "complete")
++        self.assertEqual(interleaved_names, runner.GOLDEN_NAMES)
++        self.assertEqual(interleaved_signatures, runner.GOLDEN_SIGNATURES)
++        panic_body_ok = runner.GOLDEN_LOG.replace(
++            b"left  aos_deadbeef\n right: .tmpABC\n",
++            b"ok\n",
++        )
++        _body_summary, _body_names, body_signatures = runner.summarize_test_log(
++            panic_body_ok,
++            101,
++        )
++        self.assertIn(
++            b"alpha::case\tcrates/shell/src/a.rs:10:2\tok\n",
++            body_signatures,
++        )
+ 
+     def test_summarizer_last_result_and_failure_section_grammar(self) -> None:
+         prefixed = (

@@ -1,0 +1,231 @@
+diff --git a/scripts/ci/canonical_shell_wall_runner.py b/scripts/ci/canonical_shell_wall_runner.py
+index 35dda66aa553a690842b6dda1f0f60035d2325df..e3df67d6a4544f8301197084a819aee7748df426 100644
+--- a/scripts/ci/canonical_shell_wall_runner.py
++++ b/scripts/ci/canonical_shell_wall_runner.py
+@@ -2750,10 +2750,17 @@ def unlink_validated_entry_at(
+     name: str,
+     *,
+     expected: tuple[int, int] | None = None,
++    expected_nlink_after: int = 0,
+     cleanup_authority: CleanupQuiescence | ProtocolUnlinkAuthority | None = None,
+ ) -> None:
+     _validate_mutation_authority(cleanup_authority)
+-    if not name or name in {".", ".."} or "/" in name:
++    if (
++        not name
++        or name in {".", ".."}
++        or "/" in name
++        or type(expected_nlink_after) is not int
++        or expected_nlink_after < 0
++    ):
+         raise RunnerError(70, "cleanup_identity_mismatch")
+     try:
+         details = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+@@ -2771,7 +2778,15 @@ def unlink_validated_entry_at(
+         held = os.fstat(entry_fd)
+         if (
+             (held.st_dev, held.st_ino) != (details.st_dev, details.st_ino)
+-            or (stat.S_ISREG(details.st_mode) and details.st_nlink != 1)
++            or held.st_nlink != details.st_nlink
++            or (
++                stat.S_ISREG(details.st_mode)
++                and details.st_nlink != expected_nlink_after + 1
++            )
++            or (
++                not stat.S_ISREG(details.st_mode)
++                and expected_nlink_after != 0
++            )
+         ):
+             raise RunnerError(70, "cleanup_identity_mismatch")
+         quarantine = _isolate_name_for_cleanup(
+@@ -2794,6 +2809,7 @@ def unlink_validated_entry_at(
+             entry_fd,
+             (held.st_dev, held.st_ino),
+             is_directory=stat.S_ISDIR(details.st_mode),
++            expected_nlink_after=expected_nlink_after,
+             cleanup_authority=cleanup_authority,
+         )
+         for absent_name in (name, quarantine):
+@@ -2915,6 +2931,7 @@ def _delete_isolated_entry(
+     expected: tuple[int, int],
+     *,
+     is_directory: bool,
++    expected_nlink_after: int = 0,
+     cleanup_authority: CleanupQuiescence | ProtocolUnlinkAuthority | None,
+ ) -> None:
+     _validate_mutation_authority(cleanup_authority)
+@@ -2924,6 +2941,11 @@ def _delete_isolated_entry(
+         (held.st_dev, held.st_ino) != expected
+         or (isolated.st_dev, isolated.st_ino) != expected
+         or stat.S_ISDIR(isolated.st_mode) != is_directory
++        or (
++            not is_directory
++            and isolated.st_nlink != expected_nlink_after + 1
++        )
++        or (is_directory and expected_nlink_after != 0)
+     ):
+         raise RunnerError(70, "cleanup_identity_mismatch")
+     _validate_mutation_authority(cleanup_authority)
+@@ -2932,7 +2954,10 @@ def _delete_isolated_entry(
+     else:
+         os.unlink(quarantine, dir_fd=parent_fd)
+     after = os.fstat(held_fd)
+-    if (after.st_dev, after.st_ino) != expected or after.st_nlink != 0:
++    if (
++        (after.st_dev, after.st_ino) != expected
++        or after.st_nlink != expected_nlink_after
++    ):
+         raise RunnerError(70, "cleanup_identity_mismatch")
+     try:
+         os.stat(quarantine, dir_fd=parent_fd, follow_symlinks=False)
+@@ -2994,6 +3019,30 @@ def _restore_isolated_name(
+     raise RunnerError(70, "cleanup_identity_mismatch")
+ 
+ 
++def _confined_regular_hardlinks(
++    entries: Sequence[tuple[str, os.stat_result]],
++) -> frozenset[tuple[int, int]]:
++    observed: dict[tuple[int, int], int] = {}
++    expected: dict[tuple[int, int], int] = {}
++    for _name, details in entries:
++        if not stat.S_ISREG(details.st_mode):
++            continue
++        identity = (details.st_dev, details.st_ino)
++        observed[identity] = observed.get(identity, 0) + 1
++        prior = expected.setdefault(identity, details.st_nlink)
++        if prior != details.st_nlink:
++            raise RunnerError(70, "cleanup_identity_mismatch")
++    confined: set[tuple[int, int]] = set()
++    for identity, count in observed.items():
++        link_count = expected[identity]
++        if link_count == 1:
++            continue
++        if link_count < 1 or count != link_count:
++            raise RunnerError(70, "cleanup_identity_mismatch")
++        confined.add(identity)
++    return frozenset(confined)
++
++
+ def _validate_tree_for_cleanup(
+     directory_fd: int,
+     mount_id: int,
+@@ -3003,12 +3052,19 @@ def _validate_tree_for_cleanup(
+         while stack:
+             current = stack.pop()
+             try:
+-                for name in sorted(os.listdir(current), key=os.fsencode):
+-                    details = os.stat(
++                entries = [
++                    (
+                         name,
+-                        dir_fd=current,
+-                        follow_symlinks=False,
++                        os.stat(
++                            name,
++                            dir_fd=current,
++                            follow_symlinks=False,
++                        ),
+                     )
++                    for name in sorted(os.listdir(current), key=os.fsencode)
++                ]
++                confined_hardlinks = _confined_regular_hardlinks(entries)
++                for name, details in entries:
+                     if details.st_uid != os.getuid():
+                         raise RunnerError(70, "cleanup_identity_mismatch")
+                     entry_fd = os.open(
+@@ -3028,6 +3084,7 @@ def _validate_tree_for_cleanup(
+                             (opened.st_dev, opened.st_ino)
+                             != (details.st_dev, details.st_ino)
+                             or statx_identity(entry_fd)[2] != mount_id
++                            or opened.st_nlink != details.st_nlink
+                         ):
+                             raise RunnerError(
+                                 70,
+@@ -3046,7 +3103,11 @@ def _validate_tree_for_cleanup(
+                             stack.append(entry_fd)
+                             entry_fd = -1
+                         elif stat.S_ISREG(details.st_mode):
+-                            if details.st_nlink != 1:
++                            if (
++                                details.st_nlink != 1
++                                and (details.st_dev, details.st_ino)
++                                not in confined_hardlinks
++                            ):
+                                 raise RunnerError(
+                                     70,
+                                     "cleanup_identity_mismatch",
+@@ -3180,7 +3241,15 @@ def remove_tree_at(
+             child_fd,
+             child_identity.mount_id,
+         )
+-        for entry in sorted(os.listdir(child_fd), key=os.fsencode):
++        entries = [
++            (
++                entry,
++                os.stat(entry, dir_fd=child_fd, follow_symlinks=False),
++            )
++            for entry in sorted(os.listdir(child_fd), key=os.fsencode)
++        ]
++        confined_hardlinks = _confined_regular_hardlinks(entries)
++        for entry, _initial_details in entries:
+             details = os.stat(entry, dir_fd=child_fd, follow_symlinks=False)
+             if details.st_uid != os.getuid():
+                 raise RunnerError(70, "cleanup_identity_mismatch")
+@@ -3223,12 +3292,19 @@ def remove_tree_at(
+                     or stat.S_ISLNK(details.st_mode)
+                 ):
+                     raise RunnerError(70, "cleanup_identity_mismatch")
++                expected_nlink_after = 0
+                 if stat.S_ISREG(details.st_mode) and details.st_nlink != 1:
+-                    raise RunnerError(70, "cleanup_identity_mismatch")
++                    if (
++                        (details.st_dev, details.st_ino)
++                        not in confined_hardlinks
++                    ):
++                        raise RunnerError(70, "cleanup_identity_mismatch")
++                    expected_nlink_after = details.st_nlink - 1
+                 unlink_validated_entry_at(
+                     child_fd,
+                     entry,
+                     expected=(details.st_dev, details.st_ino),
++                    expected_nlink_after=expected_nlink_after,
+                     cleanup_authority=cleanup_authority,
+                 )
+         held_pair = (child_identity.dev, child_identity.ino)
+diff --git a/scripts/ci/test_canonical_shell_wall_runner.py b/scripts/ci/test_canonical_shell_wall_runner.py
+index dc6982ccdc1553386033205db0397b5c492310a3..0b9ed61ae42dbb746860b0fd0fffc33042558637 100644
+--- a/scripts/ci/test_canonical_shell_wall_runner.py
++++ b/scripts/ci/test_canonical_shell_wall_runner.py
+@@ -1377,6 +1377,32 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
+         os.close(root_fd)
+         os.close(parent_fd)
+ 
++        root = os.path.join(parent, "cargo-target")
++        build = os.path.join(root, "debug", "build", "crate-hash")
++        os.makedirs(build, mode=0o700)
++        first = os.path.join(build, "build_script_build-hash")
++        alias = os.path.join(build, "build-script-build")
++        with open(first, "xb") as handle:
++            handle.write(b"cargo build script")
++        os.link(first, alias)
++        parent_fd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
++        root_fd, identity = runner.open_validated_directory(
++            root,
++            expected_uid=os.getuid(),
++            expected_mode=0o700,
++        )
++        proof = runner.remove_tree_at(
++            parent_fd,
++            "cargo-target",
++            expected=identity,
++            cleanup_authority=self.cleanup_authority,
++        )
++        self.assertFalse(os.path.exists(root))
++        self.assertTrue(proof["removed"])
++        self.assertTrue(proof["name_absence_proved"])
++        os.close(root_fd)
++        os.close(parent_fd)
++
+     def test_rejects_subreaper_readback_failure(self) -> None:
+         result = self.run_bounded_fixture("pid1")
+         self.assertEqual(result, {"pid": 1, "subreaper": 1})

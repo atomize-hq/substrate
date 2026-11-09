@@ -1,0 +1,135 @@
+diff --git a/scripts/ci/canonical_shell_wall_runner.py b/scripts/ci/canonical_shell_wall_runner.py
+index 176b7ee083491086dfdabe24e6e5b64540b94cd9..2e82be962e40d25518892292aa2bd57ddd713637 100644
+--- a/scripts/ci/canonical_shell_wall_runner.py
++++ b/scripts/ci/canonical_shell_wall_runner.py
+@@ -13840,6 +13840,50 @@ def _read_authenticated_staged_provenance(
+     ):
+         if staged_launcher.get(key) != original_launcher.get(key):
+             raise RunnerError(71, "evidence_write_failed")
++    staged_namespace = staged.get("namespace")
++    original_namespace = original.get("namespace")
++    if not isinstance(staged_namespace, dict) or not isinstance(
++        original_namespace,
++        dict,
++    ):
++        raise RunnerError(71, "evidence_write_failed")
++    staged_host_fields = (
++        staged_launcher.get("stage_a_argv_sha256"),
++        staged_namespace.get("stage_a_bwrap_pid"),
++        staged_namespace.get("stage_a_bwrap_start_time_ticks"),
++        staged_namespace.get("stage_a_bwrap_pidfd_opened"),
++    )
++    original_host_fields = (
++        original_launcher.get("stage_a_argv_sha256"),
++        original_namespace.get("stage_a_bwrap_pid"),
++        original_namespace.get("stage_a_bwrap_start_time_ticks"),
++        original_namespace.get("stage_a_bwrap_pidfd_opened"),
++    )
++    default_host_fields = (None, None, None, False)
++    if staged_host_fields != default_host_fields:
++        raise RunnerError(71, "evidence_write_failed")
++    if original_host_fields != default_host_fields:
++        argv_sha256, bwrap_pid, start_time_ticks, pidfd_opened = (
++            original_host_fields
++        )
++        if (
++            not isinstance(argv_sha256, str)
++            or re.fullmatch(r"[0-9a-f]{64}", argv_sha256) is None
++            or type(bwrap_pid) is not int
++            or not 1 <= bwrap_pid <= MAX_PID
++            or type(start_time_ticks) is not int
++            or start_time_ticks <= 0
++            or pidfd_opened is not True
++        ):
++            raise RunnerError(71, "evidence_write_failed")
++        staged_launcher["stage_a_argv_sha256"] = argv_sha256
++        staged_namespace.update(
++            {
++                "stage_a_bwrap_pid": bwrap_pid,
++                "stage_a_bwrap_start_time_ticks": start_time_ticks,
++                "stage_a_bwrap_pidfd_opened": True,
++            }
++        )
+     return staged
+ 
+ 
+diff --git a/scripts/ci/test_canonical_shell_wall_runner.py b/scripts/ci/test_canonical_shell_wall_runner.py
+index 9518da2fba21a54953b16428213d3c0fb9f1ad23..69193910cedf17c54947a38d209507618ea3884e 100644
+--- a/scripts/ci/test_canonical_shell_wall_runner.py
++++ b/scripts/ci/test_canonical_shell_wall_runner.py
+@@ -5282,6 +5282,75 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
+             failure_branch.index("_read_authenticated_staged_provenance("),
+         )
+         self.assertIn('return int(provenance["runner_exit_code"])', host_source)
++        staged_parent = self.make_safe_parent()
++        staged_authority = runner.prepare_backing_root(
++            staged_parent,
++            "host-stage-a-fields",
++            "e" * 32,
++        )
++        staged_artifacts = runner._initialize_staged_artifact_authorities(
++            staged_authority
++        )
++        staged_record = runner._default_provenance(
++            invocation_id="e" * 32,
++            label="host-stage-a-fields",
++            mode="parallel",
++            timeout_seconds=1,
++            expected_head="0" * 40,
++            command=runner._canonical_cargo_command("parallel"),
++            environment={},
++        )
++        original_record = json.loads(json.dumps(staged_record))
++        original_record["request"]["launcher"]["stage_a_argv_sha256"] = (
++            "1" * 64
++        )
++        original_record["namespace"].update(
++            {
++                "stage_a_bwrap_pid": 123,
++                "stage_a_bwrap_start_time_ticks": 456,
++                "stage_a_bwrap_pidfd_opened": True,
++            }
++        )
++        runner._rewrite_retained_json_artifact(
++            staged_authority["partial_fd"],
++            staged_artifacts["provenance.json"],
++            staged_record,
++        )
++        merged = runner._read_authenticated_staged_provenance(
++            staged_authority,
++            original_record,
++        )
++        self.assertEqual(
++            merged["request"]["launcher"]["stage_a_argv_sha256"],
++            "1" * 64,
++        )
++        self.assertEqual(merged["namespace"]["stage_a_bwrap_pid"], 123)
++        self.assertEqual(
++            merged["namespace"]["stage_a_bwrap_start_time_ticks"],
++            456,
++        )
++        self.assertTrue(merged["namespace"]["stage_a_bwrap_pidfd_opened"])
++        conflicting = json.loads(json.dumps(staged_record))
++        conflicting["request"]["launcher"]["stage_a_argv_sha256"] = "2" * 64
++        runner._rewrite_retained_json_artifact(
++            staged_authority["partial_fd"],
++            staged_artifacts["provenance.json"],
++            conflicting,
++        )
++        with self.assertRaises(runner.RunnerError) as conflict:
++            runner._read_authenticated_staged_provenance(
++                staged_authority,
++                original_record,
++            )
++        self.assertEqual(conflict.exception.reason, "evidence_write_failed")
++        for artifact in staged_artifacts.values():
++            os.close(artifact["fd"])
++        for key in ("backing_fd", "partial_fd", "parent_fd"):
++            os.close(staged_authority[key])
++        for descriptor, _path, _identity in staged_authority[
++            "ancestor_records"
++        ]:
++            os.close(descriptor)
+         with self.assertRaises(runner.RunnerError):
+             runner._record_ineligibility(combined, "signal_termination", 68)
+         with self.assertRaises(runner.RunnerError):
