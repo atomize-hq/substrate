@@ -1,0 +1,130 @@
+{
+  "schema": "substrate-evidence-task03-plan18-receipt-v1",
+  "status": "Actual one-file cleanup and source restoration complete; publication and remote readback of this factual update pending at authoring.",
+  "source_publication_commit": "0f7e9ff3ef668b5c1ac986ea2cc9610ca4f9211a",
+  "source_index": "worktree-recovery-task03-plan18.md",
+  "published_files_at_source_commit": [
+    {
+      "path": "docs/guidance/substrate-evidence/task03-plan18-zero.patch.gz",
+      "sha256": "f3aad8f3511101e4739022f850bec00c34ec9ac87d03b61f3eaddfcd6f941903",
+      "mode": "100644",
+      "matches": true
+    },
+    {
+      "path": "docs/guidance/substrate-evidence/task03-plan18-source-manifest.json",
+      "sha256": "8fbdce3ee75daed3bdc5ed0332d16796dc98481a6e525cc0b9d1e9f2443798a0",
+      "mode": "100644",
+      "matches": true
+    },
+    {
+      "path": "docs/guidance/substrate-evidence/worktree-recovery-task03-plan18.md",
+      "sha256": "4707f256300b8fda9596e7772f91f5cf2220e928b9a507accec189562706e9d3",
+      "mode": "100644",
+      "matches": true
+    },
+    {
+      "path": "docs/guidance/substrate-evidence/task03-plan18-records.md",
+      "sha256": "ed0e1474e2aa57944ba5dbffca113e44cd5d4e38c7d112ec37d335be99377c9c",
+      "mode": "100644",
+      "matches": true
+    }
+  ],
+  "source_commit": "c7061de60c62f65bfb54771107fdaa19022937a3",
+  "source_tree": "eb70b7345d31d117b61c3fcc5ebbf074cacfcfff",
+  "verified_containing_ref": "refs/heads/feat/preserve-task03-ba242549bb10",
+  "verified_containing_tip": "ba242549bb1062283ff40d4b218c130fc8de9e12",
+  "remote_verification": {
+    "actual_GitHub_four_payload_hashes_and_modes_matched": true,
+    "containing_ref_and_exact_HEAD_tree_fetched": true,
+    "physical_changed_files": [
+      {
+        "path": "AGENT_ORCHESTRATION_GAP_MATRIX.md",
+        "sha256": "87151b0aa4a6230e2fc14648959c0e41616e34d87f446f31e8302cf29611bddc",
+        "mode": "0o644",
+        "matches": true
+      },
+      {
+        "path": "crates/shell/tests/agent_successor_contract_ahcsitc0.rs",
+        "sha256": "de94cbae37f8650b5c9a43d2bc0da9daac6a2549715520b63a8c6252d4cc644c",
+        "mode": "0o644",
+        "matches": true
+      },
+      {
+        "path": "llm-last-mile/README.md",
+        "sha256": "563a64a40dd0163740861113a1b64ddc8cbcecb8ddd352b5229f813b12922abd",
+        "mode": "0o644",
+        "matches": true
+      }
+    ],
+    "full_modes_status_empty_stage_original_patch_matched": true,
+    "original_full_patch_sha256": "9dcf1374876dc5eaf3d73f6d0bb429a90a105e47f022cb86e403b2cd5aa80bb0",
+    "own_Git_administration_verified_before_attributes_workaround": true,
+    "shared_C_W_config_attributes_unchanged": true
+  },
+  "action": {
+    "group": "repo-096",
+    "subject_custody": "task03:next4-p18:metadata-leaf",
+    "selected_relative_path": "target/tests-tmp/rustc64YaSq/lib.rmeta",
+    "command_kind": "sudo -n rm -f -- [one exact reviewed path]",
+    "start_utc": "2026-11-09T23:36:32.586518+00:00",
+    "end_utc": "2026-11-09T23:36:32.950825+00:00",
+    "exit": 0,
+    "selected_path_absent": true,
+    "source_root_and_registration_retained": true,
+    "other_fixture_paths_not_selected": true,
+    "allocated_regular_bytes_removed": 8388608,
+    "before": {
+      "available_bytes": 218401267712,
+      "available_inodes": 45721438
+    },
+    "after": {
+      "available_bytes": 218409656320,
+      "available_inodes": 45721439
+    },
+    "separate_host_available_bytes_change": 8388608,
+    "immutable_pre_sha256": "b34ecfc5a31d345c35bf6fab187ddfd72d977eb195168000cd5599de86c137f3",
+    "separate_post_sha256": "e13c8bbd597d16fde69faec33a2b5604dc3e961932b52a455ac7ea59daa43625"
+  },
+  "retained_custody": {
+    "source_changed_files_original_bytes_modes_status_retained": 3,
+    "surrounding_test_fixtures_and_registration_retained": true,
+    "protected_Task20_original_record_hashes_verified": 7,
+    "original_full_context_patch_private_copy_retained": true,
+    "all25_candidate_pins_actor_W_BACKLOG_index_preserved": true,
+    "private_custody_not_off_host_backup": true
+  },
+  "review_and_failures": [
+    "Fresh implementation discovery found no qualifying P1/P2; owner implementation CLEAN and META final Continue retained the independent Adjust sequencing advice.",
+    "P18-D1 P4: generic proof description mentions three repositories and installer; only its actual Plan18 row/commands support this source restoration. Recorded without automatic repair.",
+    "Historical source and assertions are archived exactly, not adopted or product-qualified.",
+    "Initial pristine temporary checkout had an unrelated archived Windows-log text mismatch; the own-Git attributes workaround and original failure remain preserved.",
+    "Two owner guard attempts stopped before any native action: the ancestor list includes the selected regular file, and rg returned the same seven matches in a different order. Recorded-type and set-based checks were corrected, all guards refreshed, then the sole native action succeeded.",
+    "No raw sessions/private JSONL or selected binary contents were inspected; no product build/test/doctor/provider/service/install was performed."
+  ],
+  "limits": [
+    "Historical compiler, native dependencies, original artifact command and original test/build outcome remain unknown.",
+    "Allocation is one distinct regular inode; filesystem availability is a separate observation, not an attributed phase total.",
+    "Original source/root and other fixtures remain; installer/Task12/Task11 private drafts and external checkout are not selected.",
+    "Whole Task03 and cleanup phase remain incomplete."
+  ],
+  "task03_cumulative": {
+    "registered_worktrees_retired": 75,
+    "allocated_regular_bytes_removed": 30967259136,
+    "additional_scopes": [
+      "R2 root and two clones",
+      "Task09 debug/bin",
+      "Task22 debug",
+      "38 generated index/cache leaves across three retained roots",
+      "one Plan18 metadata leaf"
+    ]
+  },
+  "task02_plus_task03_subtotal_excluding_parallel_tasks_allocated_regular_bytes": 81717338112,
+  "cohort_reconciliation": {
+    "audited": 128,
+    "retired": 75,
+    "other_unremoved_including_Plan18_source_root": 43,
+    "retained_Task09_Task10_Task11_Task13_Task22_sources": 5,
+    "protected_C_W": 2,
+    "missing_do_not_prune": 3
+  }
+}

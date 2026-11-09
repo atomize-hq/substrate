@@ -3144,7 +3144,9 @@
       "observed_exists": true,
       "allocation_bytes": 61812736,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "one exact generated metadata leaf removed; source root, registration and other test fixtures retained",
+      "actual_removed_allocated_regular_bytes": 8388608,
+      "cleanup_receipt": "cleanup-receipt-task03-plan18.json"
     },
     {
       "id": "inventory-307",
@@ -7519,8 +7521,13 @@
       "head": "c7061de60c62f65bfb54771107fdaa19022937a3",
       "lockfile_sha256_at_head": "55b3efe9d854e41777d670927109190bbb421e5d435e05c284b9ea2e0db95daf",
       "status_entry_count": 4,
-      "source_preservation": "held until exact source, changes, remote and unique inputs verified",
-      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody"
+      "source_preservation": "exact three changed source files recovered from actual remote HEAD and screened zero-context patch; source root retained",
+      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody",
+      "verified_remote_branch": "feat/preserve-task03-ba242549bb10",
+      "verified_tree": "eb70b7345d31d117b61c3fcc5ebbf074cacfcfff",
+      "source_publication_commit": "0f7e9ff3ef668b5c1ac986ea2cc9610ca4f9211a",
+      "source_index": "worktree-recovery-task03-plan18.md",
+      "cleanup_receipt": "cleanup-receipt-task03-plan18.json"
     },
     {
       "group": "repo-097",
@@ -10985,7 +10992,9 @@
         "audit-measurement",
         "audit-measurement-errors"
       ],
-      "status": "See local custody for group-specific gaps; retain until selected records and source inputs are preserved"
+      "status": "scrubbed selected audit summary published; seven original protected audit records retained locally, not off-host backup",
+      "source_index": "worktree-recovery-task03-plan18.md",
+      "cleanup_receipt": "cleanup-receipt-task03-plan18.json"
     },
     {
       "group": "repo-097",

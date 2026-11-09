@@ -1,5 +1,7 @@
-# Selected retained records — proposed
+# Selected retained records
 
 The selected Plan 18 cleanup subject is a single generated Rust metadata file in a temporary test tree. The source checkout and all surrounding test directories stay in place. A bounded Task20 historical build audit enumerated that checkout and target; its recorded target-to-proof-reference list was empty. The original target-inventory record is 137,391 bytes, SHA256 `239dba740a77739603ab2b2ef98a9914e143eeb42a390a77e1941a727c384408`; the separate proof-reference record SHA256 is `9f4c5495595559858a18ec82829e34182b65169095dafb1fff5f51455093d48d`. The original audit records remain in protected local custody outside the selected file. That custody is not an off-host backup, and it does not establish the original build command or compiler that produced the selected file.
 
 A fresh source and record readback, current-use and protected-dependency check must precede any action. No original build/test outcome is claimed for this metadata file. The exact outcome and historical compiler/native-dependency association remain unknown.
+
+The source recovery and one-file cleanup completed as recorded in the [Plan18 receipt](cleanup-receipt-task03-plan18.json). Original audit bytes remain historical observations and were not rewritten.
