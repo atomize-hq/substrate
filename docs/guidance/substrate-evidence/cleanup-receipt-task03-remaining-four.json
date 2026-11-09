@@ -1,0 +1,451 @@
+{
+  "schema": "substrate-evidence-task03-remaining-four-receipt-v1",
+  "status": "Actual one-worktree and 38-cache-file removal complete; remote publication/readback of this factual receipt update pending.",
+  "source_publication_commit": "041e8951cd075e7d3efb3f55e406e79085f498d4",
+  "source_indexes": [
+    "worktree-recovery-task03-e3d.md",
+    "worktree-recovery-task03-three-sources.md"
+  ],
+  "published_files_at_source_commit": [
+    {
+      "path_at_publication": "docs/guidance/substrate-evidence/e3d-base-to-head.patch",
+      "sha256": "38b4646112de5797674ca181211bd626ef869753dc9b45e9baf1e38393a13469",
+      "git_mode": "100644"
+    },
+    {
+      "path_at_publication": "docs/guidance/substrate-evidence/e3d-head-to-working.patch",
+      "sha256": "79db05995ab33f6b1572473f222de1ac5615214357d4c26274e4b136b83b5880",
+      "git_mode": "100644"
+    },
+    {
+      "path_at_publication": "docs/guidance/substrate-evidence/e3d-source-manifest.json",
+      "sha256": "1df19a504b2b69a03ac1d1c515b275237f821f95dc20d14c8bb1ea119d5bf4bc",
+      "git_mode": "100644"
+    },
+    {
+      "path_at_publication": "docs/guidance/substrate-evidence/worktree-recovery-task03-e3d.md",
+      "sha256": "0d6d587716fbcd58700f0b7d56bb8d6c5f01e12372ba4ddfb33b37ac29400650",
+      "git_mode": "100644"
+    },
+    {
+      "path_at_publication": "docs/guidance/substrate-evidence/task03-t10.patch",
+      "sha256": "2c48806842acbea289a17790a5f6ee50c776e74440795f70dad10fe9532a333a",
+      "git_mode": "100644"
+    },
+    {
+      "path_at_publication": "docs/guidance/substrate-evidence/task03-t11-native-launch-context.rs",
+      "sha256": "880185083e3f31bcda0858a34d2a6604d496ee95ea833439c7a15827169a7e3a",
+      "git_mode": "100644"
+    },
+    {
+      "path_at_publication": "docs/guidance/substrate-evidence/task03-t11.patch",
+      "sha256": "4faad4a774f27a19031bfe45cec95cd40aaad4fb1fe56b23620ebd6796bf9623",
+      "git_mode": "100644"
+    },
+    {
+      "path_at_publication": "docs/guidance/substrate-evidence/task03-t13.patch",
+      "sha256": "9e558718b5f8347200acd952822aafbae11defdaf29f7f7a690674ff985261af",
+      "git_mode": "100644"
+    },
+    {
+      "path_at_publication": "docs/guidance/substrate-evidence/task03-three-records.md",
+      "sha256": "290f3f0e47c4b4b236cd1885e0aadbfbe94e46d69701a0aab5ab8e87ed8ea1b2",
+      "git_mode": "100644"
+    },
+    {
+      "path_at_publication": "docs/guidance/substrate-evidence/task03-three-source-manifest.json",
+      "sha256": "43664e522ece5cd6a7403db6ffa3f8f2abe4f5e90e131a3047e89bf469ac2f7b",
+      "git_mode": "100644"
+    },
+    {
+      "path_at_publication": "docs/guidance/substrate-evidence/worktree-recovery-task03-three-sources.md",
+      "sha256": "5779934cf3d3494201e2077d31e6f4b2517fcd7bc7185771f161bac9f8b203b4",
+      "git_mode": "100644"
+    }
+  ],
+  "source_ref_commits": {
+    "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap": "041e8951cd075e7d3efb3f55e406e79085f498d4",
+    "refs/heads/feat/preserve-task03-07eda1bfa7de": "07eda1bfa7dee6a75eb4e372dbec98419830192d"
+  },
+  "remote_verification": {
+    "actual_GitHub_fetch_no_C_alternates": true,
+    "all11_payload_hashes_and_modes_matched": true,
+    "all4_source_commit_trees_matched": true,
+    "four_physical_restorations": [
+      {
+        "label": "t13",
+        "source_commit": "33ebdf0d6a277f45dbc5603063bbcdbe521252ce",
+        "source_tree": "db0412a8527940872c843a0931c552a74bcfba8f",
+        "files": [
+          {
+            "path": "crates/shell/src/execution/agent_runtime/host_session_authority/facade.rs",
+            "sha256": "046e0e97bb541e1a7478d94e5b83f7ac0d604ea430b285c72a2cba76dad61ae8",
+            "mode": "0o644",
+            "matches": true
+          },
+          {
+            "path": "crates/shell/src/execution/agent_runtime/host_session_authority/store.rs",
+            "sha256": "2324ed1a5f7fb6524d0e198c0b36289cc9d32d03c35d1b70d66c09c824ace5df",
+            "mode": "0o644",
+            "matches": true
+          },
+          {
+            "path": "crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/object_persistence.rs",
+            "sha256": "3a755074cda4808e03baba9f5886f948491fd1b17973d9669c9ac8e00e3b53ac",
+            "mode": "0o644",
+            "matches": true
+          },
+          {
+            "path": "crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs",
+            "sha256": "e428f872ffe6266f97fc56652f7c10d2266535baf59893864db4daf559a25e69",
+            "mode": "0o644",
+            "matches": true
+          },
+          {
+            "path": "crates/shell/src/execution/agent_runtime/host_session_authority/store_tests.rs",
+            "sha256": "e038a2f40933205559e591039b444b2931ea38fbc937f22baf6e5b6d19f228d4",
+            "mode": "0o644",
+            "matches": true
+          },
+          {
+            "path": "crates/shell/src/execution/agent_runtime/host_session_authority/transition.rs",
+            "sha256": "543b2ae7970c56fff77a2bfecc2f6bcdc60138486a00300fa9391e708c54eb1a",
+            "mode": "0o644",
+            "matches": true
+          }
+        ],
+        "exact_bytes_full_modes_status_empty_stage": true,
+        "regenerated_patch_sha256": "9e558718b5f8347200acd952822aafbae11defdaf29f7f7a690674ff985261af",
+        "mode_method": "native checkout/apply under umask022; only T11 untracked payload explicitly0644 as documented",
+        "all_passed": true
+      },
+      {
+        "label": "t11",
+        "source_commit": "33ebdf0d6a277f45dbc5603063bbcdbe521252ce",
+        "source_tree": "db0412a8527940872c843a0931c552a74bcfba8f",
+        "files": [
+          {
+            "path": "crates/shell/src/builtins/world_gateway.rs",
+            "sha256": "63970f647cb6cb2950322b5fe2bdc92e2855acbd6cfc2399c8fb1b9a316b49af",
+            "mode": "0o644",
+            "matches": true
+          },
+          {
+            "path": "crates/shell/src/execution/agent_runtime/control.rs",
+            "sha256": "fb76d537bd072096c3600d127149e064900259da95aa1311e118a1728c2767ee",
+            "mode": "0o644",
+            "matches": true
+          },
+          {
+            "path": "crates/shell/src/execution/agents_cmd.rs",
+            "sha256": "a4f953de3b76cc3ccc36af806f19ee9295f6618ea56626d0f0a531316b5783ea",
+            "mode": "0o644",
+            "matches": true
+          },
+          {
+            "path": "crates/shell/src/execution/cli.rs",
+            "sha256": "90426d37142aa626a7605196fe7e9b9872d1fc71e99b0e059500d494aaa9398a",
+            "mode": "0o644",
+            "matches": true
+          },
+          {
+            "path": "crates/shell/src/execution/prompt_fulfillment.rs",
+            "sha256": "5a61162a5eaf5f045f94ba0caf4f3a4d92ce9c89ced985034bd1da5aa1080bba",
+            "mode": "0o644",
+            "matches": true
+          },
+          {
+            "path": "crates/shell/src/repl/async_repl.rs",
+            "sha256": "74e07e6f055d3f939126f3f3750156021e3417bb516207aceefa253073c2171f",
+            "mode": "0o644",
+            "matches": true
+          },
+          {
+            "path": "crates/transport-api-types/src/lib.rs",
+            "sha256": "eda3b1dcd68f77f66cc9a43bf6627f28630a5012fc158f77c5681c0b34ce8c8c",
+            "mode": "0o644",
+            "matches": true
+          },
+          {
+            "path": "crates/world-service/src/gateway_runtime.rs",
+            "sha256": "b63ee8c06c9b2417431cebb7c0fcc7aa8003d929b0e3b06544a5800892b4f243",
+            "mode": "0o644",
+            "matches": true
+          },
+          {
+            "path": "crates/world-service/src/service.rs",
+            "sha256": "e8c895a56353addc2514879c04ef173564102f5246d46559148c291b62a60057",
+            "mode": "0o644",
+            "matches": true
+          },
+          {
+            "path": "docs/CONFIGURATION.md",
+            "sha256": "4fd26cd918d194cc529fd62aa8e93ca1039482f0bde95b6bd689e1b72364b388",
+            "mode": "0o644",
+            "matches": true
+          },
+          {
+            "path": "crates/shell/src/execution/agent_runtime/native_launch_context.rs",
+            "sha256": "880185083e3f31bcda0858a34d2a6604d496ee95ea833439c7a15827169a7e3a",
+            "mode": "0o644",
+            "matches": true
+          }
+        ],
+        "exact_bytes_full_modes_status_empty_stage": true,
+        "regenerated_patch_sha256": "4faad4a774f27a19031bfe45cec95cd40aaad4fb1fe56b23620ebd6796bf9623",
+        "mode_method": "native checkout/apply under umask022; only T11 untracked payload explicitly0644 as documented",
+        "all_passed": true
+      },
+      {
+        "label": "t10",
+        "source_commit": "29cf8e8223c9d166263e56de219428d2b3858aa9",
+        "source_tree": "ff0f07f8bccb4c2afa62c5cb00e9aef588bddda6",
+        "files": [
+          {
+            "path": "crates/shell/src/execution/agent_runtime/host_session_authority/store.rs",
+            "sha256": "2324ed1a5f7fb6524d0e198c0b36289cc9d32d03c35d1b70d66c09c824ace5df",
+            "mode": "0o644",
+            "matches": true
+          },
+          {
+            "path": "crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/object_persistence.rs",
+            "sha256": "3a755074cda4808e03baba9f5886f948491fd1b17973d9669c9ac8e00e3b53ac",
+            "mode": "0o644",
+            "matches": true
+          },
+          {
+            "path": "crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs",
+            "sha256": "64e46794d233bc5fde115df86fb3acae8469ccf46c48ff3741dcb20e42de18e7",
+            "mode": "0o644",
+            "matches": true
+          },
+          {
+            "path": "crates/shell/src/execution/agent_runtime/host_session_authority/store_tests.rs",
+            "sha256": "e038a2f40933205559e591039b444b2931ea38fbc937f22baf6e5b6d19f228d4",
+            "mode": "0o644",
+            "matches": true
+          }
+        ],
+        "exact_bytes_full_modes_status_empty_stage": true,
+        "regenerated_patch_sha256": "2c48806842acbea289a17790a5f6ee50c776e74440795f70dad10fe9532a333a",
+        "mode_method": "native checkout/apply under umask022; only T11 untracked payload explicitly0644 as documented",
+        "all_passed": true
+      },
+      {
+        "label": "e3d",
+        "source_commit": "07eda1bfa7dee6a75eb4e372dbec98419830192d",
+        "source_tree": "6469628a1b28785fb5a7be2c8d3f37c8f48d0f00",
+        "files": [
+          {
+            "path": "AGENTS.md",
+            "sha256": "a65fb5ed8b930ea30cdbc18090312c63009b83be36a235bda61df74a5abfa05d",
+            "mode": "0o644",
+            "matches": true
+          },
+          {
+            "path": "CLAUDE.md",
+            "sha256": "94cc2b39b4ce962eb0f3ecc794a86d31611f08096a219bb5aa8b0de12cf45bd2",
+            "mode": "0o644",
+            "matches": true
+          }
+        ],
+        "exact_bytes_full_modes_status_empty_stage": true,
+        "regenerated_patch_sha256": "79db05995ab33f6b1572473f222de1ac5615214357d4c26274e4b136b83b5880",
+        "mode_method": "native checkout/apply under umask022; only T11 untracked payload explicitly0644 as documented",
+        "all_passed": true
+      }
+    ],
+    "changed_untracked_file_bytes_full_modes_status_empty_stage_matched": 23,
+    "E3d_base_patch_tree_and_original_remote_commit_verified": true,
+    "isolated_Git_administration_verified_before_index_work": true
+  },
+  "actions": [
+    {
+      "label": "t13",
+      "group": "repo-145",
+      "source_commit": "33ebdf0d6a277f45dbc5603063bbcdbe521252ce",
+      "source_tree": "db0412a8527940872c843a0931c552a74bcfba8f",
+      "scope": "exact generated index database and parse-cache regular leaves",
+      "command_kind": "sudo -n rm -f -- [exact reviewed leaves]",
+      "selected_relative_leaves": [
+        ".gitnexus/lbug",
+        ".gitnexus/parse-cache/01f02e9b699d735d63c9fe6c555ddc47848642a89ce16a1d8af42ba3006215f1.json",
+        ".gitnexus/parse-cache/0b55ebdc18d9b33bfd6d943c43d4f231bffabf3b131bd17d9971e3a3442d97bc.json",
+        ".gitnexus/parse-cache/0f02d03a114927d2a45dc266bc1f9856e26306b5ed607b7e4a9b28994b07d6b5.json",
+        ".gitnexus/parse-cache/105ce835b9cb9b526c632c6de6e14432fd11dc65030810d0ca37e6e7594a8688.json",
+        ".gitnexus/parse-cache/1e9044e1b21378a69762718036772bd76cf60836874b6b31b1b9d77252550985.json",
+        ".gitnexus/parse-cache/3176ec43826ff8db415e0151bc1a35cb231dc20539d076c5bc1f666b503b3ee6.json",
+        ".gitnexus/parse-cache/6f32790bf275c45d03ba93b12fe17f23bed3dd30b140ef44b10693a47da67791.json",
+        ".gitnexus/parse-cache/746a4d980c7a9bb407cf532461ae48925c0adf7f0ea62e7d7960ed535bcc98a3.json",
+        ".gitnexus/parse-cache/8606d9bd29b1cfe8da196b36fa85b32c4a4eb9292a19a83da2ef86d9eb9b3660.json",
+        ".gitnexus/parse-cache/b4a0e6644596cb755e15f98ee101cce709e916baef4bf20de4836adcdbe0e33d.json",
+        ".gitnexus/parse-cache/c557eda824652c6f7c20c5b2ec15d34ef2df849b25c3fe27a139d212c293607d.json",
+        ".gitnexus/parse-cache/db98b92c84590cb502615de7583eb1e996d7b618915a8f2c9ebf05d840579234.json",
+        ".gitnexus/parse-cache/e195b883e261fed92918af81078af331871f3f1f884f9d5def654b5f91d02a25.json"
+      ],
+      "selected_regular_file_count": 14,
+      "exit": 0,
+      "selected_paths_absent": true,
+      "whole_root_absent": false,
+      "registration_retained": true,
+      "allocated_regular_bytes_removed": 445632512,
+      "start_utc": "2026-11-09T22:46:29.799263+00:00",
+      "end_utc": "2026-11-09T22:46:30.350444+00:00",
+      "host_available_bytes_before": 212957278208,
+      "host_available_bytes_after": 213402906624,
+      "host_available_bytes_change": 445628416,
+      "immutable_pre_sha256": "db87555edaeacfbacde592c9e81adcd4cc77d2ec51f1f5ebd96d22e7d285ad20",
+      "separate_post_sha256": "464a4ca8451974b43360b6a93f6f3dd0f5cd87d4b7294fffafd61ea936b63cd0",
+      "raw_custody": "task03:remaining-four:t13"
+    },
+    {
+      "label": "t11",
+      "group": "repo-142",
+      "source_commit": "33ebdf0d6a277f45dbc5603063bbcdbe521252ce",
+      "source_tree": "db0412a8527940872c843a0931c552a74bcfba8f",
+      "scope": "exact generated index database and parse-cache regular leaves",
+      "command_kind": "sudo -n rm -f -- [exact reviewed leaves]",
+      "selected_relative_leaves": [
+        ".gitnexus/lbug",
+        ".gitnexus/parse-cache/01f02e9b699d735d63c9fe6c555ddc47848642a89ce16a1d8af42ba3006215f1.json",
+        ".gitnexus/parse-cache/0b55ebdc18d9b33bfd6d943c43d4f231bffabf3b131bd17d9971e3a3442d97bc.json",
+        ".gitnexus/parse-cache/0f02d03a114927d2a45dc266bc1f9856e26306b5ed607b7e4a9b28994b07d6b5.json",
+        ".gitnexus/parse-cache/105ce835b9cb9b526c632c6de6e14432fd11dc65030810d0ca37e6e7594a8688.json",
+        ".gitnexus/parse-cache/1e9044e1b21378a69762718036772bd76cf60836874b6b31b1b9d77252550985.json",
+        ".gitnexus/parse-cache/3176ec43826ff8db415e0151bc1a35cb231dc20539d076c5bc1f666b503b3ee6.json",
+        ".gitnexus/parse-cache/6f32790bf275c45d03ba93b12fe17f23bed3dd30b140ef44b10693a47da67791.json",
+        ".gitnexus/parse-cache/746a4d980c7a9bb407cf532461ae48925c0adf7f0ea62e7d7960ed535bcc98a3.json",
+        ".gitnexus/parse-cache/8606d9bd29b1cfe8da196b36fa85b32c4a4eb9292a19a83da2ef86d9eb9b3660.json",
+        ".gitnexus/parse-cache/b4a0e6644596cb755e15f98ee101cce709e916baef4bf20de4836adcdbe0e33d.json",
+        ".gitnexus/parse-cache/c557eda824652c6f7c20c5b2ec15d34ef2df849b25c3fe27a139d212c293607d.json",
+        ".gitnexus/parse-cache/db98b92c84590cb502615de7583eb1e996d7b618915a8f2c9ebf05d840579234.json",
+        ".gitnexus/parse-cache/e195b883e261fed92918af81078af331871f3f1f884f9d5def654b5f91d02a25.json"
+      ],
+      "selected_regular_file_count": 14,
+      "exit": 0,
+      "selected_paths_absent": true,
+      "whole_root_absent": false,
+      "registration_retained": true,
+      "allocated_regular_bytes_removed": 444866560,
+      "start_utc": "2026-11-09T22:46:35.863319+00:00",
+      "end_utc": "2026-11-09T22:46:36.408849+00:00",
+      "host_available_bytes_before": 213402783744,
+      "host_available_bytes_after": 213847642112,
+      "host_available_bytes_change": 444858368,
+      "immutable_pre_sha256": "e83eda5451dbe9803752434fc832d514cb9b4d01278079122c907b94be5ac046",
+      "separate_post_sha256": "eae12d5155b6362133f15be524db6f1100553896c9b323693fae9ec784e64db1",
+      "raw_custody": "task03:remaining-four:t11"
+    },
+    {
+      "label": "t10",
+      "group": "repo-141",
+      "source_commit": "29cf8e8223c9d166263e56de219428d2b3858aa9",
+      "source_tree": "ff0f07f8bccb4c2afa62c5cb00e9aef588bddda6",
+      "scope": "exact generated index database and parse-cache regular leaves",
+      "command_kind": "sudo -n rm -f -- [exact reviewed leaves]",
+      "selected_relative_leaves": [
+        ".gitnexus/lbug",
+        ".gitnexus/parse-cache/0b55ebdc18d9b33bfd6d943c43d4f231bffabf3b131bd17d9971e3a3442d97bc.json",
+        ".gitnexus/parse-cache/0b79d3614390dfe51dbe3c4119d85814e4c5420aa41632d34e66edf7a534a3b0.json",
+        ".gitnexus/parse-cache/4e8b435c8b9001741cac63b1dd6e84e4a245e15834ccdbf53e1d40879de0e5f6.json",
+        ".gitnexus/parse-cache/4f3e66388aa4823ee38bd1535c2e64f09fdd6bed510ac65968ebe31e396166be.json",
+        ".gitnexus/parse-cache/66aa8abbf76b4cbe4eb5f32b401e2cca00f0f43dbaccb3a366c86dd122b26a87.json",
+        ".gitnexus/parse-cache/6d4d27627c9f7669826b0d57c8aba64736af2334d34b5ceeeba6ae6172ef6c7f.json",
+        ".gitnexus/parse-cache/77d773a84e67cabf07ace51875e3113247a12c6ac71b78e505b795a71039f60f.json",
+        ".gitnexus/parse-cache/c07ff52949d715d7d77756a21883589f6ca29098c14ec4a56fe82eb71f4b8099.json",
+        ".gitnexus/parse-cache/ff7af151fc87b5f3989e76085c301aa5718fdcfb14348b6e4499c217f68748cc.json"
+      ],
+      "selected_regular_file_count": 10,
+      "exit": 0,
+      "selected_paths_absent": true,
+      "whole_root_absent": false,
+      "registration_retained": true,
+      "allocated_regular_bytes_removed": 381956096,
+      "start_utc": "2026-11-09T22:46:41.388832+00:00",
+      "end_utc": "2026-11-09T22:46:41.872993+00:00",
+      "host_available_bytes_before": 213847515136,
+      "host_available_bytes_after": 214229467136,
+      "host_available_bytes_change": 381952000,
+      "immutable_pre_sha256": "e41db3f405fa82447eacbf4e95b64c050939615b93123917a5efef1eb228a8e7",
+      "separate_post_sha256": "10c72a78dc999c0bd1d743024c7ad5217a2c03748d060b8810ed35bd5bbc9baf",
+      "raw_custody": "task03:remaining-four:t10"
+    },
+    {
+      "label": "e3d",
+      "group": "repo-135",
+      "source_commit": "07eda1bfa7dee6a75eb4e372dbec98419830192d",
+      "source_tree": "6469628a1b28785fb5a7be2c8d3f37c8f48d0f00",
+      "scope": "whole registered worktree",
+      "command_kind": "git worktree remove --force",
+      "selected_relative_leaves": null,
+      "selected_regular_file_count": 2102,
+      "exit": 0,
+      "selected_paths_absent": true,
+      "whole_root_absent": true,
+      "registration_retained": false,
+      "allocated_regular_bytes_removed": 464244736,
+      "start_utc": "2026-11-09T22:46:47.127553+00:00",
+      "end_utc": "2026-11-09T22:46:47.489576+00:00",
+      "host_available_bytes_before": 214229336064,
+      "host_available_bytes_after": 214695464960,
+      "host_available_bytes_change": 466128896,
+      "immutable_pre_sha256": "c6845efe6930f44adb9bd4b91e37021781ce35e642a50130328dac501a48ab8d",
+      "separate_post_sha256": "6d88da5ba8633179279bc82c47f298da0868154c1078e28e30a7775a3f5b9bee",
+      "raw_custody": "task03:remaining-four:e3d"
+    }
+  ],
+  "postchecks": {
+    "one_worktree_path_registration_absent": true,
+    "all38_selected_cache_leaves_absent": true,
+    "three_source_roots_status_patches_targets_private_inputs_retained": true,
+    "private_metadata_copies_and_five_protected_originals_preserved": true,
+    "all86_frozen_pins_actor_W_BACKLOG_index_and_registries_preserved": true,
+    "C_product_src_crates_unchanged_from": "3dda500a630e7ab92186788b9a0641dc84a788b0",
+    "separate_immutable_pre_post_receipts_verified": true
+  },
+  "accounting": {
+    "removed_allocated_regular_bytes": 1736699904,
+    "sum_per_action_host_available_bytes_changes": 1738567680,
+    "latest_available_bytes": 217220366336,
+    "latest_available_inodes_observed": 45672223,
+    "proof_allocated_bytes_at_postcheck": 497061888,
+    "limitations": [
+      "Allocation counts distinct regular inodes and does not add nested scopes or directory blocks.",
+      "Filesystem availability changes are separate concurrent observations, not attributed recovery.",
+      "Per-action available-inode measurements were not captured; no inode-recovery total is asserted."
+    ]
+  },
+  "task03_cumulative": {
+    "registered_worktrees_retired": 75,
+    "allocated_regular_bytes_removed": 30958870528,
+    "additional_scopes": [
+      "R2 root and two standalone clones",
+      "Task09 debug/bin",
+      "Task22 debug",
+      "38 exact generated cache leaves across three retained source roots"
+    ]
+  },
+  "task02_plus_task03_subtotal_excluding_parallel_tasks_allocated_regular_bytes": 81708949504,
+  "cohort_reconciliation": {
+    "audited": 128,
+    "retired": 75,
+    "other_unremoved": 43,
+    "retained_Task09_Task10_Task11_Task13_Task22_sources": 5,
+    "protected_C_W": 2,
+    "missing_no_prune": 3
+  },
+  "holds": [
+    "Three source roots, all target/private inputs and proof, registries and .gitnexus/meta.json/.gitignore/parse-cache/index.json remain; retained index pointers are stale, so rebuild before querying.",
+    "E2 private identifier classification and source preservation remain open; RP3 source preparation and Codex9387 private-history custody remain open.",
+    "Other43 unremoved cohort roots are outside this completed increment; whole Task03 and phase remain incomplete."
+  ],
+  "review_and_limits": [
+    "Paired fresh technical/privacy and strategic discovery completed with no qualifying P1/P2, owner implementation CLEAN and final META Continue for exact scope.",
+    "D03-P3: source guide requires stale-index rebuild but lacks concrete index command/version; recorded nonblocking without automatic repair.",
+    "Author and independent review screened actual new source payload; raw private sessions and unchanged already-remote history were not audited.",
+    "Five selected historical originals remain local private custody; the published summary is not an off-host backup or an exact copy of private originals.",
+    "Historical build/compiler identity and Task11 historical outcome association remain unknown; no product build, test, doctor, provider, service or install was performed.",
+    "Original snapshot/assembly failures remain preserved. A post-action audit checker first failed on null git_registration; corrected read-only reconciliation passed with original failure retained.",
+    "Full source archive diff check reported existing whitespace; authored metadata formatting passed."
+  ]
+}
