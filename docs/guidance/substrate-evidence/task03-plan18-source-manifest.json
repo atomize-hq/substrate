@@ -1,0 +1,70 @@
+{
+  "status": "local candidate; actual publication and remote restoration pending",
+  "repository": "https://github.com/atomize-hq/substrate",
+  "source": {
+    "label": "plan18",
+    "head": "c7061de60c62f65bfb54771107fdaa19022937a3",
+    "tree": "eb70b7345d31d117b61c3fcc5ebbf074cacfcfff",
+    "original_full_patch_sha256": "9dcf1374876dc5eaf3d73f6d0bb429a90a105e47f022cb86e403b2cd5aa80bb0",
+    "original_source_files": [
+      {
+        "path": "AGENT_ORCHESTRATION_GAP_MATRIX.md",
+        "sha256": "87151b0aa4a6230e2fc14648959c0e41616e34d87f446f31e8302cf29611bddc",
+        "mode": "0o644",
+        "status": " M"
+      },
+      {
+        "path": "crates/shell/tests/agent_successor_contract_ahcsitc0.rs",
+        "sha256": "de94cbae37f8650b5c9a43d2bc0da9daac6a2549715520b63a8c6252d4cc644c",
+        "mode": "0o644",
+        "status": " M"
+      },
+      {
+        "path": "llm-last-mile/README.md",
+        "sha256": "563a64a40dd0163740861113a1b64ddc8cbcecb8ddd352b5229f813b12922abd",
+        "mode": "0o644",
+        "status": " M"
+      }
+    ],
+    "staged": "empty",
+    "build_inputs": [
+      {
+        "path": "Cargo.lock",
+        "sha256": "55b3efe9d854e41777d670927109190bbb421e5d435e05c284b9ea2e0db95daf",
+        "state": "present"
+      },
+      {
+        "path": "Cargo.toml",
+        "sha256": "5a2d7392da0424c41dfe22f52845be368a80d0a233ef3de16332521b401d7b28",
+        "state": "present"
+      },
+      {
+        "path": "rust-toolchain.toml",
+        "sha256": null,
+        "state": "not present in captured HEAD"
+      }
+    ],
+    "build_recipe": "cargo +1.89.0 build --workspace --locked --target x86_64-unknown-linux-gnu",
+    "recipe_limit": "Rust 1.89 is the source MSRV or pinned toolchain, not a claim of historical compiler or native dependency identity."
+  },
+  "remote_ref": "refs/heads/feat/preserve-task03-ba242549bb10",
+  "immutable_head": "c7061de60c62f65bfb54771107fdaa19022937a3",
+  "immutable_tree": "eb70b7345d31d117b61c3fcc5ebbf074cacfcfff",
+  "immutable_commit_link": "https://github.com/atomize-hq/substrate/tree/c7061de60c62f65bfb54771107fdaa19022937a3",
+  "payloads": [
+    {
+      "filename": "plan18.patch.gz",
+      "published_git_mode": "100644",
+      "compressed_sha256": "f3aad8f3511101e4739022f850bec00c34ec9ac87d03b61f3eaddfcd6f941903",
+      "decoded_sha256": "c279a8ddaa30c1852683f4df366664e7bfd35469c40bb9f8e01c507691d0d155",
+      "compressed_bytes": 5137,
+      "decoded_bytes": 28197,
+      "prospective_destination": "docs/guidance/substrate-evidence/task03-plan18-zero.patch.gz"
+    }
+  ],
+  "limits": [
+    "Plan18 HEAD has no rust-toolchain.toml; Rust 1.89 is its Cargo.toml MSRV, not a proven historical compiler.",
+    "Historical native dependency and original binary build identity are unknown.",
+    "Original source checkout, test fixtures and protected original records stay in place."
+  ]
+}
