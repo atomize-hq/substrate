@@ -1,6 +1,6 @@
 # Recovery index for 21 previously audited worktrees
 
-These are pending retirement candidates. Each commit was fetched through the named containing GitHub branch and compared to the checkout tree and tracked file modes and contents. No removal is asserted here. Branch names allow retrieval; commit URLs identify immutable content.
+These 21 worktrees were removed after their source and record index was published and verified at `611484bb939fe7e90de371f3342cbb76df453ef8`. The [combined receipt](cleanup-receipt-task03-combined.json) records the actions and postchecks. Each commit was fetched through the named containing GitHub branch and compared to the checkout tree and tracked file modes and contents. Branch names allow retrieval; commit URLs identify immutable content.
 
 Restore an ordinary full checkout with `git init`, `git remote add origin https://github.com/atomize-hq/substrate.git`, `git fetch --no-tags origin refs/heads/<branch>`, and `git checkout --detach <commit>`. The recorded Cargo.lock identifies resolved dependencies. For a future Linux build, use the source-pinned Rust toolchain where present and `cargo build --locked --workspace --target x86_64-unknown-linux-gnu`; native toolchain and system dependencies must be available. The original compiler, native packages and build invocation were not recorded and are not inferred.
 
