@@ -1,0 +1,93 @@
+{
+  "schema": "substrate-evidence-cleanup-receipt-v1",
+  "status": "two initial Task03 worktrees removed and postchecked; publication of this receipt pending",
+  "source_index_publication": {
+    "branch": "feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "8cb12b011b9d5e149449891987defe7d4cab0ad5",
+    "tree": "baf02a8791ca60f5b36640b413d8ceb7c7a7a85e",
+    "readme_sha256": "104bc2117202cdcbf7b4b6b89ca4628f5b938b8586541800e0cd7a7a1e33b9da",
+    "remote_verification": "Fetched exact branch/commit and README bytes from GitHub before actions; source branch commits, trees, original outcomes, lock and toolchain were separately retrieved and hashed."
+  },
+  "actions": [
+    {
+      "group": "repo-116",
+      "historical_checkout": "a1-4",
+      "action": "git worktree remove <exact root in protected local receipt>",
+      "cwd": "canonical checkout",
+      "started_utc": "2026-11-09T17:44:25.271503+00:00",
+      "finished_utc": "2026-11-09T17:44:25.358682+00:00",
+      "exit": 0,
+      "root_absent": true,
+      "worktree_registration_absent": true,
+      "source_branch": "feat/runtime-refactor-a1-4-auto-attach-producer-adoption",
+      "source_commit": "9407287ee3acd29683277f0f230fe90f6b5c816d",
+      "source_tree": "b74edaf86f188bfcbe7e24b23c1a42f7560804c9",
+      "github_source_and_record_sha256": {
+        "llm-last-mile/runtime-refactor/review-control/a1-4-auto-attach-producer-adoption-final-successor-review.txt": "e582d9409ba4e89401bac35dfe6ee1adbb0b522a2b1e450dc6208a1b59a3e99b",
+        "Cargo.lock": "359ed61cad528cf8bbff961ce71bf908e3149563746a8958c2e6cff41301b1d5",
+        "rust-toolchain.toml": "8aa4ad836dc3e6479a7677e869fd3ad6a9314e5624d76b5e7f666fe7820b30c8"
+      },
+      "preflight_unique_regular_allocated_bytes": 1828499456,
+      "filesystem_available_bytes_before": 130316603392,
+      "filesystem_available_bytes_after": 132156469248,
+      "filesystem_available_inodes_before": 45205065,
+      "filesystem_available_inodes_after": 45216403,
+      "raw_action_custody": "task03:initial-action-a1-4",
+      "raw_preflight_custody": "task03:OWNER-a1-4-preflight",
+      "limitations": "Preflight allocation excludes directory and symlink blocks. Filesystem availability and inode changes include concurrent activity."
+    },
+    {
+      "group": "repo-115",
+      "historical_checkout": "a1-3",
+      "action": "git worktree remove <exact root in protected local receipt>",
+      "cwd": "canonical checkout",
+      "started_utc": "2026-11-09T17:45:13.145705+00:00",
+      "finished_utc": "2026-11-09T17:45:13.195474+00:00",
+      "exit": 0,
+      "root_absent": true,
+      "worktree_registration_absent": true,
+      "source_branch": "feat/runtime-refactor-a1-3-p1",
+      "source_commit": "9d1b84d62e213450acbb28de7c9a98a91811c2b5",
+      "source_tree": "af3292c145b3ac5a66c5daf2e6e91a93b36f8443",
+      "github_source_and_record_sha256": {
+        "llm-last-mile/runtime-refactor/review-control/a1-3-p1-start-continuity-correction-verification.md": "4f6e788086d6df7dc3e077125801ad42e41a6dda6797590238a0ca7952485f08",
+        "Cargo.lock": "359ed61cad528cf8bbff961ce71bf908e3149563746a8958c2e6cff41301b1d5",
+        "rust-toolchain.toml": "8aa4ad836dc3e6479a7677e869fd3ad6a9314e5624d76b5e7f666fe7820b30c8"
+      },
+      "preflight_unique_regular_allocated_bytes": 960995328,
+      "filesystem_available_bytes_before": 132156309504,
+      "filesystem_available_bytes_after": 133119315968,
+      "filesystem_available_inodes_before": 45216396,
+      "filesystem_available_inodes_after": 45218912,
+      "raw_action_custody": "task03:initial-action-a1-3",
+      "raw_preflight_custody": "task03:OWNER-a1-3-preflight",
+      "limitations": "Preflight allocation excludes directory and symlink blocks. Filesystem availability and inode changes include concurrent activity."
+    }
+  ],
+  "total_preflight_unique_regular_allocated_bytes": 2789494784,
+  "sum_of_per_action_filesystem_available_changes_bytes": 2802872320,
+  "pre_action_checks": "Fresh source, registration, complete frozen membership, process cwd/exe/fd/maps, mounts, external hardlinks, scoped protection/reference and link checks passed for each action. Protected workflow matches were retained historical review links; their source-state limitation remains in the index.",
+  "private_custody": {
+    "id": "task03:a1-3-fixture-private",
+    "manifest_sha256": "65ae32612bc2fd8f87a239a7690078b1b6f877d8fd18c053c4c8236fd57b6b46",
+    "description": "22 small original fixture files, modes and a symlink preserved in protected local custody; private session/config bytes are not published. Native test executable excluded; copied symlink is dangling. Local custody is not off-host backup."
+  },
+  "pending": "Publication and remote readback of this receipt remain pending; task and phase acceptance remain separate.",
+  "remaining": "All other cohort roots and nonselected cleanup batches remain for evaluation; Task09, Task19, Task22 and R2 retain source, unique-input or scope checks as applicable. No later root was removed by these actions.",
+  "accounting_limitation": "Do not add nested paths or equate inode allocation to observed filesystem free-space changes; filesystem availability includes concurrent activity. No builds or product tests were run for cleanup.",
+  "post_action_checks": {
+    "utc": "2026-11-09T17:46:07.561942+00:00",
+    "both_paths_and_registrations_absent": true,
+    "frozen_evidence_hash_mismatches": 0,
+    "protected_workflow_reviews_and_actor": "matched retained hashes",
+    "fixture_files_verified": 22,
+    "integration_backlog_sha256": "2f199c8720cd47ec58ef7a5efbb4773fc8abfda99a65dfc4b46f395b1788a1ac",
+    "integration_index_clean_and_only_backlog_modified": true,
+    "canonical_checkout_clean_at_postcheck": true,
+    "source_and_index_remote_branch_tips": "rechecked after removal; full source and record content fetched and hashed before removal",
+    "latest_available_bytes": 133118885888,
+    "latest_available_inodes": 45218909,
+    "raw_reconciliation_custody": "task03:initial-post-action-reconciliation",
+    "raw_protection_custody": "task03:initial-fresh-external-post-initial"
+  }
+}
