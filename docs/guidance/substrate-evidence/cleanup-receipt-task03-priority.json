@@ -1,0 +1,200 @@
+{
+  "schema": "substrate-evidence-task03-priority-receipt-v1",
+  "status": "Actual cleanup and owner postchecks completed; publication and independent readback of this receipt update are pending.",
+  "source_and_evidence_publication_commit": "3db18111ce4948d4a8ab0a89ab369fe60db1cbf0",
+  "recovery_index": "priority-recovery-task03.md",
+  "source_states": [
+    {
+      "state": "task09",
+      "commit": "eee66706e74673b25490168c8d81733c8199a380",
+      "tree": "c8ba6a2369b0909eab520710a72d8ebadb666a58",
+      "tracked_files_and_modes_matched": 2145,
+      "cargo_lock_sha256": "f65d2e6ddf5790177463c0e67d8d1846ab25930f15fd2dcae97277334124c2fe",
+      "physical_restore_mismatches": 0,
+      "verified_containing_branch": "feat/internal-host-orchestrator-world-dispatch-bootstrap"
+    },
+    {
+      "state": "task19",
+      "commit": "56b90d73e3a854da8617344634996237512f87dc",
+      "tree": "774373210569f99d69ae8f348e5f218ea6903ae3",
+      "tracked_files_and_modes_matched": 2146,
+      "cargo_lock_sha256": "f65d2e6ddf5790177463c0e67d8d1846ab25930f15fd2dcae97277334124c2fe",
+      "physical_restore_mismatches": 0,
+      "verified_containing_branch": "feat/preserve-task03-task19-56b90d73"
+    },
+    {
+      "state": "r2-base",
+      "commit": "ec05167bd7bcb7be874af48fe33d6edb71492516",
+      "tree": "b0d399cfb09655d5ff61d47ec68408e52ba5cfec",
+      "tracked_files_and_modes_matched": 1681,
+      "cargo_lock_sha256": "6553b9856c4dfbadc66739b25441c9c44bc9eba5ccc5e0fe518488474f73518b",
+      "physical_restore_mismatches": 0,
+      "verified_containing_branch": "feat/internal-host-orchestrator-world-dispatch-bootstrap"
+    },
+    {
+      "state": "r2-head",
+      "commit": "199e1b1a5f3854934a08727f2846e028c065c5cb",
+      "tree": "15e17d17fa1a9222488a695a0e4e360376e3556c",
+      "tracked_files_and_modes_matched": 1681,
+      "cargo_lock_sha256": "6553b9856c4dfbadc66739b25441c9c44bc9eba5ccc5e0fe518488474f73518b",
+      "physical_restore_mismatches": 0,
+      "verified_containing_branch": "feat/preserve-task03-r2-head-199e1b1a"
+    }
+  ],
+  "source_retrieval_and_physical_restore": {
+    "passed": true,
+    "source_states": 4,
+    "total_tracked_files_and_modes_compared": 7653,
+    "mismatches": 0,
+    "method": "Independent remote fetch and physical restore; comparison with original source and Git tree."
+  },
+  "published_source_and_record_files": [
+    {
+      "path": "priority-recovery-task03.md",
+      "sha256": "14288e1303bc5282fc6a8d1ac3623fbd076b2dd0975ee80e56f5d778466e64e5"
+    },
+    {
+      "path": "records/task03-priority/priority-records-manifest.json",
+      "sha256": "778934db79a8a41d4cea778b2fe3dc44a8e8ef78dab1fc9d31849f94c660fe62"
+    },
+    {
+      "path": "records/task03-priority/r2-base-wall-serial-summary.json",
+      "sha256": "624cb850feab774d210cb136afe5ce4a13f9dd0d2c20e36d1bbfeb6ddd4fda95"
+    },
+    {
+      "path": "records/task03-priority/r2-base-wall-parallel-summary.json",
+      "sha256": "39c6a8e03360dfc79a347e593fb9bc7ed887d6838b18a880dd38f31c71732758"
+    },
+    {
+      "path": "records/task03-priority/r2-head-wall-serial-summary.json",
+      "sha256": "8a125d72fb30ba075ffe1253c3b84295795e6b6a3cbac8c0f51e9390a93a9240"
+    },
+    {
+      "path": "records/task03-priority/r2-head-wall-parallel-summary.json",
+      "sha256": "0d7077825c6de6f75621d4faad24dcc092b0ac911008c1637d35962c47f2c05a"
+    },
+    {
+      "path": "records/task03-priority/task19-final-focused-tests.stdout.txt",
+      "sha256": "bb4d87dafe5a61a9d61ad9b33ff93baea42bea6d84449d21b7b476560a999c51"
+    },
+    {
+      "path": "records/task03-priority/task19-existing-surfaces-tests.stdout.txt",
+      "sha256": "18fe951e16756d85e362ec4deaee22d03f41ab13caa9b5d46edd92ac65977c89"
+    },
+    {
+      "path": "records/task03-priority/task19-existing-publication-recovery-tests.stdout.txt",
+      "sha256": "f8d02a6674ad5c96288ab92bacb7f7fc73a05dc0dc891b0e1619bd9f90575793"
+    },
+    {
+      "path": "records/task03-priority/task19-final-focused-tests.json",
+      "sha256": "b2ac995ca1981d2f281b3256c7203add6fc634089ce085651d7b6ce092b7aeda"
+    },
+    {
+      "path": "records/task03-priority/task19-existing-surfaces-tests.json",
+      "sha256": "7e3201eb7a8d2e5b2877b83c3de1eca8aff4f0bbc0b9756d2ce79c785b424ef3"
+    },
+    {
+      "path": "records/task03-priority/task19-existing-publication-recovery-tests.json",
+      "sha256": "bfe1a3b9ea881712f9929f574a7f40d0fcec80763a3b10f514b326db6cba7021"
+    },
+    {
+      "path": "records/task03-priority/task19-clippy-library.json",
+      "sha256": "ea344f2d1f826e23be08e90b9926e683ac23ee2e562b1b3c12c76686c0259f54"
+    },
+    {
+      "path": "records/task03-priority/task09-codec-results.json",
+      "sha256": "7ea1eeebcb4f7bae941bc4ff9f55184a325c651ecf3a8b49e2e77d8a037f393a"
+    },
+    {
+      "path": "records/task03-priority/task09-codec-command.json",
+      "sha256": "fed0dd6973b083c8536317b82f3402bcb991d02a3fbee63c8d203eaf6092912f"
+    },
+    {
+      "path": "records/task03-priority/task09-links.json",
+      "sha256": "f6db6c5f13d607069e43350527489faf4cba28d20e2f9ccc2c7a69227dbd4545"
+    }
+  ],
+  "published_file_modes_matched": true,
+  "actions": [
+    {
+      "subject": "Task09 debug and bin directories; source checkout and other target children retained",
+      "start_utc": "2026-11-09T19:07:07.154452+00:00",
+      "end_utc": "2026-11-09T19:07:07.208560+00:00",
+      "command_kind": "rm -rfv --one-file-system -- exact reviewed path(s)",
+      "exit": 0,
+      "selected_paths_absent": true,
+      "allocated_regular_bytes_before": 3479199744,
+      "available_bytes_before": 137655394304,
+      "available_bytes_after": 141137514496,
+      "available_bytes_change": 3482120192,
+      "available_inodes_before": 45269682,
+      "available_inodes_after": 45273810,
+      "raw_action_custody": "task03:priority-action-task09",
+      "source_root_retained": true,
+      "other_target_children_unchanged": true
+    },
+    {
+      "subject": "Task19 registered worktree",
+      "start_utc": "2026-11-09T19:07:47.335625+00:00",
+      "end_utc": "2026-11-09T19:07:47.409988+00:00",
+      "command_kind": "git worktree remove",
+      "exit": 0,
+      "selected_paths_absent": true,
+      "allocated_regular_bytes_before": 1992167424,
+      "available_bytes_before": 141137068032,
+      "available_bytes_after": 143135547392,
+      "available_bytes_change": 1998479360,
+      "available_inodes_before": 45273807,
+      "available_inodes_after": 45283264,
+      "raw_action_custody": "task03:priority-action-task19",
+      "registration_absent": true
+    },
+    {
+      "subject": "R2 comparison root, including base and head standalone clones",
+      "start_utc": "2026-11-09T19:09:59.015006+00:00",
+      "end_utc": "2026-11-09T19:09:59.115783+00:00",
+      "command_kind": "rm -rfv --one-file-system -- exact reviewed path(s)",
+      "exit": 0,
+      "selected_paths_absent": true,
+      "allocated_regular_bytes_before": 8595755008,
+      "available_bytes_before": 143134928896,
+      "available_bytes_after": 151737032704,
+      "available_bytes_change": 8602103808,
+      "available_inodes_before": 45283261,
+      "available_inodes_after": 45300055,
+      "raw_action_custody": "task03:priority-action-r2"
+    }
+  ],
+  "postchecks": {
+    "all_three_actions_exit_zero": true,
+    "all_selected_paths_absent": true,
+    "task19_registration_absent": true,
+    "task09_source_and_held_target_children_preserved": true,
+    "r2_original_lightweight_records_in_local_custody": 70,
+    "r2_private_git_metadata_files_in_local_custody": 16,
+    "task09_task19_protected_original_hashes_preserved": true,
+    "protected_actor_and_workflow_preserved": true,
+    "frozen_evidence_hashes_matched": 35,
+    "source_checkout_clean_after_action": true
+  },
+  "accounting": {
+    "removed_allocated_regular_bytes": 14067122176,
+    "sum_of_per_action_available_bytes_changes": 14082703360,
+    "latest_available_bytes_at_postcheck": 151734792192,
+    "phase_proof_allocated_bytes_at_postcheck": 453427200,
+    "limitations": "Allocated regular blocks exclude directory and symlink blocks. Available-space changes include concurrent activity and are not attributed bytes."
+  },
+  "task03_to_date": {
+    "retired_registered_worktrees": 25,
+    "R2_comparison_root_removed_with_two_standalone_clones": true,
+    "Task09_generated_debug_and_bin_removed_source_root_retained": true,
+    "regular_allocated_bytes_removed": 21419126784
+  },
+  "prior_observations": [
+    "An initial R2 preflight failed on metadata mtime; its cause was not established. Later reviewed preflight and fresh guards passed.",
+    "A local mapping helper expected three local manifests; two actual local mappings plus separate R2 record and Git-metadata manifests were verified. The draft count error remains recorded.",
+    "A publication staging check reported three historical stdout files with trailing blank lines. Their original bytes were preserved and all 16 published destination bytes and modes matched; authored metadata formatting checks passed."
+  ],
+  "custody_limitations": "Raw paths, original sensitive records and Git metadata remain in protected local custody; this receipt and opaque references are not an off-host backup. Native binaries and caches were not uploaded.",
+  "remaining": "The separate 21-worktree and Task22 debug candidate and other cohort entries remain pending. This receipt does not claim Task03 or phase acceptance."
+}
