@@ -1,0 +1,70 @@
+id: default
+name: Default Policy
+world_fs:
+  mode: writable
+  isolation: workspace
+  require_world: false
+llm:
+  fail_closed:
+    routing: true
+  require_approval: false
+  allowed_backends: []
+  constraints:
+    routers: []
+    providers: []
+    protocols: []
+    auth_authorities: []
+  secrets:
+    env_allowed: []
+agents:
+  allowed_backends: []
+  fail_closed:
+    routing: true
+  host_credentials:
+    read:
+      allowed_backends: []
+  world_dispatch:
+    enabled: false
+    allowed_backends: []
+    allowed_actions: []
+    allowed_modes: []
+    same_session_only: true
+    same_world_binding_only: true
+    allow_capability_narrowing: false
+    max_live_retained_workers: 0
+    max_concurrent_ephemeral: 0
+    fork:
+      commands_allowed: false
+      requests_allowed: false
+      recommendations_allowed: false
+    control:
+      control_directives_allowed: false
+      progress_acks_allowed: false
+    obligations:
+      approval_allowed: false
+      approval_response_allowed: false
+      clarification_response_allowed: false
+      follow_up_allowed: false
+      blocked_allowed: false
+workflow:
+  router:
+    enabled: false
+    allow_cross_workspace: false
+    allowed_rule_ids: []
+    allowed_workflow_ids: []
+    allowed_target_workspace_ids: []
+net_allowed: []
+cmd_allowed: []
+cmd_denied:
+- rm -rf *
+- curl * | bash
+- wget * | bash
+cmd_isolated: []
+require_approval: false
+allow_shell_operators: true
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+metadata: {}

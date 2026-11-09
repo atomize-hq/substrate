@@ -1,0 +1,113 @@
+{
+  "purpose": "Only these files are proposed for publication; excludes private mapping and original copies",
+  "records": [
+    {
+      "source": "task22-package/manifest.json",
+      "destination": "records/task03-task22/manifest.json",
+      "sha256": "1c4a2b0c2d25b67b478c78821ea74de872ae449ba3fc91853497f448f7e3be87",
+      "local_mode": "0o644",
+      "git_mode": "100644"
+    },
+    {
+      "source": "task22-package/records/joined-owner-endpoint-verification.json",
+      "destination": "records/task03-task22/records/joined-owner-endpoint-verification.json",
+      "sha256": "f6f4d565606ebc0a44f997df930789084e6acc48e2215f946842e0cf2a1a7aff",
+      "local_mode": "0o644",
+      "git_mode": "100644"
+    },
+    {
+      "source": "task22-package/sources/crates/shell/src/execution/agent_runtime/host_session_authority/current_host_run.rs",
+      "destination": "records/task03-task22/sources/crates/shell/src/execution/agent_runtime/host_session_authority/current_host_run.rs",
+      "sha256": "da9935ba88b09ce828269b4d4ae3b1884314f2cc4f72ef0acd94ca2942e3c588",
+      "local_mode": "0o644",
+      "git_mode": "100644"
+    },
+    {
+      "source": "task22-package/sources/crates/shell/src/execution/agent_runtime/host_session_authority/direct_host_resume.rs",
+      "destination": "records/task03-task22/sources/crates/shell/src/execution/agent_runtime/host_session_authority/direct_host_resume.rs",
+      "sha256": "5eb7f9a8b97c2f7dba360f90a836315d4f8399c84e96ed414a37ecefe2a0854c",
+      "local_mode": "0o644",
+      "git_mode": "100644"
+    },
+    {
+      "source": "task22-package/sources/crates/shell/src/execution/agent_runtime/obligation_ledger/direct_host_inbox.rs",
+      "destination": "records/task03-task22/sources/crates/shell/src/execution/agent_runtime/obligation_ledger/direct_host_inbox.rs",
+      "sha256": "ff80ba7bdd201be4f67d47782bb5c7642d8b9ee7ec12412b3dd864956ad1f0d8",
+      "local_mode": "0o644",
+      "git_mode": "100644"
+    },
+    {
+      "source": "task22-package/sources/crates/shell/src/execution/workspace_read_cut.rs",
+      "destination": "records/task03-task22/sources/crates/shell/src/execution/workspace_read_cut.rs",
+      "sha256": "248b600ddb3ab90759d74d709c503a06370529c46f7e411e8633834f659015b4",
+      "local_mode": "0o644",
+      "git_mode": "100644"
+    },
+    {
+      "source": "task22-package/sources/crates/shell/tests/consumer_admission_preflight_linux.rs",
+      "destination": "records/task03-task22/sources/crates/shell/tests/consumer_admission_preflight_linux.rs",
+      "sha256": "5a61084f2e373d55cb7388fa92efedf047b6eaf665c4774ffdd73bdcef3712a8",
+      "local_mode": "0o644",
+      "git_mode": "100644"
+    },
+    {
+      "source": "task22-package/sources/runtime/namespace-fixture-v2.sh",
+      "destination": "records/task03-task22/sources/runtime/namespace-fixture-v2.sh",
+      "sha256": "8423829e7098ca78b606156f9858c491c2a2ec73b0362bc28b4ee3309ec9f5a3",
+      "local_mode": "0o700",
+      "git_mode": "100755"
+    },
+    {
+      "source": "task22-package/sources/runtime/release-a/default-policy-baseline.json",
+      "destination": "records/task03-task22/sources/runtime/release-a/default-policy-baseline.json",
+      "sha256": "c924b38acf5a86e3cb5064ad1f6029abeab766668bdb33e5b44bbf5debc7dda8",
+      "local_mode": "0o644",
+      "git_mode": "100644"
+    },
+    {
+      "source": "task22-package/sources/runtime/release-a/default-policy-baseline.yaml",
+      "destination": "records/task03-task22/sources/runtime/release-a/default-policy-baseline.yaml",
+      "sha256": "77362c28291f7ddea8ddc106ac10c25c7bcb394702ce193d40218514601fa09d",
+      "local_mode": "0o644",
+      "git_mode": "100644"
+    },
+    {
+      "source": "task22-package/sources/runtime/release-a/default-policy-candidate.json",
+      "destination": "records/task03-task22/sources/runtime/release-a/default-policy-candidate.json",
+      "sha256": "c924b38acf5a86e3cb5064ad1f6029abeab766668bdb33e5b44bbf5debc7dda8",
+      "local_mode": "0o644",
+      "git_mode": "100644"
+    },
+    {
+      "source": "task22-package/sources/runtime/release-a/default-policy-candidate.yaml",
+      "destination": "records/task03-task22/sources/runtime/release-a/default-policy-candidate.yaml",
+      "sha256": "77362c28291f7ddea8ddc106ac10c25c7bcb394702ce193d40218514601fa09d",
+      "local_mode": "0o644",
+      "git_mode": "100644"
+    },
+    {
+      "source": "task22-package/sources/runtime/release-a/policy-bytes.rs",
+      "destination": "records/task03-task22/sources/runtime/release-a/policy-bytes.rs",
+      "sha256": "793aa1f9fa89a4c43c07595a223a8c2b3fc614b318c9080e351bfeb4942188b4",
+      "local_mode": "0o644",
+      "git_mode": "100644"
+    },
+    {
+      "source": "task22-package/tracked.patch",
+      "destination": "records/task03-task22/tracked.patch",
+      "sha256": "66d26d9928513cf1aed073a5b3b72e1673dd66f9cbb9891f061c55e3183b5f70",
+      "local_mode": "0o644",
+      "git_mode": "100644"
+    },
+    {
+      "source": "combined-restore.py",
+      "destination": "records/task03-task22/restore.py",
+      "sha256": "3285737fce9661faae48f206cc63f3197feb79e321b7a7cb9247072b93eb445a",
+      "local_mode": "0o644",
+      "git_mode": "100644"
+    }
+  ],
+  "extra_public_index_source": "combined-public-task22.md",
+  "extra_public_index_destination": "worktree-recovery-task03-task22.md",
+  "mode_note": "Git records executable bit only; source fixture original mode 0700 is recovered from manifest by restore.py"
+}

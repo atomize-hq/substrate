@@ -1,0 +1,19 @@
+# Task22 source snapshot and debug-output recovery
+
+This preservation record describes a source snapshot, not current acceptance. Base [ce53eaa29ae720a0fb6de1f9720237d28fd86630](https://github.com/atomize-hq/substrate/commit/ce53eaa29ae720a0fb6de1f9720237d28fd86630), tree `07ccf073c396391fdd206ce96d447221ebd5d1aa`, is reachable through `refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap`. The snapshot has 37 modified tracked files, no staged changes and 11 additional untracked source or fixture files. The [manifest](records/task03-task22/manifest.json) records original and screened SHA-256 hashes, paths and modes. The [historical endpoint record](records/task03-task22/records/joined-owner-endpoint-verification.json) describes a bounded earlier R08 outcome; it reports full strict clippy failing with exit 101 and 43 diagnostics, and does not establish acceptance of this later snapshot.
+
+The screened patch and one fixture replace the workstation home prefix with `__TASK22_PRIVATE_HOME__`. Exact historical source requires a separately held private reinjection map and private original copies, which are in local custody only: no off-host backup is claimed. Without that map, exact historical reconstruction is impossible; the public fixture needs a suitable local path before use. The 3 original native or generated outputs, the source checkout, its runtime directory and the protected Task20 records remain locally retained. Generated debug outputs are rebuildable subject to dependencies and environment, but no original binary identity or current qualification is inferred.
+
+The [file allowlist](records/task03-task22/file-allowlist.json) records the package files and their screened SHA-256 hashes. Git retains only the executable bit: the fixture's original `0700` mode is recorded in the manifest and restored explicitly. The allowlist itself and this index are outside its listed package rows. Original sensitive copies and the private map are never part of the public package.
+
+To restore exact source in a new empty directory, fetch the base from its containing ref and check out the immutable commit. Retrieve the published `records/task03-task22/` files and verify their hashes against the allowlist and the publication commit. Then run the following, substituting local paths:
+
+```sh
+git init source-checkout
+git -C source-checkout remote add origin https://github.com/atomize-hq/substrate.git
+git -C source-checkout fetch --no-tags origin refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap
+git -C source-checkout checkout --detach ce53eaa29ae720a0fb6de1f9720237d28fd86630
+python3 /path/to/retrieved/records/task03-task22/restore.py /path/to/retrieved/records/task03-task22 /path/to/private-reinjection-map.json source-checkout
+```
+
+The [restore program](records/task03-task22/restore.py) checks base and clean status, screened and original patch hashes, applies the patch, restores the 11 files and modes, verifies all 48 original file hashes and modes, confirms the staged diff is empty and verifies the reconstructed tracked patch. The 3 held native outputs and ignored build cache are outside reconstruction. The original Cargo.lock SHA-256 is `95ae8d924a33b68efc2c1359313d8e00f075eff157275f6555bbf2f12abc57e7`; source-pinned Rust toolchain SHA-256 is `8aa4ad836dc3e6479a7677e869fd3ad6a9314e5624d76b5e7f666fe7820b30c8`. A future Linux recipe is `cargo build --locked --workspace --target x86_64-unknown-linux-gnu` with the source-pinned toolchain and appropriate native dependencies. The original compiler invocation and installed native packages were not established.

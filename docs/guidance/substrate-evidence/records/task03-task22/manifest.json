@@ -1,0 +1,393 @@
+{
+  "schema": "task22-source-preservation-v1",
+  "status": "prepared redacted source package; remote publication, review and exact private reinjection required",
+  "base_commit": "ce53eaa29ae720a0fb6de1f9720237d28fd86630",
+  "base_tree": "07ccf073c396391fdd206ce96d447221ebd5d1aa",
+  "base_containing_branch": "feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "tracked_patch": {
+    "candidate_file": "tracked.patch",
+    "original_sha256": "127ac229fa8c73cfc3b871a37fd67663f773bdfa2735b36f8998f7ec357fb13a",
+    "candidate_sha256": "66d26d9928513cf1aed073a5b3b72e1673dd66f9cbb9891f061c55e3183b5f70",
+    "redaction": "workstation home prefix replaced by a placeholder; reinjection requires separately held private mapping"
+  },
+  "staged_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "tracked_working_files": [
+    {
+      "path": "crates/broker/src/effective_policy.rs",
+      "mode": "0o644",
+      "sha256": "6e2b0afdbb272781721ea930ac57d456ede0c1116238937701e635f5dbfc732f"
+    },
+    {
+      "path": "crates/broker/src/lib.rs",
+      "mode": "0o644",
+      "sha256": "645628902972091c6d6e77b55e99870b55464be88143fd7da24ab4fff8aab3c4"
+    },
+    {
+      "path": "crates/broker/src/policy.rs",
+      "mode": "0o644",
+      "sha256": "db54fd793df07e9eb78e3c7a72b4dca5c9c4c0e186153e4afa313fb002fdea02"
+    },
+    {
+      "path": "crates/shell/src/execution/agent_runtime/control.rs",
+      "mode": "0o644",
+      "sha256": "07c20c9e6a593e4dbe883fe9d58a8e4f3239e0f20fbe247190415bb21b492a27"
+    },
+    {
+      "path": "crates/shell/src/execution/agent_runtime/host_session_authority/facade.rs",
+      "mode": "0o644",
+      "sha256": "539f514b137a58a3d04729d180fe290f9b091d2f90d0ac465bb5a06ed892781a"
+    },
+    {
+      "path": "crates/shell/src/execution/agent_runtime/host_session_authority/hash.rs",
+      "mode": "0o644",
+      "sha256": "5e1760e922015fc42d0292b464759aba7c90da0fc90fa9ac981a91eafca1ab12"
+    },
+    {
+      "path": "crates/shell/src/execution/agent_runtime/host_session_authority/mod.rs",
+      "mode": "0o644",
+      "sha256": "dd7fd5a5bc85147d6c7a33bb3c388cc25fe1b1c90ae04142a1e2ef75176a7f2b"
+    },
+    {
+      "path": "crates/shell/src/execution/agent_runtime/host_session_authority/schema.rs",
+      "mode": "0o644",
+      "sha256": "a3db9fb151c467b04c28e752fd85a6aeb47e3fd16b19d46bc97f90837c89afcc"
+    },
+    {
+      "path": "crates/shell/src/execution/agent_runtime/host_session_authority/store.rs",
+      "mode": "0o644",
+      "sha256": "ee567d161b51a2fc0170652d6ffd2c4a98d51dfd98d4e353e444c8eb447a69ff"
+    },
+    {
+      "path": "crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/layout.rs",
+      "mode": "0o644",
+      "sha256": "dd5e1a200c7855f37dfa8bf2bb6e411c9089c97d1d50a91b39c36443ccaa1d2c"
+    },
+    {
+      "path": "crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/object_persistence.rs",
+      "mode": "0o644",
+      "sha256": "42ab82254c2c960aff2926782680af0b03575bfb22b0431e5897a7c167794813"
+    },
+    {
+      "path": "crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs",
+      "mode": "0o644",
+      "sha256": "7108029e827e18d2b144efd936ecce41bb51dd68f74d5160767bb046793b5422"
+    },
+    {
+      "path": "crates/shell/src/execution/agent_runtime/host_session_authority/store_schema.rs",
+      "mode": "0o644",
+      "sha256": "b370f6b3d34a37818fb88c9218c410abefb3429cda76194255e3ea339108750d"
+    },
+    {
+      "path": "crates/shell/src/execution/agent_runtime/host_session_authority/store_tests.rs",
+      "mode": "0o644",
+      "sha256": "958fee5ff311e0c03b7d60bd90e46cb2a663c6b613ec4d5d468c36637cd58717"
+    },
+    {
+      "path": "crates/shell/src/execution/agent_runtime/host_session_authority/transition.rs",
+      "mode": "0o644",
+      "sha256": "37e8c95dbb9df5a1595dd2b43664a4ea3503d01bc7e6e92a69fdce8e45d66e2e"
+    },
+    {
+      "path": "crates/shell/src/execution/agent_runtime/host_session_authority/validation.rs",
+      "mode": "0o644",
+      "sha256": "589d894912d1329181389afccaef50d43f5f99f7acb33b1d0eabdeb038ea6945"
+    },
+    {
+      "path": "crates/shell/src/execution/agent_runtime/obligation_ledger.rs",
+      "mode": "0o644",
+      "sha256": "1fa5819ddaa7047762dab2bb3e9a6a0e8243a1831e0276c5d4e8828424834a76"
+    },
+    {
+      "path": "crates/shell/src/execution/agent_runtime/state_store.rs",
+      "mode": "0o644",
+      "sha256": "3628dab50d4109f4d8bbea70fbffe79a83791b2c59485a0be32fd928f5845dc1"
+    },
+    {
+      "path": "crates/shell/src/execution/agent_runtime/workspace_admission_authority.rs",
+      "mode": "0o644",
+      "sha256": "0f30181f78e7c535db23df5b66179f83c52a9a2634ac098ada862a9a8ccb569e"
+    },
+    {
+      "path": "crates/shell/src/execution/cli.rs",
+      "mode": "0o644",
+      "sha256": "397d46f5efbd857fc9248913216c5e106210fa88a6e8a95983e59ce4ac298a16"
+    },
+    {
+      "path": "crates/shell/src/execution/config_cmd.rs",
+      "mode": "0o644",
+      "sha256": "627216100e1233391ac7f9764f31e8d6302ff6fc57edb6ea4a538d98ae35dfc5"
+    },
+    {
+      "path": "crates/shell/src/execution/mod.rs",
+      "mode": "0o644",
+      "sha256": "c9d6a3c7781789e82923fad4c1f3f59dc2d43f7cb14bbf60ea660846f79a2f39"
+    },
+    {
+      "path": "crates/shell/src/execution/policy_cmd.rs",
+      "mode": "0o644",
+      "sha256": "880b5fb2ecf27666fd014edc99056918b238ebafcbb9d81c8afaab66cf30ac82"
+    },
+    {
+      "path": "crates/shell/src/execution/policy_model.rs",
+      "mode": "0o644",
+      "sha256": "ec15cb62d2f4abf7d23e3a0f3faa7a24a983005ce25077dc6f222d45a7dda1ac"
+    },
+    {
+      "path": "crates/shell/src/execution/workspace_cmd.rs",
+      "mode": "0o644",
+      "sha256": "36b49c69f176d010cbc0b78abf346870c3c4182ff68f703ae54e9765c8c93437"
+    },
+    {
+      "path": "crates/shell/src/execution/workspace_open.rs",
+      "mode": "0o644",
+      "sha256": "c0b683b8292f562acb6b567f938832f583fbf19fc8b4693d570e238214b7261c"
+    },
+    {
+      "path": "crates/shell/src/lib.rs",
+      "mode": "0o644",
+      "sha256": "7d31d4b78dec7e990b055de8a2e4499c53131f9c62c0de8fba5741792a546f2e"
+    },
+    {
+      "path": "crates/transport-api-client/src/lib.rs",
+      "mode": "0o644",
+      "sha256": "3e124186a3ecc8dae1f758142a64ba631b4af836967f5296a08ce972963dd47c"
+    },
+    {
+      "path": "crates/transport-api-client/src/transport/mod.rs",
+      "mode": "0o644",
+      "sha256": "de87b58d958ee88329b3d9a0dbabe8b612a179abde06ff564469179e8b365665"
+    },
+    {
+      "path": "crates/transport-api-types/src/lib.rs",
+      "mode": "0o644",
+      "sha256": "4345a0451050f059b0815f095e331b4fd437e318b3dd78e743643211c1e1719b"
+    },
+    {
+      "path": "crates/world-service/src/handlers.rs",
+      "mode": "0o644",
+      "sha256": "98bdc61f497bda7088296f1a6f2b6b65664fdbf11918447349806ac8e585a8e9"
+    },
+    {
+      "path": "crates/world-service/src/lib.rs",
+      "mode": "0o644",
+      "sha256": "f877dbb910c56c2e89c1ae2de2eb6953e9816c5513660115385a838424e46311"
+    },
+    {
+      "path": "crates/world-service/src/service.rs",
+      "mode": "0o644",
+      "sha256": "43c9e32a8770b42d6fa5898de090af10c55a49188ae8e7e72fcb8c5790455ece"
+    },
+    {
+      "path": "crates/world/src/lib.rs",
+      "mode": "0o644",
+      "sha256": "c82f797a00399cde1205dd9e429ac114ae2fcdb36fae714250be4d3cefb051ad"
+    },
+    {
+      "path": "crates/world/src/session.rs",
+      "mode": "0o644",
+      "sha256": "6f68472823185c6ec040bd0361559ffa0b707aa2788b4bb12b4b6a786946143c"
+    },
+    {
+      "path": "docs/CONFIGURATION.md",
+      "mode": "0o644",
+      "sha256": "b97b4e8a7e4e256ae471907e1e42fdf5959f6f77c99d65fb18465f404c9e1a60"
+    },
+    {
+      "path": "llm-last-mile/runtime-refactor/slices/tasks/b01-b03-authenticated-preflight.md",
+      "mode": "0o644",
+      "sha256": "6dafdb9670334b449526b8930d3367938751e90a0bfbd50982cf8b1138104d43"
+    }
+  ],
+  "untracked_source_files": [
+    {
+      "path": "crates/shell/src/execution/agent_runtime/host_session_authority/current_host_run.rs",
+      "type": "file",
+      "original_mode": "0o644",
+      "original_sha256": "da9935ba88b09ce828269b4d4ae3b1884314f2cc4f72ef0acd94ca2942e3c588",
+      "candidate_sha256": "da9935ba88b09ce828269b4d4ae3b1884314f2cc4f72ef0acd94ca2942e3c588",
+      "candidate_file": "sources/crates/shell/src/execution/agent_runtime/host_session_authority/current_host_run.rs"
+    },
+    {
+      "path": "crates/shell/src/execution/agent_runtime/host_session_authority/direct_host_resume.rs",
+      "type": "file",
+      "original_mode": "0o644",
+      "original_sha256": "5eb7f9a8b97c2f7dba360f90a836315d4f8399c84e96ed414a37ecefe2a0854c",
+      "candidate_sha256": "5eb7f9a8b97c2f7dba360f90a836315d4f8399c84e96ed414a37ecefe2a0854c",
+      "candidate_file": "sources/crates/shell/src/execution/agent_runtime/host_session_authority/direct_host_resume.rs"
+    },
+    {
+      "path": "crates/shell/src/execution/agent_runtime/obligation_ledger/direct_host_inbox.rs",
+      "type": "file",
+      "original_mode": "0o644",
+      "original_sha256": "ff80ba7bdd201be4f67d47782bb5c7642d8b9ee7ec12412b3dd864956ad1f0d8",
+      "candidate_sha256": "ff80ba7bdd201be4f67d47782bb5c7642d8b9ee7ec12412b3dd864956ad1f0d8",
+      "candidate_file": "sources/crates/shell/src/execution/agent_runtime/obligation_ledger/direct_host_inbox.rs"
+    },
+    {
+      "path": "crates/shell/src/execution/workspace_read_cut.rs",
+      "type": "file",
+      "original_mode": "0o644",
+      "original_sha256": "248b600ddb3ab90759d74d709c503a06370529c46f7e411e8633834f659015b4",
+      "candidate_sha256": "248b600ddb3ab90759d74d709c503a06370529c46f7e411e8633834f659015b4",
+      "candidate_file": "sources/crates/shell/src/execution/workspace_read_cut.rs"
+    },
+    {
+      "path": "crates/shell/tests/consumer_admission_preflight_linux.rs",
+      "type": "file",
+      "original_mode": "0o644",
+      "original_sha256": "5a61084f2e373d55cb7388fa92efedf047b6eaf665c4774ffdd73bdcef3712a8",
+      "candidate_sha256": "5a61084f2e373d55cb7388fa92efedf047b6eaf665c4774ffdd73bdcef3712a8",
+      "candidate_file": "sources/crates/shell/tests/consumer_admission_preflight_linux.rs"
+    },
+    {
+      "path": "runtime/namespace-fixture-v2.sh",
+      "type": "file",
+      "original_mode": "0o700",
+      "original_sha256": "4f69b62b23b1608bf8d57060d95d7481d3eb0642fcf3061de0434416d6efe921",
+      "candidate_sha256": "8423829e7098ca78b606156f9858c491c2a2ec73b0362bc28b4ee3309ec9f5a3",
+      "candidate_file": "sources/runtime/namespace-fixture-v2.sh"
+    },
+    {
+      "path": "runtime/release-a/default-policy-baseline.json",
+      "type": "file",
+      "original_mode": "0o644",
+      "original_sha256": "c924b38acf5a86e3cb5064ad1f6029abeab766668bdb33e5b44bbf5debc7dda8",
+      "candidate_sha256": "c924b38acf5a86e3cb5064ad1f6029abeab766668bdb33e5b44bbf5debc7dda8",
+      "candidate_file": "sources/runtime/release-a/default-policy-baseline.json"
+    },
+    {
+      "path": "runtime/release-a/default-policy-baseline.yaml",
+      "type": "file",
+      "original_mode": "0o644",
+      "original_sha256": "77362c28291f7ddea8ddc106ac10c25c7bcb394702ce193d40218514601fa09d",
+      "candidate_sha256": "77362c28291f7ddea8ddc106ac10c25c7bcb394702ce193d40218514601fa09d",
+      "candidate_file": "sources/runtime/release-a/default-policy-baseline.yaml"
+    },
+    {
+      "path": "runtime/release-a/default-policy-candidate.json",
+      "type": "file",
+      "original_mode": "0o644",
+      "original_sha256": "c924b38acf5a86e3cb5064ad1f6029abeab766668bdb33e5b44bbf5debc7dda8",
+      "candidate_sha256": "c924b38acf5a86e3cb5064ad1f6029abeab766668bdb33e5b44bbf5debc7dda8",
+      "candidate_file": "sources/runtime/release-a/default-policy-candidate.json"
+    },
+    {
+      "path": "runtime/release-a/default-policy-candidate.yaml",
+      "type": "file",
+      "original_mode": "0o644",
+      "original_sha256": "77362c28291f7ddea8ddc106ac10c25c7bcb394702ce193d40218514601fa09d",
+      "candidate_sha256": "77362c28291f7ddea8ddc106ac10c25c7bcb394702ce193d40218514601fa09d",
+      "candidate_file": "sources/runtime/release-a/default-policy-candidate.yaml"
+    },
+    {
+      "path": "runtime/release-a/policy-bytes.rs",
+      "type": "file",
+      "original_mode": "0o644",
+      "original_sha256": "793aa1f9fa89a4c43c07595a223a8c2b3fc614b318c9080e351bfeb4942188b4",
+      "candidate_sha256": "793aa1f9fa89a4c43c07595a223a8c2b3fc614b318c9080e351bfeb4942188b4",
+      "candidate_file": "sources/runtime/release-a/policy-bytes.rs"
+    }
+  ],
+  "untracked_native_outputs_held": [
+    {
+      "path": "runtime/build-tmp/libconsumer_admission_preflight_linux-efd99900d0ae0433.rmeta",
+      "mode": "0o644",
+      "type": "file",
+      "size": 0,
+      "reason": "native or generated output retained in source checkout; outside source package"
+    },
+    {
+      "path": "runtime/release-a/policy-bytes-baseline",
+      "mode": "0o755",
+      "type": "file",
+      "size": 4529768,
+      "reason": "native or generated output retained in source checkout; outside source package"
+    },
+    {
+      "path": "runtime/release-a/policy-bytes-candidate",
+      "mode": "0o755",
+      "type": "file",
+      "size": 4529728,
+      "reason": "native or generated output retained in source checkout; outside source package"
+    }
+  ],
+  "git_status_entries": [
+    " M crates/broker/src/effective_policy.rs",
+    " M crates/broker/src/lib.rs",
+    " M crates/broker/src/policy.rs",
+    " M crates/shell/src/execution/agent_runtime/control.rs",
+    " M crates/shell/src/execution/agent_runtime/host_session_authority/facade.rs",
+    " M crates/shell/src/execution/agent_runtime/host_session_authority/hash.rs",
+    " M crates/shell/src/execution/agent_runtime/host_session_authority/mod.rs",
+    " M crates/shell/src/execution/agent_runtime/host_session_authority/schema.rs",
+    " M crates/shell/src/execution/agent_runtime/host_session_authority/store.rs",
+    " M crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/layout.rs",
+    " M crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/object_persistence.rs",
+    " M crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs",
+    " M crates/shell/src/execution/agent_runtime/host_session_authority/store_schema.rs",
+    " M crates/shell/src/execution/agent_runtime/host_session_authority/store_tests.rs",
+    " M crates/shell/src/execution/agent_runtime/host_session_authority/transition.rs",
+    " M crates/shell/src/execution/agent_runtime/host_session_authority/validation.rs",
+    " M crates/shell/src/execution/agent_runtime/obligation_ledger.rs",
+    " M crates/shell/src/execution/agent_runtime/state_store.rs",
+    " M crates/shell/src/execution/agent_runtime/workspace_admission_authority.rs",
+    " M crates/shell/src/execution/cli.rs",
+    " M crates/shell/src/execution/config_cmd.rs",
+    " M crates/shell/src/execution/mod.rs",
+    " M crates/shell/src/execution/policy_cmd.rs",
+    " M crates/shell/src/execution/policy_model.rs",
+    " M crates/shell/src/execution/workspace_cmd.rs",
+    " M crates/shell/src/execution/workspace_open.rs",
+    " M crates/shell/src/lib.rs",
+    " M crates/transport-api-client/src/lib.rs",
+    " M crates/transport-api-client/src/transport/mod.rs",
+    " M crates/transport-api-types/src/lib.rs",
+    " M crates/world-service/src/handlers.rs",
+    " M crates/world-service/src/lib.rs",
+    " M crates/world-service/src/service.rs",
+    " M crates/world/src/lib.rs",
+    " M crates/world/src/session.rs",
+    " M docs/CONFIGURATION.md",
+    " M llm-last-mile/runtime-refactor/slices/tasks/b01-b03-authenticated-preflight.md",
+    "?? crates/shell/src/execution/agent_runtime/host_session_authority/current_host_run.rs",
+    "?? crates/shell/src/execution/agent_runtime/host_session_authority/direct_host_resume.rs",
+    "?? crates/shell/src/execution/agent_runtime/obligation_ledger/direct_host_inbox.rs",
+    "?? crates/shell/src/execution/workspace_read_cut.rs",
+    "?? crates/shell/tests/consumer_admission_preflight_linux.rs",
+    "?? runtime/build-tmp/libconsumer_admission_preflight_linux-efd99900d0ae0433.rmeta",
+    "?? runtime/namespace-fixture-v2.sh",
+    "?? runtime/release-a/default-policy-baseline.json",
+    "?? runtime/release-a/default-policy-baseline.yaml",
+    "?? runtime/release-a/default-policy-candidate.json",
+    "?? runtime/release-a/default-policy-candidate.yaml",
+    "?? runtime/release-a/policy-bytes-baseline",
+    "?? runtime/release-a/policy-bytes-candidate",
+    "?? runtime/release-a/policy-bytes.rs",
+    "!! target/"
+  ],
+  "replacement_counts": [
+    {
+      "file": "tracked.patch",
+      "replacements": 3
+    },
+    {
+      "file": "sources/runtime/namespace-fixture-v2.sh",
+      "replacements": 19
+    }
+  ],
+  "restore": "Fetch base commit, apply tracked.patch after bytewise reinjection using task22-private mapping, restore each sources/<path> after reinjection and chmod original_mode; verify all tracked/untracked SHA-256 and modes. Reconstructs source/status, not held binary/cache outputs.",
+  "private_custody": "task03:task22-local and task03:task22-private; local custody is not off-host backup",
+  "limitations": "No claim source state was accepted or original artifacts were built from it. Ignored target contains rebuildable outputs and must be assessed independently; runtime native/release outputs remain held. No exact reconstruction without private reinjection mapping.",
+  "original_records": [
+    {
+      "candidate_file": "records/joined-owner-endpoint-verification.json",
+      "original_custody": "task22:joined-owner-endpoint-verification",
+      "original_sha256": "a15fa051dfe29e7f81e9d00f74025341d1c7a9f640a12d30dadab4ac4951b492",
+      "candidate_sha256": "f6f4d565606ebc0a44f997df930789084e6acc48e2215f946842e0cf2a1a7aff",
+      "original_mode": "0o644",
+      "candidate_mode": "0o644",
+      "redaction_reason": "owner/meta thread identifiers replaced with opaque original-custody references; JSON reformatted",
+      "limitation": "Historical bounded R08 working-source endpoint; current 37-file dirty source status includes later differences, so no identity or current acceptance is inferred."
+    }
+  ]
+}
