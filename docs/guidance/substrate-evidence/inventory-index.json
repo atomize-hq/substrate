@@ -3924,8 +3924,9 @@
       "observed_exists": true,
       "allocation_bytes": null,
       "reclaimable_bytes": null,
-      "status": "partial B2 cleanup performed; remaining debug contents held pending subset-specific assessment",
-      "cleanup_receipt": "cleanup-receipt-20261109.json"
+      "status": "canonical debug root and all remaining frozen descendants removed at postcheck; no holds in this action",
+      "cleanup_receipt": "cleanup-receipt-20261109.json",
+      "continuation_receipt": "cleanup-receipt-canonical-debug-continuation.json"
     },
     {
       "id": "inventory-383",
@@ -3935,8 +3936,9 @@
       "observed_exists": true,
       "allocation_bytes": null,
       "reclaimable_bytes": null,
-      "status": "partial B1 cleanup performed; remaining incremental locks and multiply-linked files held pending assessment",
-      "cleanup_receipt": "cleanup-receipt-20261109.json"
+      "status": "incremental descendants removed across initial and continuation actions; debug root absent at postcheck",
+      "cleanup_receipt": "cleanup-receipt-20261109.json",
+      "continuation_receipt": "cleanup-receipt-canonical-debug-continuation.json"
     },
     {
       "id": "inventory-384",

@@ -1,0 +1,402 @@
+{
+  "schema": "substrate-canonical-debug-continuation-receipt-v1",
+  "status": "completed canonical debug continuation; publication and remote verification of this receipt are separate",
+  "source_baseline_commit": "3dda500a630e7ab92186788b9a0641dc84a788b0",
+  "published_docs_parent": "0a209936f30f692cab2a6785b373550668262955",
+  "published_record_refs": "source baseline and previously published evidence refs are listed individually below; this receipt update has separate publication status",
+  "action_start_utc": "2026-11-09T20:29:19.940540+00:00",
+  "action_end_utc": "2026-11-09T20:29:23.952228+00:00",
+  "command_cwd": "canonical checkout",
+  "command_template": "sudo -n python3 <custody:reviewed-v2-operator> --gate <custody:owner-gate> --receipt <custody:action-prefix> --execute",
+  "operator_sha256": "c44422395e3056a342b75dabd76704d1640211c397ecc9ca4f4290e62efa5791",
+  "command_exit": 0,
+  "stdout_empty": true,
+  "stderr_empty": true,
+  "frozen_membership_sha256": "ba4949a10fb7438d5d0e6102b43cc31972a295280a0eb10a4672b833f78a4947",
+  "selected_children": [
+    ".cargo-lock",
+    ".fingerprint",
+    "build",
+    "deps",
+    "examples",
+    "host-proxy",
+    "incremental",
+    "lift",
+    "substrate-gateway",
+    "substrate-lifecycle-control",
+    "substrate-lifecycle-linux",
+    "substrate-shim",
+    "substrate-world-entry",
+    "substrate_shim_test_bin"
+  ],
+  "selected_descendants": 16958,
+  "removed_descendants": 16958,
+  "held_children": [],
+  "root_absent_at_postcheck": true,
+  "all_frozen_descendants_absent_at_postcheck": true,
+  "removed_names_hash_matches": true,
+  "removed_names_sha256": "91cc1b2140d59fe32f6e832703a71c767607ffc7c36023cd62d54bd9e332e512",
+  "action_completed": true,
+  "action_error": null,
+  "regular_file_exclusive_allocated_bytes": 38482165760,
+  "available_bytes_before": 156505047040,
+  "available_bytes_after": 194999783424,
+  "observed_available_bytes_delta": 38494736384,
+  "available_inodes_before": 45355855,
+  "available_inodes_after": 45370748,
+  "observed_available_inode_delta": 14893,
+  "accounting_note": "Exclusive allocated regular-file bytes, filesystem free-space change and inode availability are separate measures. Directory blocks and concurrent filesystem activity affect the observed deltas; do not attribute the entire free-space change exclusively to these files.",
+  "prior_initial_cleanup_regular_allocated_bytes": 12267913216,
+  "cumulative_nonoverlap_regular_allocated_bytes": 50750078976,
+  "prior_cleanup_receipt": "cleanup-receipt-20261109.json",
+  "postcheck_utc": "2026-11-09T20:29:58.697039+00:00",
+  "postcheck": {
+    "protected_actor_sha256": "565e2033a089dcbb48e1e4da9b28bea19fed9510918ef46b7f9c64afef3c9d62",
+    "protected_actor_inode_unchanged": true,
+    "integration_backlog_sha256": "2f199c8720cd47ec58ef7a5efbb4773fc8abfda99a65dfc4b46f395b1788a1ac",
+    "canonical_codex_preserved": true,
+    "source_hashes": {
+      "Cargo.lock": "e997cc8ae39cee20b184895ac6ae0f1300fb1b2bb4e95b68d1b104303a8e3467",
+      "Cargo.toml": "b2a5f3b2862bbf3811ee0d522ba8f6e959a4ca519f8a0e4bae8185534ddc5e34",
+      "rust-toolchain.toml": "8aa4ad836dc3e6479a7677e869fd3ad6a9314e5624d76b5e7f666fe7820b30c8"
+    },
+    "canonical_status_at_postcheck": "clean before this receipt update",
+    "integration_status_at_postcheck": "only the pre-existing BACKLOG edit",
+    "non_evidence_source_delta": "none",
+    "remaining_target_children": [
+      ".rustc_info.json",
+      "CACHEDIR.TAG",
+      "release",
+      "tmp"
+    ],
+    "outside_fence_limit": "No action operated outside the reviewed debug names and root; other outside files were not rehashed wholesale."
+  },
+  "pre_action_remote_verification": {
+    "all_verified": true,
+    "remote_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "remote_ref_sha": "0a209936f30f692cab2a6785b373550668262955",
+    "files": [
+      {
+        "path": "docs/guidance/substrate-evidence/README.md",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "dad12a6eddb669550e8b85cc859d4bc54ae856e02e60a54af085a43097ce94f9",
+        "retrieved_sha256": "dad12a6eddb669550e8b85cc859d4bc54ae856e02e60a54af085a43097ce94f9"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/inventory-index.json",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "9269d51c59a95f6a3ebf77d84192485c6099890f48931054c344e69e4558a8ec",
+        "retrieved_sha256": "9269d51c59a95f6a3ebf77d84192485c6099890f48931054c344e69e4558a8ec"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/manifest.json",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "efe2616432a166235766bcbc31d539c9d52a37209e86875fd550fa11abb0d7f6",
+        "retrieved_sha256": "efe2616432a166235766bcbc31d539c9d52a37209e86875fd550fa11abb0d7f6"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/receipt-template.md",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "af43dfdfb6415378c982c59558fe4946db383991c8391521a214bbb1cc6f0989",
+        "retrieved_sha256": "af43dfdfb6415378c982c59558fe4946db383991c8391521a214bbb1cc6f0989"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/audit-measurement-errors.txt",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "retrieved_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/audit-measurement.tsv",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "b19a99641406b72edc595ba8fef70b92e2f11cf8c69b75b5f9f23cef4c3222a5",
+        "retrieved_sha256": "b19a99641406b72edc595ba8fef70b92e2f11cf8c69b75b5f9f23cef4c3222a5"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/implementation-discovery.md",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "ce69f0098148d506915d19bb2ac705a7fa50dc02b8cb46340c939f80f0b9bdd0",
+        "retrieved_sha256": "ce69f0098148d506915d19bb2ac705a7fa50dc02b8cb46340c939f80f0b9bdd0"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/prior-audit-incremental.json",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "d0d2151005f530f6a6cb8022ddda1babcf3e7781165569f28258befaf3522dca",
+        "retrieved_sha256": "d0d2151005f530f6a6cb8022ddda1babcf3e7781165569f28258befaf3522dca"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/prior-audit-reclaim.json",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "3de1b453b6851934d2c057284bde0b1884b953ae003f9a9ed655cd21076e9a6b",
+        "retrieved_sha256": "3de1b453b6851934d2c057284bde0b1884b953ae003f9a9ed655cd21076e9a6b"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/r2-base-inventory.stderr.txt.stderr.txt",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "d34cf00a4292e6b7803dd97890a81b57850898e1d27c0f5e3ad277c9ba90075e",
+        "retrieved_sha256": "d34cf00a4292e6b7803dd97890a81b57850898e1d27c0f5e3ad277c9ba90075e"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/r2-base-inventory.test_names.txt.test_names.txt",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "651e6b5509d928185e4de76eaae00c290110926265b9ca66297a4d050261f33f",
+        "retrieved_sha256": "651e6b5509d928185e4de76eaae00c290110926265b9ca66297a4d050261f33f"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/r2-base-selftest.stderr.txt.stderr.txt",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "0d0d89ddd904e6d16a663c3237076649517adeca0ecf7d88fd341e6a3aa4af7d",
+        "retrieved_sha256": "0d0d89ddd904e6d16a663c3237076649517adeca0ecf7d88fd341e6a3aa4af7d"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/r2-head-inventory.stderr.txt.stderr.txt",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "a7caf88ea1f00a3e5e8e83a29378fc5efb24578cc1a4bd9c986088ff9f51e72b",
+        "retrieved_sha256": "a7caf88ea1f00a3e5e8e83a29378fc5efb24578cc1a4bd9c986088ff9f51e72b"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/r2-head-inventory.test_names.txt.test_names.txt",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "651e6b5509d928185e4de76eaae00c290110926265b9ca66297a4d050261f33f",
+        "retrieved_sha256": "651e6b5509d928185e4de76eaae00c290110926265b9ca66297a4d050261f33f"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/r2-head-selftest.stderr.txt.stderr.txt",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "0d0d89ddd904e6d16a663c3237076649517adeca0ecf7d88fd341e6a3aa4af7d",
+        "retrieved_sha256": "0d0d89ddd904e6d16a663c3237076649517adeca0ecf7d88fd341e6a3aa4af7d"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/strategic-discovery.md",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "6c4b3d8575d9ab850c621e726cce94cdb6ecdb1c12e27e4e07cdd0d159d933fb",
+        "retrieved_sha256": "6c4b3d8575d9ab850c621e726cce94cdb6ecdb1c12e27e4e07cdd0d159d933fb"
+      },
+      {
+        "path": "Cargo.lock",
+        "ref": "3dda500a630e7ab92186788b9a0641dc84a788b0",
+        "expected_sha256": "e997cc8ae39cee20b184895ac6ae0f1300fb1b2bb4e95b68d1b104303a8e3467",
+        "retrieved_sha256": "e997cc8ae39cee20b184895ac6ae0f1300fb1b2bb4e95b68d1b104303a8e3467"
+      },
+      {
+        "path": "Cargo.toml",
+        "ref": "3dda500a630e7ab92186788b9a0641dc84a788b0",
+        "expected_sha256": "b2a5f3b2862bbf3811ee0d522ba8f6e959a4ca519f8a0e4bae8185534ddc5e34",
+        "retrieved_sha256": "b2a5f3b2862bbf3811ee0d522ba8f6e959a4ca519f8a0e4bae8185534ddc5e34"
+      },
+      {
+        "path": "rust-toolchain.toml",
+        "ref": "3dda500a630e7ab92186788b9a0641dc84a788b0",
+        "expected_sha256": "8aa4ad836dc3e6479a7677e869fd3ad6a9314e5624d76b5e7f666fe7820b30c8",
+        "retrieved_sha256": "8aa4ad836dc3e6479a7677e869fd3ad6a9314e5624d76b5e7f666fe7820b30c8"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/cleanup-receipt-20261109.json",
+        "ref": "60e417ad28a85966718fba676ad83664bd9bfda8",
+        "expected_sha256": "e123b89805d7e12389ff998c19faa0ef801c09c247bb2492e15cff9c5b5d8f69",
+        "retrieved_sha256": "e123b89805d7e12389ff998c19faa0ef801c09c247bb2492e15cff9c5b5d8f69"
+      }
+    ],
+    "custody": "canonical-debug-continuation:remote-preservation",
+    "sha256": "4bb45fe5200f111126ed3611b0a78ec934aa3129df994cd462cf9f99938e35e0"
+  },
+  "pre_action_guard_results": {
+    "focused_review_and_meta_disposition": true,
+    "explicit_meta_target_clearance": true,
+    "source_and_records_retrieved_from_remote": true,
+    "small_records_custody_and_privacy_disposition": true,
+    "protected_references_and_links_clear": true,
+    "source_and_unique_inputs_preserved": true,
+    "storage_caps_and_both_floors_verified": true,
+    "owner_no_concurrent_build_or_cleanup": true
+  },
+  "mount_alias_matches": 0,
+  "process_checked_file_directory_and_root_inodes": 14894,
+  "raw_custody": [
+    {
+      "id": "canonical-debug-continuation:pre-action-receipt",
+      "sha256": "b04efbe86951d18efe4b589dc89e55772e2f5fe27e362de919383d8d37738652"
+    },
+    {
+      "id": "canonical-debug-continuation:post-action-receipt",
+      "sha256": "b9c8b95b18139772bf0ff2373518225ab3dc597e4795739d28f1ec2dbe547c85"
+    },
+    {
+      "id": "canonical-debug-continuation:command",
+      "sha256": "b3d818bfcbceae596d485b19fce63907e9c2551c7dc0cdddf1b82da0464828fd"
+    },
+    {
+      "id": "canonical-debug-continuation:postcheck",
+      "sha256": "a2eb9fd419ffc46299ddf76498fdc21b0ac9ad10b4ca0397ceb1e28a89c8b347"
+    },
+    {
+      "id": "canonical-debug-continuation:clearance-reference-check",
+      "sha256": "896515ef49bf0ed0cae49994cb47525758331b760cc164917cdb11c22071fbf8"
+    }
+  ],
+  "small_original_records": {
+    "custody": "canonical-debug-continuation:private-original-records",
+    "archive_sha256": "a580e3cb7aee0213be17fe3d1d8704bae8ceab37f6ec3f714297b74e846a35a1",
+    "records": 2035,
+    "member_hash_errors": 0,
+    "access": "restricted local private custody; not an off-machine backup",
+    "screened_diagnostics": [
+      {
+        "id": "canonical-debug-continuation-diagnostic-01",
+        "path": "records/canonical-debug-continuation/diagnostic-01.jsonl",
+        "original_sha256": "b1965a41aefdec51d033fdba6008acb84fbc2b057c52ee9f0d4ea4c36039d26f",
+        "screened_sha256": "ee1632d8c225d5d2b53faec51cc89199356e0ca87ce557fd69801ffbf62e08fe"
+      },
+      {
+        "id": "canonical-debug-continuation-diagnostic-02",
+        "path": "records/canonical-debug-continuation/diagnostic-02.jsonl",
+        "original_sha256": "07dc7eb2f363d9c0d685ee6cfa95f272f1c4b262bbe91fedf1f429100cad1881",
+        "screened_sha256": "ee1632d8c225d5d2b53faec51cc89199356e0ca87ce557fd69801ffbf62e08fe"
+      },
+      {
+        "id": "canonical-debug-continuation-diagnostic-03",
+        "path": "records/canonical-debug-continuation/diagnostic-03.jsonl",
+        "original_sha256": "fc699e2544057499e5cfaed79453da42b887ea1c139da38f81bf1b92d5cff65f",
+        "screened_sha256": "5378e6a406c3e83c2e04071c0fa66b671e356df595710eac2e456ce1ad8d6919"
+      }
+    ],
+    "archive_mode": "0600",
+    "custody_directory_mode": "0700"
+  },
+  "limits_and_holds": [
+    "Root absence is a postcheck observation; subsequent builds can recreate debug output.",
+    "Previous original historical command, working directory and full outcome of the three diagnostic records are unknown.",
+    "The 2,035-record archive is private local custody and is not included in publication.",
+    "No product build, Rust test, doctor, installation or service change was performed as part of this cleanup.",
+    "This receipt update requires separate publication and remote verification.",
+    "Worktrees, release/musl targets, shared Cargo state, backups, protected workflow dependencies and other outstanding batches retain their separate status.",
+    "The action receipt confirms completed operations and file/directory sync calls, not durability of deletion across a crash."
+  ],
+  "post_action_remote_verification": {
+    "all_verified": true,
+    "files": [
+      {
+        "path": "docs/guidance/substrate-evidence/README.md",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "dad12a6eddb669550e8b85cc859d4bc54ae856e02e60a54af085a43097ce94f9",
+        "retrieved_sha256": "dad12a6eddb669550e8b85cc859d4bc54ae856e02e60a54af085a43097ce94f9"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/inventory-index.json",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "9269d51c59a95f6a3ebf77d84192485c6099890f48931054c344e69e4558a8ec",
+        "retrieved_sha256": "9269d51c59a95f6a3ebf77d84192485c6099890f48931054c344e69e4558a8ec"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/manifest.json",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "efe2616432a166235766bcbc31d539c9d52a37209e86875fd550fa11abb0d7f6",
+        "retrieved_sha256": "efe2616432a166235766bcbc31d539c9d52a37209e86875fd550fa11abb0d7f6"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/receipt-template.md",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "af43dfdfb6415378c982c59558fe4946db383991c8391521a214bbb1cc6f0989",
+        "retrieved_sha256": "af43dfdfb6415378c982c59558fe4946db383991c8391521a214bbb1cc6f0989"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/audit-measurement-errors.txt",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "retrieved_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/audit-measurement.tsv",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "b19a99641406b72edc595ba8fef70b92e2f11cf8c69b75b5f9f23cef4c3222a5",
+        "retrieved_sha256": "b19a99641406b72edc595ba8fef70b92e2f11cf8c69b75b5f9f23cef4c3222a5"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/implementation-discovery.md",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "ce69f0098148d506915d19bb2ac705a7fa50dc02b8cb46340c939f80f0b9bdd0",
+        "retrieved_sha256": "ce69f0098148d506915d19bb2ac705a7fa50dc02b8cb46340c939f80f0b9bdd0"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/prior-audit-incremental.json",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "d0d2151005f530f6a6cb8022ddda1babcf3e7781165569f28258befaf3522dca",
+        "retrieved_sha256": "d0d2151005f530f6a6cb8022ddda1babcf3e7781165569f28258befaf3522dca"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/prior-audit-reclaim.json",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "3de1b453b6851934d2c057284bde0b1884b953ae003f9a9ed655cd21076e9a6b",
+        "retrieved_sha256": "3de1b453b6851934d2c057284bde0b1884b953ae003f9a9ed655cd21076e9a6b"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/r2-base-inventory.stderr.txt.stderr.txt",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "d34cf00a4292e6b7803dd97890a81b57850898e1d27c0f5e3ad277c9ba90075e",
+        "retrieved_sha256": "d34cf00a4292e6b7803dd97890a81b57850898e1d27c0f5e3ad277c9ba90075e"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/r2-base-inventory.test_names.txt.test_names.txt",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "651e6b5509d928185e4de76eaae00c290110926265b9ca66297a4d050261f33f",
+        "retrieved_sha256": "651e6b5509d928185e4de76eaae00c290110926265b9ca66297a4d050261f33f"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/r2-base-selftest.stderr.txt.stderr.txt",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "0d0d89ddd904e6d16a663c3237076649517adeca0ecf7d88fd341e6a3aa4af7d",
+        "retrieved_sha256": "0d0d89ddd904e6d16a663c3237076649517adeca0ecf7d88fd341e6a3aa4af7d"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/r2-head-inventory.stderr.txt.stderr.txt",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "a7caf88ea1f00a3e5e8e83a29378fc5efb24578cc1a4bd9c986088ff9f51e72b",
+        "retrieved_sha256": "a7caf88ea1f00a3e5e8e83a29378fc5efb24578cc1a4bd9c986088ff9f51e72b"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/r2-head-inventory.test_names.txt.test_names.txt",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "651e6b5509d928185e4de76eaae00c290110926265b9ca66297a4d050261f33f",
+        "retrieved_sha256": "651e6b5509d928185e4de76eaae00c290110926265b9ca66297a4d050261f33f"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/r2-head-selftest.stderr.txt.stderr.txt",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "0d0d89ddd904e6d16a663c3237076649517adeca0ecf7d88fd341e6a3aa4af7d",
+        "retrieved_sha256": "0d0d89ddd904e6d16a663c3237076649517adeca0ecf7d88fd341e6a3aa4af7d"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/records/strategic-discovery.md",
+        "ref": "c8293743002368455195e2364ec5dabe60d8678e",
+        "expected_sha256": "6c4b3d8575d9ab850c621e726cce94cdb6ecdb1c12e27e4e07cdd0d159d933fb",
+        "retrieved_sha256": "6c4b3d8575d9ab850c621e726cce94cdb6ecdb1c12e27e4e07cdd0d159d933fb"
+      },
+      {
+        "path": "Cargo.lock",
+        "ref": "3dda500a630e7ab92186788b9a0641dc84a788b0",
+        "expected_sha256": "e997cc8ae39cee20b184895ac6ae0f1300fb1b2bb4e95b68d1b104303a8e3467",
+        "retrieved_sha256": "e997cc8ae39cee20b184895ac6ae0f1300fb1b2bb4e95b68d1b104303a8e3467"
+      },
+      {
+        "path": "Cargo.toml",
+        "ref": "3dda500a630e7ab92186788b9a0641dc84a788b0",
+        "expected_sha256": "b2a5f3b2862bbf3811ee0d522ba8f6e959a4ca519f8a0e4bae8185534ddc5e34",
+        "retrieved_sha256": "b2a5f3b2862bbf3811ee0d522ba8f6e959a4ca519f8a0e4bae8185534ddc5e34"
+      },
+      {
+        "path": "rust-toolchain.toml",
+        "ref": "3dda500a630e7ab92186788b9a0641dc84a788b0",
+        "expected_sha256": "8aa4ad836dc3e6479a7677e869fd3ad6a9314e5624d76b5e7f666fe7820b30c8",
+        "retrieved_sha256": "8aa4ad836dc3e6479a7677e869fd3ad6a9314e5624d76b5e7f666fe7820b30c8"
+      },
+      {
+        "path": "docs/guidance/substrate-evidence/cleanup-receipt-20261109.json",
+        "ref": "60e417ad28a85966718fba676ad83664bd9bfda8",
+        "expected_sha256": "e123b89805d7e12389ff998c19faa0ef801c09c247bb2492e15cff9c5b5d8f69",
+        "retrieved_sha256": "e123b89805d7e12389ff998c19faa0ef801c09c247bb2492e15cff9c5b5d8f69"
+      }
+    ],
+    "custody": "canonical-debug-continuation:post-action-remote-preservation",
+    "sha256": "bfcae77132017d017c9ebb559ae6abf3086611a28c4149cf15cf590f5687b962"
+  }
+}

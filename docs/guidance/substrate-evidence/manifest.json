@@ -1,6 +1,6 @@
 {
   "schema": "substrate-evidence-v1",
-  "status": "initial package published and verified; partial B1/B2 cleanup performed; receipt publication and verification are separate",
+  "status": "initial package published and verified; canonical debug cleanup completed; continuation receipt publication and verification are separate",
   "records": [
     {
       "id": "audit-measurement",
@@ -206,6 +206,48 @@
       "original_custody": "task01-original-record:r2-head-inventory.test_names.txt",
       "selected_copy_custody": "task01-frozen-v2:r2-head-inventory.test_names.txt",
       "kind": "original comparison output"
+    },
+    {
+      "id": "canonical-debug-continuation-diagnostic-01",
+      "original_label": "output-test-integration-test-config_init",
+      "portable_destination": "records/canonical-debug-continuation/diagnostic-01.jsonl",
+      "original_sha256": "b1965a41aefdec51d033fdba6008acb84fbc2b057c52ee9f0d4ea4c36039d26f",
+      "published_sha256": "ee1632d8c225d5d2b53faec51cc89199356e0ca87ce557fd69801ffbf62e08fe",
+      "original_custody": "canonical-debug-continuation:original-diagnostic-01",
+      "redaction_reason": "Replaced local paths and linker invocation, removed duplicate rendered text to protect machine and session metadata; structured error and cause retained.",
+      "historical_command_cwd_exit": "unknown",
+      "historical_full_outcome": "unknown; these are compiler diagnostics, not a complete command receipt",
+      "source_identity": "observed in canonical debug output; original source state and toolchain not independently established",
+      "kind": "original compiler diagnostic; no-space failure",
+      "publication_and_remote_verification": "separate from this record description"
+    },
+    {
+      "id": "canonical-debug-continuation-diagnostic-02",
+      "original_label": "output-test-bin-substrate-lifecycle-linux",
+      "portable_destination": "records/canonical-debug-continuation/diagnostic-02.jsonl",
+      "original_sha256": "07dc7eb2f363d9c0d685ee6cfa95f272f1c4b262bbe91fedf1f429100cad1881",
+      "published_sha256": "ee1632d8c225d5d2b53faec51cc89199356e0ca87ce557fd69801ffbf62e08fe",
+      "original_custody": "canonical-debug-continuation:original-diagnostic-02",
+      "redaction_reason": "Replaced local paths and linker invocation, removed duplicate rendered text to protect machine and session metadata; structured error and cause retained.",
+      "historical_command_cwd_exit": "unknown",
+      "historical_full_outcome": "unknown; these are compiler diagnostics, not a complete command receipt",
+      "source_identity": "observed in canonical debug output; original source state and toolchain not independently established",
+      "kind": "original compiler diagnostic; no-space failure",
+      "publication_and_remote_verification": "separate from this record description"
+    },
+    {
+      "id": "canonical-debug-continuation-diagnostic-03",
+      "original_label": "output-test-integration-test-authoritative_inbox_dev_support",
+      "portable_destination": "records/canonical-debug-continuation/diagnostic-03.jsonl",
+      "original_sha256": "fc699e2544057499e5cfaed79453da42b887ea1c139da38f81bf1b92d5cff65f",
+      "published_sha256": "5378e6a406c3e83c2e04071c0fa66b671e356df595710eac2e456ce1ad8d6919",
+      "original_custody": "canonical-debug-continuation:original-diagnostic-03",
+      "redaction_reason": "Replaced local paths and linker invocation, removed duplicate rendered text to protect machine and session metadata; structured error and cause retained.",
+      "historical_command_cwd_exit": "unknown",
+      "historical_full_outcome": "unknown; these are compiler diagnostics, not a complete command receipt",
+      "source_identity": "observed in canonical debug output; original source state and toolchain not independently established",
+      "kind": "original compiler diagnostic; no-space failure",
+      "publication_and_remote_verification": "separate from this record description"
     }
   ]
 }
